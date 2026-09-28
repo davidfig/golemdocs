@@ -1,8 +1,12 @@
-import type { Page } from '../document/page.ts';
+import { packColor } from '@word/layout';
+import { RectBatchRenderer, type RectBatch } from '../shapes/rectBatch.ts';
+import { ImageRenderer, type DrawImage } from '../shapes/imageRenderer.ts';
 import { RectRenderer } from '../shapes/rectRenderer.ts';
-import { packColor, type TextBatch } from '../text/textBatch.ts';
+import type { TextBatch } from '../text/textBatch.ts';
 import { TextRenderer } from '../text/textRenderer.ts';
 import type { Camera } from './camera.ts';
+import type { GpuPage } from './gpuPage.ts';
+import type { SelectionLayer } from './selectionLayer.ts';
 
 const PAGE_COLOR = packColor(0xffffff);
 const PAGE_BORDER = packColor(0x000000, 0.18);
@@ -14,19 +18,25 @@ export interface FrameStats {
   drawCalls: number;
 }
 
-/** Draws the pages that overlap the view: sheets first, then their text. */
+/**
+ * Draws the pages overlapping the view, layer by layer across pages: sheets, images behind
+ * text, shading, inline images, text, then lines (underlines, borders).
+ */
 export class PageRenderer {
-  private readonly rects: RectRenderer;
+  private readonly sheets: RectRenderer;
+  private readonly rects: RectBatchRenderer;
   private readonly text: TextRenderer;
-  private readonly visible: Page[] = [];
+  private readonly visible: GpuPage[] = [];
   private readonly batches: TextBatch[] = [];
+  images: ImageRenderer | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
-    this.rects = new RectRenderer(gl);
+    this.sheets = new RectRenderer(gl);
+    this.rects = new RectBatchRenderer(gl);
     this.text = new TextRenderer(gl);
   }
 
-  render(camera: Camera, pages: readonly Page[]): FrameStats {
+  render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true): FrameStats {
     const gl = this.gl;
     const scale = camera.scale;
     const left = camera.x;
@@ -34,7 +44,7 @@ export class PageRenderer {
     const right = left + camera.width / scale;
     const bottom = top + camera.height / scale;
 
-    // Pages are sorted top to bottom, so binary search for the first one in view.
+    // Pages are sorted top to bottom (row-major), so binary search for the first in view.
     let lo = 0;
     let hi = pages.length;
     while (lo < hi) {
@@ -54,22 +64,32 @@ export class PageRenderer {
 
     // Sheets, snapped to whole device pixels so their edges stay crisp at any zoom.
     for (const page of this.visible) {
-      if (!page.background) continue;
       const x0 = Math.round((page.x - left) * scale);
       const y0 = Math.round((page.y - top) * scale);
       const x1 = Math.round((page.x + page.width - left) * scale);
       const y1 = Math.round((page.y + page.height - top) * scale);
-      this.rects.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
-      this.rects.add(x0, y0, x1 - x0, y1 - y0, PAGE_COLOR);
+      this.sheets.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
+      this.sheets.add(x0, y0, x1 - x0, y1 - y0, PAGE_COLOR);
     }
-    this.rects.flush(camera.width, camera.height);
+    this.sheets.flush(camera.width, camera.height);
+
+    const images = (behind: boolean): DrawImage[] =>
+      this.visible.flatMap((p) =>
+        p.images.filter((i) => i.behind === behind).map((i) => ({ ...i, x: p.x + i.x, y: p.y + i.y })),
+      );
+    this.images?.render(camera, images(true));
+    let drawCalls = this.rects.render(camera, this.visible.flatMap((p): RectBatch[] => p.background));
+    if (selection) drawCalls += this.rects.render(camera, selection.highlightsFor(this.visible));
+    this.images?.render(camera, images(false));
 
     // Group text by face across pages so each atlas is bound once per frame.
     this.batches.length = 0;
-    for (const page of this.visible) this.batches.push(...page.batches);
+    for (const page of this.visible) this.batches.push(...page.text);
     this.batches.sort((a, b) => a.face.id - b.face.id);
     const text = this.text.render(camera, this.batches);
+    drawCalls += text.drawCalls + this.rects.render(camera, this.visible.flatMap((p) => p.foreground));
+    if (selection && caretVisible) drawCalls += this.rects.render(camera, selection.caretFor(this.visible));
 
-    return { pages: pages.length, visiblePages: this.visible.length, ...text };
+    return { pages: pages.length, visiblePages: this.visible.length, glyphs: text.glyphs, drawCalls };
   }
 }

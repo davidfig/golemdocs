@@ -1,6 +1,6 @@
 import { createProgram, uniforms } from '../gl/program.ts';
 import type { Camera } from '../view/camera.ts';
-import type { MsdfFace } from './msdfFace.ts';
+import type { GpuFace } from './gpuFace.ts';
 import type { TextBatch } from './textBatch.ts';
 import { TEXT_FRAGMENT, TEXT_VERTEX } from './textShaders.ts';
 
@@ -44,11 +44,13 @@ export class TextRenderer {
     gl.uniform1f(this.u.u_scale, scale);
     gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
 
-    let boundFace: MsdfFace | null = null;
+    let boundFace: GpuFace | null = null;
     for (const batch of batches) {
+      const face = batch.face;
+      // Faces draw once their atlas image has loaded.
+      if (!face.atlas) continue;
       const vao = batch.prepare(gl);
       if (!vao) continue;
-      const face = batch.face;
       if (face !== boundFace) {
         gl.activeTexture(gl.TEXTURE0 + ATLAS_UNIT);
         gl.bindTexture(gl.TEXTURE_2D, face.atlas);

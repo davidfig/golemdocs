@@ -9,7 +9,8 @@
     "dev:server": "pnpm --filter @word/server dev",
     "build": "pnpm --recursive build",
     "typecheck": "tsc && pnpm --recursive typecheck",
-    "fonts": "tsx scripts/fonts/generate.ts"
+    "fonts": "tsx scripts/fonts/generate.ts",
+    "test": "pnpm --filter @word/docx --filter @word/layout --filter @word/editor test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

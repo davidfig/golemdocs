@@ -7,7 +7,13 @@
   </head>
   <body>
     <canvas id="canvas"></canvas>
-    <nav id="docs"><a href="?doc=fonts">Fonts</a><a href="?doc=war-and-peace">War and Peace</a></nav>
+    <textarea id="input" aria-label="Document" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+    <nav id="docs">
+      <a href="?doc=fonts" data-doc="fonts">Fonts</a>
+      <a href="?doc=war-and-peace" data-doc="war-and-peace">War and Peace</a>
+      <select id="corpus" title="Test corpus (dev)"><option value="">Corpus…</option></select>
+      <label class="open">Open .docx<input id="file" type="file" accept=".docx,.docm,.dotx" hidden /></label>
+    </nav>
     <div id="stats"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

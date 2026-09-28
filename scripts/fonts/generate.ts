@@ -17,7 +17,7 @@
 
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ARCHIVES, ATLAS, FAMILIES, MSDF_ATLAS_GEN, type FaceSpec, type FamilySpec, type FileRef } from './sources.ts';
@@ -250,13 +250,18 @@ async function main(): Promise<void> {
 
   for (const family of families) {
     console.log(`${family.wordName} → ${family.substitute}`);
-    rmSync(path.join(OUT, family.id), { recursive: true, force: true });
     const faces: ManifestFace[] = [];
     for (const face of family.faces) {
       console.log(`  ${faceName(face)}`);
       faces.push(await generateFace(tool, family, face, fonts.get(face)!));
     }
     copyFileSync(licenses.get(family)!, path.join(OUT, family.id, 'LICENSE.txt'));
+    // Files are overwritten in place (a running dev server keeps serving the folder); remove
+    // anything left over from an earlier configuration.
+    const produced = new Set(['LICENSE.txt', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout)])]);
+    for (const file of readdirSync(path.join(OUT, family.id))) {
+      if (!produced.has(file)) rmSync(path.join(OUT, family.id, file));
+    }
     generated.set(family.id, {
       id: family.id,
       wordName: family.wordName,

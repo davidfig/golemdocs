@@ -8,5 +8,5 @@ dist-ssr
 .idea
 *.log
 
-# font sources and the msdf-atlas-gen build (see scripts/fonts)
+# font sources, the msdf-atlas-gen build (scripts/fonts) and the .docx test corpus (docx/test)
 .cache

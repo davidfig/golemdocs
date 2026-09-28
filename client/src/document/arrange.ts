@@ -1,4 +1,11 @@
-import type { Page } from './page.ts';
+/** Anything with a size that can be positioned (GPU pages). */
+export interface Page {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  moveTo(x: number, y: number): void;
+}
 
 export interface Bounds {
   x: number;

@@ -121,18 +121,8 @@ export class TextBatch {
 
   /** Width of a line of text without adding it, in document units. */
   measure(text: string, size: number, options: AddTextOptions = {}): number {
-    const face = this.face;
-    const kerning = options.kerning ?? false;
-    const letterSpacing = options.letterSpacing ?? 0;
-    let width = 0;
-    let previous = -1;
-    for (const char of text) {
-      const cp = char.codePointAt(0)!;
-      if (kerning && previous >= 0) width += face.kern(previous, cp) * size;
-      width += face.advance(face.glyph(cp)) * size + letterSpacing;
-      previous = cp;
-    }
-    return width;
+    const width = this.face.measure(text, 0, text.length, options.kerning ?? false) * size;
+    return width + (options.letterSpacing ?? 0) * [...text].length;
   }
 
   /** Uploads pending changes and returns the VAO to draw, or null if empty. Called by the renderer. */

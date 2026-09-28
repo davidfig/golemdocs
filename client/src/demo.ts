@@ -1,8 +1,9 @@
-// Temporary demo content for the text renderer: every font and face, word-wrapped to a
-// Letter-size text column. `?repeat=N` repeats it for stress testing.
+// Font showcase for the text renderer: every font and face, word-wrapped on one tall sheet.
+// `?repeat=N` repeats it for stress testing.
 
+import { LETTER, Page } from './document/page.ts';
 import type { FontLibrary, FontRequest } from './text/fontLibrary.ts';
-import { TextBatch, packColor } from './text/textBatch.ts';
+import { packColor, type TextBatch } from './text/textBatch.ts';
 
 const SAMPLE =
   'The quick brown fox jumps over the lazy dog. Sphinx of black quartz, judge my vow! ' +
@@ -10,66 +11,43 @@ const SAMPLE =
   'line height and page break depends on it. Numbers 0123456789, punctuation (“quotes”, ‘apostrophes’, ' +
   'dashes – and —, ellipses…) and accents: café, naïve, façade, Ångström, Ærøskøbing, Łódź, € 1.234,56.';
 
-const LEFT = 72; // 1in margins on Letter paper
-const COLUMN_WIDTH = 468;
+const LEFT = LETTER.margin.left;
+const COLUMN_WIDTH = LETTER.width - LETTER.margin.left - LETTER.margin.right;
 const BODY_SIZE = 11;
 const HEADING_SIZE = 16;
 const INK = packColor(0x1f1f1f);
 const ACCENT = packColor(0x2b579a);
 
-type Styled = FontRequest & { label: string };
-
-export async function buildDemo(library: FontLibrary, repeat: number): Promise<TextBatch[]> {
-  const batches = new Map<string, TextBatch>();
-
-  async function batchFor(request: FontRequest): Promise<TextBatch> {
-    const resolved = library.resolve(request);
-    let batch = batches.get(resolved.key);
-    if (!batch) {
-      const face = await library.load(resolved.face);
-      batch = new TextBatch(face, {
-        skew: resolved.syntheticItalic ? 0.2 : 0,
-        embolden: resolved.syntheticBold ? 0.02 : 0,
-      });
-      batches.set(resolved.key, batch);
-    }
-    return batch;
-  }
-
-  // Load every face up front, in parallel.
-  const styles: Styled[][] = library.families.map((family) => {
-    const names: [string, FontRequest][] = [
+export async function buildFontDemo(library: FontLibrary, repeat: number): Promise<Page[]> {
+  const styles = library.families.map((family) => {
+    const requests: [string, FontRequest][] = [
       ['Regular', { font: family.wordName }],
       ['Bold', { font: family.wordName, bold: true }],
       ['Italic', { font: family.wordName, italic: true }],
       ['Bold Italic', { font: family.wordName, bold: true, italic: true }],
     ];
-    for (const alias of Object.keys(family.aliases)) names.push([alias, { font: alias }]);
-    return names.map(([label, request]) => ({ ...request, label }));
+    for (const alias of Object.keys(family.aliases)) requests.push([alias, { font: alias }]);
+    return requests;
   });
-  await Promise.all(styles.flat().map(batchFor));
+  await Promise.all(styles.flat().map(([, request]) => library.load(library.resolve(request).face)));
 
-  let y = 72;
+  const page = new Page(0, 0, LETTER.width, 0);
+  let y = LETTER.margin.top;
   for (let r = 0; r < repeat; r++) {
     for (let f = 0; f < library.families.length; f++) {
       const family = library.families[f];
-      const heading = await batchFor({ font: family.wordName, bold: true });
+      const heading = page.batch(library, { font: family.wordName, bold: true });
       y += heading.face.ascent * HEADING_SIZE;
       heading.addText(`${family.wordName} – ${family.substitute}`, LEFT, y, HEADING_SIZE, ACCENT);
       y += (heading.face.lineHeight - heading.face.ascent) * HEADING_SIZE + 6;
-
-      for (const style of styles[f]) {
-        const batch = await batchFor(style);
-        y = wrap(batch, `${style.label}: ${SAMPLE}`, y, BODY_SIZE) + 8;
+      for (const [label, request] of styles[f]) {
+        y = wrap(page.batch(library, request), `${label}: ${SAMPLE}`, y, BODY_SIZE) + 8;
       }
       y += 12;
     }
   }
-
-  // Group by face so the renderer binds each atlas once.
-  const list = [...batches.values()];
-  const faces = [...new Set(list.map((batch) => batch.face))];
-  return faces.flatMap((face) => list.filter((batch) => batch.face === face));
+  page.height = y + LETTER.margin.bottom;
+  return [page];
 }
 
 /** Greedy word wrap into the column. Returns the y below the paragraph. */

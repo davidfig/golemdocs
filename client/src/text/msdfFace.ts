@@ -17,6 +17,9 @@ const FAST_LOOKUP_LIMIT = 0x2200;
  * quad (in ems) and atlas UVs, so glyph instances only need to carry a glyph index.
  */
 export class MsdfFace {
+  private static nextId = 0;
+  /** Unique per face; renderers sort by it to minimize texture binds. */
+  readonly id = MsdfFace.nextId++;
   /** Number of glyphs; glyph indices are 0..glyphCount-1. */
   readonly glyphCount: number;
   /** Advance width per glyph index, in ems. */
@@ -124,6 +127,29 @@ export class MsdfFace {
   /** Advance for a glyph index; missing glyphs (-1) advance like a space. In ems. */
   advance(glyph: number): number {
     return glyph >= 0 ? this.advances[glyph] : this.missingAdvance;
+  }
+
+  /**
+   * Advance width of text[start, end), in ems. The hot path of line breaking, so it walks
+   * UTF-16 directly instead of allocating substrings.
+   */
+  measure(text: string, start = 0, end = text.length, kerning = false): number {
+    let width = 0;
+    let previous = -1;
+    for (let i = start; i < end; i++) {
+      let cp = text.charCodeAt(i);
+      if (cp >= 0xd800 && cp < 0xdc00 && i + 1 < end) {
+        const low = text.charCodeAt(i + 1);
+        if (low >= 0xdc00 && low < 0xe000) {
+          cp = 0x10000 + ((cp - 0xd800) << 10) + (low - 0xdc00);
+          i++;
+        }
+      }
+      if (kerning && previous >= 0) width += this.kern(previous, cp);
+      width += this.advance(this.glyph(cp));
+      previous = cp;
+    }
+    return width;
   }
 
   /** Kerning adjustment between two codepoints, in ems. */

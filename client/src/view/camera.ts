@@ -11,7 +11,7 @@ export class Camera {
   y = 0;
   /** 1 = 100%. */
   zoom = 1;
-  minZoom = 0.05;
+  minZoom = 0.01;
   maxZoom = 64;
   /** Canvas size in device pixels, and device pixels per CSS pixel. */
   width = 1;
@@ -37,6 +37,16 @@ export class Camera {
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
     this.x += cssDx * pointsPerCss;
     this.y += cssDy * pointsPerCss;
+  }
+
+  /** Zooms and scrolls so a document rectangle fills the view (CSS size), with padding in CSS px. */
+  fit(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24): void {
+    const zoomX = (cssWidth - padding * 2) / (bounds.width * CSS_PX_PER_POINT);
+    const zoomY = (cssHeight - padding * 2) / (bounds.height * CSS_PX_PER_POINT);
+    this.zoom = Math.min(Math.max(Math.min(zoomX, zoomY), this.minZoom), this.maxZoom);
+    const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
+    this.x = bounds.x + bounds.width / 2 - (cssWidth / 2) * pointsPerCss;
+    this.y = bounds.y + bounds.height / 2 - (cssHeight / 2) * pointsPerCss;
   }
 
   toDocument(cssX: number, cssY: number): { x: number; y: number } {

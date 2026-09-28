@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log
+
+# font sources and the msdf-atlas-gen build (see scripts/fonts)
+.cache

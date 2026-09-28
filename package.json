@@ -1,0 +1,20 @@
+{
+  "name": "word",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --recursive dev",
+    "dev:client": "pnpm --filter @word/client dev",
+    "dev:server": "pnpm --filter @word/server dev",
+    "build": "pnpm --recursive build",
+    "typecheck": "tsc && pnpm --recursive typecheck",
+    "fonts": "tsx scripts/fonts/generate.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "sharp": "^0.35.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

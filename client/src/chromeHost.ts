@@ -34,6 +34,8 @@ export interface AppHooks {
   saved(): Sample[];
   cloud(): CloudState;
   send(command: WireCommand): void;
+  /** A PDF is shown as its own pages, which take markup annotations. */
+  annotating(): boolean;
   /** The selected text (for copy and cut). */
   selectedText(): string;
   focusEditor(): void;
@@ -73,6 +75,9 @@ const SUPPORTED = new Set<ActionKind>([
   'convert',
 ]);
 
+
+/** Actions that mark up a PDF shown as its own pages (see layout/pdfAnnotator.ts). */
+const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark', 'insertComment']);
 
 /** The formats a document can be converted to. */
 const CONVERTIBLE = new Set<DocumentKind>(['docx', 'pdf', 'md', 'txt']);
@@ -144,6 +149,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     openFile,
 
     supports(action: Action): boolean {
+      if (ANNOTATION_ACTIONS.has(action.kind)) return app.annotating();
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line';
       if (action.kind === 'viewMode') return action.mode === 'print';
@@ -217,6 +223,17 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'insertBreak':
           if (action.break === 'line') app.send({ kind: 'insertLineBreak' });
           return;
+        case 'setHighlight':
+          return app.send({ kind: 'annotate', annotation: 'highlight', color: action.color });
+        case 'toggleMark':
+          if (action.mark === 'underline') return app.send({ kind: 'annotate', annotation: 'underline' });
+          if (action.mark === 'strikethrough') return app.send({ kind: 'annotate', annotation: 'strikeout' });
+          return app.notify(`${action.mark} isn't available yet`);
+        case 'insertComment': {
+          const text = window.prompt('Note');
+          if (text !== null) app.send({ kind: 'annotate', annotation: 'note', text });
+          return;
+        }
         default:
           app.notify(`${action.kind} isn't available yet`);
       }

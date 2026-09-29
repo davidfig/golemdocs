@@ -12,6 +12,7 @@
 //   originals/source.pdf  the original PDF, when the document came from one
 
 import { ZipArchive, writeZip } from '@word/docx';
+import type { Annotation } from '@word/pdf';
 import type { Format } from './convert.ts';
 
 export const WDOC_MIME = 'application/x-golem-document';
@@ -39,6 +40,7 @@ export interface WdocManifest {
 export interface Extensions {
   md?: MarkdownExtension;
   txt?: TextExtension;
+  pdf?: PdfExtension;
 }
 
 export interface MarkdownExtension {
@@ -53,6 +55,11 @@ export interface TextExtension {
   bom?: boolean;
 }
 
+export interface PdfExtension {
+  /** The markup annotations over the original PDF's pages (they replace the file's own). */
+  annotations: Annotation[];
+}
+
 export interface Wdoc {
   manifest: WdocManifest;
   /** The document as .docx bytes; null for a PDF that hasn't been reflowed. */
@@ -64,7 +71,7 @@ export interface Wdoc {
 
 const encoder = new TextEncoder();
 const MIME_BYTES = encoder.encode(WDOC_MIME);
-const NAMESPACES = ['md', 'txt'] as const satisfies readonly (keyof Extensions)[];
+const NAMESPACES = ['md', 'txt', 'pdf'] as const satisfies readonly (keyof Extensions)[];
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {

@@ -4,6 +4,7 @@
 // worker the same way local ones do.
 
 import type { Command } from '@word/editor';
+import type { AnnotationKind } from '@word/pdf';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
@@ -33,7 +34,12 @@ export type WireCommand =
   | Exclude<Command, { kind: 'pointer' }>
   | (Omit<Extract<Command, { kind: 'pointer' }>, 'page'> & { page: number })
   | { kind: 'undo' }
-  | { kind: 'redo' };
+  | { kind: 'redo' }
+  /**
+   * On a PDF shown as its own pages: mark the selected text, or put a note there (see
+   * pdfAnnotator.ts). With an annotation selected, changes it instead.
+   */
+  | { kind: 'annotate'; annotation: AnnotationKind; color?: string | null; text?: string };
 
 /** A collaboration room to open the document in (see ../collab). */
 export interface RoomOptions {
@@ -104,8 +110,11 @@ export interface SelectionUpdate {
 }
 
 export type FromWorker =
-  /** `format`: what the document is edited as (for a .wdoc, known only once it has been read). */
-  | { type: 'opened'; doc: number; name: string; format: Format }
+  /**
+   * `format`: what the document is edited as (for a .wdoc, known only once it has been read).
+   * `annotating`: a PDF shown as its own pages, which takes markup annotations.
+   */
+  | { type: 'opened'; doc: number; name: string; format: Format; annotating: boolean }
   | ({ type: 'layout'; doc: number } & LayoutUpdate)
   /** The first full layout finished. */
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }

@@ -1,18 +1,43 @@
 // Opens a PDF as a stack of read-only PageLayouts: every glyph sits where the PDF puts it (the
 // PDF font's own advances position each character), drawn with our substitute MSDF faces.
-// Pages are interpreted lazily, one layoutPage() call each.
+// Pages are interpreted lazily, one layoutPage() call each. The page text stays unchanged; what
+// can change is the layer of markup annotations over it (highlights, notes...: see
+// @word/pdf annotations), which are drawn from the appearance streams they're given.
 
 import { FontSet, PageLayout, packColor, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@word/layout';
-import { PdfDocument, collectFonts, imageBytes, interpretPage, type DisplayImage, type FontStyle, type GlyphRun } from '@word/pdf';
+import { PdfDocument, applyAnnotations, collectFonts, extractText, imageBytes, interpretPage, readAnnotations, type Annotation, type DisplayImage, type FontStyle, type GlyphRun } from '@word/pdf';
 
 export interface PdfView {
   readonly pageCount: number;
   /** Problems found while opening and laying out pages (grows as pages are laid out). */
   readonly warnings: string[];
-  /** A fresh layout of page `index` (zero-based). */
-  layoutPage(index: number): PageLayout;
+  /** A fresh layout of page `index` (zero-based), as a page with id `id` (default: the index). */
+  layoutPage(index: number, id?: number): PageLayout;
+  /** The markup annotations shown. */
+  readonly annotations: readonly Annotation[];
+  /** Shows these annotations instead (pages laid out afterwards show them). */
+  setAnnotations(annotations: readonly Annotation[]): void;
+  /** Page `index`'s characters, for selecting text. */
+  characters(index: number): PdfCharacter[];
+  /** Page coordinates (points from the top-left, y down) to the page's user space (y up). */
+  toUser(index: number, x: number, y: number): [number, number];
+  /** User space to page coordinates. */
+  toPage(index: number, x: number, y: number): [number, number];
   /** Bytes of an image referenced by a laid-out page's `ImageItem.part`. */
   media(part: string): Promise<Uint8Array | null>;
+}
+
+/** A character on a page, where it's drawn, in page coordinates (points from the top-left, y down). */
+export interface PdfCharacter {
+  text: string;
+  x0: number;
+  x1: number;
+  top: number;
+  bottom: number;
+  /** Characters on one line share a number; lines count up in reading order. */
+  line: number;
+  /** The same box in the page's user space (y up), for annotations. */
+  user: [number, number, number, number];
 }
 
 const MAX_WARNINGS = 200;
@@ -37,8 +62,14 @@ interface FaceChoice {
  * Opens a PDF. Throws PdfError for files that aren't PDFs and PasswordError/EncryptionError
  * for encrypted ones without the right password (exported by @word/pdf).
  */
-export async function openPdfView(bytes: Uint8Array, fonts: FontSet, password?: string): Promise<PdfView> {
-  const doc = PdfDocument.load(bytes, { password });
+export async function openPdfView(bytes: Uint8Array, fonts: FontSet, options: { password?: string; annotations?: readonly Annotation[] } = {}): Promise<PdfView> {
+  const doc = PdfDocument.load(bytes, { password: options.password });
+  let annotations: readonly Annotation[] = readAnnotations(doc);
+  if (options.annotations) {
+    applyAnnotations(doc, options.annotations);
+    annotations = options.annotations;
+  }
+  const characterCache = new Map<number, PdfCharacter[]>();
   const warnings: string[] = [...doc.warnings];
   const seenWarnings = new Set(warnings);
   const warn = (message: string) => {
@@ -113,7 +144,42 @@ export async function openPdfView(bytes: Uint8Array, fonts: FontSet, password?: 
     pageCount: doc.pageCount,
     warnings,
 
-    layoutPage(index: number): PageLayout {
+    get annotations() {
+      return annotations;
+    },
+
+    setAnnotations(next: readonly Annotation[]): void {
+      applyAnnotations(doc, next);
+      annotations = next;
+    },
+
+    characters(index: number): PdfCharacter[] {
+      let chars = characterCache.get(index);
+      if (!chars) {
+        chars = pageCharacters(doc, index);
+        characterCache.set(index, chars);
+      }
+      return chars;
+    },
+
+    toUser(index: number, x: number, y: number): [number, number] {
+      const page = doc.pages[index];
+      // toDisplay is affine: invert it from three points.
+      const [ox, oy] = page.toDisplay(0, 0);
+      const [ax, ay] = page.toDisplay(1, 0);
+      const [bx, by] = page.toDisplay(0, 1);
+      const [a, b, c, d] = [ax - ox, ay - oy, bx - ox, by - oy];
+      const det = a * d - b * c;
+      const dx = x - ox;
+      const dy = y - oy;
+      return [(dx * d - dy * c) / det, (dy * a - dx * b) / det];
+    },
+
+    toPage(index: number, x: number, y: number): [number, number] {
+      return doc.pages[index].toDisplay(x, y);
+    },
+
+    layoutPage(index: number, id = index): PageLayout {
       const pdfPage = doc.pages[index];
       if (!pdfPage) throw new RangeError(`no page ${index} (the document has ${doc.pageCount})`);
       let display;
@@ -121,10 +187,10 @@ export async function openPdfView(bytes: Uint8Array, fonts: FontSet, password?: 
         display = interpretPage(pdfPage);
       } catch (e) {
         warn(`page ${index + 1} could not be read (${(e as Error).message})`);
-        return new PageLayout(index, 612, 792, 0, index + 1);
+        return new PageLayout(id, 612, 792, 0, index + 1);
       }
       for (const w of display.warnings) warn(`page ${index + 1}: ${w}`);
-      const page = new PageLayout(index, display.width, display.height, 0, index + 1);
+      const page = new PageLayout(id, display.width, display.height, 0, index + 1);
       for (const r of display.rects) (r.over ? page.foreground : page.background).push(r.x, r.y, r.w, r.h, packColor(r.color, r.alpha));
       for (const run of display.glyphRuns) pushRun(page, run);
       for (const image of display.images) {
@@ -154,4 +220,49 @@ export async function openPdfView(bytes: Uint8Array, fonts: FontSet, password?: 
       return cached;
     },
   };
+}
+
+/**
+ * A page's characters in reading order, each given an equal share of its text item's advance
+ * (PDF text items carry no per-character positions). Only horizontal, visible text is included.
+ */
+function pageCharacters(doc: PdfDocument, index: number): PdfCharacter[] {
+  const page = doc.pages[index];
+  let items;
+  try {
+    items = extractText(page).items;
+  } catch {
+    return [];
+  }
+  const out: PdfCharacter[] = [];
+  let line = -1;
+  let lastY = NaN;
+  let lastSize = 0;
+  for (const item of items) {
+    if (item.invisible || Math.abs(item.dir[1]) > 1e-3 || item.dir[0] <= 0) continue;
+    const chars = Array.from(item.text);
+    if (!chars.length) continue;
+    if (!(Math.abs(item.y - lastY) < Math.max(item.fontSize, lastSize) * 0.5)) line++;
+    lastY = item.y;
+    lastSize = item.fontSize;
+    const step = item.width / chars.length;
+    const low = item.y - item.fontSize * 0.22;
+    const high = item.y + item.fontSize * 0.78;
+    chars.forEach((text, i) => {
+      const ux0 = item.x + step * i;
+      const ux1 = ux0 + step;
+      const [px0, py0] = page.toDisplay(ux0, high);
+      const [px1, py1] = page.toDisplay(ux1, low);
+      out.push({
+        text,
+        x0: Math.min(px0, px1),
+        x1: Math.max(px0, px1),
+        top: Math.min(py0, py1),
+        bottom: Math.max(py0, py1),
+        line,
+        user: [ux0, low, ux1, high],
+      });
+    });
+  }
+  return out;
 }

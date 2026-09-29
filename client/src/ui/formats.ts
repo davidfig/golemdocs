@@ -12,6 +12,8 @@ export interface FormatProfile {
   mime: string;
   /** False for view-only formats: every editing command is disabled. */
   editable: boolean;
+  /** Takes markup annotations (highlight, underline, strikeout, notes) even when not editable. */
+  annotations: boolean;
   marks: readonly Mark[];
   fonts: boolean;
   fontSizes: boolean;
@@ -55,6 +57,7 @@ const ALL_MARKS: readonly Mark[] = ['bold', 'italic', 'underline', 'strikethroug
 
 const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   editable: true,
+  annotations: false,
   marks: ALL_MARKS,
   fonts: true,
   fontSizes: true,
@@ -80,6 +83,7 @@ const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
 
 const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   editable: true,
+  annotations: false,
   marks: [],
   fonts: false,
   fontSizes: false,
@@ -170,6 +174,11 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     extensions: ['.pdf'],
     mime: 'application/pdf',
     editable: false,
+    // Its own pages take markup: highlights, underlines, strikeouts and notes.
+    annotations: true,
+    highlight: true,
+    marks: ['underline', 'strikethrough'],
+    comments: true,
   },
 };
 
@@ -253,7 +262,19 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       }
       return false;
   }
-  if (!profile.editable) return false;
+  if (!profile.editable) {
+    if (!profile.annotations) return false;
+    switch (action.kind) {
+      case 'undo':
+      case 'redo':
+      case 'setHighlight':
+      case 'insertComment':
+        return true;
+      case 'toggleMark':
+        return profile.marks.includes(action.mark);
+    }
+    return false;
+  }
   switch (action.kind) {
     case 'undo':
     case 'redo':

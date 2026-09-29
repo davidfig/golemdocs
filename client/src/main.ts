@@ -63,6 +63,8 @@ let grid = false;
 let documentName = '';
 /** What the open document is: Word, PDF, Markdown or text. It decides which tools are on offer. */
 let documentKind: DocumentKind = 'docx';
+/** A PDF is shown as its own pages, which take markup annotations. */
+let annotating = false;
 let status = '';
 /** Collaboration status, when the document is open in a room. */
 let roomStatus = '';
@@ -115,12 +117,14 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pendingNotice = null;
   documentName = name;
   documentKind = kindOfSource(source);
+  annotating = false;
   setStatus(`Loading ${name}…`);
 
   worker.open(source, {
-    opened(docName, format) {
+    opened(docName, format, fixedPages) {
       name = documentName = docName;
       documentKind = format;
+      annotating = fixedPages;
       setStatus(`${name}: laying out…`);
     },
     layout(update) {
@@ -600,10 +604,13 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
   else if (x > camera.x + viewWidth - margin) camera.x = x + margin - viewWidth;
 }
 
+/** Commands that change a PDF's annotations (on its own pages, nothing else changes). */
+const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo']);
+
 function send(command: WireCommand): void {
   if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll') {
     editSent = performance.now();
-    if (FORMATS[documentKind].editable) documentEdited();
+    if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
   worker.command(command);
 }
@@ -927,6 +934,7 @@ const chromeHost = createChromeHost({
     documents: cloudDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
   }),
   send,
+  annotating: () => annotating,
   selectedText: () => selection.text,
   focusEditor: focusInput,
   notify: setStatus,

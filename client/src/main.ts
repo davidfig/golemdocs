@@ -75,7 +75,8 @@ import { FORMATS, PICTURE_KINDS, kindFromName, mountChrome, type DocumentKind, t
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
-// The static welcome text in index.html is for crawlers; the canvas is the page for everyone else.
+// The static welcome text in index.html is for crawlers and shows until the app starts; the canvas is the page for everyone else.
+document.getElementById('seo')?.classList.add('app-ready');
 document.getElementById('seo')?.setAttribute('aria-hidden', 'true');
 
 const localeReady = initLocale();

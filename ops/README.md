@@ -50,7 +50,9 @@ A networked server adds the following:
 - **Resubmissions**: the server skips transaction ids it has already logged, so a client that reconnects can safely resubmit its pending transactions.
 - **Presence**: carets and names are relayed but not logged (see client/src/collab/messages.ts).
 
-Until that server exists, `client/src/collab/devServer.ts` runs `CollabServer` in a SharedWorker, so tabs of one browser can share a room: open a document and choose **Collaborate**.
+The networked server is `server/src/room.ts` (a Durable Object per cloud document) with its rules in `server/src/roomCore.ts`; the wire protocol is `src/multiplayer.ts`. Who processes edits depends on how many people are in the room: alone, a client saves the .docx itself; when a second person arrives the room takes over, ordering transactions and writing the .docx (see the header of `multiplayer.ts`). Access is checked by the Worker (`server/src/sharing.ts`) before a connection reaches the room.
+
+`client/src/collab/devServer.ts` still runs `CollabServer` in a SharedWorker, so tabs of one browser can share a room without a server: open a document and choose **Collaborate**.
 
 ## Undo and redo
 

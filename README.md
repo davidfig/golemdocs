@@ -7,7 +7,7 @@ pnpm workspace:
 | Package | What it is |
 | --- | --- |
 | `client` | The app: Vite + WebGL renderer, menus and toolbars, browser storage |
-| `server` | Cloudflare Worker: sign-in, plus cloud documents (D1 for the catalogue, R2 for the files) |
+| `server` | Cloudflare Worker: sign-in, cloud documents (D1 for the catalogue, R2 for the files), sharing, and multiplayer rooms (a Durable Object per document) |
 | `docx`, `layout`, `editor`, `ops`, `pdf` | Format, layout, editing and collaboration libraries used by the client |
 
 ## Run it locally

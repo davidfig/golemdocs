@@ -11,7 +11,13 @@
       <canvas id="canvas"></canvas>
       <textarea id="input" aria-label="Document" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
     </main>
-    <div id="debug" hidden><span id="renderLight" title="Lit while the canvas draws" hidden></span><pre id="stats" title="Click to reset the frame times"></pre></div>
+    <div id="debug">
+      <pre id="statusInfo" class="debug-box" hidden></pre>
+      <div id="renderInfo" class="debug-box" title="Click to reset the frame times" hidden>
+        <div id="fpsRow" hidden><span id="renderLight" title="Lit while the canvas draws"></span><span id="fps"></span></div>
+        <pre id="stats"></pre>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

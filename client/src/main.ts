@@ -1,7 +1,7 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
-import { FrameMonitor, anyDebugFlag, debugFlags, onDebugFlagsChange } from './debug.ts';
+import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocument, listDocuments, type CloudDocument } from './cloud.ts';
@@ -47,7 +47,10 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
-const debugEl = document.getElementById('debug') as HTMLDivElement;
+const statusInfoEl = document.getElementById('statusInfo') as HTMLPreElement;
+const renderInfoEl = document.getElementById('renderInfo') as HTMLDivElement;
+const fpsRowEl = document.getElementById('fpsRow') as HTMLDivElement;
+const fpsEl = document.getElementById('fps') as HTMLSpanElement;
 const statsEl = document.getElementById('stats') as HTMLPreElement;
 const renderLight = document.getElementById('renderLight') as HTMLSpanElement;
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
@@ -906,15 +909,14 @@ function flashRenderLight(): void {
   lightTimer = window.setTimeout(() => renderLight.classList.remove('on'), 80);
 }
 
-/** The debug overlay: whichever flags are on (View > Debug). */
+/** The debug overlays: document status, and render information (View > Debug). */
 function updateDebug(): void {
   const flags = debugFlags();
-  debugEl.hidden = !anyDebugFlag();
-  renderLight.hidden = !flags.renderLight;
-  const lines: string[] = [];
+  statusInfoEl.hidden = !flags.status;
   if (flags.status) {
-    lines.push(`${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}`);
+    statusInfoEl.textContent = `${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}`;
   }
+  const lines: string[] = [];
   const parts: string[] = [];
   if (flags.pages && lastStats) {
     parts.push(
@@ -925,15 +927,17 @@ function updateDebug(): void {
   }
   if (flags.zoom) parts.push(`zoom ${Math.round(camera.zoom * 100)}%`);
   if (flags.cpu) parts.push(`CPU ${frames.cpuMs.toFixed(2)} ms/frame`);
-  if (flags.fps) parts.push(`${frames.fps(performance.now())} fps`);
   if (parts.length) lines.push(parts.join(' · '));
   if (flags.frameTimes) {
     lines.push(
       `slowest frame ${frames.maxCpuMs.toFixed(1)} ms · longest gap ${frames.maxGapMs.toFixed(0)} ms · ${frames.dropped} dropped (click to reset)`,
     );
   }
+  fpsRowEl.hidden = !flags.fps;
+  if (flags.fps) fpsEl.textContent = `${frames.fps(performance.now())} fps`;
   statsEl.textContent = lines.join('\n');
   statsEl.hidden = !lines.length;
+  renderInfoEl.hidden = fpsRowEl.hidden && statsEl.hidden;
 }
 
 // Idle, nothing draws: keep the frame rate honest (it falls to 0) and the status text fresh.
@@ -941,7 +945,7 @@ setInterval(() => {
   if (debugFlags().fps || debugFlags().status) updateDebug();
 }, 500);
 onDebugFlagsChange(updateDebug);
-debugEl.addEventListener('click', () => {
+renderInfoEl.addEventListener('click', () => {
   frames.clear();
   updateDebug();
 });
@@ -954,7 +958,7 @@ function render(): void {
   lastStats = renderer.render(camera, pages, selection, caretVisible);
   const end = performance.now();
   frames.record(end, end - start);
-  if (debugFlags().renderLight) flashRenderLight();
+  if (debugFlags().fps) flashRenderLight();
   chrome.update({
     documentName,
     kind: documentKind,

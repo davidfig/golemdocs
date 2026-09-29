@@ -1,4 +1,4 @@
-// Debug flags: what the on-screen debug overlay shows. They belong to this browser (kept in
+// Debug flags: what the on-screen debug overlays show: document status, and render information. They belong to this browser (kept in
 // localStorage), not the document, and are all off until switched on in View > Debug.
 
 export interface DebugFlagInfo {
@@ -12,9 +12,8 @@ export const DEBUG_FLAGS = [
   { key: 'pages', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
   { key: 'zoom', label: 'Zoom', hint: 'The current zoom level' },
   { key: 'cpu', label: 'CPU time per frame', hint: 'How long the last frame took to submit to the GPU' },
-  { key: 'fps', label: 'Frames per second', hint: 'Frames drawn in the last second (0 when nothing is changing: the canvas only draws on demand)' },
+  { key: 'fps', label: 'Frames per second and render light', hint: 'Frames drawn in the last second (0 when nothing is changing: the canvas only draws on demand), beside a light that flashes whenever the canvas draws' },
   { key: 'frameTimes', label: 'Slowest frame and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },
-  { key: 'renderLight', label: 'Render light', hint: 'A light that flashes whenever the canvas draws' },
 ] as const;
 
 export type DebugFlag = (typeof DEBUG_FLAGS)[number]['key'];
@@ -49,10 +48,6 @@ const listeners = new Set<() => void>();
 
 export function debugFlags(): Readonly<DebugFlags> {
   return current;
-}
-
-export function anyDebugFlag(): boolean {
-  return DEBUG_FLAGS.some((f) => current[f.key]);
 }
 
 export function setDebugFlag(key: DebugFlag, on: boolean): void {

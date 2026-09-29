@@ -22,6 +22,7 @@ import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
+import { debugSettings } from './debugSettings.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
 import { SyncButton } from './syncButton.ts';
@@ -231,7 +232,7 @@ export class Chrome {
       a('view.editForm', '&Edit Form', { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: 'Move, add, rename and delete the PDF’s fields' }),
       a('view.grid', 'Page &Grid', { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.ruler', '&Ruler', { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
-      a('view.stats', 'Performance &Stats', { kind: 'toggleStats' }, { checked: (s) => s.statsVisible }),
+      { id: 'view.debug', label: '&Debug…', run: () => this.showDebug() },
       a('view.formattingMarks', 'Formatting &Marks', { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
         tooltip: 'Show/Hide ¶',
@@ -449,7 +450,7 @@ export class Chrome {
           sub('&Toolbars', [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
-          cmd('view.stats'),
+          cmd('view.debug'),
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),
@@ -855,6 +856,12 @@ export class Chrome {
       apply: (layout) => this.setLayout(layout),
       onClose: () => this.options.host.focusEditor(),
     });
+  }
+
+  private showDebug(): void {
+    this.menuBar.close(false);
+    closePopup();
+    showDialog('Debug', debugSettings(), () => this.options.host.focusEditor());
   }
 
   // --- Help ----------------------------------------------------------------------------------

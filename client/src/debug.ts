@@ -1,0 +1,128 @@
+// Debug flags: what the on-screen debug overlay shows. They belong to this browser (kept in
+// localStorage), not the document, and are all off until switched on in View > Debug.
+
+export interface DebugFlagInfo {
+  key: DebugFlag;
+  label: string;
+  hint: string;
+}
+
+export const DEBUG_FLAGS = [
+  { key: 'status', label: 'Document status', hint: 'Sync and collaboration status, and how long the last edit took to reach the screen' },
+  { key: 'pages', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
+  { key: 'zoom', label: 'Zoom', hint: 'The current zoom level' },
+  { key: 'cpu', label: 'CPU time per frame', hint: 'How long the last frame took to submit to the GPU' },
+  { key: 'fps', label: 'Frames per second', hint: 'Frames drawn in the last second (0 when nothing is changing: the canvas only draws on demand)' },
+  { key: 'frameTimes', label: 'Slowest frame and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },
+  { key: 'renderLight', label: 'Render light', hint: 'A light that flashes whenever the canvas draws' },
+] as const;
+
+export type DebugFlag = (typeof DEBUG_FLAGS)[number]['key'];
+export type DebugFlags = Record<DebugFlag, boolean>;
+
+const STORAGE_KEY = 'golem.debug';
+
+const OFF = Object.fromEntries(DEBUG_FLAGS.map((f) => [f.key, false])) as DebugFlags;
+
+/** The saved flags; anything missing, unknown or unreadable is off. */
+export function loadDebugFlags(): DebugFlags {
+  const flags = { ...OFF };
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    if (saved && typeof saved === 'object') for (const { key } of DEBUG_FLAGS) flags[key] = (saved as Record<string, unknown>)[key] === true;
+  } catch {
+    // Storage unavailable or corrupt: everything stays off.
+  }
+  return flags;
+}
+
+function saveDebugFlags(flags: DebugFlags): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(flags));
+  } catch {
+    // Storage unavailable (private window, blocked): the flags last for this session only.
+  }
+}
+
+let current = loadDebugFlags();
+const listeners = new Set<() => void>();
+
+export function debugFlags(): Readonly<DebugFlags> {
+  return current;
+}
+
+export function anyDebugFlag(): boolean {
+  return DEBUG_FLAGS.some((f) => current[f.key]);
+}
+
+export function setDebugFlag(key: DebugFlag, on: boolean): void {
+  if (current[key] === on) return;
+  current = { ...current, [key]: on };
+  saveDebugFlags(current);
+  for (const listener of listeners) listener();
+}
+
+/** Calls `listener` whenever a flag changes. Returns the way to stop. */
+export function onDebugFlagsChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+// --- Frame timing ---------------------------------------------------------------------------
+
+/** Frames further apart than this aren't part of one continuous run (scrolling, animating). */
+const RUN_GAP_MS = 250;
+/** The shortest display refresh interval taken as real; shorter gaps are extra draws in one frame. */
+const MIN_REFRESH_MS = 6;
+const WINDOW_MS = 1000;
+
+/**
+ * Times the canvas's draws. It draws on demand, so a gap between two frames is only a dropped
+ * frame if they're part of one run: a second of idle isn't a hundred missed frames.
+ */
+export class FrameMonitor {
+  private times: number[] = [];
+  private last = 0;
+  /** The display's frame interval, learned from the shortest gap seen in a run (60 Hz to start). */
+  private refresh = 1000 / 60;
+  /** The most recent frame's CPU time, ms. */
+  cpuMs = 0;
+  /** The slowest frame's CPU time since reset, ms. */
+  maxCpuMs = 0;
+  /** The longest gap between two frames in a run since reset, ms. */
+  maxGapMs = 0;
+  /** Frames missed within runs since reset. */
+  dropped = 0;
+
+  /** Records a frame drawn at `now` that took `cpuMs` (both from performance.now()). */
+  record(now: number, cpuMs: number): void {
+    this.cpuMs = cpuMs;
+    if (cpuMs > this.maxCpuMs) this.maxCpuMs = cpuMs;
+    if (this.last) {
+      const gap = now - this.last;
+      if (gap < RUN_GAP_MS) {
+        if (gap >= MIN_REFRESH_MS && gap < this.refresh) this.refresh = gap;
+        if (gap > this.maxGapMs) this.maxGapMs = gap;
+        if (gap > this.refresh * 1.5) this.dropped += Math.round(gap / this.refresh) - 1;
+      }
+    }
+    this.last = now;
+    this.times.push(now);
+  }
+
+  /** Frames drawn in the last second, as of `now`. */
+  fps(now: number): number {
+    const from = now - WINDOW_MS;
+    let i = 0;
+    while (i < this.times.length && this.times[i] <= from) i++;
+    if (i) this.times.splice(0, i);
+    return this.times.length;
+  }
+
+  /** Forgets the slowest frame, longest gap and dropped frames. */
+  clear(): void {
+    this.maxCpuMs = 0;
+    this.maxGapMs = 0;
+    this.dropped = 0;
+  }
+}

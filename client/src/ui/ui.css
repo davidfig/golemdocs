@@ -940,3 +940,21 @@
   filter: brightness(1.1);
   background: var(--wm-hot-border);
 }
+
+/* --- Debug settings (see debugSettings.ts) ---------------------------------------------------- */
+
+.wm-debug-flag {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+}
+
+.wm-debug-flag input {
+  margin: 2px 0 0;
+}
+
+.wm-debug-flag small {
+  display: block;
+  color: #555;
+}

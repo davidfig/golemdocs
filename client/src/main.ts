@@ -1,6 +1,7 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
+import { FrameMonitor, anyDebugFlag, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
@@ -20,7 +21,7 @@ import { ImageRenderer } from './shapes/imageRenderer.ts';
 import { AtlasLibrary } from './text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
 import { GpuPage } from './view/gpuPage.ts';
-import { PageRenderer } from './view/pageRenderer.ts';
+import { PageRenderer, type FrameStats } from './view/pageRenderer.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
@@ -32,7 +33,9 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
-const statsEl = document.getElementById('stats') as HTMLDivElement;
+const debugEl = document.getElementById('debug') as HTMLDivElement;
+const statsEl = document.getElementById('stats') as HTMLPreElement;
+const renderLight = document.getElementById('renderLight') as HTMLSpanElement;
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
 if (!gl) throw new Error('WebGL2 not supported');
 
@@ -759,30 +762,79 @@ function requestRender(): void {
   requestAnimationFrame(render);
 }
 
+const frames = new FrameMonitor();
+let lastStats: FrameStats | null = null;
+let lightTimer = 0;
+
+/** Lights the render light for a moment: a frame itself is too brief to see. */
+function flashRenderLight(): void {
+  renderLight.classList.add('on');
+  clearTimeout(lightTimer);
+  lightTimer = window.setTimeout(() => renderLight.classList.remove('on'), 80);
+}
+
+/** The debug overlay: whichever flags are on (View > Debug). */
+function updateDebug(): void {
+  const flags = debugFlags();
+  debugEl.hidden = !anyDebugFlag();
+  renderLight.hidden = !flags.renderLight;
+  const lines: string[] = [];
+  if (flags.status) {
+    lines.push(`${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}`);
+  }
+  const parts: string[] = [];
+  if (flags.pages && lastStats) {
+    parts.push(
+      `${lastStats.visiblePages}/${lastStats.pages.toLocaleString()} pages visible`,
+      `${lastStats.glyphs.toLocaleString()} glyphs drawn`,
+      `${lastStats.drawCalls} draw calls`,
+    );
+  }
+  if (flags.zoom) parts.push(`zoom ${Math.round(camera.zoom * 100)}%`);
+  if (flags.cpu) parts.push(`CPU ${frames.cpuMs.toFixed(2)} ms/frame`);
+  if (flags.fps) parts.push(`${frames.fps(performance.now())} fps`);
+  if (parts.length) lines.push(parts.join(' · '));
+  if (flags.frameTimes) {
+    lines.push(
+      `slowest frame ${frames.maxCpuMs.toFixed(1)} ms · longest gap ${frames.maxGapMs.toFixed(0)} ms · ${frames.dropped} dropped (click to reset)`,
+    );
+  }
+  statsEl.textContent = lines.join('\n');
+  statsEl.hidden = !lines.length;
+}
+
+// Idle, nothing draws: keep the frame rate honest (it falls to 0) and the status text fresh.
+setInterval(() => {
+  if (debugFlags().fps || debugFlags().status) updateDebug();
+}, 500);
+onDebugFlagsChange(updateDebug);
+debugEl.addEventListener('click', () => {
+  frames.clear();
+  updateDebug();
+});
+
 function render(): void {
   frameQueued = false;
   const start = performance.now();
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight);
-  const stats = renderer.render(camera, pages, selection, caretVisible);
-  const frameMs = performance.now() - start;
+  lastStats = renderer.render(camera, pages, selection, caretVisible);
+  const end = performance.now();
+  frames.record(end, end - start);
+  if (debugFlags().renderLight) flashRenderLight();
   chrome.update({
     documentName,
     kind: documentKind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
     grid,
-    statsVisible: !statsEl.hidden,
     format: selectionFormat,
     canUndo,
     canRedo,
     formMode: annotating ? formMode : null,
   });
   formLayer.position();
-  statsEl.textContent =
-    `${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}\n${stats.visiblePages}/${stats.pages.toLocaleString()} pages visible · ` +
-    `${stats.glyphs.toLocaleString()} glyphs drawn · ${stats.drawCalls} draw calls · zoom ${Math.round(camera.zoom * 100)}% · ` +
-    `CPU ${frameMs.toFixed(2)} ms/frame`;
+  updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
   const page = caret && pagesById.get(caret.page);
@@ -1081,10 +1133,6 @@ const chromeHost = createChromeHost({
   focusEditor: focusInput,
   notify: setStatus,
   toggleGrid,
-  toggleStats: () => {
-    statsEl.hidden = !statsEl.hidden;
-    requestRender();
-  },
   viewChanged: () => {
     userMoved = true;
     requestRender();

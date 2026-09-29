@@ -48,7 +48,6 @@ export interface AppHooks {
   focusEditor(): void;
   notify(message: string): void;
   toggleGrid(): void;
-  toggleStats(): void;
   /** The camera moved: stop auto-placing it, and redraw. */
   viewChanged(): void;
   fonts(): Promise<string[]>;
@@ -78,7 +77,6 @@ const SUPPORTED = new Set<ActionKind>([
   'zoom',
   'zoomBy',
   'toggleGrid',
-  'toggleStats',
   'insertText',
   'convert',
   'insertComment',
@@ -231,8 +229,6 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         }
         case 'toggleGrid':
           return app.toggleGrid();
-        case 'toggleStats':
-          return app.toggleStats();
         case 'insertText':
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':

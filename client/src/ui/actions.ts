@@ -89,7 +89,6 @@ export type Action =
   | { kind: 'zoom'; to: ZoomTarget }
   | { kind: 'zoomBy'; factor: number }
   | { kind: 'toggleGrid' }
-  | { kind: 'toggleStats' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
@@ -163,7 +162,6 @@ export interface ChromeState {
   zoom: number;
   viewMode: ViewMode;
   grid: boolean;
-  statsVisible: boolean;
   rulerVisible: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
@@ -197,7 +195,6 @@ export const DEFAULT_STATE: ChromeState = {
   zoom: 1,
   viewMode: 'print',
   grid: false,
-  statsVisible: true,
   rulerVisible: false,
   formattingMarks: false,
   trackChanges: false,

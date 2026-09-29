@@ -1,5 +1,6 @@
 // Maps a provider identity (provider + subject) to one of our users.
 
+import { userIdFor } from './auth.ts';
 import type { Env } from './cf.ts';
 import { randomToken } from './crypto.ts';
 import type { Profile, ProviderId } from './providers.ts';
@@ -46,11 +47,22 @@ export interface Me {
   id: string;
   email: string | null;
   name: string | null;
+  isAdmin: boolean;
+}
+
+/** Whether the user has a verified email listed in ADMIN_EMAILS (or is the local DEV_USER listed there). */
+export async function isAdmin(env: Env, userId: string): Promise<boolean> {
+  const admins = (env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (!admins.length) return false;
+  const { results } = await env.DIRECTORY.prepare('SELECT email FROM identities WHERE user_id = ? AND email_verified = 1').bind(userId).all<{ email: string | null }>();
+  if (results.some((r) => r.email && admins.includes(r.email.toLowerCase()))) return true;
+  const dev = env.DEV_USER?.trim();
+  return !!dev && admins.includes(dev.toLowerCase()) && (await userIdFor(dev)) === userId;
 }
 
 export async function describeUser(env: Env, userId: string): Promise<Me> {
   const row = await env.DIRECTORY.prepare('SELECT email, name FROM identities WHERE user_id = ? ORDER BY last_login_at DESC LIMIT 1')
     .bind(userId)
     .first<{ email: string | null; name: string | null }>();
-  return { id: userId, email: row?.email ?? null, name: row?.name ?? null };
+  return { id: userId, email: row?.email ?? null, name: row?.name ?? null, isAdmin: await isAdmin(env, userId) };
 }

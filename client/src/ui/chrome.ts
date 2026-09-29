@@ -18,10 +18,13 @@ import {
 import { CommandRegistry, type CommandSpec } from './commands.ts';
 import { h } from './dom.ts';
 import { CONVERT_ORDER, FORMATS } from './formats.ts';
+import { billingPanel } from './billingPanel.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
+import { debugSettings } from './debugSettings.ts';
+import { SCHEMES, currentAppearance, currentScheme, isDark, setAppearance, setScheme, toggleDark } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
 import { SyncButton } from './syncButton.ts';
@@ -35,6 +38,8 @@ export interface ChromeOptions {
    * implemented them yet; they report "isn't available yet". Default false.
    */
   showUnimplemented?: boolean;
+  /** Whether the signed-in user is an admin; admin-only menu items are left out otherwise. */
+  isAdmin?: () => boolean;
   /** For the window title and About box. Default "Golem Docs". */
   appName?: string;
 }
@@ -94,7 +99,7 @@ export class Chrome {
   private converting = false;
   /** Fill in a PDF's form or edit it: beside the format selector, for a PDF's pages. */
   private formModeBox!: HTMLElement;
-  /** Where the document is kept (this browser, or synced), at the far right. */
+  /** Whether the document is saved (or, signed out, an offer to sign in), at the far right. */
   private syncButton!: SyncButton;
 
   constructor(private readonly options: ChromeOptions) {
@@ -193,7 +198,6 @@ export class Chrome {
       a('file.open', '&Open…', { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
       a('file.download', 'Do&wnload', { kind: 'download' }, { tooltip: 'Download a copy of this document' }),
       a('file.share', '&Share…', { kind: 'share' }, { tooltip: 'Let other people open and edit this document (cloud documents)' }),
-      a('file.saveToCloud', 'Save to &Cloud', { kind: 'saveToCloud' }, { tooltip: 'Keep a copy in your account (sign-in required)' }),
       dialog('file.pageSetup', 'Page Set&up…', 'pageSetup'),
       a('file.printPreview', 'Print Pre&view', { kind: 'printPreview' }, { icon: 'printPreview' }),
       a('file.collaborate', '&Collaborate…', { kind: 'collaborate' }, { tooltip: 'Edit this document together (opens a second window)' }),
@@ -232,7 +236,7 @@ export class Chrome {
       a('view.editForm', '&Edit Form', { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: 'Move, add, rename and delete the PDF’s fields' }),
       a('view.grid', 'Page &Grid', { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.ruler', '&Ruler', { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
-      a('view.stats', 'Performance &Stats', { kind: 'toggleStats' }, { checked: (s) => s.statsVisible }),
+      { id: 'view.debug', label: '&Debug…', run: () => this.showDebug() },
       a('view.formattingMarks', 'Formatting &Marks', { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
         tooltip: 'Show/Hide ¶',
@@ -261,6 +265,18 @@ export class Chrome {
         checked: () => this.layout.find((t) => t.name === name)?.visible ?? false,
       });
     }
+    for (const { id, label } of SCHEMES) {
+      r.add({ id: `view.theme.${id}`, label, run: () => setScheme(id), checked: () => currentScheme() === id, radio: true });
+    }
+    r.add(
+      { id: 'view.darkMode', label: '&Dark Mode', run: toggleDark, checked: isDark },
+      {
+        id: 'view.matchSystem',
+        label: '&Match System',
+        run: () => setAppearance(currentAppearance() === 'auto' ? (isDark() ? 'dark' : 'light') : 'auto'),
+        checked: () => currentAppearance() === 'auto',
+      },
+    );
     r.add({ id: 'view.customizeToolbars', label: 'Customi&ze…', run: () => this.customize() });
 
     // Insert
@@ -395,19 +411,7 @@ export class Chrome {
             if (!saved.length) return [{ type: 'item', label: '(none)', enabled: false, run: () => {} }];
             return saved.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSaved', id: s.id }, s.label) }));
           }),
-          sub('Cloud &Documents', () => {
-            const cloud = host.cloud?.();
-            if (!cloud?.signedIn) {
-              return [{ type: 'item', label: 'Sign in to see your cloud documents…', run: () => r.perform({ kind: 'signIn' }, 'Sign in') }];
-            }
-            const docs: MenuItem[] = cloud.documents.length
-              ? cloud.documents.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openCloud', id: s.id }, s.label) }))
-              : [{ type: 'item', label: '(none)', enabled: false, run: () => {} }];
-            const who = cloud.user ? ` (${cloud.user.replace(/&/g, '&&')})` : '';
-            return [...docs, sep, { type: 'item', label: `Sign &out${who}`, run: () => r.perform({ kind: 'signOut' }, 'Sign out') }];
-          }),
           sep,
-          cmd('file.saveToCloud'),
           cmd('file.share'),
           sub('Con&vert To', CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
           cmd('file.download'),
@@ -449,9 +453,11 @@ export class Chrome {
           cmd('view.outline'),
           sep,
           sub('&Toolbars', [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
+          sub('Color &Scheme', [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.matchSystem')]),
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
-          cmd('view.stats'),
+          cmd('view.debug'),
+          { type: 'item', label: 'Cloudflare &Billing…', run: () => this.showBilling(), available: () => this.options.isAdmin?.() ?? false },
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),
@@ -857,6 +863,18 @@ export class Chrome {
       apply: (layout) => this.setLayout(layout),
       onClose: () => this.options.host.focusEditor(),
     });
+  }
+
+  private showDebug(): void {
+    this.menuBar.close(false);
+    closePopup();
+    showDialog('Debug', debugSettings(), () => this.options.host.focusEditor());
+  }
+
+  private showBilling(): void {
+    this.menuBar.close(false);
+    closePopup();
+    showDialog('Cloudflare billing', billingPanel(), () => this.options.host.focusEditor());
   }
 
   // --- Help ----------------------------------------------------------------------------------

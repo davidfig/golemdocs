@@ -1,6 +1,9 @@
+import { isAdmin } from './accounts.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
+import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
+import { HttpError } from './http.ts';
 import { Room } from './room.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { CloudflareError, userDb, type UserDb } from './userDb.ts';
@@ -10,14 +13,6 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_THUMB_BYTES = 512 * 1024;
 const THUMB_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg']);
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
 
 interface DocumentRow {
   id: string;
@@ -141,6 +136,13 @@ const handler: ExportedHandler = {
         const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId);
         return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
       }
+
+      // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
+      if (path === '/api/admin/billing' && request.method === 'GET') {
+        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
+        return json(await billingSummary(env));
+      }
+
 
       const match = /^\/api\/(documents|shared)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
@@ -279,16 +281,22 @@ const handler: ExportedHandler = {
         });
       }
 
-      // PUT /api/documents/:id[?name=…]: replace the bytes (and optionally rename).
+      // PUT /api/documents/:id[?name=…][&base=…]: replace the bytes (and optionally rename). With
+      // `base` (the `updatedAt` the client's copy started from), a document changed elsewhere since
+      // is refused with 409 instead of overwritten.
       if (request.method === 'PUT') {
         requireWrite();
         // While several people are editing, the room writes the file; an upload would be overwritten.
+        // (423, not 409: 409 already means "changed elsewhere", which clients answer with a copy.)
         if (env.ROOMS && !((await (await roomFor(env, id).fetch(new Request('https://room/state'))).json()) as { maySave: boolean }).maySave) {
-          throw new HttpError(409, 'this document is being edited by several people; the server is saving it');
+          throw new HttpError(423, 'this document is being edited by several people; the server is saving it');
         }
+        const base = url.searchParams.get('base');
+        if (base !== null && Number(base) !== row.updated_at) throw new HttpError(409, 'changed elsewhere');
         const bytes = await readDocx(request);
         const name = cleanName(url.searchParams.get('name')) ?? row.name;
-        const now = Date.now();
+        // Strictly increasing, so two saves in the same millisecond still tell versions apart.
+        const now = Math.max(Date.now(), row.updated_at + 1);
         await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX } });
         await db.run('UPDATE documents SET name = ?, size = ?, updated_at = ? WHERE id = ?', [name, bytes.byteLength, now, id]);
         return json(describe({ ...row, name, size: bytes.byteLength, updated_at: now }, role));

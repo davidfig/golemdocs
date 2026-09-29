@@ -210,8 +210,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'open':
     case 'openSample':
     case 'openSaved':
-    case 'openCloud':
-    case 'saveToCloud':
+    case 'syncNow':
     case 'share':
     case 'signIn':
     case 'signOut':
@@ -223,7 +222,6 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'zoom':
     case 'zoomBy':
     case 'toggleGrid':
-    case 'toggleStats':
     case 'toggleRuler':
     case 'toggleFormattingMarks':
       return true;

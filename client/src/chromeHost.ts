@@ -10,7 +10,7 @@ import { sourceFromFile } from './formats/source.ts';
 import type { Bounds } from './document/arrange.ts';
 import type { GpuPage } from './view/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
-import { acceptList, kindFromName, type Action, type DocumentKind, type ActionKind, type ChromeHost, type CloudState, type FormMode, type Sample, type ZoomTarget } from './ui/index.ts';
+import { acceptList, kindFromName, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ZoomTarget } from './ui/index.ts';
 
 export interface AppHooks {
   /** Show (or hide) the dashboard of all documents. */
@@ -23,8 +23,8 @@ export interface AppHooks {
   openSample(id: string): void;
   /** Put the document in a collaboration room and open a second window on it. */
   collaborate(): void;
-  /** Save in this browser, then to the cloud; asks the user to sign in if they haven't. */
-  saveToCloud(): Promise<void>;
+  /** Send changes that haven't reached the account yet, now. */
+  syncNow(): Promise<void>;
   /** Share the open cloud document with other people. */
   share(): void;
   /** Download a copy of the document as a file, in its own format. */
@@ -35,9 +35,8 @@ export interface AppHooks {
   signOut(): Promise<void>;
   /** Delete every document and setting kept in this browser, once the user confirms. */
   clearLocalData(): Promise<void>;
-  /** Documents saved in this browser. */
+  /** The user's documents (ids are sources: `local:…` or `cloud:…`). */
   saved(): Sample[];
-  cloud(): CloudState;
   send(command: WireCommand): void;
   /** A PDF is shown as its own pages, which take markup annotations. */
   annotating(): boolean;
@@ -50,7 +49,6 @@ export interface AppHooks {
   focusEditor(): void;
   notify(message: string): void;
   toggleGrid(): void;
-  toggleStats(): void;
   /** The camera moved: stop auto-placing it, and redraw. */
   viewChanged(): void;
   fonts(): Promise<string[]>;
@@ -64,8 +62,7 @@ const SUPPORTED = new Set<ActionKind>([
   'open',
   'openSample',
   'openSaved',
-  'openCloud',
-  'saveToCloud',
+  'syncNow',
   'share',
   'download',
   'signIn',
@@ -81,7 +78,6 @@ const SUPPORTED = new Set<ActionKind>([
   'zoom',
   'zoomBy',
   'toggleGrid',
-  'toggleStats',
   'insertText',
   'convert',
   'insertComment',
@@ -185,15 +181,13 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'openSample':
           return app.openSample(action.id);
         case 'openSaved':
-          return app.openSample(`local:${action.id}`);
-        case 'openCloud':
-          return app.openSample(`cloud:${action.id}`);
+          return app.openSample(action.id);
         case 'download':
           return app.download();
         case 'convert':
           return app.convert(action.to);
-        case 'saveToCloud':
-          return app.saveToCloud();
+        case 'syncNow':
+          return app.syncNow();
         case 'share':
           return app.share();
         case 'signIn':
@@ -236,8 +230,6 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         }
         case 'toggleGrid':
           return app.toggleGrid();
-        case 'toggleStats':
-          return app.toggleStats();
         case 'insertText':
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':
@@ -281,7 +273,6 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     notify: app.notify,
     samples: app.samples,
     saved: app.saved,
-    cloud: app.cloud,
     fonts: app.fonts,
   };
 }

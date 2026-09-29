@@ -51,20 +51,19 @@ export type DialogName =
 
 export type Action =
   // File
-  /** The screen of thumbnails of every document, in this browser and in the cloud. */
+  /** The screen of thumbnails of every document. */
   | { kind: 'dashboard' }
   | { kind: 'new' }
   | { kind: 'open' }
   | { kind: 'openSample'; id: string }
-  /** A document saved in this browser. */
+  /** One of the user's documents (File ▸ Open Recent); `id` is its source, `local:…` or `cloud:…`. */
   | { kind: 'openSaved'; id: string }
-  /** A document in the user's cloud storage (needs an account). */
-  | { kind: 'openCloud'; id: string }
-  | { kind: 'saveToCloud' }
+  /** Send changes that haven't reached the account yet, now (after a failed upload). */
+  | { kind: 'syncNow' }
   | { kind: 'share' }
   | { kind: 'signIn' }
   | { kind: 'signOut' }
-  /** Delete every document and setting kept in this browser (asks first). Cloud documents stay. */
+  /** Delete every document and setting kept in this browser (asks first). The account's documents stay. */
   | { kind: 'clearLocalData' }
   /** Download a copy of the document, in its own format. */
   | { kind: 'download' }
@@ -90,7 +89,6 @@ export type Action =
   | { kind: 'zoom'; to: ZoomTarget }
   | { kind: 'zoomBy'; factor: number }
   | { kind: 'toggleGrid' }
-  | { kind: 'toggleStats' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
@@ -164,26 +162,26 @@ export interface ChromeState {
   zoom: number;
   viewMode: ViewMode;
   grid: boolean;
-  statsVisible: boolean;
   rulerVisible: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
   formMode: FormMode | null;
-  /** Where the open document is kept, for the sync button at the top right. */
+  /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
 }
 
 /**
- * The open document's place: `local` is this browser only (always, when signed out); `pending`
- * has edits waiting to go to the cloud; `failed` couldn't be sent (`error` says why).
+ * Whether the open document is saved. Signed out (`guest`) it is saved in this browser. Signed
+ * in: `saved` to the account, `saving` (edits on their way), `offline` (kept here until the
+ * account can be reached), `failed` (`error` says why), or `signedOut` (the session ended; the
+ * edits wait here for the user to sign in again).
  */
-export type DocumentSync = 'local' | 'synced' | 'pending' | 'syncing' | 'failed';
+export type DocumentSync = 'guest' | 'saved' | 'saving' | 'offline' | 'failed' | 'signedOut';
 
 export interface SyncStatus {
-  signedIn: boolean;
-  /** Who is signed in (an email or name). */
+  /** Who is signed in (an email or name); null when signed out. */
   user: string | null;
   document: DocumentSync;
   error: string | null;
@@ -198,27 +196,18 @@ export const DEFAULT_STATE: ChromeState = {
   zoom: 1,
   viewMode: 'print',
   grid: false,
-  statsVisible: true,
   rulerVisible: false,
   formattingMarks: false,
   trackChanges: false,
   format: {},
   formMode: null,
-  sync: { signedIn: false, user: null, document: 'local', error: null },
+  sync: { user: null, document: 'guest', error: null },
 };
 
 /** A sample document the File menu can open. */
 export interface Sample {
   id: string;
   label: string;
-}
-
-/** The cloud side of File: whether there's an account, and its documents. */
-export interface CloudState {
-  signedIn: boolean;
-  /** Who is signed in (an email or name), for the Sign out item. */
-  user: string | null;
-  documents: Sample[];
 }
 
 /** What the chrome needs from the application. */
@@ -232,10 +221,8 @@ export interface ChromeHost {
   notify(message: string): void;
   /** Samples for File ▸ Open Sample, read each time the menu opens. */
   samples?(): Sample[];
-  /** Documents saved in this browser, for File ▸ Open Recent. */
+  /** The user's documents, for File ▸ Open Recent. */
   saved?(): Sample[];
-  /** Cloud documents, for File ▸ Cloud Documents. */
-  cloud?(): CloudState;
   /** Font families for the font box. */
   fonts?(): string[] | Promise<string[]>;
 }

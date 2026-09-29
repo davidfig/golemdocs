@@ -3,7 +3,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #e8e8e8;
+  background: var(--wm-desk, #e5e5e5);
 }
 
 /* Menu bar and toolbars on top (see ui/), the document fills the rest. */
@@ -45,19 +45,113 @@ body {
   white-space: pre;
 }
 
-#stats {
+/* The debug panels (View > Debug): document status, and render information with the render light
+   in its heading. Each is a grid of label/value pairs, two to a row. Clicking the render panel
+   resets the frame times. */
+#debug {
   position: fixed;
   left: 8px;
   bottom: 8px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgb(0 0 0 / 0.7);
-  color: #fff;
-  font: 12px/1.4 ui-monospace, monospace;
-  white-space: pre;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
   pointer-events: none;
 }
 
-#stats[hidden] {
+.debug-panel {
+  padding: 3px 8px 4px;
+  border: 1px solid #4a5263;
+  border-radius: 4px;
+  background: rgb(38 43 54 / 0.75);
+  color: #fff;
+  font: 11px/1.35 ui-monospace, monospace;
+}
+
+.debug-panel[hidden] {
   display: none;
+}
+
+.debug-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 1px;
+  font: inherit;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.debug-stats {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  column-gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Labels dim, values bright; a second pair on a row is set off from the first. */
+.debug-stats > :nth-child(4n + 1),
+.debug-stats > :nth-child(4n + 3) {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.debug-stats > :nth-child(4n + 2) {
+  text-align: right;
+  margin-right: 10px;
+}
+
+.debug-stats > :nth-child(4n) {
+  text-align: right;
+}
+
+/* The document's panels sit in the same row as the render panel. */
+#statusPanels {
+  display: contents;
+}
+
+/* Status text is long: one pair per row, wrapped, rather than stretching across the window. */
+.debug-list {
+  max-width: 340px;
+}
+
+.debug-list .debug-stats {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.debug-list .debug-stats > :nth-child(odd) {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.debug-list .debug-stats > :nth-child(even) {
+  margin-right: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+#renderInfo {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* Lit while the canvas draws; fades out after. */
+#renderLight {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3a3a3a;
+  transition: background 0.25s, box-shadow 0.25s;
+}
+
+#renderLight[hidden] {
+  display: none;
+}
+
+#renderLight.on {
+  background: #4cff6a;
+  box-shadow: 0 0 6px #4cff6a;
+  transition: none;
 }

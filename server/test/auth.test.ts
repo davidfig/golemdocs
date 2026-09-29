@@ -162,7 +162,7 @@ test('google: PKCE, session, /me, logout', async () => {
   const userId = await userOf(session);
   assert.ok(userId);
   const me = (await (await call('/api/auth/me', { headers: { cookie: `__Host-session=${session}` } })).json()) as any;
-  assert.deepEqual(me.user, { id: userId, email: 'dev@example.com', name: 'Dev' });
+  assert.deepEqual(me.user, { id: userId, email: 'dev@example.com', name: 'Dev', isAdmin: false });
   // Only a hash of the token is stored.
   const stored = (env.DIRECTORY as any).raw.prepare('SELECT token_hash FROM sessions').all() as { token_hash: string }[];
   assert.equal(stored.length, 1);

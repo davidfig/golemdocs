@@ -177,20 +177,8 @@
   font-size: 11px;
 }
 
-.wm-badge-ok {
-  background: #d3ecd7;
-}
-
 .wm-badge-pending {
   background: #dbe4f5;
-}
-
-.wm-badge-warn {
-  background: #f7dcb5;
-}
-
-.wm-badge-muted {
-  color: #666;
 }
 
 .wm-card-actions {

@@ -1,6 +1,6 @@
 # Golem Docs
 
-A Word-style editor for the browser. Text is drawn with WebGL (MSDF glyph atlases), so zooming stays sharp and large documents stay fast. Documents are saved in the browser with no account; signing in is only needed to keep a copy in the cloud.
+A Word-style editor for the browser. Text is drawn with WebGL (MSDF glyph atlases), so zooming stays sharp and large documents stay fast. Documents are saved in the browser with no account; signed in, they are saved to the account instead (the browser keeps a cache for speed and offline work).
 
 pnpm workspace:
 
@@ -59,7 +59,7 @@ Other things `server/.dev.vars` controls:
 
 ### Where local state lives
 
-- Saved documents: the browser's IndexedDB (DevTools ▸ Application ▸ IndexedDB ▸ `word`).
+- Saved documents: the browser's IndexedDB (DevTools ▸ Application ▸ IndexedDB ▸ `word`). Each copy has an `owner` (the account's user id) once it belongs to an account; signing in gives the ones without one to that account, and signing out deletes the account's copies. The last signed-in account is remembered in `localStorage` (`golem.account`) so the app still shows its documents offline.
 - Thumbnails for the dashboard (File ▸ Dashboard): rendered from page 1 on every save and kept in IndexedDB next to the document; cloud documents carry theirs (uploaded with the document, fetched only when their card scrolls into view).
 - Server state in `local` mode: `server/.wrangler/`. Delete it to reset the simulated D1, R2 and sessions. In `dev` mode the data is in your dev Cloudflare resources (delete the `golemdocs-dev-user-…` databases and empty the bucket from the dashboard to reset).
 

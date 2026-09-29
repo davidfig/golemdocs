@@ -13,3 +13,6 @@ MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+
+# Emails of admins (they see View > Cloudflare Billing). CF_API_TOKEN also needs Billing Read permission.
+ADMIN_EMAILS=

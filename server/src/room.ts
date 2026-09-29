@@ -85,10 +85,12 @@ export class CloudFiles implements RoomFiles {
 
   async write(bytes: Uint8Array): Promise<boolean> {
     const db = await userDb(this.env, this.owner());
-    if (!(await db.first('SELECT 1 FROM documents WHERE id = ?', [this.doc()]))) return false;
+    const row = await db.first<{ updated_at: number }>('SELECT updated_at FROM documents WHERE id = ?', [this.doc()]);
+    if (!row) return false;
     // Bytes first: a failure leaves an old file with a row that is merely out of date.
     await this.env.FILES.put(this.key(), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, { httpMetadata: { contentType: DOCX } });
-    await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, Date.now(), this.doc()]);
+    // Strictly increasing, like an upload's: clients tell versions apart by it.
+    await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, Math.max(Date.now(), row.updated_at + 1), this.doc()]);
     return true;
   }
 }

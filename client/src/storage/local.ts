@@ -1,11 +1,14 @@
-// Documents saved in this browser (IndexedDB). No account is involved and nothing leaves the
-// device. A saved document may also be linked to a copy in the cloud (see ../library.ts).
+// Documents saved in this browser (IndexedDB). Signed out, these are the user's documents and
+// nothing leaves the device. Signed in, the account is where documents live and these are its
+// cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
 
 export interface SavedInfo {
   id: string;
   name: string;
   size: number;
   updatedAt: number;
+  /** The account (user id) this is a copy for; absent for a document made while signed out. */
+  owner?: string;
   /** The cloud document this is a copy of, once it has been saved to (or opened from) the cloud. */
   cloudId?: string;
   /** `updatedAt` as of the last time this copy and the cloud copy were identical. */
@@ -89,7 +92,15 @@ export async function getSaved(id: string): Promise<{ info: SavedInfo; bytes: Ar
   return info && bytes ? { info, bytes } : null;
 }
 
-async function write(input: { id?: string; name: string; bytes: Uint8Array | ArrayBuffer }, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
+interface WriteInput {
+  id?: string;
+  name: string;
+  bytes: Uint8Array | ArrayBuffer;
+  /** The account it belongs to; kept from the saved copy when absent. */
+  owner?: string;
+}
+
+async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
   const db = await openDb();
   const tx = db.transaction([META, BYTES], 'readwrite');
   const meta = tx.objectStore(META);
@@ -98,6 +109,7 @@ async function write(input: { id?: string; name: string; bytes: Uint8Array | Arr
   const info: SavedInfo = {
     ...existing,
     id: input.id ?? crypto.randomUUID(),
+    ...(input.owner !== undefined && { owner: input.owner }),
     name: input.name,
     size: buffer.byteLength,
     // Strictly increasing per document, so "saved after the last sync" is always decidable.
@@ -115,22 +127,54 @@ async function write(input: { id?: string; name: string; bytes: Uint8Array | Arr
 }
 
 /** Saves (creating or replacing) a document in this browser. Keeps any cloud link, now out of sync. */
-export function saveSaved(input: { id?: string; name: string; bytes: Uint8Array | ArrayBuffer }): Promise<SavedInfo> {
+export function saveSaved(input: WriteInput): Promise<SavedInfo> {
   return write(input);
 }
 
 /** Saves bytes that came from the cloud, and marks this copy as identical to it. */
-export function saveFromCloud(input: { id?: string; name: string; bytes: ArrayBuffer; cloudId: string; cloudUpdatedAt?: number }): Promise<SavedInfo> {
+export function saveFromCloud(input: WriteInput & { cloudId: string; cloudUpdatedAt?: number }): Promise<SavedInfo> {
   return write(input, { id: input.cloudId, updatedAt: input.cloudUpdatedAt });
 }
 
-/** Records that the current saved copy is what's in the cloud (after an upload). */
-export async function markSynced(id: string, cloudId: string, cloudUpdatedAt?: number): Promise<void> {
+/**
+ * Records that the saved copy as of `syncedAt` (its `updatedAt` when it was read for upload) is
+ * what's in the cloud. Saves made while it was uploading stay out of sync. A `name` renames it.
+ */
+export async function markSynced(id: string, sync: { cloudId: string; syncedAt: number; cloudUpdatedAt?: number; name?: string }): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(META, 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
-  if (info) tx.objectStore(META).put({ ...info, cloudId, cloudSyncedAt: info.updatedAt, ...(cloudUpdatedAt !== undefined && { cloudUpdatedAt }) });
+  if (info) {
+    tx.objectStore(META).put({
+      ...info,
+      ...(sync.name !== undefined && { name: sync.name }),
+      cloudId: sync.cloudId,
+      cloudSyncedAt: sync.syncedAt,
+      ...(sync.cloudUpdatedAt !== undefined && { cloudUpdatedAt: sync.cloudUpdatedAt }),
+    });
+  }
   await finished(tx);
+}
+
+/** The documents that belong in view: an account's, or (for null) those made while signed out. */
+export function ownedBy(docs: readonly SavedInfo[], owner: string | null): SavedInfo[] {
+  return docs.filter((d) => (d.owner ?? null) === owner);
+}
+
+/** Gives every document made while signed out to `owner` (they have just signed in). Returns their ids. */
+export async function adoptGuestDocuments(owner: string): Promise<string[]> {
+  const db = await openDb();
+  const tx = db.transaction(META, 'readwrite');
+  const store = tx.objectStore(META);
+  const guests = ((await done(store.getAll())) as SavedInfo[]).filter((d) => d.owner === undefined);
+  for (const info of guests) store.put({ ...info, owner });
+  await finished(tx);
+  return guests.map((d) => d.id);
+}
+
+/** Deletes an account's copies from this browser (it signed out). Its cloud documents are untouched. */
+export async function deleteOwnedBy(owner: string): Promise<void> {
+  for (const info of ownedBy(await listSaved(), owner)) await deleteSaved(info.id);
 }
 
 export async function deleteSaved(id: string): Promise<void> {

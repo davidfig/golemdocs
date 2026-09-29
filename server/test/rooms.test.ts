@@ -64,7 +64,7 @@ test('the room’s current document is served to anyone with access', async () =
 test('uploading the file is refused while the room is the one saving', async () => {
   const id = await create();
   w.room.maySave = false;
-  assert.equal((await w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: DOCX })).status, 409);
+  assert.equal((await w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: DOCX })).status, 423);
   w.room.maySave = true;
   assert.equal((await w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: DOCX })).status, 200);
 });

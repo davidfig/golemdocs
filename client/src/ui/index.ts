@@ -2,3 +2,4 @@
 export * from './actions.ts';
 export { Chrome, mountChrome, type ChromeOptions } from './chrome.ts';
 export { CONVERT_ORDER, FORMATS, acceptList, formatAllows, kindFromName, type FormatProfile } from './formats.ts';
+export { SCHEMES, deskColor, onThemeChange, type Appearance, type SchemeId } from './theme.ts';

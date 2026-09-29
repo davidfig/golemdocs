@@ -572,15 +572,16 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     entry.original = loaded.original;
     entry.pagesCurrent = loaded.pagesCurrent;
     const name = loaded.name;
-    // Shown as PDF with the original's pages still current (or never reflowed): its own pages.
-    if (loaded.lens === 'pdf' && loaded.original && (loaded.pagesCurrent || !loaded.document)) {
+    // Shown as PDF: the original's own pages, even when its text has since been edited as
+    // something else (the page is told, to say that the edits aren't on them).
+    if (loaded.lens === 'pdf' && loaded.original) {
       const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations, fields: loaded.extensions.pdf?.fields });
       const readMs = performance.now() - t0;
       if (entry.closed) return;
       entry.document = loaded.document; // kept as it is, for saving
       entry.pdf = { view, bytes: loaded.original };
       entry.annotator = new PdfAnnotator(view);
-      post({ type: 'opened', doc, name, format: 'pdf', annotating: true });
+      post({ type: 'opened', doc, name, format: 'pdf', annotating: true, outdated: !!loaded.document && !loaded.pagesCurrent });
       const bodyMs = await entry.pumpPdf();
       if (entry.closed) return;
       post({ type: 'done', doc, pages: view.pageCount, timings: { read: readMs, fonts: 0, body: bodyMs, headers: 0 } });
@@ -614,7 +615,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
     entry.ready();
-    post({ type: 'opened', doc, name, format: entry.format, annotating: false });
+    post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
     await entry.pump();
     if (entry.closed) return;
     post({ type: 'done', doc, pages: session.pages.length, timings: { read: readMs, ...session.timings } });

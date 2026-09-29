@@ -132,9 +132,10 @@ export interface SelectionUpdate {
 export type FromWorker =
   /**
    * `format`: what the document is edited as (for a .wdoc, known only once it has been read).
-   * `annotating`: a PDF shown as its own pages, which takes markup annotations.
+   * `annotating`: a PDF shown as its own pages, which takes markup annotations. `outdated`: those
+   * pages are the original's, and the text has been edited since (as Word, Markdown...).
    */
-  | { type: 'opened'; doc: number; name: string; format: Format; annotating: boolean }
+  | { type: 'opened'; doc: number; name: string; format: Format; annotating: boolean; outdated: boolean }
   | ({ type: 'layout'; doc: number } & LayoutUpdate)
   /** The first full layout finished. */
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }

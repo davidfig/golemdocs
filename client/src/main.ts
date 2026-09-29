@@ -131,10 +131,11 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   setStatus(`Loading ${name}…`);
 
   worker.open(source, {
-    opened(docName, format, fixedPages) {
+    opened(docName, format, fixedPages, outdated) {
       name = documentName = docName;
       documentKind = format;
       annotating = fixedPages;
+      if (outdated) pendingNotice = OUTDATED_PAGES;
       setStatus(`${name}: laying out…`);
     },
     layout(update) {
@@ -544,6 +545,9 @@ const LOSSES: Partial<Record<DocumentKind, string>> = {
   html: 'page setup, headers and footers, comments and embedded pictures',
 };
 
+/** Said when a PDF's own pages are shown after its text was edited as something else. */
+const OUTDATED_PAGES = 'These are the original PDF’s pages: your text edits aren’t on them. Switch to Word to see the edits; a downloaded PDF has the edited text.';
+
 /** Said once the document has opened in its new format. */
 function switchedNotice(to: Format): string {
   const { label, extensions } = FORMATS[to];
@@ -559,7 +563,7 @@ function switchedNotice(to: Format): string {
  * everything it holds whatever it is edited as: switching Word → Markdown → Word gives back the
  * fonts and colors, and a Markdown document keeps its look as Word. Only a download (an export)
  * leaves out what its format can't express. Editing a PDF as anything else reflows its text;
- * the original pages are kept, and shown again as PDF while the text is unedited.
+ * the original pages are kept, and shown again as PDF (with a warning once the text is edited).
  */
 async function convertTo(to: DocumentKind): Promise<void> {
   const from = documentKind;

@@ -5,7 +5,7 @@ import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptio
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
   /** `format`: what the document is edited as; `annotating`: a PDF's own pages, which take markup annotations. */
-  opened(name: string, format: Format, annotating: boolean): void;
+  opened(name: string, format: Format, annotating: boolean, outdated: boolean): void;
   layout(update: LayoutUpdate): void;
   /** The first full layout finished. */
   done(pages: number, timings: LayoutTimings): void;
@@ -87,7 +87,7 @@ export class LayoutClient {
     if (message.doc !== this.doc || !this.listener) return;
     switch (message.type) {
       case 'opened':
-        this.listener.opened(message.name, message.format, message.annotating);
+        this.listener.opened(message.name, message.format, message.annotating, message.outdated);
         break;
       case 'layout':
         this.listener.layout(message);

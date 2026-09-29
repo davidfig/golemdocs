@@ -26,6 +26,7 @@ export const picture = {
   'picture.draw.step': 'Repère numéroté',
   'picture.draw.pixelate': 'Masquer',
   'picture.draw.eraser': 'Gomme',
+  'picture.draw.move': 'Déplacer',
   'picture.draw.fill': 'Remplir les formes',
   'picture.draw.color': 'Couleur de dessin',
   'picture.draw.black': 'Noir',

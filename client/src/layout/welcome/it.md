@@ -7,6 +7,7 @@ Un editor di documenti che vive nel tuo browser, pensato per aprire ogni tipo di
 - **Apri quasi tutto.** Trascina un file sulla finestra oppure scegli Apri dal menu File.
 - **Cambia forma senza perdere nulla.** Converti in, nel menu File, cambia la forma con cui viene modificato il documento, e tornando indietro ritrovi la tua formattazione.
 - **Annota i PDF.** Evidenzia, sottolinea, barra e lascia note sulle pagine di un PDF.
+- **Modifica i PDF.** Passa a Modifica PDF per cambiare il testo di una pagina dov'è, spostare, aggiungere o eliminare immagini e forme, oscurare dati riservati e riordinare le pagine. Compila scrive nei campi di un modulo.
 - **Lavora insieme agli altri.** Condividi, nel menu File, ti dà un collegamento. Chiunque lo apra modifica lo stesso documento, e le modifiche compaiono in tempo reale. Puoi anche condividere con persone specifiche.
 
 ## Provalo

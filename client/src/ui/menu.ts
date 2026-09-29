@@ -534,5 +534,6 @@ export class MenuBar {
 
 /** A text field of the chrome itself (the font box), not the document's hidden textarea. */
 export function isFormField(target: EventTarget | null): boolean {
-  return target instanceof HTMLInputElement || target instanceof HTMLSelectElement;
+  // The box a PDF's text is edited in is one too: it has its own caret, selection and undo.
+  return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable);
 }

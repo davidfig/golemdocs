@@ -9,6 +9,7 @@ export const spelling = {
   'spelling.suggestionsLabel': 'Suggestions',
   'spelling.noSuggestions': '(no suggestions)',
   'spelling.checkGrammar': 'Check grammar',
+  'spelling.asYouType': 'Check spelling as you type',
   'spelling.ignoreOnce': 'Ignore Once',
   'spelling.ignoreAll': 'Ignore All',
   'spelling.ignoreRule': 'Ignore Rule',

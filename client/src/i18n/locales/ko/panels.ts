@@ -20,7 +20,7 @@ export const panels: Partial<Messages> = {
   // Dashboard
   'panels.dashboard.title': '문서',
   'panels.dashboard.search': '문서 검색',
-  'panels.dashboard.back': '문서로 돌아가기',
+  'panels.dashboard.close': '닫기',
   'panels.dashboard.sharedWithMe': '나와 공유됨',
   'panels.dashboard.yourAccount': '내 계정',
   'panels.dashboard.signIn': '로그인',
@@ -28,6 +28,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.savedHere': '이 브라우저에 저장됨',
   'panels.dashboard.newBlankLabel': '새 빈 문서',
   'panels.dashboard.newBlank': '빈 문서',
+  'panels.dashboard.importLabel': '이 컴퓨터에서 파일 가져오기',
+  'panels.dashboard.import': '파일 가져오기',
   'panels.dashboard.noMatches': '검색과 일치하는 문서가 없습니다.',
   'panels.dashboard.empty': '저장한 문서가 여기에 표시됩니다.',
   'panels.dashboard.from': '{name} 님이 공유',
@@ -49,7 +51,8 @@ export const panels: Partial<Messages> = {
   'panels.size.mb': '{value} MB',
 
   // PDF form layer
-  'panels.forms.editForm': '양식 편집',
+  'panels.forms.editForm': 'PDF 편집',
+  'panels.forms.fields': '양식 필드',
   'panels.forms.dragHint': '필드를 끌어 이동하거나 모서리를 끌어 크기를 조정하십시오.',
   'panels.forms.selectHint': '이름을 바꾸거나 삭제할 필드를 선택하십시오.',
   'panels.forms.noFields': '이 PDF에는 아직 필드가 없습니다.',

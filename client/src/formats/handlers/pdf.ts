@@ -10,7 +10,8 @@ import type { FormatHandler } from '../convert.ts';
 export { PdfAnnotator } from '../../layout/pdfAnnotator.ts';
 export { markupToDocument } from '../pdfMarkup.ts';
 export { openPdfView } from '../pdfPages.ts';
-export { PdfDocument, applyAnnotations, applyFields, readAnnotations } from '@word/pdf';
+export { EditFonts } from '../pdfFonts.ts';
+export { PdfDocument, applyAnnotations, applyEdits, applyFields, readAnnotations } from '@word/pdf';
 export { pdfToDocument };
 
 const handler: FormatHandler = {

@@ -19,6 +19,12 @@ const RUN_BUDGET = 5_000;
 /** Word's size when nothing sets one: 10pt. */
 const DEFAULT_HALF_POINTS = 20;
 
+/** Most runs examined for the document's colors, and how long the answer is kept. */
+const COLOR_BUDGET = 20_000;
+const COLOR_TTL_MS = 500;
+/** Most colors offered. */
+const MAX_DOCUMENT_COLORS = 16;
+
 const MARKS: Mark[] = ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript', 'code'];
 
 /** Style resolution for a document, rebuilt when its style sheet is replaced. */
@@ -26,6 +32,8 @@ export class FormatReader {
   private resolver: StyleResolver | null = null;
   private sheet: unknown = null;
   private numbering: unknown = null;
+  private colors: string[] = [];
+  private colorsAt = -Infinity;
 
   constructor(private readonly doc: WordDocument) {}
 
@@ -74,7 +82,30 @@ export class FormatReader {
       acc.paragraph(paragraph);
       acc.run(caretRunProperties(paragraph, offset, styles, pending));
     }
-    return acc.result();
+    return { ...acc.result(), documentColors: this.documentColors(paragraphs, styles) };
+  }
+
+  /** The text colors in use, most used first. Rescanned at most every COLOR_TTL_MS. */
+  private documentColors(paragraphs: readonly Paragraph[], styles: StyleResolver): string[] {
+    const now = performance.now();
+    if (now - this.colorsAt < COLOR_TTL_MS) return this.colors;
+    this.colorsAt = now;
+    const counts = new Map<string, number>();
+    let budget = COLOR_BUDGET;
+    for (const paragraph of paragraphs) {
+      if (budget <= 0) break;
+      const style = styles.paragraph(paragraph.properties).style;
+      forEachRun(paragraph.children, 0, Infinity, (run) => {
+        const color = styles.run(style, run.properties).color?.val;
+        if (color && color !== 'auto') {
+          const key = `#${color.toUpperCase()}`;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return --budget > 0;
+      });
+    }
+    this.colors = [...counts].sort((a, b) => b[1] - a[1]).slice(0, MAX_DOCUMENT_COLORS).map(([color]) => color);
+    return this.colors;
   }
 }
 

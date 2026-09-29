@@ -28,6 +28,7 @@ export const picture: Partial<Messages> = {
   'picture.draw.step': 'Indicatore numerato',
   'picture.draw.pixelate': 'Oscura',
   'picture.draw.eraser': 'Gomma',
+  'picture.draw.move': 'Sposta',
   'picture.draw.fill': 'Riempi forme',
   'picture.draw.color': 'Colore del disegno',
   'picture.draw.black': 'Nero',

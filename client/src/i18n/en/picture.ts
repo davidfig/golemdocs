@@ -26,6 +26,7 @@ export const picture = {
   'picture.draw.step': 'Numbered Marker',
   'picture.draw.pixelate': 'Redact',
   'picture.draw.eraser': 'Eraser',
+  'picture.draw.move': 'Move',
   'picture.draw.fill': 'Fill Shapes',
   'picture.draw.color': 'Drawing Color',
   'picture.draw.black': 'Black',

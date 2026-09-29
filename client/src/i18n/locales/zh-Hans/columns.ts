@@ -1,0 +1,25 @@
+import type { Messages } from '../../index.ts';
+
+export const columns: Partial<Messages> = {
+  'columns.title': '分栏',
+  'columns.close': '关闭',
+  'columns.presets': '预设',
+  'columns.one': '一栏',
+  'columns.two': '两栏',
+  'columns.three': '三栏',
+  'columns.number': '栏数：',
+  'columns.numberLabel': '栏数',
+  'columns.spacing': '间距：',
+  'columns.spacingLabel': '栏间距（英寸）',
+  'columns.width': '每栏宽度：',
+  'columns.inches': '{value}"',
+  'columns.line': '分隔线',
+  'columns.apply': '应用至：',
+  'columns.applyDocument': '整篇文档',
+  'columns.applySection': '本节',
+  'columns.applyForward': '从当前位置起',
+  'columns.ok': '确定',
+  'columns.cancel': '取消',
+  'columns.bad': '请选择 1 到 {max} 栏，栏间距为 0 到 4 英寸。',
+  'columns.tooNarrow': '栏宽太窄。请减少栏数或缩小栏间距。',
+};

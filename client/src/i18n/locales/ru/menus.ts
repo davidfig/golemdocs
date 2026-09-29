@@ -50,6 +50,7 @@ export const menus: Catalog = {
   'menus.combo.list': '{label}: список',
   'menus.split.options': '{label}: параметры',
   'menus.palette.more': 'Другие цвета…',
+  'menus.palette.document': 'Цвета документа',
   'menus.tableGrid.cancel': 'Отмена',
   'menus.tableGrid.size': 'Таблица {rows} × {columns}',
 

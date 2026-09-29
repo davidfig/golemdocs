@@ -247,7 +247,14 @@ class Parser {
         else definitions.push({ t: 'para', spans: parseInline(m[2], marks[0] === ';' ? { bold: true } : {}) });
         continue;
       }
-      if (/[:;]/.test(marks)) break;
+      // A bullet or number with an indent (`#:`) continues its item; on its own it reads as an indent.
+      // Either way the line must be consumed here, or the caller would meet it again forever.
+      if (/[:;]/.test(marks)) {
+        if (entries.length) break;
+        this.i++;
+        definitions.push({ t: 'para', spans: parseInline(m[2]) });
+        continue;
+      }
       this.i++;
       entries.push({ marks, spans: parseInline(m[2]), extra: [] });
     }

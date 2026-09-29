@@ -26,6 +26,7 @@ export const picture = {
   'picture.draw.step': '番号マーカー',
   'picture.draw.pixelate': '伏せ字',
   'picture.draw.eraser': '消しゴム',
+  'picture.draw.move': '移動',
   'picture.draw.fill': '図形を塗りつぶす',
   'picture.draw.color': '描画の色',
   'picture.draw.black': '黒',

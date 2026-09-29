@@ -858,3 +858,19 @@ test('pasted styles and lists are defined first; a table goes in as a table, but
   await apply({ kind: 'pasteContent', blocks: [pasted('one'), table] });
   assert.equal(doc.body.filter((b) => b.kind === 'table').length, 1, 'no table inside the table');
 });
+
+test('marks: rectangles over ranges of the text on the pages shown', skip, async () => {
+  const { editor } = await setup(['Hello wrold again', 'second one']);
+  const asked: string[] = [];
+  const marks = editor.marks((p) => {
+    asked.push(paragraphText(p));
+    return paragraphText(p).startsWith('Hello') ? [{ start: 6, end: 11, kind: 'x' }] : [];
+  });
+  assert.deepEqual(asked, ['Hello wrold again', 'second one'], 'each paragraph is asked once');
+  assert.equal(marks.length, 1);
+  assert.equal(marks[0].kind, 'x');
+  const [line] = marks[0].page.lines;
+  assert.ok(marks[0].width > 0 && marks[0].x > line.column, 'starts after "Hello "');
+  assert.equal(marks[0].y, line.y);
+  assert.deepEqual(editor.marks(() => []), []);
+});

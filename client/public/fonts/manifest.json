@@ -59,7 +59,8 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          }
+          },
+          "font": "calibri/regular.ttf"
         },
         {
           "weight": 700,
@@ -105,7 +106,8 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          }
+          },
+          "font": "calibri/bold.ttf"
         },
         {
           "weight": 400,
@@ -151,7 +153,8 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          }
+          },
+          "font": "calibri/italic.ttf"
         },
         {
           "weight": 700,
@@ -197,7 +200,8 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          }
+          },
+          "font": "calibri/bold-italic.ttf"
         }
       ]
     },
@@ -253,7 +257,8 @@
               "xOffset": 0,
               "yOffset": 350
             }
-          }
+          },
+          "font": "cambria/regular.ttf"
         },
         {
           "weight": 700,
@@ -299,7 +304,8 @@
               "xOffset": 0,
               "yOffset": 350
             }
-          }
+          },
+          "font": "cambria/bold.ttf"
         },
         {
           "weight": 400,
@@ -345,7 +351,8 @@
               "xOffset": 55,
               "yOffset": 350
             }
-          }
+          },
+          "font": "cambria/italic.ttf"
         },
         {
           "weight": 700,
@@ -391,7 +398,8 @@
               "xOffset": 55,
               "yOffset": 350
             }
-          }
+          },
+          "font": "cambria/bold-italic.ttf"
         }
       ]
     },
@@ -447,7 +455,8 @@
               "xOffset": 0,
               "yOffset": 977
             }
-          }
+          },
+          "font": "arial/regular.ttf"
         },
         {
           "weight": 700,
@@ -493,7 +502,8 @@
               "xOffset": 0,
               "yOffset": 977
             }
-          }
+          },
+          "font": "arial/bold.ttf"
         },
         {
           "weight": 400,
@@ -539,7 +549,8 @@
               "xOffset": 90,
               "yOffset": 977
             }
-          }
+          },
+          "font": "arial/italic.ttf"
         },
         {
           "weight": 700,
@@ -585,7 +596,8 @@
               "xOffset": 90,
               "yOffset": 977
             }
-          }
+          },
+          "font": "arial/bold-italic.ttf"
         }
       ]
     },
@@ -641,7 +653,8 @@
               "xOffset": 0,
               "yOffset": 928
             }
-          }
+          },
+          "font": "times-new-roman/regular.ttf"
         },
         {
           "weight": 700,
@@ -687,7 +700,8 @@
               "xOffset": 0,
               "yOffset": 928
             }
-          }
+          },
+          "font": "times-new-roman/bold.ttf"
         },
         {
           "weight": 400,
@@ -733,7 +747,8 @@
               "xOffset": 76,
               "yOffset": 928
             }
-          }
+          },
+          "font": "times-new-roman/italic.ttf"
         },
         {
           "weight": 700,
@@ -779,7 +794,8 @@
               "xOffset": 76,
               "yOffset": 928
             }
-          }
+          },
+          "font": "times-new-roman/bold-italic.ttf"
         }
       ]
     },
@@ -835,7 +851,8 @@
               "xOffset": 0,
               "yOffset": 865
             }
-          }
+          },
+          "font": "courier-new/regular.ttf"
         },
         {
           "weight": 700,
@@ -881,7 +898,8 @@
               "xOffset": 0,
               "yOffset": 865
             }
-          }
+          },
+          "font": "courier-new/bold.ttf"
         },
         {
           "weight": 400,
@@ -927,7 +945,8 @@
               "xOffset": 80,
               "yOffset": 865
             }
-          }
+          },
+          "font": "courier-new/italic.ttf"
         },
         {
           "weight": 700,
@@ -973,7 +992,8 @@
               "xOffset": 80,
               "yOffset": 865
             }
-          }
+          },
+          "font": "courier-new/bold-italic.ttf"
         }
       ]
     },
@@ -1227,7 +1247,8 @@
               "xOffset": 0,
               "yOffset": 716
             }
-          }
+          },
+          "font": "segoe-ui/light.ttf"
         },
         {
           "weight": 350,
@@ -1273,7 +1294,8 @@
               "xOffset": 0,
               "yOffset": 716
             }
-          }
+          },
+          "font": "segoe-ui/semilight.ttf"
         },
         {
           "weight": 400,
@@ -1319,7 +1341,8 @@
               "xOffset": 0,
               "yOffset": 716
             }
-          }
+          },
+          "font": "segoe-ui/regular.ttf"
         },
         {
           "weight": 600,
@@ -1365,7 +1388,8 @@
               "xOffset": 0,
               "yOffset": 716
             }
-          }
+          },
+          "font": "segoe-ui/semibold.ttf"
         },
         {
           "weight": 700,
@@ -1411,7 +1435,8 @@
               "xOffset": 0,
               "yOffset": 716
             }
-          }
+          },
+          "font": "segoe-ui/bold.ttf"
         }
       ]
     },
@@ -1467,7 +1492,8 @@
               "xOffset": 0,
               "yOffset": 928
             }
-          }
+          },
+          "font": "comic-sans-ms/regular.ttf"
         },
         {
           "weight": 700,
@@ -1513,7 +1539,8 @@
               "xOffset": 0,
               "yOffset": 928
             }
-          }
+          },
+          "font": "comic-sans-ms/bold.ttf"
         }
       ]
     },

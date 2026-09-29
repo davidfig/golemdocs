@@ -10,7 +10,6 @@ import {
   type CaseChange,
   type ChromeHost,
   type ChromeState,
-  type FormMode,
   type ImageOp,
   type Mark,
   type TableOp,
@@ -112,8 +111,6 @@ export class Chrome {
   private formatCombo!: Control;
   /** A format conversion is in flight. */
   private converting = false;
-  /** Fill in a PDF's form or edit it: beside the format selector, for a PDF's pages. */
-  private formModeBox!: HTMLElement;
   /** Whether the document is saved (or, signed out, an offer to sign in), at the far right. */
   private syncButton!: SyncButton;
 
@@ -408,7 +405,7 @@ export class Chrome {
     );
 
     // Draw: the tools stay picked until Done, so they show as pressed.
-    for (const tool of ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser'] as const) {
+    for (const tool of ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser', 'move'] as const) {
       r.add(a(`image.${tool}`, t(`picture.draw.${tool}`), { kind: 'image', op: tool }, { icon: tool, checked: (s) => s.draw.tool === tool }));
     }
 
@@ -634,6 +631,7 @@ export class Chrome {
           cmd('image.step'),
           cmd('image.pixelate'),
           cmd('image.eraser'),
+          cmd('image.move'),
         ],
       },
       {
@@ -777,7 +775,7 @@ export class Chrome {
     );
     define('control.fontColor', t('chrome.control.fontColor'), t('chrome.category.format'), 'fontColor', () =>
       gated(
-        colorButton({ label: t('chrome.control.fontColor'), icon: 'fontColor', noneLabel: t('chrome.control.automaticColor'), initial: '#FF0000', palette: 'full', action: (color) => ({ kind: 'setColor', color }) }, r),
+        colorButton({ label: t('chrome.control.fontColor'), icon: 'fontColor', noneLabel: t('chrome.control.automaticColor'), initial: '#FF0000', palette: 'full', documentColors: (state) => state.format.documentColors ?? [], action: (color) => ({ kind: 'setColor', color }) }, r),
         () => profile().colors,
       ),
     );
@@ -857,24 +855,10 @@ export class Chrome {
       () => host.focusEditor(),
     );
     this.formatCombo = combo;
-    const modeButton = (mode: FormMode, label: string, tooltip: string) => {
-      const button = h('button', { class: 'wm-form-mode-button', text: label, title: tooltip, attrs: { type: 'button', 'data-mode': mode } });
-      button.addEventListener('click', () => {
-        void Promise.resolve(this.options.host.perform({ kind: 'setFormMode', mode }));
-      });
-      return button;
-    };
-    this.formModeBox = h(
-      'div',
-      { class: 'wm-form-mode', attrs: { role: 'group', 'aria-label': t('chrome.formMode.group') } },
-      modeButton('fill', t('chrome.formMode.fill'), t('chrome.view.fillForm.tip')),
-      modeButton('edit', t('chrome.formMode.edit'), t('chrome.view.editForm.tip')),
-    );
     this.syncButton = new SyncButton(this.options.host);
     return h(
       'div',
       { class: 'wm-format' },
-      this.formModeBox,
       h('div', { class: 'wm-format-field' }, combo.el),
       this.syncButton.el,
     );
@@ -888,12 +872,6 @@ export class Chrome {
   /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */
   private syncFormatBox(): void {
     this.formatCombo.refresh(this.state);
-    this.formModeBox.hidden = this.state.formMode === null;
-    for (const button of this.formModeBox.querySelectorAll<HTMLButtonElement>('button')) {
-      const on = button.dataset.mode === this.state.formMode;
-      button.classList.toggle('wm-form-mode-on', on);
-      button.setAttribute('aria-pressed', String(on));
-    }
   }
 
   /** (Re)creates the toolbars from the layout. */

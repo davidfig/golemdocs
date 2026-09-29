@@ -20,8 +20,8 @@ test('browser languages pick a catalog, with English as the fallback', async () 
   assert.equal(pickLocale(['nl-NL', 'zh-Hant-TW']), 'zh-Hant');
   assert.equal(pickLocale(['en-US']), 'en');
   assert.equal(pickLocale(['nl']), 'en');
-  // Simplified Chinese has no catalog yet; it must not be shown Traditional.
-  assert.equal(pickLocale(['zh-CN']), 'en');
+  // Simplified and Traditional Chinese are separate catalogs.
+  for (const tag of ['zh', 'zh-CN', 'zh-SG', 'zh-Hans', 'zh-Hans-CN']) assert.equal(pickLocale([tag]), 'zh-Hans', tag);
 });
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');

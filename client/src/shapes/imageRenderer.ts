@@ -46,6 +46,13 @@ const MIME: Record<string, string> = {
   tiff: 'image/tiff',
 };
 
+/** The type of PNG or JPEG bytes ('' for anything else). */
+export function sniffType(bytes: Uint8Array): string {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg';
+  return '';
+}
+
 type TextureState = { status: 'loading' } | { status: 'ready'; texture: WebGLTexture } | { status: 'failed' };
 
 export interface DrawImage {
@@ -85,10 +92,14 @@ export class ImageRenderer {
   private async load(part: string): Promise<void> {
     const gl = this.gl;
     try {
-      const ext = part.slice(part.lastIndexOf('.') + 1).toLowerCase();
-      const type = MIME[ext];
-      if (!type) throw new Error(`unsupported image type .${ext}`);
+      const dot = part.lastIndexOf('.');
+      const ext = dot >= 0 ? part.slice(dot + 1).toLowerCase() : '';
+      // A part without an extension (a PDF's pictures: "pdf-image:3") says what it is in its bytes.
+      let type: string | undefined = ext ? MIME[ext] : '';
+      if (type === undefined) throw new Error(`unsupported image type .${ext}`);
       const bytes = await this.source.bytes(part);
+      if (!type) type = sniffType(bytes);
+      if (!type) throw new Error(`unrecognised image ${part}`);
       const bitmap = await createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }), { premultiplyAlpha: 'premultiply' });
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);

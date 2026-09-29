@@ -14,7 +14,7 @@
 import { ZipArchive, writeZip } from '@word/docx';
 import type { OdtExtension } from '@word/odt';
 import type { HtmlExtension } from './html.ts';
-import type { Annotation, FormField } from '@word/pdf';
+import type { Annotation, FormField, PdfEdit } from '@word/pdf';
 import type { Format } from './convert.ts';
 import { t } from '../i18n/index.ts';
 
@@ -99,6 +99,8 @@ export interface PdfExtension {
   annotations: Annotation[];
   /** The form fields, filled in and arranged (they replace the file's own); missing: as in the file. */
   fields?: FormField[];
+  /** Changes to the pages' own content: text edited or added. Applied to the original's content, so undoing one gives its page back. */
+  edits?: PdfEdit[];
 }
 
 export interface Wdoc {

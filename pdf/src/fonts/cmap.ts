@@ -232,6 +232,11 @@ export class CMap {
     return this.unicode.get(code + bytes * 2 ** 32) ?? (bytes !== 2 ? this.unicode.get(code + 2 * 2 ** 32) : undefined) ?? (bytes !== 1 ? this.unicode.get(code + 2 ** 32) : undefined);
   }
 
+  /** Every code with Unicode text: [code, its length in bytes, the text]. */
+  *entries(): IterableIterator<[number, number, string]> {
+    for (const [key, text] of this.unicode) yield [key % 2 ** 32, Math.floor(key / 2 ** 32), text];
+  }
+
   /** Number of bytes the ToUnicode entries use most (for splitting without codespace ranges). */
   get typicalBytes(): number {
     let one = 0, two = 0;

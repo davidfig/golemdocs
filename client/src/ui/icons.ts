@@ -175,6 +175,7 @@ export const ICONS: Record<string, string> = {
       `<rect x="9.2" y="9.5" width="5.6" height="5" fill="${BLUE}" stroke="none"/><rect x="3.5" y="14.5" width="5.7" height="5" fill="${LINE}" stroke="none"/><rect x="14.8" y="4.5" width="5.7" height="5" fill="${LINE}" stroke="none"/>`,
   ),
   eraser: svg(`<path d="M14.5 4l6 6-8.5 8.5H7.5L3.5 14.5z" fill="${PINK}"/><path d="M9 9l6 6M8 20.5h12.5" stroke-width="2"/>`),
+  move: svg(`<path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5" stroke-width="2"/>`),
   fill: svg(`<rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="${BLUE}" stroke-width="2.2"/>`),
   drawColor: svg(`<path d="M4 17l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 16z" fill="${YELLOW}"/><path d="M4 17l4-1-3-3z" fill="${MIST}"/>` + SWATCH),
   comment: svg(

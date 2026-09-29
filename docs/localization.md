@@ -2,7 +2,7 @@
 
 Every string the user reads goes through `t()` (`client/src/i18n/index.ts`). English is the source
 catalog; each other language is a lazily loaded translation that may leave keys out (a missing key
-shows the English text). Languages today: English, Traditional Chinese (`zh-Hant`), Spanish (`es`),
+shows the English text). Languages today: English, Simplified Chinese (`zh-Hans`), Traditional Chinese (`zh-Hant`), Spanish (`es`),
 French (`fr`), German (`de`), Japanese (`ja`), Korean (`ko`), Italian (`it`),
 Brazilian Portuguese (`pt-BR`, also used for `pt` and `pt-PT` until there is a European catalog),
 Russian (`ru`).
@@ -19,8 +19,7 @@ Russian (`ru`).
   must be unique within a menu or submenu. CJK languages append it as `檔案(&F)`.
 - **Language choice:** the saved choice (`localStorage` `wm.locale`), else the browser's
   (`navigator.languages`), else English. Matching drops one subtag at a time (`zh-Hant-TW`, `zh-Hant`,
-  `zh`), and `aliases` in `locales.ts` cover tags like `zh-TW`. Simplified Chinese has no catalog, so it
-  gets English rather than Traditional.
+  `zh`), and `aliases` in `locales.ts` cover tags like `zh-TW` (Traditional) and `zh-CN` (Simplified; a bare `zh` is Simplified).
 - **Picker:** Tools ▸ Language. Choosing one saves it and reloads the page (the UI is built once).
 - **Layout worker:** `LayoutClient` sends the page's language before opening a document, and the worker
   loads it with `loadLocale()` (no DOM), so errors and default names made there are translated.

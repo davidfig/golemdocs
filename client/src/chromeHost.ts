@@ -24,6 +24,8 @@ export interface AppHooks {
   pages(): readonly GpuPage[];
   bounds(): Bounds;
   open(source: DocumentSource): void;
+  /** Cover the editor with the loading screen for `name` (else take it away). */
+  loading(name: string | null): void;
   openSample(id: string): void;
   /** Send changes that haven't reached the account yet, now. */
   syncNow(): Promise<void>;
@@ -148,11 +150,13 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
   let untitled = 0;
 
   const openFile = (file: File): void => {
+    app.loading(file.name);
     if (!sourceFromFile(file.name, new ArrayBuffer(0))) {
       // An extension we don't know: text is text whatever it is called, binary files are not opened.
       void file.arrayBuffer().then((bytes) => {
         if (looksLikeText(new Uint8Array(bytes))) return bytes.byteLength >= LARGE_TEXT_BYTES ? app.openLarge(file.name, new Uint8Array(bytes)) : app.open({ kind: 'txt', name: file.name, bytes });
         const dot = file.name.lastIndexOf('.');
+        app.loading(null);
         app.notify(t('app.unsupportedOpen', { kind: dot >= 0 ? file.name.slice(dot + 1).toUpperCase() : '?', name: file.name }));
       });
       return;
@@ -168,12 +172,14 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           const picture = await toPng(source.name, new Uint8Array(bytes));
           app.open({ kind: 'image', name: picture.name, bytes: picture.bytes.slice().buffer });
         } catch (e) {
+          app.loading(null);
           app.notify(t('app.unsupportedOpen', { kind: file.name.slice(file.name.lastIndexOf('.') + 1).toUpperCase(), name: file.name }));
           console.error(e);
         }
       });
     } else {
       const dot = file.name.lastIndexOf('.');
+      app.loading(null);
       app.notify(t('app.unsupportedOpen', { kind: dot >= 0 ? file.name.slice(dot + 1).toUpperCase() : '?', name: file.name }));
     }
   };

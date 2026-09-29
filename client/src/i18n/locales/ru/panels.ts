@@ -20,7 +20,7 @@ export const panels: Catalog = {
   // Dashboard
   'panels.dashboard.title': 'Документы',
   'panels.dashboard.search': 'Поиск документов',
-  'panels.dashboard.back': 'Вернуться к документу',
+  'panels.dashboard.close': 'Закрыть',
   'panels.dashboard.sharedWithMe': 'Доступные мне',
   'panels.dashboard.yourAccount': 'ваша учётная запись',
   'panels.dashboard.signIn': 'Войти',
@@ -28,6 +28,8 @@ export const panels: Catalog = {
   'panels.dashboard.savedHere': 'Сохранено в этом браузере',
   'panels.dashboard.newBlankLabel': 'Новый пустой документ',
   'panels.dashboard.newBlank': 'Пустой документ',
+  'panels.dashboard.importLabel': 'Импортировать файл с этого компьютера',
+  'panels.dashboard.import': 'Импорт файла',
   'panels.dashboard.noMatches': 'Документов, соответствующих поиску, нет.',
   'panels.dashboard.empty': 'Здесь будут отображаться сохранённые вами документы.',
   'panels.dashboard.from': 'От: {name}',
@@ -49,7 +51,8 @@ export const panels: Catalog = {
   'panels.size.mb': '{value} МБ',
 
   // PDF form layer
-  'panels.forms.editForm': 'Изменить форму',
+  'panels.forms.editForm': 'Редактировать PDF',
+  'panels.forms.fields': 'Поля формы',
   'panels.forms.dragHint': 'Перетащите поле, чтобы переместить его, или его угол, чтобы изменить размер.',
   'panels.forms.selectHint': 'Выберите поле, чтобы переименовать или удалить его.',
   'panels.forms.noFields': 'В этом PDF-файле пока нет полей.',

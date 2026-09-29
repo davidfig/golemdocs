@@ -28,6 +28,7 @@ export const picture: Catalog = {
   'picture.draw.step': 'Нумерованная метка',
   'picture.draw.pixelate': 'Скрыть',
   'picture.draw.eraser': 'Ластик',
+  'picture.draw.move': 'Переместить',
   'picture.draw.fill': 'Заливка фигур',
   'picture.draw.color': 'Цвет рисунка',
   'picture.draw.black': 'Чёрный',

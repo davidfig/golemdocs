@@ -44,6 +44,11 @@ export const LOCALES: Record<string, LocaleInfo> = {
     aliases: ['zh-tw', 'zh-hk', 'zh-mo', 'zh-hant'],
     load: async () => (await import('./locales/zh-Hant/index.ts')).messages,
   },
+  'zh-Hans': {
+    name: '简体中文',
+    aliases: ['zh', 'zh-cn', 'zh-sg', 'zh-hans'],
+    load: async () => (await import('./locales/zh-Hans/index.ts')).messages,
+  },
   it: {
     name: 'Italiano',
     load: async () => (await import('./locales/it/index.ts')).messages,

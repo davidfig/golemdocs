@@ -7,6 +7,7 @@ Un editor de documentos que vive en tu navegador, creado para abrir todo tipo de
 - **Abrir casi cualquier cosa.** Suelta un archivo sobre la ventana o elige Abrir en el menú Archivo.
 - **Cambiar de forma sin perder nada.** Convertir a, en el menú Archivo, cambia lo que es el documento al editarlo, y al volver recuperas tu formato.
 - **Marcar PDF.** Resalta, subraya, tacha y deja notas en las páginas de un PDF.
+- **Editar PDF.** Cambia a Editar PDF para modificar el texto de una página donde está, mover, añadir o eliminar imágenes y formas, tachar datos privados y reorganizar páginas. Rellenar escribe en los campos de un formulario.
 - **Trabajar en equipo.** Compartir, en el menú Archivo, te da un enlace. Quien lo abre edita el mismo documento, y los cambios se ven en directo. También puedes compartir con personas concretas.
 
 ## Pruébalo

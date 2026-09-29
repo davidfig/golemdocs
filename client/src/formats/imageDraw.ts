@@ -5,11 +5,11 @@
 /**
  * What can be drawn: strokes, shapes, `text`, a speech `bubble` (its point is where the tail ends), a
  * numbered `step` marker (its `text` is the number), and `pixelate` (a box whose picture is blocked out).
- * `eraser` draws nothing: it takes drawn shapes away.
+ * `eraser` and `move` draw nothing: they take drawn shapes away, or drag them to another place.
  */
-export type DrawTool = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser';
+export type DrawTool = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
 
-export const DRAW_TOOLS: readonly DrawTool[] = ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser'];
+export const DRAW_TOOLS: readonly DrawTool[] = ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser', 'move'];
 
 export interface Point {
   x: number;
@@ -149,6 +149,9 @@ export function hitShape(shape: Shape, p: Point, tolerance: number): boolean {
   }
 }
 
+/** The shape moved by (dx, dy) picture pixels. */
+export const shiftShape = (shape: Shape, dx: number, dy: number): Shape => ({ ...shape, points: shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) });
+
 /** The line widths to pick from, as a fraction of the picture's longer side. */
 export const SIZE_STEPS = [0.003, 0.006, 0.012, 0.024] as const;
 
@@ -201,7 +204,7 @@ type Painter = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
  */
 export function paintShape(ctx: Painter, shape: Shape, preview = false): void {
   const { points, tool } = shape;
-  if (points.length === 0 || tool === 'eraser') return;
+  if (points.length === 0 || tool === 'eraser' || tool === 'move') return;
   if (tool === 'pixelate') {
     if (preview) {
       const b = boxOf(shape);

@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc",
-    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/setup.ts --test test/*.test.ts"
+    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/setup.ts --test --test-force-exit --test-timeout=60000 test/*.test.ts"
   },
   "dependencies": {
     "@word/docx": "workspace:*",

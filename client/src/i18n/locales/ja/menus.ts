@@ -50,6 +50,7 @@ export const menus: Partial<Messages> = {
   'menus.combo.list': '{label} の一覧',
   'menus.split.options': '{label} のオプション',
   'menus.palette.more': 'その他の色…',
+  'menus.palette.document': 'ドキュメントの色',
   'menus.tableGrid.cancel': 'キャンセル',
   'menus.tableGrid.size': '{rows} × {columns} の表',
 

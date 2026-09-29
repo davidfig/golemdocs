@@ -105,9 +105,32 @@ export interface Library {
   shared: CloudDocument[];
 }
 
+const CATALOGUE_KEY = 'wm.catalogue';
+
+/** The account's catalogue as last listed, kept so the dashboard can show it before the network answers. */
+function readCatalogue(user: User | null): { cloud: CloudDocument[]; shared: CloudDocument[] } | null {
+  if (!user) return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(CATALOGUE_KEY) ?? 'null');
+    return saved && saved.user === user.id ? { cloud: saved.cloud, shared: saved.shared } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCatalogue(user: User, cloud: CloudDocument[], shared: CloudDocument[]): void {
+  try {
+    localStorage.setItem(CATALOGUE_KEY, JSON.stringify({ user: user.id, cloud, shared }));
+  } catch {
+    // Only a head start; the next listing fills it in.
+  }
+}
+
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
-export async function loadLocalLibrary(user: User | null): Promise<LibraryEntry[]> {
-  return mergeLibrary(ownedBy(await listSaved().catch(() => []), user?.id ?? null), null);
+export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; shared: CloudDocument[] }> {
+  const cached = readCatalogue(user);
+  const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
+  return { entries: mergeLibrary(local, cached?.cloud ?? null), shared: cached?.shared ?? [] };
 }
 
 /**
@@ -132,5 +155,6 @@ export async function loadLibrary(user: User | null): Promise<Library> {
   const kept = gone.length ? local.filter((l) => !gone.includes(l)) : local;
   // Not worth failing the dashboard over.
   const shared = await listShared().catch(() => []);
+  writeCatalogue(user, cloud, shared);
   return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared };
 }

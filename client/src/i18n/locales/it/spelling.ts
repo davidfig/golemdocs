@@ -11,6 +11,7 @@ export const spelling: Partial<Messages> = {
   'spelling.suggestionsLabel': 'Suggerimenti',
   'spelling.noSuggestions': '(nessun suggerimento)',
   'spelling.checkGrammar': 'Controlla grammatica',
+  'spelling.asYouType': 'Controlla l’ortografia durante la digitazione',
   'spelling.ignoreOnce': 'Ignora una volta',
   'spelling.ignoreAll': 'Ignora tutto',
   'spelling.ignoreRule': 'Ignora regola',

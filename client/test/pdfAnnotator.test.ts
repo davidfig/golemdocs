@@ -104,3 +104,308 @@ test('annotations are drawn on the page and written into the file', skip, async 
   assert.equal(back.length, 1);
   assert.equal(back[0].kind, 'strikeout');
 });
+
+// --- editing the page's own text (Edit PDF mode) ------------------------------------------------
+
+/** A point on page `index`, in page coordinates, on the first line of text. */
+const firstLine = (view: Awaited<ReturnType<typeof setup>>['view']) => {
+  const c = view.characters(0)[3];
+  return [(c.x0 + c.x1) / 2, (c.top + c.bottom) / 2] as const;
+};
+
+test('clicking text picks its block; typing changes it; undo and redo step it', skip, async () => {
+  const { view, annotator } = await setup();
+  assert.deepEqual(annotator.pickText(0, ...firstLine(view)).includes(0), true);
+  assert.equal(annotator.picked?.text, 'First line of text');
+  assert.equal(annotator.picked?.style.mono, true);
+  // While it is picked the page shows it blank, for the editor to draw.
+  assert.ok(!view.characters(0).map((c) => c.text).join('').includes('First'));
+  assert.deepEqual(annotator.edits, []);
+
+  annotator.setPickedText('First line of text, changed');
+  annotator.setPickedText('First line of TEXT, changed again');
+  assert.equal(annotator.edits.length, 1);
+  annotator.putDown();
+  assert.ok(view.characters(0).map((c) => c.text).join('').startsWith('First line of TEXT, changed again'));
+
+  // Both changes were one undo step.
+  assert.ok(annotator.undo().includes(0));
+  assert.equal(annotator.edits.length, 0);
+  assert.ok(view.characters(0).map((c) => c.text).join('').startsWith('First line of text'));
+  annotator.redo();
+  assert.equal(annotator.edits.length, 1);
+});
+
+test('text put back as it was leaves no edit; clicking edited text picks the same edit', skip, async () => {
+  const { view, annotator } = await setup();
+  annotator.pickText(0, ...firstLine(view));
+  annotator.setPickedText('Changed');
+  const id = annotator.picked!.id;
+  annotator.putDown();
+  annotator.pickText(0, ...firstLine(view));
+  assert.equal(annotator.picked?.id, id);
+  assert.equal(annotator.picked?.text, 'Changed');
+  annotator.setPickedText('First line of text');
+  assert.equal(annotator.edits.length, 0);
+  // Clicking where there is no text picks nothing (and puts down what was picked).
+  assert.ok(annotator.pickText(0, 300, 250).includes(0));
+  assert.equal(annotator.picked, null);
+});
+
+test('edits are written into the exported file, and reopened with the view', skip, async () => {
+  const { view, annotator } = await setup();
+  annotator.pickText(0, ...firstLine(view));
+  annotator.setPickedText('Edited line');
+  annotator.putDown();
+  const doc = PdfDocument.load(await sample());
+  const { applyEdits } = await import('../../pdf/src/index.ts');
+  applyEdits(doc, annotator.edits);
+  const text = PdfDocument.load(await doc.save()).pages[0].extractText().text;
+  assert.ok(text.includes('Edited line') && text.includes('Second line here') && !text.includes('First line'), text);
+  // A view opened with the edits shows them.
+  const again = await openPdfView(await sample(), fonts!, { edits: annotator.edits });
+  assert.ok(again.characters(0).map((c) => c.text).join('').startsWith('Edited line'));
+});
+
+// --- pictures and shapes (Edit PDF mode) ---------------------------------------------------------
+
+async function withShapes(): Promise<Uint8Array> {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([400, 300]);
+  const d = new PageDrawing(page, { origin: 'top-left' });
+  d.rect(40, 120, 100, 50, { fill: [1, 0, 0] });
+  d.text('Caption above', 40, 60, { font: doc.standardFont('Courier'), size: 12 });
+  d.finish();
+  return doc.save();
+}
+
+test('a shape of the file is picked by clicking it; it can be moved, then deleted, and each is undone', skip, async () => {
+  const view = await openPdfView(await withShapes(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  // The red rectangle: page coordinates are points from the top left.
+  assert.ok(annotator.pickText(0, 90, 145).includes(0));
+  assert.equal(annotator.picked, null);
+  assert.equal(annotator.pickedObject?.kind, 'path');
+  const [x0, y0, x1, y1] = annotator.pickedObject!.box;
+  assert.ok(Math.abs(x0 - 40) < 0.5 && Math.abs(x1 - 140) < 0.5 && Math.abs(y1 - y0 - 50) < 0.5);
+
+  annotator.moveObject([x0 + 100, y0 - 50, x1 + 100, y1 - 50]);
+  assert.equal(annotator.edits.length, 1);
+  assert.deepEqual(view.editBoxes.get(annotator.edits[0].id)?.map(Math.round), [140, y0 - 50, 240, y1 - 50].map(Math.round));
+
+  // Clicking where it was picks nothing; clicking where it is now picks it again, as the same edit.
+  annotator.pickText(0, 90, 145);
+  assert.equal(annotator.pickedObject, null);
+  annotator.pickText(0, 190, 195);
+  assert.equal(annotator.pickedObject?.editId, annotator.edits[0].id);
+
+  annotator.deleteObject();
+  assert.equal(annotator.pickedObject, null);
+  assert.equal((annotator.edits[0] as { deleted?: boolean }).deleted, true);
+  annotator.undo();
+  assert.equal((annotator.edits[0] as { deleted?: boolean }).deleted, undefined);
+  annotator.undo();
+  assert.equal(annotator.edits.length, 0);
+});
+
+test('shapes and text boxes can be added, restyled and undone', skip, async () => {
+  const view = await openPdfView(await withShapes(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  annotator.addShape(0, 'ellipse', [200, 50, 300, 100], { stroke: [0, 0, 0], fill: null, width: 1.5 });
+  assert.equal(annotator.pickedObject?.kind, 'shape');
+  annotator.setShapeStyle({ fill: [1, 1, 0], width: 3 });
+  const [shape] = annotator.edits;
+  assert.deepEqual(shape.kind === 'shape' && [shape.fill, shape.width], [[1, 1, 0], 3]);
+  // The added shape is what a click on it picks, but a click in the middle of an outline-only one goes through.
+  annotator.deselect();
+  annotator.pickText(0, 250, 300 - 75);
+  assert.equal(annotator.pickedObject?.target, null);
+
+  annotator.addTextBox(0, 100, 250);
+  assert.equal(annotator.picked?.runs, null);
+  annotator.setPickedText('Hello box');
+  annotator.setTextStyle({ font: 'Times', bold: true, size: 20 });
+  const box = annotator.edits.find((e) => e.kind === 'textbox');
+  assert.ok(box?.kind === 'textbox' && box.font === 'Times-Bold' && box.size === 20 && box.text === 'Hello box');
+  annotator.deselect();
+  assert.ok(view.characters(0).map((c) => c.text).join('').includes('Hello box'));
+  // Everything can be taken back.
+  while (annotator.canUndo) annotator.undo();
+  assert.equal(annotator.edits.length, 0);
+  assert.ok(!view.characters(0).map((c) => c.text).join('').includes('Hello box'));
+});
+
+test('a block of the file can be set in another font, size and color', skip, async () => {
+  const view = await openPdfView(await withShapes(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  const c = view.characters(0)[2];
+  annotator.pickText(0, (c.x0 + c.x1) / 2, (c.top + c.bottom) / 2);
+  annotator.setTextStyle({ font: 'Helvetica', size: 24, color: [1, 0, 0] });
+  const edit = annotator.edits[0];
+  assert.ok(edit.kind === 'text' && edit.style?.font === 'Helvetica' && edit.style.size === 24);
+  assert.equal(annotator.picked?.style.size, 24);
+  annotator.deselect();
+  const doc = PdfDocument.load(await withShapes());
+  const { applyEdits } = await import('../../pdf/src/index.ts');
+  applyEdits(doc, annotator.edits);
+  const [item] = doc.pages[0].extractText().items;
+  assert.equal(item.fontName, 'Helvetica');
+  assert.equal(item.text, 'Caption above');
+});
+
+test('a redaction removes the text under it from the page, and undo brings it back', skip, async () => {
+  const view = await openPdfView(await sample(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  const chars = view.characters(0);
+  // "First": the first five characters of the first line (page coordinates, points from the top left).
+  const box = { x0: chars[0].x0 - 1, x1: chars[4].x1 + 1, top: chars[0].top - 1, bottom: chars[0].bottom + 1 };
+  const [ux0, uy0] = view.toUser(0, box.x0, box.bottom);
+  const [ux1, uy1] = view.toUser(0, box.x1, box.top);
+  annotator.addRedaction(0, [ux0, uy0, ux1, uy1]);
+  assert.equal(annotator.pickedObject?.kind, 'redact');
+  const text = () => view.characters(0).map((c) => c.text).join('');
+  assert.ok(!text().includes('First'), text());
+  assert.ok(text().includes('line of text') && text().includes('Second line here'));
+  annotator.undo();
+  assert.ok(text().includes('First line of text'));
+});
+
+test('undo and redo go back and forth across a page operation', skip, async () => {
+  const first = await sample();
+  const view = await openPdfView(first, fonts!);
+  const annotator = new PdfAnnotator(view, undefined, first);
+  annotator.pickText(0, ...firstLine(view));
+  annotator.setPickedText('Changed before the page operation');
+  annotator.deselect();
+  // A page operation makes a new file with the edit baked into it (as the worker does).
+  const doc = PdfDocument.load(first);
+  const { applyEdits } = await import('../../pdf/src/index.ts');
+  applyEdits(doc, annotator.edits);
+  doc.addPage([400, 300], 1);
+  const second = await doc.save();
+  const next = await openPdfView(second, fonts!);
+  assert.equal(next.pageCount, 2);
+  annotator.replaceView(next, second);
+  assert.equal(annotator.edits.length, 0, 'the edit is in the file now');
+  assert.ok(annotator.canUndo);
+
+  // Undo asks for the first file again, with the edit as a layer over it.
+  assert.deepEqual(annotator.undo(), []);
+  assert.equal(annotator.reopen?.original, first);
+  assert.equal(annotator.reopen?.layers.edits.length, 1);
+  const back = await openPdfView(first, fonts!, { edits: annotator.reopen!.layers.edits });
+  annotator.attach(back, first, annotator.reopen!.layers);
+  assert.equal(back.pageCount, 1);
+  assert.equal(annotator.edits.length, 1);
+  assert.ok(annotator.canRedo);
+
+  // Redo goes forward again, to the second file.
+  annotator.redo();
+  assert.equal(annotator.reopen?.original, second);
+  // And undoing within the first file still works once we're back there.
+  const again = await openPdfView(first, fonts!, { edits: annotator.edits });
+  annotator.attach(again, first, { edits: annotator.edits });
+  annotator.undo();
+  assert.ok(annotator.edits.length <= 1);
+});
+
+test('picked text can be moved, and moving it again and undoing work', skip, async () => {
+  const view = await openPdfView(await sample(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  annotator.pickText(0, ...firstLine(view));
+  const before = [...annotator.picked!.box];
+  annotator.moveText(30, -10);
+  annotator.moveText(5, 0);
+  assert.deepEqual(annotator.picked!.box.map(Math.round), [before[0] + 35, before[1] - 10, before[2] + 35, before[3] - 10].map(Math.round));
+  const [edit] = annotator.edits;
+  assert.deepEqual(edit.kind === 'text' && edit.move, [35, -10]);
+  annotator.deselect();
+  // Typing later keeps the move.
+  annotator.pickText(0, ...(() => { const c = view.characters(0).find((x) => x.text === 'F')!; return [(c.x0 + c.x1) / 2, (c.top + c.bottom) / 2] as const; })());
+  annotator.setPickedText('Moved and changed');
+  const [again] = annotator.edits;
+  assert.deepEqual(again.kind === 'text' && again.move, [35, -10]);
+  assert.equal(again.kind === 'text' && again.text, 'Moved and changed');
+  annotator.deselect();
+  while (annotator.canUndo) annotator.undo();
+  assert.equal(annotator.edits.length, 0);
+});
+
+test('Fill In: only what was added is picked by a click; the page\'s own text is left for markup', skip, async () => {
+  const view = await openPdfView(await sample(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  // Nothing added: a click on the file's text picks nothing.
+  assert.deepEqual(annotator.pickAdded(0, ...firstLine(view)), { picked: false, pages: [] });
+  assert.equal(annotator.picked, null);
+  // A date, a text box and a check mark are put on the page.
+  annotator.addTextBox(0, 100, 200, '1/2/2026');
+  annotator.setPickedText('1/2/2026 typed');
+  annotator.deselect();
+  annotator.addShape(0, 'check', [200, 200, 214, 214], { stroke: [0, 0, 0], fill: null, width: 2 });
+  annotator.deselect();
+  // Page coordinates are points from the top left (the page is 300 tall).
+  const box = view.editBoxes.get(annotator.edits[0].id)!;
+  const picked = annotator.pickAdded(0, box[0] + 3, 300 - (box[1] + box[3]) / 2);
+  assert.equal(picked.picked, true);
+  assert.equal(annotator.picked?.text, '1/2/2026 typed');
+  annotator.deselect();
+  assert.equal(annotator.pickAdded(0, 207, 300 - 207).picked, true);
+  assert.equal(annotator.pickedObject?.shape?.shape, 'check');
+  // A text box can be deleted (and brought back by undo); text of the file cannot.
+  annotator.deselect();
+  annotator.pickAdded(0, box[0] + 3, 300 - (box[1] + box[3]) / 2);
+  annotator.deleteText();
+  assert.equal(annotator.edits.filter((e) => e.kind === 'textbox').length, 0);
+  annotator.undo();
+  assert.equal(annotator.edits.filter((e) => e.kind === 'textbox').length, 1);
+  annotator.pickText(0, ...firstLine(view));
+  assert.deepEqual(annotator.deleteText(), []);
+});
+
+test('picking text that was moved again puts the editor at its new baseline, not its old one', skip, async () => {
+  const view = await openPdfView(await sample(), fonts!);
+  const annotator = new PdfAnnotator(view);
+  annotator.pickText(0, ...firstLine(view));
+  const before = { baseline: annotator.picked!.baseline, box: [...annotator.picked!.box] };
+  annotator.moveText(30, -80);
+  assert.ok(Math.abs(annotator.picked!.baseline - (before.baseline - 80)) < 1e-6);
+  annotator.deselect();
+  // Picked again (from the edit, as after reopening the document): the same place it was put down.
+  const box = view.editBoxes.get(annotator.edits[0].id)!;
+  annotator.pickText(0, ...(() => { const [px, py] = view.toPage(0, (box[0] + box[2]) / 2, (box[1] + box[3]) / 2); return [px, py] as const; })());
+  assert.ok(annotator.picked, 'picked');
+  assert.ok(Math.abs(annotator.picked!.baseline - (before.baseline - 80)) < 1e-6, `${annotator.picked!.baseline} vs ${before.baseline - 80}`);
+  assert.ok(Math.abs(annotator.picked!.box[0] - (before.box[0] + 30)) < 1e-6);
+});
+
+
+test('text can be set in one of the app\'s fonts: its file is loaded, shown in the editor, and written into the exported PDF', skip, async () => {
+  const { EditFonts } = await import('../src/formats/pdfFonts.ts');
+  const editFonts = new EditFonts(fonts!, async (file) => new Uint8Array(readFileSync(path.join(FONT_DIR, file))));
+  assert.ok(editFonts.families.includes('Calibri') && editFonts.families.includes('Arial'));
+  const view = await openPdfView(await sample(), fonts!, { editFonts });
+  const annotator = new PdfAnnotator(view);
+  annotator.pickText(0, ...firstLine(view));
+  // The worker loads a font before setting text in it.
+  await view.loadFont('Calibri', false, false);
+  annotator.setTextStyle({ font: 'Calibri', size: 16 });
+  const [edit] = annotator.edits;
+  assert.ok(edit.kind === 'text' && edit.style?.font === 'Calibri' && edit.style.bold === false);
+  // The editor is shown in the same font file the page draws.
+  assert.equal(annotator.picked?.style.family, 'Calibri');
+  assert.equal(annotator.picked?.style.fontFile, 'calibri/regular.ttf');
+  await view.loadFont('Calibri', true, false);
+  annotator.setTextStyle({ bold: true });
+  assert.equal(annotator.picked?.style.fontFile, 'calibri/bold.ttf');
+  annotator.deselect();
+  // The page shows the text (in that font: its widths are the font's).
+  assert.ok(view.characters(0).map((c) => c.text).join('').startsWith('First line of text'));
+  // Exported: the font is embedded (a subset), under its own name.
+  const doc = PdfDocument.load(await sample());
+  const { applyEdits } = await import('../../pdf/src/index.ts');
+  applyEdits(doc, annotator.edits, editFonts.options);
+  const back = PdfDocument.load(await doc.save());
+  const [item] = back.pages[0].extractText().items;
+  assert.match(item.fontName, /Carlito-Bold/);
+  assert.equal(item.text, 'First line of text');
+});

@@ -26,6 +26,7 @@ export const picture = {
   'picture.draw.step': '編號標記',
   'picture.draw.pixelate': '遮蔽',
   'picture.draw.eraser': '橡皮擦',
+  'picture.draw.move': '移動',
   'picture.draw.fill': '填滿圖形',
   'picture.draw.color': '繪圖顏色',
   'picture.draw.black': '黑色',

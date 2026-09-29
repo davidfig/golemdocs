@@ -7,6 +7,7 @@ A document editor that lives in your browser, built to open every kind of docume
 - **Open almost anything.** Drop a file onto the window, or choose Open from the File menu.
 - **Change shape without losing anything.** Convert To, in the File menu, switches what a document is edited as, and going back gives you your formatting again.
 - **Mark up PDFs.** Highlight, underline, strike out and leave notes on a PDF's own pages.
+- **Edit PDFs.** Switch to Edit PDF to change a page's text where it sits, move, add or delete pictures and shapes, black out private details, and rearrange pages. Fill In types into a form's fields.
 - **Work together.** Share, in the File menu, gives you a link. Everyone who opens it edits the same document, and changes show up live. You can also share with specific people.
 
 ## Try this

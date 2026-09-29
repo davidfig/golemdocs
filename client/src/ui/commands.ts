@@ -68,6 +68,10 @@ export class CommandRegistry {
     }
   }
 
+  state(): ChromeState {
+    return this.context.state();
+  }
+
   focusEditor(): void {
     this.context.host.focusEditor();
   }

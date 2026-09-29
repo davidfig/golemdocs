@@ -11,6 +11,7 @@ export const spelling: Catalog = {
   'spelling.suggestionsLabel': 'Варианты',
   'spelling.noSuggestions': '(вариантов нет)',
   'spelling.checkGrammar': 'Проверять грамматику',
+  'spelling.asYouType': 'Проверять орфографию в процессе набора',
   'spelling.ignoreOnce': 'Пропустить один раз',
   'spelling.ignoreAll': 'Пропустить все',
   'spelling.ignoreRule': 'Пропустить правило',

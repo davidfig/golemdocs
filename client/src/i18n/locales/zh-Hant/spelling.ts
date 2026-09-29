@@ -11,6 +11,7 @@ export const spelling: Partial<Messages> = {
   'spelling.suggestionsLabel': '建議',
   'spelling.noSuggestions': '(沒有建議)',
   'spelling.checkGrammar': '檢查文法',
+  'spelling.asYouType': '鍵入時檢查拼字',
   'spelling.ignoreOnce': '略過一次',
   'spelling.ignoreAll': '全部略過',
   'spelling.ignoreRule': '略過規則',

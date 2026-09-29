@@ -31,5 +31,6 @@ export { PageDrawing, type Color, type DrawOptions, type LineCap, type LineJoin,
 export { applyAnnotations, noteRect, quadBoxes, quadsFor, readAnnotations, type Annotation, type AnnotationKind } from './write/annotations.ts';
 export { applyFields, isFieldWidget, readFields, type FieldKind, type FormField } from './write/forms.ts';
 export { addLink, destination, namedDestinations, type LinkTarget, type OutlineEntry, type OutlineItem } from './write/navigation.ts';
-export { interpretPage, imageBytes, imageSupported, collectFonts, describeFont, encodePng, type DisplayGlyph, type DisplayImage, type DisplayRect, type FontStyle, type GlyphRun, type ImageBytes, type ImageOptions, type ImageSource, type PageDisplay } from './render/index.ts';
+export { interpretPage, imageBytes, imageSupported, collectCharacters, collectFonts, describeFont, encodePng, type DisplayGlyph, type DisplayImage, type DisplayRect, type FontStyle, type GlyphRun, type ImageBytes, type ImageOptions, type ImageSource, type PageDisplay } from './render/index.ts';
 export { reflowPage, reflowDocument, analyzeDocument, type Align as ReflowAlign, type Block as ReflowBlock, type Indent as ReflowIndent, type ListFormat as ReflowListFormat, type PageBlocks, type PageInfo as ReflowPageInfo, type PageMargins as ReflowMargins, type ReflowOptions, type ReflowResult, type Run as ReflowRun } from './text/reflow.ts';
+export * from './edit/index.ts';

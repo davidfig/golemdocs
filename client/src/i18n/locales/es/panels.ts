@@ -20,7 +20,7 @@ export const panels: Partial<Messages> = {
   // Dashboard
   'panels.dashboard.title': 'Documentos',
   'panels.dashboard.search': 'Buscar documentos',
-  'panels.dashboard.back': 'Volver al documento',
+  'panels.dashboard.close': 'Cerrar',
   'panels.dashboard.sharedWithMe': 'Compartidos conmigo',
   'panels.dashboard.yourAccount': 'su cuenta',
   'panels.dashboard.signIn': 'Iniciar sesión',
@@ -28,6 +28,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.savedHere': 'Guardado en este explorador',
   'panels.dashboard.newBlankLabel': 'Nuevo documento en blanco',
   'panels.dashboard.newBlank': 'Documento en blanco',
+  'panels.dashboard.importLabel': 'Importar un archivo de este equipo',
+  'panels.dashboard.import': 'Importar archivo',
   'panels.dashboard.noMatches': 'Ningún documento coincide con la búsqueda.',
   'panels.dashboard.empty': 'Los documentos que guarde aparecerán aquí.',
   'panels.dashboard.from': 'De {name}',
@@ -49,7 +51,8 @@ export const panels: Partial<Messages> = {
   'panels.size.mb': '{value} MB',
 
   // PDF form layer
-  'panels.forms.editForm': 'Editar formulario',
+  'panels.forms.editForm': 'Editar PDF',
+  'panels.forms.fields': 'Campos de formulario',
   'panels.forms.dragHint': 'Arrastre un campo para moverlo, o su esquina para cambiar su tamaño.',
   'panels.forms.selectHint': 'Seleccione un campo para cambiarle el nombre o eliminarlo.',
   'panels.forms.noFields': 'Este PDF aún no tiene campos.',

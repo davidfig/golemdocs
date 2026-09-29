@@ -50,6 +50,7 @@ export const menus: Partial<Messages> = {
   'menus.combo.list': '{label}清單',
   'menus.split.options': '{label}選項',
   'menus.palette.more': '其他色彩…',
+  'menus.palette.document': '文件色彩',
   'menus.tableGrid.cancel': '取消',
   'menus.tableGrid.size': '{rows} × {columns} 表格',
 

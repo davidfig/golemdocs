@@ -17,6 +17,14 @@ export interface Glyph {
   width: number;
   /** A single-byte code 32: word spacing (Tw) applies. */
   wordSpace: boolean;
+  /** How many bytes of the shown string this glyph's code takes. */
+  length: number;
+}
+
+/** A character a font can show again: the bytes that select its glyph, and its advance per unit of font size. */
+export interface Encodable {
+  bytes: Uint8Array;
+  width: number;
 }
 
 export class TextFont {
@@ -168,7 +176,7 @@ export class TextFont {
           this.cidUnicode?.get(cid) ??
           '';
         const w = this.widths.get(cid) ?? this.defaultWidth;
-        out.push({ code, text: unligate(text), width: w * scale, wordSpace: n === 1 && code === 32 });
+        out.push({ code, text: unligate(text), width: w * scale, wordSpace: n === 1 && code === 32, length: n });
       }
       return out;
     }
@@ -182,8 +190,89 @@ export class TextFont {
       if (!text && !name && !this.toUnicode) text = code >= 32 ? String.fromCharCode(code) : '';
       let w = this.widths.get(code);
       if (w === undefined) w = (name ? this.standard?.widths.get(name) : undefined) ?? this.missingWidth;
-      out.push({ code, text: unligate(text), width: w * scale, wordSpace: code === 32 });
+      out.push({ code, text: unligate(text), width: w * scale, wordSpace: code === 32, length: 1 });
     }
+    return out;
+  }
+
+  /**
+   * For a simple font with an embedded TrueType program: whether the program has an outline for
+   * a code (a subset keeps its glyph numbers but empties the glyphs it drops). True where that
+   * can't be told: no such program, or no cmap to find the glyph by.
+   */
+  private simpleOutlines(): (code: number, text: string) => boolean {
+    const yes = () => true;
+    const descriptor = this.doc.dict(this.dict.get('FontDescriptor'));
+    const file = this.doc.resolve(descriptor?.get('FontFile2'));
+    if (this.subtype !== 'TrueType' || !(file instanceof PdfStream)) return yes;
+    let font: TrueTypeFont;
+    try {
+      font = TrueTypeFont.parse(this.doc.streamData(file));
+    } catch {
+      return yes;
+    }
+    if (font.isCff || !font.codePoints.size) return yes;
+    const nonsymbolic = ((this.doc.number(descriptor?.get('Flags')) ?? 0) & 32) !== 0;
+    return (code, text) => {
+      const gid = nonsymbolic ? font.glyphForCodePoint(text.codePointAt(0)!) : font.glyphForCodePoint(0xf000 + code) || font.glyphForCodePoint(code);
+      return gid === 0 || /^\s$/u.test(text) || font.hasOutline(gid);
+    };
+  }
+
+  /** Whether the font dictionary gives this code (a CID, for a composite font) a width of its own. */
+  hasWidth(code: number): boolean {
+    return this.widths.has(code);
+  }
+
+  /**
+   * How the font's text is found: from a /ToUnicode stream (its entries: [code, bytes, text]),
+   * from /ToUnicode /Identity-H, or from the encoding and font program.
+   */
+  get unicodeSource(): { kind: 'stream'; entries: [number, number, string][] } | { kind: 'identity' | 'none' } {
+    if (this.toUnicode) return { kind: 'stream', entries: [...this.toUnicode.entries()] };
+    return { kind: this.identityUnicode ? 'identity' : 'none' };
+  }
+
+  private encodable?: Map<string, Encodable>;
+
+  /**
+   * The single characters this font can show, each with the code that selects it: for a simple
+   * font every code that has a width (a subset font gives unused glyphs none), for a composite one
+   * every code its /ToUnicode map lists. What a subset font lacks can't be typed with it.
+   */
+  get characters(): ReadonlyMap<string, Encodable> {
+    if (this.encodable) return this.encodable;
+    const out = new Map<string, Encodable>();
+    const add = (bytes: Uint8Array, text: string, width: number) => {
+      if ([...text].length !== 1 || out.has(text)) return;
+      out.set(text, { bytes, width });
+    };
+    if (this.subtype === 'Type3') {
+      // glyph procedures have no reliable text
+    } else if (this.composite) {
+      const map = this.toUnicode;
+      if (map && !this.vertical) {
+        // A ToUnicode map can list codes of a length the font itself doesn't use: only the font's own count.
+        const lengths = new Set(this.cmap!.codespace.map((r) => r.bytes));
+        for (const [code, n, text] of map.entries()) {
+          if (lengths.size && !lengths.has(n)) continue;
+          const bytes = new Uint8Array(n);
+          for (let i = 0; i < n; i++) bytes[n - 1 - i] = Math.floor(code / 256 ** i) & 255;
+          const glyph = this.decode(bytes)[0];
+          if (glyph && glyph.length === n && glyph.width > 0 && text && glyph.text === unligate(text)) add(bytes, unligate(text), glyph.width);
+        }
+      }
+    } else {
+      // With /Widths, a code the font lacks has no entry (MissingWidth fills in its width) or 0.
+      const listed = this.dict.has('Widths');
+      const outline = this.simpleOutlines();
+      for (let code = 32; code < 256; code++) {
+        const glyph = this.decode(Uint8Array.of(code))[0];
+        if (!glyph.text || (listed && !this.widths.get(code) && code !== 32)) continue;
+        if ((glyph.width > 0 || code === 32) && outline(code, glyph.text)) add(Uint8Array.of(code), glyph.text, glyph.width);
+      }
+    }
+    this.encodable = out;
     return out;
   }
 

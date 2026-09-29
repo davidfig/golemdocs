@@ -50,6 +50,7 @@ export const menus: Partial<Messages> = {
   'menus.combo.list': '{label} 목록',
   'menus.split.options': '{label} 옵션',
   'menus.palette.more': '다른 색…',
+  'menus.palette.document': '문서 색상',
   'menus.tableGrid.cancel': '취소',
   'menus.tableGrid.size': '{rows} × {columns} 표',
 

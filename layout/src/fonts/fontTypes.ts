@@ -20,6 +20,8 @@ export interface ManifestFace {
   /** Paths relative to the manifest. */
   atlas: string;
   layout: string;
+  /** The font file (TrueType), for embedding in a PDF; absent for the CJK pages and where the source can't be embedded. */
+  font?: string;
   metrics: FontMetrics;
 }
 

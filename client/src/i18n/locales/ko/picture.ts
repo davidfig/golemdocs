@@ -28,6 +28,7 @@ export const picture: Partial<Messages> = {
   'picture.draw.step': '번호 표시',
   'picture.draw.pixelate': '가리기',
   'picture.draw.eraser': '지우개',
+  'picture.draw.move': '이동',
   'picture.draw.fill': '도형 채우기',
   'picture.draw.color': '그리기 색',
   'picture.draw.black': '검정',

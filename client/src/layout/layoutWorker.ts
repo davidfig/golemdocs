@@ -52,11 +52,11 @@ async function welcomeText(): Promise<string> {
   const load = WELCOMES[`./welcome/${getLocale()}.md`] ?? WELCOMES['./welcome/en.md'];
   return load();
 }
-import { DICTIONARY_BASE, FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand, type WireField } from './protocol.ts';
+import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
-import { findIssues } from '../spelling/check.ts';
+import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
 import { Dictionary } from '../spelling/dictionary.ts';
@@ -187,7 +187,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'spellAt', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -249,6 +249,8 @@ class OpenDocument {
   private search: SelectionUpdate['search'] | null = null;
   /** What the last Spelling and Grammar step found, sent with the next selection. */
   private spell: SelectionUpdate['spell'] | null = null;
+  /** Check-as-you-type is waiting for the dictionary to load. */
+  private loadingMarks = false;
   /** The last Word Count's answer, sent with the next selection (null: none to give). */
   private stats: SelectionUpdate['stats'] = undefined;
   /** The document's properties, asked for by File ▸ Properties, sent with the next selection. */
@@ -302,15 +304,14 @@ class OpenDocument {
     const { view } = this.pdf!;
     const start = performance.now();
     let sliceStart = start;
-    this.nextPdfPageId = view.pageCount;
     for (let i = 0; i < view.pageCount && !this.closed; i++) {
       let page: PageLayout;
       try {
-        page = view.layoutPage(i);
+        page = view.layoutPage(i, this.nextPdfPageId++);
       } catch (e) {
         // One unreadable page mustn't lose the rest: show it blank.
         console.error(e);
-        page = new PageLayout(i, 612, 792, 0, i + 1);
+        page = new PageLayout(this.nextPdfPageId++, 612, 792, 0, i + 1);
       }
       this.pdfPages.push(page);
       this.pending.push(page);
@@ -380,14 +381,14 @@ class OpenDocument {
     const order = Int32Array.from(display, (page) => page.id);
     transfer.push(order.buffer);
     const selection = this.selection();
-    if (selection) transfer.push(selection.rects.buffer, selection.commentRects.buffer);
+    if (selection) transfer.push(selection.rects.buffer, selection.commentRects.buffer, ...(selection.spellMarks ? [selection.spellMarks.buffer] : []));
     const update: LayoutUpdate = { faces, pages, overlays, order, drop, selection };
     post({ type: 'layout', doc: this.doc, ...update }, transfer);
   }
 
   sendSelection(): void {
     const selection = this.selection();
-    if (selection) post({ type: 'selection', doc: this.doc, ...selection }, [selection.rects.buffer, selection.commentRects.buffer]);
+    if (selection) post({ type: 'selection', doc: this.doc, ...selection }, [selection.rects.buffer, selection.commentRects.buffer, ...(selection.spellMarks ? [selection.spellMarks.buffer] : [])]);
   }
 
   private selection(): SelectionUpdate | undefined {
@@ -417,6 +418,7 @@ class OpenDocument {
       rects,
       comments: commented.map((c) => ({ id: c.id, author: c.author, date: c.date, text: c.text, page: c.rects[0]?.page.id ?? null, y: c.rects[0]?.y ?? 0 })),
       commentRects,
+      spellMarks: this.spellMarks(editor),
       focus: caret(g.focus),
       reveal: this.reveal,
       text: editor.selectedText(CLIPBOARD_LIMIT),
@@ -468,10 +470,64 @@ class OpenDocument {
       stats: this.stats,
       docProperties: this.props,
       fields: annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
+      pdfText: this.wirePicked(annotator),
+      pdfObject: this.wireObject(annotator),
+      ...(annotator.partialNotice() && { pdfNotice: 'partialRedaction' as const }),
     };
     this.reveal = false;
     this.commandAt = 0;
     return update;
+  }
+
+  /** The text being edited in place, as the page sees it (if its page has been laid out). */
+  private wirePicked(annotator: PdfAnnotator): WirePickedText | null {
+    const picked = annotator.picked;
+    const page = picked && this.pdfPages[picked.page];
+    if (!picked || !page) return null;
+    const { view } = this.pdf!;
+    const [ax, ay] = view.toPage(picked.page, picked.box[0], picked.box[1]);
+    const [bx, by] = view.toPage(picked.page, picked.box[2], picked.box[3]);
+    const [, baseline] = view.toPage(picked.page, picked.box[0], picked.baseline);
+    return {
+      pageId: page.id,
+      id: picked.id,
+      added: picked.runs === null,
+      text: picked.text,
+      box: { x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay) },
+      baseline,
+      style: picked.style,
+    };
+  }
+
+  /** The selected picture or shape, as the page sees it (if its page has been laid out). */
+  private wireObject(annotator: PdfAnnotator): WirePickedObject | null {
+    const o = annotator.pickedObject;
+    const page = o && this.pdfPages[o.page];
+    if (!o || !page) return null;
+    const hex = (c: readonly number[] | null) => (c ? `#${c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}` : null);
+    return {
+      pageId: page.id,
+      id: o.editId ?? o.target ?? '',
+      kind: o.kind,
+      box: this.pageBox(o.page, o.box),
+      ...(o.shape && { shape: { shape: o.shape.shape, stroke: hex(o.shape.stroke), fill: hex(o.shape.fill), width: o.shape.width } }),
+    };
+  }
+
+  /** A box in a page's user space as page coordinates. */
+  private pageBox(page: number, box: readonly number[]): WireBox {
+    const { view } = this.pdf!;
+    const [ax, ay] = view.toPage(page, box[0], box[1]);
+    const [bx, by] = view.toPage(page, box[2], box[3]);
+    return { x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay) };
+  }
+
+  /** A box in page coordinates as user space [x0 y0 x1 y1]. */
+  private userBox(page: number, box: WireBox): [number, number, number, number] {
+    const { view } = this.pdf!;
+    const [ax, ay] = view.toUser(page, box.x, box.y);
+    const [bx, by] = view.toUser(page, box.x + box.width, box.y + box.height);
+    return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
   }
 
   /** A form field as the page sees it, if its page has been laid out. */
@@ -507,7 +563,17 @@ class OpenDocument {
     switch (wire.kind) {
       case 'pointer': {
         const index = this.pdfPages.findIndex((p) => p.id === wire.page);
-        if (index >= 0) annotator.pointer(index, wire.x, wire.y, wire.extend ?? false, wire.unit ?? 'character');
+        if (index < 0) break;
+        // Something added to the page is picked by clicking it (Fill In mode: its text isn't for editing); anywhere else this is selecting text.
+        if (!wire.extend) {
+          const added = annotator.pickAdded(index, wire.x, wire.y);
+          if (added.picked) {
+            void this.afterPick(annotator, added.pages);
+            return;
+          }
+          changed = annotator.deselect();
+        }
+        annotator.pointer(index, wire.x, wire.y, wire.extend ?? false, wire.unit ?? 'character');
         break;
       }
       case 'selectAll':
@@ -519,6 +585,14 @@ class OpenDocument {
         break;
       }
       case 'delete': {
+        if (annotator.pickedObject) {
+          changed = annotator.deleteObject();
+          break;
+        }
+        if (annotator.picked && !annotator.picked.runs) {
+          changed = annotator.deleteText();
+          break;
+        }
         const page = annotator.deleteSelected();
         if (page !== null) changed = [page];
         break;
@@ -531,16 +605,213 @@ class OpenDocument {
         );
         break;
       }
+      case 'pdfPick': {
+        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        if (index < 0) break;
+        // Characters added to the text may need faces that stand in for the file's fonts: load them first.
+        void this.pickText(annotator, index, wire.x, wire.y);
+        return;
+      }
+      case 'pdfText':
+        changed = annotator.setPickedText(wire.text);
+        break;
+      case 'pdfPutDown':
+        changed = annotator.deselect();
+        break;
+      case 'pdfStyle':
+        // The font file the new look needs is fetched first: setting text in it is not asynchronous.
+        void this.styleText(annotator, wire);
+        return;
+      case 'pdfMoveText': {
+        const at = annotator.picked;
+        if (!at) break;
+        const { view } = this.pdf!;
+        const [ax, ay] = view.toUser(at.page, 0, 0);
+        const [bx, by] = view.toUser(at.page, wire.dx, wire.dy);
+        changed = annotator.moveText(bx - ax, by - ay);
+        break;
+      }
+      case 'pdfMove': {
+        const o = annotator.pickedObject;
+        if (o) changed = annotator.moveObject(this.userBox(o.page, wire.box));
+        break;
+      }
+      case 'pdfShape': {
+        const stroke = wire.stroke === undefined ? undefined : wire.stroke === null ? null : parseHex(wire.stroke);
+        const fill = wire.fill === undefined ? undefined : wire.fill === null ? null : parseHex(wire.fill);
+        changed = annotator.setShapeStyle({ ...(stroke !== undefined && { stroke }), ...(fill !== undefined && { fill }), ...(wire.width !== undefined && { width: wire.width }) });
+        break;
+      }
+      case 'pdfAddShape': {
+        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        if (index < 0) break;
+        if (wire.shape === 'redact') {
+          changed = annotator.addRedaction(index, this.userBox(index, wire.box));
+          break;
+        }
+        const white = wire.shape === 'whiteout';
+        const shape = wire.shape === 'whiteout' ? 'rect' : wire.shape;
+        const mark = shape === 'check' || shape === 'cross';
+        const look = white ? { stroke: null, fill: [1, 1, 1] as [number, number, number], width: 0 } : { stroke: [0, 0, 0] as [number, number, number], fill: null, width: mark ? 2 : 1.5 };
+        changed = annotator.addShape(index, shape, this.userBox(index, wire.box), { ...look, flip: shape === 'line' && this.rises(index, wire.box, wire.flip ?? false) });
+        break;
+      }
+      case 'pdfAddImage': {
+        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        if (index >= 0) changed = annotator.addImage(index, this.userBox(index, wire.box), wire.data);
+        break;
+      }
+      case 'pdfAddText': {
+        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        if (index < 0) break;
+        const { view } = this.pdf!;
+        const [ux, uy] = view.toUser(index, wire.x, wire.y);
+        changed = annotator.addTextBox(index, ux, uy, wire.text);
+        break;
+      }
+      case 'pdfPageOp':
+        void this.pdfPageOp(annotator, wire);
+        return;
       case 'undo':
         changed = annotator.undo();
+        if (annotator.reopen) return void this.reopenPdf(annotator);
         break;
       case 'redo':
         changed = annotator.redo();
+        if (annotator.reopen) return void this.reopenPdf(annotator);
         break;
       default:
         return;
     }
     if (changed.length) this.relayoutPdf(changed);
+    else this.sendSelection();
+  }
+
+  /**
+   * Whether a line in a box on the page (from its top left to its bottom right, or from its bottom left to its top right if
+   * `rising`) runs from the top left to the bottom right of the box in user space, which is what a shape's `flip` says.
+   */
+  private rises(page: number, box: WireBox, rising: boolean): boolean {
+    const { view } = this.pdf!;
+    const [sx, sy] = view.toUser(page, box.x, rising ? box.y + box.height : box.y);
+    const [ex, ey] = view.toUser(page, box.x + box.width, rising ? box.y : box.y + box.height);
+    return (ex - sx) * (ey - sy) < 0;
+  }
+
+  private async styleText(annotator: PdfAnnotator, wire: Extract<WireCommand, { kind: 'pdfStyle' }>): Promise<void> {
+    const picked = annotator.picked;
+    if (!picked || !this.pdf) return;
+    const family = wire.font ?? picked.style.family;
+    await this.pdf.view.loadFont(family, wire.bold ?? picked.style.bold, wire.italic ?? picked.style.italic);
+    if (this.closed || annotator.picked !== picked) return;
+    const color = wire.color ? parseHex(wire.color) : undefined;
+    const changed = annotator.setTextStyle({ font: wire.font, bold: wire.bold, italic: wire.italic, size: wire.size, ...(color && { color }) });
+    if (changed.length) this.relayoutPdf([...new Set(changed)]);
+    else this.sendSelection();
+  }
+
+  /** Lays every page of the PDF out again (its pages changed), and sends them. */
+  private async relayoutAllPdf(): Promise<void> {
+    this.pdfPages = [];
+    this.pending = [];
+    await this.pumpPdf();
+    if (!this.closed) this.sendSelection();
+  }
+
+  /**
+   * Deletes, turns, moves, copies or adds a page. The change is made to a new file, with the edits, markup and fields
+   * as they are now written into it; the old one stays in the history, so undo can go back to it.
+   */
+  private async pdfPageOp(annotator: PdfAnnotator, wire: Extract<WireCommand, { kind: 'pdfPageOp' }>): Promise<void> {
+    const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+    const original = this.original;
+    if (index < 0 || !original || !this.pdf) return;
+    try {
+      const { PdfDocument, openPdfView } = await import('../formats/handlers/pdf.ts');
+      const doc = PdfDocument.load(await annotatedPdf(original, currentExtensions(this)));
+      const page = doc.pages[index];
+      switch (wire.op) {
+        case 'delete':
+          if (doc.pageCount < 2) return;
+          doc.removePage(index);
+          break;
+        case 'rotateLeft':
+        case 'rotateRight':
+          page.rotation = page.rotation + (wire.op === 'rotateRight' ? 90 : -90);
+          break;
+        case 'moveUp':
+          if (index === 0) return;
+          doc.movePage(index, index - 1);
+          break;
+        case 'moveDown':
+          if (index >= doc.pageCount - 1) return;
+          doc.movePage(index, index + 1);
+          break;
+        case 'duplicate':
+          doc.copyPages(doc, [index], index + 1);
+          break;
+        case 'insert': {
+          const [x0, y0, x1, y1] = page.mediaBox;
+          doc.addPage([x1 - x0, y1 - y0], index + 1);
+          break;
+        }
+      }
+      const bytes = await doc.save();
+      const fonts = await fontsReady;
+      const view = await openPdfView(bytes, fonts, { editFonts: await editFontsFor(fonts) });
+      if (this.closed || this.original !== original) return;
+      annotator.replaceView(view, bytes);
+      this.original = bytes;
+      this.pdf = { view, bytes };
+      this.edited = true;
+      await this.relayoutAllPdf();
+    } catch (e) {
+      console.error(e);
+      post({ type: 'error', doc: this.doc, message: (e as Error).message });
+    }
+  }
+
+  /** Undo or redo went across a page operation: opens the file that came before (or after) it, with its layers. */
+  private async reopenPdf(annotator: PdfAnnotator): Promise<void> {
+    const back = annotator.reopen;
+    if (!back || !this.pdf) return;
+    try {
+      const { openPdfView } = await import('../formats/handlers/pdf.ts');
+      const { annotations, fields, edits } = back.layers;
+      const fonts = await fontsReady;
+      const view = await openPdfView(back.original, fonts, { annotations, fields, edits, editFonts: await editFontsFor(fonts) });
+      if (this.closed) return;
+      annotator.attach(view, back.original, back.layers);
+      this.original = back.original;
+      this.pdf = { view, bytes: back.original };
+      this.edited = true;
+      await this.relayoutAllPdf();
+    } catch (e) {
+      console.error(e);
+      post({ type: 'error', doc: this.doc, message: (e as Error).message });
+    }
+  }
+
+  /** After something added was picked: the faces its text may need are loaded, then the pages are laid out again. */
+  private async afterPick(annotator: PdfAnnotator, pages: number[]): Promise<void> {
+    const picked = annotator.picked;
+    if (picked) await this.pdf!.view.ensureFonts(picked.style.serif, picked.style.mono);
+    if (this.closed) return;
+    const changed = [...new Set([...pages, ...(picked ? [picked.page] : [])])];
+    if (changed.length) this.relayoutPdf(changed);
+    else this.sendSelection();
+  }
+
+  private async pickText(annotator: PdfAnnotator, index: number, x: number, y: number): Promise<void> {
+    const before = annotator.picked;
+    let changed = annotator.pickText(index, x, y);
+    const picked = annotator.picked;
+    if (picked && picked !== before) {
+      await this.pdf!.view.ensureFonts(picked.style.serif, picked.style.mono);
+      if (this.closed || annotator.picked !== picked) return;
+      changed = [...changed, picked.page];
+    }
+    if (changed.length) this.relayoutPdf([...new Set(changed)]);
     else this.sendSelection();
   }
 
@@ -892,6 +1163,53 @@ class OpenDocument {
     this.sendSelection();
   }
 
+  /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
+  private spellMarks(editor: Editor): Float64Array {
+    if (!live.spelling && !live.grammar) return new Float64Array(0);
+    const dictionary = loadedDictionary;
+    if (!dictionary) {
+      if (!this.loadingMarks) {
+        this.loadingMarks = true;
+        loadDictionary()
+          .then(() => this.sendSelection())
+          .catch(() => undefined)
+          .finally(() => (this.loadingMarks = false));
+      }
+      return new Float64Array(0);
+    }
+    const [start, end] = editor.ordered();
+    const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
+    const marks = editor.marks((paragraph) =>
+      issuesOf(paragraph, dictionary)
+        // The word being typed isn't marked until the caret leaves it.
+        .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && typing.offset <= i.end))
+        .map((i) => ({ start: i.start, end: i.end, kind: i.kind === 'spelling' ? 0 : 1 })),
+    );
+    const out = new Float64Array(marks.length * 6);
+    marks.forEach((m, i) => out.set([m.page.id, m.x, m.y, m.width, m.height, m.kind], i * 6));
+    return out;
+  }
+
+  /** Right click: selects the mistake under the point and reports it for the menu (nothing, if there is none). */
+  private async spellAt(pageId: number, x: number, y: number): Promise<void> {
+    const editor = this.editor;
+    const session = this.session;
+    if (!editor || !session || this.closed || this.annotator) return;
+    const dictionary = await loadDictionary();
+    const page = session.displayPages.find((p) => p.id === pageId);
+    const hit = page && editor.hitTest(page, x, y);
+    this.spell = { issue: null, menu: true };
+    if (hit) {
+      const issue = issuesOf(hit.paragraph, dictionary).find((i) => i.start <= hit.offset && hit.offset <= i.end);
+      if (issue) {
+        this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
+        editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
+      }
+    }
+    this.reveal = false;
+    this.sendSelection();
+  }
+
   /** Selects the next spelling or grammar mistake at or after the place `from` says, and reports it. */
   private async spellNext(from: 'documentStart' | 'selectionStart' | 'selectionEnd', grammar: boolean): Promise<void> {
     const editor = this.editor;
@@ -905,23 +1223,7 @@ class OpenDocument {
       const text = paragraphText(list[k]);
       const issue = findIssues(text, { dictionary, grammar, ignoredRules: spelling.rules }).find((i) => k > origin.paragraph || i.start >= origin.offset);
       if (!issue) continue;
-      // The sentence around it, for the dialog to show.
-      let sentenceStart = 0;
-      for (const m of text.slice(0, issue.start).matchAll(/[.!?]["'”’)]*\s+/g)) sentenceStart = m.index + m[0].length;
-      const before = text.slice(Math.max(sentenceStart, issue.start - 200), issue.start);
-      const rest = /[.!?]["'”’)]*(?=\s|$)/.exec(text.slice(issue.end));
-      const after = text.slice(issue.end, Math.min(rest ? issue.end + rest.index + rest[0].length : text.length, issue.end + 200));
-      this.spell = {
-        issue: {
-          kind: issue.kind,
-          before,
-          text: issue.text,
-          after,
-          message: issue.message,
-          suggestions: issue.kind === 'spelling' ? dictionary.suggest(issue.text) : issue.suggestions,
-          rule: issue.rule,
-        },
-      };
+      this.spell = { issue: describeIssue(text, issue, dictionary) };
       editor.apply({ kind: 'select', paragraph: k, from: issue.start, to: issue.end });
       break;
     }
@@ -959,10 +1261,16 @@ class OpenDocument {
       this.props = { ...this.document?.properties };
       return this.sendSelection();
     }
-    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? [], wire.rules ?? []);
+    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? [], wire.rules ?? []).then(() => this.sendSelection());
+    if (wire.kind === 'spellCheck') {
+      live.spelling = wire.spelling;
+      live.grammar = wire.grammar;
+      return acceptSpelling(wire.words ?? [], []).then(() => this.sendSelection());
+    }
+    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
-    if (wire.kind === 'annotate' || wire.kind === 'setFields') return;
+    if (isPdfCommand(wire)) return;
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session) return;
@@ -1000,7 +1308,33 @@ class OpenDocument {
 
 /** Words the user added to the dictionary or chose to ignore, and grammar rules to ignore: for every document. */
 const spelling = { words: new Set<string>(), rules: new Set<string>() };
+/** What is underlined as the user types. */
+const live = { spelling: true, grammar: true };
 let dictionaryLoad: Promise<Dictionary> | null = null;
+let loadedDictionary: Dictionary | null = null;
+/** Changes when what counts as a mistake does, so checked paragraphs are checked again. */
+let spellVersion = 0;
+const checked = new WeakMap<object, { text: string; version: number; issues: TextIssue[] }>();
+
+/** What is wrong in a paragraph: kept until its text (or what counts as wrong) changes. */
+function issuesOf(paragraph: Parameters<typeof paragraphText>[0], dictionary: Dictionary): TextIssue[] {
+  const text = paragraphText(paragraph);
+  const known = checked.get(paragraph);
+  if (known && known.text === text && known.version === spellVersion) return known.issues;
+  const issues = findIssues(text, { dictionary, grammar: live.grammar, ignoredRules: spelling.rules }).filter((i) => live.spelling || i.kind !== 'spelling');
+  checked.set(paragraph, { text, version: spellVersion, issues });
+  return issues;
+}
+
+/** An issue with the sentence around it, and its suggestions, for the dialog or the menu. */
+function describeIssue(text: string, issue: TextIssue, dictionary: Dictionary): SpellIssue {
+  let sentenceStart = 0;
+  for (const m of text.slice(0, issue.start).matchAll(/[.!?]["'”’)]*\s+/g)) sentenceStart = m.index + m[0].length;
+  const before = text.slice(Math.max(sentenceStart, issue.start - 200), issue.start);
+  const rest = /[.!?]["'”’)]*(?=\s|$)/.exec(text.slice(issue.end));
+  const after = text.slice(issue.end, Math.min(rest ? issue.end + rest.index + rest[0].length : text.length, issue.end + 200));
+  return { kind: issue.kind, before, text: issue.text, after, message: issue.message, suggestions: issue.kind === 'spelling' ? dictionary.suggest(issue.text) : issue.suggestions, rule: issue.rule };
+}
 
 /** The English dictionary, read the first time something is checked. */
 function loadDictionary(): Promise<Dictionary> {
@@ -1009,6 +1343,7 @@ function loadDictionary(): Promise<Dictionary> {
       if (!aff.ok || !dic.ok) throw new Error('the dictionary could not be loaded');
       const dictionary = Dictionary.parse(await aff.text(), await dic.text());
       dictionary.accept(...spelling.words);
+      loadedDictionary = dictionary;
       return dictionary;
     })
     .catch((error: unknown) => {
@@ -1023,6 +1358,7 @@ function loadDictionary(): Promise<Dictionary> {
 async function acceptSpelling(words: string[], rules: string[]): Promise<void> {
   for (const word of words) spelling.words.add(word);
   for (const rule of rules) spelling.rules.add(rule);
+  spellVersion++;
   if (dictionaryLoad) (await dictionaryLoad).accept(...words);
 }
 
@@ -1048,12 +1384,12 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // something else (the page is told, to say that the edits aren't on them).
     if (loaded.lens === 'pdf' && loaded.original) {
       const { openPdfView, PdfAnnotator } = await import('../formats/handlers/pdf.ts');
-      const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations, fields: loaded.extensions.pdf?.fields });
+      const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations, fields: loaded.extensions.pdf?.fields, edits: loaded.extensions.pdf?.edits, editFonts: await editFontsFor(fonts) });
       const readMs = performance.now() - t0;
       if (entry.closed) return;
       entry.document = loaded.document; // kept as it is, for saving
       entry.pdf = { view, bytes: loaded.original };
-      entry.annotator = new PdfAnnotator(view);
+      entry.annotator = new PdfAnnotator(view, undefined, loaded.original);
       post({ type: 'opened', doc, name, format: 'pdf', annotating: true, outdated: !!loaded.document && !loaded.pagesCurrent });
       const bodyMs = await entry.pumpPdf();
       if (entry.closed) return;
@@ -1126,23 +1462,38 @@ async function reflow(original: Uint8Array, extensions: Extensions): Promise<Wor
   return document;
 }
 
+/** The font files edits to a PDF need, fetched as asked for (see formats/pdfFonts.ts). */
+async function editFontsFor(fonts: FontSet) {
+  const { EditFonts } = await import('../formats/handlers/pdf.ts');
+  return new EditFonts(fonts, async (path) => new Uint8Array(await (await fetchOk(FONT_BASE + path)).arrayBuffer()));
+}
+
 /** The document's extensions, with the PDF's annotations and form fields as they are now when its pages are shown. */
 function currentExtensions(open: OpenDocument): Extensions {
   if (!open.annotator) return open.extensions;
-  return { ...open.extensions, pdf: { annotations: [...open.annotator.annotations], fields: [...open.annotator.fields] } };
+  return { ...open.extensions, pdf: { annotations: [...open.annotator.annotations], fields: [...open.annotator.fields], edits: [...open.annotator.edits] } };
 }
 
 /**
- * The original PDF with the document's annotations and form fields written in as an incremental
- * update (the original bytes, then the changes), or the original itself when it has neither layer.
+ * The original PDF with the document's annotations, form fields and edits written in. Markup and
+ * fields go in as an incremental update (the original bytes, then the changes); edits to the page's
+ * own content are written in full, so that what they removed isn't left in the file behind them.
+ * The original itself when there is nothing to write.
  */
 async function annotatedPdf(original: Uint8Array, extensions: Extensions): Promise<Uint8Array> {
-  const { annotations, fields } = extensions.pdf ?? {};
-  if (!annotations && !fields) return original.slice();
-  const { PdfDocument, applyAnnotations, applyFields } = await import('../formats/handlers/pdf.ts');
+  const { annotations, fields, edits } = extensions.pdf ?? {};
+  if (!annotations && !fields && !edits?.length) return original.slice();
+  const { PdfDocument, applyAnnotations, applyEdits, applyFields } = await import('../formats/handlers/pdf.ts');
   const doc = PdfDocument.load(original);
   if (annotations) applyAnnotations(doc, annotations);
   if (fields) applyFields(doc, fields);
+  if (edits?.length) {
+    // Fonts the edits set text in are written into the file, from their font files.
+    const editFonts = await editFontsFor(await fontsReady);
+    await editFonts.ensure(edits);
+    applyEdits(doc, edits, editFonts.options);
+    return doc.save();
+  }
   return doc.save({ incremental: true });
 }
 
@@ -1273,3 +1624,11 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
   }
 };
+
+/** #rrggbb as RGB 0–1. */
+function parseHex(css: string): [number, number, number] | undefined {
+  const m = /^#?([0-9a-f]{6})$/i.exec(css);
+  if (!m) return undefined;
+  const n = parseInt(m[1], 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}

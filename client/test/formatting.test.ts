@@ -143,3 +143,20 @@ test('change case keeps formatting', skip, async () => {
   await format({ kind: 'changeCase', to: 'upper' });
   assert.equal(paragraphText(paragraphs()[0]), 'HELLO WORLD');
 });
+
+test('document colors list the text colors in use, most used first, without duplicates', async () => {
+  const doc = await WordDocument.create();
+  const run = (color?: string): Run => ({ kind: 'run', properties: color ? { color: { val: color } } : {}, attrs: {}, content: [{ kind: 'text', text: 'x' }] });
+  doc.body = [
+    { kind: 'paragraph', properties: {}, children: [run('ff0000'), run('00FF00'), run('auto'), run()], attrs: {} },
+    { kind: 'paragraph', properties: {}, children: [run('00ff00'), run('00FF00')], attrs: {} },
+  ];
+  const paragraphs = paragraphsIn(doc.body);
+  const start = { paragraph: paragraphs[0], offset: 0 };
+  const state = new FormatReader(doc).read(start, start, paragraphs);
+  assert.deepEqual(state.documentColors, ['#00FF00', '#FF0000']);
+  const plain = await WordDocument.create();
+  plain.body = [{ kind: 'paragraph', properties: {}, children: [run()], attrs: {} }];
+  const only = paragraphsIn(plain.body);
+  assert.deepEqual(new FormatReader(plain).read({ paragraph: only[0], offset: 0 }, { paragraph: only[0], offset: 0 }, only).documentColors, []);
+});

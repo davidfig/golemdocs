@@ -217,28 +217,23 @@ export class EmbeddedFont implements PdfFont {
     return Math.round(this.font.advance(gid) * this.font.scale * 100) / 100;
   }
 
-  /** Writes (or rewrites) the font program, widths and ToUnicode map for the glyphs used so far. */
-  private write(): void {
-    if (this.written === this.cids.size) return;
-    this.written = this.cids.size;
-    const f = this.font;
-    const doc = this.doc;
-    // Saving again after more text was added rewrites the same objects rather than adding new ones.
-    const put = (ref: PdfRef | undefined, stream: PdfStream): PdfRef => {
-      if (!ref) return doc.add(stream);
-      doc.set(ref, stream);
-      return ref;
-    };
-    if (f.isCff) {
-      // The whole font once; it never changes.
-      this.programRef ??= doc.add(new PdfStream(new PdfDict({ Subtype: N('OpenType') }), f.bytes));
-      this.descriptor.set('FontFile3', this.programRef);
-    } else {
-      const { data } = f.subset(this.cids.keys());
-      this.programRef = put(this.programRef, new PdfStream(new PdfDict({ Length1: data.length }), data));
-      this.descriptor.set('FontFile2', this.programRef);
-    }
+  /** Puts an object in place: rewritten where it already is (saving again after more text was added reuses the same objects). */
+  private put(ref: PdfRef | undefined, stream: PdfStream): PdfRef {
+    if (!ref) return this.doc.add(stream);
+    this.doc.set(ref, stream);
+    return ref;
+  }
 
+  private metricsFor = -1;
+
+  /**
+   * Writes the widths and the ToUnicode map for the glyphs used so far, without the font program: enough for the text to
+   * be read back from the document (a page view of it), and cheap. Saving writes the program too.
+   */
+  sync(): boolean {
+    if (this.metricsFor === this.cids.size) return false;
+    this.metricsFor = this.cids.size;
+    const doc = this.doc;
     // Widths: runs of consecutive CIDs as [first [w1 w2 ...]].
     const byCid = [...this.cids].map(([gid, cid]) => [cid, this.glyphWidth(gid)] as const).sort((a, b) => a[0] - b[0]);
     const w: (number | number[])[] = [];
@@ -249,10 +244,28 @@ export class EmbeddedFont implements PdfFont {
       i = j + 1;
     }
     this.cidFont.set('W', w);
-
     const fontDict = doc.dict(this.ref)!;
-    this.toUnicodeRef = put(this.toUnicodeRef, new PdfStream(new PdfDict(), toUnicodeCMap(this.texts)));
+    this.toUnicodeRef = this.put(this.toUnicodeRef, new PdfStream(new PdfDict(), toUnicodeCMap(this.texts)));
     fontDict.set('ToUnicode', this.toUnicodeRef);
+    return true;
+  }
+
+  /** Writes (or rewrites) the font program, widths and ToUnicode map for the glyphs used so far. */
+  private write(): void {
+    if (this.written === this.cids.size) return;
+    this.written = this.cids.size;
+    const f = this.font;
+    const doc = this.doc;
+    if (f.isCff) {
+      // The whole font once; it never changes.
+      this.programRef ??= doc.add(new PdfStream(new PdfDict({ Subtype: N('OpenType') }), f.bytes));
+      this.descriptor.set('FontFile3', this.programRef);
+    } else {
+      const { data } = f.subset(this.cids.keys());
+      this.programRef = this.put(this.programRef, new PdfStream(new PdfDict({ Length1: data.length }), data));
+      this.descriptor.set('FontFile2', this.programRef);
+    }
+    this.sync();
   }
 }
 

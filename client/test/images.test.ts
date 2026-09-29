@@ -9,6 +9,7 @@ import { epub, mhtml } from '../src/formats/handlers/webArchives.ts';
 import html from '../src/formats/handlers/html.ts';
 import rtf from '../src/formats/handlers/rtf.ts';
 import { collectImages, decodeDataUri, sniffImage } from '../src/formats/images.ts';
+import { sniffType } from '../src/shapes/imageRenderer.ts';
 
 const fonts = undefined as never;
 
@@ -187,4 +188,10 @@ test('collectImages finds pictures inside links and table cells', async () => {
   const [para] = doc.body as Paragraph[];
   doc.body = [{ kind: 'table', properties: {}, grid: [1000], rows: [{ kind: 'row', properties: {}, attrs: {}, cells: [{ kind: 'cell', properties: {}, attrs: {}, children: [{ ...para, children: [{ kind: 'hyperlink', url: 'x', children: para.children, attrs: {} }] }] }] }] }];
   assert.equal((await collectImages(doc)).size, 2);
+});
+
+test('a picture part without an extension (a PDF’s) is recognised by its bytes', () => {
+  assert.equal(sniffType(Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a)), 'image/png');
+  assert.equal(sniffType(Uint8Array.of(0xff, 0xd8, 0xff, 0xe0)), 'image/jpeg');
+  assert.equal(sniffType(Uint8Array.of(0x25, 0x50, 0x44, 0x46)), '');
 });

@@ -7,7 +7,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { FontSet, packColor } from '@word/layout';
 import { PageDrawing, PdfDocument } from '../../pdf/src/index.ts';
-import { openPdfView } from '../src/formats/pdfPages.ts';
+import { N, PdfDict, PdfStream, PdfString } from '../../pdf/src/core/objects.ts';
+import { toUnicodeCMap } from '../../pdf/src/write/fonts.ts';
+import { cjkLangOf, openPdfView } from '../src/formats/pdfPages.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../public/fonts');
 const hasFonts = existsSync(path.join(FONT_DIR, 'manifest.json'));
@@ -96,4 +98,41 @@ test('lazy: pages are not interpreted until asked for', skip, async () => {
   assert.equal(view.pageCount, 300);
   assert.ok(performance.now() - t < 2000);
   assert.equal(view.layoutPage(299).background.count, 1);
+});
+
+test('East Asian text is drawn from the CJK pages of the font’s language', skip, async () => {
+  // A Traditional Chinese font as Word writes it: a composite font whose /ToUnicode says what each code is.
+  const text = '廖文彬出生於';
+  const doc = PdfDocument.create();
+  const page = doc.addPage([300, 200]);
+  const toUnicode = doc.add(new PdfStream(new PdfDict(), toUnicodeCMap(new Map([...text].map((ch, i) => [i + 1, ch])))));
+  const cidFont = new PdfDict({ Type: N('Font'), Subtype: N('CIDFontType2'), BaseFont: N('ABCDEF+MicrosoftJhengHeiRegular'), DW: 1000, CIDSystemInfo: new PdfDict({ Registry: new PdfString(new TextEncoder().encode('Adobe')), Ordering: new PdfString(new TextEncoder().encode('Identity')), Supplement: 0 }) });
+  const font = doc.add(new PdfDict({ Type: N('Font'), Subtype: N('Type0'), BaseFont: N('ABCDEF+MicrosoftJhengHeiRegular'), Encoding: N('Identity-H'), DescendantFonts: [cidFont], ToUnicode: toUnicode }));
+  const name = page.addResource('Font', font, 'F');
+  const shown = Uint8Array.from([...text].flatMap((_, i) => [0, i + 1]));
+  page.setContent([
+    { op: 'BT', operands: [] },
+    { op: 'Tf', operands: [N(name), 12] },
+    { op: 'Td', operands: [20, 100] },
+    { op: 'Tj', operands: [new PdfString(shown, true)] },
+    { op: 'ET', operands: [] },
+  ]);
+  const view = await openPdfView(await doc.save(), fonts!);
+  const laid = view.layoutPage(0);
+  assert.equal(laid.glyphCount, text.length);
+  const lists = [...laid.glyphs.values()].filter((l) => l.count);
+  assert.ok(lists.every((l) => fonts!.cjkPages('zh-Hant').includes(l.font.family) || fonts!.cjkPages('zh-Hans').includes(l.font.family)), lists.map((l) => l.font.family.id).join());
+  assert.ok(lists.some((l) => fonts!.cjkPages('zh-Hant').includes(l.font.family)));
+});
+
+test('the CJK language of a PDF font: by its name as PDFs write it, else by its characters', () => {
+  const fontSet = { defaultCjkLang: 'ja' } as FontSet;
+  assert.equal(cjkLangOf(fontSet, 'MicrosoftJhengHeiUIRegular', []), 'zh-Hant');
+  assert.equal(cjkLangOf(fontSet, 'DFHei-W5-WIN-BF', []), 'zh-Hant');
+  assert.equal(cjkLangOf(fontSet, 'SimSun', []), 'zh-Hans');
+  assert.equal(cjkLangOf(fontSet, 'MS-Mincho', []), 'ja');
+  assert.equal(cjkLangOf(fontSet, 'MalgunGothic', []), 'ko');
+  assert.equal(cjkLangOf(fontSet, 'Unknown', [0xac00]), 'ko');
+  assert.equal(cjkLangOf(fontSet, 'Unknown', [0x3042]), 'ja');
+  assert.equal(cjkLangOf({ defaultCjkLang: 'zh-Hans' } as FontSet, 'Unknown', [0x4e00]), 'zh-Hans');
 });

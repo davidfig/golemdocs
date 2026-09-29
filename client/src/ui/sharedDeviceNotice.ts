@@ -11,7 +11,8 @@ const DISMISSED_KEY = 'golem.sharedDeviceNotice.dismissed';
 
 export class SharedDeviceNotice {
   readonly el = h('aside', { class: 'wm-shared-notice', attrs: { 'aria-label': t('dialogs.sharedDevice.label') } });
-  private signedIn = false;
+  /** Null until the account lookup has finished: the note stays hidden rather than flash for a signed-in person. */
+  private signedIn: boolean | null = null;
   private welcome = true;
 
   constructor(parent: HTMLElement, clear: () => void) {
@@ -35,7 +36,7 @@ export class SharedDeviceNotice {
     parent.append(this.el);
   }
 
-  /** Shown while signed out with a document other than the welcome one open, unless dismissed before. */
+  /** Shown once known to be signed out, with a document other than the welcome one open, unless dismissed before. */
   update(state: { signedIn?: boolean; welcome?: boolean }): void {
     this.signedIn = state.signedIn ?? this.signedIn;
     this.welcome = state.welcome ?? this.welcome;
@@ -45,6 +46,6 @@ export class SharedDeviceNotice {
     } catch {
       // storage blocked: treat as not dismissed
     }
-    this.el.hidden = this.signedIn || this.welcome || dismissed;
+    this.el.hidden = this.signedIn !== false || this.welcome || dismissed;
   }
 }

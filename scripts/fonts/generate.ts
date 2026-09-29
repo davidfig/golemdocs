@@ -3,10 +3,13 @@
 //   pnpm fonts                     all families
 //   pnpm fonts --only calibri,arial
 //   pnpm fonts --download-only     fetch and verify sources, skip atlas generation
+//   pnpm fonts --ttf-only          copy the font files next to the atlases and list them in the manifest, leaving
+//                                  the atlases as they are (no msdf-atlas-gen needed)
 //
 // Output (served by the client's Vite dev server at /fonts/):
 //   client/public/fonts/manifest.json           Word font name -> faces, atlases and metrics
 //   client/public/fonts/<id>/<face>.webp        MTSDF atlas (lossless WebP)
+//   client/public/fonts/<id>/<face>.ttf         the font file, for PDFs to embed (not for the CJK pages)
 //   client/public/fonts/<id>/<face>.json        glyph layout (msdf-atlas-gen JSON)
 //   client/public/fonts/<id>/LICENSE.txt
 //
@@ -36,6 +39,8 @@ interface ManifestFace {
   /** Paths relative to the manifest. */
   atlas: string;
   layout: string;
+  /** The font file itself (a TrueType font), for embedding in a PDF: fetched only when a PDF uses the face. Not for the CJK pages. */
+  font?: string;
   /** Font-wide metrics in font units. */
   metrics: FontMetrics;
 }
@@ -237,8 +242,18 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
     italic: face.italic,
     atlas: `${family.id}/${name}.webp`,
     layout: `${family.id}/${name}.json`,
+    ...copyFontFile(family, face, fontPath),
     metrics: readFontMetrics(readFileSync(fontPath)),
   };
+}
+
+/** Copies a face's font file next to its atlas (not the CJK pages': variable fonts of many megabytes); its manifest entry. */
+function copyFontFile(family: FamilySpec, face: FaceSpec, fontPath: string): { font?: string } {
+  if (family.cjk || face.variations) return {};
+  const name = `${faceName(face)}.ttf`;
+  mkdirSync(path.join(OUT, family.id), { recursive: true });
+  copyFileSync(fontPath, path.join(OUT, family.id, name));
+  return { font: `${family.id}/${name}` };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -249,7 +264,9 @@ async function main(): Promise<void> {
   const only = onlyIndex >= 0 ? new Set(args[onlyIndex + 1]?.split(',') ?? []) : null;
   const downloadOnly = args.includes('--download-only');
 
-  const families = only ? FAMILIES.filter((f) => only.has(f.id)) : FAMILIES;
+  // The CJK pages have no font file to copy, so --ttf-only doesn't fetch their (large) sources.
+  const wanted = args.includes('--ttf-only') ? FAMILIES.filter((f) => !f.cjk) : FAMILIES;
+  const families = only ? wanted.filter((f) => only.has(f.id)) : wanted;
   if (only) {
     const unknown = [...only].filter((id) => !FAMILIES.some((f) => f.id === id));
     if (unknown.length) throw new Error(`unknown font id(s): ${unknown.join(', ')}. Known: ${FAMILIES.map((f) => f.id).join(', ')}`);
@@ -263,6 +280,23 @@ async function main(): Promise<void> {
     for (const face of family.faces) fonts.set(face, await resolveFile(face.font));
   }
   if (downloadOnly) return;
+
+  if (args.includes('--ttf-only')) {
+    const file = path.join(OUT, 'manifest.json');
+    const manifest: Manifest = JSON.parse(readFileSync(file, 'utf8'));
+    for (const family of families) {
+      const entry = manifest.families.find((f) => f.id === family.id);
+      if (!entry) continue;
+      for (const face of family.faces) {
+        const made = manifest.families.find((f) => f.id === family.id)!.faces.find((f) => f.weight === face.weight && f.italic === face.italic);
+        const copied = copyFontFile(family, face, fonts.get(face)!);
+        if (made && copied.font) made.font = copied.font;
+      }
+    }
+    writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    console.log(`Font files copied and listed in ${path.relative(ROOT, file)}`);
+    return;
+  }
 
   const tool = ensureMsdfAtlasGen();
 
@@ -280,7 +314,7 @@ async function main(): Promise<void> {
     copyFileSync(licenses.get(family)!, path.join(OUT, family.id, 'LICENSE.txt'));
     // Files are overwritten in place (a running dev server keeps serving the folder); remove
     // anything left over from an earlier configuration.
-    const produced = new Set(['LICENSE.txt', 'coverage.json', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout)])]);
+    const produced = new Set(['LICENSE.txt', 'coverage.json', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout), ...(f.font ? [path.basename(f.font)] : [])])]);
     for (const file of readdirSync(path.join(OUT, family.id))) {
       if (!produced.has(file)) rmSync(path.join(OUT, family.id, file));
     }

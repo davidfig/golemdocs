@@ -1,0 +1,105 @@
+/* The content tools of Edit PDF mode (see pdfEditTools.ts). */
+
+.wm-pdftools-section h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.wm-pdftools-section .wm-forms-add.wm-pdftools-on {
+  background: var(--wm-accent, #316ac5);
+  color: #fff;
+}
+
+.wm-pdftools-row {
+  display: flex;
+  gap: 10px;
+}
+
+.wm-pdftools-number {
+  width: 5em;
+}
+
+.wm-pdftools-color {
+  width: 2.6em;
+  height: 1.6em;
+  padding: 0;
+}
+
+.wm-pdftools-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The layer over the pages: the frame around the selection, and the catcher for placing something new. */
+.wm-pdftools {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-pdftools[hidden],
+.wm-pdftools > [hidden] {
+  display: none;
+}
+
+.wm-pdftools > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+}
+
+.wm-pdftools-catcher {
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.wm-pdftools-rubber {
+  border: 1px dashed #316ac5;
+  background: rgb(49 106 197 / 0.12);
+}
+
+.wm-pdftools-frame {
+  border: 1px solid #316ac5;
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.wm-pdftools-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px;
+  background: #fff;
+  border: 1px solid #316ac5;
+}
+
+.wm-pdftools-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
+.wm-pdftools-handle-n { left: 50%; top: 0; cursor: ns-resize; }
+.wm-pdftools-handle-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.wm-pdftools-handle-e { left: 100%; top: 50%; cursor: ew-resize; }
+.wm-pdftools-handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.wm-pdftools-handle-s { left: 50%; top: 100%; cursor: ns-resize; }
+.wm-pdftools-handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.wm-pdftools-handle-w { left: 0; top: 50%; cursor: ew-resize; }
+
+.wm-pdftools-pages {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--wm-etch-dark);
+}
+
+.wm-pdftools-pages h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+/* Fill In mode: only what puts something on the page. */
+.wm-pdftools-fill .wm-pdftools-edit-only {
+  display: none;
+}

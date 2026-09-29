@@ -314,6 +314,8 @@ export interface ColorSpec {
   noneLabel: string;
   initial: string;
   palette: 'full' | 'highlight';
+  /** Colors the open document already uses, shown under the palette. */
+  documentColors?(state: ChromeState): string[];
   action(color: string | null): Action;
 }
 
@@ -356,6 +358,20 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
       }
     }
     panel.append(grid);
+    const used = spec.documentColors?.(registry.state()) ?? [];
+    if (used.length > 0) {
+      panel.append(h('div', { class: 'wm-palette-label', text: t('menus.palette.document') }));
+      const usedGrid = h('div', { class: 'wm-palette-grid' });
+      usedGrid.style.gridTemplateColumns = `repeat(${rows[0].length}, 18px)`;
+      for (const c of used) {
+        const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
+        cell.style.background = c;
+        if (color && c.toLowerCase() === color.toLowerCase()) cell.classList.add('current');
+        cell.addEventListener('click', () => apply(c));
+        usedGrid.append(cell);
+      }
+      panel.append(usedGrid);
+    }
     if (spec.palette === 'full') {
       const picker = h('input', { attrs: { type: 'color', value: color ?? '#000000', tabindex: '-1' } });
       picker.className = 'wm-hidden-picker';

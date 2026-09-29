@@ -268,6 +268,18 @@ export class TrueTypeFont {
     return this.bytes.subarray(start, end);
   }
 
+  /**
+   * Whether the font program holds an outline for this glyph (and, for a composite glyph, for
+   * every glyph it is built from). A subset font keeps its glyph count but leaves the glyphs it
+   * dropped empty. CFF outlines aren't read: false.
+   */
+  hasOutline(gid: number, depth = 0): boolean {
+    if (this.isCff || !this.locaOffsets || !this.tables.has('glyf') || gid <= 0 || gid >= this.numGlyphs || depth > 8) return false;
+    const data = this.glyphData(gid);
+    if (!data.length) return false;
+    return this.components(data).every((c) => this.hasOutline(c.gid, depth + 1));
+  }
+
   /** Glyphs a composite glyph refers to. */
   private components(data: Uint8Array): { gidAt: number; gid: number }[] {
     if (data.length < 10) return [];

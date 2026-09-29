@@ -11,6 +11,7 @@ export const spelling: Partial<Messages> = {
   'spelling.suggestionsLabel': '修正候補',
   'spelling.noSuggestions': '(修正候補なし)',
   'spelling.checkGrammar': '文章校正を行う',
+  'spelling.asYouType': '入力しながらスペルチェックを行う',
   'spelling.ignoreOnce': '1 回無視',
   'spelling.ignoreAll': 'すべて無視',
   'spelling.ignoreRule': 'ルールを無視',

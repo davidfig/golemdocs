@@ -89,6 +89,10 @@ export interface PageDisplay {
 
 const MAX_FORM_DEPTH = 12;
 const MAX_WARNINGS = 30;
+/** Rectangles a page may spend on drawings that aren't rectangles. */
+const VECTOR_BUDGET = 400_000;
+/** How thick the strips are that slanted lines and shapes are drawn in, points (about a third of a pixel at 100%). */
+const STRIP = 0.35;
 
 interface FontEntry {
   font: TextFont;
@@ -140,9 +144,16 @@ interface Ctx {
   boxes: [number, number, number, number][];
   skippedRotated: number;
   skippedPaths: number;
+  /** Rectangles left to spend on slanted strokes, curves and filled shapes (they are drawn as many thin ones). */
+  budget: number;
 }
 
 const fontCaches = new WeakMap<PdfDocument, Map<unknown, FontEntry | null>>();
+
+/** Forgets the fonts read so far (an embedded font has more glyphs now than when its widths were read). */
+export function forgetDisplayFonts(doc: PdfDocument): void {
+  fontCaches.delete(doc);
+}
 
 const pack = (rgb: [number, number, number]): number => (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
 
@@ -168,6 +179,7 @@ export function interpretPage(page: PdfPage, options: { hideFields?: boolean } =
     boxes: [],
     skippedRotated: 0,
     skippedPaths: 0,
+    budget: VECTOR_BUDGET,
   };
   try {
     const p0 = page.toDisplay(0, 0);
@@ -469,10 +481,13 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   };
 
   // --- paths ---
+  /** The current point, in user space (a curve starts there). */
+  let at: [number, number] = [0, 0];
   const begin = (x: number, y: number) => {
     const [dx, dy] = D(x, y);
     cur = { pts: [dx, dy], closed: false, curved: false };
     path.push(cur);
+    at = [x, y];
   };
   const lineTo = (x: number, y: number) => {
     if (!cur) return begin(x, y);
@@ -483,11 +498,24 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     }
     const [dx, dy] = D(x, y);
     cur.pts.push(dx, dy);
+    at = [x, y];
   };
-  const curveTo = (x: number, y: number) => {
-    if (!cur) return begin(x, y);
+  /** A cubic Bézier from the current point, as short straight segments. */
+  const curveTo = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => {
+    if (!cur) return begin(x3, y3);
+    const [ax, ay] = at;
+    const size = Math.hypot(...D(x1, y1).map((v, i) => v - D(ax, ay)[i])) + Math.hypot(...D(x2, y2).map((v, i) => v - D(x1, y1)[i])) + Math.hypot(...D(x3, y3).map((v, i) => v - D(x2, y2)[i]));
+    const n = Math.min(48, Math.max(6, Math.ceil(size / 2)));
     cur.curved = true;
-    lineTo(x, y);
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      const u = 1 - t;
+      const w0 = u * u * u;
+      const w1 = 3 * u * u * t;
+      const w2 = 3 * u * t * t;
+      const w3 = t * t * t;
+      lineTo(w0 * ax + w1 * x1 + w2 * x2 + w3 * x3, w0 * ay + w1 * y1 + w2 * y2 + w3 * y3);
+    }
   };
 
   const fillPath = (evenOdd: boolean) => {
@@ -495,11 +523,15 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       if (gs.fillPattern && path.length) warn(ctx, 'pattern/shading fills skipped');
       return;
     }
+    // Anything that isn't a rectangle (a triangle, an ellipse...) is filled in strips; rectangles alone are exact.
+    if (path.some((sp) => sp.pts.length >= 6 && !asRect(sp))) {
+      scanFill(ctx, path.filter((sp) => sp.pts.length >= 6).map((sp) => sp.pts), evenOdd, gs.fill, gs.fillAlpha, pushRect);
+      return;
+    }
     const rects: { r: R; sign: number; holes: R[]; isHole: boolean }[] = [];
     for (const sp of path) {
       const r = asRect(sp);
       if (r) rects.push({ r: r.rect, sign: r.sign, holes: [], isHole: false });
-      else if (sp.pts.length >= 6) ctx.skippedPaths++;
     }
     // A rectangle wholly inside a larger one cuts a hole (even-odd, or opposite winding).
     for (const a of rects)
@@ -531,10 +563,6 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     const dash = gs.dash.length && gs.dash.some((d) => d > 0) ? (gs.dash.length % 2 ? [...gs.dash, ...gs.dash] : gs.dash).map((d) => Math.max(d * scale, 0)) : [];
     const total = dash.reduce((a, b) => a + b, 0);
     for (const sp of path) {
-      if (sp.curved) {
-        ctx.skippedPaths++;
-        continue;
-      }
       const p = sp.pts;
       const n = p.length / 2;
       const closed = sp.closed || close;
@@ -559,7 +587,26 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
         const horizontal = Math.abs(dy) < 0.02 && Math.abs(dx) >= 0.02;
         const vertical = Math.abs(dx) < 0.02 && Math.abs(dy) >= 0.02;
         if (!horizontal && !vertical) {
-          if (Math.abs(dx) + Math.abs(dy) >= 0.02) ctx.skippedPaths++;
+          if (Math.abs(dx) + Math.abs(dy) < 0.02) continue;
+          // A slanted segment: drawn in strips, dashed the same way.
+          const length = Math.hypot(dx, dy);
+          const draw = (s: number, e: number) => slantedStroke(ctx, x0 + (dx * s) / length, y0 + (dy * s) / length, x0 + (dx * e) / length, y0 + (dy * e) / length, w, color, alpha, pushRect);
+          if (!useDash || length / total > 4000) {
+            draw(0, length);
+            continue;
+          }
+          let along = 0;
+          for (let guard = 0; along < length && guard < 20000; guard++) {
+            const take = Math.min(remaining, length - along);
+            if (idx % 2 === 0 && take > 0) draw(along, along + take);
+            along += take;
+            remaining -= take;
+            if (remaining <= 1e-9) {
+              idx = (idx + 1) % dash.length;
+              remaining = dash[idx];
+              if (remaining <= 0 && total <= 0) break;
+            }
+          }
           continue;
         }
         const len = horizontal ? Math.abs(dx) : Math.abs(dy);
@@ -826,11 +873,13 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
           lineTo(num(a[0]), num(a[1]));
           break;
         case 'c':
-          curveTo(num(a[4]), num(a[5]));
+          curveTo(num(a[0]), num(a[1]), num(a[2]), num(a[3]), num(a[4]), num(a[5]));
           break;
         case 'v':
+          curveTo(at[0], at[1], num(a[0]), num(a[1]), num(a[2]), num(a[3]));
+          break;
         case 'y':
-          curveTo(num(a[2]), num(a[3]));
+          curveTo(num(a[0]), num(a[1]), num(a[2]), num(a[3]), num(a[2]), num(a[3]));
           break;
         case 'h':
           if (cur) cur.closed = true;
@@ -847,6 +896,7 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
             sub.pts.push(...D(px, py));
           path.push(sub);
           cur = sub;
+          at = [x, y];
           break;
         }
         case 'S':
@@ -965,4 +1015,97 @@ function subtract(a: R, b: R): R[] {
   if (ix0 > a.x0) out.push({ x0: a.x0, y0: iy0, x1: ix0, y1: iy1 });
   if (ix1 < a.x1) out.push({ x0: ix1, y0: iy0, x1: a.x1, y1: iy1 });
   return out;
+}
+
+// --- slanted strokes and shapes, in strips ---------------------------------------------------------
+
+type PushRect = (x0: number, y0: number, x1: number, y1: number, color: number, alpha: number) => void;
+
+/** A straight line of width `w` at any angle, as thin bars along it (vertical ones if it is shallow, horizontal if steep). */
+function slantedStroke(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, w: number, color: number, alpha: number, push: PushRect): void {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-6) return;
+  const shallow = Math.abs(dx) >= Math.abs(dy);
+  // The bar is as thick, across the line, as the line is once tilted.
+  const thick = w * (length / Math.abs(shallow ? dx : dy));
+  const [a0, b0, a1, b1] = shallow ? [x0, y0, x1, y1] : [y0, x0, y1, x1];
+  const from = Math.min(a0, a1);
+  const to = Math.max(a0, a1);
+  const slope = (b1 - b0) / (a1 - a0);
+  const steps = Math.max(1, Math.ceil((to - from) / STRIP));
+  if ((ctx.budget -= steps) < 0) {
+    if (ctx.budget + steps >= 0) ctx.skippedPaths++;
+    return;
+  }
+  const step = (to - from) / steps;
+  for (let i = 0; i < steps; i++) {
+    const a = from + i * step;
+    const centre = b0 + slope * (a + step / 2 - a0);
+    if (shallow) push(a, centre - thick / 2, a + step, centre + thick / 2, color, alpha);
+    else push(centre - thick / 2, a, centre + thick / 2, a + step, color, alpha);
+  }
+}
+
+/**
+ * Fills polygons (each x0, y0, x1, y1... in display coordinates) by even-odd or non-zero winding, in horizontal
+ * strips; a strip with the same span as the one above it is joined to it.
+ */
+function scanFill(ctx: Ctx, polygons: number[][], evenOdd: boolean, color: number, alpha: number, push: PushRect): void {
+  let top = Infinity;
+  let bottom = -Infinity;
+  const edges: { x0: number; y0: number; x1: number; y1: number; dir: number }[] = [];
+  for (const p of polygons) {
+    const n = p.length / 2;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const [x0, y0, x1, y1] = [p[2 * i], p[2 * i + 1], p[2 * j], p[2 * j + 1]];
+      top = Math.min(top, y0);
+      bottom = Math.max(bottom, y0);
+      if (Math.abs(y1 - y0) < 1e-9) continue;
+      edges.push(y0 < y1 ? { x0, y0, x1, y1, dir: 1 } : { x0: x1, y0: y1, x1: x0, y1: y0, dir: -1 });
+    }
+  }
+  if (!edges.length || !(bottom > top)) return;
+  const rows = Math.ceil((bottom - top) / STRIP);
+  if (rows > 40_000) {
+    ctx.skippedPaths++;
+    return;
+  }
+  const step = (bottom - top) / rows;
+  let open: { x0: number; x1: number; y0: number }[] = [];
+  const flush = (keep: { x0: number; x1: number }[], y: number) => {
+    const next: typeof open = [];
+    for (const span of open) {
+      const kept = keep.some((k) => Math.abs(k.x0 - span.x0) < 0.02 && Math.abs(k.x1 - span.x1) < 0.02);
+      if (kept) next.push(span);
+      else if ((ctx.budget -= 1) >= 0) push(span.x0, span.y0, span.x1, y, color, alpha);
+    }
+    open = next;
+  };
+  for (let r = 0; r <= rows; r++) {
+    const y = top + r * step;
+    const spans: { x0: number; x1: number }[] = [];
+    if (r < rows) {
+      const mid = y + step / 2;
+      const hits: { x: number; dir: number }[] = [];
+      for (const e of edges) if (mid >= e.y0 && mid < e.y1) hits.push({ x: e.x0 + ((mid - e.y0) / (e.y1 - e.y0)) * (e.x1 - e.x0), dir: e.dir });
+      hits.sort((a, b) => a.x - b.x);
+      let winding = 0;
+      for (let i = 0; i + 1 < hits.length; i++) {
+        winding += hits[i].dir;
+        const inside = evenOdd ? i % 2 === 0 : winding !== 0;
+        if (inside && hits[i + 1].x - hits[i].x > 1e-3) spans.push({ x0: hits[i].x, x1: hits[i + 1].x });
+      }
+      // Touching spans are one.
+      for (let i = spans.length - 1; i > 0; i--) if (spans[i].x0 - spans[i - 1].x1 < 1e-3) spans.splice(i - 1, 2, { x0: spans[i - 1].x0, x1: spans[i].x1 });
+    }
+    flush(spans, y);
+    for (const span of spans) if (!open.some((o) => Math.abs(o.x0 - span.x0) < 0.02 && Math.abs(o.x1 - span.x1) < 0.02)) open.push({ ...span, y0: y });
+    if (ctx.budget < 0) {
+      ctx.skippedPaths++;
+      return;
+    }
+  }
 }

@@ -1257,6 +1257,30 @@ export class Editor {
     return [ops, { paragraph: this.replica.id(focus.paragraph), offset: focus.offset - before }];
   }
 
+  /**
+   * Rectangles over ranges of the text on the pages shown (spelling marks). `rangesOf` gives a
+   * paragraph's ranges as model offsets, and is asked once per paragraph that has a line in view.
+   */
+  marks<K>(rangesOf: (paragraph: Paragraph) => { start: number; end: number; kind: K }[]): (Rect & { kind: K })[] {
+    const cache = new Map<Paragraph, { start: number; end: number; kind: K }[]>();
+    const marks: (Rect & { kind: K })[] = [];
+    for (const page of this.session.displayPages) {
+      for (const line of page.lines) {
+        let ranges = cache.get(line.paragraph);
+        if (!ranges) cache.set(line.paragraph, (ranges = rangesOf(line.paragraph)));
+        for (const range of ranges) {
+          const a = Math.max(toVisible(line.spans, range.start), line.start);
+          const b = Math.min(toVisible(line.spans, range.end), line.end);
+          if (a >= b) continue;
+          const x1 = line.column + line.stops[a - line.start];
+          const x2 = line.column + line.stops[b - line.start];
+          if (x2 > x1) marks.push({ page, x: x1, y: line.y, width: x2 - x1, height: line.height, kind: range.kind });
+        }
+      }
+    }
+    return marks;
+  }
+
   /** Every comment, with the highlight over its range. */
   comments(): CommentGeometry[] {
     if (!this.doc.comments.length) return [];

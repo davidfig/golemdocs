@@ -18,7 +18,7 @@ export const panels = {
   // Dashboard
   'panels.dashboard.title': 'Documents',
   'panels.dashboard.search': 'Search documents',
-  'panels.dashboard.back': 'Back to document',
+  'panels.dashboard.close': 'Close',
   'panels.dashboard.sharedWithMe': 'Shared with me',
   'panels.dashboard.yourAccount': 'your account',
   'panels.dashboard.signIn': 'Sign in',
@@ -26,6 +26,8 @@ export const panels = {
   'panels.dashboard.savedHere': 'Saved in this browser',
   'panels.dashboard.newBlankLabel': 'New blank document',
   'panels.dashboard.newBlank': 'Blank document',
+  'panels.dashboard.importLabel': 'Import a file from this computer',
+  'panels.dashboard.import': 'Import file',
   'panels.dashboard.noMatches': 'No documents match your search.',
   'panels.dashboard.empty': 'Documents you save will show up here.',
   'panels.dashboard.from': 'From {name}',
@@ -47,7 +49,8 @@ export const panels = {
   'panels.size.mb': '{value} MB',
 
   // PDF form layer
-  'panels.forms.editForm': 'Edit form',
+  'panels.forms.editForm': 'Edit PDF',
+  'panels.forms.fields': 'Form fields',
   'panels.forms.dragHint': 'Drag a field to move it, or its corner to resize it.',
   'panels.forms.selectHint': 'Select a field to rename or delete it.',
   'panels.forms.noFields': 'This PDF has no fields yet.',

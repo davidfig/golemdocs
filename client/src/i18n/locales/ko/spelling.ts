@@ -11,6 +11,7 @@ export const spelling: Partial<Messages> = {
   'spelling.suggestionsLabel': '추천',
   'spelling.noSuggestions': '(추천 없음)',
   'spelling.checkGrammar': '문법 검사',
+  'spelling.asYouType': '입력하면서 맞춤법 검사',
   'spelling.ignoreOnce': '한 번 무시',
   'spelling.ignoreAll': '모두 무시',
   'spelling.ignoreRule': '규칙 무시',

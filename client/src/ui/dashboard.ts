@@ -20,6 +20,8 @@ import './dashboard.css';
 export interface DashboardHost {
   newDocument(): void;
   open(entry: LibraryEntry): void;
+  /** Asks for a file on this computer and opens it. */
+  importFile(): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entry: LibraryEntry): Promise<void>;
   /** Who is signed in (null: nobody), whose documents are shown. */
@@ -62,7 +64,7 @@ export class Dashboard {
     this.account = h('div', { class: 'wm-dash-account' });
     this.notice = h('p', { class: 'wm-dash-notice', attrs: { role: 'status' } });
     this.grid = h('div', { class: 'wm-dash-grid' });
-    const close = h('button', { class: 'wm-dash-close', text: t('panels.dashboard.back'), attrs: { type: 'button' } });
+    const close = h('button', { class: 'wm-dash-close', text: '×', attrs: { type: 'button', 'aria-label': t('panels.dashboard.close'), title: t('panels.dashboard.close') } });
     close.addEventListener('click', () => this.dismiss());
     this.sharedTitle = h('h2', { class: 'wm-dash-section', text: t('panels.dashboard.sharedWithMe') });
     this.sharedGrid = h('div', { class: 'wm-dash-grid' });
@@ -99,8 +101,10 @@ export class Dashboard {
     this.root.hidden = false;
     this.search.value = '';
     const generation = ++this.generation;
-    this.entries = await loadLocalLibrary(this.host.account());
+    const start = await loadLocalLibrary(this.host.account());
     if (generation !== this.generation) return;
+    this.entries = start.entries;
+    this.shared = start.shared;
     this.notice.textContent = '';
     this.render();
     this.search.focus({ preventScroll: true });
@@ -170,8 +174,14 @@ export class Dashboard {
       this.host.newDocument();
     });
 
+    const importTile = h('button', { class: 'wm-card wm-card-new', attrs: { type: 'button', 'aria-label': t('panels.dashboard.importLabel') } }, h('span', { class: 'wm-plus', text: '↑' }), h('span', { text: t('panels.dashboard.import') }));
+    importTile.addEventListener('click', () => {
+      // Stays up behind the file picker: hiding it would show the last open document.
+      this.host.importFile();
+    });
+
     const cards = shown.map((entry) => this.card(entry));
-    const children: (HTMLElement | string)[] = [blank, ...cards];
+    const children: (HTMLElement | string)[] = [blank, importTile, ...cards];
     if (!shown.length) {
       children.push(h('p', { class: 'wm-dash-empty', text: this.search.value.trim() ? t('panels.dashboard.noMatches') : t('panels.dashboard.empty') }));
     }

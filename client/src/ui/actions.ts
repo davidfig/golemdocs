@@ -31,7 +31,7 @@ export type TableOp =
   | 'properties';
 
 /** The tools of the Draw toolbar: each picks what the next stroke draws. */
-export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser';
+export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
 
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
@@ -183,6 +183,8 @@ export interface FormatState {
   list?: ListKind | null;
   color?: string | null;
   highlight?: string | null;
+  /** Text colors (#RRGGBB) the document uses, most used first, for the color palette's "Document Colors" row. */
+  documentColors?: string[];
 }
 
 /** Everything the chrome shows that comes from the application. */

@@ -20,7 +20,7 @@ export const panels: Partial<Messages> = {
   // Dashboard
   'panels.dashboard.title': 'ドキュメント',
   'panels.dashboard.search': 'ドキュメントを検索',
-  'panels.dashboard.back': 'ドキュメントに戻る',
+  'panels.dashboard.close': '閉じる',
   'panels.dashboard.sharedWithMe': '共有アイテム',
   'panels.dashboard.yourAccount': 'あなたのアカウント',
   'panels.dashboard.signIn': 'サインイン',
@@ -28,6 +28,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.savedHere': 'このブラウザーに保存済み',
   'panels.dashboard.newBlankLabel': '新しい白紙のドキュメント',
   'panels.dashboard.newBlank': '白紙のドキュメント',
+  'panels.dashboard.importLabel': 'このコンピューターからファイルを読み込む',
+  'panels.dashboard.import': 'ファイルを読み込む',
   'panels.dashboard.noMatches': '検索に一致するドキュメントはありません。',
   'panels.dashboard.empty': '保存したドキュメントはここに表示されます。',
   'panels.dashboard.from': '{name} から',
@@ -49,7 +51,8 @@ export const panels: Partial<Messages> = {
   'panels.size.mb': '{value} MB',
 
   // PDF form layer
-  'panels.forms.editForm': 'フォームを編集',
+  'panels.forms.editForm': 'PDF を編集',
+  'panels.forms.fields': 'フォームフィールド',
   'panels.forms.dragHint': 'フィールドをドラッグして移動するか、角をドラッグしてサイズを変更します。',
   'panels.forms.selectHint': 'フィールドを選択して、名前の変更や削除を行います。',
   'panels.forms.noFields': 'この PDF にはまだフィールドがありません。',

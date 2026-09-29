@@ -601,6 +601,8 @@ test('pathological large inputs finish quickly (linear-ish)', async () => {
     code: '```\n' + rep('code line\n') + '```\n',
     setext: rep('a\n---\n'),
   };
+  // Coverage instrumentation makes hot loops about 20 times slower; quadratic behaviour is still far beyond this.
+  const slowdown = process.execArgv.some((a) => a.includes('coverage')) || process.env.NODE_V8_COVERAGE ? 30 : 1;
   const started = performance.now();
   for (const [name, src] of Object.entries(inputs)) {
     const t0 = performance.now();
@@ -609,7 +611,7 @@ test('pathological large inputs finish quickly (linear-ish)', async () => {
     const took = performance.now() - t0;
     assert.ok(md.length > 0, name);
     // Generous ceiling: these take well under a second each; quadratic behaviour would take minutes.
-    assert.ok(took < 8000, `${name} took ${took.toFixed(0)}ms`);
+    assert.ok(took < 8000 * slowdown, `${name} took ${took.toFixed(0)}ms`);
   }
-  assert.ok(performance.now() - started < 60000);
+  assert.ok(performance.now() - started < 60000 * slowdown);
 });

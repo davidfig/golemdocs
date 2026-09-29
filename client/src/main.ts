@@ -25,6 +25,8 @@ import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
+import { PdfEditTools } from './ui/pdfEditTools.ts';
+import { PdfTextLayer } from './ui/pdfTextLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
@@ -32,6 +34,7 @@ import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
+import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
@@ -44,6 +47,7 @@ import { PageRenderer, type FrameStats } from './view/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
+import { SpellMenu } from './ui/spellMenu.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
@@ -213,11 +217,13 @@ function kindOfSource(source: DocumentSource): DocumentKind {
 
 function setStatus(text: string): void {
   status = text;
+  loadingScreen.update(text);
   requestRender();
 }
 
 /** A message the person needs to see (something failed or can't be done): the status, and a toast. */
 function reportError(text: string): void {
+  loadingScreen.hide();
   setStatus(text);
   showToast(text);
 }
@@ -249,9 +255,12 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   commentsPanel.update([]);
   comments = [];
   formLayer.update(null);
+  pdfTextLayer.update(null);
+  pdfTools.update(null, null);
   pointerLayer.update([]);
   formMode = 'fill';
   formLayer.setMode(formMode);
+  pdfTools.setMode(formMode);
   selectionFormat = {};
   canUndo = canRedo = false;
   renderer.images?.clear();
@@ -278,6 +287,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       documentKind = format;
       annotating = fixedPages;
       if (outdated) pendingNotice = outdatedPages();
+      spellDialog.sendLive();
       setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
@@ -288,6 +298,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
     done(count, times) {
       loaded = true;
+      loadingScreen.hide();
       arrange();
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
       loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: times.read, fonts: times.fonts, body: times.body, headers: times.headers };
@@ -492,6 +503,14 @@ function placeCamera(): void {
   }
 }
 
+const loadingScreen = new LoadingScreen(document.getElementById('viewport')!);
+
+/** Covers the editor (and the dashboard) with the loading screen until the document is open. */
+function showLoading(name: string): void {
+  loadingScreen.show(name);
+  dashboard.hide();
+}
+
 function openFile(file: File): void {
   setUrl(new URLSearchParams());
   chromeHost.openFile(file);
@@ -648,12 +667,12 @@ let accountKnown: Promise<void> = Promise.resolve();
 async function connect(lookup: Promise<User | null> = currentUser()): Promise<void> {
   const before = account?.id ?? null;
   account = await lookup;
+  sharedDeviceNotice.update({ signedIn: account !== null });
   if (account) {
     const adopted = await adoptGuestDocuments(account.id).catch(() => []);
     if (adopted.length) notify(t('app.adopted', { count: adopted.length }));
   }
   await refreshLibrary();
-  sharedDeviceNotice.update({ signedIn: account !== null });
   if (account) {
     for (const info of savedDocs) if (hasUnsentChanges(info)) dirty.add(info.id);
     void flushUploads();
@@ -1473,13 +1492,19 @@ function applySelection(update: SelectionUpdate): void {
   }
   canvas.style.cursor = painting ? 'copy' : '';
   if (update.search) findDialog.report(update.search);
-  if (update.spell) spellDialog.report(update.spell);
+  if (update.spell?.menu) {
+    if (update.spell.issue && spellMenuAt) spellMenu.show(update.spell.issue, spellMenuAt.x, spellMenuAt.y);
+    spellMenuAt = null;
+  } else if (update.spell) spellDialog.report(update.spell);
   if (update.stats !== undefined) {
     wordCountDialog.report(update.stats);
     propertiesDialog.reportStats(update.stats);
   }
   if (update.docProperties) propertiesDialog.reportProperties(update.docProperties);
   formLayer.update(update.fields ?? null);
+  pdfTextLayer.update(update.pdfText ?? null);
+  pdfTools.update(update.pdfText ?? null, update.pdfObject ?? null);
+  if (update.pdfNotice) showToast(t('chrome.pdfEdit.partialRedaction'));
   canUndo = update.canUndo;
   canRedo = update.canRedo;
   if (editSent) {
@@ -1520,10 +1545,10 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 }
 
 /** Commands that change a PDF's annotations (on its own pages, nothing else changes). */
-const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields']);
+const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
 function send(command: WireCommand): void {
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -1691,6 +1716,8 @@ function render(): void {
     viewMode,
   });
   formLayer.position();
+  pdfTextLayer.position();
+  pdfTools.position();
   pointerLayer.position();
   cropLayer.position();
   drawLayer.position();
@@ -1776,6 +1803,14 @@ canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   focusInput();
   const hit = pageAt(e.offsetX, e.offsetY);
+  // Editing a PDF: a click picks the text under it to edit there (or, over nothing, puts the text down).
+  if (annotating && formMode === 'edit') {
+    if (hit) {
+      pdfTextLayer.expectClick(e.clientX, e.clientY);
+      send({ kind: 'pdfPick', page: hit.page.id, x: hit.x, y: hit.y });
+    } else if (pdfTextLayer.active) send({ kind: 'pdfPutDown' });
+    return;
+  }
   if (!hit) return;
   if (e.metaKey || e.ctrlKey) followLinkUntil = performance.now() + 1000;
   const clicks = clickCount(e);
@@ -1951,6 +1986,7 @@ window.addEventListener('keydown', (e) => {
   if (dashboard.visible) return; // the dashboard has the keyboard; the document is behind it
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (e.isComposing) return;
+  const inEditableBox = e.target instanceof HTMLElement && e.target.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
     // Documents save themselves; the habit just saves a little sooner.
     e.preventDefault();
@@ -1960,6 +1996,8 @@ window.addEventListener('keydown', (e) => {
     else setStatus(t('app.allSaved'));
     return;
   }
+  // Editing text in a box over a PDF page: the caret keys, selection and the rest are the browser's.
+  if (inEditableBox) return;
   if (viewKey(e)) {
     e.preventDefault();
     return;
@@ -2014,6 +2052,7 @@ input.addEventListener('paste', (e) => {
 // Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
 const chromeHost = createChromeHost({
   dashboard: () => dashboard.toggle(),
+  loading: (name) => (name === null ? loadingScreen.hide() : showLoading(name)),
   canvas,
   camera,
   pages: () => pages,
@@ -2103,12 +2142,7 @@ const chromeHost = createChromeHost({
   saved: () => mergeLibrary(savedDocs, account ? cloudDocs : null).map((e) => ({ id: sourceOf(e), label: e.name.replace(/&/g, '&&') })),
   send,
   annotating: () => annotating,
-  setFormMode: (mode) => {
-    formMode = mode;
-    formLayer.setMode(mode);
-    requestRender();
-    if (mode === 'fill') focusInput();
-  },
+  setFormMode,
   author: () => account?.name ?? account?.email ?? guestName(),
   selectedText: () => selection.text,
   focusEditor: focusInput,
@@ -2218,11 +2252,39 @@ const spellDialog = new SpellDialog(document.body, {
   focusEditor: focusInput,
 });
 
+// Right click on an underlined word: change it, or ignore it.
+const spellMenu = new SpellMenu({
+  send,
+  addUserWord: (word) => {
+    try {
+      localStorage.setItem(USER_WORDS_KEY, JSON.stringify([...new Set([...userWords(), word])]));
+    } catch {
+      // Storage unavailable: the word is accepted for this session only.
+    }
+  },
+  focusEditor: focusInput,
+});
+/** Where the last right click was, for the menu it may open. */
+let spellMenuAt: { x: number; y: number } | null = null;
+canvas.addEventListener('contextmenu', (e) => {
+  if (annotating || !spellDialog.checkingLive) return;
+  const hit = pageAt(e.offsetX, e.offsetY);
+  if (!hit) return;
+  e.preventDefault();
+  focusInput();
+  spellMenuAt = { x: e.clientX, y: e.clientY };
+  send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y });
+});
+
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.
 const dashboard = new Dashboard(document.getElementById('viewport')!, {
   newDocument: () => void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput),
-  open: (entry) => openSource(sourceOf(entry)),
+  open: (entry) => {
+    showLoading(entry.name);
+    openSource(sourceOf(entry));
+  },
+  importFile: () => void chromeHost.perform({ kind: 'import' }),
   delete: deleteEverywhere,
   account: () => account,
   share: (id, name) => showShareDialog({ name, people: { id } }),
@@ -2248,6 +2310,15 @@ const largeView = new LargeTextView(document.getElementById('viewport')!);
 const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });
 
 // A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
+function setFormMode(mode: FormMode): void {
+  if (mode !== 'edit') send({ kind: 'pdfPutDown' });
+  formMode = mode;
+  formLayer.setMode(mode);
+  pdfTools.setMode(mode);
+  requestRender();
+  if (mode === 'fill') focusInput();
+}
+
 const formLayer = new FormLayer(document.getElementById('viewport')!, {
   camera,
   canvas,
@@ -2258,7 +2329,36 @@ const formLayer = new FormLayer(document.getElementById('viewport')!, {
   },
   change: (fields, merge) => send({ kind: 'setFields', fields, merge }),
   notify: setStatus,
+  setMode: setFormMode,
 });
+
+// A PDF page's own text, edited in place (see ui/pdfTextLayer.ts).
+const pdfTextLayer = new PdfTextLayer(document.getElementById('viewport')!, {
+  camera,
+  canvas,
+  page: (id) => pagesById.get(id),
+  setText: (text) => send({ kind: 'pdfText', text }),
+  putDown: () => send({ kind: 'pdfPutDown' }),
+  move: (dx, dy) => send({ kind: 'pdfMoveText', dx, dy }),
+});
+
+// Tools for a PDF page's content: add text, pictures and shapes, and move, restyle or delete them (see ui/pdfEditTools.ts).
+const pdfTools = new PdfEditTools(document.getElementById('viewport')!, {
+  camera,
+  canvas,
+  page: (id) => pagesById.get(id),
+  pageAt: (x, y) => {
+    const hit = pageAt(x, y);
+    return hit && { page: hit.page, x: hit.x, y: hit.y };
+  },
+  send,
+  notify: setStatus,
+  families: () =>
+    fetch(`${FONT_BASE}manifest.json`)
+      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; faces: { font?: string }[] }[] }>)
+      .then((m) => m.families.filter((f) => !f.cjk && f.faces.some((face) => face.font)).map((f) => f.wordName)),
+});
+formLayer.toolsSlot.append(pdfTools.el);
 
 // Comments down the right of the editor; edits to them are ordinary (undoable) edits.
 const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {

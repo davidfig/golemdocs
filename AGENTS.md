@@ -23,6 +23,10 @@ Load only the code a session needs. Every document format, every large panel and
 - **Fonts:** never load a face's metrics or atlas until a document uses it (`FontSet.ensure`). No font data goes in a JS bundle.
 - **Check your work:** run `pnpm --filter @word/client build` and read the chunk list. The layout worker (`layoutWorker-*.js`) and the main `index-*.js` should not grow because of a new format, and a new chunk under ~20 kB means it should be merged back in.
 
+## Tests
+
+Add tests where reasonable. New logic, a bug fix or a changed behavior that can be exercised without a browser gets a test in the package's `test/` folder (`client/test/*.test.ts` for the client), next to the ones for the same area. Prefer testing the pure logic (readers, converters, layout, formatting) over DOM code. Run `pnpm --filter @word/client test` before finishing.
+
 ## Localization
 
 Every user-visible string goes through `t('area.key')` (`client/src/i18n`), never an inline literal. Add the English to `client/src/i18n/en/` and call `t()` inside functions, not at module top level. Adding an English key makes the translation-completeness test fail until every language in `client/src/i18n/locales/` has it. See `docs/localization.md` for the conventions and how to add a language.

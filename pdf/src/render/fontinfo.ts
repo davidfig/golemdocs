@@ -1,7 +1,8 @@
 // What a renderer needs to pick a substitute face for a PDF font: a family name, style flags,
 // and serif/monospace hints, from the font's name and descriptor.
 
-import { PdfDict, PdfName, type PdfObject } from '../core/objects.ts';
+import { PdfDict, PdfName, PdfRef, type PdfObject } from '../core/objects.ts';
+import { TextFont } from '../text/font.ts';
 import type { PdfDocument } from '../document.ts';
 
 export interface FontStyle {
@@ -75,4 +76,33 @@ export function collectFonts(doc: PdfDocument): FontStyle[] {
     }
   }
   return [...out.values()];
+}
+
+/**
+ * The characters each font of the pages can show (from their encodings and /ToUnicode maps), by
+ * font name: what a renderer drawing with its own faces has to have glyphs for.
+ */
+export function collectCharacters(doc: PdfDocument): { name: string; codePoints: Set<number> }[] {
+  const out: { name: string; codePoints: Set<number> }[] = [];
+  const seen = new Set<unknown>();
+  for (const page of doc.pages) {
+    const fonts = doc.dict(doc.dict(page.inherited('Resources'))?.get('Font'));
+    if (!fonts) continue;
+    for (const [, v] of fonts) {
+      const key = v instanceof PdfRef ? v.key : v;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const d = doc.dict(v);
+      if (!d) continue;
+      try {
+        const font = new TextFont(doc, d);
+        const codePoints = new Set<number>();
+        for (const ch of font.characters.keys()) codePoints.add(ch.codePointAt(0)!);
+        out.push({ name: describeFont(doc, d).name, codePoints });
+      } catch {
+        // an unreadable font shows nothing
+      }
+    }
+  }
+  return out;
 }

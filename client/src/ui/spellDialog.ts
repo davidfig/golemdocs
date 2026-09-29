@@ -18,11 +18,21 @@ export interface SpellHost {
 
 const GRAMMAR_KEY = 'word.spelling.grammar';
 
-const readGrammar = (): boolean => {
+const SPELLING_KEY = 'word.spelling.asYouType';
+
+const readFlag = (key: string): boolean => {
   try {
-    return localStorage.getItem(GRAMMAR_KEY) !== 'off';
+    return localStorage.getItem(key) !== 'off';
   } catch {
     return true;
+  }
+};
+
+const writeFlag = (key: string, on: boolean): void => {
+  try {
+    localStorage.setItem(key, on ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
   }
 };
 
@@ -34,6 +44,9 @@ export class SpellDialog {
   private readonly suggestions: HTMLSelectElement;
   private readonly suggestionsLabel: HTMLElement;
   private readonly grammar: HTMLInputElement;
+  private readonly asYouType: HTMLInputElement;
+  /** The choices, kept here for the session when storage is unavailable. */
+  private live = { spelling: readFlag(SPELLING_KEY), grammar: readFlag(GRAMMAR_KEY) };
   private readonly message: HTMLElement;
   private readonly ignoreOnce: HTMLButtonElement;
   private readonly ignoreAll: HTMLButtonElement;
@@ -56,7 +69,9 @@ export class SpellDialog {
     this.suggestionsLabel = h('label', { text: t('spelling.suggestionsField') });
     this.suggestions = h('select', { class: 'wm-input wm-spell-suggestions', attrs: { size: '5', 'aria-label': t('spelling.suggestionsLabel') } });
     this.grammar = h('input', { attrs: { type: 'checkbox' } });
-    this.grammar.checked = readGrammar();
+    this.grammar.checked = this.live.grammar;
+    this.asYouType = h('input', { attrs: { type: 'checkbox' } });
+    this.asYouType.checked = this.live.spelling;
     this.message = h('div', { class: 'wm-find-message' });
 
     this.ignoreOnce = button(t('spelling.ignoreOnce'), () => this.next('selectionEnd'));
@@ -84,6 +99,7 @@ export class SpellDialog {
           this.suggestionsLabel,
           this.suggestions,
           h('label', { class: 'wm-find-case' }, this.grammar, t('spelling.checkGrammar')),
+          h('label', { class: 'wm-find-case' }, this.asYouType, t('spelling.asYouType')),
           this.message,
         ),
         h('div', { class: 'wm-find-buttons' }, this.ignoreOnce, this.ignoreAll, this.add, this.change, this.changeAll, this.again, button(t('spelling.close'), () => this.hide())),
@@ -107,14 +123,27 @@ export class SpellDialog {
       if (!this.change.disabled) this.replace(false);
     });
     this.grammar.addEventListener('change', () => {
-      try {
-        localStorage.setItem(GRAMMAR_KEY, this.grammar.checked ? 'on' : 'off');
-      } catch {
-        // Storage unavailable: the choice lasts for this session only.
-      }
+      this.live.grammar = this.grammar.checked;
+      writeFlag(GRAMMAR_KEY, this.grammar.checked);
+      this.sendLive();
       this.next('selectionStart');
     });
+    this.asYouType.addEventListener('change', () => {
+      this.live.spelling = this.asYouType.checked;
+      writeFlag(SPELLING_KEY, this.asYouType.checked);
+      this.sendLive();
+    });
     this.setProblem(false);
+  }
+
+  /** Tells the layout worker what to underline as the user types, and the user's dictionary (on each document opened). */
+  sendLive(): void {
+    this.host.send({ kind: 'spellCheck', spelling: this.live.spelling, grammar: this.live.grammar, words: this.host.userWords() });
+  }
+
+  /** Whether anything is underlined as the user types. */
+  get checkingLive(): boolean {
+    return this.live.spelling || this.live.grammar;
   }
 
   /** Opens the dialog and looks for the first problem, from the selection on. */

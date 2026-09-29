@@ -108,7 +108,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Track Changes, Options
 
 **Spelling and Grammar**
-- No check-as-you-type (red and green underlines in the document) and no Spelling toolbar state; the check is only by the dialog
+- Check-as-you-type: red squiggles under misspelled words and green under grammar mistakes on the pages shown (the word being typed is marked once the caret leaves it). Right click a mark for suggestions, Ignore All / Ignore Rule and Add to Dictionary. "Check spelling as you type" and "Check grammar" in the dialog turn it off (kept in this browser). Not there: a status-bar spelling indicator, and marks in a PDF shown as pages
 - English (U.S.) only: no other dictionaries, no language per paragraph, no UK/CA/AU variants (the release has them)
 - Grammar covers a short list of mistakes; it doesn't understand sentence structure (agreement beyond pronouns, tense, commas, passive voice)
 - Options (Ignore ALL CAPS words, Ignore addresses, custom dictionary editing) and AutoCorrect aren't there; Word's Undo button isn't either

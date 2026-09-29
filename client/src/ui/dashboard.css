@@ -242,3 +242,21 @@
   font-size: 15px;
   font-weight: 600;
 }
+
+.wm-dash-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wm-dash-close:hover {
+  background: var(--wm-hover, rgba(0, 0, 0, 0.08));
+}

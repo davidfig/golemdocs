@@ -3,7 +3,7 @@
 // (or Cancel drops them). Like the crop layer, it follows the view as it scrolls and zooms; the shapes
 // are in the picture's own pixels (see formats/imageDraw.ts).
 
-import { DRAW_TOOLS, bubbleGeometry, constrainEnd, fontSize, hitShape, lineWidth, nextStepNumber, paintShapes } from '../formats/imageDraw.ts';
+import { DRAW_TOOLS, bubbleGeometry, constrainEnd, fontSize, hitShape, lineWidth, nextStepNumber, paintShapes, shiftShape } from '../formats/imageDraw.ts';
 import type { DrawTool, Point, Shape } from '../formats/imageDraw.ts';
 import { t } from '../i18n/index.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
@@ -44,6 +44,8 @@ export class DrawLayer {
   /** Whether the eraser has already taken something away in this drag (so it is one step to undo). */
   private erasing = false;
   private _tool: DrawTool | null = null;
+  /** The shape being dragged with the move tool: its index, where the drag began and what it looked like then. */
+  private moving: { index: number; from: Point; original: Shape } | null = null;
 
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.session || e.target === this.typing) return;
@@ -89,13 +91,15 @@ export class DrawLayer {
     this._tool = tool;
     this.el.hidden = false;
     document.addEventListener('keydown', this.keys, true);
-    this.host.canvas.style.cursor = 'crosshair';
+    this.host.canvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
     this.refresh();
   }
 
   /** Picks another tool while drawing. */
   setTool(tool: DrawTool): void {
     this._tool = tool;
+    this.moving = null;
+    this.host.canvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
     this.host.changed();
   }
 
@@ -187,6 +191,7 @@ export class DrawLayer {
       this.erasing = false;
       return this.erase(at);
     }
+    if (this._tool === 'move') return this.grab(at);
     const { color, size, fill } = this.host.style();
     this.current = { tool: this._tool, color, width: lineWidth(size, session.width, session.height), points: [at], ...(fill ? { fill } : {}) };
     this.redraw();
@@ -195,6 +200,12 @@ export class DrawLayer {
   private move(e: PointerEvent): void {
     const shape = this.current;
     const frame = this.frame();
+    if (this._tool === 'move' && this.session) {
+      e.stopImmediatePropagation();
+      const to = this.toPicture(e);
+      if (to) this.drag(to);
+      return;
+    }
     if (this._tool === 'eraser' && this.session && e.buttons & 1) {
       e.stopImmediatePropagation();
       const at = this.toPicture(e);
@@ -217,6 +228,12 @@ export class DrawLayer {
 
   private up(e: PointerEvent): void {
     if (this._tool === 'eraser' && this.session) e.stopImmediatePropagation();
+    if (this._tool === 'move' && this.session) {
+      e.stopImmediatePropagation();
+      this.moving = null;
+      this.host.canvas.style.cursor = 'grab';
+      return;
+    }
     const shape = this.current;
     if (!shape || !this.session) return;
     e.stopImmediatePropagation();
@@ -225,6 +242,30 @@ export class DrawLayer {
     const [a, b] = [shape.points[0], shape.points[shape.points.length - 1]];
     const straight = shape.tool !== 'pen' && shape.tool !== 'marker';
     if (!straight || a.x !== b.x || a.y !== b.y) this.change([...this.session.shapes, shape]);
+    this.refresh();
+  }
+
+  /** Picks up the topmost shape under `at` to drag it (one step to undo, however far it goes). */
+  private grab(at: Point): void {
+    const session = this.session;
+    const frame = this.frame();
+    if (!session || !frame) return;
+    const reach = 6 / frame.scale;
+    for (let i = session.shapes.length - 1; i >= 0; i--) {
+      if (!hitShape(session.shapes[i], at, reach)) continue;
+      this.change([...session.shapes]);
+      this.moving = { index: i, from: at, original: session.shapes[i] };
+      this.host.canvas.style.cursor = 'grabbing';
+      return;
+    }
+  }
+
+  /** Carries the picked-up shape to where the pointer is. */
+  private drag(to: Point): void {
+    const session = this.session;
+    const m = this.moving;
+    if (!session || !m) return;
+    session.shapes[m.index] = shiftShape(m.original, to.x - m.from.x, to.y - m.from.y);
     this.refresh();
   }
 

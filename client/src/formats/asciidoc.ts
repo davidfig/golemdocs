@@ -225,7 +225,7 @@ class Parser {
     const parts: string[] = [];
     while (this.i < this.lines.length) {
       const line = this.lines[this.i];
-      if (!line.trim() || DELIMITER.test(line) || /^\|={3,}/.test(line) || (parts.length && (HEADING.test(line) || LIST_ITEM.test(line)))) break;
+      if (!line.trim() || DELIMITER.test(line) || /^\|={3,}\s*$/.test(line) || (parts.length && (HEADING.test(line) || LIST_ITEM.test(line)))) break;
       if (/^\/\/(?!\/)/.test(line)) {
         this.i++;
         continue;

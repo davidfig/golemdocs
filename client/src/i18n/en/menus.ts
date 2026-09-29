@@ -48,6 +48,7 @@ export const menus = {
   'menus.combo.list': '{label} list',
   'menus.split.options': '{label} options',
   'menus.palette.more': 'More Colors…',
+  'menus.palette.document': 'Document Colors',
   'menus.tableGrid.cancel': 'Cancel',
   'menus.tableGrid.size': '{rows} × {columns} Table',
 

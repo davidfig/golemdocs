@@ -674,6 +674,12 @@
   border: 1px solid var(--wm-muted);
 }
 
+.wm-palette-label {
+  padding: 2px 3px 0;
+  color: var(--wm-muted);
+  font-size: 11px;
+}
+
 .wm-palette-grid {
   display: grid;
   gap: 2px;
@@ -1034,42 +1040,6 @@
   gap: 5px;
 }
 
-.wm-form-mode {
-  display: flex;
-  margin-right: 8px;
-}
-
-.wm-form-mode[hidden] {
-  display: none;
-}
-
-.wm-form-mode-button {
-  height: 19px;
-  padding: 0 7px;
-  font: inherit;
-  color: inherit;
-  background: var(--wm-menu-bg);
-  border: 1px solid var(--wm-etch-dark);
-}
-
-.wm-form-mode-button:first-child {
-  border-radius: 3px 0 0 3px;
-}
-
-.wm-form-mode-button:last-child {
-  border-left: none;
-  border-radius: 0 3px 3px 0;
-}
-
-.wm-form-mode-button:hover {
-  background: var(--wm-hot);
-}
-
-.wm-form-mode-button.wm-form-mode-on {
-  background: var(--wm-checked-hot);
-  border-color: var(--wm-hot-border);
-}
-
 /* The format picker is a read-only combo box; it sits in the menu bar's row. */
 .wm-format .wm-combo {
   box-sizing: border-box;
@@ -1247,7 +1217,6 @@
 .wm-tbutton:focus-visible,
 .wm-combo-input:focus-visible,
 .wm-sync:focus-visible,
-.wm-form-mode-button:focus-visible,
 .wm-sync-action:focus-visible,
 .wm-palette-wide:focus-visible,
 .wm-swatch:focus-visible {
@@ -1644,4 +1613,14 @@
   color: var(--wm-text);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* The right-click menu on a misspelled word. */
+.wm-spell-menu {
+  z-index: 1000;
+  /* Not inside .wm-layer, which gives the other menus these. */
+  font: 13px/1.2 var(--wm-font);
+  color: var(--wm-text);
+  user-select: none;
+  -webkit-user-select: none;
 }

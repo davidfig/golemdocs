@@ -20,7 +20,7 @@ export const panels: Partial<Messages> = {
   // Dashboard
   'panels.dashboard.title': '文件',
   'panels.dashboard.search': '搜尋文件',
-  'panels.dashboard.back': '返回文件',
+  'panels.dashboard.close': '關閉',
   'panels.dashboard.sharedWithMe': '與我共用',
   'panels.dashboard.yourAccount': '您的帳戶',
   'panels.dashboard.signIn': '登入',
@@ -28,6 +28,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.savedHere': '已儲存在此瀏覽器',
   'panels.dashboard.newBlankLabel': '新增空白文件',
   'panels.dashboard.newBlank': '空白文件',
+  'panels.dashboard.importLabel': '從此電腦匯入檔案',
+  'panels.dashboard.import': '匯入檔案',
   'panels.dashboard.noMatches': '沒有符合搜尋條件的文件。',
   'panels.dashboard.empty': '您儲存的文件會顯示在這裡。',
   'panels.dashboard.from': '來自 {name}',
@@ -49,7 +51,8 @@ export const panels: Partial<Messages> = {
   'panels.size.mb': '{value} MB',
 
   // PDF form layer
-  'panels.forms.editForm': '編輯表單',
+  'panels.forms.editForm': '編輯 PDF',
+  'panels.forms.fields': '表單欄位',
   'panels.forms.dragHint': '拖曳欄位可移動,拖曳其角落可調整大小。',
   'panels.forms.selectHint': '選取欄位即可重新命名或刪除。',
   'panels.forms.noFields': '此 PDF 尚無任何欄位。',

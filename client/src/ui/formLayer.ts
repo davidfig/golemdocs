@@ -33,6 +33,8 @@ export interface FormLayerHost {
   /** The fields are now these. Changes with the same `merge` key undo together. */
   change(fields: WireField[], merge?: string): void;
   notify(message: string): void;
+  /** The user picked a mode in the palette. */
+  setMode(mode: FormMode): void;
 }
 
 type Box = WireField['box'];
@@ -48,7 +50,10 @@ const MIN_SIZE = 6;
 export class FormLayer {
   readonly el = h('div', { class: 'wm-forms' });
   private readonly palette: HTMLElement;
-  private readonly properties = h('div', { class: 'wm-forms-properties' });
+  private readonly modeBox = h('div', { class: 'wm-forms-modes', attrs: { role: 'group', 'aria-label': t('chrome.formMode.group') } });
+  /** Where the tools for a page's content go, above the form tools (see pdfEditTools.ts). */
+  readonly toolsSlot = h('div', { class: 'wm-forms-tools' });
+  private readonly properties = h('div', { class: 'wm-forms-properties wm-forms-edit-only' });
   private mode: FormMode = 'fill';
   /** The fields, or null when the document isn't a PDF shown as its pages. */
   private fields: WireField[] | null = null;
@@ -129,7 +134,13 @@ export class FormLayer {
   private render(): void {
     const on = this.fields !== null;
     this.el.hidden = !on;
-    this.palette.hidden = !on || this.mode !== 'edit';
+    this.palette.hidden = !on;
+    this.palette.classList.toggle('wm-forms-palette-fill', this.mode === 'fill');
+    for (const button of this.modeBox.querySelectorAll<HTMLButtonElement>('button')) {
+      const on = button.dataset.mode === this.mode;
+      button.classList.toggle('wm-forms-mode-on', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
     this.el.classList.toggle('wm-forms-edit', this.mode === 'edit');
     this.catcher.hidden = !this.placing;
     this.palette.classList.toggle('wm-forms-placing', this.placing !== null);
@@ -335,16 +346,29 @@ export class FormLayer {
       });
       return button;
     };
-    const hint = h('p', { class: 'wm-forms-hint', text: t('panels.forms.dragHint') });
+    for (const mode of ['fill', 'edit'] as const) {
+      const button = h('button', {
+        class: 'wm-forms-mode',
+        text: t(mode === 'fill' ? 'chrome.formMode.fill' : 'chrome.formMode.edit'),
+        title: t(mode === 'fill' ? 'chrome.view.fillForm.tip' : 'chrome.view.editForm.tip'),
+        attrs: { type: 'button', 'data-mode': mode },
+      });
+      button.addEventListener('click', () => this.host.setMode(mode));
+      this.modeBox.append(button);
+    }
+    const hint = h('p', { class: 'wm-forms-hint wm-forms-edit-only', text: t('panels.forms.dragHint') });
     return h(
       'aside',
       { class: 'wm-forms-palette', attrs: { 'aria-label': t('panels.forms.editForm') } },
-      h('h2', { text: t('panels.forms.editForm') }),
-      h('div', { class: 'wm-forms-adds' }, add('text', kindLabel('text')), add('checkbox', kindLabel('checkbox')), add('choice', kindLabel('choice'))),
+      this.modeBox,
+      this.toolsSlot,
+      h('h3', { class: 'wm-forms-edit-only', text: t('panels.forms.fields') }),
+      h('div', { class: 'wm-forms-adds wm-forms-edit-only' }, add('text', kindLabel('text')), add('checkbox', kindLabel('checkbox')), add('choice', kindLabel('choice'))),
       hint,
       this.properties,
     );
   }
+
 
   /** The selected field's name and settings, in the palette. */
   private syncProperties(): void {

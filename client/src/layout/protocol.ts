@@ -11,6 +11,7 @@ import type { EncodedPage, FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
+import type { PickedStyle } from './pdfAnnotator.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -83,6 +84,10 @@ export type WireCommand =
   | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
   /** Words to accept as spelled correctly (the user's dictionary, or ones ignored), and grammar rules to ignore. */
   | { kind: 'spellWords'; words?: string[]; rules?: string[] }
+  /** Check-as-you-type: what to underline in the document, and the user's dictionary words to accept. */
+  | { kind: 'spellCheck'; spelling: boolean; grammar: boolean; words?: string[] }
+  /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
+  | { kind: 'spellAt'; page: number; x: number; y: number }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
   | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean }
   /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */
@@ -100,7 +105,67 @@ export type WireCommand =
    * On a PDF shown as its own pages: its form fields are now these (filled in, moved, added or
    * removed). Edits with the same `merge` key as the last one undo together (typing in a field).
    */
-  | { kind: 'setFields'; fields: WireField[]; merge?: string };
+  | { kind: 'setFields'; fields: WireField[]; merge?: string }
+  /** On a PDF in Edit PDF mode: pick the text at a point of a page (by id) to edit it in place. */
+  | { kind: 'pdfPick'; page: number; x: number; y: number }
+  /** The picked text now reads this (typing in the editor over it). */
+  | { kind: 'pdfText'; text: string }
+  /** Done editing the picked text. */
+  | { kind: 'pdfPutDown' }
+  /** The picked text is shown in another look (whole block): a family (one of the app's, or Helvetica, Times or Courier), style, size and color (#rrggbb). */
+  | { kind: 'pdfStyle'; font?: string; bold?: boolean; italic?: boolean; size?: number; color?: string }
+  /** The picked text is moved this far (points, page coordinates: x right, y down). */
+  | { kind: 'pdfMoveText'; dx: number; dy: number }
+  /** The selected object is now in this box, on its page (page coordinates). */
+  | { kind: 'pdfMove'; box: WireBox }
+  /** The selected shape's look (colors #rrggbb, null for none). */
+  | { kind: 'pdfShape'; stroke?: string | null; fill?: string | null; width?: number }
+  /** Adds a shape to a page (by id), in this box (page coordinates), and selects it. A whiteout is a white rectangle. */
+  | { kind: 'pdfAddShape'; page: number; shape: 'rect' | 'ellipse' | 'line' | 'check' | 'cross' | 'whiteout' | 'redact'; box: WireBox; flip?: boolean }
+  /** Adds a picture (a PNG or JPEG file, base64) to a page, in this box, and selects it. */
+  | { kind: 'pdfAddImage'; page: number; box: WireBox; data: string }
+  /** Adds a text box with its top left at a point of a page, and picks it to type in. */
+  | { kind: 'pdfAddText'; page: number; x: number; y: number; /** What it says to begin with (a date, say). */ text?: string }
+  /** Changes the pages of the PDF: the page (by id) is deleted, turned, moved, copied, or a blank one is put after it. */
+  | { kind: 'pdfPageOp'; page: number; op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert' };
+
+/** The commands only a PDF shown as its own pages takes (not the editor). */
+export type PdfWireCommand = Extract<WireCommand, { kind: 'annotate' | 'setFields' | 'pdfPick' | 'pdfText' | 'pdfPutDown' | 'pdfStyle' | 'pdfMoveText' | 'pdfMove' | 'pdfShape' | 'pdfAddShape' | 'pdfAddImage' | 'pdfAddText' | 'pdfPageOp' }>;
+
+const PDF_COMMANDS: ReadonlySet<string> = new Set(['annotate', 'setFields', 'pdfPick', 'pdfText', 'pdfPutDown', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
+
+export const isPdfCommand = (command: WireCommand): command is PdfWireCommand => PDF_COMMANDS.has(command.kind);
+
+/** A box on a page: points from its top left, y down. */
+export interface WireBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A picture, shape or drawing selected on a PDF's page, as the page sees it. */
+export interface WirePickedObject {
+  pageId: number;
+  id: string;
+  kind: 'image' | 'path' | 'form' | 'shape' | 'picture' | 'redact';
+  box: WireBox;
+  /** An added shape's look (colors #rrggbb). */
+  shape?: { shape: 'rect' | 'ellipse' | 'line' | 'check' | 'cross'; stroke: string | null; fill: string | null; width: number };
+}
+
+/** Text of a PDF's page being edited in place, as the page sees it: on a page (by id), boxes in page coordinates (points, y down). */
+export interface WirePickedText {
+  pageId: number;
+  id: string;
+  /** Added to the page (a text box), not the file's own text: it can be deleted. */
+  added: boolean;
+  text: string;
+  box: { x: number; y: number; width: number; height: number };
+  /** Where the first line's baseline is, on the page. */
+  baseline: number;
+  style: PickedStyle;
+}
 
 /** A form field as the page sees it: on a page (by id), its box in page coordinates (points, y down). */
 export type WireField = FormField & { pageId: number; box: { x: number; y: number; width: number; height: number } };
@@ -193,7 +258,9 @@ export interface SelectionUpdate {
   /** Formatting at the caret or across the selection, for the toolbar. */
   format: FormatState;
   /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
-  spell?: { issue: SpellIssue | null };
+  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean };
+  /** The squiggles under what is wrong (check-as-you-type): page id, x, y, width, height, kind (0 spelling, 1 grammar) per mark. */
+  spellMarks?: Float64Array;
   /** Set once after `getProperties`. */
   docProperties?: DocumentProperties;
   /** Set once after `countWords`: the counts, or null when this document has none to give (a PDF shown as pages). */
@@ -225,6 +292,12 @@ export interface SelectionUpdate {
   commentRects: Float64Array;
   /** A PDF shown as its own pages: its form fields on the pages laid out so far. */
   fields?: WireField[];
+  /** A PDF shown as its own pages: the text picked to edit in place (null: none). */
+  pdfText?: WirePickedText | null;
+  /** A PDF shown as its own pages: the picture or shape selected (null: none). */
+  pdfObject?: WirePickedObject | null;
+  /** Set once when a redaction couldn't take out all it covers (a picture only partly under it stays whole). */
+  pdfNotice?: 'partialRedaction';
 }
 
 export type FromWorker =
@@ -278,6 +351,6 @@ export interface SpellIssue {
 }
 
 /** Where the spelling dictionaries are served from. */
-export const DICTIONARY_BASE = `${import.meta.env.BASE_URL}dictionaries/`;
+export const DICTIONARY_BASE = `${(import.meta.env?.BASE_URL ?? "/")}dictionaries/`;
 
-export const FONT_BASE = `${import.meta.env.BASE_URL}fonts/`;
+export const FONT_BASE = `${(import.meta.env?.BASE_URL ?? "/")}fonts/`;

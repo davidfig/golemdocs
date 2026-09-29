@@ -20,7 +20,7 @@ export const panels: Partial<Messages> = {
   // Dashboard
   'panels.dashboard.title': 'Documents',
   'panels.dashboard.search': 'Rechercher des documents',
-  'panels.dashboard.back': 'Retour au document',
+  'panels.dashboard.close': 'Fermer',
   'panels.dashboard.sharedWithMe': 'Partagés avec moi',
   'panels.dashboard.yourAccount': 'votre compte',
   'panels.dashboard.signIn': 'Se connecter',
@@ -28,6 +28,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.savedHere': 'Enregistré dans ce navigateur',
   'panels.dashboard.newBlankLabel': 'Nouveau document vierge',
   'panels.dashboard.newBlank': 'Document vierge',
+  'panels.dashboard.importLabel': 'Importer un fichier depuis cet ordinateur',
+  'panels.dashboard.import': 'Importer un fichier',
   'panels.dashboard.noMatches': 'Aucun document ne correspond à votre recherche.',
   'panels.dashboard.empty': 'Les documents que vous enregistrez apparaîtront ici.',
   'panels.dashboard.from': 'De {name}',
@@ -49,7 +51,8 @@ export const panels: Partial<Messages> = {
   'panels.size.mb': '{value} Mo',
 
   // PDF form layer
-  'panels.forms.editForm': 'Modifier le formulaire',
+  'panels.forms.editForm': 'Modifier le PDF',
+  'panels.forms.fields': 'Champs de formulaire',
   'panels.forms.dragHint': 'Faites glisser un champ pour le déplacer, ou son coin pour le redimensionner.',
   'panels.forms.selectHint': 'Sélectionnez un champ pour le renommer ou le supprimer.',
   'panels.forms.noFields': 'Ce PDF ne contient encore aucun champ.',

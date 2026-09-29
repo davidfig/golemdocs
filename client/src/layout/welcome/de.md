@@ -7,6 +7,7 @@ Ein Dokumenteditor, der in Ihrem Browser läuft und jede Art von Dokument öffne
 - **Fast alles öffnen.** Ziehen Sie eine Datei auf das Fenster oder wählen Sie im Menü Datei den Befehl Öffnen.
 - **Die Form wechseln, ohne etwas zu verlieren.** Mit Konvertieren in, im Menü Datei, ändern Sie, als was ein Dokument bearbeitet wird. Beim Zurückwechseln ist Ihre Formatierung wieder da.
 - **PDFs kommentieren.** Markieren, unterstreichen, durchstreichen und Notizen hinterlassen, direkt auf den Seiten eines PDFs.
+- **PDFs bearbeiten.** Mit „PDF bearbeiten“ ändern Sie den Text einer Seite an Ort und Stelle, verschieben, ergänzen oder löschen Bilder und Formen, schwärzen vertrauliche Angaben und ordnen Seiten neu an. „Ausfüllen“ trägt Text in die Felder eines Formulars ein.
 - **Zusammenarbeiten.** Freigeben, im Menü Datei, gibt Ihnen einen Link. Alle, die ihn öffnen, bearbeiten dasselbe Dokument, und Änderungen erscheinen live. Sie können auch für bestimmte Personen freigeben.
 
 ## Ausprobieren

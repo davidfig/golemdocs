@@ -119,8 +119,8 @@ test('paths: rectangles, strokes as thin rects, dashes, holes and clamping', () 
       '0 1 0 RG 2 w 150 0 m 150 100 l S', // vertical
       '0.5 G 1 w 20 70 30 10 re S', // stroked rectangle: four edges
       '0 g 100 10 m 140 10 l 140 30 l 100 30 l h f', // closed 4-point path
-      '0 g 100 60 m 130 90 l S', // diagonal: skipped
-      '0 0 m 10 10 20 0 30 10 c f', // curve: skipped
+      '0 1 1 RG 1 w 100 60 m 130 90 l S', // diagonal: drawn in strips
+      '1 0.5 0 rg 0 0 m 10 10 20 0 30 10 c f', // curve: filled in strips
       '0 g 160 10 30 30 re 170 20 10 10 re f*', // even-odd hole
       '1 0 1 rg -50 -50 20 20 re f', // outside the page
       '0 0 0 RG 1 w [4 4] 0 d 0 95 m 40 95 l S', // dashed
@@ -144,7 +144,27 @@ test('paths: rectangles, strokes as thin rects, dashes, holes and clamping', () 
   for (const r of display.rects) assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= 200.001 && r.y + r.h <= 100.001);
   const dashes = display.rects.filter((r) => r.y > 4 && r.y < 6 && r.h <= 1.01);
   assert.equal(dashes.length, 5); // 40pt of 4 on / 4 off
-  assert.ok(display.warnings.some((w) => /skipped/.test(w)));
+  // The diagonal is a band of strips along its line, about a point thick; the curve fills between itself and its chord.
+  const cyan = display.rects.filter((r) => r.color === 0x00ffff);
+  assert.ok(cyan.length > 20 && cyan.every((r) => r.x >= 99 && r.x + r.w <= 131 && r.y >= 9 && r.y + r.h <= 41.5), `${cyan.length} strips`);
+  assert.ok(Math.abs(Math.min(...cyan.map((r) => r.x)) - 100) < 0.5 && Math.abs(Math.max(...cyan.map((r) => r.x + r.w)) - 130) < 0.5);
+  const orange = display.rects.filter((r) => r.color === 0xff8000);
+  assert.ok(orange.length > 3 && orange.every((r) => r.x >= -0.01 && r.x + r.w <= 30.01));
+});
+
+test('shapes that are not rectangles are filled in strips: a triangle and an ellipse keep their area', () => {
+  const area = (rects: { w: number; h: number }[]) => rects.reduce((n, r) => n + r.w * r.h, 0);
+  const triangle = withContent('1 0 0 rg 10 10 m 110 10 l 60 90 l f').display.rects.filter((r) => r.color === 0xff0000);
+  assert.ok(Math.abs(area(triangle) - 4000) < 60, `${area(triangle)}`);
+  // An ellipse of radii 50 and 30 drawn with four curves, and a half-size one cut out of it (even-odd).
+  const ellipse = (cx: number, cy: number, rx: number, ry: number) => {
+    const k = 0.5522847498307936;
+    return `${cx + rx} ${cy} m ${cx + rx} ${cy + k * ry} ${cx + k * rx} ${cy + ry} ${cx} ${cy + ry} c ${cx - k * rx} ${cy + ry} ${cx - rx} ${cy + k * ry} ${cx - rx} ${cy} c ${cx - rx} ${cy - k * ry} ${cx - k * rx} ${cy - ry} ${cx} ${cy - ry} c ${cx + k * rx} ${cy - ry} ${cx + rx} ${cy - k * ry} ${cx + rx} ${cy} c h`;
+  };
+  const full = withContent(`0 0 1 rg ${ellipse(100, 50, 50, 30)} f`).display.rects.filter((r) => r.color === 0x0000ff);
+  assert.ok(Math.abs(area(full) - Math.PI * 50 * 30) < 60, `${area(full)}`);
+  const ring = withContent(`0 0 1 rg ${ellipse(100, 50, 50, 30)} ${ellipse(100, 50, 25, 15)} f*`).display.rects.filter((r) => r.color === 0x0000ff);
+  assert.ok(Math.abs(area(ring) - Math.PI * (50 * 30 - 25 * 15)) < 60, `${area(ring)}`);
 });
 
 test('rects painted after text are marked as over', () => {

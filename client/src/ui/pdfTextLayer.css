@@ -1,0 +1,74 @@
+/* A PDF page's text being edited in place (see pdfTextLayer.ts). */
+
+.wm-pdftext {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-pdftext[hidden] {
+  display: none;
+}
+
+.wm-pdftext-editor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  margin: -2px;
+  padding: 2px;
+  background: transparent;
+  outline: 1px dashed #316ac5;
+  outline-offset: 0;
+  caret-color: currentColor;
+  pointer-events: auto;
+  cursor: text;
+  overflow-wrap: normal;
+}
+
+.wm-pdftext-editor:focus {
+  outline: 1px solid #316ac5;
+}
+
+/* The handle to drag the text by, at the top left of its box. */
+.wm-pdftext-grip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #316ac5;
+  border-radius: 2px;
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.wm-pdftext-grip::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-top: 1px solid #316ac5;
+  border-bottom: 1px solid #316ac5;
+}
+
+/* Measures where a font's baseline is (see baselineOffset): never seen. */
+.wm-pdftext-probe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre;
+}
+
+.wm-pdftext-probe > span {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}

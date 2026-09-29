@@ -7,6 +7,7 @@ Un éditeur de documents qui vit dans votre navigateur, conçu pour ouvrir tous 
 - **Ouvrir presque tout.** Déposez un fichier sur la fenêtre, ou choisissez Ouvrir dans le menu Fichier.
 - **Changer de forme sans rien perdre.** Convertir en, dans le menu Fichier, change ce que le document est modifié comme, et en revenant, vous retrouvez votre mise en forme.
 - **Annoter les PDF.** Surlignez, soulignez, barrez et laissez des notes sur les pages d'un PDF.
+- **Modifier les PDF.** Passez en mode Modifier le PDF pour changer le texte d'une page à sa place, déplacer, ajouter ou supprimer des images et des formes, noircir des informations confidentielles et réorganiser les pages. Le mode Remplir saisit du texte dans les champs d'un formulaire.
 - **Travailler à plusieurs.** Partager, dans le menu Fichier, vous donne un lien. Toutes les personnes qui l'ouvrent modifient le même document, et les changements s'affichent en direct. Vous pouvez aussi partager avec des personnes précises.
 
 ## À essayer

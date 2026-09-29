@@ -50,6 +50,7 @@ export const menus: Partial<Messages> = {
   'menus.combo.list': 'Lista de {label}',
   'menus.split.options': 'Opções de {label}',
   'menus.palette.more': 'Mais Cores…',
+  'menus.palette.document': 'Cores do documento',
   'menus.tableGrid.cancel': 'Cancelar',
   'menus.tableGrid.size': 'Tabela de {rows} × {columns}',
 

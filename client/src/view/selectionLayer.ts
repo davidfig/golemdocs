@@ -7,6 +7,12 @@ const HIGHLIGHT = packColor(0x3390ff, 0.28);
 /** Commented text, under the selection. */
 const COMMENTED = packColor(0xffc83d, 0.35);
 const CARET = packColor(0x000000);
+/** Squiggles under misspelled words and grammar mistakes. */
+const SQUIGGLE_COLORS = [packColor(0xe0271f), packColor(0x1c9c3c)];
+/** A squiggle is a run of little steps up and down: width and height of a step, and the rise, in points. */
+const STEP = 1.6;
+const STEP_HEIGHT = 0.7;
+const RISE = 1;
 /** Caret width in points; the rect shader keeps it at least one device pixel wide. */
 const CARET_WIDTH = 0.01;
 
@@ -43,6 +49,8 @@ export class SelectionLayer {
   private highlights = new Map<number, RectBatch>();
   /** Other people's carets, per page. */
   private remote = new Map<number, RectBatch>();
+  /** Squiggles under mistakes (check-as-you-type), per page. */
+  private squiggles = new Map<number, RectBatch>();
   private caretBatch: RectBatch | null = null;
   caretPage: number | null = null;
   caret: SelectionUpdate['caret'] = null;
@@ -68,6 +76,7 @@ export class SelectionLayer {
     for (const person of selection.remoteRects) add(Float64Array.from(person.rects), packColor(person.color, 0.25));
     add(selection.rects, HIGHLIGHT);
     for (const [page, list] of byPage) this.highlights.set(page, coloredRects(list));
+    this.updateSquiggles(selection.spellMarks);
     this.caret = selection.caret;
     this.focus = selection.focus;
     this.text = selection.text;
@@ -87,6 +96,36 @@ export class SelectionLayer {
       this.caretBatch = rects([[c.x - CARET_WIDTH / 2, c.y, CARET_WIDTH, c.height]], CARET);
       this.caretPage = c.page;
     }
+  }
+
+  private updateSquiggles(marks: Float64Array | undefined): void {
+    for (const batch of this.squiggles.values()) batch.dispose(this.gl);
+    this.squiggles.clear();
+    if (!marks) return;
+    const byPage = new Map<number, { rect: number[]; color: number }[]>();
+    for (let i = 0; i < marks.length; i += 6) {
+      let list = byPage.get(marks[i]);
+      if (!list) byPage.set(marks[i], (list = []));
+      const [x, y, width, height] = [marks[i + 1], marks[i + 2], marks[i + 3], marks[i + 4]];
+      const color = SQUIGGLE_COLORS[marks[i + 5]] ?? SQUIGGLE_COLORS[0];
+      const base = y + height - STEP_HEIGHT - 0.3;
+      for (let k = 0, at = x; at < x + width; k++, at += STEP) list.push({ rect: [at, k % 2 ? base : base - RISE, Math.min(STEP, x + width - at), STEP_HEIGHT], color });
+    }
+    for (const [page, list] of byPage) this.squiggles.set(page, coloredRects(list));
+  }
+
+  /** Squiggle batches for visible pages, positioned at their pages. */
+  squigglesFor(pages: readonly GpuPage[]): RectBatch[] {
+    const out: RectBatch[] = [];
+    if (this.squiggles.size === 0) return out;
+    for (const page of pages) {
+      const batch = this.squiggles.get(page.id);
+      if (!batch) continue;
+      batch.originX = page.x;
+      batch.originY = page.y;
+      out.push(batch);
+    }
+    return out;
   }
 
   /** Highlight batches for visible pages, positioned at their pages. */
@@ -128,6 +167,8 @@ export class SelectionLayer {
     this.highlights.clear();
     for (const batch of this.remote.values()) batch.dispose(this.gl);
     this.remote.clear();
+    for (const batch of this.squiggles.values()) batch.dispose(this.gl);
+    this.squiggles.clear();
     this.caretBatch?.dispose(this.gl);
     this.caretBatch = null;
     this.caretPage = null;

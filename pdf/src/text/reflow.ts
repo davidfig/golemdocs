@@ -22,17 +22,24 @@ export interface Run {
   color?: string;
 }
 
-/** Points: `left` is the whole paragraph's indent from the column edge, `firstLine` extra on line one. */
+/** Vertical placement in points: the baseline-to-baseline distance within the block, and the gap above it beyond that. */
+export interface Spacing {
+  line: number;
+  before: number;
+}
+
+/** Points: `left` is the whole paragraph's indent from the column edge, `firstLine` extra on line one, `right` from the column's right edge. */
 export interface Indent {
   left: number;
   firstLine: number;
+  right?: number;
 }
 
 export type ListFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman';
 
 export type Block =
-  | { kind: 'heading'; level: 1 | 2 | 3 | 4; runs: Run[]; align?: Align }
-  | { kind: 'paragraph'; runs: Run[]; align?: Align; indent?: Indent }
+  | { kind: 'heading'; level: 1 | 2 | 3 | 4; runs: Run[]; align?: Align; indent?: Indent; spacing?: Spacing }
+  | { kind: 'paragraph'; runs: Run[]; align?: Align; indent?: Indent; spacing?: Spacing }
   | {
       kind: 'listItem';
       ordered: boolean;
@@ -44,8 +51,10 @@ export type Block =
       format?: ListFormat;
       start?: number;
       runs: Run[];
+      spacing?: Spacing;
     }
-  | { kind: 'pageBreak' };
+  /** `page`: the zero-based PDF page that starts here. */
+  | { kind: 'pageBreak'; page?: number };
 
 export interface PageMargins {
   top: number;
@@ -74,6 +83,8 @@ export interface ReflowOptions {
 
 export interface ReflowResult {
   blocks: Block[];
+  /** The PDF page the first block is on (page breaks name the pages after it). */
+  firstPage: number;
   pages: PageInfo[];
   bodySize: number;
 }
@@ -670,6 +681,8 @@ interface Stats {
   isHeadingSize: (size: number) => boolean;
 }
 
+const YEAR_START = /^(19|20)\d{2}(?!\d)/;
+
 /** Whether `line` continues the paragraph being built, given they follow each other in one flow. */
 function continues(d: Draft, line: Line, marker: Marker | undefined, stats: Stats): boolean {
   const pv = d.lines[d.lines.length - 1];
@@ -677,6 +690,8 @@ function continues(d: Draft, line: Line, marker: Marker | undefined, stats: Stat
   if (Math.abs(line.size - pv.size) > 0.12 * pv.size + 0.3) return false;
   if (line.boldAll !== pv.boldAll) return false;
   if (centered(line) !== centered(pv) || rightAligned(line) !== rightAligned(pv)) return false;
+  // Entries that each start with a year (a CV's exhibitions) are separate items, however long the lines.
+  if (YEAR_START.test(line.text) && YEAR_START.test(d.lines[0].text)) return false;
   const gap = line.y - pv.y;
   const leading = d.leading ?? stats.leading * (line.size / stats.body);
   if (gap > 1.35 * leading + 0.5 || gap < 0.3 * line.size) return false;
@@ -704,7 +719,7 @@ function carriesOver(d: Draft, line: Line, marker: Marker | undefined, stats: St
 }
 
 type Pending =
-  | { kind: 'break' }
+  | { kind: 'break'; page: number }
   | { kind: 'text'; d: Draft; size: number }
   | { kind: 'list'; d: Draft; size: number };
 
@@ -725,7 +740,7 @@ function buildDrafts(lines: Line[], stats: Stats, markers: (Marker | undefined)[
     if (cur && pv) {
       if (pageBreaks && pv.page !== line.page) {
         close();
-        out.push({ kind: 'break' });
+        out.push({ kind: 'break', page: line.page });
       } else if (pv.flow === line.flow) join = continues(cur, line, marker, stats);
       else join = carriesOver(cur, line, marker, stats);
     }
@@ -762,11 +777,41 @@ function dominantOfLines(lines: Line[]): number {
   return best;
 }
 
+/**
+ * Lines centered on a point that isn't their column's middle (a title beside a picture, say):
+ * centered in a box that runs from the column's left edge to the same distance past that point.
+ */
+function offCenter(lines: Line[]): Indent | undefined {
+  if (lines.length < 2) return undefined;
+  const c = (lines[0].x0 + lines[0].x1) / 2;
+  if (!lines.every((l) => Math.abs((l.x0 + l.x1) / 2 - c) <= 2 && l.colLeft === lines[0].colLeft && l.colRight === lines[0].colRight)) return undefined;
+  const { colLeft, colRight } = lines[0];
+  const right = colRight - (2 * c - colLeft);
+  const widest = Math.max(...lines.map((l) => l.x1 - l.x0));
+  // Only a box that holds every line, and is clearly narrower than the column.
+  if (right < 0.1 * (colRight - colLeft) || 2 * c - 2 * colLeft < widest) return undefined;
+  return { left: 0, firstLine: 0, right: round1(right) };
+}
+
+/** The runs of lines that keep their own lines (a title of several lines): one run per style, '\n' between lines. */
+function runsByLine(lines: Line[]): Run[] {
+  const out: Run[] = [];
+  lines.forEach((l, i) => {
+    const runs = cloneRuns(l.runs);
+    if (i < lines.length - 1 && runs.length) runs[runs.length - 1].text = runs[runs.length - 1].text.replace(/\s+$/, '') + '\n';
+    out.push(...runs);
+  });
+  return out;
+}
+
 function alignOf(lines: Line[]): Align | undefined {
   if (lines.every(centered)) return 'center';
   if (lines.every(rightAligned)) return 'right';
   return undefined;
 }
+
+/** How far down a line's box its baseline is, as a share of the box (Word's, with an exact line height). */
+const ASCENT_SHARE = 0.78;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -856,14 +901,38 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
   const blocks: Block[] = [];
   const lists: { x: number; size: number; block: Block }[][] = [];
   let run: { x: number; size: number; block: Block }[] | undefined;
+  let previous: Line | undefined;
+  let previousPitch = 0;
+  /** Per page: where the first block's box starts, if that is above where its text sits. */
+  const tops = new Map<number, number>();
+  /** Where a block sits vertically: its own line pitch, and the gap left above it by the block before. */
+  const spacingOf = (lines: Line[], size: number): Spacing => {
+    const gaps: number[] = [];
+    for (let i = 1; i < lines.length; i++) if (lines[i].flow === lines[i - 1].flow && lines[i].y > lines[i - 1].y) gaps.push(lines[i].y - lines[i - 1].y);
+    const natural = Math.abs(size - body) < 0.5 ? leading : size * 1.2;
+    const line = Math.min(Math.max(gaps.length ? median(gaps, natural) : natural, 0.9 * size), 3 * size);
+    const first = lines[0];
+    // A line's baseline sits about 78% of the way down its box: the box above it is what this
+    // block needs, the rest of the previous block's last box is what it leaves below.
+    const above = ASCENT_SHARE * line;
+    const before =
+      previous && previous.page === first.page
+        ? first.y > previous.y ? first.y - previous.y - above - (1 - ASCENT_SHARE) * previousPitch : 0
+        : first.y - above - (tops.set(first.page, Math.min(tops.get(first.page) ?? pageMargins(pages[first.page]).top, first.y - above)), tops.get(first.page)!);
+    previousPitch = line;
+    return { line: round1(line), before: round1(Math.max(0, before)) };
+  };
   for (const p of pending) {
     if (p.kind === 'break') {
-      blocks.push({ kind: 'pageBreak' });
+      blocks.push({ kind: 'pageBreak', page: p.page });
       run = undefined;
+      previous = undefined;
       continue;
     }
-    const runs = mergeRuns(p.d.runs);
+    let runs = mergeRuns(p.d.runs);
     if (!runs.length) continue;
+    const spacing = spacingOf(p.d.lines, p.size);
+    previous = p.d.lines[p.d.lines.length - 1];
     const align = alignOf(p.d.lines);
     if (p.kind === 'list') {
       const m = p.d.list!.marker;
@@ -875,6 +944,7 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
         level: 0,
         ...(first ? { format: first.format, start: first.n } : {}),
         runs,
+        spacing,
       };
       blocks.push(block);
       if (!run) lists.push((run = []));
@@ -885,7 +955,9 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
     const text = runs.map((r) => r.text).join('');
     const lineCount = p.d.lines.length;
     if (isHeading(p)) {
-      blocks.push({ kind: 'heading', level: levelOf(p.size), runs, ...(align ? { align } : {}) });
+      const box = align ? undefined : offCenter(p.d.lines);
+      if (box) runs = mergeRuns(runsByLine(p.d.lines));
+      blocks.push({ kind: 'heading', level: levelOf(p.size), runs, ...(align || box ? { align: align ?? 'center' } : {}), ...(box ? { indent: box } : {}) });
     } else if (
       !bodyBold &&
       lineCount <= 2 &&
@@ -894,17 +966,30 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
       !/[,;]$/.test(text) &&
       /\p{L}/u.test(text)
     ) {
-      blocks.push({ kind: 'heading', level: boldHeadingLevel, runs, ...(align ? { align } : {}) });
+      const box = align ? undefined : offCenter(p.d.lines);
+      if (box) runs = mergeRuns(runsByLine(p.d.lines));
+      blocks.push({ kind: 'heading', level: boldHeadingLevel, runs, ...(align || box ? { align: align ?? 'center' } : {}), ...(box ? { indent: box } : {}) });
     } else {
-      const indent = align ? undefined : indentOf(p.d.lines, p.size);
-      blocks.push({ kind: 'paragraph', runs, ...(align ? { align } : {}), ...(indent ? { indent } : {}) });
+      const box = align ? undefined : offCenter(p.d.lines);
+      if (box) runs = mergeRuns(runsByLine(p.d.lines));
+      const indent = align || box ? box : indentOf(p.d.lines, p.size);
+      // A block set well in from the column's edge (an address beside a picture) keeps its own lines.
+      const width = p.d.lines[0].colRight - p.d.lines[0].colLeft;
+      if (!box && indent && indent.firstLine === 0 && indent.left > 0.15 * width && p.d.lines.length > 1) runs = mergeRuns(runsByLine(p.d.lines));
+      blocks.push({ kind: 'paragraph', runs, ...(align || box ? { align: align ?? 'center' } : {}), ...(indent ? { indent } : {}) });
     }
+    const made = blocks[blocks.length - 1];
+    if (made.kind !== 'pageBreak') made.spacing = spacing;
   }
   assignListLevels(lists);
 
   return {
     blocks,
-    pages: pages.map((p) => ({ width: p.width, height: p.height, margins: pageMargins(p) })),
+    firstPage: lines[0]?.page ?? 0,
+    pages: pages.map((p, i) => {
+      const margins = pageMargins(p);
+      return { width: p.width, height: p.height, margins: { ...margins, top: Math.min(margins.top, tops.get(i) ?? margins.top) } };
+    }),
     bodySize: body,
   };
 }

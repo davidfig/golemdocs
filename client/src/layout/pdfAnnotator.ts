@@ -158,10 +158,13 @@ export class PdfAnnotator {
   /** What the last edits left under a redaction (pictures and shapes only partly inside it). */
   private partial: ApplyResult['partial'] = [];
   private notified = '0/0';
+  private substituted = new Set<string>();
+  private notifiedFonts = new Set<string>();
 
   private setView(edits: readonly PdfEdit[]): ApplyResult {
     const result = this.view.setEdits(edits);
     this.partial = result.partial;
+    this.substituted = result.substituted;
     return result;
   }
 
@@ -172,6 +175,13 @@ export class PdfAnnotator {
     if (key === this.notified) return false;
     this.notified = key;
     return images > 0;
+  }
+
+  /** Fonts newly replaced by a standard one since the last call (the app has no file for them), or none. */
+  fontNotice(): string[] {
+    const fresh = [...this.substituted].filter((f) => !this.notifiedFonts.has(f));
+    this.notifiedFonts = new Set(this.substituted);
+    return fresh;
   }
 
   get annotations(): readonly Annotation[] {

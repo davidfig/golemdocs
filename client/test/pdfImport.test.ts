@@ -110,8 +110,9 @@ test('a PDF becomes headings, paragraphs with styled runs, real lists and the PD
     ],
   );
   assert.equal(runs(ps[9])[0].properties.fonts?.ascii, 'Arial');
-  // Headings take size and color from their style, not from the runs.
-  assert.equal(runs(ps[0])[0].properties.size, undefined);
+  // Headings keep the PDF's size (and color, black here), on top of the style.
+  assert.equal(runs(ps[0])[0].properties.size, 48);
+  assert.equal(runs(ps[0])[0].properties.color?.val, '000000');
   assert.ok(doc.styles.styles.some((s) => s.id === 'Heading2') && doc.styles.styles.some((s) => s.id === 'Heading4'));
 
   // Lists: one bullet list, and a numbered list that starts at 1.
@@ -197,4 +198,90 @@ test('PDF fonts map to the families we ship, or stay default', () => {
   assert.equal(wordFontFor('LMRoman10-Regular'), 'Times New Roman');
   assert.equal(wordFontFor('DejaVuSans'), 'Arial');
   assert.equal(wordFontFor('ZapfDingbats'), undefined);
+});
+
+test('added text boxes and pictures float at their place on their page', async () => {
+  const pdf = PdfDocument.create();
+  const font = pdf.standardFont('Helvetica');
+  pdf.addPage([595, 842]).draw({ origin: 'top-left' }).text('First page.', 72, 100, { font, size: 12 }).finish();
+  pdf.addPage([595, 842]);
+  pdf.addPage([595, 842]).draw({ origin: 'top-left' }).text('Third page.', 72, 100, { font, size: 12 }).finish();
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const edits = [
+    { id: 'a', page: 0, kind: 'textbox' as const, box: [100, 700, 300, 740] as [number, number, number, number], text: 'Hello\nthere', font: 'Helvetica-Bold', size: 14, color: [1, 0, 0] as [number, number, number] },
+    { id: 'b', page: 1, kind: 'image' as const, box: [50, 400, 150, 500] as [number, number, number, number], data: png },
+  ];
+  const doc = await pdfToDocument(await pdf.save(), { edits });
+  const drawings = paragraphs(doc).map((p) => runs(p).flatMap((r) => r.content.filter((c) => c.kind === 'drawing')));
+  // First page's paragraph carries the text box; the text-less second page gets a paragraph for the picture.
+  assert.deepEqual(drawings.map((d) => d.length), [1, 1, 0]);
+  const box = drawings[0][0];
+  const picture = drawings[1][0];
+  assert.ok(box.kind === 'drawing' && !box.inline && box.textBox?.length === 2);
+  assert.ok(picture.kind === 'drawing' && !picture.inline && picture.image);
+  assert.deepEqual([box.width, box.height], [200 * 12700, 40 * 12700]);
+  const paragraphsOn = paragraphs(doc);
+  assert.equal(paragraphsOn[1].properties.pageBreakBefore, true);
+  assert.equal(paragraphsOn[2].properties.pageBreakBefore, true);
+  // The box's top-left is 100pt from the left, 842 - 740 = 102pt from the top.
+  assert.match(JSON.stringify(box.xml), /1270000/);
+  assert.match(JSON.stringify(box.xml), /1295400/);
+
+  // Written and read back, the text box keeps its text.
+  const back = await WordDocument.read(await doc.write());
+  const again = paragraphs(back)[0].children.flatMap((c) => (c.kind === 'run' ? c.content : [])).find((c) => c.kind === 'drawing');
+  assert.ok(again && again.kind === 'drawing' && again.textBox?.length === 2);
+  assert.equal(text(again.textBox![0] as Paragraph), 'Hello');
+});
+
+test('lines centered on a point that is not the column middle become a centered, right-indented heading', async () => {
+  const pdf = PdfDocument.create();
+  const font = pdf.standardFont('Helvetica');
+  const d = pdf.addPage([595, 842]).draw({ origin: 'top-left' });
+  // Two big lines centered on x = 190, with body text across the full width under them.
+  for (const [s, y] of [['Name', 100], ['Second line', 136]] as [string, number][]) {
+    d.text(s, 190 - PageDrawing.measure(s, { font, size: 30 }) / 2, y, { font, size: 30 });
+  }
+  d.text('Body text runs across the whole page width here, well past the title.', 57, 220, { font, size: 11 });
+  d.text('Second body line that also spans a good part of the page as well.', 57, 234, { font, size: 11 });
+  d.finish();
+  const ps = paragraphs(await pdfToDocument(await pdf.save()));
+  assert.equal(ps[0].properties.style, 'Heading1');
+  assert.equal(ps[0].properties.justification, 'center');
+  assert.ok((ps[0].properties.indent?.right ?? 0) > 800);
+  // The title keeps its two lines.
+  assert.deepEqual(runs(ps[0]).flatMap((r) => r.content.map((c) => (c.kind === 'text' ? c.text : c.kind))), ['Name', 'break', 'Second line']);
+});
+test("blocks keep the PDF's line pitch and the gaps between them", async () => {
+  const pdf = PdfDocument.create();
+  const font = pdf.standardFont('Helvetica');
+  const d = pdf.addPage([595, 842]).draw({ origin: 'top-left' });
+  const o = { font, size: 9 };
+  // Lines 14pt apart; a 28pt gap (one blank line) before the last.
+  d.text('First line of the note.', 57, 100, o);
+  d.text('Second line of the note.', 57, 114, o);
+  d.text('After a gap of one line.', 57, 156, o);
+  d.finish();
+  const ps = paragraphs(await pdfToDocument(await pdf.save()));
+  const spacing = ps.map((p) => p.properties.spacing);
+  assert.ok(spacing.every((s) => s?.lineRule === 'exact' && s.line === 280 && s.after === 0));
+  assert.equal(spacing[spacing.length - 1]?.before, 560);
+});
+
+test('year-led entries stay separate, and an address set in from the edge keeps its lines', async () => {
+  const pdf = PdfDocument.create();
+  const font = pdf.standardFont('Helvetica');
+  const d = pdf.addPage([595, 842]).draw({ origin: 'top-left' });
+  const o = { font, size: 9 };
+  // The first entry runs to the column's edge; the next starts with a year.
+  d.text('2024 A long entry that runs nearly all the way across the page to the right edge of the column ok', 57, 100, o);
+  d.text('2023 Short entry', 57, 114, o);
+  d.text('Some closing prose that also spans a good part of the width here, to set the column wide enough.', 57, 300, o);
+  d.text('Address line one here', 300, 700, o);
+  d.text('Phone 000', 300, 710, o);
+  d.finish();
+  const ps = paragraphs(await pdfToDocument(await pdf.save()));
+  assert.deepEqual(ps.map(text).slice(0, 2).map((t) => t.slice(0, 4)), ['2024', '2023']);
+  const address = ps[ps.length - 1];
+  assert.deepEqual(runs(address).flatMap((r) => r.content.map((c) => c.kind)), ['text', 'break', 'text']);
 });

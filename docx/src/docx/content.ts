@@ -340,6 +340,7 @@ export function readDrawing(e: XmlElement, ctx: ReadContext): Drawing | Raw {
   if (!container || !extent) return raw(e);
   const docPr = child(container, 'wp:docPr');
   const blip = findDescendant(container, 'a:blip');
+  const textBox = findDescendant(container, 'w:txbxContent');
   const rel = blip?.attrs['r:embed'] ? ctx.rels.byId(blip.attrs['r:embed']) : undefined;
   return {
     kind: 'drawing',
@@ -349,6 +350,7 @@ export function readDrawing(e: XmlElement, ctx: ReadContext): Drawing | Raw {
     image: rel && !rel.external ? ctx.rels.partName(rel) : undefined,
     name: docPr?.attrs.name,
     description: docPr?.attrs.descr,
+    ...(textBox && { textBox: readBlocks(textBox, ctx) }),
     xml: e,
   };
 }
@@ -371,6 +373,8 @@ export function writeDrawing(d: Drawing, ctx: ContentWriteContext): XmlElement {
     if (d.description !== undefined) docPr.attrs.descr = d.description;
     else delete docPr.attrs.descr;
   }
+  const textBox = d.textBox && findDescendant(container, 'w:txbxContent');
+  if (textBox) textBox.children = writeBlocks(d.textBox!, ctx);
   if (d.image) {
     const blip = findDescendant(container, 'a:blip');
     if (blip) {

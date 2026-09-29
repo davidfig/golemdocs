@@ -14,13 +14,16 @@ import {
   type RunProperties,
   type Style,
 } from '@word/docx';
-import { PdfDocument, analyzeDocument, type ReflowBlock, type ReflowListFormat, type ReflowMargins, type ReflowRun } from '@word/pdf';
+import { placedFrom, type Placed } from './pdfPlaced.ts';
+import { PdfDocument, analyzeDocument, type PdfEdit, type ReflowBlock, type ReflowIndent, type ReflowSpacing, type ReflowListFormat, type ReflowMargins, type ReflowRun } from '@word/pdf';
 
 export interface PdfImportOptions {
   /** User or owner password for encrypted PDFs. */
   password?: string;
   /** Start a new page where each PDF page began (default false: text reflows freely). */
   pageBreaks?: boolean;
+  /** The PDF's edits: the text boxes and pictures among them are placed on their pages, as floating drawings. */
+  edits?: readonly PdfEdit[];
 }
 
 /** Word names of the families we ship (see client/public/fonts). */
@@ -45,21 +48,40 @@ export function wordFontFor(fontName: string): string | undefined {
   return undefined;
 }
 
-function runOf(r: ReflowRun, styled: boolean): Run {
+/** `heading`: the run keeps its size and color (the heading style's are only a default), but not its weight. */
+function runOf(r: ReflowRun, styled: boolean, heading = false): Run {
   const properties: RunProperties = {};
-  if (styled) {
+  if (styled || heading) {
     const family = wordFontFor(r.fontName);
     if (family) properties.fonts = { ascii: family, hAnsi: family, cs: family };
-    if (r.bold) properties.bold = true;
+    if (r.bold && !heading) properties.bold = true;
     properties.size = pointsToHalfPoints(r.size);
     properties.sizeCs = properties.size;
   }
   if (r.italic) properties.italic = true;
   if (r.color && r.color !== '000000') properties.color = { val: r.color };
-  return { kind: 'run', properties, content: [{ kind: 'text', text: r.text }], attrs: {} };
+  else if (heading) properties.color = { val: '000000' };
+  // A newline is a line break the PDF had and the layout keeps (a title of several lines).
+  const content = r.text.split('\n').flatMap((text, i): Run['content'] => [...(i ? [{ kind: 'break' as const }] : []), ...(text ? [{ kind: 'text' as const, text }] : [])]);
+  return { kind: 'run', properties, content, attrs: {} };
+}
+
+function indentOf({ left, firstLine, right }: ReflowIndent): NonNullable<ParagraphProperties['indent']> {
+  return {
+    left: pointsToTwips(left),
+    ...(right ? { right: pointsToTwips(right) } : {}),
+    ...(firstLine > 0 ? { firstLine: pointsToTwips(firstLine) } : {}),
+    ...(firstLine < 0 ? { hanging: pointsToTwips(-firstLine) } : {}),
+  };
 }
 
 // --- Numbering -------------------------------------------------------------------------------------
+
+/** Where the PDF put a block vertically: its line pitch exactly, and the gap above it. */
+function spacingOf(spacing: ReflowSpacing | undefined): ParagraphProperties {
+  if (!spacing) return {};
+  return { contextualSpacing: false, spacing: { before: pointsToTwips(spacing.before), after: 0, line: pointsToTwips(spacing.line), lineRule: 'exact' } };
+}
 
 const BULLETS = ['•', '◦', '▪'];
 const DEEP_FORMATS = ['lowerLetter', 'lowerRoman', 'decimal'];
@@ -145,7 +167,8 @@ const median = (values: number[]) => [...values].sort((a, b) => a - b)[values.le
 function setupPage(doc: WordDocument, sizes: { width: number; height: number; margins: ReflowMargins }[]): void {
   if (!sizes.length) return;
   const first = sizes[0];
-  const clamp = (n: number, max: number) => Math.min(Math.max(n, 36), max);
+  // At least half an inch, unless the PDF's text really runs closer to the edge (a footer near the bottom).
+  const clamp = (n: number, max: number) => Math.min(Math.max(n, Math.min(36, n)), max);
   const margins = {
     left: clamp(median(sizes.map((s) => s.margins.left)), first.width * 0.3),
     right: clamp(median(sizes.map((s) => s.margins.right)), first.width * 0.3),
@@ -173,13 +196,16 @@ function setupPage(doc: WordDocument, sizes: { width: number; height: number; ma
 /** Reflows a PDF into an editable document. Throws PdfError / PasswordError for unreadable or locked files. */
 export async function pdfToDocument(bytes: Uint8Array, options: PdfImportOptions = {}): Promise<WordDocument> {
   const pdf = PdfDocument.load(bytes, { password: options.password });
-  const { blocks, pages } = analyzeDocument(pdf, { pageBreaks: options.pageBreaks });
-  return blocksToDocument(blocks, pages);
+  const placed = placedFrom(pdf, options.edits ?? []);
+  // Things placed on a page need the text to stay on its page too: each PDF page starts a Word page.
+  const { blocks, pages, firstPage } = analyzeDocument(pdf, { pageBreaks: options.pageBreaks || placed.length > 0 });
+  return blocksToDocument(blocks, pages, placed.length ? { placed, firstPage } : undefined);
 }
 
 export async function blocksToDocument(
   blocks: ReflowBlock[],
   pages: { width: number; height: number; margins: ReflowMargins }[],
+  positioned?: { placed: Placed[]; firstPage: number },
 ): Promise<WordDocument> {
   const doc = await WordDocument.create();
   setupPage(doc, pages);
@@ -191,38 +217,61 @@ export async function blocksToDocument(
   // Current numbered list: its instance, the format it counts in, and the last top-level number.
   let numbered: { id: number; format: ReflowListFormat; last?: number } | undefined;
 
-  const push = (properties: ParagraphProperties, runs: ReflowRun[], styled: boolean) => {
+  // Placed things (text boxes, pictures) float on the page they were on: each hangs on the first
+  // paragraph of its page, or on a paragraph of its own where the page has no text.
+  const placedOn = new Map<number, Placed[]>();
+  for (const p of positioned?.placed ?? []) placedOn.set(p.page, [...(placedOn.get(p.page) ?? []), p]);
+  let currentPage = -1;
+  let waiting: Placed[] = [];
+  const drawingRuns = (items: Placed[]): Inline[] =>
+    items.flatMap((item) => {
+      const content = item.build(doc);
+      return content ? [{ kind: 'run' as const, properties: {}, content: [content], attrs: {} }] : [];
+    });
+
+  const push = (properties: ParagraphProperties, runs: ReflowRun[], styled: boolean, heading = false) => {
     if (breakBefore) {
       properties.pageBreakBefore = true;
       breakBefore = false;
     }
-    const children: Inline[] = runs.map((r) => runOf(r, styled));
+    const children: Inline[] = runs.map((r) => runOf(r, styled, heading));
+    if (waiting.length) children.push(...drawingRuns(waiting));
+    waiting = [];
     body.push({ kind: 'paragraph', properties, children, attrs: {} });
   };
+  /** Moves to a PDF page, giving pages passed on the way that have only placed things a page of their own. */
+  const goTo = (page: number) => {
+    for (let q = currentPage + 1; q < page; q++) {
+      const items = placedOn.get(q);
+      if (!items) continue;
+      breakBefore = body.length > 0;
+      waiting = items;
+      push({}, [], false);
+    }
+    currentPage = page;
+    waiting = placedOn.get(page) ?? [];
+    breakBefore = body.length > 0;
+  };
+  if (positioned) goTo(positioned.firstPage);
 
   for (const b of blocks) {
     if (b.kind !== 'listItem') numbered = undefined;
     switch (b.kind) {
       case 'pageBreak':
-        breakBefore = body.length > 0;
+        if (positioned && b.page !== undefined) goTo(b.page);
+        else breakBefore = body.length > 0;
         break;
       case 'heading': {
-        // The style carries size, weight and color; runs keep only what the style doesn't imply.
-        const runs = b.runs.map((r) => ({ ...r, bold: false }));
-        push({ style: `Heading${b.level}`, ...(b.align ? { justification: b.align } : {}) }, runs, false);
+        // The style carries the weight; the runs keep the size, font and color the PDF had.
+        const properties: ParagraphProperties = { style: `Heading${b.level}`, ...(b.align ? { justification: b.align } : {}), ...spacingOf(b.spacing) };
+        if (b.indent) properties.indent = indentOf(b.indent);
+        push(properties, b.runs, false, true);
         break;
       }
       case 'paragraph': {
-        const properties: ParagraphProperties = {};
+        const properties: ParagraphProperties = spacingOf(b.spacing);
         if (b.align) properties.justification = b.align;
-        if (b.indent) {
-          const { left, firstLine } = b.indent;
-          properties.indent = {
-            left: pointsToTwips(left),
-            ...(firstLine > 0 ? { firstLine: pointsToTwips(firstLine) } : {}),
-            ...(firstLine < 0 ? { hanging: pointsToTwips(-firstLine) } : {}),
-          };
-        }
+        if (b.indent) properties.indent = indentOf(b.indent);
         push(properties, b.runs, true);
         break;
       }
@@ -240,11 +289,12 @@ export async function blocksToDocument(
           if (b.level === 0) numbered!.last = b.start;
           id = numbered!.id;
         }
-        push({ style: 'ListParagraph', numbering: { id, level: b.level } }, b.runs, true);
+        push({ style: 'ListParagraph', numbering: { id, level: b.level }, ...spacingOf(b.spacing) }, b.runs, true);
         break;
       }
     }
   }
+  if (positioned) goTo(Math.max(currentPage, ...placedOn.keys()) + 1);
   doc.body = body.length ? body : [{ kind: 'paragraph', properties: {}, children: [], attrs: {} }];
   return doc;
 }

@@ -145,15 +145,16 @@ function lastDoc(): string | null {
     return null;
   }
 }
-/** The address of the unedited welcome document; the app is at `/` for everything else. */
-const WELCOME_PATH = '/welcome';
-/** The document the address asks for: `?doc=…`, or the welcome path. */
-const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? (location.pathname === WELCOME_PATH ? 'welcome' : null);
-/** Sets the address to `params` at the app's root, or at the welcome path when it holds only the welcome document. */
+/** The built-in documents with an address of their own (the welcome text, privacy policy and terms); the app is at `/` for everything else. */
+const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', privacy: '/privacy', terms: '/terms' };
+/** The document the address asks for: `?doc=…`, or a page's path. */
+const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === location.pathname) ?? null;
+/** Sets the address to `params` at the app's root, or at a page's path when it holds only that built-in document. */
 function setUrl(params: URLSearchParams): void {
-  const welcome = params.get('doc') === 'welcome';
-  if (welcome) params.delete('doc');
-  history.replaceState(null, '', `${welcome ? WELCOME_PATH : '/'}${params.size ? `?${params}` : ''}`);
+  const doc = params.get('doc');
+  const path = doc ? PAGE_PATHS[doc] : undefined;
+  if (path) params.delete('doc');
+  history.replaceState(null, '', `${path ?? '/'}${params.size ? `?${params}` : ''}`);
 }
 
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
@@ -230,7 +231,7 @@ function reportError(text: string): void {
 
 function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean } = {}): void {
   const start = performance.now();
-  let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : t('app.fontsName');
+  let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : t('app.fontsName');
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   cropLayer.cancel();
@@ -241,7 +242,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   current = {
     localId: options.localId ?? null,
     unsavedSince: 0,
-    builtIn: source.kind === 'welcome' || source.kind === 'fonts',
+    builtIn: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'fonts',
     room: null,
     roomRequested: false,
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
@@ -276,7 +277,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   documentName = name;
   documentKind = kindOfSource(source);
   annotating = false;
-  sharedDeviceNotice.update({ welcome: source.kind === 'welcome' });
+  sharedDeviceNotice.update({ welcome: source.kind === 'welcome' || source.kind === 'legal' });
   setStatus(t('app.loading', { name }));
 
   const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
@@ -535,6 +536,8 @@ function openSource(source: string, keepRoom = false): void {
     void openShared(source.slice(7));
   } else if (source === 'welcome') {
     open({ kind: 'welcome' });
+  } else if (source === 'privacy' || source === 'terms') {
+    open({ kind: 'legal', page: source });
   } else {
     open({ kind: 'fonts' });
   }
@@ -556,7 +559,7 @@ interface OpenDocument {
   localId: string | null;
   /** When its oldest unsaved edit was made (performance.now()), or 0 when everything is saved. */
   unsavedSince: number;
-  /** The welcome or fonts document: only worth saving once the user has changed it. */
+  /** The welcome, legal or fonts document: only worth saving once the user has changed it. */
   builtIn: boolean;
   /** Where it stands in the multiplayer server's room (cloud documents), once joined. */
   room: RoomState | null;
@@ -1487,7 +1490,9 @@ function applySelection(update: SelectionUpdate): void {
   link = update.link ?? null;
   if (followLinkUntil > performance.now()) {
     followLinkUntil = 0;
-    if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
+    const page = link && Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === link!.url);
+    if (page) openSource(page);
+    else if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
     else if (link && parseDocAddress(link.url)) void openDocumentLink(parseDocAddress(link.url)!.title);
   }
   canvas.style.cursor = painting ? 'copy' : '';
@@ -1505,6 +1510,7 @@ function applySelection(update: SelectionUpdate): void {
   pdfTextLayer.update(update.pdfText ?? null);
   pdfTools.update(update.pdfText ?? null, update.pdfObject ?? null);
   if (update.pdfNotice) showToast(t('chrome.pdfEdit.partialRedaction'));
+  if (update.pdfFontNotice) showToast(t('chrome.pdfEdit.fontSubstituted', { fonts: update.pdfFontNotice.join(', ') }));
   canUndo = update.canUndo;
   canRedo = update.canRedo;
   if (editSent) {
@@ -1851,8 +1857,35 @@ canvas.addEventListener('pointerleave', () => {
   sendPointer();
 });
 
+// Over a link, the browser's tooltip says how to follow it (a plain click only puts the caret there).
+type Point = { x: number; y: number };
+let hoverAt: Point | null = null;
+let hoverBusy = false;
+function hoverLink(x: number, y: number): void {
+  hoverAt = { x, y };
+  if (hoverBusy) return;
+  hoverBusy = true;
+  requestAnimationFrame(async () => {
+    const at = hoverAt;
+    hoverAt = null;
+    const hit = at && loaded ? pageAt(at.x, at.y) : null;
+    const url = hit ? await worker.linkAt(hit.page.id, hit.x, hit.y) : null;
+    hoverBusy = false;
+    const tip = url ? t(MAC ? 'app.linkTip.cmd' : 'app.linkTip.ctrl', { url }) : '';
+    if (canvas.title !== tip) canvas.title = tip;
+    const moved = hoverAt as Point | null; // the pointer may have moved while asking
+    if (moved) hoverLink(moved.x, moved.y);
+  });
+}
+
+canvas.addEventListener('pointerleave', () => {
+  hoverAt = null;
+  canvas.title = '';
+});
+
 canvas.addEventListener('pointermove', (e) => {
   pointerMoved(e.offsetX, e.offsetY);
+  if (!pan && !selecting) hoverLink(e.offsetX, e.offsetY);
   if (pan) {
     userMoved = true;
     camera.panBy(pan.x - e.clientX, pan.y - e.clientY);

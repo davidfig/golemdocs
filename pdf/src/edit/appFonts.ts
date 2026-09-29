@@ -48,10 +48,13 @@ export function nearestStandard(family: string, bold: boolean, italic: boolean):
 }
 
 /** A font for a name and style, in the page's resources. */
-export function chooseFont(doc: PdfDocument, page: PdfPage, name: string, bold: boolean, italic: boolean, options: ApplyOptions): ChosenFont {
+export function chooseFont(doc: PdfDocument, page: PdfPage, name: string, bold: boolean, italic: boolean, options: ApplyOptions, substituted?: Set<string>): ChosenFont {
   if (isStandardName(name)) return { use: standardUse(doc, page, name).use };
   const bytes = options.fontFile?.(name, bold, italic);
-  if (!bytes) return { use: standardUse(doc, page, nearestStandard(name, bold, italic)).use };
+  if (!bytes) {
+    substituted?.add(name);
+    return { use: standardUse(doc, page, nearestStandard(name, bold, italic)).use };
+  }
   let fonts = embedded.get(doc);
   if (!fonts) embedded.set(doc, (fonts = new Map()));
   const key = `${name}|${bold ? 1 : 0}${italic ? 1 : 0}`;

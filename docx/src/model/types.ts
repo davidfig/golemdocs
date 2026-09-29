@@ -208,6 +208,8 @@ export interface Drawing {
   image?: string;
   name?: string;
   description?: string;
+  /** The content of a text box (wps:txbx), if this drawing is one; edited here, written back into `xml`. */
+  textBox?: Block[];
   /** Original w:drawing, reused on write (with size and image updated). Absent for new drawings. */
   xml?: XmlElement;
 }

@@ -792,7 +792,7 @@ export class LayoutSession {
 
     const placeFloats = (floats: FloatSpec[], paragraphTop: number) => {
       for (const f of floats) {
-        if (!f.drawing.image) continue;
+        if (!f.drawing.image && !f.drawing.textBox) continue;
         const w = f.drawing.width / 12700;
         const h = f.drawing.height / 12700;
         const frameX =
@@ -811,7 +811,18 @@ export class LayoutSession {
           : spec.align === 'center' ? frame[0] + (frame[1] - size) / 2
           : spec.align === 'right' || spec.align === 'bottom' || spec.align === 'outside' ? frame[0] + frame[1] - size
           : frame[0];
-        page.images.push({ part: f.drawing.image, x: place(frameX, w, f.h), y: place(frameY, h, f.v), width: w, height: h, behind: f.behind });
+        const x = place(frameX, w, f.h);
+        const y = place(frameY, h, f.v);
+        if (f.drawing.image) page.images.push({ part: f.drawing.image, x, y, width: w, height: h, behind: f.behind });
+        else {
+          // A text box: its paragraphs laid out like a cell's, at the box's place. Its lines aren't
+          // recorded (a click or a caret doesn't get into it: it can't be edited in place yet).
+          const inset = f.inset;
+          const content = layoutBox(f.drawing.textBox!, ctx, Math.max(w - inset.left - inset.right, 1));
+          const recorded = page.lines.length;
+          emitBox(page, content, x + inset.left, y + inset.top);
+          page.lines.length = recorded;
+        }
       }
     };
 

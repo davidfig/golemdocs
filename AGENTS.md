@@ -36,3 +36,9 @@ Every user-visible string goes through `t('area.key')` (`client/src/i18n`), neve
 The user starts any dev server you need (`pnpm dev`, which runs Vite on :5173 and the server on :3001). Don't start, restart or stop one yourself in the main checkout: duplicate processes pile up and fight over the ports. If you need one running, or it looks down (for example `/api` calls returning 500 from the Vite proxy), ask the user.
 
 **Exception: worktrees.** In a git worktree you may run and stop your own dev server, but never on the normal ports (5173, 3001). Pick other ports, pass them to both the client and the server, and stop the processes when you are done.
+
+## Git stash
+
+Never use `git stash` (including `git stash pop`, `apply` or `drop`) when working in the main checkout. Other agents are likely running there against the same working tree, and stashing sweeps up their uncommitted changes and can break their work. To set changes aside, commit them or copy the affected files instead.
+
+**Exception: worktrees.** A git worktree has its own working tree, so no other agent shares your uncommitted changes there. Stashing is fine, but note that the stash list is shared across all worktrees of the repo: only pop or drop a stash you created yourself.

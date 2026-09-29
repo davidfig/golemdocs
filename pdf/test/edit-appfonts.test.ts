@@ -44,6 +44,12 @@ test('with no file to hand, the nearest standard font is used', async () => {
   assert.equal(item.fontName, 'Times-Italic');
 });
 
+test('a font with no file to hand is reported as substituted; embedded and standard ones are not', () => {
+  const doc = load('libreoffice.pdf');
+  const result = applyEdits(doc, [box('a', 'Georgia'), box('b', 'Arial'), box('c', 'Helvetica-Bold')], options);
+  assert.deepEqual([...result.substituted], ['Georgia']);
+});
+
 test('applying again after more text was typed keeps the earlier glyphs\' widths and the text right', async () => {
   const doc = load('libreoffice.pdf');
   const text = () => doc.pages[0].extractText().text.replace(/\s+/g, ' ');

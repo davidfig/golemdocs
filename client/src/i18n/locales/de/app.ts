@@ -5,6 +5,10 @@ export const app: Partial<Messages> = {
   // Sample and default document names
   'app.welcomeName': 'Willkommen bei Golem Docs',
   'app.fontsName': 'Schriftarten',
+  'app.linkTip.ctrl': '{url}\nStrg+Klick, um dem Link zu folgen',
+  'app.linkTip.cmd': '{url}\nCmd+Klick, um dem Link zu folgen',
+  'app.privacyName': 'Datenschutzerklärung',
+  'app.termsName': 'Nutzungsbedingungen',
   'app.warAndPeaceName': 'Krieg und Frieden',
   'app.sampleWelcome': '&Willkommen bei Golem Docs',
   'app.sampleFonts': '&Schriftarten',

@@ -67,7 +67,12 @@ export type DocumentSource =
   /** Every font we ship, as a sample document. */
   | { kind: 'fonts' }
   /** What Golem Docs is: shown when there are no documents yet. */
-  | { kind: 'welcome' };
+  | { kind: 'welcome' }
+  /** The privacy policy or the terms of service, written as documents like the welcome one. */
+  | { kind: 'legal'; page: LegalPage };
+
+/** The built-in legal documents, at `/privacy` and `/terms`. */
+export type LegalPage = 'privacy' | 'terms';
 
 /** An editor command as sent from the page: pages are referred to by id. */
 export type WireCommand =
@@ -212,6 +217,8 @@ export type ToWorker =
   | { type: 'leave' }
   /** Bytes of an image part of the open document. */
   | { type: 'media'; doc: number; request: number; part: string }
+  /** The address of the link under a page point (for the hover tip). */
+  | { type: 'linkAt'; doc: number; request: number; page: number; x: number; y: number }
   | { type: 'command'; doc: number; command: WireCommand }
   /** Puts a picture in the document at the caret (its bytes go into the document; its size is in EMUs). */
   | { type: 'insertImage'; doc: number; bytes: ArrayBuffer; ext: string; width: number; height: number; description?: string }
@@ -298,6 +305,8 @@ export interface SelectionUpdate {
   pdfObject?: WirePickedObject | null;
   /** Set once when a redaction couldn't take out all it covers (a picture only partly under it stays whole). */
   pdfNotice?: 'partialRedaction';
+  /** Set once for fonts in PDF edits that the app has no equivalent of, so different ones were used. */
+  pdfFontNotice?: string[];
 }
 
 export type FromWorker =
@@ -322,6 +331,7 @@ export type FromWorker =
   /** Someone else's edit changed the document (it needs saving here too). */
   | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
+  | { type: 'linkAt'; request: number; url: string | null }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string };
 
 /** Font files, relative to the site root (the worker and the page both load from here). */

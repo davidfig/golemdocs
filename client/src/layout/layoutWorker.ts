@@ -52,7 +52,14 @@ async function welcomeText(): Promise<string> {
   const load = WELCOMES[`./welcome/${getLocale()}.md`] ?? WELCOMES['./welcome/en.md'];
   return load();
 }
-import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
+
+/** The privacy policy or terms (`legal/<page>/<locale>.md`), else English. Each is its own small chunk. */
+const LEGAL = import.meta.glob<string>('./legal/*/*.md', { query: '?raw', import: 'default' });
+async function legalText(page: LegalPage): Promise<string> {
+  const load = LEGAL[`./legal/${page}/${getLocale()}.md`] ?? LEGAL[`./legal/${page}/en.md`];
+  return load();
+}
+import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
@@ -182,6 +189,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       const { document, extensions } = await importDocument('md', new TextEncoder().encode(await welcomeText()));
       await addWelcomeIcon(document);
       return flowing(t('app.welcomeName'), document, 'docx', extensions);
+    }
+    case 'legal': {
+      const { document, extensions } = await importDocument('md', new TextEncoder().encode(await legalText(source.page)));
+      await addWelcomeIcon(document);
+      return flowing(t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName'), document, 'docx', extensions);
     }
   }
 }
@@ -453,6 +465,7 @@ class OpenDocument {
     const packed = new Float64Array(rects.length * 5);
     rects.forEach((r, i) => packed.set([this.pdfPages[r.page]?.id ?? -1, r.x, r.y, r.width, r.height], i * 5));
     const first = rects[0];
+    const fontNotice = annotator.fontNotice();
     const update: SelectionUpdate = {
       caret: null,
       rects: packed,
@@ -472,6 +485,7 @@ class OpenDocument {
       fields: annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
       pdfText: this.wirePicked(annotator),
       pdfObject: this.wireObject(annotator),
+      ...(fontNotice.length > 0 && { pdfFontNotice: fontNotice }),
       ...(annotator.partialNotice() && { pdfNotice: 'partialRedaction' as const }),
     };
     this.reveal = false;
@@ -1190,6 +1204,12 @@ class OpenDocument {
     return out;
   }
 
+  /** The address of the link under a point on a page (null when there is none, or the document isn't text). */
+  linkAt(pageId: number, x: number, y: number): string | null {
+    const page = this.session?.displayPages.find((p) => p.id === pageId);
+    return this.editor && page && !this.closed && !this.annotator ? this.editor.linkUnder(page, x, y) : null;
+  }
+
   /** Right click: selects the mistake under the point and reports it for the menu (nothing, if there is none). */
   private async spellAt(pageId: number, x: number, y: number): Promise<void> {
     const editor = this.editor;
@@ -1456,7 +1476,7 @@ async function media(doc: number, request: number, part: string): Promise<void> 
 /** A PDF reflowed into a flowing document, its markup annotations carried into the text. */
 async function reflow(original: Uint8Array, extensions: Extensions): Promise<WordDocument> {
   const { pdfToDocument, markupToDocument, PdfDocument, readAnnotations } = await import('../formats/handlers/pdf.ts');
-  const document = await pdfToDocument(original);
+  const document = await pdfToDocument(original, { edits: extensions.pdf?.edits });
   const pdf = PdfDocument.load(original);
   markupToDocument(document, pdf, extensions.pdf?.annotations ?? readAnnotations(pdf));
   return document;
@@ -1600,6 +1620,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     case 'media':
       void media(message.doc, message.request, message.part);
+      break;
+    case 'linkAt':
+      post({ type: 'linkAt', request: message.request, url: current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : null });
       break;
     case 'command':
       if (current?.doc === message.doc) {

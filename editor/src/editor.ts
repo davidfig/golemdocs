@@ -961,6 +961,17 @@ export class Editor {
     return found;
   }
 
+  /** The address of the link whose text is under the page point (x, y), or null when the point is not over one. */
+  linkUnder(page: PageLayout, x: number, y: number): string | null {
+    const line = page.lines.find((l) => y >= l.y && y <= l.y + l.height && x >= l.x && x <= l.x + l.width);
+    if (!line) return null;
+    // The character the point is over: the last caret stop at or before it (the final stop is the line's end, not a character).
+    let k = 0;
+    for (let i = 0; i < line.stops.length - 1; i++) if (line.column + line.stops[i] <= x) k = i;
+    const at = this.linkAt(line.paragraph, toModel(line.spans, line.start + k), false);
+    return at ? (at.link.url ?? (at.link.anchor ? `#${at.link.anchor}` : '')) : null;
+  }
+
   /** The link at the selection (its start, if it's a range), for the toolbar and the Insert Hyperlink dialog. */
   selectedLink(): { url: string; text: string } | null {
     const [start] = this.ordered();

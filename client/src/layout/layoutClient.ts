@@ -32,6 +32,7 @@ export class LayoutClient {
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
+  private readonly linkRequests = new Map<number, (url: string | null) => void>();
 
   constructor(
     /** New faces, before any page that uses them. Called for every document, stale or not. */
@@ -98,6 +99,15 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'media', doc: this.doc, request, part })).then((bytes) => new Uint8Array(bytes));
   }
 
+  /** The address of the link under a point on a page, or null when there is none. */
+  linkAt(page: number, x: number, y: number): Promise<string | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.linkRequests.set(request, resolve);
+      this.send({ type: 'linkAt', doc: this.doc, request, page, x, y });
+    });
+  }
+
   /** The whole open document as a .wdoc; `lens` records a different format to edit it as when next opened. */
   save(lens?: Format): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'save', doc: this.doc, request, lens })).then((bytes) => new Uint8Array(bytes));
@@ -121,6 +131,11 @@ export class LayoutClient {
   }
 
   private receive(message: FromWorker): void {
+    if (message.type === 'linkAt') {
+      this.linkRequests.get(message.request)?.(message.url);
+      this.linkRequests.delete(message.request);
+      return;
+    }
     if (message.type === 'media' || message.type === 'saved') {
       this.requests.get(message.request)?.(message.bytes, message.type === 'saved' ? message.error : undefined);
       this.requests.delete(message.request);

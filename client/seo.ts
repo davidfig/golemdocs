@@ -1,8 +1,13 @@
 import type { Plugin } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const WELCOME = path.resolve(import.meta.dirname, 'src/layout/welcome/en.md');
+/** The built-in legal documents, each also written as its own static page (`/privacy`, `/terms`) for crawlers. */
+const LEGAL_PAGES = [
+  { name: 'privacy', description: 'What Golem Docs collects, why, and what it does with it.' },
+  { name: 'terms', description: 'The terms for using Golem Docs.' },
+];
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -60,13 +65,43 @@ export function markdownToHtml(md: string): string {
 /**
  * Replaces `<!--welcome-->` in index.html with the welcome document as plain HTML. The editor draws
  * to a canvas, so without this a crawler (or a browser with scripts off) finds no text to read.
+ * After the build, the same page is written again as `privacy.html` and `terms.html` with the
+ * policy in place of the welcome text: the host serves them at `/privacy` and `/terms`, where the app
+ * opens the matching document.
  */
 export function welcomeContent(): Plugin {
+  let outDir = '';
   return {
     name: 'welcome-content',
+    configResolved: (config) => {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
     transformIndexHtml: {
       order: 'pre',
       handler: (html) => html.replace('<!--welcome-->', () => markdownToHtml(readFileSync(WELCOME, 'utf8'))),
+    },
+    closeBundle() {
+      const indexPath = path.join(outDir, 'index.html');
+      let index: string;
+      try {
+        index = readFileSync(indexPath, 'utf8');
+      } catch {
+        return; // not a full build
+      }
+      for (const { name, description } of LEGAL_PAGES) {
+        const md = readFileSync(path.resolve(import.meta.dirname, `src/layout/legal/${name}/en.md`), 'utf8');
+        const title = `${/^#\s+(.*)$/m.exec(md)?.[1] ?? name} | Golem Docs`;
+        const url = `https://golemdocs.com/${name}`;
+        const page = index
+          .replace(/<title>.*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`)
+          .replace(/(<meta name="description" content=")[^"]*"/, (_, head: string) => `${head}${escapeHtml(description)}"`)
+          .replace(/(<meta property="og:description" content=")[^"]*"/, (_, head: string) => `${head}${escapeHtml(description)}"`)
+          .replace(/(<meta property="og:title" content=")[^"]*"/, (_, head: string) => `${head}${escapeHtml(title)}"`)
+          .replace(/(<meta property="og:url" content=")[^"]*"/, (_, head: string) => `${head}${url}"`)
+          .replace(/(<link rel="canonical" href=")[^"]*"/, (_, head: string) => `${head}${url}"`)
+          .replace(/(<article id="seo">)[\s\S]*?(<\/article>)/, (_, open: string, close: string) => `${open}\n${markdownToHtml(md)}\n      <p><a href="/">Golem Docs</a></p>\n    ${close}`);
+        writeFileSync(path.join(outDir, `${name}.html`), page);
+      }
     },
   };
 }

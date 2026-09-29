@@ -417,6 +417,8 @@ export class Chrome {
       // The welcome document says what the app is and where its name comes from.
       { id: 'help.feedback', label: t('chrome.help.feedback'), run: () => this.sendFeedback() },
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
+      a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
+      a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
     );
   }
 
@@ -636,7 +638,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.about')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.about'), cmd('help.privacy'), cmd('help.terms')],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).

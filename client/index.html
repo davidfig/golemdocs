@@ -41,7 +41,8 @@
         if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
       } catch (e) {}
       // Shared links, rooms and specific documents are private or repeat the home page: keep them out of search.
-      if (location.search || location.pathname !== '/') {
+      // (The privacy policy and terms are pages of their own, see seo.ts.)
+      if (location.search || (location.pathname !== '/' && location.pathname !== '/privacy' && location.pathname !== '/terms')) {
         var robots = document.createElement('meta');
         robots.name = 'robots';
         robots.content = 'noindex';

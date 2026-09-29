@@ -5,6 +5,10 @@ export const app: Catalog = {
   // Sample and default document names
   'app.welcomeName': 'Добро пожаловать в Golem Docs',
   'app.fontsName': 'Шрифты',
+  'app.linkTip.ctrl': '{url}\nCtrl+щелчок, чтобы перейти по ссылке',
+  'app.linkTip.cmd': '{url}\nCmd+щелчок, чтобы перейти по ссылке',
+  'app.privacyName': 'Политика конфиденциальности',
+  'app.termsName': 'Условия использования',
   'app.warAndPeaceName': 'Война и мир',
   'app.sampleWelcome': '&Добро пожаловать в Golem Docs',
   'app.sampleFonts': '&Шрифты',

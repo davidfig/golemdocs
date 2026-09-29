@@ -1,7 +1,7 @@
 // Paragraph layout: turns one paragraph into lines of positioned glyphs for a given width.
 // Pure and independent of pagination, so edits can re-lay out just the changed paragraph.
 
-import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop } from '@word/docx';
+import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@word/docx';
 import { parseHexColor } from './display.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import type { ResolvedFont } from './fonts/fontSet.ts';
@@ -63,6 +63,8 @@ export interface FloatSpec {
   behind: boolean;
   h: { relativeFrom: string; offset?: number; align?: string };
   v: { relativeFrom: string; offset?: number; align?: string };
+  /** A text box's insets, points. */
+  inset: { left: number; top: number; right: number; bottom: number };
 }
 
 export interface ParagraphLayout {
@@ -153,10 +155,25 @@ class LineBuilder {
 }
 const builder = new LineBuilder();
 
+function findElement(root: XmlElement, name: string): XmlElement | undefined {
+  for (const c of root.children) {
+    if (typeof c === 'string') continue;
+    if (c.name === name) return c;
+    const found = findElement(c, name);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 function readFloat(d: Drawing): FloatSpec {
   const anchor = d.xml?.children.find((c) => typeof c !== 'string' && c.name === 'wp:anchor');
-  const spec: FloatSpec = { drawing: d, behind: false, h: { relativeFrom: 'column' }, v: { relativeFrom: 'paragraph' } };
+  const spec: FloatSpec = { drawing: d, behind: false, h: { relativeFrom: 'column' }, v: { relativeFrom: 'paragraph' }, inset: { left: 7.2, top: 3.6, right: 7.2, bottom: 3.6 } };
   if (!anchor || typeof anchor === 'string') return spec;
+  const body = d.textBox && findElement(anchor, 'wps:bodyPr');
+  if (body) {
+    const points = (name: string, fallback: number) => (body.attrs[name] === undefined ? fallback : Number(body.attrs[name]) / 12700);
+    spec.inset = { left: points('lIns', 7.2), top: points('tIns', 3.6), right: points('rIns', 7.2), bottom: points('bIns', 3.6) };
+  }
   spec.behind = anchor.attrs.behindDoc === '1' || anchor.attrs.behindDoc === 'true';
   for (const axis of ['H', 'V'] as const) {
     const pos = anchor.children.find((c) => typeof c !== 'string' && c.name === `wp:position${axis}`);

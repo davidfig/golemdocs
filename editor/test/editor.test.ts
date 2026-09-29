@@ -284,6 +284,20 @@ test('links: new text at a caret, retargeting a link, and removing one', skip, a
   assert.equal(editor.apply({ kind: 'setLink', url: '', text: 'x' }).edited, false);
 });
 
+test('linkUnder finds the link whose text a page point is over', skip, async () => {
+  const { session, editor, apply } = await setup(['Read: ']);
+  await apply({ kind: 'move', to: 'documentEnd' });
+  await apply({ kind: 'setLink', url: 'https://a.example', text: 'the manual' });
+  const page = session.displayPages[0];
+  const line = page.lines[0];
+  const at = (offset: number) => line.column + (line.stops[offset] + line.stops[offset + 1]) / 2; // the middle of a character
+  const y = line.y + line.height / 2;
+  assert.equal(editor.linkUnder(page, at(8), y), 'https://a.example', 'over "the manual"');
+  assert.equal(editor.linkUnder(page, at(1), y), null, 'over "Read:"');
+  assert.equal(editor.linkUnder(page, at(8), line.y + line.height + 40), null, 'below the line');
+  assert.equal(editor.linkUnder(page, line.x + line.width + 30, y), null, 'past the end of the line');
+});
+
 test('select puts the selection on a range of a paragraph', skip, async () => {
   const { editor, apply } = await setup(['One two', 'three four']);
   await apply({ kind: 'select', paragraph: 1, from: 6, to: 10 });

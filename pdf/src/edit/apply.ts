@@ -119,6 +119,8 @@ export interface ApplyResult {
   boxes: Map<string, Box>;
   /** Redactions that left something under them: pictures and shapes only partly inside. */
   partial: { id: string; images: number; shapes: number }[];
+  /** Fonts named in edits that the app has no file for, so a standard font stands in for them. */
+  substituted: Set<string>;
 }
 
 interface Snapshot {
@@ -133,7 +135,7 @@ const originals = new WeakMap<PdfDocument, Map<number, Snapshot>>();
  * had edits and no longer do are put back as they were.
  */
 export function applyEdits(doc: PdfDocument, edits: readonly PdfEdit[], options: ApplyOptions = {}): ApplyResult {
-  const result: ApplyResult = { skipped: [], boxes: new Map(), partial: [] };
+  const result: ApplyResult = { skipped: [], boxes: new Map(), partial: [], substituted: new Set() };
   let saved = originals.get(doc);
   if (!saved) originals.set(doc, (saved = new Map()));
   const byPage = new Map<number, PdfEdit[]>();
@@ -188,9 +190,9 @@ function applyToPage(doc: PdfDocument, page: PdfPage, edits: readonly PdfEdit[],
           result.skipped.push({ id: edit.id, reason: 'text not found' });
           continue;
         }
-        result.boxes.set(edit.id, editBlock(block, edit.text, edit.style, edit.move, () => chooseFont(doc, page, edit.style?.font ?? 'Helvetica', !!edit.style?.bold, !!edit.style?.italic, options), ops, patches, after, fallback, page.mediaBox[0] + width / 2, width));
+        result.boxes.set(edit.id, editBlock(block, edit.text, edit.style, edit.move, () => chooseFont(doc, page, edit.style?.font ?? 'Helvetica', !!edit.style?.bold, !!edit.style?.italic, options, result.substituted), ops, patches, after, fallback, page.mediaBox[0] + width / 2, width));
       } else if (edit.kind === 'textbox') {
-        result.boxes.set(edit.id, addTextBox(doc, page, edit, added, fallback, options));
+        result.boxes.set(edit.id, addTextBox(doc, page, edit, added, fallback, options, result.substituted));
       } else if (edit.kind === 'object') {
         const box = editObject(edit, scan.objects, patches, before, after);
         if (box) result.boxes.set(edit.id, box);
@@ -494,8 +496,8 @@ function imageOps(doc: PdfDocument, page: PdfPage, edit: ImageEdit): Operation[]
 
 // --- new text ------------------------------------------------------------------------------------
 
-function addTextBox(doc: PdfDocument, page: PdfPage, edit: TextBoxEdit, added: Operation[], fallback: Fallback, options: ApplyOptions): Box {
-  const font = chooseFont(doc, page, edit.font, !!edit.bold, !!edit.italic, options);
+function addTextBox(doc: PdfDocument, page: PdfPage, edit: TextBoxEdit, added: Operation[], fallback: Fallback, options: ApplyOptions, substituted: Set<string>): Box {
+  const font = chooseFont(doc, page, edit.font, !!edit.bold, !!edit.italic, options, substituted);
   const style: Style = { font: font.use, size: edit.size, color: edit.color, scale: 1, rise: 0, charSpace: 0, wordSpace: 0, k: 1 };
   const cells = styledCells(edit.text, style);
   const placed = place(cells, fallback);

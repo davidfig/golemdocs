@@ -35,3 +35,7 @@ There is no Save button. Every change is kept in this browser a moment after you
 In Jewish tradition, a golem is a figure shaped from clay and brought to life by a word. In the best-known telling, Rabbi Judah Loew of Prague shapes one from the mud of the Vltava river and writes *emet*, the Hebrew word for "truth," on its forehead. Erase the first letter and the word becomes *met*, "dead," and the golem returns to clay.
 
 A document is much the same: a shapeless thing that words bring to life. Golem Docs lets yours take whatever form you need, Word or Markdown or PDF or a web page, while what you wrote stays true underneath.
+
+## Privacy and terms
+
+Read the [Privacy Policy](/privacy) and the [Terms of Service](/terms), both in the Help menu.

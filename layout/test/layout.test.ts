@@ -330,3 +330,30 @@ test('an autofit table wider than its column narrows to it; a fixed one keeps it
   assert.ok(Math.abs((await widthOf(make(), 2)) - (72 + 108)) < 6, 'shrunk to the 216pt column');
   assert.ok((await widthOf(make('fixed'), 2)) > 72 + 200, 'a fixed table is left as it was');
 });
+
+test('a floating text box is drawn at its place on the page, apart from the text flow', skip, async () => {
+  const { el } = await import('@word/docx');
+  const doc = await WordDocument.create();
+  const cx = String(200 * 12700);
+  const cy = String(40 * 12700);
+  const anchor = el('wp:anchor', { simplePos: 0, relativeHeight: 1, behindDoc: 0, allowOverlap: 1 }, [
+    el('wp:simplePos', { x: 0, y: 0 }),
+    el('wp:positionH', { relativeFrom: 'page' }, [el('wp:posOffset', {}, [String(100 * 12700)])]),
+    el('wp:positionV', { relativeFrom: 'page' }, [el('wp:posOffset', {}, [String(300 * 12700)])]),
+    el('wp:extent', { cx, cy }),
+    el('wp:wrapNone'),
+    el('wp:docPr', { id: 1, name: 'Box' }),
+    el('a:graphic', {}, [el('a:graphicData', {}, [el('wps:wsp', {}, [el('wps:txbx', {}, [el('w:txbxContent')]), el('wps:bodyPr', { lIns: 0, tIns: 0, rIns: 0, bIns: 0 })])])]),
+  ]);
+  const drawing = { kind: 'drawing' as const, inline: false, width: 200 * 12700, height: 40 * 12700, xml: el('w:drawing', {}, [anchor]), textBox: [paragraph([run('Boxed')])] };
+  doc.body = [paragraph([run('Body text'), { kind: 'run', properties: {}, content: [drawing], attrs: {} }])];
+  const layout = await layoutDocument(doc, fonts!);
+  const page = layout.pages[0];
+  // Only the body's line is recorded; the box's glyphs are on the page too, 300pt down and 100pt across.
+  assert.equal(page.lines.length, 1);
+  let boxed = 0;
+  for (const list of page.glyphs.values()) {
+    for (let i = 0; i < list.count; i++) if (list.y(i) > 300 && list.y(i) < 340 && list.x(i) >= 100 && list.x(i) < 300) boxed++;
+  }
+  assert.equal(boxed, 5);
+});

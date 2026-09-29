@@ -161,10 +161,12 @@ export class Dashboard {
     this.observer = null;
     for (const url of this.objectUrls) URL.revokeObjectURL(url);
     this.objectUrls = [];
+    this.loaded.clear();
   }
 
   private render(): void {
-    this.releaseThumbnails();
+    this.observer?.disconnect();
+    this.observer = null;
     this.confirming = null;
     const shown = this.entries.filter((e) => matchesSearch(e, this.search.value));
 
@@ -208,6 +210,7 @@ export class Dashboard {
   private sharedCard(doc: CloudDocument): HTMLElement {
     const thumb = h('div', { class: 'wm-thumb' }, h('div', { class: 'wm-thumb-empty', attrs: { 'aria-hidden': 'true' } }));
     this.sharedThumbs.set(thumb, doc);
+    this.reuseThumbnail(thumb, `shared:${doc.id}`, thumbnailUrl(doc) ?? '');
     const by = doc.owner?.name ?? doc.owner?.email;
     const meta = [by ? t('panels.dashboard.from', { name: by }) : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', text: doc.name, title: doc.name }), h('span', { class: 'wm-card-meta', text: meta }));
@@ -232,6 +235,7 @@ export class Dashboard {
   private card(entry: LibraryEntry): HTMLElement {
     const thumb = h('div', { class: 'wm-thumb' }, h('div', { class: 'wm-thumb-empty', attrs: { 'aria-hidden': 'true' } }));
     this.entryFor.set(thumb, entry);
+    this.reuseThumbnail(thumb, entry.key, this.thumbSignature(entry));
 
     const meta = [relativeTime(entry.updatedAt), formatSize(entry.size)].join(' · ');
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', text: entry.name, title: entry.name }), h('span', { class: 'wm-card-meta', text: meta }));
@@ -289,8 +293,30 @@ export class Dashboard {
   private readonly entryFor = new WeakMap<HTMLElement, LibraryEntry>();
   private readonly sharedThumbs = new WeakMap<HTMLElement, CloudDocument>();
 
+  /** Thumbnails already on screen, so a re-render (the cloud catalogue arriving) doesn't reload them. */
+  private readonly loaded = new Map<string, { signature: string; img: HTMLImageElement }>();
+
+  /** What decides which image a card shows; when it is unchanged the loaded image is still right. */
+  private thumbSignature(entry: LibraryEntry): string {
+    const cloudUrl = entry.cloud ? thumbnailUrl(entry.cloud) : null;
+    const preferCloud = !entry.local || entry.state === 'cloud-ahead';
+    return `${preferCloud ? 'cloud' : 'local'}|${cloudUrl}|${entry.local?.id}|${entry.local?.updatedAt}`;
+  }
+
+  /** Puts back the image a previous render already loaded for this card, if it is still current. */
+  private reuseThumbnail(thumb: HTMLElement, key: string, signature: string): void {
+    thumb.dataset.thumbKey = key;
+    thumb.dataset.thumbSignature = signature;
+    const cached = this.loaded.get(key);
+    if (cached?.signature === signature) {
+      thumb.replaceChildren(cached.img);
+      thumb.dataset.thumbDone = '1';
+    }
+  }
+
   /** Fills a card's thumbnail: this device's when it has the current one, else the cloud's. */
   private async loadThumbnail(thumb: HTMLElement): Promise<void> {
+    if (thumb.dataset.thumbDone) return;
     const shared = this.sharedThumbs.get(thumb);
     if (shared) return this.showThumbnail(thumb, thumbnailUrl(shared));
     const entry = this.entryFor.get(thumb);
@@ -314,7 +340,16 @@ export class Dashboard {
   private showThumbnail(thumb: HTMLElement, src: string | null): void {
     if (!src) return;
     const img = h('img', { attrs: { alt: '', decoding: 'async', draggable: 'false' } });
-    img.addEventListener('load', () => thumb.replaceChildren(img), { once: true });
+    img.addEventListener(
+      'load',
+      () => {
+        thumb.replaceChildren(img);
+        thumb.dataset.thumbDone = '1';
+        const { thumbKey, thumbSignature } = thumb.dataset;
+        if (thumbKey && thumbSignature !== undefined) this.loaded.set(thumbKey, { signature: thumbSignature, img });
+      },
+      { once: true },
+    );
     img.src = src; // on failure the placeholder stays
   }
 }

@@ -5,6 +5,10 @@ export const app: Partial<Messages> = {
   // Sample and default document names
   'app.welcomeName': '歡迎使用 Golem Docs',
   'app.fontsName': '字型',
+  'app.linkTip.ctrl': '{url}\n按住 Ctrl 並按一下可開啟連結',
+  'app.linkTip.cmd': '{url}\n按住 Cmd 並按一下可開啟連結',
+  'app.privacyName': '隱私權政策',
+  'app.termsName': '服務條款',
   'app.warAndPeaceName': '戰爭與和平',
   'app.sampleWelcome': '歡迎使用 Golem Docs(&E)',
   'app.sampleFonts': '字型(&F)',

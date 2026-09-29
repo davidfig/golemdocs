@@ -5,6 +5,10 @@ export const app: Partial<Messages> = {
   // Sample and default document names
   'app.welcomeName': 'Golem Docs へようこそ',
   'app.fontsName': 'フォント',
+  'app.linkTip.ctrl': '{url}\nCtrl キーを押しながらクリックしてリンク先を表示',
+  'app.linkTip.cmd': '{url}\nCmd キーを押しながらクリックしてリンク先を表示',
+  'app.privacyName': 'プライバシー ポリシー',
+  'app.termsName': '利用規約',
   'app.warAndPeaceName': '戦争と平和',
   'app.sampleWelcome': 'Golem Docs へようこそ(&E)',
   'app.sampleFonts': 'フォント(&F)',

@@ -131,8 +131,9 @@ const handler: ExportedHandler = {
       if (roomMatch) {
         const docId = roomMatch[1]!;
         if (!ID.test(docId) || request.method !== 'GET') throw new HttpError(404, 'not found');
-        // Cookies ride along on cross-site WebSocket handshakes, so the origin is checked here.
-        if (request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
+        // Cookies ride along on cross-site WebSocket handshakes, so their origin is checked here
+        // (a same-origin GET carries none, and the document is readable like any other GET).
+        if (!roomMatch[2] && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
         if (!env.ROOMS || env.ENVIRONMENT === 'local') throw new HttpError(503, 'multiplayer is off in local-only mode (run pnpm dev without --local)');
         const access = await resolveAccess(env, userId, docId);
         if (!access) throw new HttpError(404, 'not found');

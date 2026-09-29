@@ -5,7 +5,7 @@ import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
-import { clearAllSaved, getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
+import { clearAllSaved, getSaved, getThumbnail, listSaved, markSynced, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
@@ -15,7 +15,7 @@ import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
-import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
+import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
 import { ImageRenderer } from './shapes/imageRenderer.ts';
 import { AtlasLibrary } from './text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
@@ -100,12 +100,12 @@ function setStatus(text: string): void {
   requestRender();
 }
 
-function open(source: DocumentSource, options: { grid?: boolean; localId?: string } = {}): void {
+function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string } = {}): void {
   const start = performance.now();
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? 'Welcome to Golem Docs' : 'Fonts';
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
-  current = { localId: options.localId ?? null, unsavedSince: 0 };
+  current = { localId: options.localId ?? null, unsavedSince: 0, room: null };
   syncError = null;
   showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
@@ -165,6 +165,26 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     selection(update) {
       applySelection(update);
     },
+    roomState(state) {
+      const doc = current;
+      const was = doc.room;
+      doc.room = state;
+      roomStatus = describeRoom(state);
+      if (state.mode !== 'solo' && doc.localId && cloudSyncId === doc.localId) {
+        // The server saves while several people are editing: an upload from here would be refused.
+        clearTimeout(cloudSyncTimer);
+        cloudSyncId = null;
+      }
+      // Back to saving from here: the copy in this browser goes to the cloud again, as it now is.
+      if (was && was.mode !== 'solo' && state.mode === 'solo') documentEdited();
+      if (state.mode === 'offline') notify('The connection to the shared document was lost. Reload to rejoin; what is on screen is kept in this browser.');
+      showSync();
+      requestRender();
+    },
+    remoteEdit() {
+      // Other people's edits are part of this document too, so they're kept in this browser.
+      documentEdited();
+    },
     room(people, version, unconfirmed) {
       roomStatus = `room ${new URLSearchParams(location.search).get('room')} · ${people} ${people === 1 ? 'person' : 'people'} · v${version}${unconfirmed ? ` · ${unconfirmed} unsent` : ''}`;
       requestRender();
@@ -173,7 +193,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       loaded = true;
       setStatus(`${name}: ${message}`);
     },
-  }, roomOptions());
+  }, roomOptions() ?? networkRoom(options.cloudId));
   focusInput();
 }
 
@@ -189,7 +209,23 @@ function roomOptions(): RoomOptions | undefined {
   const name = new URLSearchParams(location.search).get('room');
   if (!name || typeof SharedWorker === 'undefined') return undefined;
   const server = new SharedWorker(new URL('./collab/devServer.ts', import.meta.url), { type: 'module', name: 'word-collab' });
-  return { name, port: server.port, user: userName, color: userColor };
+  return { kind: 'dev', name, port: server.port, user: userName, color: userColor };
+}
+
+/** The multiplayer server's room for a cloud document, when signed in (else the document is edited on its own). */
+function networkRoom(cloudId: string | undefined): RoomOptions | undefined {
+  if (!cloudId || !cloudUser) return undefined;
+  return { kind: 'network', docId: cloudId, user: cloudUser.name ?? cloudUser.email ?? userName, color: userColor };
+}
+
+/** What the status line says about the room. */
+function describeRoom(state: RoomState): string {
+  if (state.mode === 'offline') return 'connection lost';
+  const others = state.people.length - 1;
+  const parts: string[] = [];
+  if (state.role === 'viewer') parts.push('view only');
+  if (others > 0) parts.push(`${state.people.length} people here`);
+  return parts.join(' · ');
 }
 
 /** Puts the document, as it is now, in a new room, and opens a second window on it. */
@@ -299,10 +335,12 @@ interface OpenDocument {
   localId: string | null;
   /** When its oldest unsaved edit was made (performance.now()), or 0 when everything is saved. */
   unsavedSince: number;
+  /** Where it stands in the multiplayer server's room (cloud documents), once joined. */
+  room: RoomState | null;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0 };
+let current: OpenDocument = { localId: null, unsavedSince: 0, room: null };
 let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
@@ -366,6 +404,7 @@ function syncStatus(): SyncStatus {
   const info = savedDocs.find((d) => d.id === current.localId);
   let document: DocumentSync;
   if (!signedIn || !info?.cloudId) document = 'local';
+  else if (current.room?.mode === 'shared') document = current.room.unconfirmed ? 'pending' : 'synced';
   else if (uploading === info.id) document = 'syncing';
   else if (syncError) document = 'failed';
   else if (current.unsavedSince || info.updatedAt > (info.cloudSyncedAt ?? 0)) document = 'pending';
@@ -469,7 +508,15 @@ function saveInBrowser(): Promise<string | null> {
       // A new document changes what's listed; later saves only its order.
       if (created) void refreshLibrary();
       else savedDocs = await listSaved().catch(() => savedDocs);
-      if (info.cloudId && cloudUser) scheduleCloudSync(info.id);
+      if (info.cloudId && cloudUser) {
+        if (doc.room && doc.room.mode !== 'solo') {
+          // The server keeps the cloud copy while several people edit. What is saved here is
+          // that same document, so it counts as in step with the cloud (which will have moved
+          // on, so opening it later fetches the cloud's) unless some edits didn't reach the server.
+          if (doc.room.mode === 'shared' && doc.room.unconfirmed === 0) await markSynced(info.id, info.cloudId);
+          savedDocs = await listSaved().catch(() => savedDocs);
+        } else scheduleCloudSync(info.id);
+      }
       showSync();
       return info.id;
     } catch (e) {
@@ -575,7 +622,8 @@ async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
     pendingNotice = 'That document is no longer saved in this browser';
     return;
   }
-  open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id });
+  if (saved.info.cloudId && !cloudUser) await refreshLibrary(); // whether to join the room depends on who is signed in
+  open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id, cloudId: saved.info.cloudId });
   if (thenSaveToCloud) await sendToCloud(id);
 }
 
@@ -586,7 +634,7 @@ async function openCloud(id: string): Promise<void> {
     const name = cloud?.name ?? 'Document.docx';
     setStatus('Opening from the cloud…');
     const { info, bytes, usedBrowserCopy } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt });
-    open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id });
+    open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id, cloudId: info.cloudId });
     rememberInUrl(`local:${info.id}`);
     if (usedBrowserCopy) pendingNotice = 'Opened your browser copy: it has changes the cloud doesn’t. Use Save to Cloud to sync them.';
     void refreshLibrary();

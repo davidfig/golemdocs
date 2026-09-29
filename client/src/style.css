@@ -62,8 +62,9 @@ body {
 
 .debug-panel {
   padding: 3px 8px 4px;
+  border: 1px solid rgb(255 255 255 / 0.2);
   border-radius: 4px;
-  background: rgb(0 0 0 / 0.7);
+  background: rgb(0 0 0 / 0.88);
   color: #fff;
   font: 11px/1.35 ui-monospace, monospace;
 }
@@ -106,20 +107,25 @@ body {
   text-align: right;
 }
 
+/* The document's panels sit in the same row as the render panel. */
+#statusPanels {
+  display: contents;
+}
+
 /* Status text is long: one pair per row, wrapped, rather than stretching across the window. */
-#statusInfo {
+.debug-list {
   max-width: 340px;
 }
 
-#statusInfo .debug-stats {
+.debug-list .debug-stats {
   grid-template-columns: auto minmax(0, 1fr);
 }
 
-#statusInfo .debug-stats > :nth-child(odd) {
+.debug-list .debug-stats > :nth-child(odd) {
   color: rgb(255 255 255 / 0.55);
 }
 
-#statusInfo .debug-stats > :nth-child(even) {
+.debug-list .debug-stats > :nth-child(even) {
   margin-right: 0;
   text-align: left;
   overflow-wrap: anywhere;

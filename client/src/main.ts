@@ -18,9 +18,9 @@ import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
 import { GpuPage } from './view/gpuPage.ts';
 import { PageRenderer } from './view/pageRenderer.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
-import { conversionIsLossy, isFormat } from './formats/convert.ts';
+import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
-import { FORMATS, mountChrome, type DocumentKind, type FormatState } from './ui/index.ts';
+import { FORMATS, kindFromName, mountChrome, type DocumentKind, type FormatState } from './ui/index.ts';
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -75,8 +75,15 @@ let cameraPlaced = false;
 /** The user has scrolled or zoomed since opening (streaming then stops moving the camera). */
 let userMoved = false;
 
-/** The format a source is opened as (everything but PDF, Markdown and text is a Word document). */
+/**
+ * The format a source is opened as (everything but PDF, Markdown and text is a Word document).
+ * A .wdoc says for itself once the worker has read it; until then, its name's extension.
+ */
 function kindOfSource(source: DocumentSource): DocumentKind {
+  if (source.kind === 'wdoc') {
+    const kind = kindFromName(source.name);
+    return isFormat(kind) ? kind : 'docx';
+  }
   return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' ? source.kind : 'docx';
 }
 
@@ -111,8 +118,9 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   setStatus(`Loading ${name}…`);
 
   worker.open(source, {
-    opened(docName) {
+    opened(docName, format) {
       name = documentName = docName;
+      documentKind = format;
       setStatus(`${name}: laying out…`);
     },
     layout(update) {
@@ -176,7 +184,7 @@ async function collaborate(): Promise<void> {
   if (!params.get('room')) {
     let bytes: Uint8Array;
     try {
-      bytes = await worker.save();
+      bytes = await worker.convert('docx');
     } catch (e) {
       setStatus(`Can't collaborate: ${(e as Error).message}`);
       return;
@@ -460,10 +468,10 @@ async function openCloud(id: string): Promise<void> {
   }
 }
 
-/** Downloads a copy of the document as a file, in its own format. */
+/** Downloads a copy of the document as a file of the format it is edited as (an export: only what that format holds). */
 async function download(): Promise<void> {
   try {
-    const bytes = await worker.save();
+    const bytes = await worker.convert(documentKind as Format);
     const name = fileName();
     const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS[documentKind].mime }));
     const link = Object.assign(document.createElement('a'), { href: url, download: name });
@@ -475,54 +483,68 @@ async function download(): Promise<void> {
   }
 }
 
-/** What a switch to each format leaves out, for the notice shown afterwards. */
-const LOSSES: Record<string, string> = {
+/** What exporting to each format leaves out, for the notice shown after switching to it. */
+const LOSSES: Partial<Record<DocumentKind, string>> = {
   md: 'fonts, colors, sizes, alignment and anything else Markdown can’t express',
   txt: 'all formatting, tables and images',
-  pdf: 'editing (a PDF is a fixed layout)',
-  docx: 'the PDF’s exact page layout, which is rebuilt as flowing text',
 };
 
+/** Said once the document has opened in its new format. */
+function switchedNotice(to: Format): string {
+  const { label, extensions } = FORMATS[to];
+  if (to === 'pdf') return 'Now shown as PDF, which can’t be edited. Switch back to edit it; nothing was lost.';
+  const lost = LOSSES[to];
+  if (!lost) return `Now editing as ${label}. Nothing was lost.`;
+  return `Now editing as ${label}. The document keeps everything else; only downloading a ${extensions[0]} file leaves out ${lost}.`;
+}
+
 /**
- * Converts the open document to another format (File ▸ Convert To, and the selector in the
- * chrome). The original stays as it is, saved in this browser (and in the cloud when it's
- * there), and the converted copy is saved beside it as a new document, then opened. The copy
- * holds exactly what its format can: Markdown keeps headings, emphasis, lists and tables and
- * drops fonts and colors; text keeps only the words; PDF shows fixed pages; Word from a PDF is
- * reflowed text.
+ * Switches the format the document is edited as (File ▸ Convert To, and the selector in the
+ * chrome). It is the same document, saved in the app's own format (.wdoc), which keeps
+ * everything it holds whatever it is edited as: switching Word → Markdown → Word gives back the
+ * fonts and colors, and a Markdown document keeps its look as Word. Only a download (an export)
+ * leaves out what its format can't express. Editing a PDF as anything else reflows its text;
+ * the original pages are kept, and shown again as PDF while the text is unedited.
  */
 async function convertTo(to: DocumentKind): Promise<void> {
   const from = documentKind;
   if (to === from) return;
   if (!isFormat(to) || !isFormat(from)) throw new Error(`${FORMATS[isFormat(to) ? from : to].label} isn’t supported yet`);
   if (new URLSearchParams(location.search).get('room')) {
-    setStatus('Leave the collaboration room to convert the document');
+    setStatus('Leave the collaboration room to switch formats');
     return;
   }
-  setStatus(`Converting to ${FORMATS[to].label}…`);
-  // A sample or new document that was never edited has no original worth keeping.
-  const keepOriginal = current.unsavedSince > 0 || current.localId !== null;
-  const originalId = keepOriginal ? await saveNow() : null;
-  if (keepOriginal && !originalId) throw new Error('the original couldn’t be saved first, so nothing was converted');
-  const original = originalId ? (await listSaved().catch(() => [])).find((d) => d.id === originalId) : undefined;
-  const bytes = await worker.convert(to);
+  setStatus(`Switching to ${FORMATS[to].label}…`);
+  // Saved now, as the format to edit it as, in place of the document's last save.
+  clearTimeout(autosaveTimer);
+  const doc = current;
+  doc.unsavedSince = 0;
   const name = stem(documentName) + FORMATS[to].extensions[0];
-  const source = sourceFromFile(name, bytes.slice().buffer);
+  const bytes = worker.save(to);
+  bytes.catch(() => {});
+  const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes }));
+  saving = done.catch(() => null);
+  let info: SavedInfo;
+  try {
+    info = await done;
+  } catch (e) {
+    doc.unsavedSince = performance.now();
+    throw e;
+  }
+  doc.localId = info.id;
+  const source = sourceFromFile(name, (await bytes).slice().buffer);
   if (!source) throw new Error(`can’t open ${FORMATS[to].label}`);
-  const info = await saveSaved({ name, bytes });
   history.replaceState(null, '', location.pathname);
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName, kind: documentKind });
-  const lost = conversionIsLossy(from, to) ? ` Left out: ${LOSSES[to]}.` : '';
-  const kept = original ? ` The ${FORMATS[from].label} original is still saved next to it.` : '';
-  pendingNotice = `Converted to ${FORMATS[to].label} as “${info.name}”.${lost}${kept}`;
+  pendingNotice = switchedNotice(to);
   void refreshLibrary();
-  // An original in the cloud gets its converted copy there too.
-  if (original?.cloudId) {
+  // A document in the cloud gets the change there too.
+  if (info.cloudId) {
     uploadToCloud(info.id).then(
       () => void refreshLibrary(),
-      (e: unknown) => notify(`The ${FORMATS[to].label} copy is only in this browser (${(e as Error).message}). Use Save to Cloud to add it.`),
+      (e: unknown) => notify(`The change is only in this browser (${(e as Error).message}). Use Save to Cloud to sync it.`),
     );
   }
 }

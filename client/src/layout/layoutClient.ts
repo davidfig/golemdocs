@@ -4,7 +4,8 @@ import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptio
 
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
-  opened(name: string): void;
+  /** `format`: what the document is edited as. */
+  opened(name: string, format: Format): void;
   layout(update: LayoutUpdate): void;
   /** The first full layout finished. */
   done(pages: number, timings: LayoutTimings): void;
@@ -53,12 +54,12 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'media', doc: this.doc, request, part })).then((bytes) => new Uint8Array(bytes));
   }
 
-  /** The open document as a file in its own format (.docx, .pdf, .md or .txt). */
-  save(): Promise<Uint8Array> {
-    return this.request((request) => ({ type: 'save', doc: this.doc, request })).then((bytes) => new Uint8Array(bytes));
+  /** The whole open document as a .wdoc; `lens` records a different format to edit it as when next opened. */
+  save(lens?: Format): Promise<Uint8Array> {
+    return this.request((request) => ({ type: 'save', doc: this.doc, request, lens })).then((bytes) => new Uint8Array(bytes));
   }
 
-  /** The open document as a file in another format; the open document doesn't change. */
+  /** The open document exported as a file of a format (lossy); the open document doesn't change. */
   convert(to: Format): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'convert', doc: this.doc, request, to })).then((bytes) => new Uint8Array(bytes));
   }
@@ -86,7 +87,7 @@ export class LayoutClient {
     if (message.doc !== this.doc || !this.listener) return;
     switch (message.type) {
       case 'opened':
-        this.listener.opened(message.name);
+        this.listener.opened(message.name, message.format);
         break;
       case 'layout':
         this.listener.layout(message);

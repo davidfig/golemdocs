@@ -15,8 +15,10 @@ import {
   PageLayout,
   type FaceDescriptor,
 } from '@word/layout';
-import { convertContent, readDocument, writeDocument, type Format, type OpenContent } from '../formats/convert.ts';
+import { exportDocument, importDocument, type Format } from '../formats/convert.ts';
+import { pdfToDocument } from '../formats/pdfImport.ts';
 import { openPdfView, type PdfView } from '../formats/pdfPages.ts';
+import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
 import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
@@ -51,28 +53,66 @@ async function fetchOk(url: string): Promise<Response> {
   return response;
 }
 
-/** The format a source is edited as. */
-function formatOf(source: DocumentSource): Format {
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' ? source.kind : 'docx';
+/** A document as read from its source: the universal document (see ../formats/wdoc.ts). */
+interface Loaded {
+  name: string;
+  /** The flowing document; null for a PDF that hasn't been reflowed. */
+  document: WordDocument | null;
+  extensions: Extensions;
+  /** The original PDF, when the document came from one. */
+  original: Uint8Array | null;
+  /** What it is edited as, and what it was first imported from. */
+  lens: Format;
+  origin: Format;
+  /** The original PDF's pages still show the document's text. */
+  pagesCurrent: boolean;
 }
 
-async function read(source: Exclude<DocumentSource, { kind: 'pdf' }>, fonts: FontSet): Promise<{ name: string; document: WordDocument }> {
+async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
+  const flowing = (name: string, document: WordDocument, lens: Format = 'docx', extensions: Extensions = {}): Loaded => ({
+    name,
+    document,
+    extensions,
+    original: null,
+    lens,
+    origin: lens,
+    pagesCurrent: false,
+  });
   switch (source.kind) {
+    case 'pdf':
+      return { name: source.name, document: null, extensions: {}, original: new Uint8Array(source.bytes), lens: 'pdf', origin: 'pdf', pagesCurrent: true };
     case 'md':
-    case 'txt':
-      return { name: source.name, document: await readDocument(source.kind, new Uint8Array(source.bytes)) };
+    case 'txt': {
+      const { document, extensions } = await importDocument(source.kind, new Uint8Array(source.bytes));
+      return flowing(source.name, document, source.kind, extensions);
+    }
+    case 'wdoc': {
+      const wdoc = await readWdoc(new Uint8Array(source.bytes));
+      return {
+        name: source.name,
+        document: wdoc.document ? await WordDocument.read(wdoc.document) : null,
+        extensions: wdoc.extensions,
+        original: wdoc.original,
+        lens: wdoc.manifest.lens,
+        origin: wdoc.manifest.origin,
+        pagesCurrent: wdoc.manifest.pagesCurrent,
+      };
+    }
     case 'docx':
-      return { name: source.name, document: await WordDocument.read(new Uint8Array(source.bytes)) };
+      return flowing(source.name, await WordDocument.read(new Uint8Array(source.bytes)));
     case 'docx-url':
-      return { name: source.name, document: await WordDocument.read(new Uint8Array(await (await fetchOk(source.url)).arrayBuffer())) };
+      return flowing(source.name, await WordDocument.read(new Uint8Array(await (await fetchOk(source.url)).arrayBuffer())));
     case 'text-url':
-      return { name: source.name, document: await plainTextDocument(await (await fetchOk(source.url)).text()) };
+      return flowing(source.name, await plainTextDocument(await (await fetchOk(source.url)).text()));
     case 'blank':
-      return { name: source.name, document: await WordDocument.create() };
+      return flowing(source.name, await WordDocument.create());
     case 'fonts':
-      return { name: 'Fonts', document: await fontShowcase(fonts) };
+      return flowing('Fonts', await fontShowcase(fonts));
   }
 }
+
+/** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -84,9 +124,19 @@ interface Person {
 }
 
 class OpenDocument {
-  /** What the document is edited as (a PDF isn't edited: `pdf` is set and there's no editor). */
+  /** What the document is edited as. As PDF it is shown but not edited. */
   format: Format = 'docx';
-  /** A PDF's original bytes and its lazily laid-out pages. */
+  /** What it was first imported from (kept in the .wdoc). */
+  origin: Format = 'docx';
+  /** What only one format can express (see ../formats/wdoc.ts). */
+  extensions: Extensions = {};
+  /** The original PDF, when the document came from one. */
+  original: Uint8Array | null = null;
+  /** The original PDF's pages showed the document's text when it was opened. */
+  pagesCurrent = false;
+  /** The text was edited since it was opened. */
+  edited = false;
+  /** When showing a PDF's own pages: its lazily laid-out pages. */
   pdf: { view: PdfView; bytes: Uint8Array } | null = null;
   /** The PDF's pages laid out so far, in order. */
   private pdfPages: PageLayout[] = [];
@@ -347,6 +397,8 @@ class OpenDocument {
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
     let edited: boolean;
+    // Shown as PDF: selecting and moving only.
+    if (this.format === 'pdf' && !VIEW_COMMANDS.has(wire.kind)) return;
     if (wire.kind === 'undo') edited = editor.undo().edited;
     else if (wire.kind === 'redo') edited = editor.redo().edited;
     else {
@@ -360,6 +412,7 @@ class OpenDocument {
     }
     // Edits send the selection once the changed pages are laid out.
     if (edited) {
+      this.edited = true;
       void this.pump();
       this.status();
     } else this.sendSelection();
@@ -376,22 +429,31 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
   try {
     const fonts = await fontsReady;
     const t0 = performance.now();
-    if (source.kind === 'pdf') {
-      const view = await openPdfView(new Uint8Array(source.bytes), fonts);
+    const loaded = await load(source, fonts);
+    if (entry.closed) return;
+    entry.format = loaded.lens;
+    entry.origin = loaded.origin;
+    entry.extensions = loaded.extensions;
+    entry.original = loaded.original;
+    entry.pagesCurrent = loaded.pagesCurrent;
+    const name = loaded.name;
+    // Shown as PDF with the original's pages still current (or never reflowed): its own pages.
+    if (loaded.lens === 'pdf' && loaded.original && (loaded.pagesCurrent || !loaded.document)) {
+      const view = await openPdfView(loaded.original, fonts);
       const readMs = performance.now() - t0;
       if (entry.closed) return;
-      entry.format = 'pdf';
-      entry.pdf = { view, bytes: new Uint8Array(source.bytes) };
-      post({ type: 'opened', doc, name: source.name });
+      entry.document = loaded.document; // kept as it is, for saving
+      entry.pdf = { view, bytes: loaded.original };
+      post({ type: 'opened', doc, name, format: 'pdf' });
       const bodyMs = await entry.pumpPdf();
       if (entry.closed) return;
       post({ type: 'done', doc, pages: view.pageCount, timings: { read: readMs, fonts: 0, body: bodyMs, headers: 0 } });
       return;
     }
-    entry.format = formatOf(source);
+    // A PDF edited as anything else is reflowed into a flowing document the first time.
+    let document = loaded.document ?? (await pdfToDocument(loaded.original!));
     // Rooms share a .docx, so only a Word document can be in one.
     const room = entry.format === 'docx' ? requestedRoom : undefined;
-    let { name, document } = await read(source, fonts);
     const readMs = performance.now() - t0;
     if (entry.closed) return;
     const clientId = crypto.randomUUID().slice(0, 8);
@@ -416,7 +478,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
     entry.ready();
-    post({ type: 'opened', doc, name });
+    post({ type: 'opened', doc, name, format: entry.format });
     await entry.pump();
     if (entry.closed) return;
     post({ type: 'done', doc, pages: session.pages.length, timings: { read: readMs, ...session.timings } });
@@ -438,18 +500,35 @@ async function media(doc: number, request: number, part: string): Promise<void> 
   post({ type: 'media', request, bytes }, bytes ? [bytes] : []);
 }
 
-/** The open document as a file of its own format (`to` unset) or another one. */
-async function save(doc: number, request: number, to?: Format): Promise<void> {
+/** The whole open document as a .wdoc, to be edited as `lens` (default: as now) when next opened. */
+async function save(doc: number, request: number, lens?: Format): Promise<void> {
   try {
     const open = current;
-    if (open?.doc !== doc) throw new Error('no document');
-    let content: OpenContent;
-    if (open.pdf) content = { format: 'pdf', bytes: open.pdf.bytes };
-    else if (open.document && open.format !== 'pdf') content = { format: open.format, document: open.document };
-    else throw new Error('no document');
-    const target = to ?? open.format;
-    const bytes = (target === content.format && content.format !== 'pdf' ? await writeDocument(content.document, target, await fontsReady) : await convertContent(content, target, await fontsReady)).slice().buffer;
-    post({ type: 'saved', request, bytes }, [bytes]);
+    if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    const bytes = await writeWdoc({
+      manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
+      document: open.document ? await open.document.write() : null,
+      original: open.original,
+      extensions: open.extensions,
+    });
+    const buffer = bytes.slice().buffer;
+    post({ type: 'saved', request, bytes: buffer }, [buffer]);
+  } catch (e) {
+    post({ type: 'saved', request, bytes: null, error: (e as Error).message });
+  }
+}
+
+/** The open document exported as a file of a format: only what that format can hold. */
+async function exportAs(doc: number, request: number, to: Format): Promise<void> {
+  try {
+    const open = current;
+    if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    let bytes: Uint8Array;
+    // A PDF whose text wasn't edited exports as the original, pages and all.
+    if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = open.original.slice();
+    else bytes = await exportDocument(open.document ?? (await pdfToDocument(open.original!)), open.extensions, to, await fontsReady);
+    const buffer = bytes.slice().buffer;
+    post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {
     post({ type: 'saved', request, bytes: null, error: (e as Error).message });
   }
@@ -480,10 +559,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       }
       break;
     case 'save':
-      void save(message.doc, message.request);
+      void save(message.doc, message.request, message.lens);
       break;
     case 'convert':
-      void save(message.doc, message.request, message.to);
+      void exportAs(message.doc, message.request, message.to);
       break;
   }
 };

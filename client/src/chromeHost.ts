@@ -4,6 +4,7 @@
 
 import type { WireCommand } from './layout/protocol.ts';
 import type { DocumentSource } from './layout/protocol.ts';
+import { WDOC_EXTENSION } from './formats/wdoc.ts';
 import { sourceFromFile } from './formats/source.ts';
 import type { Bounds } from './document/arrange.ts';
 import type { GpuPage } from './view/gpuPage.ts';
@@ -88,7 +89,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
   };
 
   const pickFile = (): void => {
-    const input = Object.assign(document.createElement('input'), { type: 'file', accept: acceptList() });
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: `${acceptList()},${WDOC_EXTENSION}` });
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file) openFile(file);

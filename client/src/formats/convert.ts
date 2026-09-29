@@ -1,10 +1,9 @@
-// Converting between the formats the editor works in. A document is Word (.docx), PDF, Markdown
-// or plain text; the selector in the chrome switches between them. Word, Markdown and text are
-// all edited as the same document model (a format just limits what that model may hold, see
-// ui/formats.ts), so switching among them is: write the model out in the target format, then
-// read that back in, which drops exactly what the target can't express. PDF is a fixed layout:
-// switching *to* it lays the document out and writes pages; switching *from* it recovers text
-// and structure (a reflowed document).
+// Converting between the model and the file formats the editor works in: Word (.docx), PDF,
+// Markdown and plain text. The open document is always the full model (saved as a .wdoc, see
+// wdoc.ts), and switching formats only changes what it is edited as; these functions are the
+// edges, where a file comes in (import) or goes out (export). Exporting drops exactly what the
+// target can't express. PDF is a fixed layout: exporting *to* it lays the document out and
+// writes pages; importing *from* it recovers text and structure (a reflowed document).
 
 import { WordDocument } from '@word/docx';
 import type { FontSet } from '@word/layout';
@@ -12,6 +11,7 @@ import { documentToMarkdown, markdownToDocument } from './markdown.ts';
 import { documentToPdf } from './pdfExport.ts';
 import { pdfToDocument } from './pdfImport.ts';
 import { documentToText, textToDocument } from './plainText.ts';
+import type { Extensions } from './wdoc.ts';
 
 /** The formats a document can be opened, saved and switched to. */
 export type Format = 'docx' | 'pdf' | 'md' | 'txt';
@@ -49,6 +49,50 @@ export async function writeDocument(document: WordDocument, format: Format, font
     case 'pdf':
       return documentToPdf(document, fonts);
   }
+}
+
+/**
+ * Reads a file into the model, and keeps what the model can't hold in the format's extension
+ * (Markdown front matter, a text file's line endings), so exporting to the same format gives it
+ * back after any number of switches through other formats.
+ */
+export async function importDocument(format: Exclude<Format, 'pdf'>, bytes: Uint8Array): Promise<{ document: WordDocument; extensions: Extensions }> {
+  if (format === 'md') {
+    const { frontMatter, body } = splitFrontMatter(decoder.decode(bytes));
+    const document = await markdownToDocument(body);
+    return { document, extensions: frontMatter === null ? {} : { md: { frontMatter } } };
+  }
+  if (format === 'txt') {
+    const text = decoder.decode(bytes);
+    // The decoder drops a UTF-8 byte order mark, so look at the bytes.
+    const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+    const ending = /\r\n|\r|\n/.exec(text)?.[0];
+    const txt = { ...(bom && { bom }), ...(ending && ending !== '\n' && { lineEnding: ending as '\r\n' | '\r' }) };
+    return { document: await textToDocument(text), extensions: Object.keys(txt).length ? { txt } : {} };
+  }
+  return { document: await readDocument(format, bytes), extensions: {} };
+}
+
+/** Writes the model plus the target format's own extension as a file of that format. */
+export async function exportDocument(document: WordDocument, extensions: Extensions, format: Format, fonts: FontSet): Promise<Uint8Array> {
+  if (format === 'md' && extensions.md?.frontMatter !== undefined) {
+    return encoder.encode(`---\n${extensions.md.frontMatter}\n---\n\n${documentToMarkdown(document)}`);
+  }
+  if (format === 'txt' && extensions.txt) {
+    const { lineEnding, bom } = extensions.txt;
+    let text = documentToText(document);
+    if (lineEnding) text = text.replace(/\n/g, lineEnding);
+    return encoder.encode(bom ? `\ufeff${text}` : text);
+  }
+  return writeDocument(document, format, fonts);
+}
+
+/** YAML front matter at the very start of a Markdown file, and the Markdown after it. */
+export function splitFrontMatter(source: string): { frontMatter: string | null; body: string } {
+  const text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+  const match = /^---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/.exec(text);
+  if (!match) return { frontMatter: null, body: source };
+  return { frontMatter: match[1], body: text.slice(match[0].length).replace(/^(?:[ \t]*\r?\n)+/, '') };
 }
 
 /** What is open: an editable model in one of the text formats, or a PDF's original bytes. */

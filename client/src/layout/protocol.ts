@@ -21,6 +21,8 @@ export type DocumentSource =
   | { kind: 'md'; name: string; bytes: ArrayBuffer }
   /** A plain-text file, edited one paragraph per line. */
   | { kind: 'txt'; name: string; bytes: ArrayBuffer }
+  /** The app's own file (see ../formats/wdoc.ts): the whole document, opened in the format it was being edited as. */
+  | { kind: 'wdoc'; name: string; bytes: ArrayBuffer }
   /** A new, empty document. */
   | { kind: 'blank'; name: string }
   /** Every font we ship, as a sample document. */
@@ -50,9 +52,9 @@ export type ToWorker =
   /** Bytes of an image part of the open document. */
   | { type: 'media'; doc: number; request: number; part: string }
   | { type: 'command'; doc: number; command: WireCommand }
-  /** The document as a file in its own format. */
-  | { type: 'save'; doc: number; request: number }
-  /** The document as a file in another format (the open document is left as it is). */
+  /** The whole document as a .wdoc; `lens` records a different format to edit it as next time. */
+  | { type: 'save'; doc: number; request: number; lens?: Format }
+  /** The document exported as a file of a format (the open document is left as it is). */
   | { type: 'convert'; doc: number; request: number; to: Format };
 
 export interface LayoutTimings {
@@ -102,7 +104,8 @@ export interface SelectionUpdate {
 }
 
 export type FromWorker =
-  | { type: 'opened'; doc: number; name: string }
+  /** `format`: what the document is edited as (for a .wdoc, known only once it has been read). */
+  | { type: 'opened'; doc: number; name: string; format: Format }
   | ({ type: 'layout'; doc: number } & LayoutUpdate)
   /** The first full layout finished. */
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }

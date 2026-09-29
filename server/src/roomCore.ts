@@ -20,11 +20,13 @@ export interface RoomMeta {
   handoffDeadline: number | null;
   /** The client asked to upload its document during a handoff. */
   flusher: string | null;
+  /** When a shared room down to fewer than two people starts winding down, or null. */
+  settleAt: number | null;
   /** When the log is next written to the .docx, or null if it's all written. */
   snapshotDue: number | null;
 }
 
-export const INITIAL_META: RoomMeta = { epoch: 0, mode: 'solo', snapshotVersion: 0, handoffDeadline: null, flusher: null, snapshotDue: null };
+export const INITIAL_META: RoomMeta = { epoch: 0, mode: 'solo', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null };
 
 export interface RoomStore {
   meta(): RoomMeta;
@@ -74,9 +76,11 @@ export interface RoomTimings {
   handoffMs: number;
   /** How long after an edit the .docx is rewritten. */
   snapshotMs: number;
+  /** How long a shared room waits for someone to come back (a dropped connection) before winding down. */
+  graceMs: number;
 }
 
-export const DEFAULT_TIMINGS: RoomTimings = { handoffMs: 15_000, snapshotMs: 5_000 };
+export const DEFAULT_TIMINGS: RoomTimings = { handoffMs: 15_000, snapshotMs: 5_000, graceMs: 30_000 };
 
 const MAX_SUBMIT_TRANSACTIONS = 500;
 
@@ -111,8 +115,8 @@ export class RoomCore {
   private canEdit = (p: Peer): boolean => p.state.role !== 'viewer';
 
   private reschedule(): void {
-    const { handoffDeadline, snapshotDue } = this.meta;
-    const times = [handoffDeadline, snapshotDue].filter((t): t is number => t !== null);
+    const { handoffDeadline, snapshotDue, settleAt } = this.meta;
+    const times = [handoffDeadline, snapshotDue, settleAt].filter((t): t is number => t !== null);
     this.host.alarm(times.length ? Math.min(...times) : null);
   }
 
@@ -162,6 +166,10 @@ export class RoomCore {
     this.broadcast({ type: 'people', people: this.people() }, peer);
 
     if (meta.mode === 'solo' && this.members.length >= 2) this.beginHandoff(peer);
+    if (meta.mode === 'shared' && meta.settleAt !== null && this.members.length >= 2) {
+      this.store.setMeta({ settleAt: null });
+      this.reschedule();
+    }
   }
 
   /** A second person arrived while one was saving on their own: get that person's document first. */
@@ -182,7 +190,7 @@ export class RoomCore {
   private beginShared(): void {
     // A new epoch: its log starts empty on top of whatever .docx is in the cloud now.
     this.store.clear();
-    this.store.setMeta({ mode: 'shared', snapshotVersion: 0, handoffDeadline: null, flusher: null, snapshotDue: null });
+    this.store.setMeta({ mode: 'shared', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null });
     for (const peer of this.members) peer.state.synced = false;
     this.reschedule();
     this.broadcast({ type: 'shared', epoch: this.meta.epoch });
@@ -230,9 +238,19 @@ export class RoomCore {
       return this.members.length >= 2 ? this.beginShared() : this.finishEpoch();
     }
     if (meta.mode !== 'shared' || this.members.length >= 2) return;
+    // Someone may only have lost their connection: give them the chance to come back.
+    this.store.setMeta({ settleAt: this.host.now() + this.timings.graceMs });
+    this.reschedule();
+    if (this.timings.graceMs === 0) await this.beginSettle();
+  }
+
+  /** Down to one person (or none) for a while: write the file and hand saving back. */
+  private async beginSettle(): Promise<void> {
+    this.store.setMeta({ settleAt: null });
+    if (this.meta.mode !== 'shared' || this.members.length >= 2) return;
     const [last] = this.members;
     if (!last || !this.canEdit(last)) return this.finishEpoch();
-    last.send({ type: 'settle', epoch: meta.epoch });
+    last.send({ type: 'settle', epoch: this.meta.epoch });
   }
 
   private async quiet(peer: Peer, epoch: number, version: number): Promise<void> {
@@ -256,7 +274,7 @@ export class RoomCore {
     if (this.members.length >= 2 && wasShared) return;
     this.store.clear();
     const epoch = meta.epoch + 1;
-    this.store.setMeta({ mode: 'solo', epoch, snapshotVersion: 0, handoffDeadline: null, flusher: null, snapshotDue: null });
+    this.store.setMeta({ mode: 'solo', epoch, snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null });
     this.reschedule();
     for (const peer of this.members) {
       peer.state.synced = false;
@@ -301,6 +319,7 @@ export class RoomCore {
       this.store.setMeta({ handoffDeadline: null });
       this.members.find((p) => p.state.client === meta.flusher)?.close(ROOM_CLOSE.handoffFailed, 'no document upload');
     }
+    if (this.meta.mode === 'shared' && this.meta.settleAt !== null && now >= this.meta.settleAt) await this.beginSettle();
     if (this.meta.mode === 'shared' && this.meta.snapshotDue !== null && now >= this.meta.snapshotDue) {
       this.store.setMeta({ snapshotDue: null });
       if (!(await this.snapshot())) this.store.setMeta({ snapshotDue: now + this.timings.snapshotMs * 3 });

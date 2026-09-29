@@ -79,6 +79,15 @@ export class CollabClient {
     this.flush();
   }
 
+  /**
+   * After reconnecting (and catching up): what was in flight may never have arrived, so send it
+   * again. The server skips transactions it already has.
+   */
+  resubmit(): void {
+    this.inflight = 0;
+    this.flush();
+  }
+
   /** Submits pending transactions if none are awaiting an answer. */
   flush(): void {
     if (this.inflight > 0 || this.pending.length === 0) return;

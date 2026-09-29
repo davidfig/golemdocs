@@ -44,7 +44,7 @@ export default defineConfig({
     // Forward API calls to the server package during development. The Worker sees its own address
     // (:3001), so it's told the one the browser is on, for origin checks and sign-in redirects.
     proxy: {
-      '/api': { target: 'http://localhost:3001', headers: { 'x-dev-origin': 'http://localhost:5173' } },
+      '/api': { target: 'http://localhost:3001', ws: true, headers: { 'x-dev-origin': 'http://localhost:5173' } },
     },
   },
 });

@@ -31,7 +31,7 @@ const textOf = async (bytes: Uint8Array) =>
     .map((p) => JSON.stringify(p.children))
     .join('');
 
-async function setup() {
+async function setup(options: { graceMs?: number } = {}) {
   const { bytes, paragraph } = await sample();
   const store = new MemoryStore();
   let file: Uint8Array | null = bytes;
@@ -48,6 +48,7 @@ async function setup() {
       },
     },
     { now: () => clock.now, alarm: (at) => (clock.alarm = at), log: () => {} },
+    { handoffMs: 15_000, snapshotMs: 5_000, graceMs: options.graceMs ?? 0 },
   );
 
   const peers: (Peer & { inbox: MultiplayerServerMessage[]; closed: number | null; name: string })[] = [];
@@ -78,8 +79,8 @@ async function setup() {
 }
 
 /** Two editors in a shared room, both synced at version 0. */
-async function shared() {
-  const t = await setup();
+async function shared(options: { graceMs?: number } = {}) {
+  const t = await setup(options);
   const a = await t.join('a');
   const b = await t.join('b');
   await t.core.message(a, { type: 'flushed', epoch: 0 });
@@ -254,4 +255,28 @@ test('a connection must say hello first', async () => {
   t.core.add(peer);
   await t.core.message(peer, { type: 'presence', selection: null });
   assert.equal(peer.closed, ROOM_CLOSE.badMessage);
+});
+
+test('a shared room waits a while before winding down, so a dropped connection can come back', async () => {
+  const t = await shared({ graceMs: 30_000 });
+  await t.core.message(t.a, { type: 'submit', epoch: 0, version: 0, transactions: [t.tx('a:0', t.insert(5, '!'))] });
+  t.a.inbox.length = 0;
+  await t.core.disconnect(t.b);
+  assert.deepEqual(t.types(t.a), ['people'], 'not asked to settle yet');
+  assert.equal(t.store.m.settleAt, 1000 + 30_000);
+
+  // b comes back in time: the epoch carries on and the timer is cancelled.
+  const b2 = await t.join('b');
+  await t.core.message(b2, { type: 'sync', epoch: 0, version: 0 });
+  assert.equal((b2.inbox.at(-1) as any).transactions.length, 1);
+  t.clock.now += 40_000;
+  await t.core.tick();
+  assert.equal(t.store.m.mode, 'shared');
+  assert.ok(!t.types(t.a).includes('settle'));
+
+  // b leaves for good: after the grace period, a is asked to settle.
+  await t.core.disconnect(b2);
+  t.clock.now += 30_000;
+  await t.core.tick();
+  assert.equal(t.types(t.a).at(-1), 'settle');
 });

@@ -12,6 +12,7 @@ import {
   type MultiplayerClientMessage,
   type MultiplayerServerMessage,
   type Person,
+  type Pointer,
   type RoomRole,
   type Selection,
   type ServerMessage,
@@ -43,6 +44,8 @@ export interface RoomHost {
   changed(state: RoomState): void;
   /** People's carets moved (or people came or went). */
   people(people: Person[]): void;
+  /** Someone's mouse pointer moved. */
+  pointers(people: Person[]): void;
 }
 
 export type RoomState = {
@@ -222,6 +225,12 @@ export class RoomClient {
         host.people(this.people);
         break;
       }
+      case 'pointer': {
+        const person = this.people.find((p) => p.client === message.client);
+        if (person) person.pointer = message.pointer;
+        host.pointers(this.people);
+        break;
+      }
       case 'handoff':
         this.epoch = message.epoch;
         this.startHandoff();
@@ -294,6 +303,10 @@ export class RoomClient {
 
   presence(selection: Selection | null): void {
     if (this.attached || this.mode === 'solo') this.send({ type: 'presence', selection });
+  }
+
+  pointer(pointer: Pointer | null): void {
+    if (this.attached || this.mode === 'solo') this.send({ type: 'pointer', pointer });
   }
 
   private announce(): void {

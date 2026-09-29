@@ -280,3 +280,27 @@ test('a shared room waits a while before winding down, so a dropped connection c
   await t.core.tick();
   assert.equal(t.types(t.a).at(-1), 'settle');
 });
+
+test('mouse pointers are relayed to others and shown to newcomers, but never logged', async () => {
+  const t = await shared();
+  t.b.inbox.length = 0;
+  const pointer = { page: 2, x: 120.5, y: 300 };
+  await t.core.message(t.a, { type: 'pointer', pointer });
+  assert.deepEqual(t.b.inbox, [{ type: 'pointer', client: 'a', pointer }]);
+  assert.equal(t.store.length(), 0);
+  const c = await t.join('c');
+  assert.deepEqual((c.inbox[0] as any).people.find((p: any) => p.client === 'a').pointer, pointer);
+
+  t.b.inbox.length = 0;
+  await t.core.message(t.a, { type: 'pointer', pointer: null });
+  assert.deepEqual(t.b.inbox, [{ type: 'pointer', client: 'a', pointer: null }]);
+});
+
+test('a malformed pointer closes the connection', async () => {
+  const t = await shared();
+  for (const bad of [{ page: -1, x: 0, y: 0 }, { page: 1.5, x: 0, y: 0 }, { page: 0, x: NaN, y: 0 }, { page: 0, x: 0 }, 'x', undefined]) {
+    const peer = await t.join('p' + Math.random());
+    await t.core.message(peer, { type: 'pointer', pointer: bad } as any);
+    assert.equal(peer.closed, ROOM_CLOSE.badMessage, JSON.stringify(bad));
+  }
+});

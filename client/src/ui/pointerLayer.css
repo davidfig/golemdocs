@@ -1,0 +1,36 @@
+/* Other people's mouse pointers (see pointerLayer.ts). */
+
+.wm-pointers {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-pointer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  will-change: transform;
+}
+
+.wm-pointer[hidden] {
+  display: none;
+}
+
+.wm-pointer svg path {
+  fill: var(--wm-pointer, #e8590c);
+}
+
+.wm-pointer-name {
+  margin: 14px 0 0 -2px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--wm-pointer, #e8590c);
+  color: #fff;
+  font: 11px/1.4 system-ui, sans-serif;
+  white-space: nowrap;
+}

@@ -4,7 +4,7 @@
 // worker the same way local ones do.
 
 import type { Command } from '@word/editor';
-import type { RoomRole } from '@word/ops';
+import type { Pointer, RoomRole } from '@word/ops';
 import type { AnnotationKind, FormField } from '@word/pdf';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
@@ -87,6 +87,8 @@ export interface RoomState {
 
 export type ToWorker =
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
+  /** Where this user's mouse is (null: it left the document), for the other people in the room. */
+  | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
   | { type: 'joinRoom'; doc: number; room: Extract<RoomOptions, { kind: 'network' }> }
   /** Leaving the page: tell the room. */
@@ -145,6 +147,8 @@ export interface SelectionUpdate {
   workerMs: number;
   /** Other people's carets (in a collaboration room). */
   remote: { page: number; x: number; y: number; height: number; color: number; name: string }[];
+  /** What other people have selected: rectangles per person, as (page, x, y, width, height) runs. */
+  remoteRects: { color: number; rects: number[] }[];
   /** The document's comments, in order, and where each one's text starts (page id and y), if laid out. */
   comments: { id: string; author: string; date?: string; text: string; page: number | null; y: number }[];
   /** Highlight over commented text: page id, x, y, width, height per rectangle. */
@@ -169,6 +173,8 @@ export type FromWorker =
   | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */
   | ({ type: 'roomState'; doc: number } & RoomState)
+  /** Where other people's mouse pointers are (page positions in display order, points). */
+  | { type: 'pointers'; doc: number; pointers: { page: number; x: number; y: number; color: number; name: string }[] }
   /** Someone else's edit changed the document (it needs saving here too). */
   | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }

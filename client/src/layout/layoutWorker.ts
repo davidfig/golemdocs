@@ -4,7 +4,7 @@
 
 import { WordDocument } from '@word/docx';
 import { Editor, type Command } from '@word/editor';
-import { Replica, type Selection as OpSelection, type Transaction } from '@word/ops';
+import { Replica, type Pointer, type Selection as OpSelection, type Transaction } from '@word/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
 import { RoomClient, type RoomHost, type RoomStart, type SocketLike } from '../collab/roomClient.ts';
 import {
@@ -135,6 +135,7 @@ interface Person {
   name: string;
   color: number;
   selection: OpSelection | null;
+  pointer: Pointer | null;
 }
 
 class OpenDocument {
@@ -325,6 +326,11 @@ class OpenDocument {
       const at = person.selection && editor.caretAt(person.selection.focus);
       if (at) remote.push({ page: at.page.id, x: at.x, y: at.y, height: at.height, color: person.color, name: person.name });
     }
+    const remoteRects: SelectionUpdate['remoteRects'] = [];
+    for (const person of this.people.values()) {
+      const list = person.selection ? editor.rectsFor(person.selection) : [];
+      if (list.length) remoteRects.push({ color: person.color, rects: list.flatMap((r) => [r.page.id, r.x, r.y, r.width, r.height]) });
+    }
     const commented = editor.comments();
     const commentRects = new Float64Array(commented.reduce((n, c) => n + c.rects.length, 0) * 5);
     let k = 0;
@@ -343,6 +349,7 @@ class OpenDocument {
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote,
       search: this.search ?? undefined,
+      remoteRects,
     };
     this.search = null;
     this.reveal = false;
@@ -361,6 +368,7 @@ class OpenDocument {
       rects: packed,
       comments: [],
       commentRects: new Float64Array(0),
+      remoteRects: [],
       focus: first && this.pdfPages[first.page] ? { page: this.pdfPages[first.page].id, x: first.x, y: first.y, height: first.height } : null,
       reveal: this.reveal,
       text: annotator.selectedText(CLIPBOARD_LIMIT),
@@ -493,7 +501,7 @@ class OpenDocument {
         break;
       }
       case 'presence':
-        if (message.selection) this.people.set(message.client, { name: message.name, color: message.color, selection: message.selection });
+        if (message.selection) this.people.set(message.client, { name: message.name, color: message.color, selection: message.selection, pointer: null });
         else this.people.delete(message.client);
         this.sendSelection();
         break;
@@ -554,6 +562,17 @@ class OpenDocument {
   /** Viewers, and anyone whose connection to the room is gone, can look but not edit. */
   get readOnly(): boolean {
     return this.net !== null && !this.net.canEdit;
+  }
+
+  private postPointers(): void {
+    const pointers = [];
+    for (const person of this.people.values()) if (person.pointer) pointers.push({ ...person.pointer, color: person.color, name: person.name });
+    post({ type: 'pointers', doc: this.doc, pointers });
+  }
+
+  /** This user's mouse, for the other people in the room. */
+  sendPointer(pointer: Pointer | null): void {
+    this.net?.pointer(pointer);
   }
 
   private postRoomState(): void {
@@ -633,8 +652,16 @@ class OpenDocument {
       },
       people: (list) => {
         this.people.clear();
-        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, color: p.color, selection: p.selection });
+        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, color: p.color, selection: p.selection, pointer: p.pointer });
+        this.postPointers();
         this.sendSelection();
+      },
+      pointers: (list) => {
+        for (const p of list) {
+          const person = this.people.get(p.client);
+          if (person) person.pointer = p.pointer;
+        }
+        this.postPointers();
       },
     };
   }
@@ -873,6 +900,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   switch (message.type) {
     case 'open':
       void open(message.doc, message.source, message.room);
+      break;
+    case 'pointer':
+      if (current?.doc === message.doc) current.sendPointer(message.pointer);
       break;
     case 'joinRoom':
       if (current?.doc === message.doc) void current.joinLate(message.room);

@@ -64,6 +64,8 @@ export class SelectionLayer {
       }
     };
     add(selection.commentRects, COMMENTED);
+    // Other people's selections, behind the text in their colors, and behind this user's own.
+    for (const person of selection.remoteRects) add(Float64Array.from(person.rects), packColor(person.color, 0.25));
     add(selection.rects, HIGHLIGHT);
     for (const [page, list] of byPage) this.highlights.set(page, coloredRects(list));
     this.caret = selection.caret;

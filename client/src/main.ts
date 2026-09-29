@@ -1,7 +1,7 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
-import { onThemeChange } from './ui/theme.ts';
+import { deskColor, onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
@@ -32,7 +32,7 @@ import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
-import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
+import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
 import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
 import { ImageRenderer } from './shapes/imageRenderer.ts';
@@ -40,11 +40,20 @@ import { AtlasLibrary } from './text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
 import { GpuPage } from './view/gpuPage.ts';
 import { PageRenderer, type FrameStats } from './view/pageRenderer.ts';
-import { FindBar } from './ui/findBar.ts';
+import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
+import { FindDialog } from './ui/findDialog.ts';
+import { SpellDialog } from './ui/spellDialog.ts';
+import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
 import { FORMATS, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus } from './ui/index.ts';
+
+// Every string the UI builds goes through t(): the language has to be loaded first. Started here
+// and awaited once the worker is running, so it doesn't hold up starting the worker.
+const localeReady = initLocale();
+// Who is signed in decides whether a saved document joins its room, so ask straight away too.
+const accountLookup = currentUser().catch(() => null);
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -57,7 +66,17 @@ const renderInfoEl = document.getElementById('renderInfo') as HTMLElement;
 const renderStatsEl = renderInfoEl.querySelector('.debug-stats') as HTMLElement;
 const renderLight = document.getElementById('renderLight') as HTMLSpanElement;
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
-if (!gl) throw new Error('WebGL2 not supported');
+if (!gl) {
+  await localeReady;
+  throw new Error(t('app.webglUnsupported'));
+}
+
+// A new canvas is black until it is first drawn to: paint the desk at once, before pages arrive.
+{
+  const [r, g, b] = deskColor();
+  gl.clearColor(r, g, b, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+}
 
 const camera = new Camera();
 const renderer = new PageRenderer(gl);
@@ -68,6 +87,23 @@ const selection = new SelectionLayer(gl);
 const worker = new LayoutClient((faces) => {
   for (const face of faces) atlases.define(face);
 });
+await localeReady;
+
+// The document to carry on with is read from this browser while the rest of the page is built.
+const LAST_DOC_KEY = 'golemdocs.lastDoc';
+function lastDoc(): string | null {
+  try {
+    return localStorage.getItem(LAST_DOC_KEY);
+  } catch {
+    return null;
+  }
+}
+let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
+{
+  const params = new URLSearchParams(location.search);
+  const wanted = params.get('doc') ?? (params.get('room') ? null : lastDoc());
+  if (wanted?.startsWith('local:')) earlySaved = { id: wanted.slice(6), saved: getSaved(wanted.slice(6)).catch(() => null) };
+}
 
 // Development convenience: the round-trip test corpus (pnpm --filter @word/docx corpus),
 // served by a dev-only Vite plugin (see vite.config.ts), so builds never include it.
@@ -117,7 +153,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
     const kind = kindFromName(source.name);
     return isFormat(kind) ? kind : 'docx';
   }
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'html' ? source.kind : 'docx';
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -127,7 +163,7 @@ function setStatus(text: string): void {
 
 function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument } = {}): void {
   const start = performance.now();
-  let name = 'name' in source ? source.name : source.kind === 'welcome' ? 'Welcome to Golem Docs' : 'Fonts';
+  let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : t('app.fontsName');
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   current = {
@@ -144,6 +180,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pages = [];
   selection.clear();
   commentsPanel.update([]);
+  comments = [];
   formLayer.update(null);
   pointerLayer.update([]);
   formMode = 'fill';
@@ -164,7 +201,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   documentKind = kindOfSource(source);
   annotating = false;
   sharedDeviceNotice.update({ welcome: source.kind === 'welcome' });
-  setStatus(`Loading ${name}…`);
+  setStatus(t('app.loading', { name }));
 
   const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
   current.roomRequested = requestedRoom !== undefined;
@@ -173,21 +210,21 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       name = documentName = docName;
       documentKind = format;
       annotating = fixedPages;
-      if (outdated) pendingNotice = OUTDATED_PAGES;
-      setStatus(`${name}: laying out…`);
+      if (outdated) pendingNotice = outdatedPages();
+      setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
       if (!firstPage && update.pages.length) firstPage = performance.now() - start;
       applyLayout(update);
       if (update.selection) applySelection(update.selection);
-      if (!loaded) setStatus(`${name}: laying out… ${pages.length.toLocaleString()} pages`);
+      if (!loaded) setStatus(t('app.layingOutPages', { name, count: pages.length, pages: pages.length.toLocaleString(getLocale()) }));
     },
-    done(count, t) {
+    done(count, times) {
       loaded = true;
       arrange();
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
-      loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: t.read, fonts: t.fonts, body: t.body, headers: t.headers };
-      setStatus(`${name}: ready`);
+      loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: times.read, fonts: times.fonts, body: times.body, headers: times.headers };
+      setStatus(t('app.ready', { name }));
       if (pendingNotice) {
         setStatus(pendingNotice);
         pendingNotice = null;
@@ -197,18 +234,22 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     selection(update) {
       applySelection(update);
     },
+    roomReplace() {
+      const doc = current;
+      if (doc.localId && doc.unsavedSince === 0) void openLocal(doc.localId);
+    },
     roomState(state) {
       const doc = current;
       const was = doc.room;
       doc.room = state;
       const text = describeRoom(state);
-      if (text !== lastRoomText) notify(text || 'Editing on your own again');
+      if (text !== lastRoomText) notify(text || t('app.editingAlone'));
       lastRoomText = text;
       // The server saves while several people are editing: an upload from here would be refused.
       if (state.mode !== 'solo' && doc.localId) dirty.delete(doc.localId);
       // Back to saving from here: the server's last version is what this copy now continues from.
       if (was && was.mode !== 'solo' && state.mode === 'solo') void resumeAfterRoom(doc);
-      if (state.mode === 'offline') notify('The connection to the shared document was lost. Reload to rejoin; what is on screen is kept in this browser.');
+      if (state.mode === 'offline') notify(t('app.roomLost'));
       showSync();
       requestRender();
     },
@@ -225,7 +266,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
     error(message) {
       loaded = true;
-      setStatus(`${name}: ${message}`);
+      setStatus(t('app.documentError', { name, message }));
     },
   }, requestedRoom);
   focusInput();
@@ -237,19 +278,20 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
 
 const USER_COLORS = [0xe8590c, 0x2f9e44, 0x7048e8, 0xd6336c, 0x1098ad, 0xf08c00];
 const userColor = USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
-const userName = `Guest ${Math.floor(Math.random() * 900 + 100)}`;
+const guestNumber = Math.floor(Math.random() * 900 + 100);
+const guestName = (): string => t('app.guestName', { number: guestNumber });
 
 function roomOptions(): RoomOptions | undefined {
   const name = new URLSearchParams(location.search).get('room');
   if (!name || typeof SharedWorker === 'undefined') return undefined;
   const server = new SharedWorker(new URL('./collab/devServer.ts', import.meta.url), { type: 'module', name: 'word-collab' });
-  return { kind: 'dev', name, port: server.port, user: userName, color: userColor };
+  return { kind: 'dev', name, port: server.port, user: guestName(), color: userColor };
 }
 
 /** The multiplayer server's room for a cloud document, when signed in (else the document is edited on its own). */
 function networkRoom(cloudId: string | undefined): Extract<RoomOptions, { kind: 'network' }> | undefined {
   if (!cloudId || !account) return undefined;
-  return { kind: 'network', docId: cloudId, user: account.name ?? account.email ?? userName, color: userColor };
+  return { kind: 'network', docId: cloudId, user: account.name ?? account.email ?? guestName(), color: userColor };
 }
 
 let lastRoomText = '';
@@ -277,11 +319,11 @@ async function resumeAfterRoom(doc: OpenDocument): Promise<void> {
 
 /** What the status line says about the room. */
 function describeRoom(state: RoomState): string {
-  if (state.mode === 'offline') return 'connection lost';
+  if (state.mode === 'offline') return t('app.roomConnectionLost');
   const others = state.people.length - 1;
   const parts: string[] = [];
-  if (state.role === 'viewer') parts.push('view only');
-  if (others > 0) parts.push(`${state.people.length} people here`);
+  if (state.role === 'viewer') parts.push(t('app.roomViewOnly'));
+  if (others > 0) parts.push(t('app.roomPeople', { count: state.people.length }));
   return parts.join(' · ');
 }
 
@@ -289,7 +331,7 @@ function describeRoom(state: RoomState): string {
 async function collaborate(): Promise<void> {
   const params = new URLSearchParams(location.search);
   if (documentKind !== 'docx') {
-    setStatus('Switch the format to Word Document to collaborate');
+    setStatus(t('app.collabNeedsWord'));
     return;
   }
   if (!params.get('room')) {
@@ -297,7 +339,7 @@ async function collaborate(): Promise<void> {
     try {
       bytes = await worker.convert('docx');
     } catch (e) {
-      setStatus(`Can't collaborate: ${(e as Error).message}`);
+      setStatus(t('app.collabFailed', { message: (e as Error).message }));
       return;
     }
     // Others join with just the room: its first member's copy is the document.
@@ -360,7 +402,7 @@ function openSource(source: string, keepRoom = false): void {
   if (!keepRoom) params.delete('room');
   history.replaceState(null, '', `?${params}`);
   if (source === 'war-and-peace') {
-    open({ kind: 'text-url', name: 'War and Peace', url: warAndPeaceUrl }, { grid: true });
+    open({ kind: 'text-url', name: t('app.warAndPeaceName'), url: warAndPeaceUrl }, { grid: true });
   } else if (source.startsWith('corpus:')) {
     const name = source.slice(7);
     open({ kind: 'docx-url', name, url: CORPUS_URL + encodeURIComponent(name) });
@@ -497,13 +539,15 @@ let cloudDocs: CloudDocument[] = [];
  */
 /** The first `connect()`, on load: opening a document in the account waits for it, to know who is signed in. */
 let firstConnect: Promise<void> = Promise.resolve();
+/** Who is signed in is known: enough to decide whether a document joins its room. */
+let accountKnown: Promise<void> = Promise.resolve();
 
-async function connect(): Promise<void> {
+async function connect(lookup: Promise<User | null> = currentUser()): Promise<void> {
   const before = account?.id ?? null;
-  account = await currentUser();
+  account = await lookup;
   if (account) {
     const adopted = await adoptGuestDocuments(account.id).catch(() => []);
-    if (adopted.length) notify(adopted.length === 1 ? 'Added the document from this browser to your account' : `Added ${adopted.length} documents from this browser to your account`);
+    if (adopted.length) notify(t('app.adopted', { count: adopted.length }));
   }
   await refreshLibrary();
   sharedDeviceNotice.update({ signedIn: account !== null });
@@ -633,7 +677,7 @@ async function upload(id: string): Promise<void> {
         documentName = doc.name;
         chrome.update({ documentName });
       }
-      notify(`“${before ?? 'This document'}” was also changed somewhere else, so these changes were saved as “${doc.name}”`);
+      notify(t('app.conflictNotice', { before: before ?? t('app.thisDocument'), name: doc.name }));
     }
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) {
@@ -701,16 +745,6 @@ function rememberInUrl(doc: string): void {
   }
 }
 
-/** Which saved document was open last on this machine, so a fresh visit (no `?doc=`) picks up there. */
-const LAST_DOC_KEY = 'golemdocs.lastDoc';
-function lastDoc(): string | null {
-  try {
-    return localStorage.getItem(LAST_DOC_KEY);
-  } catch {
-    return null;
-  }
-}
-
 /** The document's file name, with the extension of its current format. */
 const fileName = () => stem(documentName) + FORMATS[documentKind].extensions[0];
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
@@ -767,7 +801,7 @@ function saveInBrowser(): Promise<string | null> {
         await makeThumbnail(info);
         rememberInUrl(`local:${info.id}`);
         // Signed in, the button at the top right says how saving is going.
-        if (!owner) setStatus(`Saved “${info.name}” in this browser`);
+        if (!owner) setStatus(t('app.savedInBrowser', { name: info.name }));
       }
       // A new document changes what's listed; later saves only its order.
       if (created) void refreshLibrary();
@@ -787,7 +821,7 @@ function saveInBrowser(): Promise<string | null> {
       return info.id;
     } catch (e) {
       if (!doc.unsavedSince) doc.unsavedSince = performance.now(); // still unsaved: the next edit tries again
-      if (doc === current) setStatus(`Save failed: ${(e as Error).message}`);
+      if (doc === current) setStatus(t('app.saveFailed', { message: (e as Error).message }));
       return null;
     }
   });
@@ -815,11 +849,10 @@ async function signOut(): Promise<void> {
   await flushUploads();
   const unsent = ownedBy(await listSaved().catch(() => []), user.id).filter(hasUnsentChanges);
   if (unsent.length) {
-    const which = unsent.length === 1 ? `“${unsent[0]!.name}” has` : `${unsent.length} documents have`;
-    const why = offline ? ' (you’re offline)' : signedOutRemotely ? ' (you were signed out)' : '';
+    const key = offline ? 'app.signOutLossOffline' : signedOutRemotely ? 'app.signOutLossExpired' : 'app.signOutLoss';
     const body = document.createElement('p');
-    body.textContent = `${which} changes that haven’t been saved to your account yet${why}. Signing out removes your documents from this browser, so those changes would be lost.`;
-    if (!(await showConfirm('Sign Out', body, 'Sign Out Anyway'))) {
+    body.textContent = t(key, { count: unsent.length, name: unsent[0]!.name });
+    if (!(await showConfirm(t('app.signOutTitle'), body, t('app.signOutAnyway')))) {
       focusInput();
       return;
     }
@@ -827,7 +860,7 @@ async function signOut(): Promise<void> {
   try {
     await signOutOfCloud();
   } catch (e) {
-    setStatus(e instanceof TypeError ? 'Can’t sign out while offline' : `Couldn’t sign out: ${(e as Error).message}`);
+    setStatus(e instanceof TypeError ? t('app.signOutOffline') : t('app.signOutFailed', { message: (e as Error).message }));
     return;
   }
   cleared = true; // nothing more is saved for this account here
@@ -864,12 +897,10 @@ async function deleteEverywhere(entry: LibraryEntry): Promise<void> {
  */
 async function clearLocalData(): Promise<void> {
   const count = savedDocs.length;
-  const what = count === 1 ? 'the one document' : `all ${count} documents`;
   const body = document.createElement('p');
-  body.textContent =
-    `This deletes ${count ? what : 'everything'} saved in this browser, along with your toolbar layout. ` +
-    (account ? 'It can’t be undone. Documents saved to your account are kept.' : 'It can’t be undone.');
-  if (!(await showConfirm('Clear Local Data', body, 'Delete Everything'))) {
+  const which = count === 0 ? 'None' : count === 1 ? 'One' : 'Many';
+  body.textContent = t(`app.clearBody${which}${account ? 'Account' : ''}` as MessageKey, { count });
+  if (!(await showConfirm(t('app.clearTitle'), body, t('app.clearConfirm')))) {
     focusInput();
     return;
   }
@@ -885,21 +916,34 @@ async function clearLocalData(): Promise<void> {
     }
   } catch (e) {
     cleared = false;
-    setStatus(`Couldn’t clear local data: ${(e as Error).message}`);
+    setStatus(t('app.clearFailed', { message: (e as Error).message }));
     return;
   }
   location.replace(location.pathname);
 }
 
 async function openLocal(id: string): Promise<void> {
-  const saved = await getSaved(id).catch(() => null);
+  const early = earlySaved?.id === id ? earlySaved.saved : null;
+  earlySaved = null;
+  const saved = await (early ?? getSaved(id).catch(() => null));
   if (!saved) {
-    open({ kind: 'blank', name: 'Document1' });
-    pendingNotice = 'That document is no longer saved in this browser';
+    open({ kind: 'blank', name: t('app.newDocumentName') });
+    pendingNotice = t('app.localGone');
     return;
   }
-  if (saved.info.cloudId) await firstConnect; // whether it joins the room depends on who is signed in
-  open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id, cloudId: saved.info.cloudId });
+  // Shown at once. Whether it joins its room depends on who is signed in, so if that isn't known
+  // yet the room is joined once it is (the room's own copy replaces this one only if untouched).
+  const cloudId = saved.info.cloudId;
+  open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id, cloudId });
+  const doc = current;
+  if (cloudId && !doc.roomRequested) {
+    void accountKnown.then(() => {
+      const room = current === doc && !doc.roomRequested ? networkRoom(cloudId) : undefined;
+      if (!room) return;
+      doc.roomRequested = true;
+      worker.joinRoom(room);
+    });
+  }
 }
 
 /** Documents other people shared with this user, as last listed (the dashboard hands them over). */
@@ -915,24 +959,24 @@ async function openShared(id: string): Promise<void> {
       doc = sharedDocs.get(id);
     }
     if (!doc) {
-      open({ kind: 'blank', name: 'Document1' });
-      pendingNotice = 'That document is no longer shared with you';
+      open({ kind: 'blank', name: t('app.newDocumentName') });
+      pendingNotice = t('app.sharedGone');
       return;
     }
-    setStatus('Opening the shared document…');
+    setStatus(t('app.openingShared'));
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
-    else setStatus(`Couldn’t open the shared document: ${(e as Error).message}`);
+    else setStatus(t('app.openSharedFailed', { message: (e as Error).message }));
   }
 }
 
 /** File ▸ Share: who else can open the open document. */
 function share(): void {
-  if (!account) return notify('Sign in to share this document');
-  if (current.shared) return notify('Only the owner can share this document');
+  if (!account) return notify(t('app.signInToShare'));
+  if (current.shared) return notify(t('app.ownerOnlyShare'));
   const info = savedDocs.find((d) => d.id === current.localId);
-  if (!info?.cloudId) return notify('This document isn’t in your account yet: give it a moment to upload, then try again');
+  if (!info?.cloudId) return notify(t('app.notInAccountYet'));
   showShareDialog({ id: info.cloudId, name: info.name });
 }
 
@@ -940,8 +984,8 @@ async function openCloud(id: string): Promise<void> {
   try {
     if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary();
     const cloud = cloudDocs.find((d) => d.id === id);
-    const name = cloud?.name ?? 'Document.docx';
-    setStatus(`Opening “${name}”…`);
+    const name = cloud?.name ?? t('app.cloudDocumentName');
+    setStatus(t('app.opening', { name }));
     // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest.
     const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
     open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id, cloudId: info.cloudId });
@@ -949,7 +993,7 @@ async function openCloud(id: string): Promise<void> {
     void refreshLibrary();
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `cloud:${id}` }));
-    else setStatus(`Couldn’t open the document: ${(e as Error).message}`);
+    else setStatus(t('app.openFailed', { message: (e as Error).message }));
   }
 }
 
@@ -962,9 +1006,9 @@ async function download(): Promise<void> {
     const link = Object.assign(document.createElement('a'), { href: url, download: name });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(`Downloaded “${name}”`);
+    setStatus(t('app.downloaded', { name }));
   } catch (e) {
-    setStatus(`Download failed: ${(e as Error).message}`);
+    setStatus(t('app.downloadFailed', { message: (e as Error).message }));
   }
 }
 
@@ -976,7 +1020,7 @@ async function print(preview: boolean): Promise<void> {
   const bytes = await worker.convert('pdf');
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
-    if (!window.open(url, '_blank')) setStatus('Allow pop-ups to see the print preview');
+    if (!window.open(url, '_blank')) setStatus(t('app.allowPopups'));
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return;
   }
@@ -993,23 +1037,18 @@ async function print(preview: boolean): Promise<void> {
   document.body.append(frame);
 }
 
-/** What exporting to each format leaves out, for the notice shown after switching to it. */
-const LOSSES: Partial<Record<DocumentKind, string>> = {
-  md: 'fonts, colors, sizes, alignment and anything else Markdown can’t express',
-  txt: 'all formatting, tables and images',
-  html: 'page setup, headers and footers, comments and embedded pictures',
-};
-
 /** Said when a PDF's own pages are shown after its text was edited as something else. */
-const OUTDATED_PAGES = 'These are the original PDF’s pages: your text edits aren’t on them. Switch to Word to see the edits; a downloaded PDF has the edited text.';
+const outdatedPages = (): string => t('app.outdatedPages');
 
-/** Said once the document has opened in its new format. */
+/** Said once the document has opened in its new format (what exporting to it leaves out, where that's something). */
 function switchedNotice(to: Format): string {
   const { label, extensions } = FORMATS[to];
-  if (to === 'pdf') return 'Now shown as PDF, which can’t be edited. Switch back to edit it; nothing was lost.';
-  const lost = LOSSES[to];
-  if (!lost) return `Now editing as ${label}. Nothing was lost.`;
-  return `Now editing as ${label}. The document keeps everything else; only downloading a ${extensions[0]} file leaves out ${lost}.`;
+  if (to === 'pdf') return t('app.switchedPdf');
+  const params = { label, extension: extensions[0] ?? '' };
+  if (to === 'md') return t('app.switchedMd', params);
+  if (to === 'txt') return t('app.switchedTxt', params);
+  if (to === 'html') return t('app.switchedHtml', params);
+  return t('app.switchedLossless', params);
 }
 
 /**
@@ -1023,12 +1062,12 @@ function switchedNotice(to: Format): string {
 async function convertTo(to: DocumentKind): Promise<void> {
   const from = documentKind;
   if (to === from) return;
-  if (!isFormat(to) || !isFormat(from)) throw new Error(`${FORMATS[isFormat(to) ? from : to].label} isn’t supported yet`);
+  if (!isFormat(to) || !isFormat(from)) throw new Error(t('app.unsupportedFormat', { label: FORMATS[isFormat(to) ? from : to].label }));
   if (new URLSearchParams(location.search).get('room')) {
-    setStatus('Leave the collaboration room to switch formats');
+    setStatus(t('app.leaveRoomToSwitch'));
     return;
   }
-  setStatus(`Switching to ${FORMATS[to].label}…`);
+  setStatus(t('app.switching', { label: FORMATS[to].label }));
   // Saved now, as the format to edit it as, in place of the document's last save.
   clearTimeout(autosaveTimer);
   const doc = current;
@@ -1047,7 +1086,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   }
   doc.localId = info.id;
   const source = sourceFromFile(name, (await bytes).slice().buffer);
-  if (!source) throw new Error(`can’t open ${FORMATS[to].label}`);
+  if (!source) throw new Error(t('app.cannotOpenFormat', { label: FORMATS[to].label }));
   history.replaceState(null, '', location.pathname);
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
@@ -1062,6 +1101,14 @@ async function convertTo(to: DocumentKind): Promise<void> {
 let caretOn = true;
 /** Formatting at the selection (from the worker), for the toolbar. */
 let selectionFormat: FormatState = {};
+/** The Format Painter is waiting for a selection to paint. */
+let painting = false;
+/** The link the selection is in. */
+let link: SelectionUpdate['link'] = null;
+/** Ctrl/Cmd was down for the last click: open the link it lands on, once the selection says which. */
+let followLinkUntil = 0;
+/** The document's comments, in order (for Go To). */
+let comments: SelectionUpdate['comments'] = [];
 let canUndo = false;
 let canRedo = false;
 let blinkTimer = 0;
@@ -1072,7 +1119,16 @@ function applySelection(update: SelectionUpdate): void {
   selection.update(update);
   commentsPanel.update(update.comments);
   selectionFormat = update.format;
-  if (update.search) findBar.report(update.search);
+  comments = update.comments;
+  painting = update.painting ?? false;
+  link = update.link ?? null;
+  if (followLinkUntil > performance.now()) {
+    followLinkUntil = 0;
+    if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
+  }
+  canvas.style.cursor = painting ? 'copy' : '';
+  if (update.search) findDialog.report(update.search);
+  if (update.spell) spellDialog.report(update.spell);
   formLayer.update(update.fields ?? null);
   canUndo = update.canUndo;
   canRedo = update.canRedo;
@@ -1117,7 +1173,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields']);
 
 function send(command: WireCommand): void {
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords') {
     editSent = performance.now();
     if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -1275,6 +1331,7 @@ function render(): void {
     canUndo,
     canRedo,
     formMode: annotating ? formMode : null,
+    painting,
   });
   formLayer.position();
   pointerLayer.position();
@@ -1361,6 +1418,7 @@ canvas.addEventListener('pointerdown', (e) => {
   focusInput();
   const hit = pageAt(e.offsetX, e.offsetY);
   if (!hit) return;
+  if (e.metaKey || e.ctrlKey) followLinkUntil = performance.now() + 1000;
   const clicks = clickCount(e);
   const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
@@ -1424,7 +1482,11 @@ const endPointer = () => {
   pan = null;
   selecting = false;
 };
-canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointerup', () => {
+  endPointer();
+  // With the Format Painter picked up, what was just selected is painted.
+  if (painting) send({ kind: 'applyPainter' });
+});
 canvas.addEventListener('pointercancel', endPointer);
 
 // Trackpad pinch arrives as ctrl+wheel; cmd/ctrl+wheel zooms with a mouse; plain wheel scrolls.
@@ -1521,6 +1583,11 @@ function viewKey(e: KeyboardEvent): boolean {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (painting && e.key === 'Escape') {
+    e.preventDefault();
+    send({ kind: 'format', action: { kind: 'formatPainter' } });
+    return;
+  }
   if (dashboard.visible) return; // the dashboard has the keyboard; the document is behind it
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (e.isComposing) return;
@@ -1530,7 +1597,7 @@ window.addEventListener('keydown', (e) => {
     if (current.shared) void uploadShared();
     else if (current.unsavedSince || (!current.localId && !current.builtIn)) void saveInBrowser();
     else if (account) void flushUploads();
-    else setStatus('All changes are saved in this browser');
+    else setStatus(t('app.allSaved'));
     return;
   }
   if (viewKey(e)) {
@@ -1592,7 +1659,17 @@ const chromeHost = createChromeHost({
   share,
   download,
   print,
-  showFind: (replace) => findBar.show(replace),
+  showFind: (tab) => findDialog.show(tab),
+  showSpelling: () => spellDialog.open(),
+  showLinkDialog: () => {
+    const selected = selection.text;
+    if (selected.includes('\n')) return setStatus(t('app.linkOneParagraph'));
+    void showLinkDialog(link ?? null, selected).then((choice) => {
+      if (choice === undefined) return;
+      send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
+      focusInput();
+    });
+  },
   convert: convertTo,
   signIn,
   signOut,
@@ -1606,7 +1683,7 @@ const chromeHost = createChromeHost({
     requestRender();
     if (mode === 'fill') focusInput();
   },
-  author: () => account?.name ?? account?.email ?? userName,
+  author: () => account?.name ?? account?.email ?? guestName(),
   selectedText: () => selection.text,
   focusEditor: focusInput,
   notify: setStatus,
@@ -1620,16 +1697,16 @@ const chromeHost = createChromeHost({
       .then((r) => r.json() as Promise<{ families: { wordName: string }[] }>)
       .then((m) => m.families.map((f) => f.wordName)),
   samples: () => [
-    { id: 'welcome', label: 'W&elcome to Golem Docs' },
-    { id: 'fonts', label: '&Fonts' },
-    { id: 'war-and-peace', label: '&War and Peace' },
+    { id: 'welcome', label: t('app.sampleWelcome') },
+    { id: 'fonts', label: t('app.sampleFonts') },
+    { id: 'war-and-peace', label: t('app.sampleWarAndPeace') },
     ...corpusNames.map((name) => ({ id: `corpus:${name}`, label: name.replace(/&/g, '&&') })),
   ],
 });
 const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => account?.isAdmin === true, showUnimplemented: import.meta.env.DEV });
 
-// Edit ▸ Find and Replace.
-const findBar = new FindBar(document.body, {
+// Edit ▸ Find, Replace and Go To.
+const findDialog = new FindDialog(document.body, {
   find: (text, matchCase, backward) => send({ kind: 'find', text, matchCase, backward }),
   replace: (text, replacement, matchCase) => {
     const selected = selection.text;
@@ -1640,6 +1717,51 @@ const findBar = new FindBar(document.body, {
   },
   replaceAll: (text, replacement, matchCase) => send({ kind: 'replaceAll', text, with: replacement, matchCase }),
   selectedText: () => selection.text,
+  pageCount: () => pages.length,
+  pageIndex: () => {
+    const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+    const page = nearestPage(pages, center.x, center.y);
+    return page ? pages.indexOf(page) : 0;
+  },
+  goToPage: (index) => {
+    const page = pages[index];
+    if (!page) return;
+    // The page's top at the top of the view, and the page centered across it.
+    const pointsPerCss = 1 / (camera.zoom * CSS_PX_PER_POINT);
+    camera.x = page.x + page.width / 2 - (canvas.clientWidth / 2) * pointsPerCss;
+    camera.y = page.y - 16 * pointsPerCss;
+    userMoved = true;
+    requestRender();
+  },
+  commentCount: () => comments.length,
+  goToComment: (index) => {
+    const comment = comments[index];
+    if (comment) send({ kind: 'selectComment', id: comment.id });
+  },
+  focusEditor: focusInput,
+});
+
+// Tools ▸ Spelling and Grammar. The words the user adds to the dictionary are kept in this browser.
+const USER_WORDS_KEY = 'word.userDictionary.v1';
+const userWords = (): string[] => {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(USER_WORDS_KEY) ?? '[]');
+    return Array.isArray(saved) ? saved.filter((w): w is string => typeof w === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+const spellDialog = new SpellDialog(document.body, {
+  send,
+  selectedText: () => selection.text,
+  userWords,
+  addUserWord: (word) => {
+    try {
+      localStorage.setItem(USER_WORDS_KEY, JSON.stringify([...new Set([...userWords(), word])]));
+    } catch {
+      // Storage unavailable: the word is accepted for this session only.
+    }
+  },
   focusEditor: focusInput,
 });
 
@@ -1714,18 +1836,27 @@ Object.defineProperties(window, {
     history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
     void dashboard.show();
   }
-  firstConnect = connect();
+  accountKnown = accountLookup.then((user) => {
+    account = user;
+  });
+  firstConnect = connect(accountLookup);
   // Joining a room without a document: the room has it.
-  if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? 'Document' });
+  if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? t('app.blankDocumentName') });
   else if (doc) openSource(doc, true);
   // Nothing asked for: carry on with the document last open here (else the newest saved one);
   // someone with no documents yet is welcomed with what Golem Docs is.
-  else void listSaved().then(
-    (saved) => {
-      const last = lastDoc();
-      const id = saved.some((d) => `local:${d.id}` === last) ? last : [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id;
-      openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', true);
-    },
-    () => openSource('welcome', true),
-  );
+  else {
+    const early = earlySaved;
+    void (async () => {
+      if (early && (await early.saved)) return openSource(`local:${early.id}`, true);
+      try {
+        const saved = await listSaved();
+        const last = lastDoc();
+        const id = saved.some((d) => `local:${d.id}` === last) ? last : [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id;
+        openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', true);
+      } catch {
+        openSource('welcome', true);
+      }
+    })();
+  }
 }

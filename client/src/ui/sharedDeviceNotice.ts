@@ -3,22 +3,23 @@
 // hides it for good in this browser (until its data is cleared). It waits while only the welcome
 // document is showing, since there's nothing of theirs to clear yet.
 
+import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import './sharedDeviceNotice.css';
 
 const DISMISSED_KEY = 'golem.sharedDeviceNotice.dismissed';
 
 export class SharedDeviceNotice {
-  readonly el = h('aside', { class: 'wm-shared-notice', attrs: { 'aria-label': 'Shared computer' } });
+  readonly el = h('aside', { class: 'wm-shared-notice', attrs: { 'aria-label': t('dialogs.sharedDevice.label') } });
   private signedIn = false;
   private welcome = true;
 
   constructor(parent: HTMLElement, clear: () => void) {
-    const clearButton = h('button', { class: 'wm-button', text: 'Clear Local Data…', attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-shared-notice-close', text: '×', attrs: { type: 'button', 'aria-label': 'Dismiss' } });
+    const clearButton = h('button', { class: 'wm-button', text: t('dialogs.sharedDevice.clear'), attrs: { type: 'button' } });
+    const close = h('button', { class: 'wm-shared-notice-close', text: '×', attrs: { type: 'button', 'aria-label': t('dialogs.sharedDevice.dismiss') } });
     this.el.append(
       close,
-      h('p', { text: 'Your documents are saved in this browser. On a shared computer, clear them when you’re done.' }),
+      h('p', { text: t('dialogs.sharedDevice.message') }),
       clearButton,
     );
     clearButton.addEventListener('click', clear);

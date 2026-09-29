@@ -1,6 +1,7 @@
 // Drop-down panels for toolbar controls (lists, color palettes, the table grid). One is open at
 // a time; it closes on Escape, a press outside it or its owner, window blur and resize.
 
+import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 
 interface Open {
@@ -80,16 +81,32 @@ function listen(): void {
   window.addEventListener('resize', closePopup);
 }
 
+const SVG = 'http://www.w3.org/2000/svg';
+
+/** The title bar every dialog shares: the title on the left, the red close button on the right. */
+export function dialogTitleBar(title: string, onClose: () => void): HTMLElement {
+  // An SVG cross rather than a × character, so it is centered exactly whatever the font does.
+  const cross = document.createElementNS(SVG, 'svg');
+  cross.setAttribute('viewBox', '0 0 10 10');
+  cross.setAttribute('width', '8');
+  cross.setAttribute('height', '8');
+  cross.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(SVG, 'path');
+  path.setAttribute('d', 'M1 1L9 9M9 1L1 9');
+  cross.append(path);
+  const close = h('button', { class: 'wm-dialog-close', attrs: { type: 'button', 'aria-label': t('menus.dialog.close') } }, cross as unknown as Node);
+  close.addEventListener('click', onClose);
+  return h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close);
+}
+
 /** A small modal dialog (About, Keyboard Shortcuts). */
 export function showDialog(title: string, body: Node, onClose?: () => void): void {
   const dialog = h('dialog', { class: 'wm-dialog' });
-  const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { 'aria-label': 'Close' } });
-  const ok = h('button', { class: 'wm-button', text: 'OK' });
-  dialog.append(h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));
   const done = () => dialog.close();
+  const ok = h('button', { class: 'wm-button', text: t('menus.dialog.ok') });
+  dialog.append(dialogTitleBar(title, done), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
-  close.addEventListener('click', done);
   ok.addEventListener('click', done);
   dialog.addEventListener('close', () => {
     dialog.remove();
@@ -104,17 +121,15 @@ export function showDialog(title: string, body: Node, onClose?: () => void): voi
 export function showConfirm(title: string, body: Node, action: string): Promise<boolean> {
   return new Promise((resolve) => {
     const dialog = h('dialog', { class: 'wm-dialog' });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { 'aria-label': 'Close' } });
-    const cancel = h('button', { class: 'wm-button', text: 'Cancel' });
+    const cancel = h('button', { class: 'wm-button', text: t('menus.dialog.cancel') });
     const confirm = h('button', { class: 'wm-button', text: action });
     dialog.append(
-      h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close),
+      dialogTitleBar(title, () => dialog.close()),
       h('div', { class: 'wm-dialog-body' }, body),
       h('div', { class: 'wm-dialog-buttons' }, cancel, confirm),
     );
     let confirmed = false;
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     confirm.addEventListener('click', () => {
       confirmed = true;

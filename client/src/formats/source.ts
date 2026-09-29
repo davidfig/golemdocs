@@ -5,7 +5,16 @@ import { isWdoc } from './wdoc.ts';
 
 const DOCX_FILE = /\.(docx|docm|dotx)$/i;
 const ODT_FILE = /\.(odt|fodt)$/i;
+const RTF_FILE = /\.rtf$/i;
 const HTML_FILE = /\.(html?|xhtml)$/i;
+const EPUB_FILE = /\.epub$/i;
+const MHTML_FILE = /\.(mhtml?)$/i;
+const CSV_FILE = /\.csv$/i;
+const TSV_FILE = /\.(tsv|tab)$/i;
+const TEX_FILE = /\.(tex|latex)$/i;
+const ADOC_FILE = /\.(adoc|asciidoc|asc)$/i;
+const RST_FILE = /\.(rst|rest)$/i;
+const ORG_FILE = /\.org$/i;
 const PDF_FILE = /\.pdf$/i;
 const MARKDOWN_FILE = /\.(md|markdown)$/i;
 const TEXT_FILE = /\.(txt|text)$/i;
@@ -20,7 +29,16 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
   if (WDOC_FILE.test(name) || isWdoc(bytes)) return { kind: 'wdoc', name, bytes };
   if (DOCX_FILE.test(name)) return { kind: 'docx', name, bytes };
   if (ODT_FILE.test(name)) return { kind: 'odt', name, bytes };
+  if (RTF_FILE.test(name)) return { kind: 'rtf', name, bytes };
   if (HTML_FILE.test(name)) return { kind: 'html', name, bytes };
+  if (EPUB_FILE.test(name)) return { kind: 'epub', name, bytes };
+  if (MHTML_FILE.test(name)) return { kind: 'mhtml', name, bytes };
+  if (CSV_FILE.test(name)) return { kind: 'csv', name, bytes };
+  if (TSV_FILE.test(name)) return { kind: 'tsv', name, bytes };
+  if (TEX_FILE.test(name)) return { kind: 'tex', name, bytes };
+  if (ADOC_FILE.test(name)) return { kind: 'adoc', name, bytes };
+  if (RST_FILE.test(name)) return { kind: 'rst', name, bytes };
+  if (ORG_FILE.test(name)) return { kind: 'org', name, bytes };
   if (PDF_FILE.test(name)) return { kind: 'pdf', name, bytes };
   if (MARKDOWN_FILE.test(name)) return { kind: 'md', name, bytes };
   if (TEXT_FILE.test(name)) return { kind: 'txt', name, bytes };
@@ -29,5 +47,5 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
 
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
-  return name.replace(/\.(docx|docm|dotx|doc|odt|rtf|html?|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|odt|rtf|html?|mhtml?|epub|csv|tsv|tex|latex|adoc|asciidoc|asc|rst|rest|org|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
 }

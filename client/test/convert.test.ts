@@ -90,6 +90,7 @@ test('files open as the format their extension names', () => {
   assert.equal(sourceFromFile('a.md', bytes)?.kind, 'md');
   assert.equal(sourceFromFile('a.markdown', bytes)?.kind, 'md');
   assert.equal(sourceFromFile('a.txt', bytes)?.kind, 'txt');
-  assert.equal(sourceFromFile('a.rtf', bytes), null);
+  assert.equal(sourceFromFile('a.rtf', bytes)?.kind, 'rtf');
+  assert.equal(sourceFromFile('a.doc', bytes), null);
   assert.equal(stem('Report.final.pdf'), 'Report.final');
 });

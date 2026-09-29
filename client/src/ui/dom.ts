@@ -68,3 +68,32 @@ export const stripMnemonic = (label: string) => label.replace(/&(.)/g, '$1');
 export function keepFocus(el: HTMLElement): void {
   el.addEventListener('mousedown', (e) => e.preventDefault());
 }
+
+/**
+ * Lets a dialog be moved by dragging its title bar (for the dialogs that stay open over the
+ * document: Find, Spelling). It starts where the stylesheet puts it and moves from there.
+ */
+export function makeDraggable(dialog: HTMLElement): void {
+  const title = dialog.querySelector<HTMLElement>('.wm-dialog-title');
+  if (!title) return;
+  title.style.cursor = 'move';
+  title.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+    const box = dialog.getBoundingClientRect();
+    const dx = e.clientX - box.left;
+    const dy = e.clientY - box.top;
+    const move = (m: PointerEvent) => {
+      // Kept where the title bar can still be grabbed.
+      const left = Math.min(Math.max(m.clientX - dx, 40 - box.width), window.innerWidth - 40);
+      const top = Math.min(Math.max(m.clientY - dy, 0), window.innerHeight - 30);
+      dialog.style.inset = `${top}px auto auto ${left}px`;
+    };
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    e.preventDefault();
+  });
+}

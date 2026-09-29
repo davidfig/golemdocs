@@ -9,6 +9,7 @@
 // Every change goes to the layout worker as the whole list of fields (see pdfAnnotator.ts), which
 // keeps it with the document, puts it in the undo history and writes it into an exported PDF.
 
+import { t } from '../i18n/index.ts';
 import type { WireField } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import type { FormMode } from './actions.ts';
@@ -39,7 +40,8 @@ type NewKind = 'text' | 'checkbox' | 'choice';
 
 /** New fields' size, points. */
 const NEW_SIZE: Record<NewKind, [number, number]> = { text: [160, 20], checkbox: [12, 12], choice: [120, 20] };
-const NEW_NAME: Record<NewKind, string> = { text: 'Text', checkbox: 'Check Box', choice: 'Dropdown' };
+/** The start of a new field's name ("Text1", "Text2"...). */
+const newName = (kind: NewKind): string => t(kind === 'text' ? 'panels.forms.newText' : kind === 'checkbox' ? 'panels.forms.newCheckbox' : 'panels.forms.newChoice');
 /** Smallest box a field can be resized to, points. */
 const MIN_SIZE = 6;
 
@@ -260,7 +262,7 @@ export class FormLayer {
     const label = el.querySelector('.wm-field-name')!;
     const text = field.kind === 'radio' ? `${field.name} (${field.onState})` : field.name;
     if (label.textContent !== text) label.textContent = text;
-    el.title = `${KIND_LABEL[field.kind]}: ${field.name}`;
+    el.title = t('panels.forms.fieldTitle', { kind: kindLabel(field.kind), name: field.name });
   }
 
   /** Moves or resizes a field with the pointer; sent when the pointer is released. */
@@ -333,12 +335,12 @@ export class FormLayer {
       });
       return button;
     };
-    const hint = h('p', { class: 'wm-forms-hint', text: 'Drag a field to move it, or its corner to resize it.' });
+    const hint = h('p', { class: 'wm-forms-hint', text: t('panels.forms.dragHint') });
     return h(
       'aside',
-      { class: 'wm-forms-palette', attrs: { 'aria-label': 'Edit form' } },
-      h('h2', { text: 'Edit form' }),
-      h('div', { class: 'wm-forms-adds' }, add('text', 'Text box'), add('checkbox', 'Check box'), add('choice', 'Drop-down')),
+      { class: 'wm-forms-palette', attrs: { 'aria-label': t('panels.forms.editForm') } },
+      h('h2', { text: t('panels.forms.editForm') }),
+      h('div', { class: 'wm-forms-adds' }, add('text', kindLabel('text')), add('checkbox', kindLabel('checkbox')), add('choice', kindLabel('choice'))),
       hint,
       this.properties,
     );
@@ -351,15 +353,15 @@ export class FormLayer {
     if (this.properties.dataset.key === key && this.properties.contains(document.activeElement)) return;
     this.properties.dataset.key = key;
     if (this.placing) {
-      this.properties.replaceChildren(h('p', { class: 'wm-forms-hint', text: `Click on a page to place the ${KIND_LABEL[this.placing].toLowerCase()}. Esc cancels.` }));
+      this.properties.replaceChildren(h('p', { class: 'wm-forms-hint', text: t(`panels.forms.place.${this.placing}` as const) }));
       return;
     }
     if (!field) {
-      this.properties.replaceChildren(h('p', { class: 'wm-forms-hint', text: this.fields?.length ? 'Select a field to rename or delete it.' : 'This PDF has no fields yet.' }));
+      this.properties.replaceChildren(h('p', { class: 'wm-forms-hint', text: this.fields?.length ? t('panels.forms.selectHint') : t('panels.forms.noFields') }));
       return;
     }
     const id = field.id;
-    const name = h('input', { class: 'wm-forms-name', attrs: { type: 'text', 'aria-label': 'Field name' } });
+    const name = h('input', { class: 'wm-forms-name', attrs: { type: 'text', 'aria-label': t('panels.forms.fieldName') } });
     name.value = field.name;
     name.spellcheck = false;
     const rename = () => {
@@ -389,15 +391,15 @@ export class FormLayer {
         name.blur();
       }
     });
-    const rows: HTMLElement[] = [h('label', { class: 'wm-forms-row' }, h('span', { text: 'Name' }), name)];
+    const rows: HTMLElement[] = [h('label', { class: 'wm-forms-row' }, h('span', { text: t('panels.forms.name') }), name)];
     if (field.kind === 'text') {
       const multi = h('input', { attrs: { type: 'checkbox' } });
       multi.checked = !!field.multiline;
       multi.addEventListener('change', () => this.replaceField(id, { multiline: multi.checked }));
-      rows.push(h('label', { class: 'wm-forms-check' }, multi, h('span', { text: 'Several lines' })));
+      rows.push(h('label', { class: 'wm-forms-check' }, multi, h('span', { text: t('panels.forms.severalLines') })));
     }
     if (field.kind === 'choice') {
-      const options = h('textarea', { class: 'wm-forms-options', attrs: { rows: '4', 'aria-label': 'Options, one per line' } });
+      const options = h('textarea', { class: 'wm-forms-options', attrs: { rows: '4', 'aria-label': t('panels.forms.options') } });
       options.value = (field.options ?? []).map((o) => o.label).join('\n');
       options.addEventListener('keydown', (e) => e.stopPropagation());
       options.addEventListener('change', () => {
@@ -407,12 +409,12 @@ export class FormLayer {
         const old = new Map((f.options ?? []).map((o) => [o.label, o.value]));
         this.replaceField(id, { options: labels.map((label) => ({ value: old.get(label) ?? label, label })) });
       });
-      rows.push(h('label', { class: 'wm-forms-row wm-forms-column' }, h('span', { text: 'Options, one per line' }), options));
+      rows.push(h('label', { class: 'wm-forms-row wm-forms-column' }, h('span', { text: t('panels.forms.options') }), options));
     }
-    const remove = h('button', { class: 'wm-forms-delete', text: 'Delete field', attrs: { type: 'button' } });
+    const remove = h('button', { class: 'wm-forms-delete', text: t('panels.forms.deleteField'), attrs: { type: 'button' } });
     remove.addEventListener('click', () => this.remove(id));
     rows.push(remove);
-    this.properties.replaceChildren(h('p', { class: 'wm-forms-kind', text: KIND_LABEL[field.kind] }), ...rows);
+    this.properties.replaceChildren(h('p', { class: 'wm-forms-kind', text: kindLabel(field.kind) }), ...rows);
   }
 
   /** Places a new field where the page was clicked. */
@@ -431,11 +433,11 @@ export class FormLayer {
     const box = { x: Math.min(at.x, at.page.width - width), y: Math.min(at.y, at.page.height - height), width, height };
     const taken = new Set(this.fields.map((f) => f.name));
     let n = 1;
-    while (taken.has(`${NEW_NAME[kind]}${n}`)) n++;
+    while (taken.has(`${newName(kind)}${n}`)) n++;
     // Its page index and rect are worked out by the worker, from its page id and box.
     const field: WireField = {
       id: `new-${Date.now().toString(36)}-${this.nextId++}`,
-      name: `${NEW_NAME[kind]}${n}`,
+      name: `${newName(kind)}${n}`,
       kind,
       page: 0,
       rect: [0, 0, 0, 0],
@@ -480,7 +482,7 @@ export class FormLayer {
   }
 }
 
-const KIND_LABEL: Record<WireField['kind'], string> = { text: 'Text box', checkbox: 'Check box', radio: 'Radio button', choice: 'Drop-down' };
+const kindLabel = (kind: WireField['kind']): string => t(`panels.forms.kind.${kind}` as const);
 
 /** Text size in points: the field's own, or what fits its box. */
 function fontSize(field: WireField, box: Box): number {

@@ -1,89 +1,159 @@
 // One Worker serves both the API (src/worker.ts) and the built client (../client/dist).
 {
-  "name": "golemdocs",
-  "main": "src/worker.ts",
-  "compatibility_date": "2026-09-01",
-
-  // Production is served at golemdocs.com (the zone is on this Cloudflare account). Deploying
-  // creates the DNS record and certificate for it.
-  "routes": [{ "pattern": "golemdocs.com", "custom_domain": true }],
-
-  // The client is a static SPA. Only /api/* runs the Worker; everything else is served from assets.
-  "assets": {
-    "directory": "../client/dist",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
-  },
-
-  // The actual .docx files, keyed `<userId>/<documentId>.docx`.
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files" }],
-
-  // One collaboration room per cloud document (see src/room.ts).
-  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-
-  // Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
-  // Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
-  "d1_databases": [
-    {
-      "binding": "DIRECTORY",
-      "database_name": "golemdocs-directory",
-      "database_id": "5c644ff5-3e2b-42c1-b684-b649e30c7943",
-      "migrations_dir": "migrations/directory"
-    }
-  ],
-
-  "vars": {
-    // production | dev | local. Decides what per-user databases are called (golemdocs-user-… in
-    // production, golemdocs-dev-user-… otherwise) and whether cloud storage is on (not when "local").
-    "ENVIRONMENT": "production",
-    // Your Cloudflare account id (per-user databases are created and queried through the REST API).
-    "CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
-    // Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
-    "MICROSOFT_TENANT": "common"
-  },
-
-  // Bindings and vars aren't inherited by environments, so each one lists its own. The top level
-  // above is production: only `pnpm --filter @word/server deploy` uses it.
-  "env": {
-    // `pnpm dev`: the Worker runs on your machine but D1 and R2 are the real *dev* resources
-    // ("remote": true), so local testing exercises the same services as production without ever
-    // touching production data. Create them with `pnpm --filter @word/server cf:setup:dev`, then
-    // paste the printed database id here (and your account id below).
-    "dev": {
-      "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files-dev", "remote": true }],
-      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-      "d1_databases": [
-        {
-          "binding": "DIRECTORY",
-          "database_name": "golemdocs-directory-dev",
-          "database_id": "REPLACE_WITH_DEV_DATABASE_ID",
-          "migrations_dir": "migrations/directory",
-          "remote": true
-        }
-      ],
-      "vars": { "ENVIRONMENT": "dev", "CF_ACCOUNT_ID": "REPLACE_WITH_ACCOUNT_ID", "MICROSOFT_TENANT": "common" }
-    },
-
-    // `pnpm dev --local`: everything simulated on your machine, works offline. Sign-in works;
-    // cloud documents are switched off (the per-user databases need the real Cloudflare API).
-    "local": {
-      "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files-local" }],
-      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-      "d1_databases": [
-        { "binding": "DIRECTORY", "database_name": "golemdocs-directory-local", "database_id": "local", "migrations_dir": "migrations/directory" }
-      ],
-      "vars": { "ENVIRONMENT": "local", "CF_ACCOUNT_ID": "", "MICROSOFT_TENANT": "common" }
-    }
-  }
-  // Secrets (not committed), set with `pnpm exec wrangler secret put <NAME> --env=""`:
-  //   CF_API_TOKEN, a token with "D1 Edit" and "Billing Read" permission
-  //   ADMIN_EMAILS, comma-separated emails of admins (who see the Cloudflare billing panel)
-  //   sign-in providers (each is offered only when all of its secrets are set; see AUTH.md):
-  //   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
-  //   MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET
-  //   GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
-  //   APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY
+	"name": "golemdocs",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-09-01",
+	// Production is served at golemdocs.com (the zone is on this Cloudflare account). Deploying
+	// creates the DNS record and certificate for it.
+	"routes": [
+		{
+			"pattern": "golemdocs.com",
+			"custom_domain": true
+		}
+	],
+	// The client is a static SPA. Only /api/* runs the Worker; everything else is served from assets.
+	"assets": {
+		"directory": "../client/dist",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	// The actual .docx files, keyed `<userId>/<documentId>.docx`.
+	"r2_buckets": [
+		{
+			"binding": "FILES",
+			"bucket_name": "golemdocs-files"
+		}
+	],
+	// One collaboration room per cloud document (see src/room.ts).
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "ROOMS",
+				"class_name": "Room"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"Room"
+			]
+		}
+	],
+	// Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
+	// Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
+	"d1_databases": [
+		{
+			"binding": "DIRECTORY",
+			"database_name": "golemdocs-directory",
+			"database_id": "5c644ff5-3e2b-42c1-b684-b649e30c7943",
+			"migrations_dir": "migrations/directory"
+		}
+	],
+	"vars": {
+		// production | dev | local. Decides what per-user databases are called (golemdocs-user-… in
+		// production, golemdocs-dev-user-… otherwise) and whether cloud storage is on (not when "local").
+		"ENVIRONMENT": "production",
+		// Your Cloudflare account id (per-user databases are created and queried through the REST API).
+		"CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
+		// Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
+		"MICROSOFT_TENANT": "common"
+	},
+	// Bindings and vars aren't inherited by environments, so each one lists its own. The top level
+	// above is production: only `pnpm --filter @word/server deploy` uses it.
+	"env": {
+		// `pnpm dev`: the Worker runs on your machine but D1 and R2 are the real *dev* resources
+		// ("remote": true), so local testing exercises the same services as production without ever
+		// touching production data. Create them with `pnpm --filter @word/server cf:setup:dev`, then
+		// paste the printed database id here (and your account id below).
+		"dev": {
+			"r2_buckets": [
+				{
+					"binding": "FILES",
+					"bucket_name": "golemdocs-files-dev",
+					"remote": true
+				}
+			],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "ROOMS",
+						"class_name": "Room"
+					}
+				]
+			},
+			"migrations": [
+				{
+					"tag": "v1",
+					"new_sqlite_classes": [
+						"Room"
+					]
+				}
+			],
+			"d1_databases": [
+				{
+					"binding": "DIRECTORY",
+					"database_name": "golemdocs-directory-dev",
+					"database_id": "24783707-80b7-4b25-a666-f45c83eba1a6",
+					"migrations_dir": "migrations/directory",
+					"remote": true
+				}
+			],
+			"vars": {
+				"ENVIRONMENT": "dev",
+				"CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
+				"MICROSOFT_TENANT": "common"
+			}
+		},
+		// `pnpm dev --local`: everything simulated on your machine, works offline. Sign-in works;
+		// cloud documents are switched off (the per-user databases need the real Cloudflare API).
+		"local": {
+			"r2_buckets": [
+				{
+					"binding": "FILES",
+					"bucket_name": "golemdocs-files-local"
+				}
+			],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "ROOMS",
+						"class_name": "Room"
+					}
+				]
+			},
+			"migrations": [
+				{
+					"tag": "v1",
+					"new_sqlite_classes": [
+						"Room"
+					]
+				}
+			],
+			"d1_databases": [
+				{
+					"binding": "DIRECTORY",
+					"database_name": "golemdocs-directory-local",
+					"database_id": "local",
+					"migrations_dir": "migrations/directory"
+				}
+			],
+			"vars": {
+				"ENVIRONMENT": "local",
+				"CF_ACCOUNT_ID": "",
+				"MICROSOFT_TENANT": "common"
+			}
+		}
+	}
+	// Secrets (not committed), set with `pnpm exec wrangler secret put <NAME> --env=""`:
+	//   CF_API_TOKEN, a token with "D1 Edit" and "Billing Read" permission
+	//   ADMIN_EMAILS, comma-separated emails of admins (who see the Cloudflare billing panel)
+	//   sign-in providers (each is offered only when all of its secrets are set; see AUTH.md):
+	//   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
+	//   MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET
+	//   GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
+	//   APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY
 }

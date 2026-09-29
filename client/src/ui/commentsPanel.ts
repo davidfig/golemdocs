@@ -3,6 +3,7 @@
 // Hidden while the document has no comments.
 
 import type { SelectionUpdate } from '../layout/protocol.ts';
+import { t } from '../i18n/index.ts';
 import { relativeTime } from './dashboardFormat.ts';
 import { h } from './dom.ts';
 import './comments.css';
@@ -16,7 +17,7 @@ export interface CommentsHost {
 }
 
 export class CommentsPanel {
-  readonly el = h('aside', { class: 'wm-comments', attrs: { 'aria-label': 'Comments' } });
+  readonly el = h('aside', { class: 'wm-comments', attrs: { 'aria-label': t('panels.comments.label') } });
   private shown = '';
 
   constructor(
@@ -32,16 +33,16 @@ export class CommentsPanel {
     if (key === this.shown) return;
     this.shown = key;
     this.el.hidden = comments.length === 0;
-    this.el.replaceChildren(h('h2', { text: `Comments (${comments.length})` }), ...comments.map((c) => this.card(c)));
+    this.el.replaceChildren(h('h2', { text: t('panels.comments.title', { count: comments.length }) }), ...comments.map((c) => this.card(c)));
   }
 
   private card(c: CommentInfo): HTMLElement {
-    const edit = h('button', { text: 'Edit', attrs: { type: 'button' } });
-    const remove = h('button', { text: 'Delete', attrs: { type: 'button' } });
+    const edit = h('button', { text: t('panels.comments.edit'), attrs: { type: 'button' } });
+    const remove = h('button', { text: t('panels.comments.delete'), attrs: { type: 'button' } });
     const card = h(
       'article',
       { class: 'wm-comment', attrs: { tabindex: '0' } },
-      h('header', {}, h('strong', { text: c.author || 'Unknown' }), c.date ? h('time', { text: relativeTime(Date.parse(c.date)), attrs: { datetime: c.date } }) : null),
+      h('header', {}, h('strong', { text: c.author || t('panels.comments.unknown') }), c.date ? h('time', { text: relativeTime(Date.parse(c.date)), attrs: { datetime: c.date } }) : null),
       h('p', { text: c.text }),
       h('footer', {}, edit, remove),
     );
@@ -50,7 +51,7 @@ export class CommentsPanel {
       this.host.select(c.id);
     });
     edit.addEventListener('click', () => {
-      const text = window.prompt('Comment', c.text);
+      const text = window.prompt(t('panels.comments.prompt'), c.text);
       if (text !== null && text !== c.text) this.host.edit(c.id, text);
     });
     remove.addEventListener('click', () => this.host.remove(c.id));

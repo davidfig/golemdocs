@@ -133,7 +133,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'txt';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'txt';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
@@ -168,6 +168,8 @@ export interface ChromeState {
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
   formMode: FormMode | null;
+  /** The Format Painter has picked up formatting and is waiting for a selection to paint. */
+  painting: boolean;
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
 }
@@ -201,6 +203,7 @@ export const DEFAULT_STATE: ChromeState = {
   trackChanges: false,
   format: {},
   formMode: null,
+  painting: false,
   sync: { user: null, document: 'guest', error: null },
 };
 

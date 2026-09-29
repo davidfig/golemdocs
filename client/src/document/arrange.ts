@@ -51,3 +51,19 @@ export function columnsToFill(pages: readonly Page[], aspect: number, gap: numbe
   }
   return best;
 }
+
+/** The page nearest to a point (the one under it, if any), or null with no pages. */
+export function nearestPage<T extends Omit<Page, 'moveTo'>>(pages: readonly T[], x: number, y: number): T | null {
+  let best: T | null = null;
+  let bestDistance = Infinity;
+  for (const page of pages) {
+    const dy = y < page.y ? page.y - y : y > page.y + page.height ? y - page.y - page.height : 0;
+    const dx = x < page.x ? page.x - x : x > page.x + page.width ? x - page.x - page.width : 0;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      best = page;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}

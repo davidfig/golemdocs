@@ -4,9 +4,11 @@
 
 import type { Action, ChromeState } from './actions.ts';
 import type { CommandRegistry } from './commands.ts';
+import { t } from '../i18n/index.ts';
 import { h, keepFocus, setAttr, toggleClass } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
+import { toolbarTitle } from './toolbarLayout.ts';
 
 export interface Control {
   el: HTMLElement;
@@ -37,7 +39,7 @@ export class Toolbar {
     registry: CommandRegistry,
     items: ToolbarItem[],
   ) {
-    this.el = h('div', { class: 'wm-toolbar', attrs: { role: 'toolbar', 'aria-label': name } });
+    this.el = h('div', { class: 'wm-toolbar', attrs: { role: 'toolbar', 'aria-label': toolbarTitle(name) } });
     for (const item of items) {
       if (item.type === 'separator') {
         const el = h('span', { class: 'wm-tsep', attrs: { role: 'separator' } });
@@ -147,7 +149,7 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
     input.readOnly = true;
     input.classList.add('readonly');
   }
-  const arrow = h('button', { class: 'wm-combo-arrow', attrs: { type: 'button', tabindex: '-1', 'aria-label': `${spec.label} list` } });
+  const arrow = h('button', { class: 'wm-combo-arrow', attrs: { type: 'button', tabindex: '-1', 'aria-label': t('menus.combo.list', { label: spec.label }) } });
   arrow.innerHTML = ICONS.dropdown;
   keepFocus(arrow);
   const el = h('div', { class: 'wm-combo', title: spec.label }, input, arrow);
@@ -305,7 +307,7 @@ export interface ColorSpec {
 export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control {
   let color: string | null = spec.initial;
   const main = h('button', { class: 'wm-tbutton wm-split-main', title: spec.label, attrs: { type: 'button', tabindex: '-1', 'aria-label': spec.label } }, iconElement(spec.icon));
-  const arrow = h('button', { class: 'wm-tbutton wm-split-arrow', title: spec.label, attrs: { type: 'button', tabindex: '-1', 'aria-label': `${spec.label} options`, 'aria-haspopup': 'true' } });
+  const arrow = h('button', { class: 'wm-tbutton wm-split-arrow', title: spec.label, attrs: { type: 'button', tabindex: '-1', 'aria-label': t('menus.split.options', { label: spec.label }), 'aria-haspopup': 'true' } });
   arrow.innerHTML = ICONS.dropdown;
   keepFocus(main);
   keepFocus(arrow);
@@ -345,7 +347,7 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
       const picker = h('input', { attrs: { type: 'color', value: color ?? '#000000', tabindex: '-1' } });
       picker.className = 'wm-hidden-picker';
       picker.addEventListener('change', () => apply(picker.value));
-      const more = h('button', { class: 'wm-palette-wide', text: 'More Colors…', attrs: { type: 'button' } });
+      const more = h('button', { class: 'wm-palette-wide', text: t('menus.palette.more'), attrs: { type: 'button' } });
       more.addEventListener('click', () => picker.click());
       panel.append(more, picker);
     }
@@ -375,13 +377,13 @@ export function tableGridButton(registry: CommandRegistry, commandId: string): C
     let rows = 4;
     let columns = 5;
     const grid = h('div', { class: 'wm-tablegrid' });
-    const caption = h('div', { class: 'wm-tablegrid-caption', text: 'Cancel' });
+    const caption = h('div', { class: 'wm-tablegrid-caption', text: t('menus.tableGrid.cancel') });
     const panel = h('div', { class: 'wm-tablegrid-panel' }, grid, caption);
     let pick = { rows: 0, columns: 0 };
     const cells: HTMLElement[][] = [];
     const paint = () => {
       cells.forEach((row, r) => row.forEach((cell, c) => toggleClass(cell, 'on', r < pick.rows && c < pick.columns)));
-      caption.textContent = pick.rows ? `${pick.rows} × ${pick.columns} Table` : 'Cancel';
+      caption.textContent = pick.rows ? t('menus.tableGrid.size', { rows: pick.rows, columns: pick.columns }) : t('menus.tableGrid.cancel');
     };
     const draw = () => {
       grid.replaceChildren();

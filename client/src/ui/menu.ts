@@ -5,6 +5,7 @@
 // Keyboard focus stays in the document while menus are used: keys are taken in the capture
 // phase while a menu is active, so the caret and IME state are undisturbed when it closes.
 
+import { t } from '../i18n/index.ts';
 import type { CommandRegistry } from './commands.ts';
 import { h, mnemonicLabel, setAttr } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
@@ -326,7 +327,7 @@ export class MenuBar {
     layer: HTMLDivElement,
   ) {
     this.layer = layer;
-    this.el = h('div', { class: 'wm-menubar', attrs: { role: 'menubar', 'aria-label': 'Menu' } });
+    this.el = h('div', { class: 'wm-menubar', attrs: { role: 'menubar', 'aria-label': t('menus.menuBar') } });
     this.el.addEventListener('mousedown', (e) => e.preventDefault());
     menus.forEach((menu, i) => {
       const { el: labelEl, key } = mnemonicLabel(menu.label);

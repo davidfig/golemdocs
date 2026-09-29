@@ -1,5 +1,5 @@
-// Converting between the model and the file formats the editor works in: Word (.docx), PDF,
-// Markdown and plain text. The open document is always the full model (saved as a .wdoc, see
+// Converting between the model and the file formats the editor works in: Word (.docx),
+// OpenDocument, Rich Text, HTML, PDF, Markdown and plain text. The open document is always the full model (saved as a .wdoc, see
 // wdoc.ts), and switching formats only changes what it is edited as; these functions are the
 // edges, where a file comes in (import) or goes out (export). Exporting drops exactly what the
 // target can't express. PDF is a fixed layout: exporting *to* it lays the document out and
@@ -9,11 +9,12 @@ import { WordDocument } from '@word/docx';
 import type { FontSet } from '@word/layout';
 import type { Extensions } from './wdoc.ts';
 import txtHandler from './handlers/txt.ts';
+import { csv as csvHandler, tsv as tsvHandler } from './handlers/csv.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'odt' | 'html' | 'pdf' | 'md' | 'txt';
+export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'pdf' | 'md' | 'txt';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'html', 'pdf', 'md', 'txt'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'pdf', 'md', 'txt'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -45,9 +46,18 @@ const docx: FormatHandler = {
 const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   docx: async () => docx,
   odt: async () => (await import('./handlers/odt.ts')).default,
+  rtf: async () => (await import('./handlers/rtf.ts')).default,
   html: async () => (await import('./handlers/html.ts')).default,
+  epub: async () => (await import('./handlers/webArchives.ts')).epub,
+  mhtml: async () => (await import('./handlers/webArchives.ts')).mhtml,
   pdf: async () => (await import('./handlers/pdf.ts')).default,
   md: async () => (await import('./handlers/md.ts')).default,
+  csv: async () => csvHandler,
+  tsv: async () => tsvHandler,
+  tex: async () => (await import('./handlers/markup.ts')).tex,
+  adoc: async () => (await import('./handlers/markup.ts')).adoc,
+  rst: async () => (await import('./handlers/markup.ts')).rst,
+  org: async () => (await import('./handlers/markup.ts')).org,
   txt: async () => txtHandler,
 };
 
@@ -94,7 +104,8 @@ export async function convertContent(content: OpenContent, to: Format, fonts: Fo
  */
 export function conversionIsLossy(from: Format, to: Format): boolean {
   if (from === to) return false;
-  if (from === 'txt') return to === 'pdf';
+  if (from === 'txt' || from === 'csv' || from === 'tsv') return to === 'pdf';
+  if (from === 'tex' || from === 'adoc' || from === 'rst' || from === 'org') return to === 'txt' || to === 'pdf';
   if (from === 'md') return to === 'txt' || to === 'pdf';
   return true;
 }

@@ -2,6 +2,8 @@
 // command id ("format.bold"), a control id ("control.font"), or SEPARATOR. The layout is
 // edited with Customize Toolbars (customize.ts) and remembered in this browser.
 
+import { t } from '../i18n/index.ts';
+
 export const SEPARATOR = '|';
 
 export interface ToolbarLayout {
@@ -71,10 +73,15 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
   },
 ];
 
+/** A toolbar's name as shown (its `name` is an id, kept as saved). */
+export function toolbarTitle(name: string): string {
+  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name;
+}
+
 const STORAGE_KEY = 'word.toolbars.v1';
 
 export function cloneLayout(layout: readonly ToolbarLayout[]): ToolbarLayout[] {
-  return layout.map((t) => ({ ...t, items: [...t.items] }));
+  return layout.map((bar) => ({ ...bar, items: [...bar.items] }));
 }
 
 /**
@@ -90,7 +97,7 @@ export function loadLayout(isValid: (id: string) => boolean): ToolbarLayout[] {
     saved = null;
   }
   return DEFAULT_LAYOUT.map((fallback) => {
-    const stored = Array.isArray(saved) ? saved.find((t) => t?.name === fallback.name) : undefined;
+    const stored = Array.isArray(saved) ? saved.find((bar) => bar?.name === fallback.name) : undefined;
     if (!stored || !Array.isArray(stored.items)) return { ...fallback, items: [...fallback.items] };
     return {
       name: fallback.name,

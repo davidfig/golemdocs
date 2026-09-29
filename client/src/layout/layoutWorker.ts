@@ -2,9 +2,9 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { WordDocument } from '@word/docx';
+import { paragraphLength, paragraphText, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@word/docx';
 import { Editor, type Command } from '@word/editor';
-import { Replica, type Pointer, type Selection as OpSelection, type Transaction } from '@word/ops';
+import { Replica, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@word/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
 import { RoomClient, type RoomHost, type RoomStart, type SocketLike } from '../collab/roomClient.ts';
 import {
@@ -21,11 +21,14 @@ import type { PdfView } from '../formats/pdfPages.ts';
 import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
 import type { FormField } from '@word/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
-import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand, type WireField } from './protocol.ts';
+import { loadLocale } from '../i18n/index.ts';
+import { DICTIONARY_BASE, FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand, type WireField } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import welcomeText from './welcome.md?raw';
 import { FormatReader } from './selectionFormat.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
+import { findIssues } from '../spelling/check.ts';
+import { Dictionary } from '../spelling/dictionary.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
 const SLICE_MS = 12;
@@ -87,6 +90,15 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       return { name: source.name, document: null, extensions: {}, original: new Uint8Array(source.bytes), lens: 'pdf', origin: 'pdf', pagesCurrent: true };
     case 'md':
     case 'odt':
+    case 'rtf':
+    case 'epub':
+    case 'csv':
+    case 'tex':
+    case 'adoc':
+    case 'rst':
+    case 'org':
+    case 'tsv':
+    case 'mhtml':
     case 'html':
     case 'txt': {
       const { document, extensions } = await importDocument(source.kind, new Uint8Array(source.bytes));
@@ -126,7 +138,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -186,6 +198,10 @@ class OpenDocument {
   private commandAt = 0;
   /** The result of the last Find or Replace All, sent with the next selection. */
   private search: SelectionUpdate['search'] | null = null;
+  /** What the last Spelling and Grammar step found, sent with the next selection. */
+  private spell: SelectionUpdate['spell'] | null = null;
+  /** Formatting the Format Painter has picked up: the paragraph's only when a whole paragraph was copied. */
+  private painter: { run: RunProperties; paragraph: ParagraphProperties | null } | null = null;
 
   constructor(readonly doc: number) {}
 
@@ -350,8 +366,12 @@ class OpenDocument {
       remote,
       search: this.search ?? undefined,
       remoteRects,
+      painting: this.painter !== null,
+      link: editor.selectedLink(),
+      spell: this.spell ?? undefined,
     };
     this.search = null;
+    this.spell = null;
     this.reveal = false;
     this.commandAt = 0;
     this.sendPresence();
@@ -542,18 +562,27 @@ class OpenDocument {
   }
 
   /**
-   * Joins the room for a document that was already open (a new one, once it has been uploaded). Only
-   * when nobody else is editing it: otherwise the room's document would replace this one, which
-   * can't be done under the user, so it carries on unshared and is merged as a separate copy later.
+   * Joins the room for a document that was already open (a new one once uploaded, or a saved one
+   * shown before it was known who is signed in). When someone else is editing, the room's document
+   * would replace this one: if nothing was typed here the page reopens it from the room; otherwise
+   * it carries on unshared and is merged as a separate copy later.
    */
   async joinLate(room: Extract<RoomOptions, { kind: 'network' }>): Promise<void> {
     if (this.net || this.room || this.format !== 'docx' || !this.replica || !this.editor) return;
     const start = await this.joinNetwork(room, this.replica.clientId);
-    if (this.closed || !start) return;
+    if (this.closed) {
+      // Another document was opened while joining: nobody is left to use this room.
+      (this.net as RoomClient | null)?.leave();
+      this.net = null;
+      return;
+    }
+    if (!start) return;
     if (start.kind === 'own') this.net!.ready(start);
     else {
       this.net!.leave();
       this.net = null;
+      // Nothing typed here yet: the page reopens the document from the room's copy instead.
+      if (!this.edited) post({ type: 'roomReplace', doc: this.doc });
     }
   }
 
@@ -679,11 +708,86 @@ class OpenDocument {
   private applyFormat(action: FormatAction): void | Promise<void> {
     const { editor, session } = this;
     if (!editor || !session || this.annotator || this.readOnly) return;
+    if (action.kind === 'formatPainter') {
+      this.painter = this.painter ? null : this.pickUpFormat(editor);
+      this.sendSelection();
+      return;
+    }
     const fonts = new Set<string>();
     const command = formatCommand(action, editor, this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending), fonts);
     if (!command) return;
     if (fonts.size) return session.ensureFonts(fonts).then(() => this.apply(command));
     this.apply(command);
+  }
+
+  /** The formatting at the selection: its text's, and its paragraphs' when it covers a whole paragraph. */
+  private pickUpFormat(editor: Editor): NonNullable<OpenDocument['painter']> {
+    const [start, end] = editor.ordered();
+    const run = structuredClone(runPropertiesAt(start.paragraph, start.offset) ?? {});
+    const whole = !editor.collapsed && start.offset === 0 && (end.paragraph !== start.paragraph || end.offset >= paragraphLength(start.paragraph));
+    return { run, paragraph: whole ? structuredClone(start.paragraph.properties) : null };
+  }
+
+  /** Paints the selection with what the Format Painter picked up, once, if something is selected. */
+  private applyPainter(): void {
+    const editor = this.editor;
+    const painter = this.painter;
+    if (!editor || !painter || editor.collapsed || this.annotator || this.readOnly) return;
+    this.painter = null;
+    // Each run takes exactly the picked-up formatting: what it had of its own goes.
+    this.apply({
+      kind: 'formatText',
+      format: (run) => {
+        const format: RunFormat = {};
+        for (const key of Object.keys(run) as (keyof RunProperties)[]) if (!(key in painter.run)) format[key] = null;
+        for (const key of Object.keys(painter.run) as (keyof RunProperties)[]) (format as Record<string, unknown>)[key] = structuredClone(painter.run[key]);
+        return format;
+      },
+    });
+    const source = painter.paragraph;
+    if (source) {
+      this.apply({
+        kind: 'formatParagraphs',
+        change: () => ({ style: source.style, justification: source.justification, spacing: source.spacing && { ...source.spacing }, indent: source.indent && { ...source.indent } }),
+      });
+    }
+  }
+
+  /** Selects the next spelling or grammar mistake at or after the place `from` says, and reports it. */
+  private async spellNext(from: 'documentStart' | 'selectionStart' | 'selectionEnd', grammar: boolean): Promise<void> {
+    const editor = this.editor;
+    if (!editor || this.closed || this.annotator) return;
+    const dictionary = await loadDictionary();
+    const list = editor.paragraphs();
+    const [start, end] = editor.ordered();
+    const origin = from === 'documentStart' ? { paragraph: 0, offset: 0 } : { paragraph: Math.max(list.indexOf(from === 'selectionStart' ? start.paragraph : end.paragraph), 0), offset: (from === 'selectionStart' ? start : end).offset };
+    this.spell = { issue: null };
+    for (let k = origin.paragraph; k < list.length; k++) {
+      const text = paragraphText(list[k]);
+      const issue = findIssues(text, { dictionary, grammar, ignoredRules: spelling.rules }).find((i) => k > origin.paragraph || i.start >= origin.offset);
+      if (!issue) continue;
+      // The sentence around it, for the dialog to show.
+      let sentenceStart = 0;
+      for (const m of text.slice(0, issue.start).matchAll(/[.!?]["'”’)]*\s+/g)) sentenceStart = m.index + m[0].length;
+      const before = text.slice(Math.max(sentenceStart, issue.start - 200), issue.start);
+      const rest = /[.!?]["'”’)]*(?=\s|$)/.exec(text.slice(issue.end));
+      const after = text.slice(issue.end, Math.min(rest ? issue.end + rest.index + rest[0].length : text.length, issue.end + 200));
+      this.spell = {
+        issue: {
+          kind: issue.kind,
+          before,
+          text: issue.text,
+          after,
+          message: issue.message,
+          suggestions: issue.kind === 'spelling' ? dictionary.suggest(issue.text) : issue.suggestions,
+          rule: issue.rule,
+        },
+      };
+      editor.apply({ kind: 'select', paragraph: k, from: issue.start, to: issue.end });
+      break;
+    }
+    this.reveal = true;
+    this.sendSelection();
   }
 
   private later(task: () => void | Promise<void>): void {
@@ -709,6 +813,9 @@ class OpenDocument {
 
   private runCommand(wire: WireCommand): void | Promise<void> {
     if (wire.kind === 'format') return this.applyFormat(wire.action);
+    if (wire.kind === 'applyPainter') return this.applyPainter();
+    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? [], wire.rules ?? []);
+    if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
     if (wire.kind === 'annotate' || wire.kind === 'setFields') return;
     const editor = this.editor;
@@ -739,6 +846,34 @@ class OpenDocument {
       this.status();
     } else this.sendSelection();
   }
+}
+
+/** Words the user added to the dictionary or chose to ignore, and grammar rules to ignore: for every document. */
+const spelling = { words: new Set<string>(), rules: new Set<string>() };
+let dictionaryLoad: Promise<Dictionary> | null = null;
+
+/** The English dictionary, read the first time something is checked. */
+function loadDictionary(): Promise<Dictionary> {
+  dictionaryLoad ??= Promise.all([fetch(`${DICTIONARY_BASE}en_US.aff`), fetch(`${DICTIONARY_BASE}en_US.dic`)])
+    .then(async ([aff, dic]) => {
+      if (!aff.ok || !dic.ok) throw new Error('the dictionary could not be loaded');
+      const dictionary = Dictionary.parse(await aff.text(), await dic.text());
+      dictionary.accept(...spelling.words);
+      return dictionary;
+    })
+    .catch((error: unknown) => {
+      // Try again next time.
+      dictionaryLoad = null;
+      throw error;
+    });
+  return dictionaryLoad;
+}
+
+/** Words to treat as spelled correctly and grammar rules to leave out, from now on. */
+async function acceptSpelling(words: string[], rules: string[]): Promise<void> {
+  for (const word of words) spelling.words.add(word);
+  for (const rule of rules) spelling.rules.add(rule);
+  if (dictionaryLoad) (await dictionaryLoad).accept(...words);
 }
 
 let current: OpenDocument | null = null;
@@ -895,11 +1030,17 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
   }
 }
 
+/** Settles once the page's language is loaded; documents wait for it so their errors are translated. */
+let localeReady: Promise<unknown> = Promise.resolve();
+
 self.onmessage = (event: MessageEvent<ToWorker>) => {
   const message = event.data;
   switch (message.type) {
+    case 'locale':
+      localeReady = loadLocale(message.locale);
+      break;
     case 'open':
-      void open(message.doc, message.source, message.room);
+      void localeReady.then(() => open(message.doc, message.source, message.room));
       break;
     case 'pointer':
       if (current?.doc === message.doc) current.sendPointer(message.pointer);

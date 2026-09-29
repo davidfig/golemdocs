@@ -12,6 +12,7 @@ import { getThumbnail } from '../storage/local.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
+import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import './dashboard.css';
 
@@ -57,19 +58,19 @@ export class Dashboard {
     parent: HTMLElement,
     private readonly host: DashboardHost,
   ) {
-    this.search = h('input', { class: 'wm-dash-search', attrs: { type: 'search', placeholder: 'Search documents', 'aria-label': 'Search documents' } });
+    this.search = h('input', { class: 'wm-dash-search', attrs: { type: 'search', placeholder: t('panels.dashboard.search'), 'aria-label': t('panels.dashboard.search') } });
     this.account = h('div', { class: 'wm-dash-account' });
     this.notice = h('p', { class: 'wm-dash-notice', attrs: { role: 'status' } });
     this.grid = h('div', { class: 'wm-dash-grid' });
-    const close = h('button', { class: 'wm-dash-close', text: 'Back to document', attrs: { type: 'button' } });
+    const close = h('button', { class: 'wm-dash-close', text: t('panels.dashboard.back'), attrs: { type: 'button' } });
     close.addEventListener('click', () => this.dismiss());
-    this.sharedTitle = h('h2', { class: 'wm-dash-section', text: 'Shared with me' });
+    this.sharedTitle = h('h2', { class: 'wm-dash-section', text: t('panels.dashboard.sharedWithMe') });
     this.sharedGrid = h('div', { class: 'wm-dash-grid' });
     this.scroller = h('div', { class: 'wm-dash-scroll' }, this.notice, this.grid, this.sharedTitle, this.sharedGrid);
     this.root = h(
       'section',
-      { class: 'wm-dashboard', attrs: { 'aria-label': 'Documents' } },
-      h('header', { class: 'wm-dash-head' }, h('h1', { text: 'Documents' }), this.search, this.account, close),
+      { class: 'wm-dashboard', attrs: { 'aria-label': t('panels.dashboard.title') } },
+      h('header', { class: 'wm-dash-head' }, h('h1', { text: t('panels.dashboard.title') }), this.search, this.account, close),
       this.scroller,
     );
     this.root.hidden = true;
@@ -144,10 +145,10 @@ export class Dashboard {
       return b;
     };
     if (user) {
-      const who = user.email ?? user.name ?? 'your account';
-      this.account.replaceChildren(h('span', { text: who }), button('Sign out', () => this.host.signOut()));
+      const who = user.email ?? user.name ?? t('panels.dashboard.yourAccount');
+      this.account.replaceChildren(h('span', { text: who }), button(t('panels.dashboard.signOut'), () => this.host.signOut()));
     } else {
-      this.account.replaceChildren(h('span', { text: 'Saved in this browser' }), button('Sign in', () => this.host.signIn()));
+      this.account.replaceChildren(h('span', { text: t('panels.dashboard.savedHere') }), button(t('panels.dashboard.signIn'), () => this.host.signIn()));
     }
   }
 
@@ -163,7 +164,7 @@ export class Dashboard {
     this.confirming = null;
     const shown = this.entries.filter((e) => matchesSearch(e, this.search.value));
 
-    const blank = h('button', { class: 'wm-card wm-card-new', attrs: { type: 'button', 'aria-label': 'New blank document' } }, h('span', { class: 'wm-plus', text: '+' }), h('span', { text: 'Blank document' }));
+    const blank = h('button', { class: 'wm-card wm-card-new', attrs: { type: 'button', 'aria-label': t('panels.dashboard.newBlankLabel') } }, h('span', { class: 'wm-plus', text: '+' }), h('span', { text: t('panels.dashboard.newBlank') }));
     blank.addEventListener('click', () => {
       this.hide();
       this.host.newDocument();
@@ -172,7 +173,7 @@ export class Dashboard {
     const cards = shown.map((entry) => this.card(entry));
     const children: (HTMLElement | string)[] = [blank, ...cards];
     if (!shown.length) {
-      children.push(h('p', { class: 'wm-dash-empty', text: this.search.value.trim() ? 'No documents match your search.' : 'Documents you save will show up here.' }));
+      children.push(h('p', { class: 'wm-dash-empty', text: this.search.value.trim() ? t('panels.dashboard.noMatches') : t('panels.dashboard.empty') }));
     }
     this.grid.replaceChildren(...children);
 
@@ -198,19 +199,19 @@ export class Dashboard {
     const thumb = h('div', { class: 'wm-thumb' }, h('div', { class: 'wm-thumb-empty', attrs: { 'aria-hidden': 'true' } }));
     this.sharedThumbs.set(thumb, doc);
     const by = doc.owner?.name ?? doc.owner?.email;
-    const meta = [by ? `From ${by}` : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
-    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': `Open ${doc.name}` } }, thumb, h('span', { class: 'wm-card-name', text: doc.name, title: doc.name }), h('span', { class: 'wm-card-meta', text: meta }));
+    const meta = [by ? t('panels.dashboard.from', { name: by }) : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
+    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', text: doc.name, title: doc.name }), h('span', { class: 'wm-card-meta', text: meta }));
     open.addEventListener('click', () => {
       this.hide();
       this.host.openShared(doc);
     });
-    const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: doc.role === 'viewer' ? 'View only' : 'Can edit' }));
+    const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: doc.role === 'viewer' ? t('panels.dashboard.viewOnly') : t('panels.dashboard.canEdit') }));
     const actions = h('div', { class: 'wm-card-actions' });
     const user = this.host.account();
     if (user) {
       const userId = user.id;
       actions.append(
-        this.confirmButton('Leave', async () => {
+        this.confirmButton(t('panels.dashboard.leave'), async () => {
           await removeShare(doc.id, userId);
         }),
       );
@@ -223,7 +224,7 @@ export class Dashboard {
     this.entryFor.set(thumb, entry);
 
     const meta = [relativeTime(entry.updatedAt), formatSize(entry.size)].join(' · ');
-    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': `Open ${entry.name}` } }, thumb, h('span', { class: 'wm-card-name', text: entry.name, title: entry.name }), h('span', { class: 'wm-card-meta', text: meta }));
+    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', text: entry.name, title: entry.name }), h('span', { class: 'wm-card-meta', text: meta }));
     open.addEventListener('click', () => {
       this.hide();
       this.host.open(entry);
@@ -233,9 +234,9 @@ export class Dashboard {
     const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
 
-    const actions = h('div', { class: 'wm-card-actions' }, this.confirmButton('Delete', () => this.host.delete(entry)));
+    const actions = h('div', { class: 'wm-card-actions' }, this.confirmButton(t('panels.dashboard.delete'), () => this.host.delete(entry)));
     if (entry.cloud) {
-      const share = h('button', { text: 'Share…', attrs: { type: 'button' } });
+      const share = h('button', { text: t('panels.dashboard.share'), attrs: { type: 'button' } });
       share.addEventListener('click', () => this.host.share(entry.cloud!.id, entry.cloud!.name));
       actions.prepend(share);
     }
@@ -253,14 +254,14 @@ export class Dashboard {
         run().then(
           () => this.refresh(),
           (error) => {
-            this.notice.textContent = `Couldn’t do that: ${(error as Error).message}`;
+            this.notice.textContent = t('panels.dashboard.failed', { reason: (error as Error).message });
             void this.refresh();
           },
         );
         return;
       }
       this.resetConfirm();
-      button.textContent = 'Click again to confirm';
+      button.textContent = t('panels.dashboard.confirm');
       this.confirming = { button, label, timer: window.setTimeout(() => this.resetConfirm(), 4000) };
     });
     return button;

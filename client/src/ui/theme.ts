@@ -1,13 +1,17 @@
-// Color schemes: Office 2003's Silver (the default), Blue and Olive Green, each with a dark
-// counterpart shared by all three. A scheme is only a set of --wm-* colors in ui.css, chosen by
+// Color schemes: Golem (the default, orange like the favicon) and Office 2003's Silver, Blue,
+// Olive Green and Grayscale, each with a dark counterpart shared by all of them. A scheme is only a set of --wm-* colors in ui.css, chosen by
 // data-theme on the root element. Two choices make it: the scheme, and the appearance, which is
 // automatic (dark when the system prefers dark), always light, or always dark. Both belong to this
 // browser (kept in localStorage), not the document.
 
+import { t } from '../i18n/index.ts';
+
 export const SCHEMES = [
-  { id: 'silver', label: '&Silver' },
-  { id: 'blue', label: '&Blue' },
-  { id: 'olive', label: '&Olive Green' },
+  { id: 'golem', get label() { return t('menus.scheme.golem'); } },
+  { id: 'silver', get label() { return t('menus.scheme.silver'); } },
+  { id: 'blue', get label() { return t('menus.scheme.blue'); } },
+  { id: 'olive', get label() { return t('menus.scheme.olive'); } },
+  { id: 'gray', get label() { return t('menus.scheme.gray'); } },
 ] as const;
 
 export type SchemeId = (typeof SCHEMES)[number]['id'];
@@ -37,7 +41,7 @@ function write(key: string, value: string): void {
 const isScheme = (value: unknown): value is SchemeId => SCHEMES.some((s) => s.id === value);
 const isAppearance = (value: unknown): value is Appearance => value === 'auto' || value === 'light' || value === 'dark';
 
-let scheme: SchemeId = 'silver';
+let scheme: SchemeId = 'golem';
 let appearance: Appearance = 'auto';
 {
   const savedScheme = read(SCHEME_KEY);
@@ -68,6 +72,7 @@ export function isDark(): boolean {
 function apply(): void {
   desk = null;
   document.documentElement.dataset.theme = isDark() ? 'dark' : scheme;
+  document.documentElement.dataset.scheme = scheme;
   for (const listener of listeners) listener();
 }
 
@@ -101,6 +106,7 @@ darkQuery.addEventListener('change', () => {
 });
 
 document.documentElement.dataset.theme = isDark() ? 'dark' : scheme;
+document.documentElement.dataset.scheme = scheme;
 
 /** The color behind the pages, 0-1 per channel, as the scheme's --wm-desk. */
 export function deskColor(): readonly [number, number, number] {

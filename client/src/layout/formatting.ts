@@ -26,6 +26,7 @@ export type FormatAction = Extract<
       | 'setHighlight'
       | 'changeCase'
       | 'clearFormatting'
+      | 'formatPainter'
       | 'setStyle'
       | 'setAlignment'
       | 'setLineSpacing'
@@ -44,6 +45,7 @@ export const FORMAT_ACTIONS = new Set<FormatAction['kind']>([
   'setHighlight',
   'changeCase',
   'clearFormatting',
+  'formatPainter',
   'setStyle',
   'setAlignment',
   'setLineSpacing',
@@ -349,6 +351,9 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
           return keys.length ? Object.fromEntries(keys.map((k) => [k, null])) : null;
         },
       };
+    // Handled by the worker, which holds what was picked up (see OpenDocument.applyPainter).
+    case 'formatPainter':
+      return null;
     case 'setStyle': {
       const existing = findStyle(doc, action.style);
       const define: Operation[] = [];

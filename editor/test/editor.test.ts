@@ -233,3 +233,81 @@ test('replace all changes every match, undoes together, and leaves the caret aft
   editor.apply({ kind: 'replaceAll', text: 'fish', with: '', matchCase: true });
   assert.deepEqual(texts(), ['One , two ', 'red FISH, blue ']);
 });
+
+const linksOf = (p: Paragraph) => p.children.filter((c) => c.kind === 'hyperlink') as Extract<Paragraph['children'][number], { kind: 'hyperlink' }>[];
+
+test('links: the selection becomes a link that keeps its formatting; undo takes it back', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['See the docs here']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'wordRight', extend: true });
+  assert.equal(editor.selectedText(), 'docs ');
+  await apply({ kind: 'formatText', format: { bold: true } });
+  await apply({ kind: 'setLink', url: 'https://example.com', text: 'docs ' });
+  const [paragraph] = paragraphsIn(doc.body);
+  const [link] = linksOf(paragraph);
+  assert.equal(link.url, 'https://example.com');
+  assert.deepEqual(texts(), ['See the docs here'], 'the text is unchanged');
+  const run = link.children[0] as Extract<typeof link.children[number], { kind: 'run' }>;
+  assert.equal(run.properties.style, 'Hyperlink');
+  assert.equal(run.properties.bold, true, 'bold survives');
+  assert.ok(doc.styles.styles.some((s) => s.id === 'Hyperlink'));
+  assert.equal(editor.selectedLink()?.url, 'https://example.com', 'the caret at the end of a link counts as in it');
+  // It survives saving as a .docx.
+  const back = await WordDocument.read(await doc.write());
+  assert.equal(linksOf(paragraphsIn(back.body)[0])[0]?.url, 'https://example.com');
+  editor.undo();
+  assert.equal(linksOf(paragraphsIn(doc.body)[0]).length, 0);
+  assert.deepEqual(texts(), ['See the docs here']);
+});
+
+test('links: new text at a caret, retargeting a link, and removing one', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['Read: ']);
+  await apply({ kind: 'move', to: 'documentEnd' });
+  await apply({ kind: 'setLink', url: 'https://a.example', text: 'the manual' });
+  assert.deepEqual(texts(), ['Read: the manual']);
+  assert.equal(linksOf(paragraphsIn(doc.body)[0])[0].url, 'https://a.example');
+  // A caret inside the link edits that link: new address, new text.
+  await apply({ kind: 'move', to: 'left' }, { kind: 'move', to: 'left' });
+  assert.deepEqual(editor.selectedLink(), { url: 'https://a.example', text: 'the manual' });
+  await apply({ kind: 'setLink', url: 'https://b.example', text: 'the guide' });
+  const links = linksOf(paragraphsIn(doc.body)[0]);
+  assert.equal(links.length, 1, 'still one link');
+  assert.equal(links[0].url, 'https://b.example');
+  assert.deepEqual(texts(), ['Read: the guide']);
+  // Remove: the text stays, without the link or its style.
+  await apply({ kind: 'move', to: 'left' }, { kind: 'removeLink' });
+  const [paragraph] = paragraphsIn(doc.body);
+  assert.equal(linksOf(paragraph).length, 0);
+  assert.deepEqual(texts(), ['Read: the guide']);
+  assert.equal(editor.selectedLink(), null);
+  // Nothing to link across paragraphs, or without an address.
+  assert.equal(editor.apply({ kind: 'setLink', url: '', text: 'x' }).edited, false);
+});
+
+test('select puts the selection on a range of a paragraph', skip, async () => {
+  const { editor, apply } = await setup(['One two', 'three four']);
+  await apply({ kind: 'select', paragraph: 1, from: 6, to: 10 });
+  assert.equal(editor.selectedText(), 'four');
+  await apply({ kind: 'select', paragraph: 0, from: 4, to: 99 });
+  assert.equal(editor.selectedText(), 'two', 'past the end stops at the end');
+  await apply({ kind: 'select', paragraph: 9, from: 0, to: 1 });
+  assert.equal(editor.selectedText(), 'two', 'a paragraph that is not there changes nothing');
+});
+
+test('whole-word find and replace, and replace all staying at the selected match', skip, async () => {
+  const { editor, apply, texts } = await setup(['ab abc ab', 'cab ab']);
+  await apply({ kind: 'move', to: 'documentStart' });
+  const at = () => `${editor.paragraphs().indexOf(editor.selection.anchor.paragraph)}:${editor.selection.anchor.offset}`;
+  assert.equal(editor.apply({ kind: 'find', text: 'ab', wholeWord: true }).found, true);
+  assert.equal(at(), '0:0');
+  assert.equal(editor.apply({ kind: 'find', text: 'ab', wholeWord: true }).found, true);
+  assert.equal(at(), '0:7', 'abc is skipped');
+  assert.equal(editor.apply({ kind: 'find', text: 'ab', wholeWord: true }).found, true);
+  assert.equal(at(), '1:4', 'and so is cab');
+  // With the second whole-word match selected, the caret stays after it while the rest change.
+  await apply({ kind: 'select', paragraph: 0, from: 7, to: 9 });
+  editor.apply({ kind: 'replaceAll', text: 'ab', with: 'xyz', wholeWord: true });
+  await apply();
+  assert.deepEqual(texts(), ['xyz abc xyz', 'cab xyz']);
+  assert.equal(editor.collapsed, true);
+  assert.equal(`${editor.paragraphs().indexOf(editor.selection.focus.paragraph)}:${editor.selection.focus.offset}`, '0:11');
+});

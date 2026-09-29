@@ -1,0 +1,72 @@
+import type { Messages } from '../../index.ts';
+
+export const panels: Partial<Messages> = {
+  // Billing (View > Cloudflare Billing)
+  'panels.billing.loading': '載入中…',
+  'panels.billing.status': '狀態 {status}',
+  'panels.billing.failed': '無法取得帳單:{reason}',
+  'panels.billing.soFar': '{month}截至目前:{total}',
+  'panels.billing.none': '本月尚無費用。',
+  'panels.billing.asOf': '截至 {time}。Cloudflare 回報用量可能需要一段時間。',
+
+  // Comments
+  'panels.comments.label': '註解',
+  'panels.comments.title': '註解 ({count})',
+  'panels.comments.edit': '編輯',
+  'panels.comments.delete': '刪除',
+  'panels.comments.unknown': '未知',
+  'panels.comments.prompt': '註解',
+
+  // Dashboard
+  'panels.dashboard.title': '文件',
+  'panels.dashboard.search': '搜尋文件',
+  'panels.dashboard.back': '返回文件',
+  'panels.dashboard.sharedWithMe': '與我共用',
+  'panels.dashboard.yourAccount': '您的帳戶',
+  'panels.dashboard.signIn': '登入',
+  'panels.dashboard.signOut': '登出',
+  'panels.dashboard.savedHere': '已儲存在此瀏覽器',
+  'panels.dashboard.newBlankLabel': '新增空白文件',
+  'panels.dashboard.newBlank': '空白文件',
+  'panels.dashboard.noMatches': '沒有符合搜尋條件的文件。',
+  'panels.dashboard.empty': '您儲存的文件會顯示在這裡。',
+  'panels.dashboard.from': '來自 {name}',
+  'panels.dashboard.open': '開啟 {name}',
+  'panels.dashboard.viewOnly': '僅供檢視',
+  'panels.dashboard.canEdit': '可編輯',
+  'panels.dashboard.leave': '離開',
+  'panels.dashboard.delete': '刪除',
+  'panels.dashboard.share': '分享…',
+  'panels.dashboard.confirm': '再按一次以確認',
+  'panels.dashboard.failed': '無法完成此操作:{reason}',
+  'panels.dashboard.notSaved': '尚未儲存',
+
+  // Dates and sizes
+  'panels.time.justNow': '剛剛',
+  'panels.time.yesterday': '昨天',
+  'panels.size.bytes': '{value} B',
+  'panels.size.kb': '{value} KB',
+  'panels.size.mb': '{value} MB',
+
+  // PDF form layer
+  'panels.forms.editForm': '編輯表單',
+  'panels.forms.dragHint': '拖曳欄位可移動,拖曳其角落可調整大小。',
+  'panels.forms.selectHint': '選取欄位即可重新命名或刪除。',
+  'panels.forms.noFields': '此 PDF 尚無任何欄位。',
+  'panels.forms.fieldName': '欄位名稱',
+  'panels.forms.name': '名稱',
+  'panels.forms.severalLines': '多行',
+  'panels.forms.options': '選項,每行一個',
+  'panels.forms.deleteField': '刪除欄位',
+  'panels.forms.fieldTitle': '{kind}:{name}',
+  'panels.forms.kind.text': '文字方塊',
+  'panels.forms.kind.checkbox': '核取方塊',
+  'panels.forms.kind.radio': '選項按鈕',
+  'panels.forms.kind.choice': '下拉式清單',
+  'panels.forms.place.text': '在頁面上按一下以放置文字方塊。按 Esc 取消。',
+  'panels.forms.place.checkbox': '在頁面上按一下以放置核取方塊。按 Esc 取消。',
+  'panels.forms.place.choice': '在頁面上按一下以放置下拉式清單。按 Esc 取消。',
+  'panels.forms.newText': '文字',
+  'panels.forms.newCheckbox': '核取方塊',
+  'panels.forms.newChoice': '下拉式清單',
+};

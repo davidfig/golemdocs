@@ -26,6 +26,24 @@ export type DocumentSource =
   | { kind: 'html'; name: string; bytes: ArrayBuffer }
   /** An OpenDocument text file. */
   | { kind: 'odt'; name: string; bytes: ArrayBuffer }
+  /** LaTeX source. */
+  | { kind: 'tex'; name: string; bytes: ArrayBuffer }
+  /** AsciiDoc source. */
+  | { kind: 'adoc'; name: string; bytes: ArrayBuffer }
+  /** reStructuredText source. */
+  | { kind: 'rst'; name: string; bytes: ArrayBuffer }
+  /** Org mode source. */
+  | { kind: 'org'; name: string; bytes: ArrayBuffer }
+  /** Comma-, semicolon- or pipe-delimited text, opened as a table. */
+  | { kind: 'csv'; name: string; bytes: ArrayBuffer }
+  /** Tab-delimited text, opened as a table. */
+  | { kind: 'tsv'; name: string; bytes: ArrayBuffer }
+  /** An e-book. */
+  | { kind: 'epub'; name: string; bytes: ArrayBuffer }
+  /** A web page saved as one MIME message. */
+  | { kind: 'mhtml'; name: string; bytes: ArrayBuffer }
+  /** A Rich Text Format file. */
+  | { kind: 'rtf'; name: string; bytes: ArrayBuffer }
   /** A plain-text file, edited one paragraph per line. */
   | { kind: 'txt'; name: string; bytes: ArrayBuffer }
   /** The app's own file (see ../formats/wdoc.ts): the whole document, opened in the format it was being edited as. */
@@ -45,6 +63,15 @@ export type WireCommand =
   | { kind: 'redo' }
   /** Formatting from the menus and toolbars (see formatting.ts). */
   | { kind: 'format'; action: FormatAction }
+  /**
+   * Spelling and Grammar: selects the next thing wrong, from the start of the document, the start
+   * or the end of the selection, and reports it (see `SelectionUpdate.spell`).
+   */
+  | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
+  /** Words to accept as spelled correctly (the user's dictionary, or ones ignored), and grammar rules to ignore. */
+  | { kind: 'spellWords'; words?: string[]; rules?: string[] }
+  /** The pointer was released: with the Format Painter picked up, paint the selection (if there is one). */
+  | { kind: 'applyPainter' }
   /**
    * On a PDF shown as its own pages: mark the selected text, or put a note there (see
    * pdfAnnotator.ts). With an annotation selected, changes it instead.
@@ -86,6 +113,8 @@ export interface RoomState {
 }
 
 export type ToWorker =
+  /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
+  | { type: 'locale'; locale: string }
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
@@ -138,6 +167,12 @@ export interface SelectionUpdate {
   text: string;
   /** Formatting at the caret or across the selection, for the toolbar. */
   format: FormatState;
+  /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
+  spell?: { issue: SpellIssue | null };
+  /** The link the selection is in (or starts in), for Insert Hyperlink and Ctrl+click. */
+  link?: { url: string; text: string } | null;
+  /** The Format Painter has picked up formatting and is waiting for a selection. */
+  painting?: boolean;
   /** Set once after a Find (whether it found a match) or Replace All (how many it replaced). */
   search?: { found?: boolean; replaced?: number };
   /** Whether Undo and Redo have anything to do. */
@@ -173,6 +208,7 @@ export type FromWorker =
   | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */
   | ({ type: 'roomState'; doc: number } & RoomState)
+  | { type: 'roomReplace'; doc: number }
   /** Where other people's mouse pointers are (page positions in display order, points). */
   | { type: 'pointers'; doc: number; pointers: { page: number; x: number; y: number; color: number; name: string }[] }
   /** Someone else's edit changed the document (it needs saving here too). */
@@ -181,4 +217,21 @@ export type FromWorker =
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string };
 
 /** Font files, relative to the site root (the worker and the page both load from here). */
+/** A problem the Spelling and Grammar check found, with the sentence around it. */
+export interface SpellIssue {
+  kind: 'spelling' | 'grammar';
+  /** The sentence before the problem, the problem, and the sentence after it. */
+  before: string;
+  text: string;
+  after: string;
+  /** "Not in Dictionary", or what the grammar rule says. */
+  message: string;
+  suggestions: string[];
+  /** Grammar only, to ignore the rule. */
+  rule?: string;
+}
+
+/** Where the spelling dictionaries are served from. */
+export const DICTIONARY_BASE = `${import.meta.env.BASE_URL}dictionaries/`;
+
 export const FONT_BASE = `${import.meta.env.BASE_URL}fonts/`;

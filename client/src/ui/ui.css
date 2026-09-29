@@ -38,9 +38,111 @@
   color-scheme: light;
 }
 
-/* Color schemes. Silver (above) is the default; Blue and Olive Green are Office 2003's other two,
+/* Color schemes. Silver (above) is the base palette that Golem, Blue and Olive override; Blue and Olive Green are Office 2003's other two,
    and Dark is the modern addition. They override colors only. theme.ts sets data-theme on the
    root and remembers the choice. */
+
+/* Golem: the favicon's orange (#d9601f) as the accent, on warm neutrals. */
+
+:root[data-theme='golem'] {
+  --wm-face: #f1f0ee;
+  --wm-bar-top: #f8f0e8;
+  --wm-bar-bottom: #e5e4e2;
+  --wm-border: #bbb9b6;
+  --wm-etch-dark: #c7c5c3;
+  --wm-hot: #f8d9c3;
+  --wm-hot-border: #d9601f;
+  --wm-checked: #f1e6dd;
+  --wm-checked-hot: #efb48c;
+  --wm-menu-bg: #fcfcfb;
+  --wm-gutter: #eeedeb;
+  --wm-field-border: #a8a09a;
+  --wm-toolbar-border: #d3d2d0;
+  --wm-menu-border: #8b8a88;
+  --wm-dialog-border: #b8683a;
+  --wm-title-top: #e8783a;
+  --wm-title-bottom: #c24e12;
+  --wm-button-bottom: #e4e3e0;
+  --wm-button-border: #8a3a0c;
+  --wm-row-hover: #f9efe8;
+  --wm-letter: #4a3428;
+  --wm-desk: #e6e5e3;
+}
+
+:root[data-theme='dark'][data-scheme='golem'] {
+  --wm-hot: #6a3f26;
+  --wm-hot-border: #f08040;
+  --wm-checked: #57381f;
+  --wm-checked-hot: #8a5230;
+  --wm-title-top: #c4581a;
+  --wm-title-bottom: #8f3c0d;
+  --wm-letter: #f0e0d4;
+}
+
+/* Grayscale: no color anywhere in the chrome. Icons are desaturated by --wm-icon-halo. */
+
+:root[data-theme='gray'] {
+  --wm-disabled: #a0a0a0;
+  --wm-face: #eeeeee;
+  --wm-bar-top: #f8f8f8;
+  --wm-bar-bottom: #e2e2e2;
+  --wm-border: #b8b8b8;
+  --wm-etch-dark: #c4c4c4;
+  --wm-hot: #d6d6d6;
+  --wm-hot-border: #555;
+  --wm-checked: #e0e0e0;
+  --wm-checked-hot: #bdbdbd;
+  --wm-menu-bg: #fcfcfc;
+  --wm-gutter: #ececec;
+  --wm-field-border: #8f8f8f;
+  --wm-toolbar-border: #d0d0d0;
+  --wm-menu-border: #8a8a8a;
+  --wm-dialog-border: #707070;
+  --wm-title-top: #7a7a7a;
+  --wm-title-bottom: #4a4a4a;
+  --wm-button-bottom: #e0e0e0;
+  --wm-button-border: #444;
+  --wm-error: #333;
+  --wm-row-hover: #efefef;
+  --wm-letter: #333;
+  --wm-icon-halo: grayscale(1);
+  --wm-desk: #e2e2e2;
+}
+
+:root[data-theme='dark'][data-scheme='gray'] {
+  --wm-face: #2c2c2c;
+  --wm-bar-top: #363636;
+  --wm-bar-bottom: #262626;
+  --wm-border: #4c4c4c;
+  --wm-etch-dark: #474747;
+  --wm-etch-light: #3d3d3d;
+  --wm-hot: #4a4a4a;
+  --wm-hot-border: #aaa;
+  --wm-checked: #414141;
+  --wm-checked-hot: #5a5a5a;
+  --wm-menu-bg: #303030;
+  --wm-gutter: #292929;
+  --wm-field-border: #585858;
+  --wm-field-bg: #212121;
+  --wm-toolbar-border: #474747;
+  --wm-menu-border: #585858;
+  --wm-dialog-border: #585858;
+  --wm-title-top: #5a5a5a;
+  --wm-title-bottom: #3c3c3c;
+  --wm-button-top: #3c3c3c;
+  --wm-button-bottom: #303030;
+  --wm-button-border: #5e5e5e;
+  --wm-muted: #a3a3a3;
+  --wm-error: #ddd;
+  --wm-row-hover: #383838;
+  --wm-letter: #e0e0e0;
+  --wm-icon-halo: grayscale(1) drop-shadow(0 0 0.6px rgb(255 255 255 / 0.75));
+  --wm-desk: #1d1d1d;
+}
+
+:root[data-scheme='gray'] .wm-dialog-close {
+  background: linear-gradient(#8a8a8a, #555);
+}
 
 :root[data-theme='blue'] {
   --wm-face: #c4dbf9;
@@ -159,8 +261,6 @@
   height: 22px;
   padding: 1px 2px 0;
   background: linear-gradient(var(--wm-bar-top), var(--wm-face));
-  border-bottom: 1px solid var(--wm-etch-dark);
-  box-shadow: 0 1px 0 var(--wm-etch-light);
 }
 
 .wm-title {
@@ -333,10 +433,9 @@
   align-items: center;
   min-height: 29px;
   padding: 1px 3px;
-  background: linear-gradient(var(--wm-bar-top), var(--wm-bar-bottom));
+  background: var(--wm-bar-top);
   border: 1px solid var(--wm-toolbar-border);
-  border-radius: 3px;
-  box-shadow: inset 0 1px 0 var(--wm-etch-light);
+  border-radius: 4px;
 }
 
 
@@ -660,8 +759,17 @@
   border-radius: 3px;
   background: linear-gradient(#e57a5d, #c4441f);
   color: #fff !important;
-  font-weight: 700;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wm-dialog-close svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
 }
 
 .wm-dialog-body {
@@ -1110,8 +1218,8 @@
   padding: 2px 0;
 }
 
-.wm-billing-cost {
-  padding-left: 24px;
+.wm-billing td.wm-billing-cost {
+  padding-left: 32px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -1212,7 +1320,7 @@
   gap: 6px;
 }
 
-.wm-field {
+.wm-input {
   box-sizing: border-box;
   width: 100%;
   height: 22px;
@@ -1259,4 +1367,62 @@
 .wm-find .wm-hint {
   margin: 0 0 4px;
   color: var(--wm-muted);
+}
+
+/* --- Insert Hyperlink ------------------------------------------------------------------------ */
+
+.wm-dialog.wm-link {
+  width: 420px;
+}
+
+.wm-link-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wm-link .wm-find-message {
+  color: #b00020;
+}
+
+.wm-link-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* --- Spelling and Grammar -------------------------------------------------------------------- */
+
+.wm-dialog.wm-spell {
+  width: 500px;
+}
+
+.wm-spell-sentence {
+  box-sizing: border-box;
+  min-height: 62px;
+  max-height: 110px;
+  margin-bottom: 5px;
+  padding: 3px 5px;
+  overflow-y: auto;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  user-select: text;
+}
+
+.wm-spell-problem {
+  font-weight: 700;
+}
+
+.wm-spell-sentence.spelling .wm-spell-problem {
+  color: #c00000;
+}
+
+.wm-spell-sentence.grammar .wm-spell-problem {
+  color: #007a33;
+}
+
+.wm-spell-suggestions {
+  height: auto;
+  padding: 1px;
 }

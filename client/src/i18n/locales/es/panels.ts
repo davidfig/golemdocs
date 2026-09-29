@@ -1,0 +1,72 @@
+import type { Messages } from '../../index.ts';
+
+export const panels: Partial<Messages> = {
+  // Billing (View > Cloudflare Billing)
+  'panels.billing.loading': 'Cargando…',
+  'panels.billing.status': 'estado {status}',
+  'panels.billing.failed': 'No se pudo obtener la facturación: {reason}',
+  'panels.billing.soFar': '{month} hasta ahora: {total}',
+  'panels.billing.none': 'Aún no hay cargos este mes.',
+  'panels.billing.asOf': 'A {time}. Cloudflare puede tardar en informar del uso.',
+
+  // Comments
+  'panels.comments.label': 'Comentarios',
+  'panels.comments.title': 'Comentarios ({count})',
+  'panels.comments.edit': 'Editar',
+  'panels.comments.delete': 'Eliminar',
+  'panels.comments.unknown': 'Desconocido',
+  'panels.comments.prompt': 'Comentario',
+
+  // Dashboard
+  'panels.dashboard.title': 'Documentos',
+  'panels.dashboard.search': 'Buscar documentos',
+  'panels.dashboard.back': 'Volver al documento',
+  'panels.dashboard.sharedWithMe': 'Compartidos conmigo',
+  'panels.dashboard.yourAccount': 'su cuenta',
+  'panels.dashboard.signIn': 'Iniciar sesión',
+  'panels.dashboard.signOut': 'Cerrar sesión',
+  'panels.dashboard.savedHere': 'Guardado en este explorador',
+  'panels.dashboard.newBlankLabel': 'Nuevo documento en blanco',
+  'panels.dashboard.newBlank': 'Documento en blanco',
+  'panels.dashboard.noMatches': 'Ningún documento coincide con la búsqueda.',
+  'panels.dashboard.empty': 'Los documentos que guarde aparecerán aquí.',
+  'panels.dashboard.from': 'De {name}',
+  'panels.dashboard.open': 'Abrir {name}',
+  'panels.dashboard.viewOnly': 'Solo lectura',
+  'panels.dashboard.canEdit': 'Puede editar',
+  'panels.dashboard.leave': 'Salir',
+  'panels.dashboard.delete': 'Eliminar',
+  'panels.dashboard.share': 'Compartir…',
+  'panels.dashboard.confirm': 'Haga clic de nuevo para confirmar',
+  'panels.dashboard.failed': 'No se pudo completar la acción: {reason}',
+  'panels.dashboard.notSaved': 'Aún sin guardar',
+
+  // Dates and sizes
+  'panels.time.justNow': 'Ahora mismo',
+  'panels.time.yesterday': 'Ayer',
+  'panels.size.bytes': '{value} B',
+  'panels.size.kb': '{value} KB',
+  'panels.size.mb': '{value} MB',
+
+  // PDF form layer
+  'panels.forms.editForm': 'Editar formulario',
+  'panels.forms.dragHint': 'Arrastre un campo para moverlo, o su esquina para cambiar su tamaño.',
+  'panels.forms.selectHint': 'Seleccione un campo para cambiarle el nombre o eliminarlo.',
+  'panels.forms.noFields': 'Este PDF aún no tiene campos.',
+  'panels.forms.fieldName': 'Nombre del campo',
+  'panels.forms.name': 'Nombre',
+  'panels.forms.severalLines': 'Varias líneas',
+  'panels.forms.options': 'Opciones, una por línea',
+  'panels.forms.deleteField': 'Eliminar campo',
+  'panels.forms.fieldTitle': '{kind}: {name}',
+  'panels.forms.kind.text': 'Cuadro de texto',
+  'panels.forms.kind.checkbox': 'Casilla de verificación',
+  'panels.forms.kind.radio': 'Botón de opción',
+  'panels.forms.kind.choice': 'Lista desplegable',
+  'panels.forms.place.text': 'Haga clic en una página para colocar el cuadro de texto. Esc cancela.',
+  'panels.forms.place.checkbox': 'Haga clic en una página para colocar la casilla de verificación. Esc cancela.',
+  'panels.forms.place.choice': 'Haga clic en una página para colocar la lista desplegable. Esc cancela.',
+  'panels.forms.newText': 'Texto',
+  'panels.forms.newCheckbox': 'Casilla de verificación',
+  'panels.forms.newChoice': 'Lista desplegable',
+};

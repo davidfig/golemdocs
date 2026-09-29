@@ -1,6 +1,7 @@
 import type { FaceDescriptor } from '@word/layout';
 import type { Pointer } from '@word/ops';
 import type { Format } from '../formats/convert.ts';
+import { getLocale, t } from '../i18n/index.ts';
 import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -15,6 +16,8 @@ export interface DocumentListener {
   room(people: number, version: number, unconfirmed: number): void;
   /** The multiplayer room changed (cloud documents). */
   roomState(state: RoomState): void;
+  /** The room has its own copy of the document, and nothing typed here yet: reopen from the room. */
+  roomReplace(): void;
   /** Another person's edit changed the document. */
   remoteEdit(): void;
   /** Other people's mouse pointers moved. */
@@ -34,8 +37,9 @@ export class LayoutClient {
     /** New faces, before any page that uses them. Called for every document, stale or not. */
     private readonly onFaces: (faces: FaceDescriptor[]) => void,
   ) {
+    this.worker.postMessage({ type: 'locale', locale: getLocale() } satisfies ToWorker);
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
-    this.worker.onerror = (event) => this.listener?.error(event.message || 'layout worker failed to start');
+    this.worker.onerror = (event) => this.listener?.error(event.message || t('app.workerFailed'));
   }
 
   /** Opens a document, cancelling any layout in progress; in a collaboration room if given. */
@@ -120,6 +124,9 @@ export class LayoutClient {
         break;
       case 'roomState':
         this.listener.roomState(message);
+        break;
+      case 'roomReplace':
+        this.listener.roomReplace();
         break;
       case 'remoteEdit':
         this.listener.remoteEdit();

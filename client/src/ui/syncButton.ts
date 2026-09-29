@@ -5,16 +5,17 @@
 
 import type { Action, ChromeHost, DocumentSync, SyncStatus } from './actions.ts';
 import { h, setAttr } from './dom.ts';
+import { t } from '../i18n/index.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 
-const LABELS: Record<DocumentSync, { text: string; tooltip: string }> = {
-  guest: { text: 'Sign in', tooltip: 'Sign in to keep your documents in your account' },
-  saved: { text: 'Saved', tooltip: 'All changes saved to your account' },
-  saving: { text: 'Saving…', tooltip: 'Saving your latest changes' },
-  offline: { text: 'Offline', tooltip: 'Your changes are kept on this device and saved when you’re back online' },
-  failed: { text: 'Not saved', tooltip: 'Your latest changes couldn’t be saved to your account' },
-  signedOut: { text: 'Sign in to save', tooltip: 'You’ve been signed out. Sign in again to save your changes' },
-};
+const labels = (): Record<DocumentSync, { text: string; tooltip: string }> => ({
+  guest: { text: t('dialogs.sync.guest.text'), tooltip: t('dialogs.sync.guest.tooltip') },
+  saved: { text: t('dialogs.sync.saved.text'), tooltip: t('dialogs.sync.saved.tooltip') },
+  saving: { text: t('dialogs.sync.saving.text'), tooltip: t('dialogs.sync.saving.tooltip') },
+  offline: { text: t('dialogs.sync.offline.text'), tooltip: t('dialogs.sync.offline.tooltip') },
+  failed: { text: t('dialogs.sync.failed.text'), tooltip: t('dialogs.sync.failed.tooltip') },
+  signedOut: { text: t('dialogs.sync.signedOut.text'), tooltip: t('dialogs.sync.signedOut.tooltip') },
+});
 
 export class SyncButton {
   readonly el: HTMLButtonElement;
@@ -35,17 +36,17 @@ export class SyncButton {
     const changed = JSON.stringify(status) !== JSON.stringify(this.status);
     this.status = status;
     if (!changed) return;
-    const { text, tooltip } = LABELS[status.document];
+    const { text, tooltip } = labels()[status.document];
     this.label.textContent = text;
     setAttr(this.el, 'data-state', status.document);
-    this.el.title = status.document === 'failed' && status.error ? `${tooltip}: ${status.error}` : tooltip;
-    this.el.setAttribute('aria-label', status.document === 'guest' ? text : `Saving: ${text}`);
+    this.el.title = status.document === 'failed' && status.error ? t('dialogs.sync.failedWithReason', { tooltip, error: status.error }) : tooltip;
+    this.el.setAttribute('aria-label', status.document === 'guest' ? text : t('dialogs.sync.ariaLabel', { status: text }));
     if (popupOpenFor(this.el)) openPopup(this.el, this.panel(), () => this.host.focusEditor());
   }
 
   private panel(): HTMLElement {
     const status = this.status;
-    const panel = h('div', { class: 'wm-sync-panel', attrs: { role: 'dialog', 'aria-label': 'Saving' } });
+    const panel = h('div', { class: 'wm-sync-panel', attrs: { role: 'dialog', 'aria-label': t('dialogs.sync.panelLabel') } });
     const run = (label: string, action: Action, primary = false) => {
       const button = h('button', { class: primary ? 'wm-sync-action wm-sync-primary' : 'wm-sync-action', text: label, attrs: { type: 'button' } });
       button.addEventListener('click', () => {
@@ -58,28 +59,28 @@ export class SyncButton {
 
     switch (status?.document ?? 'guest') {
       case 'guest':
-        say('Saved in this browser', 'Sign in to keep your documents in your account and open them on any device. The documents you’ve made here come with you.');
-        panel.append(run('Sign in…', { kind: 'signIn' }, true), h('p', { class: 'wm-sync-note', text: 'Free while Golem Docs is in early access.' }));
+        say(t('dialogs.sync.guest.title'), t('dialogs.sync.guest.body'));
+        panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true), h('p', { class: 'wm-sync-note', text: t('dialogs.sync.free') }));
         return panel;
       case 'saved':
-        say('All changes saved', 'Your documents are saved to your account as you work.');
+        say(t('dialogs.sync.saved.title'), t('dialogs.sync.saved.body'));
         break;
       case 'saving':
-        say('Saving…', 'Your latest changes are on their way to your account.');
+        say(t('dialogs.sync.saving.title'), t('dialogs.sync.saving.body'));
         break;
       case 'offline':
-        say('Offline', 'Keep working: your changes are kept on this device and saved to your account when you’re back online.');
+        say(t('dialogs.sync.offline.title'), t('dialogs.sync.offline.body'));
         break;
       case 'failed':
-        say('Not saved', `Your latest changes are kept on this device but couldn’t be saved to your account${status?.error ? ` (${status.error})` : ''}.`);
-        panel.append(run('Try again', { kind: 'syncNow' }, true));
+        say(t('dialogs.sync.failed.title'), status?.error ? t('dialogs.sync.failed.bodyWithReason', { error: status.error }) : t('dialogs.sync.failed.body'));
+        panel.append(run(t('dialogs.sync.tryAgain'), { kind: 'syncNow' }, true));
         break;
       case 'signedOut':
-        say('Signed out', 'Your changes are kept on this device. Sign in again to save them to your account.');
-        panel.append(run('Sign in…', { kind: 'signIn' }, true));
+        say(t('dialogs.sync.signedOut.title'), t('dialogs.sync.signedOut.body'));
+        panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true));
         break;
     }
-    panel.append(h('hr'), h('p', { class: 'wm-sync-note', text: `Signed in as ${status?.user ?? 'you'}` }), run('Sign out', { kind: 'signOut' }));
+    panel.append(h('hr'), h('p', { class: 'wm-sync-note', text: status?.user ? t('dialogs.sync.signedInAs', { user: status.user }) : t('dialogs.sync.signedInAsYou') }), run(t('dialogs.sync.signOut'), { kind: 'signOut' }));
     return panel;
   }
 }

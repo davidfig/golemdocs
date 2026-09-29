@@ -6,6 +6,7 @@
 import type { Action, ChromeHost, ChromeState } from './actions.ts';
 import { FORMATS, formatAllows } from './formats.ts';
 import { formatShortcut, parseShortcut, type Shortcut, type ShortcutSpec } from './shortcuts.ts';
+import { t } from '../i18n/index.ts';
 import { stripMnemonic } from './dom.ts';
 
 export interface CommandSpec {
@@ -142,11 +143,11 @@ export class CommandRegistry {
     const { host } = this.context;
     if (!formatAllows(FORMATS[this.context.state().kind], action)) return;
     if (!host.supports(action)) {
-      host.notify(`${label} isn't available yet`);
+      host.notify(t('menus.command.unavailable', { label }));
       return;
     }
     const result = host.perform(action);
-    if (result instanceof Promise) result.catch((e: unknown) => host.notify(`${label} failed: ${(e as Error).message ?? e}`));
+    if (result instanceof Promise) result.catch((e: unknown) => host.notify(t('menus.command.failed', { label, error: String((e as Error).message ?? e) })));
   }
 
   /** Whether a value-carrying action is available, for combo boxes and color buttons. */

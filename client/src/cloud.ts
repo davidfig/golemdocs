@@ -1,5 +1,6 @@
 // Client for the server's document API (server/src/worker.ts): a user's .docx files, kept in
 // Cloudflare R2 with their catalogue in the user's own D1 database.
+import { t } from './i18n/index.ts';
 
 export interface CloudDocument {
   id: string;
@@ -39,7 +40,7 @@ export class CloudError extends Error {
 async function check(response: Response): Promise<Response> {
   if (response.ok) return response;
   const message = await response.json().then((b: { error?: string }) => b.error, () => undefined);
-  throw new CloudError(response.status, message ?? `request failed (${response.status})`);
+  throw new CloudError(response.status, message ?? t('app.requestFailed', { status: response.status }));
 }
 
 /** Where a document's .docx bytes can be fetched (usable as a `docx-url` document source). */

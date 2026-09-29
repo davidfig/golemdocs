@@ -2,14 +2,16 @@
 // as editors (who can change the document) or viewers (who can only look, live), and removes them.
 
 import { addShare, listShares, removeShare, type Share, type ShareRole } from '../cloud.ts';
+import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
-const ROLE_LABEL: Record<ShareRole, string> = { editor: 'Can edit', viewer: 'Can view' };
+const roleLabel = (role: ShareRole): string => t(role === 'editor' ? 'dialogs.share.canEdit' : 'dialogs.share.canView');
 
 function roleSelect(value: ShareRole): HTMLSelectElement {
-  const select = h('select', { attrs: { 'aria-label': 'Access' } });
+  const select = h('select', { attrs: { 'aria-label': t('dialogs.share.access') } });
   for (const role of ['editor', 'viewer'] as const) {
-    const option = h('option', { text: ROLE_LABEL[role] });
+    const option = h('option', { text: roleLabel(role) });
     option.value = role;
     select.append(option);
   }
@@ -19,19 +21,18 @@ function roleSelect(value: ShareRole): HTMLSelectElement {
 
 /** A modal for sharing the cloud document `doc`. */
 export function showShareDialog(doc: { id: string; name: string }): void {
-  const dialog = h('dialog', { class: 'wm-share', attrs: { 'aria-label': `Share ${doc.name}` } });
-  dialog.style.cssText =
-    'border:1px solid var(--wm-border,#888);border-radius:6px;padding:20px;width:min(420px,90vw);background:var(--wm-face,#f0f0f0);color:var(--wm-text,#000);font:14px var(--wm-font,system-ui,sans-serif)';
+  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: doc.name }) } });
+  dialog.style.width = 'min(420px, 90vw)';
 
   const people = h('div', { attrs: { role: 'list' } });
   people.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin:12px 0';
   const message = h('p', { attrs: { role: 'status' } });
   message.style.cssText = 'margin:8px 0 0;min-height:1.2em';
 
-  const email = h('input', { attrs: { type: 'email', placeholder: 'Their email address', 'aria-label': 'Email address', autocomplete: 'off' } });
+  const email = h('input', { attrs: { type: 'email', placeholder: t('dialogs.share.emailPlaceholder'), 'aria-label': t('dialogs.share.emailLabel'), autocomplete: 'off' } });
   email.style.cssText = 'flex:1;min-width:0;padding:6px';
   const role = roleSelect('editor');
-  const add = h('button', { text: 'Share', attrs: { type: 'submit' } });
+  const add = h('button', { text: t('dialogs.share.share'), attrs: { type: 'submit' } });
   const form = h('form', {}, email, role, add);
   form.style.cssText = 'display:flex;gap:6px';
 
@@ -41,7 +42,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
   };
 
   const row = (share: Share): HTMLElement => {
-    const label = h('span', { text: share.name && share.email ? `${share.name} (${share.email})` : (share.email ?? share.name ?? 'Unknown') });
+    const label = h('span', { text: share.name && share.email ? t('dialogs.share.person', { name: share.name, email: share.email }) : (share.email ?? share.name ?? t('dialogs.share.unknown')) });
     label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
     const access = roleSelect(share.role);
     access.addEventListener('change', () => {
@@ -51,7 +52,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
         (error: Error) => say(error.message, true),
       );
     });
-    const remove = h('button', { text: 'Remove', attrs: { type: 'button' } });
+    const remove = h('button', { text: t('dialogs.share.remove'), attrs: { type: 'button' } });
     remove.addEventListener('click', () => {
       remove.disabled = true;
       removeShare(doc.id, share.userId).then(
@@ -70,7 +71,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
   async function refresh(): Promise<void> {
     try {
       const shares = await listShares(doc.id);
-      people.replaceChildren(...(shares.length ? shares.map(row) : [h('p', { text: 'Not shared with anyone yet.' })]));
+      people.replaceChildren(...(shares.length ? shares.map(row) : [h('p', { text: t('dialogs.share.nobody') })]));
     } catch (error) {
       say((error as Error).message, true);
     }
@@ -91,16 +92,16 @@ export function showShareDialog(doc: { id: string; name: string }): void {
     ).finally(() => (add.disabled = false));
   });
 
-  const done = h('button', { text: 'Done', attrs: { type: 'button' } });
+  const done = h('button', { text: t('dialogs.share.done'), attrs: { type: 'button' } });
   done.style.cssText = 'margin-top:12px;padding:6px 14px';
   done.addEventListener('click', () => dialog.close());
 
-  const title = h('h2', { text: `Share “${doc.name}”` });
-  title.style.cssText = 'margin:0 0 4px;font-size:16px;overflow-wrap:anywhere';
-  const note = h('p', { text: 'People need to have signed in to Golem Docs once. Editors and viewers see changes live.' });
+  const note = h('p', { text: t('dialogs.share.note') });
   note.style.margin = '0';
 
-  dialog.append(title, note, people, form, message, done);
+  const body = h('div', { class: 'wm-dialog-body' }, note, people, form, message, done);
+  body.style.paddingBottom = '14px';
+  dialog.append(dialogTitleBar(t('dialogs.share.title', { name: doc.name }), () => dialog.close()), body);
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();

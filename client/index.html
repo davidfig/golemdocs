@@ -7,6 +7,17 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- The desk color from the very first paint, before any script or stylesheet has loaded (mirrors ui/theme.ts). -->
+    <style>
+      html { background: #e5e5e5; }
+      html[data-theme='dark'] { background: #1c1d20; }
+    </style>
+    <script>
+      try {
+        var appearance = localStorage.getItem('golem.appearance');
+        if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <header id="chrome"></header>

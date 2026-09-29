@@ -1,5 +1,6 @@
 // Sign-in state for the client (server/src/authRoutes.ts). The session is an HttpOnly cookie, so
 // nothing here handles a token: the page just asks who is signed in and links to the sign-in routes.
+import { t } from './i18n/index.ts';
 
 export interface AuthProvider {
   id: string;
@@ -69,7 +70,7 @@ export function signInUrl(providerId: string, returnTo = location.pathname + loc
 /** Ends the session. Fails (throws) when the server can't be reached, and then nothing changes. */
 export async function signOut(): Promise<void> {
   const response = await fetch('/api/auth/logout', { method: 'POST' });
-  if (!response.ok) throw new Error(`sign-out failed (${response.status})`);
+  if (!response.ok) throw new Error(t('app.signOutRequestFailed', { status: response.status }));
   remember(null);
 }
 
@@ -81,5 +82,5 @@ export function takeAuthError(): string | null {
   params.delete('auth_error');
   const query = params.toString();
   history.replaceState(null, '', location.pathname + (query ? `?${query}` : ''));
-  return reason === 'denied' ? 'Sign-in was cancelled.' : 'Sign-in failed. Please try again.';
+  return reason === 'denied' ? t('app.authCancelled') : t('app.authFailed');
 }

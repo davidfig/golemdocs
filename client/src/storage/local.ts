@@ -1,6 +1,7 @@
 // Documents saved in this browser (IndexedDB). Signed out, these are the user's documents and
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
+import { t } from '../i18n/index.ts';
 
 export interface SavedInfo {
   id: string;
@@ -51,7 +52,7 @@ function openDb(): Promise<IDBDatabase> {
         };
         resolve(request.result);
       };
-      request.onerror = () => reject(request.error ?? new Error('could not open browser storage'));
+      request.onerror = () => reject(request.error ?? new Error(t('app.storageOpenFailed')));
     }).catch((error) => {
       dbPromise = null; // storage can be blocked (private windows, policies); try again next time
       throw error;
@@ -71,7 +72,7 @@ function finished(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error ?? new Error('storage transaction aborted'));
+    tx.onabort = () => reject(tx.error ?? new Error(t('app.storageAborted')));
   });
 }
 
@@ -208,6 +209,6 @@ export async function clearAllSaved(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error('could not clear browser storage'));
+    request.onerror = () => reject(request.error ?? new Error(t('app.storageClearFailed')));
   });
 }

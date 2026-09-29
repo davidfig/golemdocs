@@ -6,6 +6,7 @@
 
 import { CloudError, createDocument, downloadDocument, saveDocument, uploadThumbnail, type CloudDocument } from './cloud.ts';
 import { getSaved, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
+import { t } from './i18n/index.ts';
 
 export interface Uploaded {
   doc: CloudDocument;
@@ -17,13 +18,13 @@ export interface Uploaded {
 export function conflictCopyName(name: string): string {
   const dot = name.lastIndexOf('.');
   const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
-  return `${stem} (conflicted copy)${ext}`;
+  return t('app.conflictedCopy', { stem, ext });
 }
 
 /** Uploads the saved browser copy to the cloud (creating the cloud document the first time). */
 export async function uploadToCloud(localId: string, retry = true): Promise<Uploaded> {
   const saved = await getSaved(localId);
-  if (!saved) throw new Error('The document is no longer saved in this browser');
+  if (!saved) throw new Error(t('app.noLongerSaved'));
   const { info } = saved;
   const bytes = new Uint8Array(saved.bytes);
   let doc: CloudDocument;

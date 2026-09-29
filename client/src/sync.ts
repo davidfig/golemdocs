@@ -10,6 +10,7 @@
 import type { User } from './auth.ts';
 import { CloudError, listDocuments, listShared, type CloudDocument } from './cloud.ts';
 import { deleteSaved, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
+import { t } from './i18n/index.ts';
 
 export type SyncState =
   /** Only in this browser: signed out, or not uploaded yet. */
@@ -122,7 +123,7 @@ export async function loadLibrary(user: User | null): Promise<Library> {
     cloud = await listDocuments();
   } catch (error) {
     const signedOut = error instanceof CloudError && error.status === 401;
-    const problem = signedOut ? 'You’ve been signed out. Sign in again to see all your documents.' : `Only the documents on this device are shown: your account can’t be reached (${(error as Error).message}).`;
+    const problem = signedOut ? t('app.signedOutProblem') : t('app.cloudUnreachable', { message: (error as Error).message });
     return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut, shared: [] };
   }
 

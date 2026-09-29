@@ -2,7 +2,9 @@
 // modal, so the document stays usable while it is open. Find selects each match in turn (the
 // editor does the searching, see @word/editor); Go To scrolls to a page or selects a comment.
 
-import { h } from './dom.ts';
+import { t } from '../i18n/index.ts';
+import { h, makeDraggable } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 export type FindTab = 'find' | 'replace' | 'goTo';
 
@@ -26,15 +28,15 @@ export interface FindHost {
   focusEditor(): void;
 }
 
-const TABS: { tab: FindTab; label: string }[] = [
-  { tab: 'find', label: '&Find' },
-  { tab: 'replace', label: 'R&eplace' },
-  { tab: 'goTo', label: '&Go To' },
+const tabList = (): { tab: FindTab; label: string }[] => [
+  { tab: 'find', label: t('dialogs.find.tabFind') },
+  { tab: 'replace', label: t('dialogs.find.tabReplace') },
+  { tab: 'goTo', label: t('dialogs.find.tabGoTo') },
 ];
 
-const TARGETS: { target: Target; label: string; entry: string }[] = [
-  { target: 'page', label: 'Page', entry: 'Enter page number:' },
-  { target: 'comment', label: 'Comment', entry: 'Enter comment number:' },
+const targets = (): { target: Target; label: string; entry: string }[] => [
+  { target: 'page', label: t('dialogs.find.targetPage'), entry: t('dialogs.find.enterPage') },
+  { target: 'comment', label: t('dialogs.find.targetComment'), entry: t('dialogs.find.enterComment') },
 ];
 
 /** "+3", "-2" (relative to where you are) or "5" (that one). */
@@ -68,7 +70,7 @@ export class FindDialog {
     parent: HTMLElement,
     private readonly host: FindHost,
   ) {
-    const field = (label: string) => h('input', { class: 'wm-field', attrs: { type: 'text', 'aria-label': label, autocomplete: 'off', spellcheck: 'false' } });
+    const field = (label: string) => h('input', { class: 'wm-input', attrs: { type: 'text', 'aria-label': label, autocomplete: 'off', spellcheck: 'false' } });
     const button = (text: string, run: () => void, title?: string) => {
       const el = h('button', { class: 'wm-button', text, title, attrs: { type: 'button' } });
       el.addEventListener('click', run);
@@ -76,14 +78,14 @@ export class FindDialog {
     };
 
     // Find and Replace share a pane: Replace adds a field and two buttons.
-    this.query = field('Find what');
-    this.replacement = field('Replace with');
+    this.query = field(t('dialogs.find.findWhatLabel'));
+    this.replacement = field(t('dialogs.find.replaceWithLabel'));
     this.matchCase = h('input', { attrs: { type: 'checkbox' } });
     this.findMessage = h('div', { class: 'wm-find-message', attrs: { role: 'status' } });
-    const replaceLabel = h('label', { text: 'Replace with:' });
+    const replaceLabel = h('label', { text: t('dialogs.find.replaceWithField') });
     this.replaceFields = [replaceLabel, this.replacement];
-    const replace = button('Replace', () => this.replaceOne(), 'Replace this match and find the next');
-    const replaceAll = button('Replace All', () => this.replaceEvery());
+    const replace = button(t('dialogs.find.replace'), () => this.replaceOne(), t('dialogs.find.replaceTip'));
+    const replaceAll = button(t('dialogs.find.replaceAll'), () => this.replaceEvery());
     this.replaceButtons = [replace, replaceAll];
     this.findPane = h(
       'div',
@@ -91,34 +93,35 @@ export class FindDialog {
       h(
         'div',
         { class: 'wm-find-fields' },
-        h('label', { text: 'Find what:' }),
+        h('label', { text: t('dialogs.find.findWhatField') }),
         this.query,
         replaceLabel,
         this.replacement,
-        h('label', { class: 'wm-find-case' }, this.matchCase, 'Match case'),
+        h('label', { class: 'wm-find-case' }, this.matchCase, t('dialogs.find.matchCase')),
         this.findMessage,
       ),
       h(
         'div',
         { class: 'wm-find-buttons' },
-        button('Find Next', () => this.next(false), 'Enter'),
-        button('Find Previous', () => this.next(true), 'Shift+Enter'),
+        button(t('dialogs.find.findNext'), () => this.next(false), t('dialogs.find.findNextTip')),
+        button(t('dialogs.find.findPrevious'), () => this.next(true), t('dialogs.find.findPreviousTip')),
         replace,
         replaceAll,
-        button('Close', () => this.hide()),
+        button(t('dialogs.find.close'), () => this.hide()),
       ),
     );
 
     // Go To: what to go to, and where.
-    this.what = h('select', { class: 'wm-field wm-goto-what', attrs: { size: '6', 'aria-label': 'Go to what' } });
-    for (const { target, label } of TARGETS) {
+    this.what = h('select', { class: 'wm-input wm-goto-what', attrs: { size: '6', 'aria-label': t('dialogs.find.goToWhatLabel') } });
+    const targetList = targets();
+    for (const { target, label } of targetList) {
       const option = h('option', { text: label });
       option.value = target;
       this.what.append(option);
     }
     this.what.value = 'page';
-    this.entryLabel = h('label', { text: TARGETS[0].entry });
-    this.entry = field('Item number');
+    this.entryLabel = h('label', { text: targetList[0].entry });
+    this.entry = field(t('dialogs.find.itemNumber'));
     this.goToMessage = h('div', { class: 'wm-find-message', attrs: { role: 'status' } });
     this.goToPane = h(
       'div',
@@ -126,30 +129,28 @@ export class FindDialog {
       h(
         'div',
         { class: 'wm-goto-fields' },
-        h('div', { class: 'wm-goto-column' }, h('label', { text: 'Go to what:' }), this.what),
+        h('div', { class: 'wm-goto-column' }, h('label', { text: t('dialogs.find.goToWhatField') }), this.what),
         h(
           'div',
           { class: 'wm-goto-column' },
           this.entryLabel,
           this.entry,
-          h('p', { class: 'wm-hint', text: 'Type + or − to move relative to the current location. For example, +4 moves forward four.' }),
+          h('p', { class: 'wm-hint', text: t('dialogs.find.goToHint') }),
           this.goToMessage,
         ),
       ),
       h(
         'div',
         { class: 'wm-find-buttons' },
-        button('Go To', () => this.go(), 'Enter'),
-        button('Previous', () => this.step(-1)),
-        button('Next', () => this.step(1)),
-        button('Close', () => this.hide()),
+        button(t('dialogs.find.goTo'), () => this.go(), t('dialogs.find.goToTip')),
+        button(t('dialogs.find.previous'), () => this.step(-1)),
+        button(t('dialogs.find.next'), () => this.step(1)),
+        button(t('dialogs.find.close'), () => this.hide()),
       ),
     );
 
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': 'Close' } });
-    close.addEventListener('click', () => this.hide());
     const tabs = h('div', { class: 'wm-find-tabs', attrs: { role: 'tablist' } });
-    for (const { tab, label } of TABS) {
+    for (const { tab, label } of tabList()) {
       const el = h('button', { class: 'wm-find-tab', text: label.replace('&', ''), attrs: { type: 'button', role: 'tab' } });
       el.addEventListener('click', () => {
         this.setTab(tab);
@@ -161,13 +162,14 @@ export class FindDialog {
 
     this.el = h(
       'dialog',
-      { class: 'wm-dialog wm-find', attrs: { 'aria-label': 'Find and Replace' } },
-      h('div', { class: 'wm-dialog-title' }, h('span', { text: 'Find and Replace' }), close),
+      { class: 'wm-dialog wm-find', attrs: { 'aria-label': t('dialogs.find.title') } },
+      dialogTitleBar(t('dialogs.find.title'), () => this.hide()),
       tabs,
       this.findPane,
       this.goToPane,
     );
     parent.append(this.el);
+    makeDraggable(this.el);
 
     // Keys stay in the dialog: the document's handlers listen on the window.
     this.el.addEventListener('keydown', (e) => {
@@ -192,7 +194,7 @@ export class FindDialog {
       if (this.query.value) this.host.find(this.query.value, this.matchCase.checked, false);
     });
     this.what.addEventListener('change', () => {
-      this.entryLabel.textContent = TARGETS.find((t) => t.target === this.what.value)?.entry ?? '';
+      this.entryLabel.textContent = targets().find((x) => x.target === this.what.value)?.entry ?? '';
       this.goToMessage.textContent = '';
     });
   }
@@ -230,8 +232,8 @@ export class FindDialog {
   /** What the editor said about the last search or replacement. */
   report(result: { found?: boolean; replaced?: number }): void {
     if (!this.el.open) return;
-    if (result.replaced !== undefined) this.findMessage.textContent = result.replaced ? `Replaced ${result.replaced}` : 'No matches';
-    else this.findMessage.textContent = result.found === false ? 'No matches' : '';
+    if (result.replaced !== undefined) this.findMessage.textContent = result.replaced ? t('dialogs.find.replaced', { count: result.replaced }) : t('dialogs.find.noMatches');
+    else this.findMessage.textContent = result.found === false ? t('dialogs.find.noMatches') : '';
   }
 
   private next(backward: boolean): void {
@@ -258,7 +260,7 @@ export class FindDialog {
     if (!text && this.target === 'comment') return this.step(1);
     const parsed = parseEntry(text);
     if (!parsed) {
-      this.goToMessage.textContent = `Enter a number, like 3 or +2.`;
+      this.goToMessage.textContent = t('dialogs.find.badNumber');
       return;
     }
     this.goTo(parsed.relative ? this.current() + parsed.amount : parsed.amount - 1, parsed.relative);
@@ -277,15 +279,16 @@ export class FindDialog {
   private goTo(index: number, clamp: boolean): void {
     const page = this.target === 'page';
     const count = page ? this.host.pageCount() : this.host.commentCount();
-    const name = page ? 'page' : 'comment';
     if (!count) {
-      this.goToMessage.textContent = page ? 'The document has no pages.' : 'The document has no comments.';
+      this.goToMessage.textContent = page ? t('dialogs.find.noPages') : t('dialogs.find.noComments');
       return;
     }
     const last = count - 1;
     if (index < 0 || index > last) {
       if (!clamp) {
-        this.goToMessage.textContent = index < 0 && !page ? 'This is the first comment.' : `There is no ${name} ${index + 1}. The document has ${count}.`;
+        this.goToMessage.textContent = index < 0 && !page
+            ? t('dialogs.find.firstComment')
+            : t(page ? 'dialogs.find.noSuchPage' : 'dialogs.find.noSuchComment', { number: index + 1, total: count });
         return;
       }
       index = Math.min(Math.max(index, 0), last);

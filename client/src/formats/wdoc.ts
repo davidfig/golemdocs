@@ -16,6 +16,7 @@ import type { OdtExtension } from '@word/odt';
 import type { HtmlExtension } from './html.ts';
 import type { Annotation, FormField } from '@word/pdf';
 import type { Format } from './convert.ts';
+import { t } from '../i18n/index.ts';
 
 export const WDOC_MIME = 'application/x-golem-document';
 export const WDOC_EXTENSION = '.wdoc';
@@ -47,6 +48,19 @@ export interface Extensions {
   odt?: OdtExtension;
   /** What only HTML can express (head, tags, attributes, unmappable elements), see html.ts. */
   html?: HtmlExtension;
+  /** How a CSV or TSV file was written (delimiter, line endings, encoding), see csv.ts. */
+  csv?: CsvExtension;
+}
+
+export interface CsvExtension {
+  /** The delimiter of a .csv, when it isn't a comma. */
+  delimiter?: ';' | '|' | '\t';
+  lineEnding?: '\r\n' | '\r';
+  bom?: boolean;
+  /** Not UTF-8: the file is written back in the same encoding. */
+  encoding?: 'windows-1252';
+  /** The file had no line ending after its last row. */
+  trailingNewline?: false;
 }
 
 export interface MarkdownExtension {
@@ -79,7 +93,7 @@ export interface Wdoc {
 
 const encoder = new TextEncoder();
 const MIME_BYTES = encoder.encode(WDOC_MIME);
-const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html'] as const satisfies readonly (keyof Extensions)[];
+const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv'] as const satisfies readonly (keyof Extensions)[];
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {
@@ -113,7 +127,7 @@ export async function writeWdoc(wdoc: Wdoc): Promise<Uint8Array> {
 }
 
 export async function readWdoc(bytes: Uint8Array): Promise<Wdoc> {
-  if (!isWdoc(bytes)) throw new Error('not a .wdoc file');
+  if (!isWdoc(bytes)) throw new Error(t('app.notWdoc'));
   const zip = ZipArchive.read(bytes);
   const text = async (name: string) => {
     const entry = zip.entries.get(name);
@@ -124,10 +138,10 @@ export async function readWdoc(bytes: Uint8Array): Promise<Wdoc> {
     return entry ? entry.read() : null;
   };
   const manifestText = await text('manifest.json');
-  if (!manifestText) throw new Error('this .wdoc file has no manifest');
+  if (!manifestText) throw new Error(t('app.wdocNoManifest'));
   const manifest = JSON.parse(manifestText) as WdocManifest;
   if (typeof manifest.version !== 'number' || manifest.version > WDOC_VERSION) {
-    throw new Error('this document was saved by a newer version of the app');
+    throw new Error(t('app.wdocNewer'));
   }
   const extensions: Extensions = {};
   for (const ns of NAMESPACES) {
@@ -136,7 +150,7 @@ export async function readWdoc(bytes: Uint8Array): Promise<Wdoc> {
   }
   const document = await binary('document.docx');
   const original = await binary('originals/source.pdf');
-  if (!document && !original) throw new Error('this .wdoc file has no content');
+  if (!document && !original) throw new Error(t('app.wdocNoContent'));
   return {
     manifest: { version: manifest.version, lens: manifest.lens, origin: manifest.origin ?? manifest.lens, pagesCurrent: manifest.pagesCurrent ?? false },
     document,

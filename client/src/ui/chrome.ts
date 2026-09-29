@@ -17,6 +17,8 @@ import {
 } from './actions.ts';
 import { CommandRegistry, type CommandSpec } from './commands.ts';
 import { h } from './dom.ts';
+import { format, getLocale, setLocale, t } from '../i18n/index.ts';
+import { LOCALES } from '../i18n/locales.ts';
 import { CONVERT_ORDER, FORMATS } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
@@ -45,7 +47,7 @@ export interface ChromeOptions {
 }
 
 const FONT_SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
-const ZOOM_PRESETS: { label: string; to: ZoomTarget }[] = [
+const zoomPresets = (): { label: string; to: ZoomTarget }[] => [
   { label: '500%', to: 5 },
   { label: '200%', to: 2 },
   { label: '150%', to: 1.5 },
@@ -54,29 +56,40 @@ const ZOOM_PRESETS: { label: string; to: ZoomTarget }[] = [
   { label: '50%', to: 0.5 },
   { label: '25%', to: 0.25 },
   { label: '10%', to: 0.1 },
-  { label: 'Page Width', to: 'pageWidth' },
-  { label: 'Whole Page', to: 'wholePage' },
-  { label: 'All Pages', to: 'allPages' },
+  { label: t('chrome.zoom.pageWidth'), to: 'pageWidth' },
+  { label: t('chrome.zoom.wholePage'), to: 'wholePage' },
+  { label: t('chrome.zoom.allPages'), to: 'allPages' },
 ];
 const DEFAULT_FONTS = ['Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Courier New', 'Georgia', 'Segoe UI', 'Times New Roman'];
-const SYMBOLS: [string, string][] = [
-  ['©', 'Copyright'],
-  ['®', 'Registered'],
-  ['™', 'Trademark'],
-  ['§', 'Section'],
-  ['¶', 'Paragraph'],
-  ['…', 'Ellipsis'],
-  ['—', 'Em Dash'],
-  ['–', 'En Dash'],
-  ['•', 'Bullet'],
-  ['°', 'Degree'],
-  ['±', 'Plus-Minus'],
-  ['×', 'Multiply'],
-  ['÷', 'Divide'],
-  ['€', 'Euro'],
-  ['£', 'Pound'],
-  ['¥', 'Yen'],
+const symbols = (): [string, string][] => [
+  ['©', t('chrome.symbol.copyright')],
+  ['®', t('chrome.symbol.registered')],
+  ['™', t('chrome.symbol.trademark')],
+  ['§', t('chrome.symbol.section')],
+  ['¶', t('chrome.symbol.paragraph')],
+  ['…', t('chrome.symbol.ellipsis')],
+  ['—', t('chrome.symbol.emdash')],
+  ['–', t('chrome.symbol.endash')],
+  ['•', t('chrome.symbol.bullet')],
+  ['°', t('chrome.symbol.degree')],
+  ['±', t('chrome.symbol.plusminus')],
+  ['×', t('chrome.symbol.multiply')],
+  ['÷', t('chrome.symbol.divide')],
+  ['€', t('chrome.symbol.euro')],
+  ['£', t('chrome.symbol.pound')],
+  ['¥', t('chrome.symbol.yen')],
 ];
+
+/** The language picker's entries: each language by its own name. The UI is built once, so a change reloads it. */
+const languageItems = (): MenuItem[] =>
+  Object.entries(LOCALES).map(([id, info]) => ({
+    type: 'item',
+    label: info.name,
+    checked: id === getLocale(),
+    run: () => {
+      if (id !== getLocale()) void setLocale(id).then(() => location.reload());
+    },
+  }));
 
 export class Chrome {
   readonly el: HTMLDivElement;
@@ -193,17 +206,17 @@ export class Chrome {
 
     // File
     r.add(
-      a('file.dashboard', '&Dashboard', { kind: 'dashboard' }, { tooltip: 'See all your documents' }),
-      a('file.new', '&New', { kind: 'new' }, { icon: 'new', tooltip: 'New Blank Document' }),
-      a('file.open', '&Open…', { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
-      a('file.download', 'Do&wnload', { kind: 'download' }, { tooltip: 'Download a copy of this document' }),
-      a('file.share', '&Share…', { kind: 'share' }, { tooltip: 'Let other people open and edit this document (cloud documents)' }),
-      dialog('file.pageSetup', 'Page Set&up…', 'pageSetup'),
-      a('file.printPreview', 'Print Pre&view', { kind: 'printPreview' }, { icon: 'printPreview' }),
-      a('file.collaborate', '&Collaborate…', { kind: 'collaborate' }, { tooltip: 'Edit this document together (opens a second window)' }),
-      a('file.print', '&Print…', { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
-      dialog('file.properties', 'Propert&ies', 'properties', { icon: 'properties' }),
-      a('file.clearLocalData', 'C&lear Local Data…', { kind: 'clearLocalData' }, { tooltip: 'Delete every document and setting kept in this browser' }),
+      a('file.dashboard', t('chrome.file.dashboard'), { kind: 'dashboard' }, { tooltip: t('chrome.file.dashboard.tip') }),
+      a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
+      a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
+      a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
+      a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
+      dialog('file.pageSetup', t('chrome.file.pageSetup'), 'pageSetup'),
+      a('file.printPreview', t('chrome.file.printPreview'), { kind: 'printPreview' }, { icon: 'printPreview' }),
+      a('file.collaborate', t('chrome.file.collaborate'), { kind: 'collaborate' }, { tooltip: t('chrome.file.collaborate.tip') }),
+      a('file.print', t('chrome.file.print'), { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
+      dialog('file.properties', t('chrome.file.properties'), 'properties', { icon: 'properties' }),
+      a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
     );
     for (const kind of CONVERT_ORDER) {
       const profile = FORMATS[kind];
@@ -212,55 +225,55 @@ export class Chrome {
 
     // Edit
     r.add(
-      a('edit.undo', '&Undo', { kind: 'undo' }, { icon: 'undo', shortcut: 'Mod+Z', enabled: (s) => s.canUndo }),
-      a('edit.redo', '&Redo', { kind: 'redo' }, { icon: 'redo', shortcut: { mac: 'Mod+Shift+Z', other: 'Mod+Y' }, enabled: (s) => s.canRedo }),
-      a('edit.cut', 'Cu&t', { kind: 'cut' }, { icon: 'cut', shortcut: 'Mod+X', nativeShortcut: true, enabled: (s) => s.hasSelection }),
-      a('edit.copy', '&Copy', { kind: 'copy' }, { icon: 'copy', shortcut: 'Mod+C', nativeShortcut: true, enabled: (s) => s.hasSelection }),
-      a('edit.paste', '&Paste', { kind: 'paste' }, { icon: 'paste', shortcut: 'Mod+V', nativeShortcut: true }),
-      dialog('edit.pasteSpecial', 'Paste &Special…', 'pasteSpecial'),
-      a('edit.selectAll', 'Select A&ll', { kind: 'selectAll' }, { shortcut: 'Mod+A' }),
-      dialog('edit.find', '&Find…', 'find', { icon: 'find', shortcut: 'Mod+F' }),
-      dialog('edit.replace', 'R&eplace…', 'replace', { shortcut: { other: 'Mod+H', mac: 'Ctrl+H' } }),
-      dialog('edit.goTo', '&Go To…', 'goTo', { shortcut: 'Mod+G' }),
+      a('edit.undo', t('chrome.edit.undo'), { kind: 'undo' }, { icon: 'undo', shortcut: 'Mod+Z', enabled: (s) => s.canUndo }),
+      a('edit.redo', t('chrome.edit.redo'), { kind: 'redo' }, { icon: 'redo', shortcut: { mac: 'Mod+Shift+Z', other: 'Mod+Y' }, enabled: (s) => s.canRedo }),
+      a('edit.cut', t('chrome.edit.cut'), { kind: 'cut' }, { icon: 'cut', shortcut: 'Mod+X', nativeShortcut: true, enabled: (s) => s.hasSelection }),
+      a('edit.copy', t('chrome.edit.copy'), { kind: 'copy' }, { icon: 'copy', shortcut: 'Mod+C', nativeShortcut: true, enabled: (s) => s.hasSelection }),
+      a('edit.paste', t('chrome.edit.paste'), { kind: 'paste' }, { icon: 'paste', shortcut: 'Mod+V', nativeShortcut: true }),
+      dialog('edit.pasteSpecial', t('chrome.edit.pasteSpecial'), 'pasteSpecial'),
+      a('edit.selectAll', t('chrome.edit.selectAll'), { kind: 'selectAll' }, { shortcut: 'Mod+A' }),
+      dialog('edit.find', t('chrome.edit.find'), 'find', { icon: 'find', shortcut: 'Mod+F' }),
+      dialog('edit.replace', t('chrome.edit.replace'), 'replace', { shortcut: { other: 'Mod+H', mac: 'Ctrl+H' } }),
+      dialog('edit.goTo', t('chrome.edit.goTo'), 'goTo', { shortcut: 'Mod+G' }),
     );
 
     // View
     const mode = (id: string, label: string, m: ChromeState['viewMode']) =>
       a(id, label, { kind: 'viewMode', mode: m }, { checked: (s) => s.viewMode === m, radio: true });
     r.add(
-      mode('view.normal', '&Normal', 'normal'),
-      mode('view.web', '&Web Layout', 'web'),
-      mode('view.print', '&Print Layout', 'print'),
-      mode('view.outline', '&Outline', 'outline'),
-      a('view.fillForm', '&Fill In Form', { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: 'Type in the PDF’s fields' }),
-      a('view.editForm', '&Edit Form', { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: 'Move, add, rename and delete the PDF’s fields' }),
-      a('view.grid', 'Page &Grid', { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
-      a('view.ruler', '&Ruler', { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
-      { id: 'view.debug', label: '&Debug…', run: () => this.showDebug() },
-      a('view.formattingMarks', 'Formatting &Marks', { kind: 'toggleFormattingMarks' }, {
+      mode('view.normal', t('chrome.view.normal'), 'normal'),
+      mode('view.web', t('chrome.view.web'), 'web'),
+      mode('view.print', t('chrome.view.print'), 'print'),
+      mode('view.outline', t('chrome.view.outline'), 'outline'),
+      a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
+      a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
+      a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
+      a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
+      { id: 'view.debug', label: t('chrome.view.debug'), run: () => this.showDebug() },
+      a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
-        tooltip: 'Show/Hide ¶',
+        tooltip: t('chrome.view.formattingMarks.tip'),
         shortcut: 'Mod+Shift+8',
         checked: (s) => s.formattingMarks,
       }),
       {
         id: 'view.fullScreen',
-        label: 'F&ull Screen',
+        label: t('chrome.view.fullScreen'),
         run: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}),
         checked: () => !!document.fullscreenElement,
         enabled: () => document.fullscreenEnabled,
       },
-      a('view.zoomIn', 'Zoom &In', { kind: 'zoomBy', factor: 1.25 }, { shortcut: 'Mod+=' }),
-      a('view.zoomOut', 'Zoom &Out', { kind: 'zoomBy', factor: 0.8 }, { shortcut: 'Mod+-' }),
-      a('view.zoom100', '&Actual Size', { kind: 'zoom', to: 1 }, { shortcut: 'Mod+0' }),
-      a('view.pageWidth', 'Page &Width', { kind: 'zoom', to: 'pageWidth' }),
-      a('view.wholePage', 'W&hole Page', { kind: 'zoom', to: 'wholePage' }),
-      a('view.allPages', 'All Pa&ges', { kind: 'zoom', to: 'allPages' }, { shortcut: { mac: 'Alt+F' } }),
+      a('view.zoomIn', t('chrome.view.zoomIn'), { kind: 'zoomBy', factor: 1.25 }, { shortcut: 'Mod+=' }),
+      a('view.zoomOut', t('chrome.view.zoomOut'), { kind: 'zoomBy', factor: 0.8 }, { shortcut: 'Mod+-' }),
+      a('view.zoom100', t('chrome.view.zoom100'), { kind: 'zoom', to: 1 }, { shortcut: 'Mod+0' }),
+      a('view.pageWidth', t('chrome.view.pageWidth'), { kind: 'zoom', to: 'pageWidth' }),
+      a('view.wholePage', t('chrome.view.wholePage'), { kind: 'zoom', to: 'wholePage' }),
+      a('view.allPages', t('chrome.view.allPages'), { kind: 'zoom', to: 'allPages' }, { shortcut: { mac: 'Alt+F' } }),
     );
     for (const name of ['Standard', 'Formatting']) {
       r.add({
         id: `view.toolbar.${name.toLowerCase()}`,
-        label: name === 'Standard' ? '&Standard' : '&Formatting',
+        label: name === 'Standard' ? t('chrome.view.toolbar.standard') : t('chrome.view.toolbar.formatting'),
         run: () => this.toggleToolbar(name),
         checked: () => this.layout.find((t) => t.name === name)?.visible ?? false,
       });
@@ -269,58 +282,58 @@ export class Chrome {
       r.add({ id: `view.theme.${id}`, label, run: () => setScheme(id), checked: () => currentScheme() === id, radio: true });
     }
     r.add(
-      { id: 'view.darkMode', label: '&Dark Mode', run: toggleDark, checked: isDark },
+      { id: 'view.darkMode', label: t('chrome.view.darkMode'), run: toggleDark, checked: isDark },
       {
         id: 'view.matchSystem',
-        label: '&Match System',
+        label: t('chrome.view.matchSystem'),
         run: () => setAppearance(currentAppearance() === 'auto' ? (isDark() ? 'dark' : 'light') : 'auto'),
         checked: () => currentAppearance() === 'auto',
       },
     );
-    r.add({ id: 'view.customizeToolbars', label: 'Customi&ze…', run: () => this.customize() });
+    r.add({ id: 'view.customizeToolbars', label: t('chrome.view.customizeToolbars'), run: () => this.customize() });
 
     // Insert
     r.add(
-      a('insert.pageBreak', '&Page Break', { kind: 'insertBreak', break: 'page' }, { icon: 'pageBreak', shortcut: 'Mod+Enter' }),
-      a('insert.columnBreak', '&Column Break', { kind: 'insertBreak', break: 'column' }, { shortcut: 'Mod+Shift+Enter' }),
-      a('insert.lineBreak', '&Line Break', { kind: 'insertBreak', break: 'line' }, { shortcut: 'Shift+Enter', nativeShortcut: true }),
-      a('insert.sectionNext', 'Section Break (&Next Page)', { kind: 'insertBreak', break: 'sectionNextPage' }),
-      a('insert.sectionContinuous', 'Section Break (Co&ntinuous)', { kind: 'insertBreak', break: 'sectionContinuous' }),
-      dialog('insert.pageNumbers', 'Page N&umbers…', 'pageNumbers'),
-      a('insert.comment', 'Co&mment', { kind: 'insertComment' }, { icon: 'comment', shortcut: 'Mod+Alt+M' }),
-      a('insert.footnote', 'Foot&note', { kind: 'insertFootnote' }, { shortcut: 'Mod+Alt+F' }),
-      a('insert.image', '&Picture…', { kind: 'insertImage' }, { icon: 'image' }),
-      a('insert.textBox', 'Te&xt Box', { kind: 'insertTextBox' }),
-      a('insert.table', '&Table…', { kind: 'insertTable' }, { icon: 'table', tooltip: 'Insert Table' }),
-      a('insert.horizontalRule', 'Hori&zontal Line', { kind: 'insertHorizontalRule' }),
-      a('insert.codeBlock', 'Code Bloc&k', { kind: 'insertCodeBlock' }),
-      a('insert.link', 'Hyperl&ink…', { kind: 'insertLink' }, { icon: 'link', shortcut: 'Mod+K', tooltip: 'Insert Hyperlink' }),
-      a('insert.bookmark', 'Boo&kmark…', { kind: 'insertBookmark' }),
+      a('insert.pageBreak', t('chrome.insert.pageBreak'), { kind: 'insertBreak', break: 'page' }, { icon: 'pageBreak', shortcut: 'Mod+Enter' }),
+      a('insert.columnBreak', t('chrome.insert.columnBreak'), { kind: 'insertBreak', break: 'column' }, { shortcut: 'Mod+Shift+Enter' }),
+      a('insert.lineBreak', t('chrome.insert.lineBreak'), { kind: 'insertBreak', break: 'line' }, { shortcut: 'Shift+Enter', nativeShortcut: true }),
+      a('insert.sectionNext', t('chrome.insert.sectionNext'), { kind: 'insertBreak', break: 'sectionNextPage' }),
+      a('insert.sectionContinuous', t('chrome.insert.sectionContinuous'), { kind: 'insertBreak', break: 'sectionContinuous' }),
+      dialog('insert.pageNumbers', t('chrome.insert.pageNumbers'), 'pageNumbers'),
+      a('insert.comment', t('chrome.insert.comment'), { kind: 'insertComment' }, { icon: 'comment', shortcut: 'Mod+Alt+M' }),
+      a('insert.footnote', t('chrome.insert.footnote'), { kind: 'insertFootnote' }, { shortcut: 'Mod+Alt+F' }),
+      a('insert.image', t('chrome.insert.image'), { kind: 'insertImage' }, { icon: 'image' }),
+      a('insert.textBox', t('chrome.insert.textBox'), { kind: 'insertTextBox' }),
+      a('insert.table', t('chrome.insert.table'), { kind: 'insertTable' }, { icon: 'table', tooltip: t('chrome.insert.table.tip') }),
+      a('insert.horizontalRule', t('chrome.insert.horizontalRule'), { kind: 'insertHorizontalRule' }),
+      a('insert.codeBlock', t('chrome.insert.codeBlock'), { kind: 'insertCodeBlock' }),
+      a('insert.link', t('chrome.insert.link'), { kind: 'insertLink' }, { icon: 'link', shortcut: 'Mod+K', tooltip: t('chrome.insert.link.tip') }),
+      a('insert.bookmark', t('chrome.insert.bookmark'), { kind: 'insertBookmark' }),
     );
 
     // Format: character
     const mark = (m: Mark, label: string, shortcut?: CommandSpec['shortcut']) =>
       a(`format.${m}`, label, { kind: 'toggleMark', mark: m }, { icon: m, shortcut, checked: (s) => !!s.format.marks?.[m] });
     r.add(
-      mark('bold', '&Bold', 'Mod+B'),
-      mark('italic', '&Italic', 'Mod+I'),
-      mark('underline', '&Underline', 'Mod+U'),
-      mark('strikethrough', 'Stri&kethrough', { other: 'Alt+Shift+5', mac: 'Mod+Shift+X' }),
-      mark('superscript', 'Su&perscript', 'Mod+.'),
-      mark('subscript', 'Su&bscript', 'Mod+,'),
-      mark('code', '&Code'),
-      a('format.growFont', '&Grow Font', { kind: 'growFont' }, { icon: 'growFont', shortcut: 'Mod+]' }),
-      a('format.shrinkFont', 'S&hrink Font', { kind: 'shrinkFont' }, { icon: 'shrinkFont', shortcut: 'Mod+[' }),
-      a('format.clear', 'Clear F&ormatting', { kind: 'clearFormatting' }, { icon: 'clearFormatting', shortcut: 'Mod+Space' }),
-      a('format.painter', 'Format &Painter', { kind: 'formatPainter' }, { icon: 'formatPainter' }),
-      dialog('format.font', '&Font…', 'font', { shortcut: 'Mod+D' }),
+      mark('bold', t('chrome.format.bold'), 'Mod+B'),
+      mark('italic', t('chrome.format.italic'), 'Mod+I'),
+      mark('underline', t('chrome.format.underline'), 'Mod+U'),
+      mark('strikethrough', t('chrome.format.strikethrough'), { other: 'Alt+Shift+5', mac: 'Mod+Shift+X' }),
+      mark('superscript', t('chrome.format.superscript'), 'Mod+.'),
+      mark('subscript', t('chrome.format.subscript'), 'Mod+,'),
+      mark('code', t('chrome.format.code')),
+      a('format.growFont', t('chrome.format.growFont'), { kind: 'growFont' }, { icon: 'growFont', shortcut: 'Mod+]' }),
+      a('format.shrinkFont', t('chrome.format.shrinkFont'), { kind: 'shrinkFont' }, { icon: 'shrinkFont', shortcut: 'Mod+[' }),
+      a('format.clear', t('chrome.format.clear'), { kind: 'clearFormatting' }, { icon: 'clearFormatting', shortcut: 'Mod+Space' }),
+      a('format.painter', t('chrome.format.painter'), { kind: 'formatPainter' }, { icon: 'formatPainter', tooltip: t('chrome.format.painter.tip'), checked: (s) => s.painting }),
+      dialog('format.font', t('chrome.format.font'), 'font', { shortcut: 'Mod+D' }),
     );
     const cases: [CaseChange, string][] = [
-      ['sentence', '&Sentence case.'],
-      ['lower', '&lowercase'],
-      ['upper', '&UPPERCASE'],
-      ['title', '&Title Case'],
-      ['toggle', 't&OGGLE cASE'],
+      ['sentence', t('chrome.format.case.sentence')],
+      ['lower', t('chrome.format.case.lower')],
+      ['upper', t('chrome.format.case.upper')],
+      ['title', t('chrome.format.case.title')],
+      ['toggle', t('chrome.format.case.toggle')],
     ];
     for (const [to, label] of cases) r.add(a(`format.case.${to}`, label, { kind: 'changeCase', to }));
 
@@ -328,20 +341,20 @@ export class Chrome {
     const align = (to: Alignment, label: string, icon: string, shortcut: string) =>
       a(`format.align.${to}`, label, { kind: 'setAlignment', align: to }, { icon, shortcut, checked: (s) => s.format.align === to, radio: true });
     r.add(
-      align('left', 'Align &Left', 'alignLeft', 'Mod+L'),
-      align('center', '&Center', 'alignCenter', 'Mod+E'),
-      align('right', 'Align &Right', 'alignRight', 'Mod+R'),
-      align('justify', '&Justify', 'justify', 'Mod+J'),
-      a('format.bullets', '&Bullets', { kind: 'toggleList', list: 'bullet' }, { icon: 'bullets', checked: (s) => s.format.list === 'bullet' }),
-      a('format.numbering', '&Numbering', { kind: 'toggleList', list: 'number' }, { icon: 'numbering', checked: (s) => s.format.list === 'number' }),
-      a('format.indent', '&Increase Indent', { kind: 'indent', direction: 'increase' }, { icon: 'indentIncrease', shortcut: { other: 'Mod+M' } }),
-      a('format.outdent', '&Decrease Indent', { kind: 'indent', direction: 'decrease' }, { icon: 'indentDecrease', shortcut: { other: 'Mod+Shift+M' } }),
-      dialog('format.paragraph', '&Paragraph…', 'paragraph'),
-      dialog('format.bulletsAndNumbering', 'Bullets and &Numbering…', 'bulletsAndNumbering'),
-      dialog('format.borders', 'Bor&ders and Shading…', 'bordersAndShading', { icon: 'borders' }),
-      dialog('format.columns', '&Columns…', 'columns', { icon: 'columns' }),
-      dialog('format.tabs', '&Tabs…', 'tabs'),
-      dialog('format.styles', 'St&yles…', 'styles'),
+      align('left', t('chrome.format.align.left'), 'alignLeft', 'Mod+L'),
+      align('center', t('chrome.format.align.center'), 'alignCenter', 'Mod+E'),
+      align('right', t('chrome.format.align.right'), 'alignRight', 'Mod+R'),
+      align('justify', t('chrome.format.align.justify'), 'justify', 'Mod+J'),
+      a('format.bullets', t('chrome.format.bullets'), { kind: 'toggleList', list: 'bullet' }, { icon: 'bullets', checked: (s) => s.format.list === 'bullet' }),
+      a('format.numbering', t('chrome.format.numbering'), { kind: 'toggleList', list: 'number' }, { icon: 'numbering', checked: (s) => s.format.list === 'number' }),
+      a('format.indent', t('chrome.format.indent'), { kind: 'indent', direction: 'increase' }, { icon: 'indentIncrease', shortcut: { other: 'Mod+M' } }),
+      a('format.outdent', t('chrome.format.outdent'), { kind: 'indent', direction: 'decrease' }, { icon: 'indentDecrease', shortcut: { other: 'Mod+Shift+M' } }),
+      dialog('format.paragraph', t('chrome.format.paragraph'), 'paragraph'),
+      dialog('format.bulletsAndNumbering', t('chrome.format.bulletsAndNumbering'), 'bulletsAndNumbering'),
+      dialog('format.borders', t('chrome.format.borders'), 'bordersAndShading', { icon: 'borders' }),
+      dialog('format.columns', t('chrome.format.columns'), 'columns', { icon: 'columns' }),
+      dialog('format.tabs', t('chrome.format.tabs'), 'tabs'),
+      dialog('format.styles', t('chrome.format.styles'), 'styles'),
     );
     for (const lines of [1, 1.15, 1.5, 2, 2.5, 3]) {
       r.add(a(`format.spacing.${lines}`, lines.toFixed(lines % 1 ? 2 : 1).replace(/0$/, ''), { kind: 'setLineSpacing', lines }));
@@ -349,33 +362,33 @@ export class Chrome {
 
     // Tools
     r.add(
-      dialog('tools.spelling', '&Spelling and Grammar…', 'spelling', { icon: 'spelling', shortcut: 'F7' }),
-      dialog('tools.wordCount', '&Word Count…', 'wordCount', { icon: 'wordCount' }),
-      a('tools.trackChanges', '&Track Changes', { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
-      dialog('tools.options', '&Options…', 'options'),
+      dialog('tools.spelling', t('chrome.tools.spelling'), 'spelling', { icon: 'spelling', shortcut: 'F7' }),
+      dialog('tools.wordCount', t('chrome.tools.wordCount'), 'wordCount', { icon: 'wordCount' }),
+      a('tools.trackChanges', t('chrome.tools.trackChanges'), { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
+      dialog('tools.options', t('chrome.tools.options'), 'options'),
     );
 
     // Table
     const table = (op: TableOp, label: string) => a(`table.${op}`, label, { kind: 'table', op });
     r.add(
-      table('insertRowAbove', 'Rows &Above'),
-      table('insertRowBelow', 'Rows &Below'),
-      table('insertColumnLeft', 'Columns to the &Left'),
-      table('insertColumnRight', 'Columns to the &Right'),
-      table('deleteTable', '&Table'),
-      table('deleteRows', '&Rows'),
-      table('deleteColumns', '&Columns'),
-      table('mergeCells', '&Merge Cells'),
-      table('splitCells', 'S&plit Cells…'),
-      table('selectTable', 'Select &Table'),
-      table('properties', 'Table P&roperties…'),
+      table('insertRowAbove', t('chrome.table.insertRowAbove')),
+      table('insertRowBelow', t('chrome.table.insertRowBelow')),
+      table('insertColumnLeft', t('chrome.table.insertColumnLeft')),
+      table('insertColumnRight', t('chrome.table.insertColumnRight')),
+      table('deleteTable', t('chrome.table.deleteTable')),
+      table('deleteRows', t('chrome.table.deleteRows')),
+      table('deleteColumns', t('chrome.table.deleteColumns')),
+      table('mergeCells', t('chrome.table.mergeCells')),
+      table('splitCells', t('chrome.table.splitCells')),
+      table('selectTable', t('chrome.table.selectTable')),
+      table('properties', t('chrome.table.properties')),
     );
 
     // Help
     r.add(
-      { id: 'help.shortcuts', label: '&Keyboard Shortcuts', icon: 'help', shortcut: 'F1', run: () => this.showShortcuts() },
+      { id: 'help.shortcuts', label: t('chrome.help.shortcuts'), icon: 'help', shortcut: 'F1', run: () => this.showShortcuts() },
       // The welcome document says what the app is and where its name comes from.
-      a('help.about', `&About ${this.options.appName ?? 'Golem Docs'}`, { kind: 'openSample', id: 'welcome' }),
+      a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
     );
   }
 
@@ -390,30 +403,30 @@ export class Chrome {
       hint,
       enabled: r.allows({ kind: 'insertText', text }),
       available: () => r.availableFor({ kind: 'insertText', text }),
-      run: () => r.perform({ kind: 'insertText', text }, 'Insert'),
+      run: () => r.perform({ kind: 'insertText', text }, t('chrome.perform.insert')),
     });
 
     return [
       {
-        label: '&File',
+        label: t('chrome.menu.file'),
         items: [
           cmd('file.dashboard'),
           sep,
           cmd('file.new'),
           cmd('file.open'),
-          sub('Open Sa&mple', () => {
+          sub(t('chrome.file.openSample'), () => {
             const samples = host.samples?.() ?? [];
-            if (!samples.length) return [{ type: 'item', label: '(none)', enabled: false, run: () => {} }];
+            if (!samples.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
             return samples.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSample', id: s.id }, s.label) }));
           }),
-          sub('Open &Recent', () => {
+          sub(t('chrome.file.openRecent'), () => {
             const saved = host.saved?.() ?? [];
-            if (!saved.length) return [{ type: 'item', label: '(none)', enabled: false, run: () => {} }];
+            if (!saved.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
             return saved.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSaved', id: s.id }, s.label) }));
           }),
           sep,
           cmd('file.share'),
-          sub('Con&vert To', CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
+          sub(t('chrome.file.convertTo'), CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
           cmd('file.download'),
           cmd('file.collaborate'),
           sep,
@@ -427,7 +440,7 @@ export class Chrome {
         ],
       },
       {
-        label: '&Edit',
+        label: t('chrome.menu.edit'),
         items: [
           cmd('edit.undo'),
           cmd('edit.redo'),
@@ -445,19 +458,19 @@ export class Chrome {
         ],
       },
       {
-        label: '&View',
+        label: t('chrome.menu.view'),
         items: [
           cmd('view.normal'),
           cmd('view.web'),
           cmd('view.print'),
           cmd('view.outline'),
           sep,
-          sub('&Toolbars', [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
-          sub('Color &Scheme', [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.matchSystem')]),
+          sub(t('chrome.view.toolbars'), [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
+          sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.matchSystem')]),
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
           cmd('view.debug'),
-          { type: 'item', label: 'Cloudflare &Billing…', run: () => this.showBilling(), available: () => this.options.isAdmin?.() ?? false },
+          { type: 'item', label: t('chrome.view.billing'), run: () => this.showBilling(), available: () => this.options.isAdmin?.() ?? false },
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),
@@ -465,14 +478,14 @@ export class Chrome {
           cmd('view.grid'),
           cmd('view.fullScreen'),
           sub(
-            '&Zoom',
+            t('chrome.view.zoom'),
             () => [
-              ...ZOOM_PRESETS.filter((p) => typeof p.to === 'number').map(
+              ...zoomPresets().filter((p) => typeof p.to === 'number').map(
                 (p): MenuItem => ({
                   type: 'item',
                   label: p.label,
                   checked: Math.abs(this.state.zoom - (p.to as number)) < 0.005,
-                  run: () => r.perform({ kind: 'zoom', to: p.to }, 'Zoom'),
+                  run: () => r.perform({ kind: 'zoom', to: p.to }, t('chrome.perform.zoom')),
                 }),
               ),
               sep,
@@ -489,11 +502,11 @@ export class Chrome {
         ],
       },
       {
-        label: '&Insert',
+        label: t('chrome.menu.insert'),
         items: [
-          sub('&Break', [cmd('insert.pageBreak'), cmd('insert.columnBreak'), cmd('insert.lineBreak'), sep, cmd('insert.sectionNext'), cmd('insert.sectionContinuous')], 'pageBreak'),
+          sub(t('chrome.insert.break'), [cmd('insert.pageBreak'), cmd('insert.columnBreak'), cmd('insert.lineBreak'), sep, cmd('insert.sectionNext'), cmd('insert.sectionContinuous')], 'pageBreak'),
           cmd('insert.pageNumbers'),
-          sub('Date and &Time', () => {
+          sub(t('chrome.insert.dateTime'), () => {
             const now = new Date();
             return [
               insertText(now.toLocaleDateString(undefined, { dateStyle: 'long' }), now.toLocaleDateString(undefined, { dateStyle: 'long' })),
@@ -503,7 +516,7 @@ export class Chrome {
               insertText(now.toLocaleTimeString(undefined, { timeStyle: 'short' }), now.toLocaleTimeString(undefined, { timeStyle: 'short' })),
             ];
           }),
-          sub('&Symbol', () => SYMBOLS.map(([c, name]) => insertText(c, `${c}   ${name}`)), 'symbol'),
+          sub(t('chrome.insert.symbol'), () => symbols().map(([c, name]) => insertText(c, `${c}   ${name}`)), 'symbol'),
           sep,
           cmd('insert.comment'),
           cmd('insert.footnote'),
@@ -519,7 +532,7 @@ export class Chrome {
         ],
       },
       {
-        label: 'F&ormat',
+        label: t('chrome.menu.format'),
         items: [
           cmd('format.font'),
           cmd('format.paragraph'),
@@ -528,7 +541,7 @@ export class Chrome {
           cmd('format.columns'),
           cmd('format.tabs'),
           sep,
-          sub('C&haracter', [
+          sub(t('chrome.format.character'), [
             cmd('format.bold'),
             cmd('format.italic'),
             cmd('format.underline'),
@@ -541,9 +554,9 @@ export class Chrome {
             cmd('format.growFont'),
             cmd('format.shrinkFont'),
           ]),
-          sub('&Align', [cmd('format.align.left'), cmd('format.align.center'), cmd('format.align.right'), cmd('format.align.justify')], 'alignLeft'),
-          sub('&Line Spacing', [1, 1.15, 1.5, 2, 2.5, 3].map((n) => cmd(`format.spacing.${n}`)), 'lineSpacing'),
-          sub('Change Cas&e', ['sentence', 'lower', 'upper', 'title', 'toggle'].map((c) => cmd(`format.case.${c}`))),
+          sub(t('chrome.format.align'), [cmd('format.align.left'), cmd('format.align.center'), cmd('format.align.right'), cmd('format.align.justify')], 'alignLeft'),
+          sub(t('chrome.format.lineSpacing'), [1, 1.15, 1.5, 2, 2.5, 3].map((n) => cmd(`format.spacing.${n}`)), 'lineSpacing'),
+          sub(t('chrome.format.changeCase'), ['sentence', 'lower', 'upper', 'title', 'toggle'].map((c) => cmd(`format.case.${c}`))),
           sep,
           cmd('format.styles'),
           cmd('format.painter'),
@@ -551,15 +564,15 @@ export class Chrome {
         ],
       },
       {
-        label: '&Tools',
-        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), sep, cmd('view.customizeToolbars'), cmd('tools.options')],
+        label: t('chrome.menu.tools'),
+        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
-        label: 'T&able',
+        label: t('chrome.menu.table'),
         items: [
           cmd('insert.table'),
-          sub('&Insert', [cmd('table.insertRowAbove'), cmd('table.insertRowBelow'), cmd('table.insertColumnLeft'), cmd('table.insertColumnRight')]),
-          sub('&Delete', [cmd('table.deleteTable'), cmd('table.deleteRows'), cmd('table.deleteColumns')]),
+          sub(t('chrome.table.insert'), [cmd('table.insertRowAbove'), cmd('table.insertRowBelow'), cmd('table.insertColumnLeft'), cmd('table.insertColumnRight')]),
+          sub(t('chrome.table.delete'), [cmd('table.deleteTable'), cmd('table.deleteRows'), cmd('table.deleteColumns')]),
           sep,
           cmd('table.mergeCells'),
           cmd('table.splitCells'),
@@ -569,7 +582,7 @@ export class Chrome {
         ],
       },
       {
-        label: '&Help',
+        label: t('chrome.menu.help'),
         items: [cmd('help.shortcuts'), sep, cmd('help.about')],
       },
     ];
@@ -587,20 +600,20 @@ export class Chrome {
     /** A control the open format can't use is hidden, not just disabled. */
     const gated = (c: Control, available: () => boolean): Control => ({ ...c, available });
 
-    define('control.zoom', 'Zoom Box', 'View', 'zoom', () =>
+    define('control.zoom', t('chrome.control.zoomBox'), t('chrome.category.view'), 'zoom', () =>
       comboBox(
         {
-          label: 'Zoom',
+          label: t('chrome.control.zoom'),
           width: 52,
-          options: () => ZOOM_PRESETS.map((p) => p.label),
+          options: () => zoomPresets().map((p) => p.label),
           value: (s) => `${Math.round(s.zoom * 100)}%`,
           enabled: () => true,
           commit: (text) => {
-            const preset = ZOOM_PRESETS.find((p) => p.label.toLowerCase() === text.toLowerCase());
+            const preset = zoomPresets().find((p) => p.label.toLowerCase() === text.toLowerCase());
             const percent = parseFloat(text);
             const to = preset?.to ?? (percent > 0 ? percent / 100 : NaN);
             if (typeof to === 'number' && !(to > 0)) return false;
-            r.perform({ kind: 'zoom', to }, 'Zoom');
+            r.perform({ kind: 'zoom', to }, t('chrome.perform.zoom'));
             return true;
           },
         },
@@ -609,11 +622,11 @@ export class Chrome {
       ),
     );
 
-    define('control.style', 'Style Box', 'Format', 'combo', () =>
+    define('control.style', t('chrome.control.styleBox'), t('chrome.category.format'), 'combo', () =>
       gated(
         comboBox(
           {
-            label: 'Style',
+            label: t('chrome.control.style'),
             width: 96,
             options: () => [...profile().styles],
             value: (s) => s.format.style ?? '',
@@ -622,10 +635,10 @@ export class Chrome {
             commit: (text) => {
               const style = profile().styles.find((s) => s.toLowerCase() === text.toLowerCase());
               if (!style) {
-                this.options.host.notify(`There's no style named "${text}"`);
+                this.options.host.notify(t('chrome.control.noStyle', { name: text }));
                 return false;
               }
-              r.perform({ kind: 'setStyle', style }, 'Style');
+              r.perform({ kind: 'setStyle', style }, t('chrome.perform.style'));
               return true;
             },
           },
@@ -636,11 +649,11 @@ export class Chrome {
       ),
     );
 
-    define('control.font', 'Font Box', 'Format', 'combo', () =>
+    define('control.font', t('chrome.control.fontBox'), t('chrome.category.format'), 'combo', () =>
       gated(
         comboBox(
           {
-            label: 'Font',
+            label: t('chrome.control.font'),
             width: 128,
             options: () => [...this.recentFonts, ...this.fonts],
             headerCount: () => this.recentFonts.length,
@@ -650,7 +663,7 @@ export class Chrome {
             commit: (text) => {
               const family = this.fonts.find((f) => f.toLowerCase() === text.toLowerCase()) ?? text;
               this.recentFonts = [family, ...this.recentFonts.filter((f) => f !== family)].slice(0, 3);
-              r.perform({ kind: 'setFont', family }, 'Font');
+              r.perform({ kind: 'setFont', family }, t('chrome.perform.font'));
               return true;
             },
           },
@@ -661,11 +674,11 @@ export class Chrome {
       ),
     );
 
-    define('control.size', 'Font Size Box', 'Format', 'combo', () =>
+    define('control.size', t('chrome.control.sizeBox'), t('chrome.category.format'), 'combo', () =>
       gated(
         comboBox(
           {
-            label: 'Font Size',
+            label: t('chrome.control.size'),
             width: 30,
             options: () => FONT_SIZES.map(String),
             value: (s) => (s.format.size ? String(s.format.size) : ''),
@@ -673,10 +686,10 @@ export class Chrome {
             commit: (text) => {
               const points = Math.round(parseFloat(text) * 2) / 2;
               if (!(points >= 1 && points <= 1638)) {
-                this.options.host.notify('The font size must be a number between 1 and 1638');
+                this.options.host.notify(t('chrome.control.badSize'));
                 return false;
               }
-              r.perform({ kind: 'setFontSize', points }, 'Font Size');
+              r.perform({ kind: 'setFontSize', points }, t('chrome.perform.fontSize'));
               return true;
             },
           },
@@ -687,15 +700,15 @@ export class Chrome {
       ),
     );
 
-    define('control.highlight', 'Highlight', 'Format', 'highlight', () =>
+    define('control.highlight', t('chrome.control.highlight'), t('chrome.category.format'), 'highlight', () =>
       gated(
-        colorButton({ label: 'Highlight', icon: 'highlight', noneLabel: 'None', initial: '#FFFF00', palette: 'highlight', action: (color) => ({ kind: 'setHighlight', color }) }, r),
+        colorButton({ label: t('chrome.control.highlight'), icon: 'highlight', noneLabel: t('chrome.control.noHighlight'), initial: '#FFFF00', palette: 'highlight', action: (color) => ({ kind: 'setHighlight', color }) }, r),
         () => profile().highlight,
       ),
     );
-    define('control.fontColor', 'Font Color', 'Format', 'fontColor', () =>
+    define('control.fontColor', t('chrome.control.fontColor'), t('chrome.category.format'), 'fontColor', () =>
       gated(
-        colorButton({ label: 'Font Color', icon: 'fontColor', noneLabel: 'Automatic', initial: '#FF0000', palette: 'full', action: (color) => ({ kind: 'setColor', color }) }, r),
+        colorButton({ label: t('chrome.control.fontColor'), icon: 'fontColor', noneLabel: t('chrome.control.automaticColor'), initial: '#FF0000', palette: 'full', action: (color) => ({ kind: 'setColor', color }) }, r),
         () => profile().colors,
       ),
     );
@@ -709,26 +722,26 @@ export class Chrome {
     const kindOf = (label: string) => (Object.keys(FORMATS) as (keyof typeof FORMATS)[]).find((k) => FORMATS[k].label === label);
     const combo = comboBox(
       {
-        label: 'Document format',
+        label: t('chrome.formatBox.label'),
         width: 104,
         readOnly: true,
         options: () => this.formatKinds().map((kind) => FORMATS[kind].label),
         value: (s) => FORMATS[s.kind].label,
         enabled: () => !this.converting,
         title: (s) =>
-          FORMATS[s.kind].editable ? 'Document format: switching changes the tools available' : 'Read-only format: switch to Word Document to edit',
+          FORMATS[s.kind].editable ? t('chrome.formatBox.editableTip') : t('chrome.formatBox.readOnlyTip'),
         commit: (text) => {
           const to = kindOf(text);
           if (!to) return false;
           const action: Action = { kind: 'convert', to };
           if (!host.supports(action)) {
-            host.notify(`Converting to ${FORMATS[to].label} isn't available yet`);
+            host.notify(t('chrome.formatBox.unavailable', { format: FORMATS[to].label }));
             return false;
           }
           this.converting = true;
           this.formatCombo.refresh(this.state);
           Promise.resolve(host.perform(action))
-            .catch((e: unknown) => host.notify(`Couldn't convert: ${(e as Error).message ?? e}`))
+            .catch((e: unknown) => host.notify(t('chrome.formatBox.failed', { error: (e as Error).message ?? String(e) })))
             .finally(() => {
               this.converting = false;
               this.formatCombo.refresh(this.state);
@@ -750,16 +763,16 @@ export class Chrome {
     };
     this.formModeBox = h(
       'div',
-      { class: 'wm-form-mode', attrs: { role: 'group', 'aria-label': 'Form' } },
-      modeButton('fill', 'Fill In', 'Type in the PDF’s fields'),
-      modeButton('edit', 'Edit Form', 'Move, add, rename and delete the PDF’s fields'),
+      { class: 'wm-form-mode', attrs: { role: 'group', 'aria-label': t('chrome.formMode.group') } },
+      modeButton('fill', t('chrome.formMode.fill'), t('chrome.view.fillForm.tip')),
+      modeButton('edit', t('chrome.formMode.edit'), t('chrome.view.editForm.tip')),
     );
     this.syncButton = new SyncButton(this.options.host);
     return h(
       'div',
       { class: 'wm-format' },
       this.formModeBox,
-      h('div', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: 'Format' }), combo.el),
+      h('div', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: t('chrome.formatBox.title') }), combo.el),
       this.syncButton.el,
     );
   }
@@ -818,29 +831,31 @@ export class Chrome {
   /** Everything that can go on a toolbar, grouped by menu. */
   private catalog(): CatalogItem[] {
     const categories: Record<string, string> = {
-      file: 'File',
-      edit: 'Edit',
-      view: 'View',
-      insert: 'Insert',
-      format: 'Format',
-      tools: 'Tools',
-      table: 'Table',
-      help: 'Help',
+      file: t('chrome.category.file'),
+      edit: t('chrome.category.edit'),
+      view: t('chrome.category.view'),
+      insert: t('chrome.category.insert'),
+      format: t('chrome.category.format'),
+      tools: t('chrome.category.tools'),
+      table: t('chrome.category.table'),
+      help: t('chrome.category.help'),
     };
+    // Each prefix is a whole message with the command's own label as {label}.
     const prefixes: [string, string][] = [
-      ['file.convertTo.', 'Convert To '],
-      ['format.case.', 'Change Case: '],
-      ['format.spacing.', 'Line Spacing '],
-      ['table.', 'Table: '],
-      ['view.toolbar.', 'Toolbar: '],
+      ['file.convertTo.', t('chrome.catalog.convertTo')],
+      ['format.case.', t('chrome.catalog.changeCase')],
+      ['format.spacing.', t('chrome.catalog.lineSpacing')],
+      ['table.', t('chrome.catalog.table')],
+      ['view.toolbar.', t('chrome.catalog.toolbar')],
     ];
     const items: CatalogItem[] = [];
     const byCategory = new Map<string, CatalogItem[]>();
     for (const command of this.registry.all()) {
       if (command.id === 'view.customizeToolbars') continue;
-      const category = categories[command.id.split('.')[0]] ?? 'Other';
-      const prefix = prefixes.find(([p]) => command.id.startsWith(p))?.[1] ?? '';
-      const label = prefix + (command.tooltip ?? command.plainLabel);
+      const category = categories[command.id.split('.')[0]] ?? t('chrome.category.other');
+      const own = command.tooltip ?? command.plainLabel;
+      const prefix = prefixes.find(([p]) => command.id.startsWith(p))?.[1];
+      const label = prefix ? format(prefix, { label: own }) : own;
       if (!byCategory.has(category)) byCategory.set(category, []);
       byCategory.get(category)!.push({ id: command.id, label, category });
     }
@@ -868,13 +883,13 @@ export class Chrome {
   private showDebug(): void {
     this.menuBar.close(false);
     closePopup();
-    showDialog('Debug', debugSettings(), () => this.options.host.focusEditor());
+    showDialog(t('chrome.debug.title'), debugSettings(), () => this.options.host.focusEditor());
   }
 
   private showBilling(): void {
     this.menuBar.close(false);
     closePopup();
-    showDialog('Cloudflare billing', billingPanel(), () => this.options.host.focusEditor());
+    showDialog(t('chrome.billing.title'), billingPanel(), () => this.options.host.focusEditor());
   }
 
   // --- Help ----------------------------------------------------------------------------------
@@ -887,7 +902,7 @@ export class Chrome {
       seen.add(command.shortcutText);
       table.append(h('tr', {}, h('td', { text: command.plainLabel }), h('td', {}, h('kbd', { text: command.shortcutText }))));
     }
-    showDialog('Keyboard Shortcuts', h('div', { class: 'wm-scroll' }, table), () => this.options.host.focusEditor());
+    showDialog(t('chrome.shortcuts.title'), h('div', { class: 'wm-scroll' }, table), () => this.options.host.focusEditor());
   }
 }
 

@@ -7,10 +7,12 @@ import { FORMAT_ACTIONS, type FormatAction } from './layout/formatting.ts';
 import type { DocumentSource } from './layout/protocol.ts';
 import { WDOC_EXTENSION } from './formats/wdoc.ts';
 import { sourceFromFile } from './formats/source.ts';
-import type { Bounds } from './document/arrange.ts';
+import { nearestPage, type Bounds } from './document/arrange.ts';
 import type { GpuPage } from './view/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
+import type { FindTab } from './ui/findDialog.ts';
 import { acceptList, kindFromName, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ZoomTarget } from './ui/index.ts';
+import { t } from './i18n/index.ts';
 
 export interface AppHooks {
   /** Show (or hide) the dashboard of all documents. */
@@ -29,8 +31,12 @@ export interface AppHooks {
   share(): void;
   /** Download a copy of the document as a file, in its own format. */
   download(): Promise<void>;
-  /** Show the find bar, with the replace row for Replace. */
-  showFind(replace: boolean): void;
+  /** Ask for a link to make of the selection (Insert ▸ Hyperlink). */
+  showLinkDialog(): void;
+  /** Show the Spelling and Grammar dialog and look for the first problem. */
+  showSpelling(): void;
+  /** Show the Find, Replace or Go To dialog on that tab. */
+  showFind(tab: FindTab): void;
   /** Print the document (as a PDF), or open that PDF in a new tab to preview it. */
   print(preview: boolean): Promise<void>;
   /** Make a copy of the document in another format next to the original, and open it. */
@@ -87,6 +93,7 @@ const SUPPORTED = new Set<ActionKind>([
   'insertText',
   'convert',
   'insertComment',
+  'insertLink',
 ]);
 
 
@@ -94,7 +101,7 @@ const SUPPORTED = new Set<ActionKind>([
 const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark']);
 
 /** The formats a document can be converted to. */
-const CONVERTIBLE = new Set<DocumentKind>(['docx', 'odt', 'html', 'pdf', 'md', 'txt']);
+const CONVERTIBLE = new Set<DocumentKind>(['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'pdf', 'md', 'txt']);
 
 export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: File): void } {
   let untitled = 0;
@@ -103,7 +110,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     if (sourceFromFile(file.name, new ArrayBuffer(0))) {
       void file.arrayBuffer().then((bytes) => app.open(sourceFromFile(file.name, bytes)!));
     } else {
-      app.notify(`Opening ${kindFromName(file.name, 'txt').toUpperCase()} files isn't supported yet (${file.name})`);
+      app.notify(t('app.unsupportedOpen', { kind: kindFromName(file.name, 'txt').toUpperCase(), name: file.name }));
     }
   };
 
@@ -120,18 +127,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
   const currentPage = (): GpuPage | null => {
     const { canvas, camera } = app;
     const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
-    let best: GpuPage | null = null;
-    let bestDistance = Infinity;
-    for (const page of app.pages()) {
-      const dy = center.y < page.y ? page.y - center.y : center.y > page.y + page.height ? center.y - page.y - page.height : 0;
-      const dx = center.x < page.x ? page.x - center.x : center.x > page.x + page.width ? center.x - page.x - page.width : 0;
-      const distance = dx * dx + dy * dy;
-      if (distance < bestDistance) {
-        best = page;
-        bestDistance = distance;
-      }
-    }
-    return best;
+    return nearestPage(app.pages(), center.x, center.y);
   };
 
   const zoomTo = (to: ZoomTarget): void => {
@@ -166,7 +162,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (ANNOTATION_ACTIONS.has(action.kind) && app.annotating()) return true;
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode === 'print';
@@ -191,9 +187,12 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.openSample(action.id);
         case 'download':
           return app.download();
+        case 'insertLink':
+          return app.showLinkDialog();
         case 'dialog':
-          if (action.name === 'find' || action.name === 'replace') return app.showFind(action.name === 'replace');
-          return app.notify(`${action.name} isn't available yet`);
+          if (action.name === 'spelling') return app.showSpelling();
+          if (action.name === 'find' || action.name === 'replace' || action.name === 'goTo') return app.showFind(action.name);
+          return app.notify(t('app.notAvailable', { name: action.name }));
         case 'print':
         case 'printPreview':
           return app.print(action.kind === 'printPreview');
@@ -256,7 +255,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (!app.annotating()) return app.send({ kind: 'format', action });
           if (action.mark === 'underline') return app.send({ kind: 'annotate', annotation: 'underline' });
           if (action.mark === 'strikethrough') return app.send({ kind: 'annotate', annotation: 'strikeout' });
-          return app.notify(`${action.mark} isn't available yet`);
+          return app.notify(t('app.notAvailable', { name: action.mark }));
         case 'setFont':
         case 'setFontSize':
         case 'growFont':
@@ -264,6 +263,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'setColor':
         case 'changeCase':
         case 'clearFormatting':
+        case 'formatPainter':
         case 'setStyle':
         case 'setAlignment':
         case 'setLineSpacing':
@@ -271,14 +271,14 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'indent':
           return app.send({ kind: 'format', action });
         case 'insertComment': {
-          const text = window.prompt(app.annotating() ? 'Note' : 'Comment');
+          const text = window.prompt(app.annotating() ? t('app.notePrompt') : t('app.commentPrompt'));
           if (text === null) return;
           if (app.annotating()) app.send({ kind: 'annotate', annotation: 'note', text });
           else app.send({ kind: 'addComment', text, author: app.author() });
           return;
         }
         default:
-          app.notify(`${action.kind} isn't available yet`);
+          app.notify(t('app.notAvailable', { name: action.kind }));
       }
     },
 

@@ -2,6 +2,7 @@
 // represent (no font colors in Markdown, no editing in a PDF), so the same menus and toolbars
 // serve every format without lying about what will survive a save.
 
+import { t } from '../i18n/index.ts';
 import type { Action, DocumentKind, Mark } from './actions.ts';
 
 export interface FormatProfile {
@@ -107,25 +108,61 @@ const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   horizontalRule: false,
 };
 
+/** What an HTML page can express; EPUB and MHTML hold the same content in a container. */
+const WEB: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
+  ...RICH,
+  styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6', 'Quote', 'Code'],
+  marks: [...ALL_MARKS, 'code'],
+  pageLayout: false,
+  comments: false,
+  footnotes: false,
+  trackChanges: false,
+  codeBlocks: true,
+};
+
+/** A grid of text: tables and nothing else. */
+const GRID: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, tables: true };
+
+const MARKUP_MARKS: Mark[] = ['bold', 'italic', 'code', 'superscript', 'subscript'];
+
+/** What the lightweight markup formats (LaTeX, AsciiDoc, reStructuredText, Org) can express: structure and simple marks. */
+const MARKUP: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
+  ...NOTHING,
+  marks: MARKUP_MARKS,
+  styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6', 'Quote', 'Code'],
+  lists: true,
+  indent: true,
+  tables: true,
+  links: true,
+  codeBlocks: true,
+  horizontalRule: true,
+};
+
 export const FORMATS: Record<DocumentKind, FormatProfile> = {
   docx: {
     ...RICH,
     kind: 'docx',
-    label: 'Word Document',
+    get label() {
+      return t('menus.format.docx');
+    },
     extensions: ['.docx', '.docm', '.dotx', '.doc'],
     mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   },
   odt: {
     ...RICH,
     kind: 'odt',
-    label: 'OpenDocument Text',
+    get label() {
+      return t('menus.format.odt');
+    },
     extensions: ['.odt'],
     mime: 'application/vnd.oasis.opendocument.text',
   },
   rtf: {
     ...RICH,
     kind: 'rtf',
-    label: 'Rich Text Format',
+    get label() {
+      return t('menus.format.rtf');
+    },
     extensions: ['.rtf'],
     mime: 'application/rtf',
     trackChanges: false,
@@ -134,7 +171,9 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   html: {
     ...RICH,
     kind: 'html',
-    label: 'Web Page',
+    get label() {
+      return t('menus.format.html');
+    },
     extensions: ['.html', '.htm'],
     mime: 'text/html',
     styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6', 'Quote', 'Code'],
@@ -145,10 +184,30 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     trackChanges: false,
     codeBlocks: true,
   },
+  epub: {
+    ...WEB,
+    kind: 'epub',
+    get label() {
+      return t('menus.format.epub');
+    },
+    extensions: ['.epub'],
+    mime: 'application/epub+zip',
+  },
+  mhtml: {
+    ...WEB,
+    kind: 'mhtml',
+    get label() {
+      return t('menus.format.mhtml');
+    },
+    extensions: ['.mhtml', '.mht'],
+    mime: 'multipart/related',
+  },
   md: {
     ...NOTHING,
     kind: 'md',
-    label: 'Markdown',
+    get label() {
+      return t('menus.format.md');
+    },
     extensions: ['.md', '.markdown'],
     mime: 'text/markdown',
     marks: ['bold', 'italic', 'strikethrough', 'code'],
@@ -160,17 +219,43 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     codeBlocks: true,
     horizontalRule: true,
   },
+  csv: {
+    ...GRID,
+    kind: 'csv',
+    get label() {
+      return t('menus.format.csv');
+    },
+    extensions: ['.csv'],
+    mime: 'text/csv',
+  },
+  tsv: {
+    ...GRID,
+    kind: 'tsv',
+    get label() {
+      return t('menus.format.tsv');
+    },
+    extensions: ['.tsv', '.tab'],
+    mime: 'text/tab-separated-values',
+  },
+  tex: { ...MARKUP, kind: 'tex', label: 'LaTeX', extensions: ['.tex', '.latex'], mime: 'application/x-tex', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
+  adoc: { ...MARKUP, kind: 'adoc', label: 'AsciiDoc', extensions: ['.adoc', '.asciidoc', '.asc'], mime: 'text/asciidoc', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
+  rst: { ...MARKUP, kind: 'rst', label: 'reStructuredText', extensions: ['.rst', '.rest'], mime: 'text/x-rst' },
+  org: { ...MARKUP, kind: 'org', label: 'Org Mode', extensions: ['.org'], mime: 'text/x-org', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
   txt: {
     ...NOTHING,
     kind: 'txt',
-    label: 'Plain Text',
+    get label() {
+      return t('menus.format.txt');
+    },
     extensions: ['.txt', '.text'],
     mime: 'text/plain',
   },
   pdf: {
     ...NOTHING,
     kind: 'pdf',
-    label: 'PDF',
+    get label() {
+      return t('menus.format.pdf');
+    },
     extensions: ['.pdf'],
     mime: 'application/pdf',
     editable: false,
@@ -183,7 +268,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
 };
 
 /** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
-export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'html', 'pdf', 'md', 'txt'];
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'pdf', 'md', 'txt'];
 
 /** The kind of a file, from its name; `fallback` when the extension isn't one we know. */
 export function kindFromName(name: string, fallback: DocumentKind = 'docx'): DocumentKind {

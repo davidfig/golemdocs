@@ -46,6 +46,7 @@ import type {
   TableCellProperties,
   TableRow,
 } from '@word/docx';
+import { t } from '../i18n/index.ts';
 
 // --- Public types -----------------------------------------------------------------------------------
 
@@ -2295,7 +2296,7 @@ class Writer {
       if (this.classify(block).kind === 'heading') return text.slice(0, 120);
       if (!fallback) fallback = text.slice(0, 120);
     }
-    return fallback || 'Document';
+    return fallback || t('app.defaultTitle');
   }
 
   // --- Classification ---

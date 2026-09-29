@@ -1,8 +1,10 @@
 // Customize Toolbars: choose a toolbar, then add, remove and reorder its buttons from the list
 // of every command (by the buttons, double-click, or dragging). Changes apply as they're made.
 
+import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
-import { SEPARATOR, cloneLayout, type ToolbarLayout } from './toolbarLayout.ts';
+import { dialogTitleBar } from './popup.ts';
+import { SEPARATOR, cloneLayout, toolbarTitle, type ToolbarLayout } from './toolbarLayout.ts';
 
 export interface CatalogItem {
   id: string;
@@ -19,7 +21,8 @@ export interface CustomizeOptions {
   onClose(): void;
 }
 
-const ALL = 'All Commands';
+/** Stands for "every category" (shown as a translated label, never compared as text). */
+const ALL = '\u0000all';
 type Drag = { from: 'catalog'; id: string } | { from: 'toolbar'; index: number };
 
 export function showCustomize(options: CustomizeOptions): void {
@@ -35,26 +38,26 @@ export function showCustomize(options: CustomizeOptions): void {
   const items = () => layout[current].items;
 
   // --- Controls ---
-  const toolbarSelect = h('select', { class: 'wm-select', attrs: { 'aria-label': 'Toolbar' } });
-  for (const [i, t] of layout.entries()) toolbarSelect.append(new Option(t.name, String(i)));
+  const toolbarSelect = h('select', { class: 'wm-select', attrs: { 'aria-label': t('menus.customize.toolbar') } });
+  for (const [i, bar] of layout.entries()) toolbarSelect.append(new Option(toolbarTitle(bar.name), String(i)));
   const visible = h('input', { attrs: { type: 'checkbox' } });
-  const categorySelect = h('select', { class: 'wm-select', attrs: { 'aria-label': 'Category' } });
-  for (const c of categories) categorySelect.append(new Option(c, c));
-  const catalogList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': 'Commands' } });
-  const toolbarList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': 'Toolbar buttons' } });
+  const categorySelect = h('select', { class: 'wm-select', attrs: { 'aria-label': t('menus.customize.category') } });
+  for (const c of categories) categorySelect.append(new Option(c === ALL ? t('menus.customize.allCommands') : c, c));
+  const catalogList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': t('menus.customize.commandsList') } });
+  const toolbarList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': t('menus.customize.buttonsList') } });
 
   const button = (text: string, onClick: () => void, title?: string) => {
     const b = h('button', { class: 'wm-button', text, title, attrs: { type: 'button' } });
     b.addEventListener('click', onClick);
     return b;
   };
-  const addButton = button('Add ›', () => add(catalogSelection));
-  const removeButton = button('‹ Remove', () => remove());
-  const upButton = button('Move Up', () => move(-1));
-  const downButton = button('Move Down', () => move(1));
-  const separatorButton = button('Separator', () => insert(SEPARATOR), 'Add a separator after the selected button');
-  const resetButton = button('Reset Toolbar', () => reset(), 'Put back the toolbar as it was originally');
-  const closeButton = button('Close', () => dialog.close());
+  const addButton = button(t('menus.customize.add'), () => add(catalogSelection));
+  const removeButton = button(t('menus.customize.remove'), () => remove());
+  const upButton = button(t('menus.customize.moveUp'), () => move(-1));
+  const downButton = button(t('menus.customize.moveDown'), () => move(1));
+  const separatorButton = button(t('menus.customize.separator'), () => insert(SEPARATOR), t('menus.customize.separatorTip'));
+  const resetButton = button(t('menus.customize.reset'), () => reset(), t('menus.customize.resetTip'));
+  const closeButton = button(t('menus.customize.close'), () => dialog.close());
 
   // --- Editing ---
   const commit = () => {
@@ -84,7 +87,7 @@ export function showCustomize(options: CustomizeOptions): void {
     commit();
   };
   const reset = () => {
-    const fallback = options.defaults.find((t) => t.name === layout[current].name);
+    const fallback = options.defaults.find((bar) => bar.name === layout[current].name);
     if (fallback) layout[current] = { ...fallback, items: [...fallback.items] };
     toolbarSelection = -1;
     commit();
@@ -121,7 +124,7 @@ export function showCustomize(options: CustomizeOptions): void {
       const used = onToolbar.has(item.id);
       if (used) {
         el.classList.add('used');
-        el.title = `Already on the ${layout[current].name} toolbar`;
+        el.title = t('menus.customize.alreadyOn', { toolbar: toolbarTitle(layout[current].name) });
       }
       if (item.id === catalogSelection) el.classList.add('selected');
       el.draggable = !used;
@@ -141,7 +144,7 @@ export function showCustomize(options: CustomizeOptions): void {
   const renderToolbar = () => {
     toolbarList.replaceChildren();
     items().forEach((id, index) => {
-      const el = row(id, id === SEPARATOR ? 'Separator' : (labelOf.get(id) ?? id));
+      const el = row(id, id === SEPARATOR ? t('menus.customize.separator') : (labelOf.get(id) ?? id));
       if (id === SEPARATOR) el.classList.add('separator');
       if (index === toolbarSelection) el.classList.add('selected');
       el.draggable = true;
@@ -248,25 +251,20 @@ export function showCustomize(options: CustomizeOptions): void {
 
   // --- Dialog ---
   const dialog = h('dialog', { class: 'wm-dialog wm-customize' });
-  const title = h('div', { class: 'wm-dialog-title' }, h('span', { text: 'Customize Toolbars' }));
-  const x = button('×', () => dialog.close());
-  x.className = 'wm-dialog-close';
-  x.setAttribute('aria-label', 'Close');
-  title.append(x);
   dialog.append(
-    title,
+    dialogTitleBar(t('menus.customize.title'), () => dialog.close()),
     h(
       'div',
       { class: 'wm-dialog-body' },
-      h('div', { class: 'wm-customize-top' }, h('label', {}, 'Toolbar: ', toolbarSelect), h('label', {}, visible, ' Show this toolbar')),
+      h('div', { class: 'wm-customize-top' }, h('label', {}, t('menus.customize.toolbarField'), toolbarSelect), h('label', {}, visible, t('menus.customize.showToolbar'))),
       h(
         'div',
         { class: 'wm-customize-lists' },
-        h('div', { class: 'wm-customize-pane' }, h('label', {}, 'Commands: ', categorySelect), catalogList),
+        h('div', { class: 'wm-customize-pane' }, h('label', {}, t('menus.customize.commandsField'), categorySelect), catalogList),
         h('div', { class: 'wm-customize-buttons' }, addButton, removeButton, h('span', { class: 'wm-gap' }), upButton, downButton, separatorButton),
-        h('div', { class: 'wm-customize-pane' }, h('div', { class: 'wm-pane-title', text: 'On the toolbar:' }), toolbarList),
+        h('div', { class: 'wm-customize-pane' }, h('div', { class: 'wm-pane-title', text: t('menus.customize.onToolbar') }), toolbarList),
       ),
-      h('p', { class: 'wm-hint', text: 'Double-click or drag to add and remove buttons. Drag within the toolbar list to reorder.' }),
+      h('p', { class: 'wm-hint', text: t('menus.customize.hint') }),
     ),
     h('div', { class: 'wm-dialog-buttons spread' }, resetButton, closeButton),
   );

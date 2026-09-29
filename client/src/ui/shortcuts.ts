@@ -2,6 +2,8 @@
 // is the Control key on every platform. Keys are matched by physical key for letters, digits
 // and punctuation, so Alt/Option combinations and non-US layouts behave predictably.
 
+import { t } from '../i18n/index.ts';
+
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export interface Shortcut {
@@ -40,6 +42,15 @@ const MAC_KEY_NAMES: Record<string, string> = {
   Delete: '⌦',
   Escape: '⎋',
   Tab: '⇥',
+};
+
+const KEY_WORDS: Record<string, 'menus.key.enter' | 'menus.key.space' | 'menus.key.backspace' | 'menus.key.delete' | 'menus.key.escape' | 'menus.key.tab'> = {
+  Enter: 'menus.key.enter',
+  Space: 'menus.key.space',
+  Backspace: 'menus.key.backspace',
+  Delete: 'menus.key.delete',
+  Escape: 'menus.key.escape',
+  Tab: 'menus.key.tab',
 };
 
 export function parseShortcut(spec: ShortcutSpec | undefined): Shortcut | null {
@@ -99,9 +110,9 @@ export function formatShortcut(shortcut: Shortcut): string {
     );
   }
   const parts: string[] = [];
-  if (shortcut.mod || shortcut.ctrl) parts.push('Ctrl');
-  if (shortcut.alt) parts.push('Alt');
-  if (shortcut.shift) parts.push('Shift');
-  parts.push(key);
+  if (shortcut.mod || shortcut.ctrl) parts.push(t('menus.key.ctrl'));
+  if (shortcut.alt) parts.push(t('menus.key.alt'));
+  if (shortcut.shift) parts.push(t('menus.key.shift'));
+  parts.push(KEY_WORDS[key] ? t(KEY_WORDS[key]) : key);
   return parts.join('+');
 }

@@ -9,7 +9,7 @@ export const DEBUG_FLAGS = [
   { key: 'pages', panel: 'Render', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
   { key: 'zoom', panel: 'Render', label: 'Zoom', hint: 'The current zoom level' },
   { key: 'cpu', panel: 'Render', label: 'CPU time', hint: 'How long the last frame took to submit to the GPU' },
-  { key: 'fps', panel: 'Render', label: 'FPS and render light', hint: 'Frames drawn in the last second (0 when nothing is changing: the canvas only draws on demand), beside a light that flashes whenever the canvas draws' },
+  { key: 'fps', panel: 'Render', label: 'FPS and render light', hint: 'Frame rate of the last stretch of drawing (it holds there while the canvas is idle: it only draws on demand), beside a light that flashes whenever the canvas draws' },
   { key: 'frameTimes', panel: 'Render', label: 'Slowest and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },
 ] as const satisfies readonly { key: string; panel: DebugPanel; label: string; hint: string }[];
 
@@ -66,17 +66,21 @@ export function onDebugFlagsChange(listener: () => void): () => void {
 const RUN_GAP_MS = 250;
 /** The shortest display refresh interval taken as real; shorter gaps are extra draws in one frame. */
 const MIN_REFRESH_MS = 6;
-const WINDOW_MS = 1000;
+/** How many recent gaps between frames the frame rate is averaged over. */
+const RATE_GAPS = 30;
 
 /**
  * Times the canvas's draws. It draws on demand, so a gap between two frames is only a dropped
  * frame if they're part of one run: a second of idle isn't a hundred missed frames.
  */
 export class FrameMonitor {
-  private times: number[] = [];
+  /** The recent gaps between frames in the current run, ms (newest last). */
+  private gaps: number[] = [];
   private last = 0;
   /** The display's frame interval, learned from the shortest gap seen in a run (60 Hz to start). */
   private refresh = 1000 / 60;
+  /** Frames per second over the latest run; it holds there while nothing draws. */
+  rate = 0;
   /** The most recent frame's CPU time, ms. */
   cpuMs = 0;
   /** The slowest frame's CPU time since reset, ms. */
@@ -96,19 +100,18 @@ export class FrameMonitor {
         if (gap >= MIN_REFRESH_MS && gap < this.refresh) this.refresh = gap;
         if (gap > this.maxGapMs) this.maxGapMs = gap;
         if (gap > this.refresh * 1.5) this.dropped += Math.round(gap / this.refresh) - 1;
+        // (Two draws inside one display frame aren't a rate.)
+        if (gap >= MIN_REFRESH_MS) {
+          this.gaps.push(gap);
+          if (this.gaps.length > RATE_GAPS) this.gaps.shift();
+          this.rate = (1000 * this.gaps.length) / this.gaps.reduce((a, b) => a + b, 0);
+        }
+      } else {
+        // A new run: its rate replaces the last one's once it has a gap to go on.
+        this.gaps.length = 0;
       }
     }
     this.last = now;
-    this.times.push(now);
-  }
-
-  /** Frames drawn in the last second, as of `now`. */
-  fps(now: number): number {
-    const from = now - WINDOW_MS;
-    let i = 0;
-    while (i < this.times.length && this.times[i] <= from) i++;
-    if (i) this.times.splice(0, i);
-    return this.times.length;
   }
 
   /** Forgets the slowest frame, longest gap and dropped frames. */

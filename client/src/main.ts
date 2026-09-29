@@ -994,7 +994,7 @@ function updateDebug(): void {
   }
   if (flags.zoom) rows.push(['zoom', `${Math.round(camera.zoom * 100)}%`]);
   if (flags.cpu) rows.push(['cpu', `${frames.cpuMs.toFixed(2)} ms`]);
-  if (flags.fps) rows.push(['fps', String(frames.fps(performance.now()))]);
+  if (flags.fps) rows.push(['fps', String(Math.round(frames.rate))]);
   if (flags.frameTimes) {
     rows.push(['slowest', `${frames.maxCpuMs.toFixed(1)} ms`], ['gap', `${frames.maxGapMs.toFixed(0)} ms`], ['dropped', String(frames.dropped)]);
   }
@@ -1003,10 +1003,6 @@ function updateDebug(): void {
   renderInfoEl.hidden = !rows.length && !flags.fps;
 }
 
-// Idle, nothing draws: keep the frame rate honest (it falls to 0) and the status text fresh.
-setInterval(() => {
-  if (debugFlags().fps || debugFlags().status) updateDebug();
-}, 500);
 onDebugFlagsChange(updateDebug);
 onThemeChange(requestRender);
 renderInfoEl.addEventListener('click', () => {

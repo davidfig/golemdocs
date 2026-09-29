@@ -27,6 +27,7 @@
   --wm-button-bottom: #e3e3db;
   --wm-button-border: #003c74;
   --wm-muted: #666;
+  --wm-error: #b00020;
   --wm-row-hover: #eef3fb;
   --wm-letter: #2e3148;
   --wm-icon-halo: none;
@@ -121,6 +122,7 @@
   --wm-button-bottom: #2f3136;
   --wm-button-border: #5b5f66;
   --wm-muted: #a0a3a8;
+  --wm-error: #ff8a80;
   --wm-row-hover: #363a40;
   --wm-letter: #dfe3f0;
   --wm-icon-halo: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.75));
@@ -1115,7 +1117,7 @@
 }
 
 .wm-billing-error {
-  color: #b00020;
+  color: var(--wm-error);
 }
 
 /* --- Keyboard focus and motion ------------------------------------------------------------ */

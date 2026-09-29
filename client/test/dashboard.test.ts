@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CloudDocument } from '../src/cloud.ts';
 import type { SavedInfo } from '../src/storage/local.ts';
-import { classify, mergeLibrary, pushLinked, type LibraryEntry } from '../src/sync.ts';
+import { classify, deletedElsewhere, hasUnsentChanges, mergeLibrary, type LibraryEntry } from '../src/sync.ts';
 import { THUMB_MAX_HEIGHT, THUMB_WIDTH, thumbnailSize, toTopDownOpaque } from '../src/thumbnail.ts';
 import { formatSize, matchesSearch, opensFromCloud, relativeTime, syncBadge } from '../src/ui/dashboardFormat.ts';
 
@@ -69,7 +69,7 @@ test('the library pairs copies, lists cloud-only documents once, and sorts newes
   assert.equal(entries.length, 3, 'the paired document is one card, not two');
 });
 
-test('a document changed elsewhere shows the cloud’s name and size; signed out, linked ones are "unknown"', () => {
+test('a document changed elsewhere shows the cloud’s name and size; offline, linked ones are "unknown"', () => {
   const [ahead] = mergeLibrary([linked()], [cloud({ name: 'Renamed.docx', size: 99, updatedAt: 600 })]);
   assert.deepEqual([ahead!.name, ahead!.size, ahead!.state], ['Renamed.docx', 99, 'cloud-ahead']);
 
@@ -78,29 +78,20 @@ test('a document changed elsewhere shows the cloud’s name and size; signed out
   assert.equal(offline!.name, 'Local.docx');
 });
 
-test('only linked documents edited here are uploaded on their own', async () => {
-  const entries = mergeLibrary(
-    [
-      linked({ id: 'a', cloudId: 'c1', updatedAt: 1001 }), // edited here
-      linked({ id: 'b', cloudId: 'c2' }), // in sync
-      linked({ id: 'c', cloudId: 'c3', updatedAt: 1001 }), // edited in both places
-      local({ id: 'd', updatedAt: 5 }), // never saved to the cloud
-      linked({ id: 'e', cloudId: 'gone', updatedAt: 1001 }), // deleted from the cloud elsewhere
-    ],
-    [cloud({ id: 'c1' }), cloud({ id: 'c2' }), cloud({ id: 'c3', updatedAt: 900 })],
-  );
-  const sent: string[] = [];
-  const count = await pushLinked(entries, async (id) => void sent.push(id));
-  assert.deepEqual(sent, ['a']);
-  assert.equal(count, 1);
+test('a copy has unsent changes until it has been uploaded as it is now', () => {
+  assert.equal(hasUnsentChanges(local()), true, 'never uploaded');
+  assert.equal(hasUnsentChanges(linked()), false);
+  assert.equal(hasUnsentChanges(linked({ updatedAt: 1001 })), true, 'saved since');
 });
 
-test('a failed upload is skipped, not fatal', async () => {
-  const entries = mergeLibrary([linked({ id: 'a', updatedAt: 1001 }), linked({ id: 'b', cloudId: 'c2', updatedAt: 1001 })], [cloud({ id: 'c1' }), cloud({ id: 'c2' })]);
-  const count = await pushLinked(entries, async (id) => {
-    if (id === 'a') throw new Error('offline');
-  });
-  assert.equal(count, 1);
+test('copies of documents deleted elsewhere go, unless they have changes the account never got', () => {
+  const copies = [
+    linked({ id: 'a', cloudId: 'c1' }), // still in the account
+    linked({ id: 'b', cloudId: 'gone' }), // deleted elsewhere, nothing new here
+    linked({ id: 'c', cloudId: 'gone2', updatedAt: 1001 }), // deleted elsewhere, but edited here since
+    local({ id: 'd' }), // not uploaded yet
+  ];
+  assert.deepEqual(deletedElsewhere(copies, [cloud({ id: 'c1' })]).map((l) => l.id), ['b']);
 });
 
 // --- Card text --------------------------------------------------------------------------------
@@ -120,9 +111,13 @@ test('relative times', () => {
 
 test('sizes, badges, search and where a card opens from', () => {
   assert.deepEqual([512, 2048, 5 * 1024 * 1024].map(formatSize), ['512 B', '2 KB', '5.0 MB']);
-  assert.equal(syncBadge('local-only'), null);
-  assert.equal(syncBadge('synced')?.text, 'Synced');
-  assert.equal(syncBadge('conflict')?.tone, 'warn');
+  // Where a document is never comes up: only changes that haven't reached the account yet do.
+  assert.equal(syncBadge('local-only', false), null, 'signed out, documents are just documents');
+  assert.equal(syncBadge('synced', true), null);
+  assert.equal(syncBadge('cloud-only', true), null);
+  assert.equal(syncBadge('cloud-ahead', true), null);
+  assert.equal(syncBadge('local-only', true)?.text, 'Not saved yet');
+  assert.equal(syncBadge('local-ahead', true)?.text, 'Not saved yet');
 
   const entry = (state: Parameters<typeof syncBadge>[0], hasLocal: boolean, hasCloud: boolean) =>
     ({ key: 'k', name: 'Quarterly Report.docx', size: 1, updatedAt: 1, local: hasLocal ? local() : null, cloud: hasCloud ? cloud() : null, state }) satisfies LibraryEntry;

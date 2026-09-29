@@ -24,22 +24,13 @@ export function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** The sync badge for a state, or null when there is nothing worth saying. */
-export function syncBadge(state: SyncState): { text: string; tone: 'ok' | 'pending' | 'warn' | 'muted' } | null {
-  switch (state) {
-    case 'synced':
-      return { text: 'Synced', tone: 'ok' };
-    case 'local-ahead':
-      return { text: 'Not yet uploaded', tone: 'pending' };
-    case 'cloud-ahead':
-      return { text: 'Newer in the cloud', tone: 'pending' };
-    case 'conflict':
-      return { text: 'Changed in both places', tone: 'warn' };
-    case 'unknown':
-      return { text: 'Cloud unavailable', tone: 'muted' };
-    default:
-      return null;
-  }
+/**
+ * The badge for a card, or null when there is nothing worth saying, which is nearly always: only
+ * a signed-in user's changes that haven't reached their account yet (offline, say) are mentioned.
+ */
+export function syncBadge(state: SyncState, signedIn: boolean): { text: string; tone: 'pending' } | null {
+  if (!signedIn) return null;
+  return state === 'local-only' || state === 'local-ahead' || state === 'conflict' ? { text: 'Not saved yet', tone: 'pending' } : null;
 }
 
 /** Where opening an entry gets its document: the cloud only when that has something the browser doesn't. */

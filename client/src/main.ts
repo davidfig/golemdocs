@@ -3,13 +3,27 @@ import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocument, listDocuments, type CloudDocument } from './cloud.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
-import { clearAllSaved, getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
+import {
+  adoptGuestDocuments,
+  clearAllSaved,
+  deleteOwnedBy,
+  deleteSaved,
+  getSaved,
+  getThumbnail,
+  listSaved,
+  ownedBy,
+  saveSaved,
+  saveThumbnail,
+  type SavedInfo,
+} from './storage/local.ts';
+import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
 import { Dashboard } from './ui/dashboard.ts';
+import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
@@ -106,7 +120,6 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   current = { localId: options.localId ?? null, unsavedSince: 0 };
-  syncError = null;
   showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
   pagesById.clear();
@@ -265,8 +278,6 @@ function openSource(source: string, keepRoom = false): void {
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
   if (!keepRoom) params.delete('room');
-  const thenSaveToCloud = params.get('cloud') === '1';
-  params.delete('cloud');
   history.replaceState(null, '', `?${params}`);
   if (source === 'war-and-peace') {
     open({ kind: 'text-url', name: 'War and Peace', url: warAndPeaceUrl }, { grid: true });
@@ -274,7 +285,7 @@ function openSource(source: string, keepRoom = false): void {
     const name = source.slice(7);
     open({ kind: 'docx-url', name, url: CORPUS_URL + encodeURIComponent(name) });
   } else if (source.startsWith('local:')) {
-    void openLocal(source.slice(6), thenSaveToCloud);
+    void openLocal(source.slice(6));
   } else if (source.startsWith('cloud:')) {
     void openCloud(source.slice(6));
   } else if (source === 'welcome') {
@@ -285,10 +296,11 @@ function openSource(source: string, keepRoom = false): void {
 }
 
 // --- Saving ----------------------------------------------------------------------------
-// Documents save themselves in this browser (IndexedDB) a moment after each edit, so there's no
-// Save command and the app needs no account. The cloud is an opt-in extra: only Save to Cloud and
-// Cloud Documents ask the user to sign in, and they save in the browser first, so leaving the
-// page to sign in never loses work.
+// Documents save themselves a moment after each edit, so there's no Save command, and the user
+// never picks where a document goes. Signed out, documents are saved in this browser (IndexedDB)
+// and the app needs no account. Signed in, the account is where they live: each save still lands
+// in this browser first (instant, and safe offline) and is uploaded soon after. Signing in brings
+// this browser's documents into the account; signing out removes the account's from this browser.
 
 const AUTOSAVE_DELAY_MS = 1000;
 /** Typing without a pause still saves this often. */
@@ -322,7 +334,9 @@ function saveIfEdited(): void {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') saveIfEdited();
+  if (document.visibilityState !== 'hidden') return;
+  saveIfEdited();
+  void saving.then(() => flushUploads()); // the page may be closing: don't wait for the pause
 });
 
 /** The open document's id in this browser, saving it first if it has unsaved edits or was never saved. */
@@ -334,66 +348,180 @@ function saveNow(): Promise<string | null> {
 /** Shown when the current document finishes loading, which would otherwise replace it. */
 let pendingNotice: string | null = null;
 
+/** Who is signed in; null signed out. Offline, whoever was last time (see auth.ts). */
+let account: User | null = null;
+/** This browser's copies of the documents in view: the account's, or signed out, the browser's own. */
 let savedDocs: SavedInfo[] = [];
-let cloudUser: User | null = null;
+/** The account's documents, as last listed (empty signed out or offline). */
 let cloudDocs: CloudDocument[] = [];
 
-/** Refreshes what File ▸ Open Recent and Cloud Documents list (cloud parts stay empty when signed out or offline). */
-async function refreshLibrary(): Promise<void> {
-  savedDocs = await listSaved().catch(() => []);
-  cloudUser = await currentUser().catch(() => null);
-  cloudDocs = cloudUser ? await listDocuments().catch(() => []) : [];
-  sharedDeviceNotice.update({ signedIn: cloudUser !== null });
+/**
+ * Finds out who is signed in and gets going: signed in, any documents made here while signed out
+ * join the account, and whatever the account doesn't have yet is sent. Run on load and whenever
+ * the connection comes back.
+ */
+async function connect(): Promise<void> {
+  const before = account?.id ?? null;
+  account = await currentUser();
+  if (account) {
+    const adopted = await adoptGuestDocuments(account.id).catch(() => []);
+    if (adopted.length) notify(adopted.length === 1 ? 'Added the document from this browser to your account' : `Added ${adopted.length} documents from this browser to your account`);
+  }
+  await refreshLibrary();
+  sharedDeviceNotice.update({ signedIn: account !== null });
+  if (account) {
+    for (const info of savedDocs) if (hasUnsentChanges(info)) dirty.add(info.id);
+    void flushUploads();
+  }
+  if ((account?.id ?? null) !== before) dashboard.refreshIfVisible();
   showSync();
 }
 
-// --- Sync ------------------------------------------------------------------------------
-// Once a document is in the cloud, its edits follow it there: each save in the browser schedules
-// an upload, a few seconds after editing pauses. The sync button (top right) shows where it is.
+/** Refreshes what File ▸ Open Recent lists. */
+async function refreshLibrary(): Promise<void> {
+  if (account) {
+    try {
+      cloudDocs = await listDocuments();
+      signedOutRemotely = false;
+    } catch (e) {
+      if (e instanceof CloudError && e.status === 401) signedOutRemotely = true;
+      else if (e instanceof TypeError) wentOffline();
+    }
+  } else {
+    cloudDocs = [];
+  }
+  savedDocs = ownedBy(await listSaved().catch(() => []), account?.id ?? null);
+  showSync();
+}
 
-const CLOUD_SYNC_DELAY_MS = 5000;
-let cloudSyncTimer = 0;
-/** The browser copy waiting for `cloudSyncTimer`. */
-let cloudSyncId: string | null = null;
+/** Where to open a listed document from: the account only when this browser's copy is missing or older. */
+function sourceOf(entry: LibraryEntry): string {
+  return entry.local && !opensFromCloud(entry) ? `local:${entry.local.id}` : `cloud:${entry.cloud!.id}`;
+}
+
+// --- Uploading ------------------------------------------------------------------------------
+// Signed in, each save schedules an upload of that document for a moment after editing pauses.
+// Uploads go one at a time. Offline, or once the session has ended, they wait (the button at the
+// top right says so) and go when the connection or the sign-in is back.
+
+const UPLOAD_DELAY_MS = 2000;
+/** How often to try again while offline (the browser's "online" event isn't always reliable). */
+const OFFLINE_RETRY_MS = 30_000;
+/** Browser copies with changes the account doesn't have, to upload. */
+const dirty = new Set<string>();
+let uploadTimer = 0;
+let flushing: Promise<void> | null = null;
 /** The browser copy being uploaded now, if any. */
 let uploading: string | null = null;
-/** Why the open document's last upload failed (cleared by the next one). */
-let syncError: string | null = null;
+/** Uploads failed because the account couldn't be reached. */
+let offline = false;
+let offlineRetryTimer = 0;
+/** The session ended (signed out elsewhere, or it expired): uploads wait for the user to sign in again. */
+let signedOutRemotely = false;
+/** Why a browser copy's last upload failed, by id (cleared by the next that works). */
+const failures = new Map<string, string>();
 
 function syncStatus(): SyncStatus {
-  const signedIn = cloudUser !== null;
-  const user = cloudUser?.email ?? cloudUser?.name ?? null;
-  const info = savedDocs.find((d) => d.id === current.localId);
+  if (!account) return { user: null, document: 'guest', error: null };
+  const user = account.email ?? account.name ?? null;
+  const id = current.localId;
+  const info = savedDocs.find((d) => d.id === id);
+  const unsent = current.unsavedSince > 0 || (id !== null && uploading === id) || (info !== undefined && hasUnsentChanges(info));
   let document: DocumentSync;
-  if (!signedIn || !info?.cloudId) document = 'local';
-  else if (uploading === info.id) document = 'syncing';
-  else if (syncError) document = 'failed';
-  else if (current.unsavedSince || info.updatedAt > (info.cloudSyncedAt ?? 0)) document = 'pending';
-  else document = 'synced';
-  return { signedIn, user, document, error: document === 'failed' ? syncError : null };
+  if (id && failures.has(id)) document = 'failed';
+  else if (!unsent) document = 'saved';
+  else if (signedOutRemotely) document = 'signedOut';
+  else if (offline) document = 'offline';
+  else document = 'saving';
+  return { user, document, error: document === 'failed' ? failures.get(id!)! : null };
 }
 
 function showSync(): void {
   chrome.update({ sync: syncStatus() });
 }
 
-/** Uploads a cloud document's browser copy once editing has paused. */
-function scheduleCloudSync(id: string): void {
-  if (cloudSyncId && cloudSyncId !== id) flushCloudSync(); // another document's edits go now
-  clearTimeout(cloudSyncTimer);
-  cloudSyncId = id;
-  cloudSyncTimer = window.setTimeout(() => {
-    if (uploading) scheduleCloudSync(id); // one upload at a time
-    else flushCloudSync();
-  }, CLOUD_SYNC_DELAY_MS);
+/** Uploads a browser copy once editing has paused. */
+function scheduleUpload(id: string, delay = UPLOAD_DELAY_MS): void {
+  dirty.add(id);
+  clearTimeout(uploadTimer);
+  uploadTimer = window.setTimeout(() => void flushUploads(), delay);
 }
 
-/** Sends a scheduled upload now (another document is opening). */
-function flushCloudSync(): void {
-  const id = cloudSyncId;
-  clearTimeout(cloudSyncTimer);
-  cloudSyncId = null;
-  if (id) void sendToCloud(id, { quiet: true });
+/** Uploads everything waiting, now. Resolves once they have all gone (or can't, for now). */
+function flushUploads(): Promise<void> {
+  clearTimeout(uploadTimer);
+  // Cleared asynchronously, so an empty queue can't clear it before it's set.
+  flushing ??= drainUploads().finally(() => (flushing = null));
+  return flushing;
+}
+
+async function drainUploads(): Promise<void> {
+  // Copies saved during an upload join the set, and are visited too.
+  for (const id of dirty) {
+    if (!account || offline || signedOutRemotely) break;
+    dirty.delete(id);
+    await upload(id);
+  }
+}
+
+async function upload(id: string): Promise<void> {
+  uploading = id;
+  showSync();
+  const before = savedDocs.find((d) => d.id === id)?.name;
+  try {
+    const { doc, conflictCopy } = await uploadToCloud(id);
+    failures.delete(id);
+    cloudDocs = [doc, ...cloudDocs.filter((d) => d.id !== doc.id)];
+    if (conflictCopy) {
+      if (id === current.localId) {
+        documentName = doc.name;
+        chrome.update({ documentName });
+      }
+      notify(`“${before ?? 'This document'}” was also changed somewhere else, so these changes were saved as “${doc.name}”`);
+    }
+  } catch (e) {
+    if (e instanceof CloudError && e.status === 401) {
+      signedOutRemotely = true;
+      dirty.add(id);
+    } else if (e instanceof TypeError) {
+      // fetch couldn't reach the server.
+      dirty.add(id);
+      wentOffline();
+    } else if (e instanceof CloudError) {
+      failures.set(id, e.message);
+    }
+    // Anything else: the copy was deleted meanwhile, so there's nothing to send.
+  } finally {
+    uploading = null;
+    savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
+    showSync();
+  }
+}
+
+/** The account can't be reached: uploads wait, and are tried again every so often. */
+function wentOffline(): void {
+  offline = true;
+  clearTimeout(offlineRetryTimer);
+  offlineRetryTimer = window.setTimeout(backOnline, OFFLINE_RETRY_MS);
+}
+
+function backOnline(): void {
+  if (!account) return;
+  offline = false;
+  void connect();
+}
+
+window.addEventListener('online', backOnline);
+
+/** Tries the uploads that failed again, now (the button's Try again). */
+async function syncNow(): Promise<void> {
+  saveIfEdited();
+  await saving;
+  failures.clear();
+  offline = false;
+  for (const info of savedDocs) if (hasUnsentChanges(info)) dirty.add(info.id);
+  showSync();
+  await flushUploads();
 }
 
 /** Tells the user something now, or once the document being loaded has finished. */
@@ -459,17 +587,19 @@ function saveInBrowser(): Promise<string | null> {
   const done = saving.then(async () => {
     const created = !doc.localId;
     try {
-      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes });
+      const owner = account?.id;
+      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner });
       doc.localId = info.id;
       if (doc === current) {
         await makeThumbnail(info);
         rememberInUrl(`local:${info.id}`);
-        setStatus(`Saved “${info.name}” in this browser`);
+        // Signed in, the button at the top right says how saving is going.
+        if (!owner) setStatus(`Saved “${info.name}” in this browser`);
       }
       // A new document changes what's listed; later saves only its order.
       if (created) void refreshLibrary();
-      else savedDocs = await listSaved().catch(() => savedDocs);
-      if (info.cloudId && cloudUser) scheduleCloudSync(info.id);
+      else savedDocs = ownedBy(await listSaved().catch(() => savedDocs), owner ?? null);
+      if (owner) scheduleUpload(info.id);
       showSync();
       return info.id;
     } catch (e) {
@@ -482,62 +612,72 @@ function saveInBrowser(): Promise<string | null> {
   return done;
 }
 
-/**
- * Uploads a document already saved in this browser; asks to sign in if there's no session.
- * `quiet` (the automatic sync of an edit) reports only through the sync button.
- */
-async function sendToCloud(id: string, { quiet = false } = {}): Promise<void> {
-  if (id === cloudSyncId) {
-    clearTimeout(cloudSyncTimer); // this upload covers it
-    cloudSyncId = null;
-  }
-  uploading = id;
-  syncError = null;
-  showSync();
-  if (!quiet) setStatus('Saving to the cloud…');
-  try {
-    const doc = await uploadToCloud(id);
-    if (!quiet) notify(`Saved “${doc.name}” to the cloud`);
-    uploading = null;
-    await refreshLibrary();
-  } catch (e) {
-    uploading = null;
-    if (e instanceof CloudError && e.status === 401) {
-      cloudUser = null; // the session ended: the button offers to sign in again
-      if (!quiet) {
-        notify('Sign in to save to the cloud');
-        showSignInDialog(returnTo({ doc: `local:${id}`, cloud: '1' }));
-      }
-    } else {
-      if (id === current.localId) syncError = (e as Error).message;
-      if (!quiet) notify(`Cloud save failed: ${(e as Error).message}`);
-    }
-  } finally {
-    showSync();
-  }
-}
-
-async function saveToCloud(): Promise<void> {
-  const id = await saveNow();
-  if (id) await sendToCloud(id);
-}
-
 async function signIn(options: { dashboard?: boolean } = {}): Promise<void> {
-  // Signing in leaves the page, so keep the document first.
+  // Signing in leaves the page, so keep the document first. Coming back, it joins the account.
   const id = await saveNow();
   const back: Record<string, string> = options.dashboard ? { dashboard: '1' } : {};
   showSignInDialog(id ? returnTo({ doc: `local:${id}`, ...back }) : returnTo(back));
 }
 
+/**
+ * Signs out, and removes the account's documents from this browser (they're in the account). If
+ * some changes haven't reached the account yet, it says so first, since signing out loses them.
+ */
 async function signOut(): Promise<void> {
-  await signOutOfCloud().catch(() => {});
+  const user = account;
+  if (!user) return;
+  saveIfEdited();
+  await saving;
+  offline = false;
+  await flushUploads();
+  const unsent = ownedBy(await listSaved().catch(() => []), user.id).filter(hasUnsentChanges);
+  if (unsent.length) {
+    const which = unsent.length === 1 ? `“${unsent[0]!.name}” has` : `${unsent.length} documents have`;
+    const why = offline ? ' (you’re offline)' : signedOutRemotely ? ' (you were signed out)' : '';
+    const body = document.createElement('p');
+    body.textContent = `${which} changes that haven’t been saved to your account yet${why}. Signing out removes your documents from this browser, so those changes would be lost.`;
+    if (!(await showConfirm('Sign Out', body, 'Sign Out Anyway'))) {
+      focusInput();
+      return;
+    }
+  }
+  try {
+    await signOutOfCloud();
+  } catch (e) {
+    setStatus(e instanceof TypeError ? 'Can’t sign out while offline' : `Couldn’t sign out: ${(e as Error).message}`);
+    return;
+  }
+  cleared = true; // nothing more is saved for this account here
+  clearTimeout(autosaveTimer);
+  clearTimeout(uploadTimer);
+  dirty.clear();
+  await saving.catch(() => {});
+  await deleteOwnedBy(user.id).catch(() => {});
+  location.replace(location.pathname);
+}
+
+/** Deletes a document (from the dashboard): from the account, and this browser's copy. */
+async function deleteEverywhere(entry: LibraryEntry): Promise<void> {
+  const cloudId = entry.cloud?.id ?? entry.local?.cloudId;
+  if (cloudId && account) {
+    try {
+      await deleteDocument(cloudId);
+    } catch (e) {
+      // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
+      if (!(e instanceof CloudError && e.status === 404)) throw e;
+    }
+  }
+  if (entry.local) {
+    dirty.delete(entry.local.id);
+    failures.delete(entry.local.id);
+    await deleteSaved(entry.local.id);
+  }
   await refreshLibrary();
-  setStatus('Signed out');
 }
 
 /**
  * File ▸ Clear Local Data: deletes every document, thumbnail and setting kept in this browser,
- * then starts afresh (with the welcome document). Cloud documents and the sign-in stay.
+ * then starts afresh (with the welcome document). The account's documents and the sign-in stay.
  */
 async function clearLocalData(): Promise<void> {
   const count = savedDocs.length;
@@ -545,7 +685,7 @@ async function clearLocalData(): Promise<void> {
   const body = document.createElement('p');
   body.textContent =
     `This deletes ${count ? what : 'everything'} saved in this browser, along with your toolbar layout. ` +
-    'It can’t be undone. Documents saved to the cloud are kept.';
+    (account ? 'It can’t be undone. Documents saved to your account are kept.' : 'It can’t be undone.');
   if (!(await showConfirm('Clear Local Data', body, 'Delete Everything'))) {
     focusInput();
     return;
@@ -568,7 +708,7 @@ async function clearLocalData(): Promise<void> {
   location.replace(location.pathname);
 }
 
-async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
+async function openLocal(id: string): Promise<void> {
   const saved = await getSaved(id).catch(() => null);
   if (!saved) {
     open({ kind: 'blank', name: 'Document1' });
@@ -576,7 +716,6 @@ async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
     return;
   }
   open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id });
-  if (thenSaveToCloud) await sendToCloud(id);
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -584,15 +723,15 @@ async function openCloud(id: string): Promise<void> {
     if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary();
     const cloud = cloudDocs.find((d) => d.id === id);
     const name = cloud?.name ?? 'Document.docx';
-    setStatus('Opening from the cloud…');
-    const { info, bytes, usedBrowserCopy } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt });
+    setStatus(`Opening “${name}”…`);
+    // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest.
+    const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
     open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id });
     rememberInUrl(`local:${info.id}`);
-    if (usedBrowserCopy) pendingNotice = 'Opened your browser copy: it has changes the cloud doesn’t. Use Save to Cloud to sync them.';
     void refreshLibrary();
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `cloud:${id}` }));
-    else setStatus(`Couldn’t open from the cloud: ${(e as Error).message}`);
+    else setStatus(`Couldn’t open the document: ${(e as Error).message}`);
   }
 }
 
@@ -654,7 +793,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   const name = stem(documentName) + FORMATS[to].extensions[0];
   const bytes = worker.save(to);
   bytes.catch(() => {});
-  const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes }));
+  const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner: account?.id }));
   saving = done.catch(() => null);
   let info: SavedInfo;
   try {
@@ -672,13 +811,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   chrome.update({ documentName, kind: documentKind });
   pendingNotice = switchedNotice(to);
   void refreshLibrary();
-  // A document in the cloud gets the change there too.
-  if (info.cloudId) {
-    uploadToCloud(info.id).then(
-      () => void refreshLibrary(),
-      (e: unknown) => notify(`The change is only in this browser (${(e as Error).message}). Use Save to Cloud to sync it.`),
-    );
-  }
+  if (account) scheduleUpload(info.id, 0);
 }
 
 // --- Selection and caret ---------------------------------------------------------------
@@ -996,6 +1129,7 @@ window.addEventListener('keydown', (e) => {
     // Documents save themselves; the habit just saves a little sooner.
     e.preventDefault();
     if (current.unsavedSince || !current.localId) void saveInBrowser();
+    else if (account) void flushUploads();
     else setStatus('All changes are saved in this browser');
     return;
   }
@@ -1054,18 +1188,13 @@ const chromeHost = createChromeHost({
   },
   openSample: openSource,
   collaborate,
-  saveToCloud,
+  syncNow,
   download,
   convert: convertTo,
   signIn,
   signOut,
   clearLocalData,
-  saved: () => savedDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
-  cloud: () => ({
-    signedIn: cloudUser !== null,
-    user: cloudUser?.email ?? cloudUser?.name ?? null,
-    documents: cloudDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
-  }),
+  saved: () => mergeLibrary(savedDocs, account ? cloudDocs : null).map((e) => ({ id: sourceOf(e), label: e.name.replace(/&/g, '&&') })),
   send,
   annotating: () => annotating,
   setFormMode: (mode) => {
@@ -1074,7 +1203,7 @@ const chromeHost = createChromeHost({
     requestRender();
     if (mode === 'fill') focusInput();
   },
-  author: () => cloudUser?.name ?? cloudUser?.email ?? userName,
+  author: () => account?.name ?? account?.email ?? userName,
   selectedText: () => selection.text,
   focusEditor: focusInput,
   notify: setStatus,
@@ -1101,14 +1230,12 @@ const chromeHost = createChromeHost({
 const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, showUnimplemented: import.meta.env.DEV });
 
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
-// same paths as File ▸ Open Recent and Cloud Documents.
+// same paths as File ▸ Open Recent.
 const dashboard = new Dashboard(document.getElementById('viewport')!, {
   newDocument: () => void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput),
-  openLocal: (id) => openSource(`local:${id}`),
-  openCloud: (id) => openSource(`cloud:${id}`),
-  saveToCloud: async (id) => {
-    await sendToCloud(id);
-  },
+  open: (entry) => openSource(sourceOf(entry)),
+  delete: deleteEverywhere,
+  account: () => account,
   signIn: () => signIn({ dashboard: true }),
   signOut,
   closed: focusInput,
@@ -1167,7 +1294,7 @@ Object.defineProperties(window, {
     history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
     void dashboard.show();
   }
-  void refreshLibrary();
+  void connect();
   // Joining a room without a document: the room has it.
   if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? 'Document' });
   else if (doc) openSource(doc, true);

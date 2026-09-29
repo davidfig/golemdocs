@@ -72,6 +72,10 @@ let calls: Call[];
 let signedIn: boolean;
 let cloudHas: boolean; // whether document c1 exists in the cloud
 let cloudBytes: Uint8Array;
+/** Document c1's version (its `updatedAt`); a save based on another is refused. */
+let cloudVersion: number;
+/** What the next created document is called. */
+let created: number;
 
 function stubServer() {
   globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
@@ -80,12 +84,19 @@ function stubServer() {
     calls.push({ method, url });
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
     if (!signedIn) return json({ error: 'not signed in' }, 401);
-    const meta = { id: 'c1', name: 'Doc.docx', size: 1, createdAt: 1, updatedAt: 1 };
+    const meta = { id: 'c1', name: 'Doc.docx', size: 1, createdAt: 1, updatedAt: cloudVersion };
+    const query = new URL(url, 'http://x').searchParams;
     if (method === 'POST' && url.startsWith('/api/documents')) {
+      if (cloudHas) return json({ ...meta, id: `c${++created}`, name: query.get('name'), updatedAt: 1 }, 201);
       cloudHas = true;
       return json(meta, 201);
     }
-    if (method === 'PUT' && url.startsWith('/api/documents/c1')) return cloudHas ? json(meta) : json({ error: 'not found' }, 404);
+    if (method === 'PUT' && url.startsWith('/api/documents/c1?')) {
+      if (!cloudHas) return json({ error: 'not found' }, 404);
+      if (query.has('base') && Number(query.get('base')) !== cloudVersion) return json({ error: 'changed elsewhere' }, 409);
+      cloudVersion++;
+      return json({ ...meta, updatedAt: cloudVersion });
+    }
     if (method === 'GET' && url === '/api/documents/c1') return new Response(cloudBytes.slice());
     if (method === 'PUT' && url === '/api/documents/c1/thumbnail') return json({ ...meta, thumbAt: 7 });
     return json({ error: 'not found' }, 404);
@@ -106,6 +117,8 @@ beforeEach(async () => {
   signedIn = true;
   cloudHas = false;
   cloudBytes = bytes(9, 9, 9);
+  cloudVersion = 1;
+  created = 1;
   stubServer();
 });
 
@@ -222,7 +235,7 @@ test('a failed thumbnail upload does not fail the save', async () => {
     return before(input as string, init);
   }) as typeof fetch;
   const saved = await uploadToCloud(doc.id);
-  assert.equal(saved.id, 'c1');
+  assert.equal(saved.doc.id, 'c1');
   assert.equal((await local.getSaved(doc.id))!.info.cloudId, 'c1');
 });
 
@@ -240,4 +253,69 @@ test('opening from the cloud downloads nothing when the browser already has that
   assert.deepEqual(calls.map((c) => c.method), ['GET'], 'the cloud copy changed, so it is downloaded');
   assert.deepEqual([...new Uint8Array(newer.bytes)], [4, 4]);
   assert.equal(newer.info.cloudUpdatedAt, 2);
+});
+
+test('a copy changed in the account since it was opened is saved as a conflicted copy, not over it', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  await uploadToCloud(doc.id); // c1, version 1
+  await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(2) });
+  cloudVersion = 5; // edited on another computer meanwhile
+  calls = [];
+  const { doc: copy, conflictCopy } = await uploadToCloud(doc.id);
+  assert.equal(conflictCopy, true);
+  assert.deepEqual(calls.map((c) => c.method).slice(0, 2), ['PUT', 'POST'], 'refused, then saved alongside');
+  assert.equal(copy.name, 'Doc (conflicted copy).docx');
+  const info = (await local.getSaved(doc.id))!.info;
+  assert.equal(info.cloudId, copy.id, 'this copy carries on as the conflicted one');
+  assert.equal(info.name, 'Doc (conflicted copy).docx');
+  assert.equal(cloudVersion, 5, 'the other computer’s version is untouched');
+});
+
+test('an upload marks synced only what it sent, not what was saved while it was sending', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  const before = globalThis.fetch;
+  let edited: Promise<unknown> | null = null;
+  globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+    edited ??= local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(2) }); // typed during the upload
+    await edited;
+    return before(input as string, init);
+  }) as typeof fetch;
+  await uploadToCloud(doc.id);
+  const info = (await local.getSaved(doc.id))!.info;
+  assert.ok(info.updatedAt > info.cloudSyncedAt!, 'the later save still needs uploading');
+});
+
+test('signing in adopts the documents made while signed out; signing out removes that account’s', async () => {
+  const guest = await local.saveSaved({ name: 'Mine.docx', bytes: bytes(1) });
+  const other = await local.saveSaved({ name: 'Theirs.docx', bytes: bytes(2), owner: 'u2' });
+  assert.deepEqual(local.ownedBy(await local.listSaved(), null).map((d) => d.id), [guest.id]);
+
+  assert.deepEqual(await local.adoptGuestDocuments('u1'), [guest.id]);
+  assert.deepEqual(local.ownedBy(await local.listSaved(), null), []);
+  assert.deepEqual(local.ownedBy(await local.listSaved(), 'u1').map((d) => d.id), [guest.id]);
+  // Saving keeps the owner.
+  await local.saveSaved({ id: guest.id, name: 'Mine.docx', bytes: bytes(3) });
+  assert.equal((await local.getSaved(guest.id))!.info.owner, 'u1');
+
+  await local.deleteOwnedBy('u1');
+  assert.deepEqual((await local.listSaved()).map((d) => d.id), [other.id], 'another account’s copies stay');
+});
+
+test('offline, opening an account document opens the copy this browser has', async () => {
+  const first = await openFromCloud({ id: 'c1', name: 'Doc.docx' }, 'u1');
+  assert.equal(first.info.owner, 'u1');
+  globalThis.fetch = (async () => {
+    throw new TypeError('Failed to fetch');
+  }) as typeof fetch;
+  const offline = await openFromCloud({ id: 'c1', name: 'Doc.docx' }, 'u1');
+  assert.equal(offline.info.id, first.info.id);
+  assert.deepEqual([...new Uint8Array(offline.bytes)], [9, 9, 9]);
+  await assert.rejects(openFromCloud({ id: 'c9', name: 'Never opened.docx' }, 'u1'), TypeError);
+});
+
+test('conflicted copies are named beside the original', async () => {
+  const { conflictCopyName } = await import('../src/library.ts');
+  assert.equal(conflictCopyName('Report.docx'), 'Report (conflicted copy).docx');
+  assert.equal(conflictCopyName('notes'), 'notes (conflicted copy)');
+  assert.equal(conflictCopyName('.hidden'), '.hidden (conflicted copy)');
 });

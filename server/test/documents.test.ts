@@ -139,3 +139,18 @@ test('thumbnails of unknown documents are 404, and need a session', async () => 
   delete env.DEV_USER;
   assert.equal((await call('GET', '/api/documents/00000000-0000-4000-8000-000000000000/thumbnail')).status, 401);
 });
+
+test('a save based on an older version is refused, not written over the newer one', async () => {
+  const doc = await create();
+  const put = (base: number) => call('PUT', `/api/documents/${doc.id}?base=${base}`, { body: new Uint8Array([4]), type: DOCX });
+  const first = await put(doc.updatedAt);
+  assert.equal(first.status, 200);
+  const saved = (await first.json()) as any;
+  assert.ok(saved.updatedAt > doc.updatedAt, 'every save moves the version on');
+
+  const stale = await put(doc.updatedAt); // another device, still on the first version
+  assert.equal(stale.status, 409);
+  assert.equal((await put(saved.updatedAt)).status, 200);
+  // Without a base, a save always goes through.
+  assert.equal((await call('PUT', `/api/documents/${doc.id}`, { body: new Uint8Array([5]), type: DOCX })).status, 200);
+});

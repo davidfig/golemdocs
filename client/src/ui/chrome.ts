@@ -94,7 +94,7 @@ export class Chrome {
   private converting = false;
   /** Fill in a PDF's form or edit it: beside the format selector, for a PDF's pages. */
   private formModeBox!: HTMLElement;
-  /** Where the document is kept (this browser, or synced), at the far right. */
+  /** Whether the document is saved (or, signed out, an offer to sign in), at the far right. */
   private syncButton!: SyncButton;
 
   constructor(private readonly options: ChromeOptions) {
@@ -192,7 +192,6 @@ export class Chrome {
       a('file.new', '&New', { kind: 'new' }, { icon: 'new', tooltip: 'New Blank Document' }),
       a('file.open', '&Open…', { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
       a('file.download', 'Do&wnload', { kind: 'download' }, { tooltip: 'Download a copy of this document' }),
-      a('file.saveToCloud', 'Save to &Cloud', { kind: 'saveToCloud' }, { tooltip: 'Keep a copy in your account (sign-in required)' }),
       dialog('file.pageSetup', 'Page Set&up…', 'pageSetup'),
       a('file.printPreview', 'Print Pre&view', { kind: 'printPreview' }, { icon: 'printPreview' }),
       a('file.collaborate', '&Collaborate…', { kind: 'collaborate' }, { tooltip: 'Edit this document together (opens a second window)' }),
@@ -394,19 +393,7 @@ export class Chrome {
             if (!saved.length) return [{ type: 'item', label: '(none)', enabled: false, run: () => {} }];
             return saved.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSaved', id: s.id }, s.label) }));
           }),
-          sub('Cloud &Documents', () => {
-            const cloud = host.cloud?.();
-            if (!cloud?.signedIn) {
-              return [{ type: 'item', label: 'Sign in to see your cloud documents…', run: () => r.perform({ kind: 'signIn' }, 'Sign in') }];
-            }
-            const docs: MenuItem[] = cloud.documents.length
-              ? cloud.documents.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openCloud', id: s.id }, s.label) }))
-              : [{ type: 'item', label: '(none)', enabled: false, run: () => {} }];
-            const who = cloud.user ? ` (${cloud.user.replace(/&/g, '&&')})` : '';
-            return [...docs, sep, { type: 'item', label: `Sign &out${who}`, run: () => r.perform({ kind: 'signOut' }, 'Sign out') }];
-          }),
           sep,
-          cmd('file.saveToCloud'),
           sub('Con&vert To', CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
           cmd('file.download'),
           cmd('file.collaborate'),

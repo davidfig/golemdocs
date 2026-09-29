@@ -1,26 +1,28 @@
-// The dashboard: every document at a glance, as a grid of first-page thumbnails. It lists what is
-// saved in this browser and, when signed in, what is in the cloud (matched up by sync.ts). It is a
-// plain DOM screen laid over the editor's canvas; File ▸ Dashboard shows it, Esc or any open hides it.
+// The dashboard: every document at a glance, as a grid of first-page thumbnails. Signed in, that
+// is the account's documents; signed out, the ones saved in this browser (sync.ts lists them). It
+// is a plain DOM screen laid over the editor's canvas; File ▸ Dashboard shows it, Esc or any open
+// hides it.
 //
-// Nothing here is loaded before it is needed: the browser's documents appear straight away, the
-// cloud's follow once the catalogue arrives, and each thumbnail is fetched only when its card
-// scrolls into view.
+// Nothing here is loaded before it is needed: what this browser has appears straight away, the
+// rest of the account's documents once the catalogue arrives, and each thumbnail is fetched only
+// when its card scrolls into view.
 
-import { deleteDocument, thumbnailUrl } from '../cloud.ts';
-import { deleteSaved, getThumbnail } from '../storage/local.ts';
+import { thumbnailUrl } from '../cloud.ts';
+import { getThumbnail } from '../storage/local.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
-import { formatSize, matchesSearch, opensFromCloud, relativeTime, syncBadge } from './dashboardFormat.ts';
+import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { h } from './dom.ts';
 import './dashboard.css';
 
 /** What the dashboard asks of the application. */
 export interface DashboardHost {
   newDocument(): void;
-  openLocal(id: string): void;
-  openCloud(id: string): void;
-  /** Saves a browser document to the cloud (asks the user to sign in if they haven't). */
-  saveToCloud(localId: string): Promise<void>;
+  open(entry: LibraryEntry): void;
+  /** Deletes the document everywhere: from the account and from this browser. */
+  delete(entry: LibraryEntry): Promise<void>;
+  /** Who is signed in (null: nobody), whose documents are shown. */
+  account(): User | null;
   signIn(): Promise<void>;
   signOut(): Promise<void>;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
@@ -39,7 +41,6 @@ export class Dashboard {
   private observer: IntersectionObserver | null = null;
   private objectUrls: string[] = [];
   private entries: LibraryEntry[] = [];
-  private user: User | null = null;
   /** Bumped on every show and refresh, so a slow answer never replaces a newer one. */
   private generation = 0;
   /** Cards showing a "click again to confirm" button, and the timer that resets them. */
@@ -83,12 +84,12 @@ export class Dashboard {
     else void this.show();
   }
 
-  /** Shows the dashboard and refreshes it: the browser's documents first, then the cloud's. */
+  /** Shows the dashboard and refreshes it: what this browser has first, then the account's. */
   async show(): Promise<void> {
     this.root.hidden = false;
     this.search.value = '';
     const generation = ++this.generation;
-    this.entries = await loadLocalLibrary();
+    this.entries = await loadLocalLibrary(this.host.account());
     if (generation !== this.generation) return;
     this.notice.textContent = '';
     this.render();
@@ -109,20 +110,24 @@ export class Dashboard {
     this.releaseThumbnails();
   }
 
+  /** Lists the documents again (after the sign-in or an upload changed them), if it's showing. */
+  refreshIfVisible(): void {
+    if (this.visible) void this.refresh();
+  }
+
   private async refresh(generation = ++this.generation): Promise<void> {
-    this.setAccount(this.user, true);
-    const library = await loadLibrary();
+    const user = this.host.account();
+    this.setAccount(user);
+    const library = await loadLibrary(user);
     if (generation !== this.generation) return;
     this.entries = library.entries;
-    this.user = library.user;
     this.notice.textContent = library.cloudProblem ?? '';
-    this.setAccount(library.user, false);
     this.render();
   }
 
   // --- Rendering ---------------------------------------------------------------------------
 
-  private setAccount(user: User | null, busy: boolean): void {
+  private setAccount(user: User | null): void {
     const button = (text: string, run: () => Promise<void>) => {
       const b = h('button', { text, attrs: { type: 'button' } });
       b.addEventListener('click', () => void run().then(() => this.refresh()));
@@ -130,9 +135,9 @@ export class Dashboard {
     };
     if (user) {
       const who = user.email ?? user.name ?? 'your account';
-      this.account.replaceChildren(h('span', { text: busy ? `Syncing ${who}…` : `Signed in as ${who}` }), button('Sign out', () => this.host.signOut()));
+      this.account.replaceChildren(h('span', { text: who }), button('Sign out', () => this.host.signOut()));
     } else {
-      this.account.replaceChildren(h('span', { text: 'Only documents on this device' }), button('Sign in to sync', () => this.host.signIn()));
+      this.account.replaceChildren(h('span', { text: 'Saved in this browser' }), button('Sign in', () => this.host.signIn()));
     }
   }
 
@@ -182,36 +187,14 @@ export class Dashboard {
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': `Open ${entry.name}` } }, thumb, h('span', { class: 'wm-card-name', text: entry.name, title: entry.name }), h('span', { class: 'wm-card-meta', text: meta }));
     open.addEventListener('click', () => {
       this.hide();
-      if (opensFromCloud(entry)) this.host.openCloud(entry.cloud!.id);
-      else this.host.openLocal(entry.local!.id);
+      this.host.open(entry);
     });
 
     const badges = h('div', { class: 'wm-badges' });
-    if (entry.local) badges.append(h('span', { class: 'wm-badge', text: 'This device' }));
-    if (entry.cloud || entry.local?.cloudId) badges.append(h('span', { class: 'wm-badge', text: 'Cloud' }));
-    const sync = syncBadge(entry.state);
+    const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
 
-    const actions = h('div', { class: 'wm-card-actions' });
-    if (entry.local && !entry.cloud && !entry.local.cloudId) {
-      const save = h('button', { text: 'Save to cloud', attrs: { type: 'button' } });
-      save.addEventListener('click', () => {
-        save.disabled = true;
-        void this.host.saveToCloud(entry.local!.id).finally(() => void this.refresh());
-      });
-      actions.append(save);
-    }
-    if (entry.local) {
-      actions.append(this.confirmButton(entry.cloud ? 'Remove from this device' : 'Delete', async () => {
-        await deleteSaved(entry.local!.id);
-      }));
-    }
-    if (entry.cloud) {
-      actions.append(this.confirmButton('Delete from cloud', async () => {
-        await deleteDocument(entry.cloud!.id);
-      }));
-    }
-
+    const actions = h('div', { class: 'wm-card-actions' }, this.confirmButton('Delete', () => this.host.delete(entry)));
     return h('article', { class: 'wm-card' }, open, badges, actions);
   }
 

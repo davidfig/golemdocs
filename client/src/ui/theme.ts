@@ -44,9 +44,9 @@ let appearance: Appearance = 'auto';
   const savedAppearance = read(APPEARANCE_KEY);
   if (isScheme(savedScheme)) scheme = savedScheme;
   if (isAppearance(savedAppearance)) appearance = savedAppearance;
-  // Before appearance existed the scheme list held Dark, and a saved choice was always explicit.
+  // Before appearance existed the scheme list held Dark; a saved Dark stays dark, and any other
+  // saved scheme is just a palette, so appearance stays automatic.
   else if (savedScheme === 'dark') appearance = 'dark';
-  else if (isScheme(savedScheme)) appearance = 'light';
 }
 
 let desk: [number, number, number] | null = null;

@@ -59,6 +59,8 @@ export interface PeerState {
   name: string;
   color: number;
   selection: Person['selection'];
+  /** Latest mouse position; transient, so not persisted with the connection. */
+  pointer?: Person['pointer'];
   /** Shared mode: has said what version it's at, so gets the live transactions. */
   synced: boolean;
 }
@@ -84,6 +86,14 @@ export const DEFAULT_TIMINGS: RoomTimings = { handoffMs: 15_000, snapshotMs: 5_0
 
 const MAX_SUBMIT_TRANSACTIONS = 500;
 
+/** A pointer message's position, checked (null: no pointer; undefined: not a pointer at all). */
+function cleanPointer(value: unknown): Person['pointer'] | undefined {
+  if (value === null) return null;
+  const p = value as Partial<NonNullable<Person['pointer']>> | undefined;
+  if (!p || !Number.isInteger(p.page) || p.page! < 0 || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return undefined;
+  return { page: p.page!, x: p.x!, y: p.y! };
+}
+
 export class RoomCore {
   private readonly peers = new Set<Peer>();
   /** Snapshots and document reads take turns, so a read never sees a half-written pair. */
@@ -105,7 +115,7 @@ export class RoomCore {
   }
 
   private people(): Person[] {
-    return this.members.map((p) => ({ client: p.state.client!, name: p.state.name, color: p.state.color, selection: p.state.selection }));
+    return this.members.map((p) => ({ client: p.state.client!, name: p.state.name, color: p.state.color, selection: p.state.selection, pointer: p.state.pointer ?? null }));
   }
 
   private broadcast(message: MultiplayerServerMessage, except?: Peer, only: (p: Peer) => boolean = () => true): void {
@@ -136,6 +146,12 @@ export class RoomCore {
         peer.state.selection = message.selection;
         peer.persist();
         return this.broadcast({ type: 'presence', client: peer.state.client!, selection: message.selection }, peer);
+      case 'pointer': {
+        const pointer = cleanPointer(message.pointer);
+        if (pointer === undefined) return peer.close(ROOM_CLOSE.badMessage, 'bad pointer');
+        peer.state.pointer = pointer;
+        return this.broadcast({ type: 'pointer', client: peer.state.client!, pointer }, peer);
+      }
       case 'flushed':
         return this.flushed(peer, message.epoch);
       case 'sync':
@@ -159,7 +175,7 @@ export class RoomCore {
 
   private hello(peer: Peer, message: Extract<MultiplayerClientMessage, { type: 'hello' }>): void {
     if (peer.state.client !== null) return;
-    Object.assign(peer.state, { client: String(message.client).slice(0, 64), name: String(message.name).slice(0, 80), color: Number(message.color) | 0, selection: null, synced: false });
+    Object.assign(peer.state, { client: String(message.client).slice(0, 64), name: String(message.name).slice(0, 80), color: Number(message.color) | 0, selection: null, pointer: null, synced: false });
     peer.persist();
     const meta = this.meta;
     peer.send({ type: 'welcome', role: peer.state.role, client: peer.state.client!, mode: meta.mode, epoch: meta.epoch, people: this.people() });

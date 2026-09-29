@@ -25,6 +25,7 @@ import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
+import { PointerLayer } from './ui/pointerLayer.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
@@ -143,6 +144,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   selection.clear();
   commentsPanel.update([]);
   formLayer.update(null);
+  pointerLayer.update([]);
   formMode = 'fill';
   formLayer.setMode(formMode);
   selectionFormat = {};
@@ -208,6 +210,9 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       if (state.mode === 'offline') notify('The connection to the shared document was lost. Reload to rejoin; what is on screen is kept in this browser.');
       showSync();
       requestRender();
+    },
+    pointers(list) {
+      pointerLayer.update(list);
     },
     remoteEdit() {
       // Other people's edits are part of this document too, so they're kept in this browser.
@@ -1245,6 +1250,7 @@ function render(): void {
     formMode: annotating ? formMode : null,
   });
   formLayer.position();
+  pointerLayer.position();
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
@@ -1334,7 +1340,40 @@ canvas.addEventListener('pointerdown', (e) => {
   selecting = unit === 'character';
 });
 
+// Where this user's mouse is, for the other people in the document's room (about 20 times a second).
+const POINTER_INTERVAL_MS = 50;
+let pointerSentAt = 0;
+let pointerTimer = 0;
+let pointerAt: { x: number; y: number } | null = null;
+
+function shareEnabled(): boolean {
+  return (current.room?.people.length ?? 0) > 1;
+}
+
+function sendPointer(): void {
+  pointerTimer = 0;
+  pointerSentAt = performance.now();
+  const at = pointerAt;
+  const hit = at && pageAt(at.x, at.y);
+  worker.pointer(hit ? { page: pages.indexOf(hit.page), x: hit.x, y: hit.y } : null);
+}
+
+function pointerMoved(x: number, y: number): void {
+  if (!shareEnabled()) return;
+  pointerAt = { x, y };
+  if (pointerTimer) return;
+  pointerTimer = window.setTimeout(sendPointer, Math.max(0, POINTER_INTERVAL_MS - (performance.now() - pointerSentAt)));
+}
+
+canvas.addEventListener('pointerleave', () => {
+  if (!shareEnabled()) return;
+  pointerAt = null;
+  clearTimeout(pointerTimer);
+  sendPointer();
+});
+
 canvas.addEventListener('pointermove', (e) => {
+  pointerMoved(e.offsetX, e.offsetY);
   if (pan) {
     userMoved = true;
     camera.panBy(pan.x - e.clientX, pan.y - e.clientY);
@@ -1581,6 +1620,9 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
 
 // Comments down the right of the editor; edits to them are ordinary (undoable) edits.
+// Other people's mouse pointers (see ui/pointerLayer.ts).
+const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
+
 // A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
 const formLayer = new FormLayer(document.getElementById('viewport')!, {
   camera,

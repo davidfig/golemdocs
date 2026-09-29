@@ -23,12 +23,21 @@ import type { Selection } from './history.ts';
 export type RoomMode = 'solo' | 'handoff' | 'shared';
 export type RoomRole = 'owner' | 'editor' | 'viewer';
 
+/** Where someone's mouse pointer is: on this page (its position in display order), at this point on it (points). */
+export interface Pointer {
+  page: number;
+  x: number;
+  y: number;
+}
+
 export interface Person {
   /** Identifies this connection (one user can have several tabs). */
   client: string;
   name: string;
   color: number;
   selection: Selection | null;
+  /** Not kept by the room across reconnects: it is only ever the latest position. */
+  pointer: Pointer | null;
 }
 
 export type MultiplayerClientMessage =
@@ -43,6 +52,8 @@ export type MultiplayerClientMessage =
   | { type: 'sync'; epoch: number; version: number }
   | (ClientMessage & { epoch: number })
   | { type: 'presence'; selection: Selection | null }
+  /** Where the mouse is (null: it left the document). Sent often, so it is relayed and never stored. */
+  | { type: 'pointer'; pointer: Pointer | null }
   /** In answer to `settle`: nothing unsent, at this version. */
   | { type: 'quiet'; epoch: number; version: number };
 
@@ -54,7 +65,8 @@ export type MultiplayerServerMessage =
   | { type: 'settle'; epoch: number }
   | { type: 'solo'; epoch: number }
   | { type: 'people'; people: Person[] }
-  | { type: 'presence'; client: string; selection: Selection | null };
+  | { type: 'presence'; client: string; selection: Selection | null }
+  | { type: 'pointer'; client: string; pointer: Pointer | null };
 
 /** Close codes the room uses. */
 export const ROOM_CLOSE = {

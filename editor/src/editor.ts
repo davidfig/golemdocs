@@ -234,6 +234,19 @@ export class Editor {
     return caret;
   }
 
+  /** Highlight rectangles for someone else's selection, given by ids (none if it is only a caret, or not laid out). */
+  rectsFor(selection: OpSelection): Rect[] {
+    const a = this.position(selection.anchor);
+    const b = this.position(selection.focus);
+    if (!a || !b) return [];
+    const [start, end] = this.compare(a, b) <= 0 ? [a, b] : [b, a];
+    if (start.paragraph === end.paragraph && start.offset === end.offset) return [];
+    const hint = this.hint;
+    const rects = this.rangeRects(start, end);
+    this.hint = hint;
+    return rects;
+  }
+
   /** Sets the selection by ids; positions whose paragraph is gone fall back to the document start. */
   setSelectionIds(selection: OpSelection): void {
     const first = { paragraph: this.paragraphs()[0], offset: 0 };

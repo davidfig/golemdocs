@@ -61,6 +61,7 @@ async function person(name: string, world: Awaited<ReturnType<typeof cloud>>, ro
     resubmit: () => host.replica!.resubmit(),
     changed: (s: RoomState) => void (host.state = s),
     people: () => {},
+    pointers: () => {},
   } satisfies RoomHost & Record<string, any>;
 
   let drop = () => {};

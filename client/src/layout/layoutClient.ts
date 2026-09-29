@@ -1,4 +1,5 @@
 import type { FaceDescriptor } from '@word/layout';
+import type { Pointer } from '@word/ops';
 import type { Format } from '../formats/convert.ts';
 import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
 
@@ -16,6 +17,8 @@ export interface DocumentListener {
   roomState(state: RoomState): void;
   /** Another person's edit changed the document. */
   remoteEdit(): void;
+  /** Other people's mouse pointers moved. */
+  pointers(pointers: { page: number; x: number; y: number; color: number; name: string }[]): void;
   error(message: string): void;
 }
 
@@ -42,6 +45,11 @@ export class LayoutClient {
     const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
     if (room?.kind === 'dev') transfer.push(room.port);
     this.send({ type: 'open', doc: this.doc, source, room }, transfer);
+  }
+
+  /** Tells the room where this user's mouse is (null: it left the document). */
+  pointer(pointer: Pointer | null): void {
+    this.send({ type: 'pointer', doc: this.doc, pointer });
   }
 
   /** The open document is now in the cloud: join its multiplayer room (it had none when it opened). */
@@ -115,6 +123,9 @@ export class LayoutClient {
         break;
       case 'remoteEdit':
         this.listener.remoteEdit();
+        break;
+      case 'pointers':
+        this.listener.pointers(message.pointers);
         break;
       case 'error':
         this.listener.error(message.message);

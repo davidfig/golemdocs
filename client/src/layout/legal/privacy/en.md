@@ -1,4 +1,4 @@
-# Privacy Policy
+# Golem Docs - Privacy Policy
 
 Last updated: September 29, 2026
 

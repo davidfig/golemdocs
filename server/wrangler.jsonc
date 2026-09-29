@@ -11,12 +11,15 @@
 			"custom_domain": true
 		}
 	],
-	// The client is a static SPA. Only /api/* runs the Worker; everything else is served from assets.
+	// The client is a static SPA. Only /api/* and the home page run the Worker; everything else is served from assets.
 	"assets": {
 		"directory": "../client/dist",
 		"not_found_handling": "single-page-application",
+		"binding": "ASSETS",
+		// "/" goes through the Worker so crawlers can be given the plain home page (see src/crawler.ts).
 		"run_worker_first": [
-			"/api/*"
+			"/api/*",
+			"/"
 		]
 	},
 	// The actual .docx files, keyed `<userId>/<documentId>.docx`.

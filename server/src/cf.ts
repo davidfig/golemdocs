@@ -25,6 +25,11 @@ export interface R2ObjectBody {
   httpMetadata?: { contentType?: string };
 }
 
+/** The static assets binding: serves the built client. */
+export interface Fetcher {
+  fetch(request: Request): Promise<Response>;
+}
+
 export interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
   put(
@@ -74,6 +79,8 @@ export interface DurableObjectNamespace {
 export interface Env {
   DIRECTORY: D1Database;
   FILES: R2Bucket;
+  /** The built client (see `assets` in wrangler.jsonc). */
+  ASSETS?: Fetcher;
   /** One collaboration room per cloud document (see room.ts). */
   ROOMS: DurableObjectNamespace;
   CF_ACCOUNT_ID: string;

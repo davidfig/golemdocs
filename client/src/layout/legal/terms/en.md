@@ -1,4 +1,4 @@
-# Terms of Service
+# Golem Docs - Terms of Service
 
 Last updated: September 29, 2026
 

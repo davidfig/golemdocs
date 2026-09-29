@@ -126,7 +126,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? 'Welcome to Golem Docs' : 'Fonts';
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
-  current = { localId: options.localId ?? null, unsavedSince: 0 };
+  current = { localId: options.localId ?? null, unsavedSince: 0, builtIn: source.kind === 'welcome' || source.kind === 'fonts' };
   showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
   pagesById.clear();
@@ -316,10 +316,12 @@ interface OpenDocument {
   localId: string | null;
   /** When its oldest unsaved edit was made (performance.now()), or 0 when everything is saved. */
   unsavedSince: number;
+  /** The welcome or fonts document: only worth saving once the user has changed it. */
+  builtIn: boolean;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0 };
+let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false };
 let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
@@ -347,7 +349,7 @@ document.addEventListener('visibilitychange', () => {
 /** The open document's id in this browser, saving it first if it has unsaved edits or was never saved. */
 function saveNow(): Promise<string | null> {
   const doc = current;
-  return doc.unsavedSince || !doc.localId ? saveInBrowser() : saving.then(() => doc.localId);
+  return doc.unsavedSince || (!doc.localId && !doc.builtIn) ? saveInBrowser() : saving.then(() => doc.localId);
 }
 
 /** Shown when the current document finishes loading, which would otherwise replace it. */
@@ -541,6 +543,21 @@ function rememberInUrl(doc: string): void {
   if (params.get('room')) return;
   params.set('doc', doc);
   history.replaceState(null, '', `?${params}`);
+  if (doc.startsWith('local:')) {
+    try {
+      localStorage.setItem(LAST_DOC_KEY, doc);
+    } catch {}
+  }
+}
+
+/** Which saved document was open last on this machine, so a fresh visit (no `?doc=`) picks up there. */
+const LAST_DOC_KEY = 'golemdocs.lastDoc';
+function lastDoc(): string | null {
+  try {
+    return localStorage.getItem(LAST_DOC_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /** The document's file name, with the extension of its current format. */
@@ -958,20 +975,6 @@ function updateDebug(): void {
   const panels: HTMLElement[] = [];
   if (flags.status) {
     panels.push(debugPanel('Document', [['status', status], ...(loadTimes ? ([['pages', loadTimes.pages.toLocaleString()], ['glyphs', loadTimes.glyphs.toLocaleString()]] as DebugRow[]) : [])], true));
-    if (loadTimes) {
-      const t = loadTimes;
-      panels.push(
-        debugPanel('Load', [
-          ['first page', ms(t.firstPage)],
-          ['all', ms(t.total)],
-          ['read', ms(t.read)],
-          ['fonts', ms(t.fonts)],
-          ['body', ms(t.body)],
-          ['headers', ms(t.headers)],
-        ]),
-      );
-    }
-    if (editTimes) panels.push(debugPanel('Edit', [['to screen', ms(editTimes.total, 1)], ['worker', ms(editTimes.worker, 1)]]));
     if (room) {
       panels.push(
         debugPanel('Room', [
@@ -983,6 +986,22 @@ function updateDebug(): void {
       );
     }
   }
+  if (flags.load && loadTimes) {
+    const t = loadTimes;
+    panels.splice(
+      flags.status ? 1 : 0,
+      0,
+      debugPanel('Load', [
+        ['first page', ms(t.firstPage)],
+        ['all', ms(t.total)],
+        ['read', ms(t.read)],
+        ['fonts', ms(t.fonts)],
+        ['body', ms(t.body)],
+        ['headers', ms(t.headers)],
+      ]),
+    );
+  }
+  if (flags.edit && editTimes) panels.push(debugPanel('Edit', [['to screen', ms(editTimes.total, 1)], ['worker', ms(editTimes.worker, 1)]]));
   statusPanelsEl.replaceChildren(...panels);
   const rows: DebugRow[] = [];
   if (flags.pages && lastStats) {
@@ -1252,7 +1271,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
     // Documents save themselves; the habit just saves a little sooner.
     e.preventDefault();
-    if (current.unsavedSince || !current.localId) void saveInBrowser();
+    if (current.unsavedSince || (!current.localId && !current.builtIn)) void saveInBrowser();
     else if (account) void flushUploads();
     else setStatus('All changes are saved in this browser');
     return;
@@ -1416,9 +1435,14 @@ Object.defineProperties(window, {
   // Joining a room without a document: the room has it.
   if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? 'Document' });
   else if (doc) openSource(doc, true);
-  // Nothing asked for: someone with no documents yet is welcomed with what Golem Docs is.
+  // Nothing asked for: carry on with the document last open here (else the newest saved one);
+  // someone with no documents yet is welcomed with what Golem Docs is.
   else void listSaved().then(
-    (saved) => openSource(saved.length ? 'fonts' : 'welcome', true),
+    (saved) => {
+      const last = lastDoc();
+      const id = saved.some((d) => `local:${d.id}` === last) ? last : [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id;
+      openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', true);
+    },
     () => openSource('welcome', true),
   );
 }

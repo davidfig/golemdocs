@@ -1,11 +1,13 @@
-// Debug flags: what the on-screen debug overlays show: document status, and render information. They belong to this browser (kept in
+// Debug flags: what the on-screen debug overlays show: document status, load times and render information. They belong to this browser (kept in
 // localStorage), not the document, and are all off until switched on in View > Debug.
 
 /** The overlay a flag belongs to. */
 export type DebugPanel = 'Document' | 'Render';
 
 export const DEBUG_FLAGS = [
-  { key: 'status', panel: 'Document', label: 'Status', hint: 'Sync and collaboration status, and how long the last edit took to reach the screen' },
+  { key: 'status', panel: 'Document', label: 'Status', hint: 'Sync and collaboration status, and the room' },
+  { key: 'edit', panel: 'Document', label: 'Edit times', hint: 'How long the last edit took to reach the screen, and how much of that was the layout worker' },
+  { key: 'load', panel: 'Document', label: 'Load times', hint: 'How long the document took to load, in parts' },
   { key: 'pages', panel: 'Render', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
   { key: 'zoom', panel: 'Render', label: 'Zoom', hint: 'The current zoom level' },
   { key: 'cpu', panel: 'Render', label: 'CPU time', hint: 'How long the last frame took to submit to the GPU' },

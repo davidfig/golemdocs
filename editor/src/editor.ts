@@ -83,7 +83,11 @@ export type Command =
   /** Removes a comment and its markers from the text. */
   | { kind: 'deleteComment'; id: string }
   /** Selects the text a comment is on. */
-  | { kind: 'selectComment'; id: string };
+  | { kind: 'selectComment'; id: string }
+  /** Selects the next (or previous) match of `text` after the selection, wrapping around the document. */
+  | { kind: 'find'; text: string; matchCase?: boolean; backward?: boolean }
+  /** Replaces every match of `text` in the document. */
+  | { kind: 'replaceAll'; text: string; with: string; matchCase?: boolean };
 
 export interface Rect {
   page: PageLayout;
@@ -134,6 +138,9 @@ export interface CommandResult {
   structural: boolean;
   /** Styles or list definitions changed. */
   styles?: boolean;
+  /** Find: whether a match was found. Replace All: how many were replaced. */
+  found?: boolean;
+  replaced?: number;
 }
 
 const NO_CHANGE: CommandResult = { edited: false, changed: new Set(), structural: false };
@@ -318,7 +325,67 @@ export class Editor {
         if (range) this.selection = { anchor: { ...range.start }, focus: { ...range.end } };
         return NO_CHANGE;
       }
+      case 'find':
+        return { ...NO_CHANGE, found: this.find(command.text, command.matchCase ?? false, command.backward ?? false) };
+      case 'replaceAll':
+        return this.replaceAll(command.text, command.with, command.matchCase ?? false);
     }
+  }
+
+  // --- Find and replace ------------------------------------------------------------------
+
+  /** Where each match of `text` starts in a paragraph (model offsets), not overlapping. */
+  private matches(paragraph: Paragraph, text: string, matchCase: boolean): number[] {
+    if (!text) return [];
+    const original = paragraphText(paragraph);
+    const haystack = matchCase ? original : original.toLowerCase();
+    const needle = matchCase ? text : text.toLowerCase();
+    // Lower-casing can change a string's length (İ): then offsets no longer line up, so skip it.
+    if (haystack.length !== original.length) return [];
+    const found: number[] = [];
+    for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) found.push(at);
+    return found;
+  }
+
+  private find(text: string, matchCase: boolean, backward: boolean): boolean {
+    const list = this.paragraphs();
+    if (!text || !list.length) return false;
+    const [start, end] = this.ordered();
+    const from = this.indexOf(backward ? start.paragraph : end.paragraph);
+    // Every paragraph once from the selection, then the one it began in again for matches before it.
+    for (let step = 0; step <= list.length; step++) {
+      const k = (backward ? from - step : from + step) % list.length;
+      const paragraph = list[(k + list.length) % list.length];
+      let offsets = this.matches(paragraph, text, matchCase);
+      if (step === 0) offsets = offsets.filter((o) => (backward ? o + text.length <= start.offset : o >= end.offset));
+      else if (step === list.length) offsets = offsets.filter((o) => (backward ? o + text.length > start.offset : o < end.offset));
+      const at = backward ? offsets[offsets.length - 1] : offsets[0];
+      if (at === undefined) continue;
+      this.selection = { anchor: { paragraph, offset: at }, focus: { paragraph, offset: at + text.length } };
+      return true;
+    }
+    return false;
+  }
+
+  private replaceAll(text: string, replacement: string, matchCase: boolean): CommandResult {
+    const ops: Operation[] = [];
+    let count = 0;
+    let after: Pos | null = null;
+    for (const paragraph of this.paragraphs()) {
+      const id = this.replica.id(paragraph);
+      const found = this.matches(paragraph, text, matchCase);
+      if (found.length && !after) after = { paragraph: id, offset: found[0] + replacement.length };
+      // From the end, so earlier offsets stay valid as the text changes length.
+      for (const at of found.reverse()) {
+        ops.push({ type: 'delete', paragraph: id, from: at, to: at + text.length });
+        if (replacement) ops.push({ type: 'insertText', paragraph: id, offset: at, text: replacement });
+        count++;
+      }
+    }
+    if (!after) return { ...NO_CHANGE, replaced: 0 };
+    // The caret ends after the first replacement; the old selection's offsets may no longer hold.
+    const change = this.replica.edit(ops, { before: this.selectionIds, after: { anchor: after, focus: after } });
+    return { ...this.changed(change.applied, { anchor: after, focus: after }), replaced: count };
   }
 
   // --- Formatting ------------------------------------------------------------------------

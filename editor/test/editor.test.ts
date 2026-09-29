@@ -200,3 +200,36 @@ test('a comment with nothing selected goes on the word at the caret', skip, asyn
   await apply({ kind: 'selectComment', id: comment.id });
   assert.equal(editor.selectedText(), 'world');
 });
+
+test('find selects each match in turn, wrapping around, forwards and backwards', skip, async () => {
+  const { editor, apply } = await setup(['One fish, two fish', 'red FISH, blue fish']);
+  const find = (backward = false, matchCase = false) => {
+    const found = editor.apply({ kind: 'find', text: 'fish', matchCase, backward }).found;
+    return found ? `${editor.paragraphs().indexOf(editor.selection.focus.paragraph)}:${editor.selection.anchor.offset}` : null;
+  };
+  await apply({ kind: 'move', to: 'documentStart' });
+  assert.deepEqual([find(), find(), find(), find(), find()], ['0:4', '0:14', '1:4', '1:15', '0:4'], 'wraps to the first match');
+  assert.equal(editor.selectedText(), 'fish');
+  assert.deepEqual([find(true), find(true)], ['1:15', '1:4'], 'backwards wraps too');
+  assert.equal(editor.apply({ kind: 'find', text: 'Fish', matchCase: true }).found, false, 'case matters when asked');
+  assert.equal(editor.apply({ kind: 'find', text: 'whale' }).found, false);
+  assert.equal(editor.apply({ kind: 'find', text: '' }).found, false);
+});
+
+test('replace all changes every match, undoes together, and leaves the caret after the first', skip, async () => {
+  const { editor, apply, texts } = await setup(['One fish, two fish', 'red FISH, blue fish']);
+  const result = editor.apply({ kind: 'replaceAll', text: 'fish', with: 'cat' });
+  await apply();
+  assert.equal(result.replaced, 4);
+  assert.deepEqual(texts(), ['One cat, two cat', 'red cat, blue cat']);
+  assert.equal(editor.collapsed, true);
+  assert.equal(editor.selection.focus.offset, 7);
+  editor.undo();
+  assert.deepEqual(texts(), ['One fish, two fish', 'red FISH, blue fish']);
+  const none = editor.apply({ kind: 'replaceAll', text: 'whale', with: 'x' });
+  assert.equal(none.replaced, 0);
+  assert.equal(none.edited, false);
+  // Case-sensitive, and an empty replacement deletes.
+  editor.apply({ kind: 'replaceAll', text: 'fish', with: '', matchCase: true });
+  assert.deepEqual(texts(), ['One , two ', 'red FISH, blue ']);
+});

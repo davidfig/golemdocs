@@ -170,7 +170,7 @@ export class Chrome {
 
   private shortcut(e: KeyboardEvent): void {
     if (e.defaultPrevented || e.isComposing || this.menuBar.active) return;
-    if (isFormField(e.target) || document.querySelector('dialog[open]')) return;
+    if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
     for (const command of this.registry.all()) {
       if (!command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;

@@ -13,6 +13,7 @@ import type {
 import { CONTENT_TYPE, OpcPackage, PackageError, REL, contentTypeForExtension, type Relationships } from '../opc/package.ts';
 import { DOCUMENT_NAMESPACES, NS } from '../xml/namespaces.ts';
 import { child, el, elements, type XmlElement } from '../xml/xml.ts';
+import { BLANK_STYLES, BLANK_SETTINGS, BLANK_SECTION } from './blank.ts';
 import { readComments, writeComments, type CommentsPart } from './comments.ts';
 import { readBlocks, writeBlocks, type ContentWriteContext } from './content.ts';
 import { readSection, writeSection } from './properties.ts';
@@ -116,7 +117,6 @@ export class WordDocument {
 
   /** A new, empty document with Word's default page setup and styles. */
   static async create(): Promise<WordDocument> {
-    const { BLANK_STYLES, BLANK_SETTINGS, BLANK_SECTION } = await import('./blank.ts');
     const pkg = OpcPackage.create();
     const doc = new WordDocument(pkg, 'word/document.xml');
     (await pkg.relationships('')).add(REL.officeDocument, doc.mainPart);

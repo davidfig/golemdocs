@@ -9,7 +9,7 @@
 import { StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@word/docx';
 import type { Command, Editor } from '@word/editor';
 import type { Operation, RunFormat } from '@word/ops';
-import { styleFor } from '../formats/markdown.ts';
+import { styleFor } from '../formats/markdownStyles.ts';
 import type { Action, CaseChange, FormatState, Mark } from '../ui/actions.ts';
 
 /** The actions that change formatting (the worker applies these; see WireCommand). */

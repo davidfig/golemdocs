@@ -136,6 +136,8 @@ export interface SelectionUpdate {
   text: string;
   /** Formatting at the caret or across the selection, for the toolbar. */
   format: FormatState;
+  /** Set once after a Find (whether it found a match) or Replace All (how many it replaced). */
+  search?: { found?: boolean; replaced?: number };
   /** Whether Undo and Redo have anything to do. */
   canUndo: boolean;
   canRedo: boolean;

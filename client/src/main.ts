@@ -25,10 +25,10 @@ import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
-import { Dashboard } from './ui/dashboard.ts';
-import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
+import { Dashboard } from './ui/dashboard.ts';
+import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
@@ -39,6 +39,7 @@ import { AtlasLibrary } from './text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
 import { GpuPage } from './view/gpuPage.ts';
 import { PageRenderer, type FrameStats } from './view/pageRenderer.ts';
+import { FindBar } from './ui/findBar.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
@@ -962,6 +963,31 @@ async function download(): Promise<void> {
   }
 }
 
+/**
+ * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as
+ * Download), then printed from a hidden frame, or opened in a new tab to look at first.
+ */
+async function print(preview: boolean): Promise<void> {
+  const bytes = await worker.convert('pdf');
+  const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
+  if (preview) {
+    if (!window.open(url, '_blank')) setStatus('Allow pop-ups to see the print preview');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+  const frame = Object.assign(document.createElement('iframe'), { src: url });
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+  frame.addEventListener('load', () => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    setTimeout(() => {
+      frame.remove();
+      URL.revokeObjectURL(url);
+    }, 60_000);
+  });
+  document.body.append(frame);
+}
+
 /** What exporting to each format leaves out, for the notice shown after switching to it. */
 const LOSSES: Partial<Record<DocumentKind, string>> = {
   md: 'fonts, colors, sizes, alignment and anything else Markdown can’t express',
@@ -1041,6 +1067,7 @@ function applySelection(update: SelectionUpdate): void {
   selection.update(update);
   commentsPanel.update(update.comments);
   selectionFormat = update.format;
+  if (update.search) findBar.report(update.search);
   formLayer.update(update.fields ?? null);
   canUndo = update.canUndo;
   canRedo = update.canRedo;
@@ -1085,7 +1112,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields']);
 
 function send(command: WireCommand): void {
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find') {
     editSent = performance.now();
     if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -1525,6 +1552,8 @@ const chromeHost = createChromeHost({
   syncNow,
   share,
   download,
+  print,
+  showFind: (replace) => findBar.show(replace),
   convert: convertTo,
   signIn,
   signOut,
@@ -1560,6 +1589,21 @@ const chromeHost = createChromeHost({
 });
 const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => account?.isAdmin === true, showUnimplemented: import.meta.env.DEV });
 
+// Edit ▸ Find and Replace.
+const findBar = new FindBar(document.body, {
+  find: (text, matchCase, backward) => send({ kind: 'find', text, matchCase, backward }),
+  replace: (text, replacement, matchCase) => {
+    const selected = selection.text;
+    if (matchCase ? selected === text : selected.toLowerCase() === text.toLowerCase()) {
+      send(replacement ? { kind: 'insertText', text: replacement } : { kind: 'delete', direction: 'backward' });
+    }
+    send({ kind: 'find', text, matchCase });
+  },
+  replaceAll: (text, replacement, matchCase) => send({ kind: 'replaceAll', text, with: replacement, matchCase }),
+  selectedText: () => selection.text,
+  focusEditor: focusInput,
+});
+
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.
 const dashboard = new Dashboard(document.getElementById('viewport')!, {
@@ -1580,7 +1624,6 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
 
-// Comments down the right of the editor; edits to them are ordinary (undoable) edits.
 // A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
 const formLayer = new FormLayer(document.getElementById('viewport')!, {
   camera,
@@ -1594,6 +1637,7 @@ const formLayer = new FormLayer(document.getElementById('viewport')!, {
   notify: setStatus,
 });
 
+// Comments down the right of the editor; edits to them are ordinary (undoable) edits.
 const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   select: (id) => {
     send({ kind: 'selectComment', id });

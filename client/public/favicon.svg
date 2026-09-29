@@ -1,19 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150">
   <rect width="150" height="150" rx="34" fill="#d9601f"/>
-  <rect x="-35" y="-43" width="70" height="86" rx="10" fill="#f1b98f" transform="translate(84 68) rotate(3)"/>
-  <rect x="-35" y="-43" width="70" height="86" rx="10" fill="#f9dcc3" transform="translate(75 76) rotate(-2)"/>
-  <g transform="translate(66 84)">
-    <rect x="-35" y="-43" width="70" height="86" rx="10" fill="#fff"/>
-    <g fill="#000" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="1.7" font-weight="700" lengthAdjust="spacingAndGlyphs">
-      <text x="-25" y="-17.00" textLength="18.0">shaped from clay</text>
-      <text x="-25" y="-14.54" textLength="18.0">and brought to life</text>
-      <text x="-25" y="-12.07" textLength="14.4">by a single word</text>
-      <text x="7" y="-17.00" textLength="18.0">Rabbi Judah Loew</text>
-      <text x="7" y="-14.54" textLength="18.0">of Prague shapes</text>
-      <text x="7" y="-12.07" textLength="14.4">one from the mud</text>
-      <text x="-20" y="19.00" textLength="40.0">and writes emet, the Hebrew word for truth, on its</text>
-      <text x="-20" y="21.46" textLength="40.0">forehead. Erase the first letter and the word becomes</text>
-      <text x="-20" y="23.93" textLength="26.0">met, dead, and the golem returns to clay.</text>
+  <g transform="translate(2 -3)">
+    <path d="M42 30h44l24 24v66a6 6 0 0 1-6 6H42a6 6 0 0 1-6-6V36a6 6 0 0 1 6-6z" fill="#fff"/>
+    <path d="M86 30v20a4 4 0 0 0 4 4h20z" fill="#f4d3b5"/>
+    <g fill="#000">
+      <rect x="46" y="63" width="20" height="3.2" rx="1.6"/>
+      <rect x="46" y="69" width="13" height="3.2" rx="1.6"/>
+      <rect x="80" y="63" width="20" height="3.2" rx="1.6"/>
+      <rect x="80" y="69" width="13" height="3.2" rx="1.6"/>
+      <rect x="50" y="96" width="46" height="3.2" rx="1.6"/>
+      <rect x="50" y="102" width="30" height="3.2" rx="1.6"/>
     </g>
   </g>
 </svg>

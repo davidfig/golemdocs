@@ -17,12 +17,10 @@ import {
   type FaceDescriptor,
 } from '@word/layout';
 import { exportDocument, importDocument, type Format } from '../formats/convert.ts';
-import { pdfToDocument } from '../formats/pdfImport.ts';
-import { openPdfView, type PdfView } from '../formats/pdfPages.ts';
+import type { PdfView } from '../formats/pdfPages.ts';
 import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
-import { PdfDocument, applyAnnotations, applyFields, readAnnotations, type FormField } from '@word/pdf';
-import { markupToDocument } from '../formats/pdfMarkup.ts';
-import { PdfAnnotator } from './pdfAnnotator.ts';
+import type { FormField } from '@word/pdf';
+import type { PdfAnnotator } from './pdfAnnotator.ts';
 import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand, type WireField } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import welcomeText from './welcome.md?raw';
@@ -128,7 +126,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -185,6 +183,8 @@ class OpenDocument {
   reveal = false;
   /** When the last command arrived (for the latency readout). */
   private commandAt = 0;
+  /** The result of the last Find or Replace All, sent with the next selection. */
+  private search: SelectionUpdate['search'] | null = null;
 
   constructor(readonly doc: number) {}
 
@@ -342,7 +342,9 @@ class OpenDocument {
       canRedo: this.replica!.history.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote,
+      search: this.search ?? undefined,
     };
+    this.search = null;
     this.reveal = false;
     this.commandAt = 0;
     this.sendPresence();
@@ -699,7 +701,9 @@ class OpenDocument {
         if (!page) return;
         command = { ...wire, page };
       } else command = wire;
-      edited = editor.apply(command).edited;
+      const result = editor.apply(command);
+      edited = result.edited;
+      if (command.kind === 'find' || command.kind === 'replaceAll') this.search = { found: result.found, replaced: result.replaced };
     }
     // Edits send the selection once the changed pages are laid out.
     if (edited) {
@@ -731,6 +735,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Shown as PDF: the original's own pages, even when its text has since been edited as
     // something else (the page is told, to say that the edits aren't on them).
     if (loaded.lens === 'pdf' && loaded.original) {
+      const { openPdfView, PdfAnnotator } = await import('../formats/handlers/pdf.ts');
       const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations, fields: loaded.extensions.pdf?.fields });
       const readMs = performance.now() - t0;
       if (entry.closed) return;
@@ -802,6 +807,7 @@ async function media(doc: number, request: number, part: string): Promise<void> 
 
 /** A PDF reflowed into a flowing document, its markup annotations carried into the text. */
 async function reflow(original: Uint8Array, extensions: Extensions): Promise<WordDocument> {
+  const { pdfToDocument, markupToDocument, PdfDocument, readAnnotations } = await import('../formats/handlers/pdf.ts');
   const document = await pdfToDocument(original);
   const pdf = PdfDocument.load(original);
   markupToDocument(document, pdf, extensions.pdf?.annotations ?? readAnnotations(pdf));
@@ -821,6 +827,7 @@ function currentExtensions(open: OpenDocument): Extensions {
 async function annotatedPdf(original: Uint8Array, extensions: Extensions): Promise<Uint8Array> {
   const { annotations, fields } = extensions.pdf ?? {};
   if (!annotations && !fields) return original.slice();
+  const { PdfDocument, applyAnnotations, applyFields } = await import('../formats/handlers/pdf.ts');
   const doc = PdfDocument.load(original);
   if (annotations) applyAnnotations(doc, annotations);
   if (fields) applyFields(doc, fields);

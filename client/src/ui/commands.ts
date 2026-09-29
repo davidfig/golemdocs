@@ -131,7 +131,9 @@ export class CommandRegistry {
       const action = this.actionOf(command);
       if (action) this.perform(action, command.plainLabel);
     }
-    if (options.refocus !== false) host.focusEditor();
+    // A dialog takes the keyboard for itself.
+    const opensDialog = this.actionOf(command)?.kind === 'dialog';
+    if (options.refocus !== false && !opensDialog) host.focusEditor();
     return true;
   }
 

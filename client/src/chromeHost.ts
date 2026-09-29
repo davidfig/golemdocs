@@ -29,6 +29,10 @@ export interface AppHooks {
   share(): void;
   /** Download a copy of the document as a file, in its own format. */
   download(): Promise<void>;
+  /** Show the find bar, with the replace row for Replace. */
+  showFind(replace: boolean): void;
+  /** Print the document (as a PDF), or open that PDF in a new tab to preview it. */
+  print(preview: boolean): Promise<void>;
   /** Make a copy of the document in another format next to the original, and open it. */
   convert(to: DocumentKind): Promise<void>;
   signIn(): Promise<void>;
@@ -65,6 +69,8 @@ const SUPPORTED = new Set<ActionKind>([
   'syncNow',
   'share',
   'download',
+  'print',
+  'printPreview',
   'signIn',
   'signOut',
   'clearLocalData',
@@ -160,6 +166,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (ANNOTATION_ACTIONS.has(action.kind) && app.annotating()) return true;
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode === 'print';
@@ -184,6 +191,12 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.openSample(action.id);
         case 'download':
           return app.download();
+        case 'dialog':
+          if (action.name === 'find' || action.name === 'replace') return app.showFind(action.name === 'replace');
+          return app.notify(`${action.name} isn't available yet`);
+        case 'print':
+        case 'printPreview':
+          return app.print(action.kind === 'printPreview');
         case 'convert':
           return app.convert(action.to);
         case 'syncNow':

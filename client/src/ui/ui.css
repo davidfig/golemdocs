@@ -1153,3 +1153,86 @@
     --wm-ease: 0ms;
   }
 }
+
+/* --- Find and Replace ------------------------------------------------------------------------ */
+
+/* Not modal: it sits at the top right, below the toolbars, over the document, which stays usable. */
+.wm-dialog.wm-find {
+  position: fixed;
+  inset: 110px 28px auto auto;
+  z-index: 50;
+  margin: 0;
+  width: 400px;
+  min-width: 0;
+}
+
+.wm-find-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid var(--wm-button-border);
+}
+
+.wm-find-tab {
+  margin-bottom: -1px;
+  padding: 2px 14px;
+  border: 1px solid var(--wm-button-border);
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(var(--wm-button-top), var(--wm-button-bottom));
+  cursor: default;
+}
+
+.wm-find-tab[aria-selected='true'] {
+  background: var(--wm-face);
+  border-bottom-color: var(--wm-face);
+  font-weight: 700;
+}
+
+.wm-find-body {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.wm-find-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wm-find-fields [hidden],
+.wm-find-buttons [hidden] {
+  display: none;
+}
+
+.wm-find-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wm-field {
+  box-sizing: border-box;
+  width: 100%;
+  height: 22px;
+  margin-bottom: 5px;
+  padding: 0 4px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  font: 13px var(--wm-font);
+}
+
+.wm-find-case {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wm-find-message {
+  min-height: 1.4em;
+  color: var(--wm-muted);
+}

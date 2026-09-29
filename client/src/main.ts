@@ -24,7 +24,7 @@ import { PageRenderer } from './view/pageRenderer.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
-import { FORMATS, kindFromName, mountChrome, type DocumentKind, type FormatState, type FormMode } from './ui/index.ts';
+import { FORMATS, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus } from './ui/index.ts';
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -106,6 +106,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   current = { localId: options.localId ?? null, unsavedSince: 0 };
+  syncError = null;
+  showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
   pagesById.clear();
   pages = [];
@@ -342,6 +344,56 @@ async function refreshLibrary(): Promise<void> {
   cloudUser = await currentUser().catch(() => null);
   cloudDocs = cloudUser ? await listDocuments().catch(() => []) : [];
   sharedDeviceNotice.update({ signedIn: cloudUser !== null });
+  showSync();
+}
+
+// --- Sync ------------------------------------------------------------------------------
+// Once a document is in the cloud, its edits follow it there: each save in the browser schedules
+// an upload, a few seconds after editing pauses. The sync button (top right) shows where it is.
+
+const CLOUD_SYNC_DELAY_MS = 5000;
+let cloudSyncTimer = 0;
+/** The browser copy waiting for `cloudSyncTimer`. */
+let cloudSyncId: string | null = null;
+/** The browser copy being uploaded now, if any. */
+let uploading: string | null = null;
+/** Why the open document's last upload failed (cleared by the next one). */
+let syncError: string | null = null;
+
+function syncStatus(): SyncStatus {
+  const signedIn = cloudUser !== null;
+  const user = cloudUser?.email ?? cloudUser?.name ?? null;
+  const info = savedDocs.find((d) => d.id === current.localId);
+  let document: DocumentSync;
+  if (!signedIn || !info?.cloudId) document = 'local';
+  else if (uploading === info.id) document = 'syncing';
+  else if (syncError) document = 'failed';
+  else if (current.unsavedSince || info.updatedAt > (info.cloudSyncedAt ?? 0)) document = 'pending';
+  else document = 'synced';
+  return { signedIn, user, document, error: document === 'failed' ? syncError : null };
+}
+
+function showSync(): void {
+  chrome.update({ sync: syncStatus() });
+}
+
+/** Uploads a cloud document's browser copy once editing has paused. */
+function scheduleCloudSync(id: string): void {
+  if (cloudSyncId && cloudSyncId !== id) flushCloudSync(); // another document's edits go now
+  clearTimeout(cloudSyncTimer);
+  cloudSyncId = id;
+  cloudSyncTimer = window.setTimeout(() => {
+    if (uploading) scheduleCloudSync(id); // one upload at a time
+    else flushCloudSync();
+  }, CLOUD_SYNC_DELAY_MS);
+}
+
+/** Sends a scheduled upload now (another document is opening). */
+function flushCloudSync(): void {
+  const id = cloudSyncId;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncId = null;
+  if (id) void sendToCloud(id, { quiet: true });
 }
 
 /** Tells the user something now, or once the document being loaded has finished. */
@@ -417,6 +469,8 @@ function saveInBrowser(): Promise<string | null> {
       // A new document changes what's listed; later saves only its order.
       if (created) void refreshLibrary();
       else savedDocs = await listSaved().catch(() => savedDocs);
+      if (info.cloudId && cloudUser) scheduleCloudSync(info.id);
+      showSync();
       return info.id;
     } catch (e) {
       if (!doc.unsavedSince) doc.unsavedSince = performance.now(); // still unsaved: the next edit tries again
@@ -428,20 +482,38 @@ function saveInBrowser(): Promise<string | null> {
   return done;
 }
 
-/** Uploads a document already saved in this browser; asks to sign in if there's no session. */
-async function sendToCloud(id: string): Promise<void> {
-  setStatus('Saving to the cloud…');
+/**
+ * Uploads a document already saved in this browser; asks to sign in if there's no session.
+ * `quiet` (the automatic sync of an edit) reports only through the sync button.
+ */
+async function sendToCloud(id: string, { quiet = false } = {}): Promise<void> {
+  if (id === cloudSyncId) {
+    clearTimeout(cloudSyncTimer); // this upload covers it
+    cloudSyncId = null;
+  }
+  uploading = id;
+  syncError = null;
+  showSync();
+  if (!quiet) setStatus('Saving to the cloud…');
   try {
     const doc = await uploadToCloud(id);
-    notify(`Saved “${doc.name}” to the cloud`);
-    void refreshLibrary();
+    if (!quiet) notify(`Saved “${doc.name}” to the cloud`);
+    uploading = null;
+    await refreshLibrary();
   } catch (e) {
+    uploading = null;
     if (e instanceof CloudError && e.status === 401) {
-      notify('Sign in to save to the cloud');
-      showSignInDialog(returnTo({ doc: `local:${id}`, cloud: '1' }));
+      cloudUser = null; // the session ended: the button offers to sign in again
+      if (!quiet) {
+        notify('Sign in to save to the cloud');
+        showSignInDialog(returnTo({ doc: `local:${id}`, cloud: '1' }));
+      }
     } else {
-      notify(`Cloud save failed: ${(e as Error).message}`);
+      if (id === current.localId) syncError = (e as Error).message;
+      if (!quiet) notify(`Cloud save failed: ${(e as Error).message}`);
     }
+  } finally {
+    showSync();
   }
 }
 

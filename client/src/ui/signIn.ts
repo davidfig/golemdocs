@@ -41,10 +41,10 @@ export function showSignInDialog(returnTo: string): void {
     'border:1px solid var(--wm-border,#888);border-radius:6px;padding:20px;max-width:340px;background:var(--wm-face,#f0f0f0);color:var(--wm-text,#000);font:14px var(--wm-font,system-ui,sans-serif)';
 
   const title = document.createElement('h2');
-  title.textContent = 'Sign in to use the cloud';
+  title.textContent = 'Sign in to sync';
   title.style.cssText = 'margin:0 0 8px;font-size:16px';
   const note = document.createElement('p');
-  note.textContent = 'Your documents are saved in this browser without an account. Sign in only to keep a copy in the cloud.';
+  note.textContent = 'Your documents are saved in this browser without an account. Sign in to sync them to your account and open them anywhere. Sync is free while Golem Docs is in early access.';
   note.style.cssText = 'margin:0 0 12px';
   const providers = document.createElement('div');
   const cancel = document.createElement('button');

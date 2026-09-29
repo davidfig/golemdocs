@@ -24,6 +24,7 @@ import { matches } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
+import { SyncButton } from './syncButton.ts';
 import { DEFAULT_LAYOUT, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import './ui.css';
 
@@ -93,6 +94,8 @@ export class Chrome {
   private converting = false;
   /** Fill in a PDF's form or edit it: beside the format selector, for a PDF's pages. */
   private formModeBox!: HTMLElement;
+  /** Where the document is kept (this browser, or synced), at the far right. */
+  private syncButton!: SyncButton;
 
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
@@ -137,7 +140,7 @@ export class Chrome {
       const next = partial[key];
       const prev = this.state[key];
       if (next === prev) continue;
-      if (key === 'format' && JSON.stringify(next) === JSON.stringify(prev)) continue;
+      if ((key === 'format' || key === 'sync') && JSON.stringify(next) === JSON.stringify(prev)) continue;
       changed = true;
     }
     if (!changed) return;
@@ -154,6 +157,7 @@ export class Chrome {
     this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden);
     this.menuBar.refresh();
     this.syncFormatBox();
+    this.syncButton.update(this.state.sync);
     const name = this.state.documentName;
     const title = name ? `${name} - ${this.appName}` : this.appName;
     if (document.title !== title) document.title = title;
@@ -742,11 +746,13 @@ export class Chrome {
       modeButton('fill', 'Fill In', 'Type in the PDF’s fields'),
       modeButton('edit', 'Edit Form', 'Move, add, rename and delete the PDF’s fields'),
     );
+    this.syncButton = new SyncButton(this.options.host);
     return h(
       'div',
       { class: 'wm-format' },
       this.formModeBox,
       h('div', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: 'Format' }), combo.el),
+      this.syncButton.el,
     );
   }
 

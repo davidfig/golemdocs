@@ -170,6 +170,22 @@ export interface ChromeState {
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
   formMode: FormMode | null;
+  /** Where the open document is kept, for the sync button at the top right. */
+  sync: SyncStatus;
+}
+
+/**
+ * The open document's place: `local` is this browser only (always, when signed out); `pending`
+ * has edits waiting to go to the cloud; `failed` couldn't be sent (`error` says why).
+ */
+export type DocumentSync = 'local' | 'synced' | 'pending' | 'syncing' | 'failed';
+
+export interface SyncStatus {
+  signedIn: boolean;
+  /** Who is signed in (an email or name). */
+  user: string | null;
+  document: DocumentSync;
+  error: string | null;
 }
 
 export const DEFAULT_STATE: ChromeState = {
@@ -187,6 +203,7 @@ export const DEFAULT_STATE: ChromeState = {
   trackChanges: false,
   format: {},
   formMode: null,
+  sync: { signedIn: false, user: null, document: 'local', error: null },
 };
 
 /** A sample document the File menu can open. */

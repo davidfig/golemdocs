@@ -4,12 +4,15 @@ import { ImageRenderer, type DrawImage } from '../shapes/imageRenderer.ts';
 import { RectRenderer } from '../shapes/rectRenderer.ts';
 import type { TextBatch } from '../text/textBatch.ts';
 import { TextRenderer } from '../text/textRenderer.ts';
+import { deskColor } from '../ui/theme.ts';
 import type { Camera } from './camera.ts';
 import type { GpuPage } from './gpuPage.ts';
 import type { SelectionLayer } from './selectionLayer.ts';
 
 const PAGE_COLOR = packColor(0xffffff);
 const PAGE_BORDER = packColor(0x000000, 0.18);
+const PAGE_SHADOW = packColor(0x000000, 0.035);
+const SHADOW_LAYERS = 4;
 
 export interface FrameStats {
   pages: number;
@@ -59,7 +62,8 @@ export class PageRenderer {
     }
 
     gl.viewport(0, 0, camera.width, camera.height);
-    gl.clearColor(0.9, 0.9, 0.9, 1);
+    const [r, g, b] = deskColor();
+    gl.clearColor(r, g, b, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // Sheets, snapped to whole device pixels so their edges stay crisp at any zoom.
@@ -68,6 +72,11 @@ export class PageRenderer {
       const y0 = Math.round((page.y - top) * scale);
       const x1 = Math.round((page.x + page.width - left) * scale);
       const y1 = Math.round((page.y + page.height - top) * scale);
+      // A soft drop shadow: a few faint layers, each larger than the last, sinking below the sheet.
+      for (let i = 0; i < SHADOW_LAYERS; i++) {
+        const grow = (i + 1) * scale;
+        this.sheets.add(x0 - grow, y0 - grow + 2 * scale, x1 - x0 + 2 * grow, y1 - y0 + 2 * grow, PAGE_SHADOW);
+      }
       this.sheets.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
       this.sheets.add(x0, y0, x1 - x0, y1 - y0, PAGE_COLOR);
     }

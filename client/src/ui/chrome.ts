@@ -23,6 +23,7 @@ import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
+import { THEMES, setTheme, theme } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
 import { SyncButton } from './syncButton.ts';
@@ -260,6 +261,9 @@ export class Chrome {
         checked: () => this.layout.find((t) => t.name === name)?.visible ?? false,
       });
     }
+    for (const { id, label } of THEMES) {
+      r.add({ id: `view.theme.${id}`, label, run: () => setTheme(id), checked: () => theme() === id, radio: true });
+    }
     r.add({ id: 'view.customizeToolbars', label: 'Customi&ze…', run: () => this.customize() });
 
     // Insert
@@ -435,6 +439,7 @@ export class Chrome {
           cmd('view.outline'),
           sep,
           sub('&Toolbars', [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
+          sub('Color &Scheme', THEMES.map(({ id }) => cmd(`view.theme.${id}`))),
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
           cmd('view.debug'),

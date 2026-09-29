@@ -849,7 +849,7 @@ function applySelection(update: SelectionUpdate): void {
       // An unfocused editor draws no caret, so there's nothing to redraw (focus redraws).
       if (document.activeElement !== input || !document.hasFocus()) return;
       caretOn = !caretOn;
-      requestRender();
+      requestCaretRender();
     }, CARET_BLINK_MS);
   }
   if (update.reveal && update.focus) reveal(update.focus);
@@ -891,8 +891,20 @@ function focusInput(): void {
 // --- Rendering -------------------------------------------------------------------------
 
 let frameQueued = false;
+/** Everything that asked for the queued frame was only the caret blinking. */
+let frameCaretOnly = true;
 
 function requestRender(): void {
+  frameCaretOnly = false;
+  queueFrame();
+}
+
+/** A redraw for the caret blinking alone (left out of the debug frame stats). */
+function requestCaretRender(): void {
+  queueFrame();
+}
+
+function queueFrame(): void {
   if (frameQueued) return;
   frameQueued = true;
   requestAnimationFrame(render);
@@ -1002,13 +1014,18 @@ renderInfoEl.addEventListener('click', () => {
 
 function render(): void {
   frameQueued = false;
+  const caretOnly = frameCaretOnly;
+  frameCaretOnly = true;
   const start = performance.now();
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight);
   lastStats = renderer.render(camera, pages, selection, caretVisible);
   const end = performance.now();
-  frames.record(end, end - start);
-  if (debugFlags().fps) flashRenderLight();
+  // The caret blinks on an idle document; counting that would make idle read as a steady frame rate.
+  if (!caretOnly) {
+    frames.record(end, end - start);
+    if (debugFlags().fps) flashRenderLight();
+  }
   chrome.update({
     documentName,
     kind: documentKind,
@@ -1046,6 +1063,7 @@ new ResizeObserver(([entry]) => {
   if (grid && !userMoved && pages.length) placeCamera();
   // Resizing clears the canvas to (opaque) black: draw now, before this frame is painted, or
   // that black shows for a frame.
+  frameCaretOnly = false;
   render();
 }).observe(canvas);
 

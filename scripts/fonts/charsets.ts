@@ -3,6 +3,8 @@
 //
 //   ja       JIS X 0208 (6,879: kana, symbols, level 1 then level 2 kanji), then JIS X 0212 (6,067)
 //   zh-Hant  Big5 (13,710: symbols and Bopomofo, level 1 (5,401, by frequency) then level 2 kanji)
+//   zh-Hans  the Table of General Standard Chinese Characters (通用规范汉字表, 2013: 8,105, in table order, so its
+//            3,500 level 1 characters, which cover ~99.5% of text, come first), then the rest of GB2312, then GBK
 //   ko       KS X 1001's 2,350 common syllables first, then jamo and symbols, then every other modern
 //            Hangul syllable (11,172 in all: an IME can produce any of them), then KS X 1001's 4,888 hanja
 //
@@ -12,7 +14,7 @@
 //
 //   pnpm tsx scripts/fonts/charsets.ts
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -80,6 +82,22 @@ pages('zh-Hant', [
   ...range(0xff01, 0xff5e),
   ...big5.filter((c) => !isHan(c)),
   ...big5.filter(isHan),
+]);
+
+// Simplified Chinese. GB2312's symbols and the punctuation come first, then the 8,105 characters of the
+// Table of General Standard Chinese Characters (data/tgscc.txt, level 1's 3,500 leading), then every other
+// GB2312 hanzi, then the remaining GBK ones (rare: only reached by documents that use them).
+const gb2312 = decode('gb2312', [0xa1, 0xf7], [[0xa1, 0xfe]]);
+const gbk = decode('gbk', [0x81, 0xfe], [[0x40, 0x7e], [0x80, 0xfe]]);
+const tgscc = [...readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'tgscc.txt'), 'utf8').replace(/\s/g, '')].map((c) => c.codePointAt(0)!);
+pages('zh-Hans', [
+  ...range(0x3000, 0x303f),
+  ...range(0x3100, 0x312f),
+  ...range(0xff01, 0xff5e),
+  ...gb2312.filter((c) => !isHan(c)),
+  ...tgscc,
+  ...gb2312.filter(isHan),
+  ...gbk.filter(isHan),
 ]);
 
 // Korean. The 2,350 syllables of KS X 1001 (EUC-KR rows B0-C8) are the ones in everyday use, so they lead:

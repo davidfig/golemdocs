@@ -1214,7 +1214,7 @@ function commandText(wire: WireCommand): string {
 function setCjkLang(): Promise<void> {
   return fontsReady.then((fonts) => {
     const locale = getLocale();
-    fonts.defaultCjkLang = locale.startsWith('zh-Hant') ? 'zh-Hant' : locale.startsWith('ko') ? 'ko' : 'ja';
+    fonts.defaultCjkLang = locale.startsWith('zh-Hant') ? 'zh-Hant' : locale.startsWith('zh') ? 'zh-Hans' : locale.startsWith('ko') ? 'ko' : 'ja';
   });
 }
 

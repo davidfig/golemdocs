@@ -87,13 +87,14 @@ Conventions used so far:
 The page renders text from pre-built MSDF atlases (`client/public/fonts`), and the Latin fonts have no
 Japanese or Chinese glyphs, so those languages also need font atlases or their text draws blank:
 
-- `scripts/fonts/sources.ts` lists Noto Sans JP, TC and KR as `cjkPages(...)`: each language is 5 or 6
-  hidden families (`noto-sans-jp-1` … `-5`, `noto-sans-tc-1` … `-5`, `noto-sans-kr-1` … `-6`), one 2048 x 2048 atlas page each
+- `scripts/fonts/sources.ts` lists Noto Sans JP, SC, TC and KR as `cjkPages(...)`: each language is 5 to 7
+  hidden families (`noto-sans-jp-1` … `-5`, `noto-sans-sc-1` … `-7`, `noto-sans-tc-1` … `-5`, `noto-sans-kr-1` … `-6`), one 2048 x 2048 atlas page each
   (32 px/em, at most 3,200 glyphs; kanji fill their cell, so 3,600 didn't fit). Page 1 has the kana,
   punctuation and the most used kanji, and is the only page most documents fetch (~5 MB); the rest load
   when a document uses characters on them.
-- The charsets (`scripts/fonts/charsets/<lang>-<n>.txt`) are generated from JIS X 0208 + 0212 (Japanese)
-  and Big5 (Traditional Chinese) by `pnpm tsx scripts/fonts/charsets.ts`. Korean is the 2,350 KS X 1001
+- The charsets (`scripts/fonts/charsets/<lang>-<n>.txt`) are generated from JIS X 0208 + 0212 (Japanese),
+  Big5 (Traditional Chinese) and the 通用规范汉字表 (Simplified Chinese: its 8,105 characters in table order, so the
+  3,500 of level 1 lead, then the rest of GB2312 and GBK; `scripts/fonts/data/tgscc.txt`) by `pnpm tsx scripts/fonts/charsets.ts`. Korean is the 2,350 KS X 1001
   syllables first, then all 11,172 modern syllables, jamo, symbols and 4,888 hanja. Only these characters are
   covered; anything else draws blank.
 - `pnpm fonts --only noto-sans-jp-1,…` regenerates atlases. It downloads the pinned fonts and builds
@@ -101,10 +102,11 @@ Japanese or Chinese glyphs, so those languages also need font atlases or their t
 - Each page has a small `coverage.json` (the code points it holds), fetched only when a document has CJK
   text, so the manifest every user loads stays small.
 - Layout draws CJK characters through a per-character fallback (`RunStyle.fallbacks`), choosing Japanese or
-  Traditional Chinese glyph forms from the run's East Asian font, then its language, then the app's language.
+  Simplified or Traditional Chinese glyph forms from the run's East Asian font, then its language, then the app's language. A Chinese character missing from the chosen form's pages falls
+  back to the other form's (`CJK_SIBLINGS`).
   Line breaking follows kinsoku rules (no line starts with 。、」, none ends with 「（).
 - Korean breaks lines at spaces, not between syllables (hanja still break freely), unlike Chinese and Japanese.
-- A new CJK language (Simplified Chinese) needs its own font pages and charsets the same way, plus
+- A new CJK language needs its own font pages and charsets the same way, plus
   its entries in `layout/src/fonts/cjk.ts` (character classes, font names, language tags).
 
 Not done for CJK: PDF export (characters become `?`, with a console warning), inline IME composition

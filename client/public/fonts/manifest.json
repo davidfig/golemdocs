@@ -2189,6 +2189,433 @@
       }
     },
     {
+      "id": "noto-sans-sc-1",
+      "wordName": "Noto Sans SC (1)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-1/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-1/regular.webp",
+          "layout": "noto-sans-sc-1/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 0,
+        "coverage": "noto-sans-sc-1/coverage.json"
+      }
+    },
+    {
+      "id": "noto-sans-sc-2",
+      "wordName": "Noto Sans SC (2)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-2/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-2/regular.webp",
+          "layout": "noto-sans-sc-2/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 1,
+        "coverage": "noto-sans-sc-2/coverage.json"
+      }
+    },
+    {
+      "id": "noto-sans-sc-3",
+      "wordName": "Noto Sans SC (3)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-3/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-3/regular.webp",
+          "layout": "noto-sans-sc-3/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 2,
+        "coverage": "noto-sans-sc-3/coverage.json"
+      }
+    },
+    {
+      "id": "noto-sans-sc-4",
+      "wordName": "Noto Sans SC (4)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-4/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-4/regular.webp",
+          "layout": "noto-sans-sc-4/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 3,
+        "coverage": "noto-sans-sc-4/coverage.json"
+      }
+    },
+    {
+      "id": "noto-sans-sc-5",
+      "wordName": "Noto Sans SC (5)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-5/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-5/regular.webp",
+          "layout": "noto-sans-sc-5/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 4,
+        "coverage": "noto-sans-sc-5/coverage.json"
+      }
+    },
+    {
+      "id": "noto-sans-sc-6",
+      "wordName": "Noto Sans SC (6)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-6/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-6/regular.webp",
+          "layout": "noto-sans-sc-6/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 5,
+        "coverage": "noto-sans-sc-6/coverage.json"
+      }
+    },
+    {
+      "id": "noto-sans-sc-7",
+      "wordName": "Noto Sans SC (7)",
+      "substitute": "Noto Sans SC",
+      "license": "OFL-1.1",
+      "licenseFile": "noto-sans-sc-7/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "noto-sans-sc-7/regular.webp",
+          "layout": "noto-sans-sc-7/regular.json",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1160,
+              "descender": -288,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 880,
+              "descender": -120,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1160,
+              "descent": 288
+            },
+            "xHeight": 543,
+            "capHeight": 733,
+            "underline": {
+              "position": -125,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 325
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "cjk": {
+        "lang": "zh-Hans",
+        "order": 6,
+        "coverage": "noto-sans-sc-7/coverage.json"
+      }
+    },
+    {
       "id": "noto-sans-tc-1",
       "wordName": "Noto Sans TC (1)",
       "substitute": "Noto Sans TC",

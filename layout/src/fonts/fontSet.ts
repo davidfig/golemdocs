@@ -2,7 +2,7 @@
 // injected (fetch in the browser, the file system on a server), so layout runs anywhere.
 
 import { FaceMetrics } from './faceMetrics.ts';
-import type { CjkLang } from './cjk.ts';
+import { CJK_SIBLINGS, type CjkLang } from './cjk.ts';
 import type { FontManifest, ManifestFace, ManifestFamily, MsdfLayout } from './fontTypes.ts';
 
 /** Loads a JSON file given its path relative to the font manifest. */
@@ -153,7 +153,9 @@ export class FontSet {
    */
   cjkFonts(lang: CjkLang, bold: boolean, italic: boolean): ResolvedFont[] {
     const out: ResolvedFont[] = [];
-    for (const family of this.cjkPages(lang)) {
+    // The language's own pages, then its siblings' (for characters its pages lack).
+    const families = [lang, ...CJK_SIBLINGS[lang]].flatMap((l) => this.cjkPages(l));
+    for (const family of families) {
       const key = `cjk\u0000${family.id}\u0000${bold ? 1 : 0}${italic ? 1 : 0}`;
       let font = this.resolveCache.get(key);
       if (!font) this.resolveCache.set(key, (font = this.pick(family, undefined, { font: family.wordName, bold, italic })));
@@ -167,18 +169,18 @@ export class FontSet {
    * the language (small lists), then the metrics of the first page holding each character.
    */
   async ensureCjk(lang: CjkLang, codePoints: Iterable<number>): Promise<void> {
-    const pages = this.cjkPages(lang);
-    if (pages.length === 0) return;
-    await Promise.all(pages.map((family) => this.loadCoverage(family)));
     const needed = new Set<ManifestFamily>();
-    const cps = [...codePoints];
-    for (const cp of cps) {
-      for (const family of pages) {
-        if (covers(this.coverageLoaded.get(family)!, cp)) {
-          needed.add(family);
-          break;
-        }
-      }
+    let remaining = [...codePoints];
+    // Each language takes the characters its pages hold; the rest go to its siblings.
+    for (const l of [lang, ...CJK_SIBLINGS[lang]]) {
+      const pages = this.cjkPages(l);
+      if (pages.length === 0 || remaining.length === 0) continue;
+      await Promise.all(pages.map((family) => this.loadCoverage(family)));
+      remaining = remaining.filter((cp) => {
+        const family = pages.find((f) => covers(this.coverageLoaded.get(f)!, cp));
+        if (family) needed.add(family);
+        return !family;
+      });
     }
     await this.ensure([...needed].map((family) => family.faces[0]));
   }

@@ -33,7 +33,7 @@ const SHARED = '、。「」あ（'; // punctuation and kana on the first page o
 
 interface PageSpec {
   id: string;
-  lang: 'ja' | 'zh-Hant' | 'ko';
+  lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko';
   order: number;
   text: string;
   advance: number;
@@ -42,6 +42,8 @@ const PAGES: PageSpec[] = [
   { id: 'noto-sans-jp-1', lang: 'ja', order: 0, text: '日本語' + SHARED, advance: 1 },
   { id: 'noto-sans-jp-2', lang: 'ja', order: 1, text: '字', advance: 1 },
   { id: 'noto-sans-jp-3', lang: 'ja', order: 2, text: '猫', advance: 1 },
+  { id: 'noto-sans-sc-1', lang: 'zh-Hans', order: 0, text: '日本語' + SHARED, advance: 1.3 },
+  { id: 'noto-sans-sc-2', lang: 'zh-Hans', order: 1, text: '汉', advance: 1.3 },
   { id: 'noto-sans-tc-1', lang: 'zh-Hant', order: 0, text: '日本語' + SHARED, advance: 1.1 },
   { id: 'noto-sans-tc-2', lang: 'zh-Hant', order: 1, text: '漢', advance: 1.1 },
   { id: 'noto-sans-kr-1', lang: 'ko', order: 0, text: '한글가나다' + '日本語' + SHARED, advance: 1.2 },
@@ -91,7 +93,7 @@ const narrow = (children: Paragraph['children']): Paragraph => ({
   attrs: {},
 });
 
-async function layout(paragraph: Paragraph, fonts: FontSet, lang?: 'ja' | 'zh-Hant' | 'ko') {
+async function layout(paragraph: Paragraph, fonts: FontSet, lang?: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko') {
   if (lang) fonts.defaultCjkLang = lang;
   const doc = await WordDocument.create();
   doc.body = [paragraph];
@@ -112,10 +114,11 @@ test('character classes', () => {
 test('language from a font name or a language tag', () => {
   for (const name of ['MS Mincho', 'MS Gothic', 'MS PGothic', 'Yu Gothic', 'Meiryo', 'Hiragino Kaku Gothic Pro', 'MS UI Gothic']) assert.equal(langOfFontName(name), 'ja', name);
   for (const name of ['PMingLiU', 'MingLiU', 'Microsoft JhengHei', 'DFKai-SB', 'Noto Sans CJK TC']) assert.equal(langOfFontName(name), 'zh-Hant', name);
-  for (const name of ['SimSun', 'SimHei', 'Microsoft YaHei', 'Calibri']) assert.equal(langOfFontName(name), undefined, name);
+  for (const name of ['SimSun', 'NSimSun', 'SimHei', 'KaiTi', 'FangSong', 'Microsoft YaHei', 'DengXian', 'PingFang SC', 'Noto Sans SC', '宋体', '微软雅黑']) assert.equal(langOfFontName(name), 'zh-Hans', name);
+  assert.equal(langOfFontName('Calibri'), undefined);
   assert.equal(langOfTag('ja-JP'), 'ja');
   for (const tag of ['zh-TW', 'zh-HK', 'zh-MO', 'zh-Hant-TW']) assert.equal(langOfTag(tag), 'zh-Hant', tag);
-  assert.equal(langOfTag('zh-CN'), undefined);
+  for (const tag of ['zh', 'zh-CN', 'zh-SG', 'zh-Hans', 'zh-Hans-CN']) assert.equal(langOfTag(tag), 'zh-Hans', tag);
   assert.equal(langOfTag('en-US'), undefined);
 });
 
@@ -170,18 +173,28 @@ test('a line may break at a Latin to CJK boundary', async () => {
 
 test('language: East Asian font, run language, then the default', async () => {
   const { fonts } = await makeFonts();
-  const page = async (properties: Run['properties'], lang?: 'ja' | 'zh-Hant' | 'ko') => keys((await layout(narrow([run('日', properties)]), fonts, lang)).page)[0].split('/')[0];
+  const page = async (properties: Run['properties'], lang?: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko') => keys((await layout(narrow([run('日', properties)]), fonts, lang)).page)[0].split('/')[0];
   assert.equal(await page({ fonts: { eastAsia: 'MS Mincho' } }, 'zh-Hant'), 'noto-sans-jp-1');
   assert.equal(await page({ fonts: { eastAsia: 'PMingLiU' } }, 'ja'), 'noto-sans-tc-1');
   assert.equal(await page({ lang: { eastAsia: 'zh-TW' } }, 'ja'), 'noto-sans-tc-1');
   assert.equal(await page({ lang: { eastAsia: 'ja-JP' } }, 'zh-Hant'), 'noto-sans-jp-1');
-  // Simplified Chinese fonts have no catalog: the default language.
-  assert.equal(await page({ fonts: { eastAsia: 'SimSun' } }, 'zh-Hant'), 'noto-sans-tc-1');
+  assert.equal(await page({ fonts: { eastAsia: 'SimSun' } }, 'zh-Hant'), 'noto-sans-sc-1');
+  assert.equal(await page({ lang: { eastAsia: 'zh-CN' } }, 'ja'), 'noto-sans-sc-1');
+  assert.equal(await page({}, 'zh-Hans'), 'noto-sans-sc-1');
   assert.equal(await page({}, 'zh-Hant'), 'noto-sans-tc-1');
   assert.equal(await page({}, 'ja'), 'noto-sans-jp-1');
   // Same glyph, different language, different advance.
   const tc = await layout(narrow([run('日')]), fonts, 'zh-Hant');
   assert.ok(Math.abs(tc.lines[0].stops[1] - tc.lines[0].stops[0] - 11) < 0.01);
+});
+
+test('a Chinese form falls back to the other for characters its pages lack', async () => {
+  const { fonts, loaded } = await makeFonts();
+  const hans = await layout(narrow([run('汉漢', { lang: { eastAsia: 'zh-CN' } })]), fonts);
+  assert.deepEqual(keys(hans.page).map((k) => k.split('/')[0]).sort(), ['noto-sans-sc-2', 'noto-sans-tc-2']);
+  assert.ok(!loaded.includes('noto-sans-jp-1'));
+  const hant = await layout(narrow([run('汉漢', { lang: { eastAsia: 'zh-TW' } })]), fonts);
+  assert.deepEqual(keys(hant.page).map((k) => k.split('/')[0]).sort(), ['noto-sans-sc-2', 'noto-sans-tc-2']);
 });
 
 test('only pages whose coverage intersects the text are loaded', async () => {
@@ -228,7 +241,7 @@ test('Hangul is CJK text, and language selection knows Korean', async () => {
   for (const name of ['Malgun Gothic', 'Batang', 'BatangChe', 'Gulim', 'GulimChe', 'Dotum', 'DotumChe', 'Gungsuh', 'GungsuhChe', 'NanumGothic', 'Nanum Myeongjo', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Noto Sans CJK KR']) assert.equal(langOfFontName(name), 'ko', name);
   for (const tag of ['ko', 'ko-KR', 'KO-kr']) assert.equal(langOfTag(tag), 'ko', tag);
   const { fonts } = await makeFonts();
-  const page = async (properties: Run['properties'], lang?: 'ja' | 'zh-Hant' | 'ko') => keys((await layout(narrow([run('한', properties)]), fonts, lang)).page)[0].split('/')[0];
+  const page = async (properties: Run['properties'], lang?: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko') => keys((await layout(narrow([run('한', properties)]), fonts, lang)).page)[0].split('/')[0];
   assert.equal(await page({ fonts: { eastAsia: 'Malgun Gothic' } }, 'ja'), 'noto-sans-kr-1');
   assert.equal(await page({ lang: { eastAsia: 'ko-KR' } }, 'zh-Hant'), 'noto-sans-kr-1');
   assert.equal(await page({}, 'ko'), 'noto-sans-kr-1');

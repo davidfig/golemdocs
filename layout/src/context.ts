@@ -128,7 +128,7 @@ function isDark(color: number): boolean {
 
 /**
  * The CJK language a run's East Asian text is in: from its East Asian font's name, else its
- * East Asian (then general) language, else the app's language. Simplified Chinese has no catalog.
+ * East Asian (then general) language, else the app's language.
  */
 export function cjkLangOf(ctx: Pick<LayoutContext, 'resolver' | 'fonts'>, props: RunProperties): CjkLang {
   return (

@@ -48,7 +48,7 @@ interface ManifestFamily {
   licenseFile: string;
   aliases: Record<string, number>;
   faces: ManifestFace[];
-  cjk?: { lang: 'ja' | 'zh-Hant' | 'ko'; order: number; coverage: string };
+  cjk?: { lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'; order: number; coverage: string };
 }
 
 interface Manifest {

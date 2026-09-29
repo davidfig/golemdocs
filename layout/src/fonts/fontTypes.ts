@@ -39,7 +39,7 @@ export interface ManifestFamily {
    * font list): its pages, in `order`, draw the characters of `lang` that the run's own font lacks.
    */
   cjk?: {
-    lang: 'ja' | 'zh-Hant' | 'ko';
+    lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko';
     /** 0 for the page with the most used characters. */
     order: number;
     /**

@@ -2,7 +2,15 @@
 // line breaking rules (kinsoku) of Japanese and Chinese typography.
 
 /** The languages we ship CJK fonts for. */
-export type CjkLang = 'ja' | 'zh-Hant' | 'ko';
+export type CjkLang = 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko';
+
+/** Languages whose glyph forms are close enough to fill in for each other's rarer characters. */
+export const CJK_SIBLINGS: Readonly<Record<CjkLang, readonly CjkLang[]>> = {
+  ja: [],
+  ko: [],
+  'zh-Hans': ['zh-Hant'],
+  'zh-Hant': ['zh-Hans'],
+};
 
 /** Characters drawn from the CJK fonts when the run's own font lacks them. */
 export function isCjk(code: number): boolean {
@@ -71,13 +79,15 @@ export function cjkBreakBetween(before: number, after: number): boolean {
 
 const JA_FONTS = /^(ms\s?p?(mincho|gothic)|ms ui gothic|yu (gothic|mincho)|meiryo|hiragino|ipa|takao|vl gothic|noto (sans|serif) (cjk )?jp|游ゴシック|游明朝|ＭＳ|メイリオ)/i;
 const KO_FONTS = /^(malgun gothic|batang(che)?|gulim(che)?|dotum(che)?|gungsuh(che)?|nanum|apple sd gothic neo|noto (sans|serif) (cjk )?kr|맑은 고딕|바탕|굴림|돋움|궁서)/i;
+const SC_FONTS = /^(nsimsun|simsun|simhei|simkai|simfang|simli|simyou|kaiti|fangsong|lisu|youyuan|stsong|stheiti|stkaiti|stfangsong|songti|heiti sc|microsoft yahei|dengxian|pingfang sc|noto (sans|serif) (cjk )?sc|source han (sans|serif) (cn|sc)|宋体|新宋体|黑体|楷体|仿宋|隶书|幼圆|微软雅黑|等线)/i;
 const TC_FONTS = /^(p?mingliu|microsoft jhenghei|dfkai|noto (sans|serif) (cjk )?tc|新細明體|細明體|微軟正黑體|標楷體|pingfang tc|pingfang hk)/i;
 
-/** The language a East Asian font name is for, when it's one we have a catalog for (Simplified Chinese isn't). */
+/** The language a East Asian font name is for, when it's one we have a catalog for. */
 export function langOfFontName(name: string | undefined): CjkLang | undefined {
   if (!name) return undefined;
   const n = name.trim().toLowerCase();
   if (JA_FONTS.test(n)) return 'ja';
+  if (SC_FONTS.test(n)) return 'zh-Hans';
   if (TC_FONTS.test(n)) return 'zh-Hant';
   if (KO_FONTS.test(n)) return 'ko';
   return undefined;
@@ -89,6 +99,7 @@ export function langOfTag(tag: string | undefined): CjkLang | undefined {
   const t = tag.toLowerCase();
   if (t === 'ja' || t.startsWith('ja-')) return 'ja';
   if (t === 'ko' || t.startsWith('ko-')) return 'ko';
+  if (t === 'zh' || t === 'zh-cn' || t === 'zh-sg' || t.startsWith('zh-hans')) return 'zh-Hans';
   if (t === 'zh-tw' || t === 'zh-hk' || t === 'zh-mo' || t.startsWith('zh-hant')) return 'zh-Hant';
   return undefined;
 }

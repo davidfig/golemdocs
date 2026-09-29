@@ -66,7 +66,7 @@ export interface FamilySpec {
    * A page of a CJK font: never chosen by name, only used to draw characters the document's own font
    * lacks (see ManifestFamily.cjk in layout/src/fonts/fontTypes.ts). Not offered in the font list.
    */
-  cjk?: { lang: 'ja' | 'zh-Hant' | 'ko'; order: number };
+  cjk?: { lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'; order: number };
 }
 
 export const ARCHIVES = {
@@ -95,7 +95,7 @@ const NOTO_LICENSE = '1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e
  * 2048 x 2048 texture; at 32 px/em with a 4 px range a glyph takes ~1,100 px, so kanji fill their cell, so a page holds ~3,300.
  * Only regular weight is generated: bold is synthesized, as for other families without one.
  */
-function cjkPages(lang: 'ja' | 'zh-Hant' | 'ko', substitute: string, dir: string, file: string, sha256: string, pages: number): FamilySpec[] {
+function cjkPages(lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko', substitute: string, dir: string, file: string, sha256: string, pages: number): FamilySpec[] {
   return Array.from({ length: pages }, (_, i) => ({
     id: `${dir.replace('notosans', 'noto-sans-')}-${i + 1}`,
     wordName: `${substitute} (${i + 1})`,
@@ -225,6 +225,7 @@ export const FAMILIES: FamilySpec[] = [
   },
   ...cjkPages('ja', 'Noto Sans JP', 'notosansjp', 'NotoSansJP%5Bwght%5D.ttf', 'c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f', 5),
   ...cjkPages('ko', 'Noto Sans KR', 'notosanskr', 'NotoSansKR%5Bwght%5D.ttf', '194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252', 6),
+  ...cjkPages('zh-Hans', 'Noto Sans SC', 'notosanssc', 'NotoSansSC%5Bwght%5D.ttf', 'a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da', 7),
   ...cjkPages('zh-Hant', 'Noto Sans TC', 'notosanstc', 'NotoSansTC%5Bwght%5D.ttf', '864727d210d54f2537bbe23b3a839436c3992af72de9322af5270897246bd44f', 5),
 ];
 

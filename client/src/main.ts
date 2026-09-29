@@ -1,6 +1,7 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
+import { onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
@@ -1007,6 +1008,7 @@ setInterval(() => {
   if (debugFlags().fps || debugFlags().status) updateDebug();
 }, 500);
 onDebugFlagsChange(updateDebug);
+onThemeChange(requestRender);
 renderInfoEl.addEventListener('click', () => {
   frames.clear();
   updateDebug();

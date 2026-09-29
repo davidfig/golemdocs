@@ -3,7 +3,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #e8e8e8;
+  background: var(--wm-desk, #e5e5e5);
 }
 
 /* Menu bar and toolbars on top (see ui/), the document fills the rest. */

@@ -98,7 +98,7 @@ const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: stri
 async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb): Promise<Access | null> {
   const access = await accessFor(env, userId, docId);
   if (access) return access;
-  if (env.ENVIRONMENT === 'local' || !env.CF_API_TOKEN) return null;
+  if (env.ENVIRONMENT !== 'local' && !env.CF_API_TOKEN) return null;
   const db = knownDb ?? (await userDb(env, userId));
   if (!(await db.first('SELECT 1 FROM documents WHERE id = ?', [docId]))) return null;
   await registerOwner(env, docId, userId);
@@ -134,7 +134,7 @@ const handler: ExportedHandler = {
         // Cookies ride along on cross-site WebSocket handshakes, so their origin is checked here
         // (a same-origin GET carries none, and the document is readable like any other GET).
         if (!roomMatch[2] && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
-        if (!env.ROOMS || env.ENVIRONMENT === 'local') throw new HttpError(503, 'multiplayer is off in local-only mode (run pnpm dev without --local)');
+        if (!env.ROOMS) throw new HttpError(503, 'multiplayer is not configured');
         const access = await resolveAccess(env, userId, docId);
         if (!access) throw new HttpError(404, 'not found');
         const room = roomFor(env, docId);
@@ -148,8 +148,8 @@ const handler: ExportedHandler = {
       if (id !== undefined && !ID.test(id)) throw new HttpError(404, 'not found');
       if (collection === 'shared' && id !== undefined) throw new HttpError(404, 'not found');
 
-      if (env.ENVIRONMENT === 'local') throw new HttpError(503, 'cloud storage is off in local-only mode (run pnpm dev without --local)');
-      if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE')) {
+      // Locally, catalogues live in the simulated directory database (see userDb.ts).
+      if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
         throw new HttpError(503, 'cloud storage is not configured');
       }
       const ownDb = await userDb(env, userId);

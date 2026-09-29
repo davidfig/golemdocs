@@ -41,7 +41,8 @@ export interface World {
   restore(): void;
 }
 
-export function world(): World {
+/** `local`: as `pnpm dev --local` runs it, with no Cloudflare API to call (any call to it fails the test). */
+export function world(options: { local?: boolean } = {}): World {
   const objects: World['objects'] = new Map();
   const userDatabases = new Map<string, DatabaseSync>();
   const directory = fakeDirectory();
@@ -69,11 +70,14 @@ export function world(): World {
       },
     }),
   };
-  const env: Env = { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, CF_ACCOUNT_ID: 'acct', CF_API_TOKEN: 'tok' };
+  const env: Env = options.local
+    ? { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, ENVIRONMENT: 'local', CF_ACCOUNT_ID: '', CF_API_TOKEN: '' }
+    : { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, CF_ACCOUNT_ID: 'acct', CF_API_TOKEN: 'tok' };
 
   // Cloudflare's REST API: create a database, run a query in one.
   globalThis.fetch = (async (input: unknown, init?: { body?: string }) => {
     const url = new URL(String(input));
+    if (options.local) throw new Error(`local mode must not call ${url}`);
     const body = init?.body ? JSON.parse(init.body) : {};
     const ok = (result: unknown) => new Response(JSON.stringify({ success: true, errors: [], result }));
     if (url.pathname.endsWith('/d1/database')) {

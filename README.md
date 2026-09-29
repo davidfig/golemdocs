@@ -30,7 +30,7 @@ The server has three Cloudflare environments in `server/wrangler.jsonc`, and loc
 | Environment | Used by | D1 and R2 | Cloud documents |
 | --- | --- | --- | --- |
 | `dev` | `pnpm dev` (once set up) | The real **dev** database and bucket (`golemdocs-directory-dev`, `golemdocs-files-dev`). The Worker runs on your machine; only D1 and R2 are remote. | On. Per-user databases are named `golemdocs-dev-user-<id>`. |
-| `local` | `pnpm dev --local`, or `pnpm dev` before dev is set up | Simulated on your machine (`server/.wrangler/`); works offline. | Off (they need the real Cloudflare API). Sign-in still works. |
+| `local` | `pnpm dev --local`, or `pnpm dev` before dev is set up | Simulated on your machine (`server/.wrangler/`); works offline. | On, kept in the simulated directory database (per-user tables) instead of per-user databases. Sharing and multiplayer work too. |
 | production | `pnpm --filter @word/server deploy` only | `golemdocs-directory`, `golemdocs-files`, `golemdocs-user-<id>` | On |
 
 Set up the dev environment once:
@@ -48,6 +48,14 @@ Other things `server/.dev.vars` controls:
 | --- | --- |
 | `DEV_USER=you@example.com` | The API treats you as signed in, with no provider needed. Local development only; the first-run copy has it set. |
 | Provider keys (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and so on) | Real sign-in buttons. Register `http://localhost:5173/api/auth/callback/<provider>` as the redirect URI. Apple doesn't allow localhost, so test it on a deployed https domain. Setup for each provider is in [server/AUTH.md](server/AUTH.md). |
+
+### Trying multiplayer locally
+
+`pnpm dev` works offline with no Cloudflare account (cloud documents, sharing and rooms are all simulated). To see two people editing:
+
+1. Open <http://localhost:5173> and choose **Sign in ▸ Dev User**, then File ▸ Save to Cloud.
+2. Open the same document in a second tab: the first tab hands the document over, and both edit live with carets.
+3. To try sharing, open a private window and go to `http://localhost:5173/api/auth/start/dev?as=alice@example.com&return=/`. That signs that window in as a second user. Back in the first window, File ▸ Share… with `alice@example.com`; the document appears under "Shared with me" on Alice's dashboard.
 
 ### Where local state lives
 
@@ -81,7 +89,6 @@ The `--env=""` in the scripts selects the production (top-level) config. Never s
 
 ## Troubleshooting
 
-- **"cloud storage is off in local-only mode"**: you're running `pnpm dev --local`, or the dev environment isn't set up yet. See the setup steps above.
 - **"cloud storage is not configured"**: `CF_API_TOKEN` (or the account id in `env.dev`) is missing. Sign-in still works without it.
 - **`pnpm dev` fails applying dev migrations**: not logged in to Cloudflare or offline; run `wrangler login`, or use `pnpm dev --local`.
 - **"Sign-in is unavailable"**: no provider has all of its values set.

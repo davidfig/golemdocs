@@ -9,7 +9,7 @@
 // With DEV_USER set (local development), a "dev" provider signs in as that user with no round trip.
 
 import { describeUser, userForProfile } from './accounts.ts';
-import { DEV_SIGNED_OUT, authenticate } from './auth.ts';
+import { DEV_SIGNED_OUT, authenticate, userIdFor } from './auth.ts';
 import type { Env } from './cf.ts';
 import { base64url, constantTimeEqual, fromBase64url, pkceChallenge, randomToken } from './crypto.ts';
 import { AuthError, PROVIDERS, providerFor } from './providers.ts';
@@ -46,11 +46,22 @@ function fail(cookies: string[], reason: string): Response {
   return redirect(`/?auth_error=${encodeURIComponent(reason)}`, 303, cookies);
 }
 
+/** Makes a development identity exist, so other users can share documents with it by email. */
+async function recordDevIdentity(env: Env, email: string): Promise<void> {
+  const now = Date.now();
+  await env.DIRECTORY.prepare(
+    "INSERT INTO identities (provider, subject, user_id, email, email_verified, name, created_at, last_login_at) VALUES ('dev', ?, ?, ?, 1, ?, ?, ?) ON CONFLICT(provider, subject) DO UPDATE SET last_login_at = excluded.last_login_at",
+  )
+    .bind(email, await userIdFor(email), email, email.split('@')[0], now, now)
+    .run();
+}
+
 export async function handleAuth(request: Request, env: Env, url: URL): Promise<Response> {
   const parts = url.pathname.split('/').slice(3); // after /api/auth/
   const [action, providerId] = parts;
 
-  const devUser = env.DEV_USER?.trim();
+  // Never in production, even if DEV_USER were set there by mistake.
+  const devUser = env.ENVIRONMENT === 'production' ? undefined : env.DEV_USER?.trim();
 
   if (action === 'providers' && request.method === 'GET') {
     const providers: { id: string; name: string }[] = Object.values(PROVIDERS).filter((p) => p.enabled(env)).map((p) => ({ id: p.id, name: p.name }));
@@ -58,13 +69,20 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     return json(providers);
   }
 
-  // Signing in as DEV_USER only lifts the sign-out.
+  // Signing in as DEV_USER lifts the sign-out. `?as=<email>` signs in as anyone instead (for
+  // trying out sharing between two accounts): each browser profile has its own session.
   if (action === 'start' && providerId === 'dev' && devUser && request.method === 'GET') {
-    return redirect(safeReturnPath(url.searchParams.get('return')), 302, [clearCookie(url, DEV_SIGNED_OUT)]);
+    const as = (url.searchParams.get('as') ?? devUser).trim().toLowerCase();
+    await recordDevIdentity(env, as);
+    const cookies = [clearCookie(url, DEV_SIGNED_OUT)];
+    cookies.push(as === devUser.toLowerCase() ? clearCookie(url, 'session') : await createSession(env, url, await userIdFor(as)));
+    return redirect(safeReturnPath(url.searchParams.get('return')), 302, cookies);
   }
 
   if (action === 'me' && request.method === 'GET') {
     const userId = await authenticate(request, env, url);
+    // DEV_USER is signed in without ever visiting the sign-in page: make it findable by email too.
+    if (userId && devUser && userId === (await userIdFor(devUser))) await recordDevIdentity(env, devUser.toLowerCase());
     return json({ user: userId ? await describeUser(env, userId) : null });
   }
 

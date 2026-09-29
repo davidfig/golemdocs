@@ -5,8 +5,9 @@
 //   3. runs the client (Vite, :5173) and the server (wrangler dev, :3001) with prefixed output
 //
 // The server uses the *dev* Cloudflare resources (env.dev in server/wrangler.jsonc) once they are
-// set up, and never production's. Until then, or with `pnpm dev --local`, it uses offline
-// stand-ins and cloud documents are off.
+// set up, and never production's. Until then, or with `pnpm dev --local`, it runs entirely on this
+// machine (wrangler's simulated D1, R2 and Durable Objects): cloud documents, sharing and
+// multiplayer all work offline.
 //
 // Ctrl-C stops both; if either one exits, the other is stopped too.
 
@@ -47,10 +48,10 @@ if (cloud) {
     console.log('[dev] note: CF_API_TOKEN is empty in server/.dev.vars, so cloud documents will say "not configured"');
   }
 } else if (forceLocal) {
-  console.log('[dev] --local: offline stand-ins, cloud documents are off');
+  console.log('[dev] --local: everything simulated on this machine (cloud documents, sharing and multiplayer work offline)');
 } else {
   console.log(
-    '[dev] the dev Cloudflare resources aren\'t set up yet, so this run is local-only (cloud documents off). To enable them:\n' +
+    '[dev] the dev Cloudflare resources aren\'t set up yet, so this run is fully local (simulated on this machine). To use the real dev resources instead:\n' +
       '[dev]   1. pnpm --filter @word/server cf:setup:dev\n' +
       '[dev]   2. paste the database id and your account id into env.dev in server/wrangler.jsonc\n' +
       '[dev]   3. wrangler login, and set CF_API_TOKEN in server/.dev.vars (see the README)',

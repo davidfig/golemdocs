@@ -4,6 +4,8 @@
 
 import { WordDocument } from '@word/docx';
 import { Editor, type Command } from '@word/editor';
+import { Replica, type Selection as OpSelection, type Transaction } from '@word/ops';
+import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
 import {
   describeFace,
   encodePage,
@@ -13,8 +15,9 @@ import {
   type FaceDescriptor,
   type PageLayout,
 } from '@word/layout';
-import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
+import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
+import { FormatReader } from './selectionFormat.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
 const SLICE_MS = 12;
@@ -54,6 +57,8 @@ async function read(source: DocumentSource, fonts: FontSet): Promise<{ name: str
       return { name: source.name, document: await WordDocument.read(new Uint8Array(await (await fetchOk(source.url)).arrayBuffer())) };
     case 'text-url':
       return { name: source.name, document: await plainTextDocument(await (await fetchOk(source.url)).text()) };
+    case 'blank':
+      return { name: source.name, document: await WordDocument.create() };
     case 'fonts':
       return { name: 'Fonts', document: await fontShowcase(fonts) };
   }
@@ -62,10 +67,25 @@ async function read(source: DocumentSource, fonts: FontSet): Promise<{ name: str
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
 
+interface Person {
+  name: string;
+  color: number;
+  selection: OpSelection | null;
+}
+
 class OpenDocument {
   document: WordDocument | null = null;
+  replica: Replica | null = null;
   session: LayoutSession | null = null;
   editor: Editor | null = null;
+  formats: FormatReader | null = null;
+  /** Collaboration: the room, other people in it, room messages that came before we were ready. */
+  room: RoomOptions | null = null;
+  private readonly people = new Map<string, Person>();
+  private backlog: RoomServerMessage[] = [];
+  private joined: ((m: Extract<RoomServerMessage, { type: 'joined' }>) => void) | null = null;
+  private count = 1;
+  private lastPresence = '';
   readonly controller = new AbortController();
   /** Page ids the page thread holds. */
   private readonly shown = new Set<number>();
@@ -171,55 +191,174 @@ class OpenDocument {
     const caret = (c: typeof g.caret) => (c ? { page: c.page.id, x: c.x, y: c.y, height: c.height } : null);
     const rects = new Float64Array(g.rects.length * 5);
     g.rects.forEach((r, i) => rects.set([r.page.id, r.x, r.y, r.width, r.height], i * 5));
+    const remote: SelectionUpdate['remote'] = [];
+    for (const person of this.people.values()) {
+      const at = person.selection && editor.caretAt(person.selection.focus);
+      if (at) remote.push({ page: at.page.id, x: at.x, y: at.y, height: at.height, color: person.color, name: person.name });
+    }
     const update: SelectionUpdate = {
       caret: caret(g.caret),
       rects,
       focus: caret(g.focus),
       reveal: this.reveal,
       text: editor.selectedText(CLIPBOARD_LIMIT),
+      format: this.formats!.read(...editor.ordered(), editor.paragraphs()),
+      canUndo: this.replica!.history.canUndo,
+      canRedo: this.replica!.history.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
+      remote,
     };
     this.reveal = false;
     this.commandAt = 0;
+    this.sendPresence();
     return update;
+  }
+
+  // --- Collaboration ---------------------------------------------------------------------
+
+  private toRoom(message: RoomClientMessage, transfer: Transferable[] = []): void {
+    this.room?.port.postMessage(message, transfer);
+  }
+
+  /** Joins the room: resolves with the room's document and its log so far. */
+  join(room: RoomOptions, client: string, snapshot: ArrayBuffer): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
+    this.room = room;
+    room.port.onmessage = (event: MessageEvent<RoomServerMessage>) => this.fromRoom(event.data);
+    return new Promise((resolve) => {
+      this.joined = resolve;
+      this.toRoom({ type: 'join', room: room.name, client, snapshot }, [snapshot]);
+    });
+  }
+
+  private fromRoom(message: RoomServerMessage): void {
+    try {
+      this.handleRoom(message);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  private handleRoom(message: RoomServerMessage): void {
+    if (this.closed) return;
+    if (message.type === 'joined') {
+      this.count = message.people;
+      this.joined?.(message);
+      return;
+    }
+    if (!this.editor) {
+      this.backlog.push(message);
+      return;
+    }
+    switch (message.type) {
+      case 'transactions': {
+        const { change } = this.editor.receive(message);
+        if (change) {
+          // Other people's carets move with the text too.
+          for (const person of this.people.values()) if (person.selection) person.selection = Replica.mapSelection(person.selection, change.mapping);
+          void this.pump();
+        }
+        this.status();
+        break;
+      }
+      case 'presence':
+        if (message.selection) this.people.set(message.client, { name: message.name, color: message.color, selection: message.selection });
+        else this.people.delete(message.client);
+        this.sendSelection();
+        break;
+      case 'people':
+        this.count = message.count;
+        this.status();
+        break;
+    }
+  }
+
+  /** Handles room messages that arrived while the document was being set up. */
+  ready(): void {
+    const backlog = this.backlog;
+    this.backlog = [];
+    for (const message of backlog) this.fromRoom(message);
+    this.status();
+  }
+
+  private sendPresence(): void {
+    if (!this.room || !this.editor) return;
+    const selection = this.editor.selectionIds;
+    const key = JSON.stringify(selection);
+    if (key === this.lastPresence) return;
+    this.lastPresence = key;
+    this.toRoom({ type: 'presence', name: this.room.user, color: this.room.color, selection });
+  }
+
+  private status(): void {
+    const sync = this.replica?.sync;
+    if (this.room && sync) post({ type: 'room', doc: this.doc, people: this.count, ...sync });
+  }
+
+  leave(): void {
+    this.toRoom({ type: 'leave' });
   }
 
   command(wire: WireCommand): void {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session) return;
-    let command: Command;
-    if (wire.kind === 'pointer') {
-      const page = session.displayPages.find((p) => p.id === wire.page) ?? session.pages.find((p) => p.id === wire.page);
-      if (!page) return;
-      command = { ...wire, page };
-    } else command = wire;
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
-    const { edited } = editor.apply(command);
+    let edited: boolean;
+    if (wire.kind === 'undo') edited = editor.undo().edited;
+    else if (wire.kind === 'redo') edited = editor.redo().edited;
+    else {
+      let command: Command;
+      if (wire.kind === 'pointer') {
+        const page = session.displayPages.find((p) => p.id === wire.page) ?? session.pages.find((p) => p.id === wire.page);
+        if (!page) return;
+        command = { ...wire, page };
+      } else command = wire;
+      edited = editor.apply(command).edited;
+    }
     // Edits send the selection once the changed pages are laid out.
-    if (edited) void this.pump();
-    else this.sendSelection();
+    if (edited) {
+      void this.pump();
+      this.status();
+    } else this.sendSelection();
   }
 }
 
 let current: OpenDocument | null = null;
 
-async function open(doc: number, source: DocumentSource): Promise<void> {
+async function open(doc: number, source: DocumentSource, room?: RoomOptions): Promise<void> {
+  current?.leave();
   current?.controller.abort();
   const entry = new OpenDocument(doc);
   current = entry;
   try {
     const fonts = await fontsReady;
     const t0 = performance.now();
-    const { name, document } = await read(source, fonts);
+    let { name, document } = await read(source, fonts);
     const readMs = performance.now() - t0;
     if (entry.closed) return;
+    const clientId = crypto.randomUUID().slice(0, 8);
+    let log: Transaction[] = [];
+    if (room) {
+      // Everyone starts from the room's copy (ours, if we're first): the same bytes, read the
+      // same way, then the log so far.
+      const joined = await entry.join(room, clientId, (await document.write()).slice().buffer);
+      if (entry.closed) return;
+      document = await WordDocument.read(new Uint8Array(joined.snapshot));
+      log = joined.transactions;
+    }
+    // Operations need paragraph ids and normalized content: set up before layout sees the document.
+    const replica = new Replica(document, { clientId });
+    for (const tx of log) replica.engine.apply(tx.ops);
+    if (room) replica.connect((message) => room.port.postMessage(message satisfies RoomClientMessage), log.length);
     const session = await LayoutSession.create(document, fonts);
     if (entry.closed) return;
     entry.document = document;
+    entry.replica = replica;
     entry.session = session;
-    entry.editor = new Editor(document, session);
+    entry.editor = new Editor(replica, session);
+    entry.formats = new FormatReader(document);
+    entry.ready();
     post({ type: 'opened', doc, name });
     await entry.pump();
     if (entry.closed) return;
@@ -255,13 +394,25 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   const message = event.data;
   switch (message.type) {
     case 'open':
-      void open(message.doc, message.source);
+      void open(message.doc, message.source, message.room);
+      break;
+    case 'leave':
+      current?.leave();
       break;
     case 'media':
       void media(message.doc, message.request, message.part);
       break;
     case 'command':
-      if (current?.doc === message.doc) current.command(message.command);
+      if (current?.doc === message.doc) {
+        try {
+          current.command(message.command);
+        } catch (e) {
+          // Keep editing possible: report, and put the selection somewhere valid.
+          console.error(e);
+          current.editor?.setSelectionIds(current.editor.selectionIds);
+          current.sendSelection();
+        }
+      }
       break;
     case 'save':
       void save(message.doc, message.request);

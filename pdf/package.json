@@ -1,0 +1,20 @@
+{
+  "name": "@word/pdf",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "fetch-corpus": "tsx test/fetch-corpus.ts",
+    "corpus": "tsx test/corpus.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

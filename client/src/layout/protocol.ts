@@ -5,6 +5,7 @@
 
 import type { Command } from '@word/editor';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
+import type { FormatState } from '../ui/actions.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -13,16 +14,32 @@ export type DocumentSource =
   | { kind: 'docx-url'; name: string; url: string }
   /** A plain-text file to fetch and turn into a document (paragraphs at blank lines). */
   | { kind: 'text-url'; name: string; url: string }
+  /** A new, empty document. */
+  | { kind: 'blank'; name: string }
   /** Every font we ship, as a sample document. */
   | { kind: 'fonts' };
 
 /** An editor command as sent from the page: pages are referred to by id. */
 export type WireCommand =
   | Exclude<Command, { kind: 'pointer' }>
-  | (Omit<Extract<Command, { kind: 'pointer' }>, 'page'> & { page: number });
+  | (Omit<Extract<Command, { kind: 'pointer' }>, 'page'> & { page: number })
+  | { kind: 'undo' }
+  | { kind: 'redo' };
+
+/** A collaboration room to open the document in (see ../collab). */
+export interface RoomOptions {
+  name: string;
+  /** Connected to the room server; transferred to the worker. */
+  port: MessagePort;
+  /** How this user appears to others. */
+  user: string;
+  color: number;
+}
 
 export type ToWorker =
-  | { type: 'open'; doc: number; source: DocumentSource }
+  | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
+  /** Leaving the page: tell the room. */
+  | { type: 'leave' }
   /** Bytes of an image part of the open document. */
   | { type: 'media'; doc: number; request: number; part: string }
   | { type: 'command'; doc: number; command: WireCommand }
@@ -64,8 +81,15 @@ export interface SelectionUpdate {
   reveal: boolean;
   /** Selected text, for copy and cut. */
   text: string;
+  /** Formatting at the caret or across the selection, for the toolbar. */
+  format: FormatState;
+  /** Whether Undo and Redo have anything to do. */
+  canUndo: boolean;
+  canRedo: boolean;
   /** Worker time from receiving the last command to sending this, ms (0 if not after a command). */
   workerMs: number;
+  /** Other people's carets (in a collaboration room). */
+  remote: { page: number; x: number; y: number; height: number; color: number; name: string }[];
 }
 
 export type FromWorker =
@@ -75,6 +99,8 @@ export type FromWorker =
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }
   | ({ type: 'selection'; doc: number } & SelectionUpdate)
   | { type: 'error'; doc: number; message: string }
+  /** Collaboration status: people in the room, and edits not yet confirmed by the server. */
+  | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string };
 

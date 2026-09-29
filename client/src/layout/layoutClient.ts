@@ -1,5 +1,5 @@
 import type { FaceDescriptor } from '@word/layout';
-import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
+import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
@@ -8,6 +8,8 @@ export interface DocumentListener {
   /** The first full layout finished. */
   done(pages: number, timings: LayoutTimings): void;
   selection(update: SelectionUpdate): void;
+  /** Collaboration status (documents opened in a room). */
+  room(people: number, version: number, unconfirmed: number): void;
   error(message: string): void;
 }
 
@@ -27,11 +29,18 @@ export class LayoutClient {
     this.worker.onerror = (event) => this.listener?.error(event.message || 'layout worker failed to start');
   }
 
-  /** Opens a document, cancelling any layout in progress. */
-  open(source: DocumentSource, listener: DocumentListener): void {
+  /** Opens a document, cancelling any layout in progress; in a collaboration room if given. */
+  open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions): void {
     this.doc++;
     this.listener = listener;
-    this.send({ type: 'open', doc: this.doc, source }, source.kind === 'docx' ? [source.bytes] : []);
+    const transfer: Transferable[] = source.kind === 'docx' ? [source.bytes] : [];
+    if (room) transfer.push(room.port);
+    this.send({ type: 'open', doc: this.doc, source, room }, transfer);
+  }
+
+  /** The page is going away: leave any collaboration room. */
+  leave(): void {
+    this.send({ type: 'leave' });
   }
 
   command(command: WireCommand): void {
@@ -81,6 +90,9 @@ export class LayoutClient {
         break;
       case 'selection':
         this.listener.selection(message);
+        break;
+      case 'room':
+        this.listener.room(message.people, message.version, message.unconfirmed);
         break;
       case 'error':
         this.listener.error(message.message);

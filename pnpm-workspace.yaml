@@ -3,7 +3,9 @@ packages:
   - server
   - docx
   - layout
+  - ops
   - editor
+  - pdf
 
 allowBuilds:
   esbuild: true

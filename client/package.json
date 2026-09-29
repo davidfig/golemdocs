@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "node --test test/*.test.ts"
   },
   "dependencies": {
     "@word/docx": "workspace:*",
     "@word/editor": "workspace:*",
-    "@word/layout": "workspace:*"
+    "@word/layout": "workspace:*",
+    "@word/ops": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

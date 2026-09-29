@@ -1,0 +1,16 @@
+{
+  "name": "@word/ops",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@word/docx": "workspace:*"
+  }
+}

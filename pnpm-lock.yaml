@@ -32,6 +32,9 @@ importers:
       '@word/layout':
         specifier: workspace:*
         version: link:../layout
+      '@word/ops':
+        specifier: workspace:*
+        version: link:../ops
     devDependencies:
       typescript:
         specifier: ^5.9.0
@@ -60,6 +63,9 @@ importers:
       '@word/layout':
         specifier: workspace:*
         version: link:../layout
+      '@word/ops':
+        specifier: workspace:*
+        version: link:../ops
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -86,6 +92,12 @@ importers:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
+
+  ops:
+    dependencies:
+      '@word/docx':
+        specifier: workspace:*
+        version: link:../docx
 
   server:
     devDependencies:

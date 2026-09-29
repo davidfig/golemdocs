@@ -1,15 +1,22 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
+import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
+import { createChromeHost } from './chromeHost.ts';
+import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
+import { openFromCloud, uploadToCloud } from './library.ts';
+import { getSaved, listSaved, saveSaved, type SavedInfo } from './storage/local.ts';
+import { showSignInDialog } from './ui/signIn.ts';
 import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
-import { FONT_BASE, type DocumentSource, type LayoutUpdate, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
+import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
 import { ImageRenderer } from './shapes/imageRenderer.ts';
 import { AtlasLibrary } from './text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
 import { GpuPage } from './view/gpuPage.ts';
 import { PageRenderer } from './view/pageRenderer.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
+import { kindFromName, mountChrome, type FormatState } from './ui/index.ts';
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -18,8 +25,6 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
 const statsEl = document.getElementById('stats') as HTMLDivElement;
-const corpusSelect = document.getElementById('corpus') as HTMLSelectElement;
-const fileInput = document.getElementById('file') as HTMLInputElement;
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
 if (!gl) throw new Error('WebGL2 not supported');
 
@@ -36,16 +41,11 @@ const worker = new LayoutClient((faces) => {
 // Development convenience: the round-trip test corpus (pnpm --filter @word/docx corpus),
 // served by a dev-only Vite plugin (see vite.config.ts), so builds never include it.
 const CORPUS_URL = '/__corpus/';
-corpusSelect.hidden = true;
+let corpusNames: string[] = [];
 if (import.meta.env.DEV) {
   void fetch(CORPUS_URL)
     .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
-    .then((names) => {
-      for (const name of names) corpusSelect.append(new Option(name, name));
-      corpusSelect.hidden = names.length === 0;
-      const doc = new URLSearchParams(location.search).get('doc');
-      if (doc?.startsWith('corpus:')) corpusSelect.value = doc.slice(7);
-    })
+    .then((names) => (corpusNames = names))
     .catch(() => {});
 }
 
@@ -58,6 +58,8 @@ let bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 };
 let grid = false;
 let documentName = '';
 let status = '';
+/** Collaboration status, when the document is open in a room. */
+let roomStatus = '';
 /** Latest edit round trip (command sent to its selection update), ms. */
 let editLatency = '';
 /** Layout finished for the current document. */
@@ -72,7 +74,7 @@ function setStatus(text: string): void {
   requestRender();
 }
 
-function open(source: DocumentSource, options: { grid?: boolean } = {}): void {
+function open(source: DocumentSource, options: { grid?: boolean; localId?: string } = {}): void {
   const start = performance.now();
   let name = 'name' in source ? source.name : 'Fonts';
   let firstPage = 0;
@@ -80,13 +82,18 @@ function open(source: DocumentSource, options: { grid?: boolean } = {}): void {
   pagesById.clear();
   pages = [];
   selection.clear();
+  selectionFormat = {};
+  canUndo = canRedo = false;
   renderer.images?.clear();
   renderer.images = new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, requestRender);
   grid = options.grid ?? false;
+  localId = options.localId ?? null;
   loaded = false;
   cameraPlaced = false;
   userMoved = false;
   editLatency = '';
+  roomStatus = '';
+  pendingNotice = null;
   documentName = name;
   setStatus(`Loading ${name}…`);
 
@@ -110,17 +117,60 @@ function open(source: DocumentSource, options: { grid?: boolean } = {}): void {
           `all ${(performance.now() - start).toFixed(0)} ms (worker: read ${t.read.toFixed(0)}, fonts ${t.fonts.toFixed(0)}, ` +
           `body ${t.body.toFixed(0)}, headers ${t.headers.toFixed(0)} ms)`,
       );
+      if (pendingNotice) {
+        setStatus(pendingNotice);
+        pendingNotice = null;
+      }
     },
     selection(update) {
       applySelection(update);
+    },
+    room(people, version, unconfirmed) {
+      roomStatus = `room ${new URLSearchParams(location.search).get('room')} · ${people} ${people === 1 ? 'person' : 'people'} · v${version}${unconfirmed ? ` · ${unconfirmed} unsent` : ''}`;
+      requestRender();
     },
     error(message) {
       loaded = true;
       setStatus(`${name}: ${message}`);
     },
-  });
+  }, roomOptions());
   focusInput();
 }
+
+// --- Collaboration ---------------------------------------------------------------------
+// ?room=<name> opens the document in a collaboration room. Until there's a networked server,
+// rooms live in a SharedWorker (./collab/devServer.ts) shared by this browser's tabs.
+
+const USER_COLORS = [0xe8590c, 0x2f9e44, 0x7048e8, 0xd6336c, 0x1098ad, 0xf08c00];
+const userColor = USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
+const userName = `Guest ${Math.floor(Math.random() * 900 + 100)}`;
+
+function roomOptions(): RoomOptions | undefined {
+  const name = new URLSearchParams(location.search).get('room');
+  if (!name || typeof SharedWorker === 'undefined') return undefined;
+  const server = new SharedWorker(new URL('./collab/devServer.ts', import.meta.url), { type: 'module', name: 'word-collab' });
+  return { name, port: server.port, user: userName, color: userColor };
+}
+
+/** Puts the document, as it is now, in a new room, and opens a second window on it. */
+async function collaborate(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  if (!params.get('room')) {
+    let bytes: Uint8Array;
+    try {
+      bytes = await worker.save();
+    } catch (e) {
+      setStatus(`Can't collaborate: ${(e as Error).message}`);
+      return;
+    }
+    // Others join with just the room: its first member's copy is the document.
+    const name = documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
+    history.replaceState(null, '', `?${new URLSearchParams({ room: Math.random().toString(36).slice(2, 8), name })}`);
+    open({ kind: 'docx', name, bytes: bytes.slice().buffer });
+  }
+  window.open(location.href, '_blank', 'popup,width=900,height=900');
+}
+window.addEventListener('pagehide', () => worker.leave());
 
 function applyLayout(update: LayoutUpdate): void {
   for (const encoded of update.pages) pagesById.set(encoded.id, new GpuPage(encoded, atlases));
@@ -159,31 +209,149 @@ function placeCamera(): void {
 }
 
 function openFile(file: File): void {
-  corpusSelect.value = '';
-  for (const link of document.querySelectorAll<HTMLAnchorElement>('#docs a')) link.classList.remove('active');
   history.replaceState(null, '', location.pathname);
-  void file.arrayBuffer().then((bytes) => open({ kind: 'docx', name: file.name, bytes }));
+  chromeHost.openFile(file);
 }
 
-function openSource(source: string): void {
+/** Opens a document by name; `keepRoom` keeps the URL's collaboration room (else it's left). */
+function openSource(source: string, keepRoom = false): void {
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
+  if (!keepRoom) params.delete('room');
+  const thenSaveToCloud = params.get('cloud') === '1';
+  params.delete('cloud');
   history.replaceState(null, '', `?${params}`);
-  for (const link of document.querySelectorAll<HTMLAnchorElement>('#docs a')) {
-    link.classList.toggle('active', link.dataset.doc === source);
-  }
-  corpusSelect.value = source.startsWith('corpus:') ? source.slice(7) : '';
   if (source === 'war-and-peace') {
     open({ kind: 'text-url', name: 'War and Peace', url: warAndPeaceUrl }, { grid: true });
   } else if (source.startsWith('corpus:')) {
     const name = source.slice(7);
     open({ kind: 'docx-url', name, url: CORPUS_URL + encodeURIComponent(name) });
+  } else if (source.startsWith('local:')) {
+    void openLocal(source.slice(6), thenSaveToCloud);
+  } else if (source.startsWith('cloud:')) {
+    void openCloud(source.slice(6));
   } else {
     open({ kind: 'fonts' });
   }
 }
 
-async function save(): Promise<void> {
+// --- Saving ----------------------------------------------------------------------------
+// Save keeps the document in this browser (IndexedDB), so the app needs no account. The cloud is
+// an opt-in extra: only Save to Cloud and Cloud Documents ask the user to sign in, and they save
+// in the browser first, so leaving the page to sign in never loses work.
+
+/** The open document's id among the documents saved in this browser (null until first saved). */
+let localId: string | null = null;
+/** Shown when the current document finishes loading, which would otherwise replace it. */
+let pendingNotice: string | null = null;
+
+let savedDocs: SavedInfo[] = [];
+let cloudUser: User | null = null;
+let cloudDocs: CloudDocument[] = [];
+
+/** Refreshes what File ▸ Open Recent and Cloud Documents list (cloud parts stay empty when signed out or offline). */
+async function refreshLibrary(): Promise<void> {
+  savedDocs = await listSaved().catch(() => []);
+  cloudUser = await currentUser().catch(() => null);
+  cloudDocs = cloudUser ? await listDocuments().catch(() => []) : [];
+}
+
+/** Tells the user something now, or once the document being loaded has finished. */
+function notify(message: string): void {
+  if (loaded) setStatus(message);
+  else pendingNotice = message;
+}
+
+/** Makes reloading the page reopen this document (not inside a collaboration room, where the room decides). */
+function rememberInUrl(doc: string): void {
+  const params = new URLSearchParams(location.search);
+  if (params.get('room')) return;
+  params.set('doc', doc);
+  history.replaceState(null, '', `?${params}`);
+}
+
+const docxName = () => documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
+const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
+
+/** Saves in this browser. Returns the saved document's id, or null if that failed. */
+async function saveInBrowser(): Promise<string | null> {
+  try {
+    const bytes = await worker.save();
+    const info = await saveSaved({ id: localId ?? undefined, name: docxName(), bytes });
+    localId = info.id;
+    rememberInUrl(`local:${info.id}`);
+    setStatus(`Saved “${info.name}” in this browser`);
+    void refreshLibrary();
+    return info.id;
+  } catch (e) {
+    setStatus(`Save failed: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+/** Uploads a document already saved in this browser; asks to sign in if there's no session. */
+async function sendToCloud(id: string): Promise<void> {
+  setStatus('Saving to the cloud…');
+  try {
+    const doc = await uploadToCloud(id);
+    notify(`Saved “${doc.name}” to the cloud`);
+    void refreshLibrary();
+  } catch (e) {
+    if (e instanceof CloudError && e.status === 401) {
+      notify('Sign in to save to the cloud');
+      showSignInDialog(returnTo({ doc: `local:${id}`, cloud: '1' }));
+    } else {
+      notify(`Cloud save failed: ${(e as Error).message}`);
+    }
+  }
+}
+
+async function saveToCloud(): Promise<void> {
+  const id = await saveInBrowser();
+  if (id) await sendToCloud(id);
+}
+
+async function signIn(): Promise<void> {
+  // Signing in leaves the page, so keep the document first.
+  const id = await saveInBrowser();
+  showSignInDialog(id ? returnTo({ doc: `local:${id}` }) : location.pathname);
+}
+
+async function signOut(): Promise<void> {
+  await signOutOfCloud().catch(() => {});
+  await refreshLibrary();
+  setStatus('Signed out');
+}
+
+async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
+  const saved = await getSaved(id).catch(() => null);
+  if (!saved) {
+    open({ kind: 'blank', name: 'Document1' });
+    pendingNotice = 'That document is no longer saved in this browser';
+    return;
+  }
+  open({ kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id });
+  if (thenSaveToCloud) await sendToCloud(id);
+}
+
+async function openCloud(id: string): Promise<void> {
+  try {
+    if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary();
+    const name = cloudDocs.find((d) => d.id === id)?.name ?? 'Document.docx';
+    setStatus('Opening from the cloud…');
+    const { info, bytes, usedBrowserCopy } = await openFromCloud({ id, name });
+    open({ kind: 'docx', name: info.name, bytes }, { localId: info.id });
+    rememberInUrl(`local:${info.id}`);
+    if (usedBrowserCopy) pendingNotice = 'Opened your browser copy: it has changes the cloud doesn’t. Use Save to Cloud to sync them.';
+    void refreshLibrary();
+  } catch (e) {
+    if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `cloud:${id}` }));
+    else setStatus(`Couldn’t open from the cloud: ${(e as Error).message}`);
+  }
+}
+
+/** Downloads the document as a .docx file. */
+async function download(): Promise<void> {
   try {
     const bytes = await worker.save();
     const name = documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
@@ -199,12 +367,19 @@ async function save(): Promise<void> {
 // --- Selection and caret ---------------------------------------------------------------
 
 let caretOn = true;
+/** Formatting at the selection (from the worker), for the toolbar. */
+let selectionFormat: FormatState = {};
+let canUndo = false;
+let canRedo = false;
 let blinkTimer = 0;
 /** When the last edit command was sent, for the latency readout. */
 let editSent = 0;
 
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
+  selectionFormat = update.format;
+  canUndo = update.canUndo;
+  canRedo = update.canRedo;
   if (editSent) {
     editLatency = `edit → screen ${(performance.now() - editSent).toFixed(1)} ms (worker ${update.workerMs.toFixed(1)} ms)`;
     editSent = 0;
@@ -265,8 +440,19 @@ function render(): void {
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   const stats = renderer.render(camera, pages, selection, caretVisible);
   const frameMs = performance.now() - start;
+  chrome.update({
+    documentName,
+    kind: kindFromName(documentName),
+    hasSelection: selection.text.length > 0,
+    zoom: camera.zoom,
+    grid,
+    statsVisible: !statsEl.hidden,
+    format: selectionFormat,
+    canUndo,
+    canRedo,
+  });
   statsEl.textContent =
-    `${status}${editLatency ? ` · ${editLatency}` : ''}\n${stats.visiblePages}/${stats.pages.toLocaleString()} pages visible · ` +
+    `${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}\n${stats.visiblePages}/${stats.pages.toLocaleString()} pages visible · ` +
     `${stats.glyphs.toLocaleString()} glyphs drawn · ${stats.drawCalls} draw calls · zoom ${Math.round(camera.zoom * 100)}% · ` +
     `CPU ${frameMs.toFixed(2)} ms/frame`;
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
@@ -426,8 +612,18 @@ function editingCommand(e: KeyboardEvent): WireCommand[] | null {
     case 'Tab':
       return [{ kind: 'insertText', text: '\t' }];
   }
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') return [{ kind: 'selectAll' }];
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 'a') return [{ kind: 'selectAll' }];
+  if (mod && e.key.toLowerCase() === 'z') return [{ kind: e.shiftKey ? 'redo' : 'undo' }];
+  if (e.ctrlKey && !MAC && e.key.toLowerCase() === 'y') return [{ kind: 'redo' }];
   return null;
+}
+
+function toggleGrid(): void {
+  grid = !grid;
+  cameraPlaced = false;
+  userMoved = false;
+  arrange();
 }
 
 /** View keys: zoom, grid, fit, page scrolling. */
@@ -443,10 +639,7 @@ function viewKey(e: KeyboardEvent): boolean {
   else if (e.key === 'PageUp') camera.y -= viewHeight * 0.9;
   else if (e.altKey && e.code === 'KeyF') camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
   else if (e.altKey && e.code === 'KeyG') {
-    grid = !grid;
-    cameraPlaced = false;
-    userMoved = false;
-    arrange();
+    toggleGrid();
     return true;
   } else return false;
   userMoved = true;
@@ -459,7 +652,7 @@ window.addEventListener('keydown', (e) => {
   if (e.isComposing) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    void save();
+    void saveInBrowser();
     return;
   }
   if (viewKey(e)) {
@@ -504,20 +697,56 @@ input.addEventListener('paste', (e) => {
 
 // --- Navigation ------------------------------------------------------------------------
 
-for (const link of document.querySelectorAll<HTMLAnchorElement>('#docs a')) {
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    openSource(link.dataset.doc!);
-  });
-}
-corpusSelect.addEventListener('change', () => {
-  if (corpusSelect.value) openSource(`corpus:${corpusSelect.value}`);
+// Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
+const chromeHost = createChromeHost({
+  canvas,
+  camera,
+  pages: () => pages,
+  bounds: () => bounds,
+  open: (source) => {
+    history.replaceState(null, '', location.pathname);
+    open(source);
+  },
+  openSample: openSource,
+  collaborate,
+  save: async () => {
+    await saveInBrowser();
+  },
+  saveToCloud,
+  download,
+  signIn,
+  signOut,
+  saved: () => savedDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
+  cloud: () => ({
+    signedIn: cloudUser !== null,
+    user: cloudUser?.email ?? cloudUser?.name ?? null,
+    documents: cloudDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
+  }),
+  send,
+  selectedText: () => selection.text,
+  focusEditor: focusInput,
+  notify: setStatus,
+  toggleGrid,
+  toggleStats: () => {
+    statsEl.hidden = !statsEl.hidden;
+    requestRender();
+  },
+  viewChanged: () => {
+    userMoved = true;
+    requestRender();
+  },
+  fonts: () =>
+    fetch(`${FONT_BASE}manifest.json`)
+      .then((r) => r.json() as Promise<{ families: { wordName: string }[] }>)
+      .then((m) => m.families.map((f) => f.wordName)),
+  samples: () => [
+    { id: 'fonts', label: '&Fonts' },
+    { id: 'war-and-peace', label: '&War and Peace' },
+    ...corpusNames.map((name) => ({ id: `corpus:${name}`, label: name.replace(/&/g, '&&') })),
+  ],
 });
-fileInput.addEventListener('change', () => {
-  const file = fileInput.files?.[0];
-  if (file) openFile(file);
-  fileInput.value = '';
-});
+const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, showUnimplemented: import.meta.env.DEV });
+
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => {
   e.preventDefault();
@@ -531,8 +760,16 @@ Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },
   status: { get: () => status },
+  roomStatus: { get: () => roomStatus },
   editLatency: { get: () => editLatency },
-  selectionState: { get: () => ({ caret: selection.caret, text: selection.text }) },
+  selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others }) },
 });
 
-openSource(new URLSearchParams(location.search).get('doc') ?? 'fonts');
+{
+  const params = new URLSearchParams(location.search);
+  const doc = params.get('doc');
+  void refreshLibrary();
+  // Joining a room without a document: the room has it.
+  if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? 'Document' });
+  else openSource(doc ?? 'fonts', true);
+}

@@ -1,0 +1,41 @@
+// One Worker serves both the API (src/worker.ts) and the built client (../client/dist).
+{
+  "name": "word",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+
+  // The client is a static SPA. Only /api/* runs the Worker; everything else is served from assets.
+  "assets": {
+    "directory": "../client/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // The actual .docx files, keyed `<userId>/<documentId>.docx`.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "word-files" }],
+
+  // Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
+  // Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
+  "d1_databases": [
+    {
+      "binding": "DIRECTORY",
+      "database_name": "word-directory",
+      "database_id": "REPLACE_WITH_DATABASE_ID",
+      "migrations_dir": "migrations/directory"
+    }
+  ],
+
+  "vars": {
+    // Your Cloudflare account id (per-user databases are created and queried through the REST API).
+    "CF_ACCOUNT_ID": "REPLACE_WITH_ACCOUNT_ID",
+    // Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
+    "MICROSOFT_TENANT": "common"
+  }
+  // Secrets (not committed), set with `pnpm exec wrangler secret put <NAME>`:
+  //   CF_API_TOKEN, a token with "D1 Edit" permission
+  //   sign-in providers (each is offered only when all of its secrets are set; see AUTH.md):
+  //   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
+  //   MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET
+  //   GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
+  //   APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY
+}

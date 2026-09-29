@@ -1,0 +1,207 @@
+// What the menus and toolbars can ask the application to do.
+//
+// Actions are deliberately format-agnostic: "make the selection bold", "insert a page break",
+// "save as Markdown". The host (the app) decides how each maps onto the open document, and the
+// format profile (formats.ts) decides which ones make sense for that kind of document at all.
+// Nothing here knows about .docx XML, the editor's model or the layout worker.
+
+export type Mark = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'superscript' | 'subscript' | 'code';
+export type Alignment = 'left' | 'center' | 'right' | 'justify';
+export type ListKind = 'bullet' | 'number';
+export type CaseChange = 'sentence' | 'lower' | 'upper' | 'title' | 'toggle';
+export type BreakKind = 'page' | 'column' | 'line' | 'sectionNextPage' | 'sectionContinuous';
+export type ViewMode = 'normal' | 'print' | 'web' | 'outline';
+/** A zoom factor (1 = 100%) or a fit mode. */
+export type ZoomTarget = number | 'pageWidth' | 'wholePage' | 'allPages';
+
+export type TableOp =
+  | 'insertRowAbove'
+  | 'insertRowBelow'
+  | 'insertColumnLeft'
+  | 'insertColumnRight'
+  | 'deleteRows'
+  | 'deleteColumns'
+  | 'deleteTable'
+  | 'mergeCells'
+  | 'splitCells'
+  | 'selectTable'
+  | 'properties';
+
+export type DialogName =
+  | 'font'
+  | 'paragraph'
+  | 'bulletsAndNumbering'
+  | 'bordersAndShading'
+  | 'columns'
+  | 'tabs'
+  | 'styles'
+  | 'pageSetup'
+  | 'properties'
+  | 'find'
+  | 'replace'
+  | 'goTo'
+  | 'pasteSpecial'
+  | 'spelling'
+  | 'wordCount'
+  | 'options'
+  | 'pageNumbers'
+  | 'dateTime';
+
+export type Action =
+  // File
+  | { kind: 'new' }
+  | { kind: 'open' }
+  | { kind: 'openSample'; id: string }
+  /** A document saved in this browser. */
+  | { kind: 'openSaved'; id: string }
+  /** A document in the user's cloud storage (needs an account). */
+  | { kind: 'openCloud'; id: string }
+  | { kind: 'save' }
+  | { kind: 'saveToCloud' }
+  | { kind: 'signIn' }
+  | { kind: 'signOut' }
+  | { kind: 'saveAs'; format: DocumentKind }
+  | { kind: 'print' }
+  | { kind: 'printPreview' }
+  /** Edit the document together with other people. */
+  | { kind: 'collaborate' }
+  // Edit
+  | { kind: 'undo' }
+  | { kind: 'redo' }
+  | { kind: 'cut' }
+  | { kind: 'copy' }
+  | { kind: 'paste' }
+  | { kind: 'selectAll' }
+  | { kind: 'dialog'; name: DialogName }
+  // View
+  | { kind: 'viewMode'; mode: ViewMode }
+  | { kind: 'zoom'; to: ZoomTarget }
+  | { kind: 'zoomBy'; factor: number }
+  | { kind: 'toggleGrid' }
+  | { kind: 'toggleStats' }
+  | { kind: 'toggleRuler' }
+  | { kind: 'toggleFormattingMarks' }
+  // Character formatting
+  | { kind: 'toggleMark'; mark: Mark }
+  | { kind: 'setFont'; family: string }
+  | { kind: 'setFontSize'; points: number }
+  | { kind: 'growFont' }
+  | { kind: 'shrinkFont' }
+  /** A CSS color (#rrggbb), or null for automatic. */
+  | { kind: 'setColor'; color: string | null }
+  /** A CSS color (#rrggbb), or null for none. */
+  | { kind: 'setHighlight'; color: string | null }
+  | { kind: 'changeCase'; to: CaseChange }
+  | { kind: 'clearFormatting' }
+  | { kind: 'formatPainter' }
+  // Paragraph formatting
+  | { kind: 'setStyle'; style: string }
+  | { kind: 'setAlignment'; align: Alignment }
+  | { kind: 'setLineSpacing'; lines: number }
+  | { kind: 'toggleList'; list: ListKind }
+  | { kind: 'indent'; direction: 'increase' | 'decrease' }
+  // Insert
+  | { kind: 'insertText'; text: string }
+  | { kind: 'insertBreak'; break: BreakKind }
+  /** Without a size, the host asks for one. */
+  | { kind: 'insertTable'; rows?: number; columns?: number }
+  | { kind: 'insertImage' }
+  | { kind: 'insertLink' }
+  | { kind: 'insertComment' }
+  | { kind: 'insertFootnote' }
+  | { kind: 'insertBookmark' }
+  | { kind: 'insertTextBox' }
+  | { kind: 'insertCodeBlock' }
+  | { kind: 'insertHorizontalRule' }
+  // Table
+  | { kind: 'table'; op: TableOp }
+  // Tools
+  | { kind: 'toggleTrackChanges' };
+
+export type ActionKind = Action['kind'];
+
+/** Kinds of document the chrome knows how to present. */
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'txt';
+
+/**
+ * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
+ * control shows blank / unpressed), which is also what a host that can't report it yet sends.
+ */
+export interface FormatState {
+  marks?: Partial<Record<Mark, boolean>>;
+  style?: string;
+  font?: string;
+  /** Points. */
+  size?: number;
+  align?: Alignment;
+  list?: ListKind | null;
+  color?: string | null;
+  highlight?: string | null;
+}
+
+/** Everything the chrome shows that comes from the application. */
+export interface ChromeState {
+  documentName: string;
+  kind: DocumentKind;
+  hasSelection: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  /** 1 = 100%. */
+  zoom: number;
+  viewMode: ViewMode;
+  grid: boolean;
+  statsVisible: boolean;
+  rulerVisible: boolean;
+  formattingMarks: boolean;
+  trackChanges: boolean;
+  format: FormatState;
+}
+
+export const DEFAULT_STATE: ChromeState = {
+  documentName: '',
+  kind: 'docx',
+  hasSelection: false,
+  canUndo: false,
+  canRedo: false,
+  zoom: 1,
+  viewMode: 'print',
+  grid: false,
+  statsVisible: true,
+  rulerVisible: false,
+  formattingMarks: false,
+  trackChanges: false,
+  format: {},
+};
+
+/** A sample document the File menu can open. */
+export interface Sample {
+  id: string;
+  label: string;
+}
+
+/** The cloud side of File: whether there's an account, and its documents. */
+export interface CloudState {
+  signedIn: boolean;
+  /** Who is signed in (an email or name), for the Sign out item. */
+  user: string | null;
+  documents: Sample[];
+}
+
+/** What the chrome needs from the application. */
+export interface ChromeHost {
+  /** Whether the app implements this action (for any document). Unimplemented actions are disabled. */
+  supports(action: Action): boolean;
+  perform(action: Action): void | Promise<void>;
+  /** Puts keyboard focus back in the document. */
+  focusEditor(): void;
+  /** A short message for the user (errors, "not available yet"). */
+  notify(message: string): void;
+  /** Samples for File ▸ Open Sample, read each time the menu opens. */
+  samples?(): Sample[];
+  /** Documents saved in this browser, for File ▸ Open Recent. */
+  saved?(): Sample[];
+  /** Cloud documents, for File ▸ Cloud Documents. */
+  cloud?(): CloudState;
+  /** Font families for the font box. */
+  fonts?(): string[] | Promise<string[]>;
+}

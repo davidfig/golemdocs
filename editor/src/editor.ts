@@ -7,22 +7,17 @@
 // hidden text, caret x positions).
 
 import {
-  deleteText,
-  findContainer,
-  insertBlockAfter,
-  insertItem,
-  insertText,
-  mergeParagraphs,
+  newParagraphProperties,
   paragraphLength,
   paragraphsIn,
   paragraphText,
   plainText,
-  removeBlock,
-  splitParagraph,
-  type Block,
+  runPropertiesAt,
   type Paragraph,
+  type ParagraphProperties,
   type WordDocument,
 } from '@word/docx';
+import { END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type Selection as OpSelection, type ServerMessage } from '@word/ops';
 import { toModel, toVisible, visibleLength, type LayoutSession, type LineRecord, type PageLayout, type SourceSpan } from '@word/layout';
 
 /** A position between two model positions of a paragraph. */
@@ -91,6 +86,15 @@ const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
 const WORD = /[\p{L}\p{N}_'’]/u;
 const SPACE = /\s/u;
 
+/** What a command did to the document (to lay out again). */
+export interface CommandResult {
+  edited: boolean;
+  changed: Set<Paragraph>;
+  structural: boolean;
+}
+
+const NO_CHANGE: CommandResult = { edited: false, changed: new Set(), structural: false };
+
 export class Editor {
   selection: Selection;
   /** x the caret tries to keep while moving up and down. */
@@ -99,19 +103,19 @@ export class Editor {
   private list: Paragraph[] = [];
   /** Display page index near the caret, to find lines quickly. */
   private hint = 0;
+  private commands = 0;
 
   constructor(
-    readonly doc: WordDocument,
+    /** The document, edited through operations (undo, collaboration). */
+    readonly replica: Replica,
     readonly session: LayoutSession,
   ) {
-    let first = this.paragraphs()[0];
-    if (!first) {
-      first = { kind: 'paragraph', properties: {}, children: [], attrs: {} };
-      doc.body.push(first);
-      this.structureChanged();
-      session.invalidate([first], { structural: true });
-    }
+    const first = this.paragraphs()[0];
     this.selection = { anchor: { paragraph: first, offset: 0 }, focus: { paragraph: first, offset: 0 } };
+  }
+
+  get doc(): WordDocument {
+    return this.replica.doc;
   }
 
   // --- Document order --------------------------------------------------------------------
@@ -155,140 +159,221 @@ export class Editor {
     this.selection = { anchor: { ...position }, focus: { ...position } };
   }
 
+  // --- Positions as operations address them ----------------------------------------------
+
+  private pos(position: Position): Pos {
+    // A paragraph that's gone (removed by someone else, say) can't be addressed: its start.
+    if (!this.replica.engine.index.has(position.paragraph.attrs['w14:paraId'] ?? '') || this.replica.paragraph(position.paragraph.attrs['w14:paraId']) !== position.paragraph) {
+      return { paragraph: this.replica.id(this.paragraphs()[0]), offset: 0 };
+    }
+    return { paragraph: this.replica.id(position.paragraph), offset: position.offset };
+  }
+
+  private position(pos: Pos): Position | null {
+    const paragraph = this.replica.paragraph(pos.paragraph);
+    return paragraph ? { paragraph, offset: Math.min(pos.offset, paragraphLength(paragraph)) } : null;
+  }
+
+  /** The selection by paragraph ids (for undo history, collaboration). */
+  get selectionIds(): OpSelection {
+    return { anchor: this.pos(this.selection.anchor), focus: this.pos(this.selection.focus) };
+  }
+
+  /** Caret geometry at a position given by ids (someone else's caret), if that's laid out. */
+  caretAt(pos: Pos): Caret | null {
+    const position = this.position(pos);
+    if (!position) return null;
+    const hint = this.hint;
+    const caret = this.caret(position);
+    this.hint = hint;
+    return caret;
+  }
+
+  /** Sets the selection by ids; positions whose paragraph is gone fall back to the document start. */
+  setSelectionIds(selection: OpSelection): void {
+    const first = { paragraph: this.paragraphs()[0], offset: 0 };
+    const anchor = this.position(selection.anchor) ?? first;
+    const focus = this.position(selection.focus) ?? anchor;
+    this.selection = { anchor, focus };
+  }
+
   // --- Commands --------------------------------------------------------------------------
 
   /** Applies a command. Edits invalidate the session; run it afterwards to update layout. */
-  apply(command: Command): { edited: boolean } {
+  apply(command: Command): CommandResult {
     if (command.kind !== 'move' || (command.to !== 'up' && command.to !== 'down')) this.goalX = null;
-    const edit = new EditSet();
     switch (command.kind) {
       case 'insertText':
-        this.deleteSelection(edit);
-        this.insert(command.text, edit);
-        break;
       case 'insertParagraph':
-        this.deleteSelection(edit);
-        this.collapse(this.split(this.selection.focus, edit));
-        break;
       case 'insertLineBreak': {
-        this.deleteSelection(edit);
-        const { paragraph, offset } = this.selection.focus;
-        insertItem(paragraph, offset, { kind: 'break' });
-        edit.changed.add(paragraph);
-        this.collapse({ paragraph, offset: offset + 1 });
-        break;
+        // Typing over a selection: delete it first (as its own step, undone together with
+        // the insertion), then insert at the document as it now is.
+        const group = this.collapsed ? undefined : `replace:${this.commands++}`;
+        const removed = this.collapsed ? NO_CHANGE : this.edit(this.deleteSelection(), group);
+        const at = this.selection.focus;
+        let ops: Operation[];
+        let after: Pos;
+        if (command.kind === 'insertText') [ops, after] = this.insertOps(at, command.text);
+        else if (command.kind === 'insertParagraph') [ops, after] = this.splitOps(at);
+        else {
+          ops = [{ type: 'insertItem', paragraph: this.replica.id(at.paragraph), offset: at.offset, item: { kind: 'break' } }];
+          after = { paragraph: this.replica.id(at.paragraph), offset: at.offset + 1 };
+        }
+        const typing = command.kind === 'insertText' && !command.text.includes('\n') ? 'typing' : undefined;
+        return combine(removed, this.edit([ops, after], group ?? typing));
       }
       case 'delete':
-        if (!this.collapsed) this.deleteSelection(edit);
-        else if (command.direction === 'backward') this.deleteBackward(command.unit ?? 'character', edit);
-        else this.deleteForward(command.unit ?? 'character', edit);
-        break;
+        if (!this.collapsed) return this.edit(this.deleteSelection());
+        return this.edit(command.direction === 'backward' ? this.deleteBackward(command.unit ?? 'character') : this.deleteForward(command.unit ?? 'character'), 'deleting');
       case 'move':
         this.move(command.to, command.extend ?? false);
-        break;
+        return NO_CHANGE;
       case 'pointer':
         this.pointer(command);
-        break;
+        return NO_CHANGE;
       case 'selectAll': {
         const list = this.paragraphs();
         const last = list[list.length - 1];
         this.selection = { anchor: { paragraph: list[0], offset: 0 }, focus: { paragraph: last, offset: paragraphLength(last) } };
-        break;
+        return NO_CHANGE;
       }
     }
-    if (edit.changed.size === 0 && !edit.structural) return { edited: false };
-    if (edit.structureChanged) this.structureChanged();
-    this.session.invalidate(edit.changed, { structural: edit.structural });
-    return { edited: true };
   }
 
-  private insert(text: string, edit: EditSet): void {
-    let pos = this.selection.focus;
+  /** Applies planned operations as one local edit and moves the selection. */
+  private edit(plan: [Operation[], Pos] | null, group?: string): CommandResult {
+    if (!plan || plan[0].length === 0) return NO_CHANGE;
+    const [ops, after] = plan;
+    const change = this.replica.edit(ops, { before: this.selectionIds, after: { anchor: after, focus: after }, group });
+    return this.changed(change.applied, { anchor: after, focus: after });
+  }
+
+  /** After the document changed: lay out again, put the selection where it belongs. */
+  private changed(applied: Applied, selection: OpSelection | null): CommandResult {
+    this.structureChanged();
+    this.session.invalidate(applied.changed, { structural: applied.structural });
+    if (selection) this.setSelectionIds(selection);
+    else this.setSelectionIds(this.selectionIds);
+    return { edited: true, changed: applied.changed, structural: applied.structural };
+  }
+
+  undo(): CommandResult {
+    const current = this.selectionIds;
+    const change = this.replica.undo();
+    return change ? this.changed(change.applied, change.selection ?? current) : NO_CHANGE;
+  }
+
+  redo(): CommandResult {
+    const current = this.selectionIds;
+    const change = this.replica.redo();
+    return change ? this.changed(change.applied, change.selection ?? current) : NO_CHANGE;
+  }
+
+  /**
+   * A message from the collaboration server: applies others' edits (rebasing ours), lays out
+   * again and keeps the selection where it was in the text. Returns the change, if any.
+   */
+  receive(message: ServerMessage): { result: CommandResult; change: RemoteChange | null } {
+    // By id, before paragraphs it's in can go away.
+    const before = this.selectionIds;
+    const change = this.replica.receive(message);
+    if (!change) return { result: NO_CHANGE, change: null };
+    const selection = Replica.mapSelection(before, change.mapping);
+    this.structureChanged();
+    this.session.invalidate(change.changed, { structural: change.structural });
+    this.setSelectionIds(selection);
+    return { result: { edited: true, changed: change.changed, structural: change.structural }, change };
+  }
+
+  /** Text (with tabs and line breaks as new paragraphs) at a position. */
+  private insertOps(at: Position, text: string): [Operation[], Pos] {
+    const ops: Operation[] = [];
+    let pos = this.pos(at);
+    const runProperties = runPropertiesAt(at.paragraph, at.offset);
     text.replace(/\r\n?/g, '\n').split('\n').forEach((line, i) => {
-      if (i > 0) pos = this.split(pos, edit);
+      if (i > 0) {
+        const id = this.replica.newId();
+        const properties = newParagraphProperties(at.paragraph.properties, false, this.doc.styles, runProperties);
+        ops.push({ type: 'split', paragraph: pos.paragraph, offset: pos.offset, id, properties });
+        pos = { paragraph: id, offset: 0 };
+      }
       line.split('\t').forEach((part, j) => {
         if (j > 0) {
-          insertItem(pos.paragraph, pos.offset, { kind: 'tab' });
+          ops.push({ type: 'insertItem', paragraph: pos.paragraph, offset: pos.offset, item: { kind: 'tab' } });
           pos = { paragraph: pos.paragraph, offset: pos.offset + 1 };
         }
         if (part) {
-          insertText(pos.paragraph, pos.offset, part);
+          ops.push({ type: 'insertText', paragraph: pos.paragraph, offset: pos.offset, text: part });
           pos = { paragraph: pos.paragraph, offset: pos.offset + part.length };
         }
       });
-      edit.changed.add(pos.paragraph);
     });
-    this.collapse(pos);
+    return [ops, pos];
   }
 
-  /** Splits a paragraph (Enter); returns the start of the new one. */
-  private split(pos: Position, edit: EditSet): Position {
-    const container = this.containerOf(pos.paragraph);
-    const hadSection = !!pos.paragraph.properties.section;
-    const next = splitParagraph(pos.paragraph, pos.offset, this.doc.styles);
-    insertBlockAfter(container, pos.paragraph, next);
-    edit.changed.add(pos.paragraph);
-    edit.changed.add(next);
-    edit.structureChanged = true;
-    if (hadSection) edit.structural = true;
-    this.structureChanged();
-    return { paragraph: next, offset: 0 };
+  /** Enter: the new paragraph continues the formatting at the caret (and takes the next style at an end). */
+  private splitOps(at: Position): [Operation[], Pos] {
+    const p = at.paragraph;
+    const id = this.replica.newId();
+    const atEnd = at.offset >= paragraphLength(p);
+    const properties = newParagraphProperties(p.properties, atEnd, this.doc.styles, runPropertiesAt(p, at.offset));
+    const ops: Operation[] = [{ type: 'split', paragraph: this.replica.id(p), offset: at.offset, id, properties }];
+    // A section break belongs to the paragraph mark, which is now the new paragraph's.
+    if (p.properties.section) ops.push(this.setProperties(p, { section: undefined }));
+    return [ops, { paragraph: id, offset: 0 }];
   }
 
-  private containerOf(p: Paragraph): Block[] {
-    const container = findContainer(this.doc.body, p);
-    if (!container) throw new Error('paragraph is not in the document body');
-    return container;
+  private setProperties(p: Paragraph, changes: Partial<ParagraphProperties>): Operation {
+    const properties: ParagraphProperties = { ...structuredClone(p.properties), ...structuredClone(changes) };
+    for (const key of Object.keys(changes) as (keyof ParagraphProperties)[]) if (changes[key] === undefined) delete properties[key];
+    return { type: 'setParagraphProperties', paragraph: this.replica.id(p), properties };
   }
 
-  /** Merges `second` into `first` if they're neighbors in one container. */
-  private merge(first: Paragraph, second: Paragraph, edit: EditSet): boolean {
-    const container = this.containerOf(second);
-    if (container[container.indexOf(second) - 1] !== first) return false;
-    if (first.properties.section || second.properties.section) edit.structural = true;
-    mergeParagraphs(first, second);
-    removeBlock(container, second);
-    edit.changed.add(first);
-    edit.structureChanged = true;
-    this.structureChanged();
-    return true;
-  }
-
-  private deleteSelection(edit: EditSet): void {
-    if (this.collapsed) return;
+  /** Deletes the selection; the caret goes to its start. */
+  private deleteSelection(): [Operation[], Pos] | null {
+    if (this.collapsed) return null;
     const [start, end] = this.ordered();
     const a = start.paragraph;
     const b = end.paragraph;
+    const ida = this.replica.id(a);
+    const ops: Operation[] = [];
     if (a === b) {
-      deleteText(a, start.offset, end.offset);
-      edit.changed.add(a);
-      this.collapse(start);
-      return;
+      ops.push({ type: 'delete', paragraph: ida, from: start.offset, to: end.offset });
+      // Emptying a paragraph: its mark keeps the deleted text's formatting for what's typed next.
+      if (start.offset === 0 && end.offset >= paragraphLength(a)) {
+        const carried = runPropertiesAt(a, 0);
+        if (carried && JSON.stringify(carried) !== JSON.stringify(a.properties.runProperties ?? {})) ops.push(this.setProperties(a, { runProperties: carried }));
+      }
+      return [ops, this.pos(start)];
     }
-    deleteText(a, start.offset, paragraphLength(a));
-    deleteText(b, 0, end.offset);
-    edit.changed.add(a);
-    edit.changed.add(b);
-    const container = findContainer(this.doc.body, a);
-    if (container && container === findContainer(this.doc.body, b)) {
+    ops.push({ type: 'delete', paragraph: ida, from: start.offset, to: END });
+    ops.push({ type: 'delete', paragraph: this.replica.id(b), from: 0, to: end.offset });
+    const index = this.replica.engine.index;
+    const container = index.container(a);
+    if (container && container === index.container(b)) {
       // Blocks in between go; the end paragraph's rest joins the start paragraph.
-      const i = container.indexOf(a);
-      const j = container.indexOf(b);
-      const removed = container.splice(i + 1, j - i - 1);
-      if (removed.some((block) => block.kind === 'paragraph' && block.properties.section)) edit.structural = true;
-      this.merge(a, b, edit);
+      if (container.indexOf(b) > container.indexOf(a) + 1) ops.push({ type: 'removeBetween', after: ida, before: this.replica.id(b) });
+      if (b.properties.section) ops.push(this.setProperties(a, { section: b.properties.section }));
+      ops.push({ type: 'merge', paragraph: ida, next: this.replica.id(b) });
     } else {
       // Across containers (into or out of a table): empty the paragraphs in between.
       const list = this.paragraphs();
-      for (let k = this.indexOf(a) + 1; k < this.indexOf(b); k++) {
-        deleteText(list[k], 0, paragraphLength(list[k]));
-        edit.changed.add(list[k]);
-      }
+      for (let k = this.indexOf(a) + 1; k < this.indexOf(b); k++) ops.push({ type: 'delete', paragraph: this.replica.id(list[k]), from: 0, to: END });
     }
-    this.collapse(start);
+    return [ops, this.pos(start)];
   }
 
-  private deleteBackward(unit: 'character' | 'word', edit: EditSet): void {
+  /** Merges `second` into the paragraph before it (keeping a section break it ends). */
+  private mergeOps(first: Paragraph, second: Paragraph): Operation[] {
+    const container = this.replica.engine.index.container(second);
+    if (!container || container[container.indexOf(second) - 1] !== first) return [];
+    const ops: Operation[] = [];
+    if (second.properties.section) ops.push(this.setProperties(first, { section: second.properties.section }));
+    ops.push({ type: 'merge', paragraph: this.replica.id(first), next: this.replica.id(second) });
+    return ops;
+  }
+
+  private deleteBackward(unit: 'character' | 'word'): [Operation[], Pos] | null {
     const pos = this.selection.focus;
     const p = pos.paragraph;
     let from: number | undefined;
@@ -298,34 +383,24 @@ export class Editor {
     } else from = this.charBefore(pos)?.[0];
     if (from === undefined || from === pos.offset) {
       // At the start: a list item loses its numbering first, then paragraphs merge.
-      if (p.properties.numbering) {
-        delete p.properties.numbering;
-        edit.changed.add(p);
-        return;
-      }
-      const list = this.paragraphs();
-      const previous = list[this.indexOf(p) - 1];
-      if (!previous) return;
-      const at = { paragraph: previous, offset: paragraphLength(previous) };
-      if (this.merge(previous, p, edit)) this.collapse(at);
-      return;
+      if (p.properties.numbering) return [[this.setProperties(p, { numbering: undefined })], this.pos(pos)];
+      const previous = this.paragraphs()[this.indexOf(p) - 1];
+      if (!previous) return null;
+      const at = { paragraph: this.replica.id(previous), offset: paragraphLength(previous) };
+      return [this.mergeOps(previous, p), at];
     }
-    deleteText(p, from, pos.offset);
-    edit.changed.add(p);
-    this.collapse({ paragraph: p, offset: from });
+    return [[{ type: 'delete', paragraph: this.replica.id(p), from, to: pos.offset }], { paragraph: this.replica.id(p), offset: from }];
   }
 
-  private deleteForward(unit: 'character' | 'word', edit: EditSet): void {
+  private deleteForward(unit: 'character' | 'word'): [Operation[], Pos] | null {
     const pos = this.selection.focus;
     const p = pos.paragraph;
     const to = unit === 'word' ? this.wordRight(pos).offset : this.charAfter(pos)?.[1];
     if (to === undefined || to === pos.offset || (unit === 'word' && this.wordRight(pos).paragraph !== p)) {
       const next = this.paragraphs()[this.indexOf(p) + 1];
-      if (next) this.merge(p, next, edit);
-      return;
+      return next ? [this.mergeOps(p, next), this.pos(pos)] : null;
     }
-    deleteText(p, pos.offset, to);
-    edit.changed.add(p);
+    return [[{ type: 'delete', paragraph: this.replica.id(p), from: pos.offset, to }], this.pos(pos)];
   }
 
   // --- Moving ----------------------------------------------------------------------------
@@ -627,16 +702,12 @@ export class Editor {
   }
 }
 
-/** Model changes made by one command. */
-class EditSet {
-  readonly changed = new Set<Paragraph>();
-  /** Sections changed: lay out everything again. */
-  structural = false;
-  /** Paragraphs were added or removed. */
-  structureChanged = false;
+function combine(a: CommandResult, b: CommandResult): CommandResult {
+  if (!a.edited) return b;
+  if (!b.edited) return a;
+  return { edited: true, changed: new Set([...a.changed, ...b.changed]), structural: a.structural || b.structural };
 }
 
-/** Model range of the visible character at a visible offset. */
 function charRange(spans: readonly SourceSpan[], visible: number): [number, number] {
   let s = spans[0];
   for (const span of spans) {

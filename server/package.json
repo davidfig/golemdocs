@@ -4,14 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "wrangler dev --port 3001",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc",
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "cf:setup": "wrangler d1 create word-directory && wrangler r2 bucket create word-files",
+    "cf:migrate": "wrangler d1 migrations apply DIRECTORY --remote",
+    "deploy": "pnpm --filter @word/client build && wrangler deploy"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "wrangler": "^4.143.0"
   }
 }

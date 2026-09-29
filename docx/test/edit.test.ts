@@ -78,15 +78,17 @@ test('insertText into a hyperlink and around tabs', () => {
   assert.equal(shape(q), 'before→after');
 });
 
-test('deleteText across runs merges what is left and keeps a formatting carrier', () => {
+test('deleteText across runs merges what is left and returns what it removed', () => {
   const p = para(run('Hello '), run('bold', bold), run(' world'));
-  deleteText(p, 3, 12);
+  const removed = deleteText(p, 3, 12);
   assert.equal(shape(p), 'Helorld');
+  assert.equal(shape(para(...removed)), 'lo |[bold]| w');
   const q = para(run('only', bold));
+  q.properties.runProperties = { bold: true };
   deleteText(q, 0, 4);
   assert.equal(paragraphLength(q), 0);
   insertText(q, 0, 'new');
-  assert.equal(shape(q), '[new]');
+  assert.equal(shape(q), '[new]', 'typing takes the paragraph mark formatting');
 });
 
 test('deleting between two same-format runs joins them', () => {

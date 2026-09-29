@@ -88,6 +88,7 @@ export class PageRenderer {
     this.batches.sort((a, b) => a.face.id - b.face.id);
     const text = this.text.render(camera, this.batches);
     drawCalls += text.drawCalls + this.rects.render(camera, this.visible.flatMap((p) => p.foreground));
+    if (selection) drawCalls += this.rects.render(camera, selection.remoteFor(this.visible));
     if (selection && caretVisible) drawCalls += this.rects.render(camera, selection.caretFor(this.visible));
 
     return { pages: pages.length, visiblePages: this.visible.length, glyphs: text.glyphs, drawCalls };

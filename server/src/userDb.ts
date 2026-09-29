@@ -1,0 +1,114 @@
+// One D1 database per user.
+//
+// A Worker can only use D1 databases bound in wrangler.jsonc, and bindings are fixed at deploy time,
+// so databases created at runtime are provisioned and queried through Cloudflare's REST API instead.
+// The DIRECTORY binding (a normal D1 binding) records which database belongs to which user.
+// Each query is an HTTP round trip to api.cloudflare.com, so keep it to catalogue-sized work.
+
+import type { Env } from './cf.ts';
+import { USER_MIGRATIONS } from './schema.ts';
+
+const API = 'https://api.cloudflare.com/client/v4';
+
+interface Envelope<T> {
+  success: boolean;
+  errors: { code: number; message: string }[];
+  result: T;
+}
+
+export class CloudflareError extends Error {
+  constructor(
+    readonly status: number,
+    readonly errors: { code: number; message: string }[],
+  ) {
+    super(`Cloudflare API ${status}: ${errors.map((e) => e.message).join('; ') || 'request failed'}`);
+  }
+}
+
+async function api<T>(env: Env, path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${API}/accounts/${env.CF_ACCOUNT_ID}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const envelope = (await response.json().catch(() => null)) as Envelope<T> | null;
+  if (!response.ok || !envelope?.success) throw new CloudflareError(response.status, envelope?.errors ?? []);
+  return envelope.result;
+}
+
+export class UserDb {
+  constructor(
+    private readonly env: Env,
+    readonly databaseId: string,
+  ) {}
+
+  async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    const [result] = await api<{ results: T[] }[]>(this.env, `/d1/database/${this.databaseId}/query`, { sql, params });
+    return result?.results ?? [];
+  }
+
+  async run(sql: string, params: unknown[] = []): Promise<void> {
+    await this.all(sql, params);
+  }
+
+  async first<T>(sql: string, params: unknown[] = []): Promise<T | null> {
+    return (await this.all<T>(sql, params))[0] ?? null;
+  }
+}
+
+/** Applies the migrations a database hasn't seen. Safe to repeat, and to run concurrently. */
+async function migrate(db: UserDb): Promise<number> {
+  await db.run('CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY)');
+  const applied = new Set((await db.all<{ version: number }>('SELECT version FROM _migrations')).map((r) => r.version));
+  for (const [index, statements] of USER_MIGRATIONS.entries()) {
+    const version = index + 1;
+    if (applied.has(version)) continue;
+    for (const statement of statements) await db.run(statement);
+    await db.run('INSERT OR IGNORE INTO _migrations (version) VALUES (?)', [version]);
+  }
+  return USER_MIGRATIONS.length;
+}
+
+async function createDatabase(env: Env, userId: string): Promise<string> {
+  const name = `word-user-${userId}`;
+  try {
+    return (await api<{ uuid: string }>(env, '/d1/database', { name })).uuid;
+  } catch (error) {
+    // A concurrent first request may have created it already; the name is deterministic.
+    const existing = await api<{ uuid: string; name: string }[]>(env, `/d1/database?name=${encodeURIComponent(name)}`).catch(() => []);
+    const found = existing.find((d) => d.name === name);
+    if (found) return found.uuid;
+    throw error;
+  }
+}
+
+interface DirectoryRow {
+  database_id: string;
+  schema_version: number;
+}
+
+/** The user's database, created and migrated on first use. */
+export async function userDb(env: Env, userId: string): Promise<UserDb> {
+  const lookup = () =>
+    env.DIRECTORY.prepare('SELECT database_id, schema_version FROM users WHERE user_id = ?').bind(userId).first<DirectoryRow>();
+
+  let row = await lookup();
+  if (!row) {
+    const databaseId = await createDatabase(env, userId);
+    const version = await migrate(new UserDb(env, databaseId));
+    await env.DIRECTORY.prepare(
+      'INSERT INTO users (user_id, database_id, schema_version, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING',
+    )
+      .bind(userId, databaseId, version, Date.now())
+      .run();
+    row = await lookup();
+    if (!row) throw new Error('failed to register user database');
+  }
+
+  const db = new UserDb(env, row.database_id);
+  if (row.schema_version < USER_MIGRATIONS.length) {
+    const version = await migrate(db);
+    await env.DIRECTORY.prepare('UPDATE users SET schema_version = ? WHERE user_id = ?').bind(version, userId).run();
+  }
+  return db;
+}

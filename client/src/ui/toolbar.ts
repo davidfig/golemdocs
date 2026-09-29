@@ -1,0 +1,369 @@
+// Toolbars: rows of buttons, toggle buttons, editable combo boxes (style, font, size, zoom),
+// split color buttons and the table-size grid. Pressing a control never takes focus from the
+// document, except the combo boxes, which hand it back when they commit or cancel.
+
+import type { Action, ChromeState } from './actions.ts';
+import type { CommandRegistry } from './commands.ts';
+import { h, keepFocus, setAttr, toggleClass } from './dom.ts';
+import { ICONS, iconElement } from './icons.ts';
+import { closePopup, openPopup, popupOpenFor } from './popup.ts';
+
+export interface Control {
+  el: HTMLElement;
+  refresh(state: ChromeState): void;
+}
+
+export type ToolbarItem = { type: 'button'; id: string } | { type: 'separator' } | { type: 'control'; create: () => Control };
+
+export const tsep: ToolbarItem = { type: 'separator' };
+export const btn = (id: string): ToolbarItem => ({ type: 'button', id });
+export const control = (create: () => Control): ToolbarItem => ({ type: 'control', create });
+
+export class Toolbar {
+  readonly el: HTMLDivElement;
+  private readonly controls: Control[] = [];
+
+  constructor(
+    readonly name: string,
+    registry: CommandRegistry,
+    items: ToolbarItem[],
+  ) {
+    this.el = h('div', { class: 'wm-toolbar', attrs: { role: 'toolbar', 'aria-label': name } });
+    for (const item of items) {
+      if (item.type === 'separator') {
+        this.el.append(h('span', { class: 'wm-tsep', attrs: { role: 'separator' } }));
+        continue;
+      }
+      const c = item.type === 'button' ? commandButton(registry, item.id) : item.create();
+      this.controls.push(c);
+      this.el.append(c.el);
+    }
+  }
+
+  refresh(state: ChromeState): void {
+    for (const c of this.controls) c.refresh(state);
+  }
+}
+
+function tooltip(label: string, shortcut: string): string {
+  return shortcut ? `${label} (${shortcut})` : label;
+}
+
+/** A button for a command: pressed when the command is checked. */
+export function commandButton(registry: CommandRegistry, id: string): Control {
+  const command = registry.get(id);
+  const el = h(
+    'button',
+    { class: 'wm-tbutton', title: tooltip(command.tooltip ?? command.plainLabel, command.shortcutText), attrs: { type: 'button', tabindex: '-1', 'aria-label': command.plainLabel } },
+    command.icon ? iconElement(command.icon) : null,
+  );
+  // Commands without a picture show their name, as classic toolbars did.
+  if (!command.icon) {
+    el.classList.add('text');
+    el.append(command.plainLabel);
+  }
+  keepFocus(el);
+  el.addEventListener('click', () => registry.execute(command));
+  return {
+    el,
+    refresh() {
+      el.disabled = !registry.isEnabled(command);
+      if (command.checked) setAttr(el, 'aria-pressed', String(registry.isChecked(command)));
+    },
+  };
+}
+
+// --- Combo box ---------------------------------------------------------------------------
+
+export interface ComboSpec {
+  label: string;
+  /** CSS width of the text field. */
+  width: number;
+  options(state: ChromeState): string[];
+  /** Text shown for the current state ('' when mixed/unknown). */
+  value(state: ChromeState): string;
+  enabled(state: ChromeState): boolean;
+  /** Applies typed or picked text. Returns false if it wasn't valid (the box reverts). */
+  commit(text: string): boolean;
+  /** Per-option inline style (font previews). */
+  optionStyle?(option: string): string;
+  /** A separator after these options (the "recently used" group). */
+  headerCount?(state: ChromeState): number;
+}
+
+export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEditor: () => void): Control {
+  const input = h('input', {
+    class: 'wm-combo-input',
+    attrs: { type: 'text', role: 'combobox', 'aria-label': spec.label, 'aria-autocomplete': 'list', 'aria-expanded': 'false', spellcheck: 'false', autocomplete: 'off' },
+  });
+  input.style.width = `${spec.width}px`;
+  const arrow = h('button', { class: 'wm-combo-arrow', attrs: { type: 'button', tabindex: '-1', 'aria-label': `${spec.label} list` } });
+  arrow.innerHTML = ICONS.dropdown;
+  keepFocus(arrow);
+  const el = h('div', { class: 'wm-combo', title: spec.label }, input, arrow);
+  let shown = '';
+  let list: HTMLElement | null = null;
+  let options: string[] = [];
+  let highlighted = -1;
+
+  const revert = () => {
+    input.value = shown;
+  };
+  const done = () => {
+    closePopup();
+    focusEditor();
+  };
+  const commit = (text: string) => {
+    text = text.trim();
+    if (text && text !== shown && !spec.commit(text)) revert();
+    else if (!text) revert();
+    done();
+  };
+
+  const highlight = (i: number, scroll = true) => {
+    if (!list) return;
+    list.children[highlighted]?.classList.remove('active');
+    highlighted = i;
+    const row = list.children[i] as HTMLElement | undefined;
+    row?.classList.add('active');
+    if (row && scroll) row.scrollIntoView({ block: 'nearest' });
+  };
+
+  const openList = () => {
+    const state = getState();
+    options = spec.options(state);
+    const headers = spec.headerCount?.(state) ?? 0;
+    list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': spec.label } });
+    options.forEach((option, i) => {
+      const row = h('div', { class: 'wm-option', text: option, attrs: { role: 'option' } });
+      if (i === headers - 1) row.classList.add('group-end');
+      const style = spec.optionStyle?.(option);
+      if (style) row.setAttribute('style', style);
+      row.addEventListener('pointerenter', () => highlight(i, false));
+      row.addEventListener('click', () => {
+        input.value = option;
+        commit(option);
+      });
+      list!.append(row);
+    });
+    const current = options.findIndex((o) => o.toLowerCase() === input.value.trim().toLowerCase());
+    openPopup(el, list, () => {
+      list = null;
+      input.setAttribute('aria-expanded', 'false');
+    });
+    input.setAttribute('aria-expanded', 'true');
+    highlighted = -1;
+    highlight(current >= 0 ? current : 0);
+  };
+
+  arrow.addEventListener('click', () => {
+    if (arrow.disabled) return;
+    if (popupOpenFor(el)) closePopup();
+    else {
+      openList();
+    }
+  });
+
+  input.addEventListener('focus', () => input.select());
+  input.addEventListener('blur', () => {
+    if (!list) revert();
+  });
+  input.addEventListener('input', () => {
+    if (!list) openList();
+    const typed = input.value.trim().toLowerCase();
+    const i = options.findIndex((o) => o.toLowerCase().startsWith(typed));
+    if (i >= 0) highlight(i);
+  });
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'ArrowUp': {
+        e.preventDefault();
+        if (!list) return openList();
+        const n = options.length;
+        const i = highlighted + (e.key === 'ArrowDown' ? 1 : -1);
+        highlight(Math.min(Math.max(i, 0), n - 1));
+        input.value = options[highlighted] ?? input.value;
+        input.select();
+        return;
+      }
+      case 'Enter': {
+        e.preventDefault();
+        commit(input.value);
+        return;
+      }
+      case 'Escape':
+        e.preventDefault();
+        revert();
+        done();
+        return;
+      case 'Tab':
+        closePopup();
+        return;
+    }
+  });
+
+  return {
+    el,
+    refresh(state) {
+      const enabled = spec.enabled(state);
+      input.disabled = !enabled;
+      arrow.disabled = !enabled;
+      toggleClass(el, 'disabled', !enabled);
+      shown = enabled ? spec.value(state) : '';
+      if (document.activeElement !== input && input.value !== shown) input.value = shown;
+    },
+  };
+}
+
+// --- Color split button ------------------------------------------------------------------
+
+/** The classic 40-color palette, row by row. */
+const PALETTE = [
+  ['#000000', '#993300', '#333300', '#003300', '#003366', '#000080', '#333399', '#333333'],
+  ['#800000', '#FF6600', '#808000', '#008000', '#008080', '#0000FF', '#666699', '#808080'],
+  ['#FF0000', '#FF9900', '#99CC00', '#339966', '#33CCCC', '#3366FF', '#800080', '#969696'],
+  ['#FF00FF', '#FFCC00', '#FFFF00', '#00FF00', '#00FFFF', '#00CCFF', '#993366', '#C0C0C0'],
+  ['#FF99CC', '#FFCC99', '#FFFF99', '#CCFFCC', '#CCFFFF', '#99CCFF', '#CC99FF', '#FFFFFF'],
+];
+
+/** Word's 15 highlight colors. */
+const HIGHLIGHTS = [
+  ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF', '#0000FF'],
+  ['#FF0000', '#000080', '#008080', '#008000', '#800080'],
+  ['#800000', '#808000', '#808080', '#C0C0C0', '#000000'],
+];
+
+export interface ColorSpec {
+  label: string;
+  icon: string;
+  /** "Automatic" (font color) or "No Color" (highlight): the null choice. */
+  noneLabel: string;
+  initial: string;
+  palette: 'full' | 'highlight';
+  action(color: string | null): Action;
+}
+
+export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control {
+  let color: string | null = spec.initial;
+  const main = h('button', { class: 'wm-tbutton wm-split-main', title: spec.label, attrs: { type: 'button', tabindex: '-1', 'aria-label': spec.label } }, iconElement(spec.icon));
+  const arrow = h('button', { class: 'wm-tbutton wm-split-arrow', title: spec.label, attrs: { type: 'button', tabindex: '-1', 'aria-label': `${spec.label} options`, 'aria-haspopup': 'true' } });
+  arrow.innerHTML = ICONS.dropdown;
+  keepFocus(main);
+  keepFocus(arrow);
+  const el = h('div', { class: 'wm-split' }, main, arrow);
+  const paint = () => main.style.setProperty('--swatch', color ?? 'transparent');
+  paint();
+
+  const apply = (c: string | null) => {
+    color = c;
+    paint();
+    closePopup();
+    registry.perform(spec.action(c), spec.label);
+    registry.focusEditor();
+  };
+
+  main.addEventListener('click', () => apply(color));
+  arrow.addEventListener('click', () => {
+    if (popupOpenFor(el)) return closePopup();
+    const panel = h('div', { class: 'wm-palette', attrs: { role: 'dialog', 'aria-label': spec.label } });
+    const none = h('button', { class: 'wm-palette-wide', attrs: { type: 'button' } }, h('span', { class: 'wm-chip', attrs: { style: `background:${spec.palette === 'full' ? '#000' : 'transparent'}` } }), spec.noneLabel);
+    none.addEventListener('click', () => apply(null));
+    panel.append(none);
+    const rows = spec.palette === 'full' ? PALETTE : HIGHLIGHTS;
+    const grid = h('div', { class: 'wm-palette-grid' });
+    grid.style.gridTemplateColumns = `repeat(${rows[0].length}, 18px)`;
+    for (const row of rows) {
+      for (const c of row) {
+        const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
+        cell.style.background = c;
+        if (color && c.toLowerCase() === color.toLowerCase()) cell.classList.add('current');
+        cell.addEventListener('click', () => apply(c));
+        grid.append(cell);
+      }
+    }
+    panel.append(grid);
+    if (spec.palette === 'full') {
+      const picker = h('input', { attrs: { type: 'color', value: color ?? '#000000', tabindex: '-1' } });
+      picker.className = 'wm-hidden-picker';
+      picker.addEventListener('change', () => apply(picker.value));
+      const more = h('button', { class: 'wm-palette-wide', text: 'More Colors…', attrs: { type: 'button' } });
+      more.addEventListener('click', () => picker.click());
+      panel.append(more, picker);
+    }
+    openPopup(el, panel);
+  });
+
+  return {
+    el,
+    refresh() {
+      const enabled = registry.allows(spec.action(color));
+      main.disabled = !enabled;
+      arrow.disabled = !enabled;
+    },
+  };
+}
+
+// --- Insert Table grid ---------------------------------------------------------------------
+
+/** The "drag out a table size" drop-down. */
+export function tableGridButton(registry: CommandRegistry, commandId: string): Control {
+  const command = registry.get(commandId);
+  const label = command.tooltip ?? command.plainLabel;
+  const el = h('button', { class: 'wm-tbutton', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'true' } }, iconElement(command.icon));
+  keepFocus(el);
+  el.addEventListener('click', () => {
+    if (popupOpenFor(el)) return closePopup();
+    let rows = 4;
+    let columns = 5;
+    const grid = h('div', { class: 'wm-tablegrid' });
+    const caption = h('div', { class: 'wm-tablegrid-caption', text: 'Cancel' });
+    const panel = h('div', { class: 'wm-tablegrid-panel' }, grid, caption);
+    let pick = { rows: 0, columns: 0 };
+    const cells: HTMLElement[][] = [];
+    const paint = () => {
+      cells.forEach((row, r) => row.forEach((cell, c) => toggleClass(cell, 'on', r < pick.rows && c < pick.columns)));
+      caption.textContent = pick.rows ? `${pick.rows} × ${pick.columns} Table` : 'Cancel';
+    };
+    const draw = () => {
+      grid.replaceChildren();
+      cells.length = 0;
+      grid.style.gridTemplateColumns = `repeat(${columns}, 16px)`;
+      for (let r = 1; r <= rows; r++) {
+        const row: HTMLElement[] = [];
+        for (let c = 1; c <= columns; c++) {
+          const cell = h('div', { class: 'wm-tablecell' });
+          cell.addEventListener('pointerenter', () => {
+            pick = { rows: r, columns: c };
+            // The grid grows as the pointer reaches its edge, as in Word.
+            const grownRows = Math.min(Math.max(rows, r + 1), 12);
+            const grownColumns = Math.min(Math.max(columns, c + 1), 12);
+            if (grownRows !== rows || grownColumns !== columns) {
+              rows = grownRows;
+              columns = grownColumns;
+              draw();
+            }
+            paint();
+          });
+          cell.addEventListener('click', () => {
+            closePopup();
+            registry.perform({ kind: 'insertTable', rows: r, columns: c }, command.plainLabel);
+            registry.focusEditor();
+          });
+          row.push(cell);
+          grid.append(cell);
+        }
+        cells.push(row);
+      }
+    };
+    draw();
+    openPopup(el, panel);
+  });
+  return {
+    el,
+    refresh() {
+      el.disabled = !registry.isEnabled(command);
+    },
+  };
+}

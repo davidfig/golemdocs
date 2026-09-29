@@ -145,15 +145,15 @@ function splitInline(inline: Inline, offset: number): [Inline, Inline] {
 
 /**
  * Splits inline content at a model offset. Zero-length content exactly at the offset (an
- * empty run, say) stays on the left.
+ * empty content control, say) goes left, or right with `zeroRight`.
  */
-export function splitInlines(inlines: readonly Inline[], offset: number): [Inline[], Inline[]] {
+export function splitInlines(inlines: readonly Inline[], offset: number, zeroRight = false): [Inline[], Inline[]] {
   const left: Inline[] = [];
   const right: Inline[] = [];
   let pos = 0;
   for (const inline of inlines) {
     const len = inlineLength(inline);
-    if (pos + len <= offset) left.push(inline);
+    if (pos + len < offset || (pos + len === offset && !(zeroRight && len === 0 && pos === offset))) left.push(inline);
     else if (pos >= offset) right.push(inline);
     else {
       const [a, b] = splitInline(inline, offset - pos);
@@ -197,31 +197,41 @@ const emptyRun = (properties: RunProperties | undefined): Run => ({
   attrs: {},
 });
 
+/** Hyperlinks or wrappers that are the same element (apart from their content). */
+function sameContainer(a: Inline, b: Inline): boolean {
+  const { children: _a, ...restA } = a as { children: unknown };
+  const { children: _b, ...restB } = b as { children: unknown };
+  return JSON.stringify(restA) === JSON.stringify(restB);
+}
+
 const sameFormat = (a: Run, b: Run) =>
   JSON.stringify(a.properties) === JSON.stringify(b.properties) && JSON.stringify(a.attrs) === JSON.stringify(b.attrs);
 
 /**
- * Merges neighboring runs with the same formatting and neighboring text items, and drops
- * empty runs, so repeated edits don't fragment the content. A paragraph keeps one empty run
- * if it has no other: it carries the formatting for text typed into it.
+ * Puts inline content in canonical form: neighboring runs with the same formatting become one,
+ * neighboring text items too, pieces of one hyperlink or content control join up, and empty
+ * runs go. Content that's the same is then structured the same, however edits produced it
+ * (collaborating clients rely on this to end up with identical documents).
  */
 export function normalizeInlines(inlines: Inline[]): Inline[] {
   const out: Inline[] = [];
-  let carrier: Run | undefined;
   for (const inline of inlines) {
     if (inline.kind === 'hyperlink' || inline.kind === 'wrapper') {
-      inline.children = normalizeInlines(inline.children);
-      out.push(inline);
+      // Pieces of one hyperlink or content control (split by an edit) join up again.
+      const previous = out.at(-1);
+      if (previous && previous.kind === inline.kind && sameContainer(previous, inline)) {
+        previous.children = normalizeInlines([...previous.children, ...inline.children]);
+      } else {
+        inline.children = normalizeInlines(inline.children);
+        out.push(inline);
+      }
       continue;
     }
     if (inline.kind !== 'run') {
       out.push(inline);
       continue;
     }
-    if (inline.content.length === 0) {
-      carrier ??= inline;
-      continue;
-    }
+    if (inline.content.every((item) => item.kind === 'text' && item.text === '')) continue;
     const previous = out.at(-1);
     if (previous?.kind === 'run' && sameFormat(previous, inline)) {
       previous.content.push(...inline.content);
@@ -232,13 +242,13 @@ export function normalizeInlines(inlines: Inline[]): Inline[] {
     const run = out.at(-1) as Run;
     const merged: RunContent[] = [];
     for (const item of run.content) {
+      if (item.kind === 'text' && item.text === '') continue;
       const last = merged.at(-1);
       if (item.kind === 'text' && last?.kind === 'text') merged[merged.length - 1] = { ...last, text: last.text + item.text };
       else merged.push(item);
     }
     run.content = merged;
   }
-  if (carrier && !firstRun(out)) out.push(carrier);
   return out;
 }
 
@@ -322,16 +332,62 @@ export function insertItem(paragraph: Paragraph, offset: number, item: RunConten
   swap(paragraph.children);
 }
 
-/** Deletes the positions [from, to) of a paragraph. */
-export function deleteText(paragraph: Paragraph, from: number, to: number): void {
-  if (to <= from) return;
+/** Deletes the positions [from, to) of a paragraph; returns what was removed. */
+export function deleteText(paragraph: Paragraph, from: number, to: number): Inline[] {
+  if (to <= from) return [];
   const [before, rest] = splitInlines(paragraph.children, from);
-  const [removed, after] = splitInlines(rest, to - from);
-  const kept = [...before, ...after];
-  // Keep the formatting of deleted text for what's typed next, if nothing else carries one.
-  const carrier = firstRun(removed);
-  if (carrier && !firstRun(kept)) kept.push(emptyRun(carrier.properties));
-  paragraph.children = normalizeInlines(kept);
+  // Zero-length content at either end stays (only what's strictly inside goes).
+  const [removed, after] = splitInlines(rest, to - from, true);
+  // Nothing keeps the deleted text's formatting when everything goes: deletes stay exactly
+  // invertible. (An editor carries it over in the paragraph mark's formatting, as Word does.)
+  paragraph.children = normalizeInlines([...before, ...after]);
+  return removed;
+}
+
+/** Inserts inline content (runs, hyperlinks...) at a model offset. */
+export function insertInlines(paragraph: Paragraph, offset: number, content: Inline[]): void {
+  const [a, b] = splitInlines(paragraph.children, offset);
+  paragraph.children = normalizeInlines([...a, ...content, ...b]);
+}
+
+/**
+ * Splits a paragraph's content at a model offset: the paragraph keeps the first part and the
+ * rest is returned.
+ */
+export function splitContent(paragraph: Paragraph, offset: number): Inline[] {
+  const [a, b] = splitInlines(paragraph.children, offset);
+  paragraph.children = normalizeInlines(a);
+  return normalizeInlines(b);
+}
+
+/** Formatting of the text at a model offset: the run before it, or else the one after it. */
+export function runPropertiesAt(paragraph: Paragraph, offset: number): RunProperties | undefined {
+  const [a, b] = splitInlines(paragraph.children, offset);
+  return (lastRun(a) ?? firstRun(b))?.properties;
+}
+
+/**
+ * Properties for a paragraph started by Enter: a copy of the current one's, with the style's
+ * next style at the end of a paragraph (Heading 1 -> Normal).
+ */
+export function newParagraphProperties(
+  properties: import('../model/types.ts').ParagraphProperties,
+  atEnd: boolean,
+  styles?: Pick<StyleSheet, 'styles'>,
+  /** Formatting at the split: the new paragraph's mark takes it, so typing there continues it. */
+  runProperties?: RunProperties,
+): import('../model/types.ts').ParagraphProperties {
+  const out = clone(properties);
+  if (runProperties) out.runProperties = clone(runProperties);
+  if (atEnd && styles && out.style) {
+    const next = styles.styles.find((s) => s.type === 'paragraph' && s.id === out.style)?.next;
+    if (next && next !== out.style) {
+      out.style = next;
+      // A heading's direct keep settings don't carry into body text.
+      delete out.keepNext;
+    }
+  }
+  return out;
 }
 
 /** Attributes that must stay unique per paragraph (Word's paragraph ids). */
@@ -345,28 +401,13 @@ const UNIQUE_ATTRS = ['w14:paraId', 'w14:textId'];
  */
 export function splitParagraph(paragraph: Paragraph, offset: number, styles?: Pick<StyleSheet, 'styles'>): Paragraph {
   const atEnd = offset >= paragraphLength(paragraph);
-  const [a, b] = splitInlines(paragraph.children, offset);
-  const leftRun = lastRun(a);
-  const rightRun = firstRun(b);
-  if (!leftRun) a.push(emptyRun(rightRun?.properties ?? paragraph.properties.runProperties));
-  if (!rightRun) b.push(emptyRun(leftRun?.properties ?? paragraph.properties.runProperties));
-
-  const properties = clone(paragraph.properties);
+  const properties = newParagraphProperties(paragraph.properties, atEnd, styles, runPropertiesAt(paragraph, offset));
+  const children = splitContent(paragraph, offset);
   // The section break belongs to the paragraph mark, which ends the second paragraph.
   delete paragraph.properties.section;
-  if (atEnd && styles && properties.style) {
-    const next = styles.styles.find((s) => s.type === 'paragraph' && s.id === properties.style)?.next;
-    if (next && next !== properties.style) {
-      properties.style = next;
-      // A heading's direct numbering/keep settings don't carry into body text.
-      delete properties.keepNext;
-    }
-  }
   const attrs = { ...paragraph.attrs };
   for (const name of UNIQUE_ATTRS) delete attrs[name];
-
-  paragraph.children = normalizeInlines(a);
-  return { kind: 'paragraph', properties, children: normalizeInlines(b), attrs };
+  return { kind: 'paragraph', properties, children, attrs };
 }
 
 /**

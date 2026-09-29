@@ -1,6 +1,6 @@
 # @word/docx
 
-A from-scratch, dependency-free DOCX reader and writer, used by both client and server.
+Code shared by client and server. Currently: a from-scratch, dependency-free DOCX reader and writer.
 
 ```ts
 import { WordDocument, StyleResolver, ListCounter } from '@word/docx';

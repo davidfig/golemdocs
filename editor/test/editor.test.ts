@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { paragraphsIn, paragraphText, WordDocument, type Paragraph } from '@word/docx';
 import { FontSet, LayoutSession, layoutDocument } from '@word/layout';
+import { Replica } from '@word/ops';
 import { Editor, type Command } from '../src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');
@@ -23,9 +24,10 @@ async function setup(texts: string[]) {
     children: text ? [{ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'text', text }] }] : [],
     attrs: {},
   }));
+  const replica = new Replica(doc);
   const session = await LayoutSession.create(doc, fonts!);
   await session.run();
-  const editor = new Editor(doc, session);
+  const editor = new Editor(replica, session);
   const apply = async (...commands: Command[]) => {
     for (const c of commands) {
       editor.apply(c);
@@ -117,4 +119,48 @@ test('selected text for the clipboard', skip, async () => {
   assert.equal(editor.selectedText(), 'two\nthree\nfour ');
   await apply({ kind: 'selectAll' });
   assert.equal(editor.selectedText(), 'one two\nthree\nfour five');
+});
+
+test('undo and redo restore text and the caret', skip, async () => {
+  const { editor, apply, texts, session } = await setup(['Hello world', 'Second']);
+  const undo = async () => {
+    editor.undo();
+    await session.run();
+  };
+  const redo = async () => {
+    editor.redo();
+    await session.run();
+  };
+  await apply({ kind: 'move', to: 'documentEnd' });
+  for (const ch of ' line') await apply({ kind: 'insertText', text: ch });
+  await apply({ kind: 'insertParagraph' }, { kind: 'insertText', text: 'Third' });
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight', extend: true }, { kind: 'insertText', text: 'Bye ' });
+  assert.deepEqual(texts(), ['Bye world', 'Second line', 'Third']);
+  await undo(); // the replacement, in one step
+  assert.deepEqual(texts(), ['Hello world', 'Second line', 'Third']);
+  assert.equal(editor.selectedText(), 'Hello ', 'the replaced selection comes back selected');
+  await undo(); // "Third"
+  await undo(); // Enter
+  assert.deepEqual(texts(), ['Hello world', 'Second line']);
+  await undo(); // the typing, grouped
+  assert.deepEqual(texts(), ['Hello world', 'Second']);
+  assert.equal(editor.selection.focus.offset, 6);
+  await redo();
+  await redo();
+  await redo();
+  await redo();
+  assert.deepEqual(texts(), ['Bye world', 'Second line', 'Third']);
+  const reference = await layoutDocument(editor.doc, fonts!);
+  assert.equal(session.pages.length, reference.pages.length);
+  session.pages.forEach((p, i) => assert.equal(p.glyphCount, reference.pages[i].glyphCount));
+});
+
+test('deleting all of a paragraph keeps its formatting for what is typed next', skip, async () => {
+  const { editor, apply, doc } = await setup(['plain']);
+  const p = paragraphsIn(doc.body)[0];
+  (p.children[0] as { properties: object }).properties = { bold: true };
+  await apply({ kind: 'selectAll' }, { kind: 'delete', direction: 'backward' }, { kind: 'insertText', text: 'new' });
+  const run = paragraphsIn(doc.body)[0].children[0] as { properties: { bold?: boolean } };
+  assert.equal(run.properties.bold, true);
+  assert.equal(editor.selectedText(), '');
 });

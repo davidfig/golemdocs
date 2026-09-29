@@ -165,44 +165,74 @@ export class WordDocument {
     // Keep a missing w:sectPr missing unless the section has since been given properties.
     const omitSection = this.sectionAbsent && !section.children.length && !Object.keys(section.attrs).length;
     const body = el('w:body', this.bodyAttrs, [...writeBlocks(this.body, ctx), ...(omitSection ? [] : [section])]);
-    const root = el('w:document', withNamespaces(this.rootAttrs), [
+    const root = el('w:document', { ...this.rootAttrs }, [
       ...this.rootChildren.before,
       body,
       ...this.rootChildren.after,
     ]);
+    declareNamespaces(root);
     pkg.set(this.mainPart, root, CONTENT_TYPE.document);
 
     if (this.stylesPart || this.styles.styles.length) {
       this.stylesPart ??= 'word/styles.xml';
       rels.add(REL.styles, this.stylesPart);
       const styles = writeStyles(this.styles, ctx);
-      styles.attrs = withNamespaces(styles.attrs, ['w']);
+      declareNamespaces(styles);
       pkg.set(this.stylesPart, styles, CONTENT_TYPE.styles);
     }
     if (this.numberingPart || this.numbering.abstracts.length || this.numbering.instances.length) {
       this.numberingPart ??= 'word/numbering.xml';
       rels.add(REL.numbering, this.numberingPart);
       const numbering = writeNumbering(this.numbering, ctx);
-      numbering.attrs = withNamespaces(numbering.attrs, ['w']);
+      declareNamespaces(numbering);
       pkg.set(this.numberingPart, numbering, CONTENT_TYPE.numbering);
     }
 
     for (const hf of this.headersFooters.values()) {
       const partCtx = context(await pkg.relationships(hf.part));
-      const partRoot = el(hf.kind === 'header' ? 'w:hdr' : 'w:ftr', withNamespaces(hf.rootAttrs), writeBlocks(hf.children, partCtx));
+      const partRoot = el(hf.kind === 'header' ? 'w:hdr' : 'w:ftr', { ...hf.rootAttrs }, writeBlocks(hf.children, partCtx));
+      declareNamespaces(partRoot);
       pkg.set(hf.part, partRoot, hf.kind === 'header' ? CONTENT_TYPE.header : CONTENT_TYPE.footer);
     }
     return pkg.write();
   }
 }
 
-/** Makes sure the prefixes this code writes are declared on a part's root element. */
-function withNamespaces(attrs: Record<string, string>, prefixes = ['w', 'r', 'wp']): Record<string, string> {
-  const out = { ...attrs };
-  for (const prefix of prefixes) {
-    if (!out[`xmlns:${prefix}`]) out[`xmlns:${prefix}`] = NS[prefix as keyof typeof NS];
+/** Office 2010+ extensions: readers that don't know them must skip them (mc:Ignorable). */
+const IGNORABLE = new Set(['w14', 'wp14', 'w15', 'w16', 'w16se', 'w16cid', 'w16cex', 'w16sdtdh', 'w16du']);
+
+/**
+ * Declares, on a part's root, every namespace prefix used in it that isn't declared yet (edits
+ * can introduce ones the original part never used, such as w14:paraId), and lists Office
+ * extension prefixes in mc:Ignorable so older readers skip rather than reject them.
+ */
+function declareNamespaces(root: XmlElement): void {
+  const used = new Set<string>();
+  // Iterative: fuzzed files nest deep enough to overflow the stack.
+  const stack: XmlElement[] = [root];
+  while (stack.length) {
+    const node = stack.pop()!;
+    const colon = node.name.indexOf(':');
+    if (colon > 0) used.add(node.name.slice(0, colon));
+    for (const name of Object.keys(node.attrs)) {
+      const c = name.indexOf(':');
+      if (c > 0 && !name.startsWith('xmlns:')) used.add(name.slice(0, c));
+    }
+    for (const child of node.children) if (typeof child !== 'string') stack.push(child);
   }
-  return out;
+  used.delete('xml');
+  const known = (prefix: string) => DOCUMENT_NAMESPACES[`xmlns:${prefix}`] ?? (NS as Record<string, string>)[prefix];
+  const ignorable = [...used].filter((p) => IGNORABLE.has(p));
+  if (ignorable.length) used.add('mc');
+  for (const prefix of used) {
+    const uri = known(prefix);
+    if (!root.attrs[`xmlns:${prefix}`] && uri) root.attrs[`xmlns:${prefix}`] = uri;
+  }
+  if (ignorable.length) {
+    const listed = new Set((root.attrs['mc:Ignorable'] ?? '').split(/\s+/).filter(Boolean));
+    for (const prefix of ignorable) listed.add(prefix);
+    root.attrs['mc:Ignorable'] = [...listed].join(' ');
+  }
 }
 
 /** Highest wp:docPr id in use, so new drawings get unique ids. */

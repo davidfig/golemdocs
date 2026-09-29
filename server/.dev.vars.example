@@ -1,0 +1,13 @@
+# Copy to .dev.vars (git-ignored) for `wrangler dev`.
+CF_API_TOKEN=
+# Local-only identity, used when there is no real auth. Never set this in production.
+DEV_USER=you@example.com
+
+# Sign-in providers (leave out any you don't use; see AUTH.md). Locally, the redirect URI is
+# http://localhost:5173/api/auth/callback/<provider>. Apple needs a real https domain.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=

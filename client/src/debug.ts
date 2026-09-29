@@ -1,20 +1,17 @@
 // Debug flags: what the on-screen debug overlays show: document status, and render information. They belong to this browser (kept in
 // localStorage), not the document, and are all off until switched on in View > Debug.
 
-export interface DebugFlagInfo {
-  key: DebugFlag;
-  label: string;
-  hint: string;
-}
+/** The overlay a flag belongs to. */
+export type DebugPanel = 'Document' | 'Render';
 
 export const DEBUG_FLAGS = [
-  { key: 'status', label: 'Document status', hint: 'Sync and collaboration status, and how long the last edit took to reach the screen' },
-  { key: 'pages', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
-  { key: 'zoom', label: 'Zoom', hint: 'The current zoom level' },
-  { key: 'cpu', label: 'CPU time per frame', hint: 'How long the last frame took to submit to the GPU' },
-  { key: 'fps', label: 'Frames per second and render light', hint: 'Frames drawn in the last second (0 when nothing is changing: the canvas only draws on demand), beside a light that flashes whenever the canvas draws' },
-  { key: 'frameTimes', label: 'Slowest frame and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },
-] as const;
+  { key: 'status', panel: 'Document', label: 'Status', hint: 'Sync and collaboration status, and how long the last edit took to reach the screen' },
+  { key: 'pages', panel: 'Render', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
+  { key: 'zoom', panel: 'Render', label: 'Zoom', hint: 'The current zoom level' },
+  { key: 'cpu', panel: 'Render', label: 'CPU time', hint: 'How long the last frame took to submit to the GPU' },
+  { key: 'fps', panel: 'Render', label: 'FPS and render light', hint: 'Frames drawn in the last second (0 when nothing is changing: the canvas only draws on demand), beside a light that flashes whenever the canvas draws' },
+  { key: 'frameTimes', panel: 'Render', label: 'Slowest and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },
+] as const satisfies readonly { key: string; panel: DebugPanel; label: string; hint: string }[];
 
 export type DebugFlag = (typeof DEBUG_FLAGS)[number]['key'];
 export type DebugFlags = Record<DebugFlag, boolean>;

@@ -69,6 +69,7 @@ body {
 }
 
 #renderInfo {
+  white-space: normal;
   cursor: pointer;
   pointer-events: auto;
 }

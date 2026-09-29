@@ -952,18 +952,27 @@
 
 /* --- Debug settings (see debugSettings.ts) ---------------------------------------------------- */
 
-.wm-debug-flag {
+.wm-debug {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 3px 0;
 }
 
-.wm-debug-flag input {
-  margin: 2px 0 0;
+.wm-debug-panel {
+  margin: 0;
+  padding: 2px 10px 6px;
+  border: 1px solid var(--wm-etch-dark);
+  border-radius: 3px;
 }
 
-.wm-debug-flag small {
-  display: block;
-  color: #555;
+.wm-debug-panel label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 1px 0;
+  white-space: nowrap;
+}
+
+.wm-debug-panel input {
+  margin: 0;
 }

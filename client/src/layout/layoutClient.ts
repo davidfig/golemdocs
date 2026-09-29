@@ -1,4 +1,5 @@
 import type { FaceDescriptor } from '@word/layout';
+import type { Format } from '../formats/convert.ts';
 import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -33,7 +34,7 @@ export class LayoutClient {
   open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions): void {
     this.doc++;
     this.listener = listener;
-    const transfer: Transferable[] = source.kind === 'docx' ? [source.bytes] : [];
+    const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
     if (room) transfer.push(room.port);
     this.send({ type: 'open', doc: this.doc, source, room }, transfer);
   }
@@ -52,9 +53,14 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'media', doc: this.doc, request, part })).then((bytes) => new Uint8Array(bytes));
   }
 
-  /** The open document as a .docx file. */
+  /** The open document as a file in its own format (.docx, .pdf, .md or .txt). */
   save(): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'save', doc: this.doc, request })).then((bytes) => new Uint8Array(bytes));
+  }
+
+  /** The open document as a file in another format; the open document doesn't change. */
+  convert(to: Format): Promise<Uint8Array> {
+    return this.request((request) => ({ type: 'convert', doc: this.doc, request, to })).then((bytes) => new Uint8Array(bytes));
   }
 
   private request(message: (request: number) => ToWorker): Promise<ArrayBuffer> {

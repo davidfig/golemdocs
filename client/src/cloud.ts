@@ -7,6 +7,8 @@ export interface CloudDocument {
   size: number;
   createdAt: number;
   updatedAt: number;
+  /** When its thumbnail was uploaded; null if it has none yet. */
+  thumbAt: number | null;
 }
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -34,6 +36,21 @@ export function documentUrl(id: string): string {
 /** The document's .docx bytes. */
 export async function downloadDocument(id: string): Promise<ArrayBuffer> {
   return (await check(await fetch(documentUrl(id)))).arrayBuffer();
+}
+
+/** Where a document's thumbnail image is (the version in the URL makes it safe to cache forever). */
+export function thumbnailUrl(doc: Pick<CloudDocument, 'id' | 'thumbAt'>): string | null {
+  return doc.thumbAt == null ? null : `/api/documents/${doc.id}/thumbnail?v=${doc.thumbAt}`;
+}
+
+/** Uploads the first-page thumbnail for a document. */
+export async function uploadThumbnail(id: string, image: Blob): Promise<CloudDocument> {
+  const response = await fetch(`/api/documents/${id}/thumbnail`, {
+    method: 'PUT',
+    headers: { 'content-type': image.type },
+    body: image,
+  });
+  return (await check(response)).json();
 }
 
 export async function listDocuments(): Promise<CloudDocument[]> {

@@ -14,4 +14,7 @@ export const USER_MIGRATIONS: string[][] = [
      )`,
     `CREATE INDEX documents_updated ON documents (updated_at DESC)`,
   ],
+  // 2: a thumbnail of the first page, rendered by the client that saved the document (the bytes
+  // live in R2 at `<r2_key minus .docx>.thumb`). thumb_at is null until one has been uploaded.
+  [`ALTER TABLE documents ADD COLUMN thumb_at INTEGER`],
 ];

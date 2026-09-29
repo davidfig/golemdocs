@@ -16,7 +16,7 @@ import {
 } from './actions.ts';
 import { CommandRegistry, type CommandSpec } from './commands.ts';
 import { h } from './dom.ts';
-import { FORMATS, SAVE_AS_ORDER } from './formats.ts';
+import { CONVERT_ORDER, FORMATS } from './formats.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
@@ -85,6 +85,9 @@ export class Chrome {
   /** Controls that can be placed on toolbars besides command buttons (the font box…). */
   private readonly controls = new Map<string, { label: string; category: string; icon: string; create: () => Control }>();
   private layout: ToolbarLayout[];
+  /** The "Format" selector at the right of the menu bar. */
+  private readonly formatBox: HTMLElement;
+  private formatSelect!: HTMLSelectElement;
 
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
@@ -104,7 +107,8 @@ export class Chrome {
       e.preventDefault();
       this.customize();
     });
-    this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.toolbarsEl);
+    this.formatBox = this.buildFormatBox();
+    this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.formatBox, this.toolbarsEl);
     this.buildToolbars();
 
     window.addEventListener('keydown', (e) => this.shortcut(e), true);
@@ -142,6 +146,9 @@ export class Chrome {
 
   private refresh(): void {
     for (const toolbar of this.toolbars) toolbar.refresh(this.state);
+    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden);
+    this.menuBar.refresh();
+    this.syncFormatBox();
     const name = this.state.documentName;
     const title = name ? `${name} - ${this.appName}` : this.appName;
     if (document.title !== title) document.title = title;
@@ -172,9 +179,10 @@ export class Chrome {
 
     // File
     r.add(
+      a('file.dashboard', '&Dashboard', { kind: 'dashboard' }, { tooltip: 'See all your documents' }),
       a('file.new', '&New', { kind: 'new' }, { icon: 'new', tooltip: 'New Blank Document' }),
       a('file.open', '&Open…', { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
-      a('file.save', '&Save', { kind: 'save' }, { icon: 'save', shortcut: 'Mod+S', tooltip: 'Save in this browser' }),
+      a('file.download', 'Do&wnload', { kind: 'download' }, { tooltip: 'Download a copy of this document' }),
       a('file.saveToCloud', 'Save to &Cloud', { kind: 'saveToCloud' }, { tooltip: 'Keep a copy in your account (sign-in required)' }),
       dialog('file.pageSetup', 'Page Set&up…', 'pageSetup'),
       a('file.printPreview', 'Print Pre&view', { kind: 'printPreview' }, { icon: 'printPreview' }),
@@ -182,9 +190,9 @@ export class Chrome {
       a('file.print', '&Print…', { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
       dialog('file.properties', 'Propert&ies', 'properties', { icon: 'properties' }),
     );
-    for (const kind of SAVE_AS_ORDER) {
+    for (const kind of CONVERT_ORDER) {
       const profile = FORMATS[kind];
-      r.add(a(`file.saveAs.${kind}`, `${profile.label} (${profile.extensions[0]})`, { kind: 'saveAs', format: kind }));
+      r.add(a(`file.convertTo.${kind}`, `${profile.label} (${profile.extensions[0]})`, { kind: 'convert', to: kind }, { enabled: (s) => s.kind !== kind }));
     }
 
     // Edit
@@ -351,6 +359,7 @@ export class Chrome {
       label,
       hint,
       enabled: r.allows({ kind: 'insertText', text }),
+      available: () => r.availableFor({ kind: 'insertText', text }),
       run: () => r.perform({ kind: 'insertText', text }, 'Insert'),
     });
 
@@ -358,6 +367,8 @@ export class Chrome {
       {
         label: '&File',
         items: [
+          cmd('file.dashboard'),
+          sep,
           cmd('file.new'),
           cmd('file.open'),
           sub('Open Sa&mple', () => {
@@ -382,9 +393,9 @@ export class Chrome {
             return [...docs, sep, { type: 'item', label: `Sign &out${who}`, run: () => r.perform({ kind: 'signOut' }, 'Sign out') }];
           }),
           sep,
-          cmd('file.save'),
           cmd('file.saveToCloud'),
-          sub('Save &As', SAVE_AS_ORDER.map((k) => cmd(`file.saveAs.${k}`))),
+          sub('Con&vert To', CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
+          cmd('file.download'),
           cmd('file.collaborate'),
           sep,
           cmd('file.pageSetup'),
@@ -547,6 +558,8 @@ export class Chrome {
     const focus = () => this.options.host.focusEditor();
     const profile = () => FORMATS[this.state.kind];
     const define = (id: string, label: string, category: string, icon: string, create: () => Control) => this.controls.set(id, { label, category, icon, create });
+    /** A control the open format can't use is hidden, not just disabled. */
+    const gated = (c: Control, available: () => boolean): Control => ({ ...c, available });
 
     define('control.zoom', 'Zoom Box', 'View', 'zoom', () =>
       comboBox(
@@ -571,80 +584,138 @@ export class Chrome {
     );
 
     define('control.style', 'Style Box', 'Format', 'combo', () =>
-      comboBox(
-        {
-          label: 'Style',
-          width: 96,
-          options: () => [...profile().styles],
-          value: (s) => s.format.style ?? '',
-          enabled: () => profile().editable && profile().styles.length > 0 && r.allows({ kind: 'setStyle', style: profile().styles[0] }),
-          optionStyle: (style) => styleOptionCss(style),
-          commit: (text) => {
-            const style = profile().styles.find((s) => s.toLowerCase() === text.toLowerCase());
-            if (!style) {
-              this.options.host.notify(`There's no style named "${text}"`);
-              return false;
-            }
-            r.perform({ kind: 'setStyle', style }, 'Style');
-            return true;
+      gated(
+        comboBox(
+          {
+            label: 'Style',
+            width: 96,
+            options: () => [...profile().styles],
+            value: (s) => s.format.style ?? '',
+            enabled: () => profile().editable && profile().styles.length > 0 && r.allows({ kind: 'setStyle', style: profile().styles[0] }),
+            optionStyle: (style) => styleOptionCss(style),
+            commit: (text) => {
+              const style = profile().styles.find((s) => s.toLowerCase() === text.toLowerCase());
+              if (!style) {
+                this.options.host.notify(`There's no style named "${text}"`);
+                return false;
+              }
+              r.perform({ kind: 'setStyle', style }, 'Style');
+              return true;
+            },
           },
-        },
-        state,
-        focus,
+          state,
+          focus,
+        ),
+        () => profile().styles.length > 0,
       ),
     );
 
     define('control.font', 'Font Box', 'Format', 'combo', () =>
-      comboBox(
-        {
-          label: 'Font',
-          width: 128,
-          options: () => [...this.recentFonts, ...this.fonts],
-          headerCount: () => this.recentFonts.length,
-          value: (s) => s.format.font ?? '',
-          enabled: () => r.allows({ kind: 'setFont', family: 'Calibri' }),
-          optionStyle: (font) => `font-family:${JSON.stringify(font)},system-ui;font-size:13px`,
-          commit: (text) => {
-            const family = this.fonts.find((f) => f.toLowerCase() === text.toLowerCase()) ?? text;
-            this.recentFonts = [family, ...this.recentFonts.filter((f) => f !== family)].slice(0, 3);
-            r.perform({ kind: 'setFont', family }, 'Font');
-            return true;
+      gated(
+        comboBox(
+          {
+            label: 'Font',
+            width: 128,
+            options: () => [...this.recentFonts, ...this.fonts],
+            headerCount: () => this.recentFonts.length,
+            value: (s) => s.format.font ?? '',
+            enabled: () => r.allows({ kind: 'setFont', family: 'Calibri' }),
+            optionStyle: (font) => `font-family:${JSON.stringify(font)},system-ui;font-size:13px`,
+            commit: (text) => {
+              const family = this.fonts.find((f) => f.toLowerCase() === text.toLowerCase()) ?? text;
+              this.recentFonts = [family, ...this.recentFonts.filter((f) => f !== family)].slice(0, 3);
+              r.perform({ kind: 'setFont', family }, 'Font');
+              return true;
+            },
           },
-        },
-        state,
-        focus,
+          state,
+          focus,
+        ),
+        () => profile().fonts,
       ),
     );
 
     define('control.size', 'Font Size Box', 'Format', 'combo', () =>
-      comboBox(
-        {
-          label: 'Font Size',
-          width: 30,
-          options: () => FONT_SIZES.map(String),
-          value: (s) => (s.format.size ? String(s.format.size) : ''),
-          enabled: () => r.allows({ kind: 'setFontSize', points: 11 }),
-          commit: (text) => {
-            const points = Math.round(parseFloat(text) * 2) / 2;
-            if (!(points >= 1 && points <= 1638)) {
-              this.options.host.notify('The font size must be a number between 1 and 1638');
-              return false;
-            }
-            r.perform({ kind: 'setFontSize', points }, 'Font Size');
-            return true;
+      gated(
+        comboBox(
+          {
+            label: 'Font Size',
+            width: 30,
+            options: () => FONT_SIZES.map(String),
+            value: (s) => (s.format.size ? String(s.format.size) : ''),
+            enabled: () => r.allows({ kind: 'setFontSize', points: 11 }),
+            commit: (text) => {
+              const points = Math.round(parseFloat(text) * 2) / 2;
+              if (!(points >= 1 && points <= 1638)) {
+                this.options.host.notify('The font size must be a number between 1 and 1638');
+                return false;
+              }
+              r.perform({ kind: 'setFontSize', points }, 'Font Size');
+              return true;
+            },
           },
-        },
-        state,
-        focus,
+          state,
+          focus,
+        ),
+        () => profile().fontSizes,
       ),
     );
 
     define('control.highlight', 'Highlight', 'Format', 'highlight', () =>
-      colorButton({ label: 'Highlight', icon: 'highlight', noneLabel: 'None', initial: '#FFFF00', palette: 'highlight', action: (color) => ({ kind: 'setHighlight', color }) }, r),
+      gated(
+        colorButton({ label: 'Highlight', icon: 'highlight', noneLabel: 'None', initial: '#FFFF00', palette: 'highlight', action: (color) => ({ kind: 'setHighlight', color }) }, r),
+        () => profile().highlight,
+      ),
     );
     define('control.fontColor', 'Font Color', 'Format', 'fontColor', () =>
-      colorButton({ label: 'Font Color', icon: 'fontColor', noneLabel: 'Automatic', initial: '#FF0000', palette: 'full', action: (color) => ({ kind: 'setColor', color }) }, r),
+      gated(
+        colorButton({ label: 'Font Color', icon: 'fontColor', noneLabel: 'Automatic', initial: '#FF0000', palette: 'full', action: (color) => ({ kind: 'setColor', color }) }, r),
+        () => profile().colors,
+      ),
     );
+  }
+
+  // --- Format selector ---------------------------------------------------------------------
+
+  /** "Format: [Word Document ▾]": switches the open document to another format (Action 'convert'). */
+  private buildFormatBox(): HTMLElement {
+    const select = h('select', { class: 'wm-format-select', attrs: { 'aria-label': 'Document format', title: 'Document format: switching changes the tools available' } });
+    this.formatSelect = select;
+    select.addEventListener('change', () => {
+      const { host } = this.options;
+      const to = select.value as keyof typeof FORMATS;
+      const action: Action = { kind: 'convert', to };
+      if (!host.supports(action)) {
+        host.notify(`Converting to ${FORMATS[to].label} isn't available yet`);
+        select.value = this.state.kind;
+        return;
+      }
+      select.disabled = true;
+      Promise.resolve(host.perform(action))
+        .catch((e: unknown) => host.notify(`Couldn't convert: ${(e as Error).message ?? e}`))
+        .finally(() => {
+          select.disabled = false;
+          select.value = this.state.kind;
+          host.focusEditor();
+        });
+    });
+    // Keep the document's keys out of the selector's way, and its focus with the document.
+    select.addEventListener('keydown', (e) => e.stopPropagation());
+    return h('label', { class: 'wm-format' }, h('span', { class: 'wm-format-label', text: 'Format' }), select);
+  }
+
+  /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */
+  private syncFormatBox(): void {
+    const select = this.formatSelect;
+    const kinds = CONVERT_ORDER.includes(this.state.kind) ? CONVERT_ORDER : [...CONVERT_ORDER, this.state.kind];
+    const have = [...select.options].map((o) => o.value).join();
+    if (have !== kinds.join()) {
+      select.replaceChildren(...kinds.map((kind) => h('option', { text: FORMATS[kind].label, attrs: { value: kind } })));
+    }
+    select.value = this.state.kind;
+    select.title = FORMATS[this.state.kind].editable
+      ? 'Document format: switching changes the tools available'
+      : 'Read-only format: switch to Word Document to edit';
   }
 
   /** (Re)creates the toolbars from the layout. */
@@ -655,14 +726,14 @@ export class Chrome {
       const c = this.controls.get(id);
       if (c) return control(c.create);
       // Insert Table gets the drag-out size grid.
-      if (id === 'insert.table') return control(() => tableGridButton(r, id));
+      if (id === 'insert.table') return control(() => ({ ...tableGridButton(r, id), available: () => r.isAvailable(r.get(id)) }));
       return btn(id);
     };
     this.toolbars.length = 0;
     this.toolbarsEl.replaceChildren();
     for (const t of this.layout) {
       const toolbar = new Toolbar(t.name, r, t.items.map(item));
-      toolbar.el.hidden = !t.visible || t.items.length === 0;
+      toolbar.setShown(t.visible && t.items.length > 0);
       this.toolbars.push(toolbar);
       this.toolbarsEl.append(toolbar.el);
     }
@@ -695,7 +766,7 @@ export class Chrome {
       help: 'Help',
     };
     const prefixes: [string, string][] = [
-      ['file.saveAs.', 'Save As '],
+      ['file.convertTo.', 'Convert To '],
       ['format.case.', 'Change Case: '],
       ['format.spacing.', 'Line Spacing '],
       ['table.', 'Table: '],

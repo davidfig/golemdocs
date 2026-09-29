@@ -4,13 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 3001",
+    "dev": "mkdir -p ../client/dist && wrangler dev --env dev --port 3001",
+    "dev:local": "mkdir -p ../client/dist && wrangler dev --env local --port 3001",
     "build": "tsc",
     "typecheck": "tsc",
     "test": "tsx --test \"test/**/*.test.ts\"",
     "cf:setup": "wrangler d1 create word-directory && wrangler r2 bucket create word-files",
-    "cf:migrate": "wrangler d1 migrations apply DIRECTORY --remote",
-    "deploy": "pnpm --filter @word/client build && wrangler deploy"
+    "cf:setup:dev": "wrangler d1 create word-directory-dev && wrangler r2 bucket create word-files-dev",
+    "cf:migrate:dev": "wrangler d1 migrations apply DIRECTORY --env dev --remote",
+    "cf:migrate:local": "wrangler d1 migrations apply DIRECTORY --env local --local",
+    "cf:migrate": "wrangler d1 migrations apply DIRECTORY --env=\"\" --remote",
+    "deploy": "pnpm --filter @word/client build && wrangler deploy --env=\"\""
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

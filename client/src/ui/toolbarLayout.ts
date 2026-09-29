@@ -17,7 +17,6 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
     items: [
       'file.new',
       'file.open',
-      'file.save',
       SEPARATOR,
       'file.print',
       'file.printPreview',

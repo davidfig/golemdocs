@@ -101,6 +101,21 @@ export class CommandRegistry {
     return this.context.showUnimplemented || this.context.host.supports(action);
   }
 
+  /**
+   * Whether the open document's format can express the command at all. Commands it can't are
+   * hidden from toolbars and menus (a plain-text document has no fonts to pick); commands it can
+   * but that don't apply right now (Undo with nothing to undo) are shown disabled.
+   */
+  isAvailable(command: Command): boolean {
+    const action = this.actionOf(command);
+    return !action || formatAllows(FORMATS[this.context.state().kind], action);
+  }
+
+  /** As `isAvailable`, for value-carrying actions of combo boxes and color buttons. */
+  availableFor(action: Action): boolean {
+    return formatAllows(FORMATS[this.context.state().kind], action);
+  }
+
   isChecked(command: Command): boolean {
     return command.checked?.(this.context.state()) ?? false;
   }

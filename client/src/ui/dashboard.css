@@ -1,0 +1,250 @@
+/* The dashboard: a screen over the editor's canvas (see dashboard.ts). Uses the chrome's tokens. */
+
+.wm-dashboard {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--wm-gutter, #eeeeea);
+  color: var(--wm-text, #000);
+  font: 13px/1.3 var(--wm-font, system-ui, sans-serif);
+}
+
+.wm-dashboard[hidden] {
+  display: none;
+}
+
+.wm-dashboard button,
+.wm-dashboard input {
+  font: inherit;
+  color: inherit;
+}
+
+.wm-dash-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--wm-border, #b9b9b9);
+  background: var(--wm-face, #f0f0f0);
+}
+
+.wm-dash-head h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.wm-dash-search {
+  flex: 1;
+  max-width: 360px;
+  padding: 5px 8px;
+  border: 1px solid var(--wm-field-border, #7f9db9);
+  background: #fff;
+}
+
+.wm-dash-account {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-dashboard button {
+  padding: 4px 10px;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  border-radius: 3px;
+  background: linear-gradient(var(--wm-bar-top, #fbfbfb), var(--wm-bar-bottom, #e4e4e4));
+  cursor: pointer;
+}
+
+.wm-dashboard button:hover:not(:disabled) {
+  border-color: var(--wm-hot-border, #316ac5);
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-dashboard button:disabled {
+  color: var(--wm-disabled, #a0a0a0);
+  cursor: default;
+}
+
+.wm-dashboard :focus-visible {
+  outline: 2px solid var(--wm-hot-border, #316ac5);
+  outline-offset: 2px;
+}
+
+.wm-dash-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 32px;
+}
+
+.wm-dash-notice {
+  margin: 0 0 12px;
+  color: #8a4b00;
+}
+
+.wm-dash-notice:empty {
+  display: none;
+}
+
+.wm-dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 20px 16px;
+  align-items: start;
+}
+
+.wm-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Reset the shared button look for the card's big click target. */
+.wm-dashboard .wm-card-open {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.wm-dashboard .wm-card-open:hover:not(:disabled) {
+  background: none;
+}
+
+.wm-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 8.5 / 11;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+}
+
+.wm-card-open:hover .wm-thumb,
+.wm-card-open:focus-visible .wm-thumb {
+  border-color: var(--wm-hot-border, #316ac5);
+}
+
+.wm-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Until there's a picture: a blank page with a few grey lines of "text". */
+.wm-thumb-empty {
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(#0000 0 12px, #e2e2e2 12px 14px) 14% 16% / 72% 62% no-repeat,
+    #fff;
+}
+
+.wm-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-card-meta {
+  color: #666;
+  font-size: 12px;
+}
+
+.wm-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wm-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #dcdcd6;
+  font-size: 11px;
+}
+
+.wm-badge-ok {
+  background: #d3ecd7;
+}
+
+.wm-badge-pending {
+  background: #dbe4f5;
+}
+
+.wm-badge-warn {
+  background: #f7dcb5;
+}
+
+.wm-badge-muted {
+  color: #666;
+}
+
+.wm-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wm-card-actions button {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* Actions stay out of the way until the card is pointed at (and always show on touch screens). */
+@media (hover: hover) {
+  .wm-card-actions {
+    visibility: hidden;
+  }
+
+  .wm-card:hover .wm-card-actions,
+  .wm-card:focus-within .wm-card-actions {
+    visibility: visible;
+  }
+}
+
+.wm-dashboard .wm-card-new {
+  aspect-ratio: 8.5 / 11;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--wm-border, #b9b9b9);
+  background: transparent;
+}
+
+.wm-plus {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.wm-dash-empty {
+  grid-column: 1 / -1;
+  margin: 8px 0;
+  color: #666;
+}
+
+@media (max-width: 640px) {
+  .wm-dash-head {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+
+  .wm-dash-scroll {
+    padding: 12px;
+  }
+}

@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --parallel --recursive dev",
+    "dev": "tsx scripts/dev.ts",
     "dev:client": "pnpm --filter @word/client dev",
     "dev:server": "pnpm --filter @word/server dev",
+    "kill": "tsx scripts/kill.ts",
     "build": "pnpm --recursive build",
     "typecheck": "tsc && pnpm --recursive typecheck",
     "fonts": "tsx scripts/fonts/generate.ts",

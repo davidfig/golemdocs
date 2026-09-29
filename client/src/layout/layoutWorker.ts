@@ -12,9 +12,11 @@ import {
   FontSet,
   LayoutSession,
   type EncodedPage,
+  PageLayout,
   type FaceDescriptor,
-  type PageLayout,
 } from '@word/layout';
+import { convertContent, readDocument, writeDocument, type Format, type OpenContent } from '../formats/convert.ts';
+import { openPdfView, type PdfView } from '../formats/pdfPages.ts';
 import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
@@ -49,8 +51,16 @@ async function fetchOk(url: string): Promise<Response> {
   return response;
 }
 
-async function read(source: DocumentSource, fonts: FontSet): Promise<{ name: string; document: WordDocument }> {
+/** The format a source is edited as. */
+function formatOf(source: DocumentSource): Format {
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' ? source.kind : 'docx';
+}
+
+async function read(source: Exclude<DocumentSource, { kind: 'pdf' }>, fonts: FontSet): Promise<{ name: string; document: WordDocument }> {
   switch (source.kind) {
+    case 'md':
+    case 'txt':
+      return { name: source.name, document: await readDocument(source.kind, new Uint8Array(source.bytes)) };
     case 'docx':
       return { name: source.name, document: await WordDocument.read(new Uint8Array(source.bytes)) };
     case 'docx-url':
@@ -74,6 +84,12 @@ interface Person {
 }
 
 class OpenDocument {
+  /** What the document is edited as (a PDF isn't edited: `pdf` is set and there's no editor). */
+  format: Format = 'docx';
+  /** A PDF's original bytes and its lazily laid-out pages. */
+  pdf: { view: PdfView; bytes: Uint8Array } | null = null;
+  /** The PDF's pages laid out so far, in order. */
+  private pdfPages: PageLayout[] = [];
   document: WordDocument | null = null;
   replica: Replica | null = null;
   session: LayoutSession | null = null;
@@ -130,9 +146,35 @@ class OpenDocument {
     }
   }
 
+  /** Lays out a PDF's pages one after another, sending them as they come (first pages appear at once). */
+  async pumpPdf(): Promise<number> {
+    const { view } = this.pdf!;
+    const start = performance.now();
+    let sliceStart = start;
+    for (let i = 0; i < view.pageCount && !this.closed; i++) {
+      let page: PageLayout;
+      try {
+        page = view.layoutPage(i);
+      } catch (e) {
+        // One unreadable page mustn't lose the rest: show it blank.
+        console.error(e);
+        page = new PageLayout(i, 612, 792, 0, i + 1);
+      }
+      this.pdfPages.push(page);
+      this.pending.push(page);
+      if (performance.now() - sliceStart > SLICE_MS) {
+        this.flush();
+        await yieldTask();
+        sliceStart = performance.now();
+      }
+    }
+    if (!this.closed) this.flush();
+    return performance.now() - start;
+  }
+
   /** Sends new pages, overlays and the page order. */
   private flush(): void {
-    const session = this.session!;
+    const session = this.session;
     const transfer: Transferable[] = [];
     const faces: FaceDescriptor[] = [];
     const encode = (page: PageLayout): EncodedPage => {
@@ -149,10 +191,10 @@ class OpenDocument {
     };
     // Pages to keep on the page thread: those shown now, and kept pages a running layout
     // may still reuse.
-    const display = session.displayPages;
+    const display = session ? session.displayPages : this.pdfPages;
     const keep = new Set<number>();
     for (const page of display) keep.add(page.id);
-    for (const page of session.pages) keep.add(page.id);
+    if (session) for (const page of session.pages) keep.add(page.id);
 
     // Pages from a superseded run may already be out of date: those aren't sent at all.
     const pages = this.pending
@@ -326,7 +368,7 @@ class OpenDocument {
 
 let current: OpenDocument | null = null;
 
-async function open(doc: number, source: DocumentSource, room?: RoomOptions): Promise<void> {
+async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions): Promise<void> {
   current?.leave();
   current?.controller.abort();
   const entry = new OpenDocument(doc);
@@ -334,6 +376,21 @@ async function open(doc: number, source: DocumentSource, room?: RoomOptions): Pr
   try {
     const fonts = await fontsReady;
     const t0 = performance.now();
+    if (source.kind === 'pdf') {
+      const view = await openPdfView(new Uint8Array(source.bytes), fonts);
+      const readMs = performance.now() - t0;
+      if (entry.closed) return;
+      entry.format = 'pdf';
+      entry.pdf = { view, bytes: new Uint8Array(source.bytes) };
+      post({ type: 'opened', doc, name: source.name });
+      const bodyMs = await entry.pumpPdf();
+      if (entry.closed) return;
+      post({ type: 'done', doc, pages: view.pageCount, timings: { read: readMs, fonts: 0, body: bodyMs, headers: 0 } });
+      return;
+    }
+    entry.format = formatOf(source);
+    // Rooms share a .docx, so only a Word document can be in one.
+    const room = entry.format === 'docx' ? requestedRoom : undefined;
     let { name, document } = await read(source, fonts);
     const readMs = performance.now() - t0;
     if (entry.closed) return;
@@ -373,17 +430,25 @@ async function open(doc: number, source: DocumentSource, room?: RoomOptions): Pr
 async function media(doc: number, request: number, part: string): Promise<void> {
   let bytes: ArrayBuffer | null = null;
   try {
-    if (current?.doc === doc && current.document) bytes = (await current.document.media(part)).slice().buffer;
+    if (current?.doc === doc && current.pdf) bytes = (await current.pdf.view.media(part))?.slice().buffer ?? null;
+    else if (current?.doc === doc && current.document) bytes = (await current.document.media(part)).slice().buffer;
   } catch {
     bytes = null;
   }
   post({ type: 'media', request, bytes }, bytes ? [bytes] : []);
 }
 
-async function save(doc: number, request: number): Promise<void> {
+/** The open document as a file of its own format (`to` unset) or another one. */
+async function save(doc: number, request: number, to?: Format): Promise<void> {
   try {
-    if (current?.doc !== doc || !current.document) throw new Error('no document');
-    const bytes = (await current.document.write()).slice().buffer;
+    const open = current;
+    if (open?.doc !== doc) throw new Error('no document');
+    let content: OpenContent;
+    if (open.pdf) content = { format: 'pdf', bytes: open.pdf.bytes };
+    else if (open.document && open.format !== 'pdf') content = { format: open.format, document: open.document };
+    else throw new Error('no document');
+    const target = to ?? open.format;
+    const bytes = (target === content.format && content.format !== 'pdf' ? await writeDocument(content.document, target, await fontsReady) : await convertContent(content, target, await fontsReady)).slice().buffer;
     post({ type: 'saved', request, bytes }, [bytes]);
   } catch (e) {
     post({ type: 'saved', request, bytes: null, error: (e as Error).message });
@@ -416,6 +481,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     case 'save':
       void save(message.doc, message.request);
+      break;
+    case 'convert':
+      void save(message.doc, message.request, message.to);
       break;
   }
 };

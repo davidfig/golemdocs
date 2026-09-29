@@ -11,6 +11,11 @@ import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 export interface Control {
   el: HTMLElement;
   refresh(state: ChromeState): void;
+  /**
+   * False when the open document's format can't express what the control does: it is then
+   * hidden (not just disabled), and the toolbar closes up around it.
+   */
+  available?(state: ChromeState): boolean;
 }
 
 export type ToolbarItem = { type: 'button'; id: string } | { type: 'separator' } | { type: 'control'; create: () => Control };
@@ -22,6 +27,10 @@ export const control = (create: () => Control): ToolbarItem => ({ type: 'control
 export class Toolbar {
   readonly el: HTMLDivElement;
   private readonly controls: Control[] = [];
+  /** Every child in order, separators included (`control` is null for those). */
+  private readonly entries: { el: HTMLElement; control: Control | null }[] = [];
+  /** The toolbar's own visibility setting (View ▸ Toolbars); formats can only hide it further. */
+  private shown = true;
 
   constructor(
     readonly name: string,
@@ -31,17 +40,49 @@ export class Toolbar {
     this.el = h('div', { class: 'wm-toolbar', attrs: { role: 'toolbar', 'aria-label': name } });
     for (const item of items) {
       if (item.type === 'separator') {
-        this.el.append(h('span', { class: 'wm-tsep', attrs: { role: 'separator' } }));
+        const el = h('span', { class: 'wm-tsep', attrs: { role: 'separator' } });
+        this.entries.push({ el, control: null });
+        this.el.append(el);
         continue;
       }
       const c = item.type === 'button' ? commandButton(registry, item.id) : item.create();
       this.controls.push(c);
+      this.entries.push({ el: c.el, control: c });
       this.el.append(c.el);
     }
   }
 
+  /** Whether the user has this toolbar turned on (it can still be empty for the format). */
+  setShown(shown: boolean): void {
+    this.shown = shown;
+    this.el.hidden = !shown || this.empty;
+  }
+
+  private empty = false;
+
   refresh(state: ChromeState): void {
-    for (const c of this.controls) c.refresh(state);
+    for (const c of this.controls) {
+      c.refresh(state);
+      c.el.hidden = c.available ? !c.available(state) : false;
+    }
+    // Close up: no separator at either end or doubled, and no toolbar with nothing on it.
+    let pending: HTMLElement | null = null;
+    let seen = false;
+    let visible = 0;
+    for (const { el, control } of this.entries) {
+      if (!control) {
+        el.hidden = true;
+        if (seen && !pending) pending = el;
+        continue;
+      }
+      if (control.el.hidden) continue;
+      if (pending) pending.hidden = false;
+      pending = null;
+      seen = true;
+      visible++;
+    }
+    this.empty = visible === 0;
+    this.el.hidden = !this.shown || this.empty;
   }
 }
 
@@ -66,6 +107,7 @@ export function commandButton(registry: CommandRegistry, id: string): Control {
   el.addEventListener('click', () => registry.execute(command));
   return {
     el,
+    available: () => registry.isAvailable(command),
     refresh() {
       el.disabled = !registry.isEnabled(command);
       if (command.checked) setAttr(el, 'aria-pressed', String(registry.isChecked(command)));

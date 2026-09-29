@@ -22,6 +22,7 @@ export interface R2ObjectBody {
   body: ReadableStream;
   size: number;
   httpEtag: string;
+  httpMetadata?: { contentType?: string };
 }
 
 export interface R2Bucket {
@@ -40,6 +41,8 @@ export interface Env {
   FILES: R2Bucket;
   CF_ACCOUNT_ID: string;
   CF_API_TOKEN: string;
+  /** `production`, `dev` or `local` (see wrangler.jsonc). */
+  ENVIRONMENT?: string;
   /** Local development only: treated as the signed-in user. */
   DEV_USER?: string;
 

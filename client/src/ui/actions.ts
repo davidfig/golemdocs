@@ -49,6 +49,8 @@ export type DialogName =
 
 export type Action =
   // File
+  /** The screen of thumbnails of every document, in this browser and in the cloud. */
+  | { kind: 'dashboard' }
   | { kind: 'new' }
   | { kind: 'open' }
   | { kind: 'openSample'; id: string }
@@ -56,11 +58,16 @@ export type Action =
   | { kind: 'openSaved'; id: string }
   /** A document in the user's cloud storage (needs an account). */
   | { kind: 'openCloud'; id: string }
-  | { kind: 'save' }
   | { kind: 'saveToCloud' }
   | { kind: 'signIn' }
   | { kind: 'signOut' }
-  | { kind: 'saveAs'; format: DocumentKind }
+  /** Download a copy of the document, in its own format. */
+  | { kind: 'download' }
+  /**
+   * Make a copy of the document in another format (Word ⇄ PDF ⇄ Markdown ⇄ text), saved next to
+   * the original, and open it. The original is kept as it is.
+   */
+  | { kind: 'convert'; to: DocumentKind }
   | { kind: 'print' }
   | { kind: 'printPreview' }
   /** Edit the document together with other people. */

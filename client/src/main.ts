@@ -5,7 +5,9 @@ import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
-import { getSaved, listSaved, saveSaved, type SavedInfo } from './storage/local.ts';
+import { getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
+import { capturePageThumbnail } from './thumbnail.ts';
+import { Dashboard } from './ui/dashboard.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
@@ -16,7 +18,9 @@ import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
 import { GpuPage } from './view/gpuPage.ts';
 import { PageRenderer } from './view/pageRenderer.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
-import { kindFromName, mountChrome, type FormatState } from './ui/index.ts';
+import { conversionIsLossy, isFormat } from './formats/convert.ts';
+import { sourceFromFile, stem } from './formats/source.ts';
+import { FORMATS, mountChrome, type DocumentKind, type FormatState } from './ui/index.ts';
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -57,6 +61,8 @@ const pagesById = new Map<number, GpuPage>();
 let bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 };
 let grid = false;
 let documentName = '';
+/** What the open document is: Word, PDF, Markdown or text. It decides which tools are on offer. */
+let documentKind: DocumentKind = 'docx';
 let status = '';
 /** Collaboration status, when the document is open in a room. */
 let roomStatus = '';
@@ -69,6 +75,11 @@ let cameraPlaced = false;
 /** The user has scrolled or zoomed since opening (streaming then stops moving the camera). */
 let userMoved = false;
 
+/** The format a source is opened as (everything but PDF, Markdown and text is a Word document). */
+function kindOfSource(source: DocumentSource): DocumentKind {
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' ? source.kind : 'docx';
+}
+
 function setStatus(text: string): void {
   status = text;
   requestRender();
@@ -78,6 +89,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   const start = performance.now();
   let name = 'name' in source ? source.name : 'Fonts';
   let firstPage = 0;
+  saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
+  current = { localId: options.localId ?? null, unsavedSince: 0 };
   for (const page of pagesById.values()) page.dispose(gl!);
   pagesById.clear();
   pages = [];
@@ -87,7 +100,6 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   renderer.images?.clear();
   renderer.images = new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, requestRender);
   grid = options.grid ?? false;
-  localId = options.localId ?? null;
   loaded = false;
   cameraPlaced = false;
   userMoved = false;
@@ -95,6 +107,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   roomStatus = '';
   pendingNotice = null;
   documentName = name;
+  documentKind = kindOfSource(source);
   setStatus(`Loading ${name}…`);
 
   worker.open(source, {
@@ -121,6 +134,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
         setStatus(pendingNotice);
         pendingNotice = null;
       }
+      if (current.localId) backfillThumbnail(current.localId);
     },
     selection(update) {
       applySelection(update);
@@ -155,6 +169,10 @@ function roomOptions(): RoomOptions | undefined {
 /** Puts the document, as it is now, in a new room, and opens a second window on it. */
 async function collaborate(): Promise<void> {
   const params = new URLSearchParams(location.search);
+  if (documentKind !== 'docx') {
+    setStatus('Switch the format to Word Document to collaborate');
+    return;
+  }
   if (!params.get('room')) {
     let bytes: Uint8Array;
     try {
@@ -170,7 +188,10 @@ async function collaborate(): Promise<void> {
   }
   window.open(location.href, '_blank', 'popup,width=900,height=900');
 }
-window.addEventListener('pagehide', () => worker.leave());
+window.addEventListener('pagehide', () => {
+  saveIfEdited();
+  worker.leave();
+});
 
 function applyLayout(update: LayoutUpdate): void {
   for (const encoded of update.pages) pagesById.set(encoded.id, new GpuPage(encoded, atlases));
@@ -236,12 +257,52 @@ function openSource(source: string, keepRoom = false): void {
 }
 
 // --- Saving ----------------------------------------------------------------------------
-// Save keeps the document in this browser (IndexedDB), so the app needs no account. The cloud is
-// an opt-in extra: only Save to Cloud and Cloud Documents ask the user to sign in, and they save
-// in the browser first, so leaving the page to sign in never loses work.
+// Documents save themselves in this browser (IndexedDB) a moment after each edit, so there's no
+// Save command and the app needs no account. The cloud is an opt-in extra: only Save to Cloud and
+// Cloud Documents ask the user to sign in, and they save in the browser first, so leaving the
+// page to sign in never loses work.
 
-/** The open document's id among the documents saved in this browser (null until first saved). */
-let localId: string | null = null;
+const AUTOSAVE_DELAY_MS = 1000;
+/** Typing without a pause still saves this often. */
+const AUTOSAVE_MAX_WAIT_MS = 10_000;
+
+interface OpenDocument {
+  /** Its id among the documents saved in this browser (null until first saved). */
+  localId: string | null;
+  /** When its oldest unsaved edit was made (performance.now()), or 0 when everything is saved. */
+  unsavedSince: number;
+}
+
+/** A new one per open(), so a save finishing for the previous document can't touch this one. */
+let current: OpenDocument = { localId: null, unsavedSince: 0 };
+let autosaveTimer = 0;
+/** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
+let saving: Promise<unknown> = Promise.resolve();
+
+/** Schedules a save for once editing pauses. */
+function documentEdited(): void {
+  const now = performance.now();
+  if (!current.unsavedSince) current.unsavedSince = now;
+  clearTimeout(autosaveTimer);
+  const wait = Math.min(AUTOSAVE_DELAY_MS, current.unsavedSince + AUTOSAVE_MAX_WAIT_MS - now);
+  autosaveTimer = window.setTimeout(() => void saveInBrowser(), Math.max(0, wait));
+}
+
+/** Saves now if there are unsaved edits (another document is opening, or the page is going away). */
+function saveIfEdited(): void {
+  if (current.unsavedSince) void saveInBrowser();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveIfEdited();
+});
+
+/** The open document's id in this browser, saving it first if it has unsaved edits or was never saved. */
+function saveNow(): Promise<string | null> {
+  const doc = current;
+  return doc.unsavedSince || !doc.localId ? saveInBrowser() : saving.then(() => doc.localId);
+}
+
 /** Shown when the current document finishes loading, which would otherwise replace it. */
 let pendingNotice: string | null = null;
 
@@ -270,23 +331,70 @@ function rememberInUrl(doc: string): void {
   history.replaceState(null, '', `?${params}`);
 }
 
-const docxName = () => documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
+/** The document's file name, with the extension of its current format. */
+const fileName = () => stem(documentName) + FORMATS[documentKind].extensions[0];
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
-/** Saves in this browser. Returns the saved document's id, or null if that failed. */
-async function saveInBrowser(): Promise<string | null> {
+/**
+ * Renders the first page as this saved copy's thumbnail (for the dashboard, and for the cloud
+ * copy). Never fails the save: without a thumbnail the dashboard just shows a blank page.
+ */
+async function makeThumbnail(info: SavedInfo): Promise<void> {
+  const page = pages[0];
+  if (!page || !gl) return;
   try {
-    const bytes = await worker.save();
-    const info = await saveSaved({ id: localId ?? undefined, name: docxName(), bytes });
-    localId = info.id;
-    rememberInUrl(`local:${info.id}`);
-    setStatus(`Saved “${info.name}” in this browser`);
-    void refreshLibrary();
-    return info.id;
-  } catch (e) {
-    setStatus(`Save failed: ${(e as Error).message}`);
-    return null;
+    const blob = await capturePageThumbnail(gl, renderer, page);
+    if (blob) await saveThumbnail(info.id, blob, info.updatedAt);
+  } catch {
+    // no thumbnail this time
+  } finally {
+    requestRender(); // the capture drew into a scratch framebuffer; the canvas is unchanged, but be sure
   }
+}
+
+/** Documents saved before thumbnails existed get one when first opened again (once their images have arrived). */
+function backfillThumbnail(id: string): void {
+  window.setTimeout(async () => {
+    if (current.localId !== id) return; // another document was opened meanwhile
+    const info = (await listSaved().catch(() => [])).find((d) => d.id === id);
+    if (!info) return;
+    const existing = await getThumbnail(id).catch(() => null);
+    if (existing?.forUpdatedAt === info.updatedAt) return;
+    await makeThumbnail(info);
+  }, 1500);
+}
+
+/** Saves the open document in this browser. Returns its id, or null if that failed. */
+function saveInBrowser(): Promise<string | null> {
+  clearTimeout(autosaveTimer);
+  const doc = current;
+  doc.unsavedSince = 0;
+  const name = fileName();
+  // Asked for now, while the worker still has this document.
+  const bytes = worker.save();
+  bytes.catch(() => {}); // handled below, once earlier saves are written
+  const done = saving.then(async () => {
+    const created = !doc.localId;
+    try {
+      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes });
+      doc.localId = info.id;
+      if (doc === current) {
+        await makeThumbnail(info);
+        rememberInUrl(`local:${info.id}`);
+        setStatus(`Saved “${info.name}” in this browser`);
+      }
+      // A new document changes what's listed; later saves only its order.
+      if (created) void refreshLibrary();
+      else savedDocs = await listSaved().catch(() => savedDocs);
+      return info.id;
+    } catch (e) {
+      if (!doc.unsavedSince) doc.unsavedSince = performance.now(); // still unsaved: the next edit tries again
+      if (doc === current) setStatus(`Save failed: ${(e as Error).message}`);
+      return null;
+    }
+  });
+  saving = done;
+  return done;
 }
 
 /** Uploads a document already saved in this browser; asks to sign in if there's no session. */
@@ -307,14 +415,15 @@ async function sendToCloud(id: string): Promise<void> {
 }
 
 async function saveToCloud(): Promise<void> {
-  const id = await saveInBrowser();
+  const id = await saveNow();
   if (id) await sendToCloud(id);
 }
 
-async function signIn(): Promise<void> {
+async function signIn(options: { dashboard?: boolean } = {}): Promise<void> {
   // Signing in leaves the page, so keep the document first.
-  const id = await saveInBrowser();
-  showSignInDialog(id ? returnTo({ doc: `local:${id}` }) : location.pathname);
+  const id = await saveNow();
+  const back: Record<string, string> = options.dashboard ? { dashboard: '1' } : {};
+  showSignInDialog(id ? returnTo({ doc: `local:${id}`, ...back }) : returnTo(back));
 }
 
 async function signOut(): Promise<void> {
@@ -330,17 +439,18 @@ async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
     pendingNotice = 'That document is no longer saved in this browser';
     return;
   }
-  open({ kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id });
+  open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id });
   if (thenSaveToCloud) await sendToCloud(id);
 }
 
 async function openCloud(id: string): Promise<void> {
   try {
     if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary();
-    const name = cloudDocs.find((d) => d.id === id)?.name ?? 'Document.docx';
+    const cloud = cloudDocs.find((d) => d.id === id);
+    const name = cloud?.name ?? 'Document.docx';
     setStatus('Opening from the cloud…');
-    const { info, bytes, usedBrowserCopy } = await openFromCloud({ id, name });
-    open({ kind: 'docx', name: info.name, bytes }, { localId: info.id });
+    const { info, bytes, usedBrowserCopy } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt });
+    open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id });
     rememberInUrl(`local:${info.id}`);
     if (usedBrowserCopy) pendingNotice = 'Opened your browser copy: it has changes the cloud doesn’t. Use Save to Cloud to sync them.';
     void refreshLibrary();
@@ -350,17 +460,70 @@ async function openCloud(id: string): Promise<void> {
   }
 }
 
-/** Downloads the document as a .docx file. */
+/** Downloads a copy of the document as a file, in its own format. */
 async function download(): Promise<void> {
   try {
     const bytes = await worker.save();
-    const name = documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
-    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+    const name = fileName();
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS[documentKind].mime }));
     const link = Object.assign(document.createElement('a'), { href: url, download: name });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(`Downloaded “${name}”`);
   } catch (e) {
-    setStatus(`Save failed: ${(e as Error).message}`);
+    setStatus(`Download failed: ${(e as Error).message}`);
+  }
+}
+
+/** What a switch to each format leaves out, for the notice shown afterwards. */
+const LOSSES: Record<string, string> = {
+  md: 'fonts, colors, sizes, alignment and anything else Markdown can’t express',
+  txt: 'all formatting, tables and images',
+  pdf: 'editing (a PDF is a fixed layout)',
+  docx: 'the PDF’s exact page layout, which is rebuilt as flowing text',
+};
+
+/**
+ * Converts the open document to another format (File ▸ Convert To, and the selector in the
+ * chrome). The original stays as it is, saved in this browser (and in the cloud when it's
+ * there), and the converted copy is saved beside it as a new document, then opened. The copy
+ * holds exactly what its format can: Markdown keeps headings, emphasis, lists and tables and
+ * drops fonts and colors; text keeps only the words; PDF shows fixed pages; Word from a PDF is
+ * reflowed text.
+ */
+async function convertTo(to: DocumentKind): Promise<void> {
+  const from = documentKind;
+  if (to === from) return;
+  if (!isFormat(to) || !isFormat(from)) throw new Error(`${FORMATS[isFormat(to) ? from : to].label} isn’t supported yet`);
+  if (new URLSearchParams(location.search).get('room')) {
+    setStatus('Leave the collaboration room to convert the document');
+    return;
+  }
+  setStatus(`Converting to ${FORMATS[to].label}…`);
+  // A sample or new document that was never edited has no original worth keeping.
+  const keepOriginal = current.unsavedSince > 0 || current.localId !== null;
+  const originalId = keepOriginal ? await saveNow() : null;
+  if (keepOriginal && !originalId) throw new Error('the original couldn’t be saved first, so nothing was converted');
+  const original = originalId ? (await listSaved().catch(() => [])).find((d) => d.id === originalId) : undefined;
+  const bytes = await worker.convert(to);
+  const name = stem(documentName) + FORMATS[to].extensions[0];
+  const source = sourceFromFile(name, bytes.slice().buffer);
+  if (!source) throw new Error(`can’t open ${FORMATS[to].label}`);
+  const info = await saveSaved({ name, bytes });
+  history.replaceState(null, '', location.pathname);
+  open(source, { grid, localId: info.id });
+  rememberInUrl(`local:${info.id}`);
+  chrome.update({ documentName, kind: documentKind });
+  const lost = conversionIsLossy(from, to) ? ` Left out: ${LOSSES[to]}.` : '';
+  const kept = original ? ` The ${FORMATS[from].label} original is still saved next to it.` : '';
+  pendingNotice = `Converted to ${FORMATS[to].label} as “${info.name}”.${lost}${kept}`;
+  void refreshLibrary();
+  // An original in the cloud gets its converted copy there too.
+  if (original?.cloudId) {
+    uploadToCloud(info.id).then(
+      () => void refreshLibrary(),
+      (e: unknown) => notify(`The ${FORMATS[to].label} copy is only in this browser (${(e as Error).message}). Use Save to Cloud to add it.`),
+    );
   }
 }
 
@@ -416,7 +579,10 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 }
 
 function send(command: WireCommand): void {
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll') editSent = performance.now();
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll') {
+    editSent = performance.now();
+    if (FORMATS[documentKind].editable) documentEdited();
+  }
   worker.command(command);
 }
 
@@ -438,11 +604,12 @@ function render(): void {
   frameQueued = false;
   const start = performance.now();
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
+  camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight);
   const stats = renderer.render(camera, pages, selection, caretVisible);
   const frameMs = performance.now() - start;
   chrome.update({
     documentName,
-    kind: kindFromName(documentName),
+    kind: documentKind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
     grid,
@@ -568,13 +735,26 @@ canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
 // Trackpad pinch arrives as ctrl+wheel; cmd/ctrl+wheel zooms with a mouse; plain wheel scrolls.
+// Browsers don't flag macOS momentum events, so while a scroll is still coasting, cmd only takes
+// over once the deltas grow again (fresh wheel/trackpad input); a decaying tail keeps scrolling.
+const WHEEL_GESTURE_GAP_MS = 200;
+let wheelZooming = false;
+let lastWheelTime = -Infinity;
+let lastWheelMagnitude = 0;
 canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
     const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? canvas.clientHeight : 1;
     userMoved = true;
-    if (e.ctrlKey || e.metaKey) camera.zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * unit * 0.01));
+    const zoomKey = e.ctrlKey || e.metaKey;
+    const magnitude = Math.hypot(e.deltaX, e.deltaY) * unit;
+    const coasting = e.timeStamp - lastWheelTime <= WHEEL_GESTURE_GAP_MS && magnitude <= lastWheelMagnitude * 1.1 + 1;
+    if (!zoomKey) wheelZooming = false;
+    else if (wheelZooming || !coasting) wheelZooming = true;
+    lastWheelTime = e.timeStamp;
+    lastWheelMagnitude = magnitude;
+    if (wheelZooming) camera.zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * unit * 0.01));
     else camera.panBy(e.deltaX * unit, e.deltaY * unit);
     requestRender();
   },
@@ -648,11 +828,14 @@ function viewKey(e: KeyboardEvent): boolean {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (dashboard.visible) return; // the dashboard has the keyboard; the document is behind it
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (e.isComposing) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+    // Documents save themselves; the habit just saves a little sooner.
     e.preventDefault();
-    void saveInBrowser();
+    if (current.unsavedSince || !current.localId) void saveInBrowser();
+    else setStatus('All changes are saved in this browser');
     return;
   }
   if (viewKey(e)) {
@@ -699,6 +882,7 @@ input.addEventListener('paste', (e) => {
 
 // Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
 const chromeHost = createChromeHost({
+  dashboard: () => dashboard.toggle(),
   canvas,
   camera,
   pages: () => pages,
@@ -709,11 +893,9 @@ const chromeHost = createChromeHost({
   },
   openSample: openSource,
   collaborate,
-  save: async () => {
-    await saveInBrowser();
-  },
   saveToCloud,
   download,
+  convert: convertTo,
   signIn,
   signOut,
   saved: () => savedDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
@@ -747,6 +929,20 @@ const chromeHost = createChromeHost({
 });
 const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, showUnimplemented: import.meta.env.DEV });
 
+// The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
+// same paths as File ▸ Open Recent and Cloud Documents.
+const dashboard = new Dashboard(document.getElementById('viewport')!, {
+  newDocument: () => void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput),
+  openLocal: (id) => openSource(`local:${id}`),
+  openCloud: (id) => openSource(`cloud:${id}`),
+  saveToCloud: async (id) => {
+    await sendToCloud(id);
+  },
+  signIn: () => signIn({ dashboard: true }),
+  signOut,
+  closed: focusInput,
+});
+
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => {
   e.preventDefault();
@@ -768,6 +964,12 @@ Object.defineProperties(window, {
 {
   const params = new URLSearchParams(location.search);
   const doc = params.get('doc');
+  // Coming back from signing in on the dashboard: open it again.
+  if (params.get('dashboard') === '1') {
+    params.delete('dashboard');
+    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+    void dashboard.show();
+  }
   void refreshLibrary();
   // Joining a room without a document: the room has it.
   if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? 'Document' });

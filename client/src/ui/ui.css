@@ -764,3 +764,42 @@
     height: 200px;
   }
 }
+
+/* --- Format selector and formats that can't use a control ----------------------------------- */
+
+/* Author `display` rules on buttons would otherwise beat the hidden attribute. */
+.wm-menubar [hidden],
+.wm-toolbar [hidden],
+.wm-tsep[hidden] {
+  display: none !important;
+}
+
+.wm-format {
+  position: absolute;
+  top: 1px;
+  right: 6px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wm-format-label {
+  color: var(--wm-text);
+  opacity: 0.7;
+}
+
+.wm-format-select {
+  height: 19px;
+  max-width: 150px;
+  padding: 0 2px;
+  font: inherit;
+  color: inherit;
+  background: var(--wm-menu-bg);
+  border: 1px solid var(--wm-etch-dark);
+  border-radius: 3px;
+}
+
+.wm-format-select:disabled {
+  opacity: 0.6;
+}

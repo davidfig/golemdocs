@@ -15,11 +15,29 @@ export type MenuItem =
   | { type: 'separator' }
   | { type: 'submenu'; label: string; icon?: string; items: MenuItem[] | (() => MenuItem[]); enabled?: () => boolean }
   /** A one-off item (a sample document, a date format) that doesn't need a command. */
-  | { type: 'item'; label: string; run: () => void; enabled?: boolean; checked?: boolean; hint?: string };
+  | { type: 'item'; label: string; run: () => void; enabled?: boolean; checked?: boolean; hint?: string; /** False when the open format can't use it: it is left out. */ available?: () => boolean };
 
 export interface TopMenu {
   label: string;
   items: MenuItem[];
+}
+
+/** Whether a menu has anything the open document's format can express (else it's left out). */
+export function hasAvailable(registry: CommandRegistry, items: MenuItem[] | (() => MenuItem[])): boolean {
+  // Menus built on demand (samples, recent documents) are always worth opening.
+  if (typeof items === 'function') return true;
+  return items.some((item) => {
+    switch (item.type) {
+      case 'command':
+        return registry.isAvailable(registry.get(item.id));
+      case 'submenu':
+        return hasAvailable(registry, item.items);
+      case 'item':
+        return item.available?.() ?? true;
+      case 'separator':
+        return false;
+    }
+  });
 }
 
 export const sep: MenuItem = { type: 'separator' };
@@ -60,6 +78,10 @@ class MenuPopup {
         lastWasSeparator = true;
         continue;
       }
+      // What the format can't express isn't offered at all (see CommandRegistry.isAvailable).
+      if (item.type === 'command' && !bar.registry.isAvailable(bar.registry.get(item.id))) continue;
+      if (item.type === 'submenu' && !hasAvailable(bar.registry, item.items)) continue;
+      if (item.type === 'item' && item.available && !item.available()) continue;
       lastWasSeparator = false;
       this.addRow(item);
     }
@@ -393,9 +415,20 @@ export class MenuBar {
     if (refocus) this.registry.focusEditor();
   }
 
+  /** Hides the menus whose every command the open document's format can't express. */
+  refresh(): void {
+    this.menus.forEach((menu, i) => {
+      this.titles[i].el.hidden = !hasAvailable(this.registry, menu.items);
+    });
+  }
+
   private step(delta: 1 | -1): void {
     const n = this.titles.length;
-    const next = (this.index + delta + n) % n;
+    let next = this.index;
+    for (let tries = 0; tries < n; tries++) {
+      next = (next + delta + n) % n;
+      if (!this.titles[next].el.hidden) break;
+    }
     if (this.mode === 'open') this.open(next, true, this.cues);
     else this.highlight(next);
   }
@@ -411,7 +444,7 @@ export class MenuBar {
       } else if (!IS_MAC && e.altKey && !e.ctrlKey && !e.metaKey && e.key !== 'Alt' && !isFormField(e.target)) {
         // Alt+letter opens a menu by its mnemonic (Windows/Linux; Option types characters on macOS).
         const letter = e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : null;
-        const i = this.titles.findIndex((t) => t.mnemonic === letter);
+        const i = this.titles.findIndex((t) => t.mnemonic === letter && !t.el.hidden);
         if (i >= 0) {
           this.take(e);
           this.open(i, true, true);
@@ -442,7 +475,7 @@ export class MenuBar {
         case 'Escape':
           return this.close();
       }
-      const i = this.titles.findIndex((t) => t.mnemonic === e.key.toLowerCase());
+      const i = this.titles.findIndex((t) => t.mnemonic === e.key.toLowerCase() && !t.el.hidden);
       if (i >= 0) this.open(i, true, true);
       return;
     }

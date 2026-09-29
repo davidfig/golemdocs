@@ -14,7 +14,7 @@ only when all of its values are set, so set up as many or as few as you like.
 | GitHub | Settings → Developer settings → OAuth Apps (or a GitHub App) | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
 | Apple | Developer account → Identifiers: an App ID with Sign in with Apple, then a Services ID (its Return URL is the redirect URI, its domain must be verified); Keys: a key with Sign in with Apple | `APPLE_CLIENT_ID` (the Services ID), `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (the whole `.p8` file) |
 
-Deployed: `pnpm exec wrangler secret put GOOGLE_CLIENT_ID` (and so on). Local: put them in `.dev.vars`.
+Deployed: `pnpm exec wrangler secret put GOOGLE_CLIENT_ID --env=""` (and so on). Local: put them in `.dev.vars`.
 Then apply the directory migrations: `pnpm --filter @word/server cf:migrate`.
 
 ## How it behaves

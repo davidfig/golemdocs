@@ -8,13 +8,14 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc",
-    "test": "node --test test/*.test.ts"
+    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --test test/*.test.ts"
   },
   "dependencies": {
     "@word/docx": "workspace:*",
     "@word/editor": "workspace:*",
     "@word/layout": "workspace:*",
-    "@word/ops": "workspace:*"
+    "@word/ops": "workspace:*",
+    "@word/pdf": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

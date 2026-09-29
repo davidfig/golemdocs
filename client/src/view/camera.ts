@@ -49,8 +49,26 @@ export class Camera {
     this.y = bounds.y + bounds.height / 2 - (cssHeight / 2) * pointsPerCss;
   }
 
+  /**
+   * Keeps the view over the document: per axis the view may extend at most `padding` CSS px past
+   * `bounds`, and a document smaller than the view is centered instead.
+   */
+  clamp(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24): void {
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+    const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
+    this.x = clampAxis(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, padding * pointsPerCss);
+    this.y = clampAxis(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss);
+  }
+
   toDocument(cssX: number, cssY: number): { x: number; y: number } {
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
     return { x: this.x + cssX * pointsPerCss, y: this.y + cssY * pointsPerCss };
   }
+}
+
+/** Clamps one axis of the view origin so the view stays within the content plus padding (all in points); centers when it can't fit. */
+function clampAxis(origin: number, start: number, size: number, view: number, pad: number): number {
+  const min = start - pad;
+  const max = start + size + pad - view;
+  return max < min ? (min + max) / 2 : Math.min(Math.max(origin, min), max);
 }

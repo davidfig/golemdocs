@@ -54,7 +54,7 @@ function fakeIndexedDB(): unknown {
       };
       const req: { result?: unknown; error: null; onupgradeneeded?: () => void; onsuccess?: () => void } = { error: null, result: db };
       setTimeout(() => {
-        if (first) req.onupgradeneeded?.();
+        if (first) (req.onupgradeneeded as ((e: unknown) => void) | undefined)?.({ oldVersion: 0 });
         req.onsuccess?.();
       }, 0);
       return req;
@@ -87,6 +87,7 @@ function stubServer() {
     }
     if (method === 'PUT' && url.startsWith('/api/documents/c1')) return cloudHas ? json(meta) : json({ error: 'not found' }, 404);
     if (method === 'GET' && url === '/api/documents/c1') return new Response(cloudBytes.slice());
+    if (method === 'PUT' && url === '/api/documents/c1/thumbnail') return json({ ...meta, thumbAt: 7 });
     return json({ error: 'not found' }, 404);
   }) as typeof fetch;
 }
@@ -176,4 +177,67 @@ test('opening from the cloud never overwrites browser edits the cloud doesn’t 
   assert.deepEqual([...new Uint8Array(opened.bytes)], [1, 1, 1]);
   assert.equal(calls.length, 0, 'did not even download');
   assert.deepEqual([...new Uint8Array((await local.getSaved(first.info.id))!.bytes)], [1, 1, 1]);
+});
+
+const image = (type = 'image/webp') => new Blob([new Uint8Array([1, 2, 3])], { type });
+
+test('a thumbnail is kept with its document and goes when the document does', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  assert.equal(await local.getThumbnail(doc.id), null);
+  await local.saveThumbnail(doc.id, image(), doc.updatedAt);
+  const kept = (await local.getThumbnail(doc.id))!;
+  assert.equal(kept.forUpdatedAt, doc.updatedAt);
+  assert.equal(kept.blob.size, 3);
+
+  await local.deleteSaved(doc.id);
+  assert.equal(await local.getThumbnail(doc.id), null);
+});
+
+test('a thumbnail finished after its document was deleted is dropped, not orphaned', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  await local.deleteSaved(doc.id);
+  await local.saveThumbnail(doc.id, image(), doc.updatedAt);
+  assert.equal(await local.getThumbnail(doc.id), null);
+});
+
+test('uploading sends the current thumbnail with the document, and not a stale one', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  await local.saveThumbnail(doc.id, image(), doc.updatedAt);
+  await uploadToCloud(doc.id);
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), ['POST /api/documents?name=Doc.docx', 'PUT /api/documents/c1/thumbnail']);
+
+  calls = [];
+  const edited = await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(2) }); // thumbnail is now of an older save
+  assert.ok(edited.updatedAt > doc.updatedAt);
+  await uploadToCloud(doc.id);
+  assert.deepEqual(calls.map((c) => c.method), ['PUT'], 'the document only');
+});
+
+test('a failed thumbnail upload does not fail the save', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  await local.saveThumbnail(doc.id, image(), doc.updatedAt);
+  const before = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+    if (String(input).endsWith('/thumbnail')) throw new Error('offline');
+    return before(input as string, init);
+  }) as typeof fetch;
+  const saved = await uploadToCloud(doc.id);
+  assert.equal(saved.id, 'c1');
+  assert.equal((await local.getSaved(doc.id))!.info.cloudId, 'c1');
+});
+
+test('opening from the cloud downloads nothing when the browser already has that version', async () => {
+  const first = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 });
+  assert.equal(first.info.cloudUpdatedAt, 1);
+  calls = [];
+  const again = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 });
+  assert.equal(calls.length, 0, 'no download');
+  assert.equal(again.usedBrowserCopy, false);
+  assert.deepEqual([...new Uint8Array(again.bytes)], [9, 9, 9]);
+
+  cloudBytes = bytes(4, 4);
+  const newer = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 2 });
+  assert.deepEqual(calls.map((c) => c.method), ['GET'], 'the cloud copy changed, so it is downloaded');
+  assert.deepEqual([...new Uint8Array(newer.bytes)], [4, 4]);
+  assert.equal(newer.info.cloudUpdatedAt, 2);
 });

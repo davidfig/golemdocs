@@ -1,4 +1,6 @@
-# Copy to .dev.vars (git-ignored) for `wrangler dev`.
+# `pnpm dev` copies this to .dev.vars (git-ignored) on first run; edit that copy.
+# A token with D1 Edit permission: the Worker uses it to create per-user databases in the dev
+# environment. Not needed for `pnpm dev --local`. (Separate from `wrangler login`.)
 CF_API_TOKEN=
 # Local-only identity, used when there is no real auth. Never set this in production.
 DEV_USER=you@example.com

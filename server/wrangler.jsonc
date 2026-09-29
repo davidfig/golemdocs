@@ -26,12 +26,47 @@
   ],
 
   "vars": {
+    // production | dev | local. Decides what per-user databases are called (word-user-… in
+    // production, word-dev-user-… otherwise) and whether cloud storage is on (not when "local").
+    "ENVIRONMENT": "production",
     // Your Cloudflare account id (per-user databases are created and queried through the REST API).
     "CF_ACCOUNT_ID": "REPLACE_WITH_ACCOUNT_ID",
     // Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
     "MICROSOFT_TENANT": "common"
+  },
+
+  // Bindings and vars aren't inherited by environments, so each one lists its own. The top level
+  // above is production: only `pnpm --filter @word/server deploy` uses it.
+  "env": {
+    // `pnpm dev`: the Worker runs on your machine but D1 and R2 are the real *dev* resources
+    // ("remote": true), so local testing exercises the same services as production without ever
+    // touching production data. Create them with `pnpm --filter @word/server cf:setup:dev`, then
+    // paste the printed database id here (and your account id below).
+    "dev": {
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "word-files-dev", "remote": true }],
+      "d1_databases": [
+        {
+          "binding": "DIRECTORY",
+          "database_name": "word-directory-dev",
+          "database_id": "REPLACE_WITH_DEV_DATABASE_ID",
+          "migrations_dir": "migrations/directory",
+          "remote": true
+        }
+      ],
+      "vars": { "ENVIRONMENT": "dev", "CF_ACCOUNT_ID": "REPLACE_WITH_ACCOUNT_ID", "MICROSOFT_TENANT": "common" }
+    },
+
+    // `pnpm dev --local`: everything simulated on your machine, works offline. Sign-in works;
+    // cloud documents are switched off (the per-user databases need the real Cloudflare API).
+    "local": {
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "word-files-local" }],
+      "d1_databases": [
+        { "binding": "DIRECTORY", "database_name": "word-directory-local", "database_id": "local", "migrations_dir": "migrations/directory" }
+      ],
+      "vars": { "ENVIRONMENT": "local", "CF_ACCOUNT_ID": "", "MICROSOFT_TENANT": "common" }
+    }
   }
-  // Secrets (not committed), set with `pnpm exec wrangler secret put <NAME>`:
+  // Secrets (not committed), set with `pnpm exec wrangler secret put <NAME> --env=""`:
   //   CF_API_TOKEN, a token with "D1 Edit" permission
   //   sign-in providers (each is offered only when all of its secrets are set; see AUTH.md):
   //   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET

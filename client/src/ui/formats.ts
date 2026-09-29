@@ -6,7 +6,7 @@ import type { Action, DocumentKind, Mark } from './actions.ts';
 
 export interface FormatProfile {
   kind: DocumentKind;
-  /** For Save As and the title bar. */
+  /** For Convert To and the title bar. */
   label: string;
   extensions: string[];
   mime: string;
@@ -152,9 +152,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     lists: true,
     indent: true,
     tables: true,
-    images: true,
     links: true,
-    footnotes: true,
     codeBlocks: true,
     horizontalRule: true,
   },
@@ -175,8 +173,8 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   },
 };
 
-/** Order in File ▸ Save As. */
-export const SAVE_AS_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'pdf', 'html', 'md', 'txt'];
+/** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'pdf', 'md', 'txt'];
 
 /** The kind of a file, from its name; `fallback` when the extension isn't one we know. */
 export function kindFromName(name: string, fallback: DocumentKind = 'docx'): DocumentKind {
@@ -197,21 +195,19 @@ export function acceptList(): string {
 /** Whether a document of this format can express the action at all. */
 export function formatAllows(profile: FormatProfile, action: Action): boolean {
   switch (action.kind) {
+    case 'dashboard':
+    case 'convert':
     case 'new':
     case 'open':
     case 'openSample':
     case 'openSaved':
     case 'openCloud':
-    case 'save':
     case 'saveToCloud':
     case 'signIn':
     case 'signOut':
-    case 'saveAs':
+    case 'download':
     case 'print':
     case 'printPreview':
-    case 'collaborate':
-    case 'copy':
-    case 'selectAll':
     case 'viewMode':
     case 'zoom':
     case 'zoomBy':
@@ -220,6 +216,12 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'toggleRuler':
     case 'toggleFormattingMarks':
       return true;
+    // Rooms share a Word document; a PDF has no text selection to copy or select yet.
+    case 'collaborate':
+      return profile.kind === 'docx';
+    case 'copy':
+    case 'selectAll':
+      return profile.kind !== 'pdf';
     case 'dialog':
       switch (action.name) {
         case 'find':

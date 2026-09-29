@@ -10,21 +10,35 @@ export interface SavedInfo {
   cloudId?: string;
   /** `updatedAt` as of the last time this copy and the cloud copy were identical. */
   cloudSyncedAt?: number;
+  /** The cloud copy's `updatedAt` as of that sync (the server's clock), to tell whether it has changed since. */
+  cloudUpdatedAt?: number;
+}
+
+/** A first-page thumbnail, and which save of the document it shows. */
+export interface Thumbnail {
+  blob: Blob;
+  /** The `updatedAt` of the saved copy it was rendered from. */
+  forUpdatedAt: number;
 }
 
 const DB_NAME = 'word';
 const META = 'meta';
 const BYTES = 'bytes';
+const THUMBS = 'thumbs';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1);
-      request.onupgradeneeded = () => {
-        request.result.createObjectStore(META, { keyPath: 'id' });
-        request.result.createObjectStore(BYTES);
+      const request = indexedDB.open(DB_NAME, 2);
+      request.onupgradeneeded = (event) => {
+        const from = event?.oldVersion ?? 0;
+        if (from < 1) {
+          request.result.createObjectStore(META, { keyPath: 'id' });
+          request.result.createObjectStore(BYTES);
+        }
+        if (from < 2) request.result.createObjectStore(THUMBS);
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error ?? new Error('could not open browser storage'));
@@ -68,7 +82,7 @@ export async function getSaved(id: string): Promise<{ info: SavedInfo; bytes: Ar
   return info && bytes ? { info, bytes } : null;
 }
 
-async function write(input: { id?: string; name: string; bytes: Uint8Array | ArrayBuffer }, cloudId?: string): Promise<SavedInfo> {
+async function write(input: { id?: string; name: string; bytes: Uint8Array | ArrayBuffer }, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
   const db = await openDb();
   const tx = db.transaction([META, BYTES], 'readwrite');
   const meta = tx.objectStore(META);
@@ -82,9 +96,10 @@ async function write(input: { id?: string; name: string; bytes: Uint8Array | Arr
     // Strictly increasing per document, so "saved after the last sync" is always decidable.
     updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1),
   };
-  if (cloudId) {
-    info.cloudId = cloudId;
+  if (cloud) {
+    info.cloudId = cloud.id;
     info.cloudSyncedAt = info.updatedAt;
+    if (cloud.updatedAt !== undefined) info.cloudUpdatedAt = cloud.updatedAt;
   }
   meta.put(info);
   tx.objectStore(BYTES).put(buffer, info.id);
@@ -98,23 +113,38 @@ export function saveSaved(input: { id?: string; name: string; bytes: Uint8Array 
 }
 
 /** Saves bytes that came from the cloud, and marks this copy as identical to it. */
-export function saveFromCloud(input: { id?: string; name: string; bytes: ArrayBuffer; cloudId: string }): Promise<SavedInfo> {
-  return write(input, input.cloudId);
+export function saveFromCloud(input: { id?: string; name: string; bytes: ArrayBuffer; cloudId: string; cloudUpdatedAt?: number }): Promise<SavedInfo> {
+  return write(input, { id: input.cloudId, updatedAt: input.cloudUpdatedAt });
 }
 
 /** Records that the current saved copy is what's in the cloud (after an upload). */
-export async function markSynced(id: string, cloudId: string): Promise<void> {
+export async function markSynced(id: string, cloudId: string, cloudUpdatedAt?: number): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(META, 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
-  if (info) tx.objectStore(META).put({ ...info, cloudId, cloudSyncedAt: info.updatedAt });
+  if (info) tx.objectStore(META).put({ ...info, cloudId, cloudSyncedAt: info.updatedAt, ...(cloudUpdatedAt !== undefined && { cloudUpdatedAt }) });
   await finished(tx);
 }
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS], 'readwrite');
   tx.objectStore(META).delete(id);
   tx.objectStore(BYTES).delete(id);
+  tx.objectStore(THUMBS).delete(id);
   await finished(tx);
+}
+
+/** Keeps the thumbnail for a saved document (replacing any older one). */
+export async function saveThumbnail(id: string, blob: Blob, forUpdatedAt: number): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction([META, THUMBS], 'readwrite');
+  // A document deleted while its thumbnail was being made must not leave an orphan behind.
+  if ((await done(tx.objectStore(META).get(id))) !== undefined) tx.objectStore(THUMBS).put({ blob, forUpdatedAt } satisfies Thumbnail, id);
+  await finished(tx);
+}
+
+export async function getThumbnail(id: string): Promise<Thumbnail | null> {
+  const db = await openDb();
+  return ((await done(db.transaction(THUMBS).objectStore(THUMBS).get(id))) as Thumbnail | undefined) ?? null;
 }

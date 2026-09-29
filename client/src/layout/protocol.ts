@@ -5,6 +5,7 @@
 
 import type { Command } from '@word/editor';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
+import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
 
 export type DocumentSource =
@@ -14,6 +15,12 @@ export type DocumentSource =
   | { kind: 'docx-url'; name: string; url: string }
   /** A plain-text file to fetch and turn into a document (paragraphs at blank lines). */
   | { kind: 'text-url'; name: string; url: string }
+  /** A PDF file: shown as its pages, read-only. */
+  | { kind: 'pdf'; name: string; bytes: ArrayBuffer }
+  /** A Markdown file, edited as a document that can hold what Markdown can. */
+  | { kind: 'md'; name: string; bytes: ArrayBuffer }
+  /** A plain-text file, edited one paragraph per line. */
+  | { kind: 'txt'; name: string; bytes: ArrayBuffer }
   /** A new, empty document. */
   | { kind: 'blank'; name: string }
   /** Every font we ship, as a sample document. */
@@ -43,8 +50,10 @@ export type ToWorker =
   /** Bytes of an image part of the open document. */
   | { type: 'media'; doc: number; request: number; part: string }
   | { type: 'command'; doc: number; command: WireCommand }
-  /** The document as a .docx file. */
-  | { type: 'save'; doc: number; request: number };
+  /** The document as a file in its own format. */
+  | { type: 'save'; doc: number; request: number }
+  /** The document as a file in another format (the open document is left as it is). */
+  | { type: 'convert'; doc: number; request: number; to: Format };
 
 export interface LayoutTimings {
   /** Reading and parsing the file. */

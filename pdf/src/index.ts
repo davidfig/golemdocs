@@ -29,3 +29,5 @@ export { EmbeddedFont, StandardFontResource, type PdfFont } from './write/fonts.
 export { ImageFormatError, type PdfImage } from './write/images.ts';
 export { PageDrawing, type Color, type DrawOptions, type LineCap, type LineJoin, type RunGlyph, type StrokeStyle, type TextOptions } from './write/draw.ts';
 export { addLink, destination, namedDestinations, type LinkTarget, type OutlineEntry, type OutlineItem } from './write/navigation.ts';
+export { interpretPage, imageBytes, imageSupported, collectFonts, describeFont, encodePng, type DisplayGlyph, type DisplayImage, type DisplayRect, type FontStyle, type GlyphRun, type ImageBytes, type ImageOptions, type ImageSource, type PageDisplay } from './render/index.ts';
+export { reflowPage, reflowDocument, analyzeDocument, type Align as ReflowAlign, type Block as ReflowBlock, type Indent as ReflowIndent, type ListFormat as ReflowListFormat, type PageBlocks, type PageInfo as ReflowPageInfo, type PageMargins as ReflowMargins, type ReflowOptions, type ReflowResult, type Run as ReflowRun } from './text/reflow.ts';

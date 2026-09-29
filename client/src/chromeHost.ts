@@ -4,12 +4,15 @@
 
 import type { WireCommand } from './layout/protocol.ts';
 import type { DocumentSource } from './layout/protocol.ts';
+import { sourceFromFile } from './formats/source.ts';
 import type { Bounds } from './document/arrange.ts';
 import type { GpuPage } from './view/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
-import { acceptList, kindFromName, type Action, type ActionKind, type ChromeHost, type CloudState, type Sample, type ZoomTarget } from './ui/index.ts';
+import { acceptList, kindFromName, type Action, type DocumentKind, type ActionKind, type ChromeHost, type CloudState, type Sample, type ZoomTarget } from './ui/index.ts';
 
 export interface AppHooks {
+  /** Show (or hide) the dashboard of all documents. */
+  dashboard(): void;
   canvas: HTMLCanvasElement;
   camera: Camera;
   pages(): readonly GpuPage[];
@@ -18,12 +21,12 @@ export interface AppHooks {
   openSample(id: string): void;
   /** Put the document in a collaboration room and open a second window on it. */
   collaborate(): void;
-  /** Save in this browser (no account needed). */
-  save(): Promise<void>;
   /** Save in this browser, then to the cloud; asks the user to sign in if they haven't. */
   saveToCloud(): Promise<void>;
-  /** Download the document as a .docx file. */
+  /** Download a copy of the document as a file, in its own format. */
   download(): Promise<void>;
+  /** Make a copy of the document in another format next to the original, and open it. */
+  convert(to: DocumentKind): Promise<void>;
   signIn(): Promise<void>;
   signOut(): Promise<void>;
   /** Documents saved in this browser. */
@@ -44,13 +47,14 @@ export interface AppHooks {
 
 /** Actions the app implements today, whatever the document. */
 const SUPPORTED = new Set<ActionKind>([
+  'dashboard',
   'new',
   'open',
   'openSample',
   'openSaved',
   'openCloud',
-  'save',
   'saveToCloud',
+  'download',
   'signIn',
   'signOut',
   'cut',
@@ -65,23 +69,19 @@ const SUPPORTED = new Set<ActionKind>([
   'toggleGrid',
   'toggleStats',
   'insertText',
+  'convert',
 ]);
 
-/** File types the worker can read, by the kind of source they become. */
-const DOCX_FILE = /\.(docx|docm|dotx)$/i;
-const TEXT_FILE = /\.(txt|text|md|markdown)$/i;
+
+/** The formats a document can be converted to. */
+const CONVERTIBLE = new Set<DocumentKind>(['docx', 'pdf', 'md', 'txt']);
 
 export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: File): void } {
   let untitled = 0;
 
   const openFile = (file: File): void => {
-    if (DOCX_FILE.test(file.name)) {
-      void file.arrayBuffer().then((bytes) => app.open({ kind: 'docx', name: file.name, bytes }));
-    } else if (TEXT_FILE.test(file.name)) {
-      // Markdown opens as its source text for now; the chrome still offers Markdown's formatting.
-      const url = URL.createObjectURL(file);
-      app.open({ kind: 'text-url', name: file.name, url });
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    if (sourceFromFile(file.name, new ArrayBuffer(0))) {
+      void file.arrayBuffer().then((bytes) => app.open(sourceFromFile(file.name, bytes)!));
     } else {
       app.notify(`Opening ${kindFromName(file.name, 'txt').toUpperCase()} files isn't supported yet (${file.name})`);
     }
@@ -143,7 +143,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     openFile,
 
     supports(action: Action): boolean {
-      if (action.kind === 'saveAs') return action.format === 'docx';
+      if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line';
       if (action.kind === 'viewMode') return action.mode === 'print';
       return SUPPORTED.has(action.kind);
@@ -151,6 +151,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
 
     async perform(action: Action): Promise<void> {
       switch (action.kind) {
+        case 'dashboard':
+          return app.dashboard();
         case 'new':
           untitled++;
           app.open({ kind: 'blank', name: `Document${untitled}` });
@@ -163,10 +165,10 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.openSample(`local:${action.id}`);
         case 'openCloud':
           return app.openSample(`cloud:${action.id}`);
-        case 'save':
-          return app.save();
-        case 'saveAs':
+        case 'download':
           return app.download();
+        case 'convert':
+          return app.convert(action.to);
         case 'saveToCloud':
           return app.saveToCloud();
         case 'signIn':

@@ -17,11 +17,12 @@ interface Envelope<T> {
 }
 
 export class CloudflareError extends Error {
-  constructor(
-    readonly status: number,
-    readonly errors: { code: number; message: string }[],
-  ) {
+  status: number;
+  errors: { code: number; message: string }[];
+  constructor(status: number, errors: { code: number; message: string }[]) {
     super(`Cloudflare API ${status}: ${errors.map((e) => e.message).join('; ') || 'request failed'}`);
+    this.status = status;
+    this.errors = errors;
   }
 }
 
@@ -37,10 +38,13 @@ async function api<T>(env: Env, path: string, body?: unknown): Promise<T> {
 }
 
 export class UserDb {
-  constructor(
-    private readonly env: Env,
-    readonly databaseId: string,
-  ) {}
+  private readonly env: Env;
+  readonly databaseId: string;
+
+  constructor(env: Env, databaseId: string) {
+    this.env = env;
+    this.databaseId = databaseId;
+  }
 
   async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     const [result] = await api<{ results: T[] }[]>(this.env, `/d1/database/${this.databaseId}/query`, { sql, params });
@@ -70,7 +74,8 @@ async function migrate(db: UserDb): Promise<number> {
 }
 
 async function createDatabase(env: Env, userId: string): Promise<string> {
-  const name = `word-user-${userId}`;
+  // Dev databases live in the same account but can never be mistaken for (or collide with) production's.
+  const name = `${env.ENVIRONMENT === 'production' ? 'word-user-' : 'word-dev-user-'}${userId}`;
   try {
     return (await api<{ uuid: string }>(env, '/d1/database', { name })).uuid;
   } catch (error) {

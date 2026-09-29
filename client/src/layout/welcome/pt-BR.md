@@ -27,7 +27,7 @@ Quando estiver pronto, escolha Novo no menu Arquivo para um documento em branco,
 
 ## Salvamento
 
-Não há botão Salvar. Cada alteração é mantida neste navegador um instante depois de você fazê-la, e você não precisa de uma conta. O Painel, no menu Arquivo, mostra todos os seus documentos. Entre e eles serão salvos na sua conta, para que você possa abri-los em qualquer dispositivo.
+Não há botão Salvar. Cada alteração é mantida neste navegador um instante depois de você fazê-la, e você não precisa de uma conta. Arquivo ▸ Abrir mostra todos os seus documentos. Entre e eles serão salvos na sua conta, para que você possa abri-los em qualquer dispositivo.
 
 ## Sobre o nome
 

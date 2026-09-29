@@ -22,6 +22,8 @@ export const picture = {
   'picture.draw.rectangle': '矩形',
   'picture.draw.ellipse': '橢圓',
   'picture.draw.text': '文字',
+  'picture.draw.bubble': '對話框',
+  'picture.draw.step': '編號標記',
   'picture.draw.pixelate': '遮蔽',
   'picture.draw.eraser': '橡皮擦',
   'picture.draw.fill': '填滿圖形',

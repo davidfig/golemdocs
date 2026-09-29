@@ -49,6 +49,7 @@ export interface AppHooks {
   showWordCount(): void;
   /** Ask for columns of text, then set them. */
   showColumnsDialog(): void;
+  showParagraphDialog(): void;
   /** Show the Spelling and Grammar dialog and look for the first problem. */
   showSpelling(): void;
   /** Show the Find, Replace or Go To dialog on that tab. */
@@ -104,9 +105,9 @@ export interface AppHooks {
 
 /** Actions the app implements today, whatever the document. */
 const SUPPORTED = new Set<ActionKind>([
-  'dashboard',
   'new',
   'open',
+  'import',
   'openSample',
   'openSaved',
   'syncNow',
@@ -227,7 +228,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'wordCount' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode === 'print' || !(app.annotating() || app.isPicture());
@@ -236,8 +237,6 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
 
     async perform(action: Action): Promise<void> {
       switch (action.kind) {
-        case 'dashboard':
-          return app.dashboard();
         case 'setFormMode':
           return app.setFormMode(action.mode);
         case 'new':
@@ -245,6 +244,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           app.open({ kind: 'blank', name: `Document${untitled}` });
           return;
         case 'open':
+          return app.dashboard();
+        case 'import':
           return pickFile();
         case 'openSample':
           return app.openSample(action.id);
@@ -257,6 +258,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'dialog':
           if (action.name === 'spelling') return app.showSpelling();
           if (action.name === 'columns') return app.showColumnsDialog();
+          if (action.name === 'paragraph') return app.showParagraphDialog();
           if (action.name === 'wordCount') return app.showWordCount();
           if (action.name === 'pageSetup') return app.showPageSetup();
           if (action.name === 'properties') return app.showProperties();
@@ -343,6 +345,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'setStyle':
         case 'setAlignment':
         case 'setLineSpacing':
+        case 'setParagraph':
         case 'toggleList':
         case 'indent':
           return app.send({ kind: 'format', action });

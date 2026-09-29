@@ -22,6 +22,8 @@ export const picture = {
   'picture.draw.rectangle': 'Rechteck',
   'picture.draw.ellipse': 'Ellipse',
   'picture.draw.text': 'Text',
+  'picture.draw.bubble': 'Sprechblase',
+  'picture.draw.step': 'Nummerierte Markierung',
   'picture.draw.pixelate': 'Schwärzen',
   'picture.draw.eraser': 'Radierer',
   'picture.draw.fill': 'Formen füllen',

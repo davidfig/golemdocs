@@ -1,9 +1,9 @@
 import type { Messages } from '../../index.ts';
 
 export const chrome: Partial<Messages> = {
-  'chrome.file.dashboard': '&Tableau de bord',
   'chrome.file.new': '&Nouveau',
   'chrome.file.open': '&Ouvrir…',
+  'chrome.file.import': '&Importer…',
   'chrome.file.download': 'Télé&charger',
   'chrome.file.share': '&Partager…',
   'chrome.file.pageSetup': 'Mise en pa&ge…',
@@ -96,7 +96,8 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.upper': 'MA&JUSCULES',
   'chrome.format.case.title': 'Mettre en majuscule &chaque mot',
   'chrome.format.case.toggle': 'i&NVERSER LA CASSE',
-  'chrome.file.dashboard.tip': 'Afficher tous vos documents',
+  'chrome.file.open.tip': 'Afficher tous vos documents',
+  'chrome.file.import.tip': 'Importer un fichier depuis votre ordinateur',
   'chrome.file.new.tip': 'Nouveau document vierge',
   'chrome.file.download.tip': 'Télécharger une copie de ce document',
   'chrome.file.share.tip': 'Obtenir un lien qui permet à quiconque de modifier ce document avec vous, ou le partager avec des personnes précises',

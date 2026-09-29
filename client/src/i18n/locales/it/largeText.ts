@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': '{count} righe copiate',
   'largeText.copyTooLarge': 'Troppe righe da copiare in una volta (il limite è {max}).',
   'largeText.notice': '{name} è grande ({size}), quindi si apre in un visualizzatore: puoi cercare, filtrare e copiare, ma non ancora modificare.',
+  'largeText.wrap': 'A capo automatico delle righe lunghe',
 };

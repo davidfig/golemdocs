@@ -24,6 +24,8 @@ export const picture: Catalog = {
   'picture.draw.rectangle': 'Прямоугольник',
   'picture.draw.ellipse': 'Эллипс',
   'picture.draw.text': 'Текст',
+  'picture.draw.bubble': 'Выноска',
+  'picture.draw.step': 'Нумерованная метка',
   'picture.draw.pixelate': 'Скрыть',
   'picture.draw.eraser': 'Ластик',
   'picture.draw.fill': 'Заливка фигур',

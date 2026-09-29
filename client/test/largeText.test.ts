@@ -110,3 +110,45 @@ test('a 50 MB log is indexed and searched quickly', async () => {
   assert.ok(took < 5000, `searching took ${took.toFixed(0)} ms`);
   console.log(`  50 MB: indexed in ${indexed.toFixed(0)} ms, searched in ${took.toFixed(0)} ms`);
 });
+
+test('row heights: totals, which entry a row falls in, and changing one entry', async () => {
+  const { RowHeights, wrappedRows } = await import('../src/largeText/rowHeights.ts');
+  const heights = new RowHeights(Uint32Array.from([1, 3, 1, 2, 1]));
+  assert.equal(heights.total, 8);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map((e) => heights.before(e)), [0, 1, 4, 5, 7, 8]);
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map((r) => heights.at(r)), [
+    { entry: 0, within: 0 }, { entry: 1, within: 0 }, { entry: 1, within: 1 }, { entry: 1, within: 2 },
+    { entry: 2, within: 0 }, { entry: 3, within: 0 }, { entry: 3, within: 1 }, { entry: 4, within: 0 },
+  ]);
+  // A line found to take one more row moves everything after it.
+  heights.set(1, 4);
+  assert.equal(heights.total, 9);
+  assert.deepEqual([heights.before(2), heights.before(4)], [5, 8]);
+  assert.deepEqual(heights.at(8), { entry: 4, within: 0 });
+  // Past the end is the last entry, further in; an empty list has nowhere to be.
+  assert.deepEqual(heights.at(100), { entry: 4, within: 91 });
+  assert.deepEqual(new RowHeights(new Uint32Array(0)).at(5), { entry: 0, within: 0 });
+  // Agreement with a plain sum on many random entries.
+  let seed = 7;
+  const random = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const counts = Uint32Array.from({ length: 5000 }, () => 1 + Math.floor(random() * 6));
+  const big = new RowHeights(counts);
+  for (let k = 0; k < 200; k++) {
+    const entry = Math.floor(random() * counts.length);
+    const count = 1 + Math.floor(random() * 6);
+    counts[entry] = count;
+    big.set(entry, count);
+  }
+  let sum = 0;
+  for (let e = 0; e < counts.length; e += 137) {
+    assert.equal(big.before(e), counts.slice(0, e).reduce((a, b) => a + b, 0));
+    assert.equal(big.at(big.before(e)).entry, e);
+    sum = e;
+  }
+  assert.ok(sum > 0);
+  // How many rows a line takes at a width.
+  assert.equal(wrappedRows(0, 0, 80), 1);
+  assert.equal(wrappedRows(80, 0, 80), 1);
+  assert.equal(wrappedRows(81, 0, 80), 2);
+  assert.equal(wrappedRows(70, 2, 80), 2);
+});

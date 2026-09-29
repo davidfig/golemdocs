@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': '{count} Zeilen kopiert',
   'largeText.copyTooLarge': 'Zu viele Zeilen zum gleichzeitigen Kopieren (das Limit ist {max}).',
   'largeText.notice': '{name} ist groß ({size}) und wird daher in einer Ansicht geöffnet: Sie können suchen, filtern und kopieren, aber noch nicht bearbeiten.',
+  'largeText.wrap': 'Lange Zeilen umbrechen',
 };

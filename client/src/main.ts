@@ -45,6 +45,7 @@ import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
+import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
 import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/pasteSpecialDialog.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
@@ -2042,6 +2043,12 @@ const chromeHost = createChromeHost({
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
+      focusInput();
+    });
+  },
+  showParagraphDialog: () => {
+    void showParagraphDialog(selectionFormat.paragraph ?? {}).then((choice) => {
+      if (choice && Object.keys(choice).length > 0) send({ kind: 'format', action: { kind: 'setParagraph', ...choice } });
       focusInput();
     });
   },

@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { arrowHead, constrainEnd, hitShape, lineWidth, paintShape } from '../src/formats/imageDraw.ts';
+import { arrowHead, bubbleGeometry, constrainEnd, contrastOn, hitShape, nextStepNumber, lineWidth, paintShape } from '../src/formats/imageDraw.ts';
 import type { Shape } from '../src/formats/imageDraw.ts';
 
 test('line thickness grows with the step and the picture, and is never under 2 pixels', () => {
@@ -64,4 +64,28 @@ test('the eraser finds strokes and shapes where they are drawn, and misses elsew
   const words = shape('text', [[5, 5]], { text: 'Hi' });
   assert.ok(hitShape(words, { x: 10, y: 10 }, 0));
   assert.ok(!hitShape(words, { x: 200, y: 10 }, 0));
+});
+
+test('a bubble sits above the point it speaks about, or below it when there is no room', () => {
+  const bubble = (y: number): Shape => ({ tool: 'bubble', color: '#000', width: 4, points: [{ x: 100, y }], text: 'Hi' });
+  const above = bubbleGeometry(bubble(200), 40);
+  assert.ok(!above.below && above.y + above.height < 200);
+  const near = bubbleGeometry(bubble(10), 40);
+  assert.ok(near.below && near.y > 10);
+  assert.ok(above.base[0] >= above.x && above.base[1] <= above.x + above.width);
+});
+
+test('step markers are numbered one after the highest, and the eraser can find them', () => {
+  const step = (n: number): Shape => ({ tool: 'step', color: '#f00', width: 4, points: [{ x: 50, y: 50 }], text: String(n) });
+  assert.equal(nextStepNumber([]), 1);
+  assert.equal(nextStepNumber([step(1), step(3), { ...step(9), tool: 'pen' }]), 4);
+  assert.ok(hitShape(step(1), { x: 60, y: 50 }, 0));
+  assert.ok(!hitShape(step(1), { x: 200, y: 50 }, 0));
+  assert.ok(hitShape({ tool: 'bubble', color: '#000', width: 4, points: [{ x: 100, y: 200 }], text: 'Hello' }, { x: 100, y: 170 }, 0));
+});
+
+test('a marker number is black on light colours and white on dark ones', () => {
+  assert.equal(contrastOn('#ffff00'), '#000');
+  assert.equal(contrastOn('#e5322d'), '#fff');
+  assert.equal(contrastOn('red'), '#fff');
 });

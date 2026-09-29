@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': '已複製 {count} 行',
   'largeText.copyTooLarge': '一次可複製的行數過多(上限為 {max} 行)。',
   'largeText.notice': '{name} 很大 ({size}),因此以檢視器開啟:可以搜尋、篩選與複製,但還不能編輯。',
+  'largeText.wrap': '自動換行',
 };

@@ -7,7 +7,7 @@
 // at the selection, and hands the editor commands it can apply as one undoable step.
 
 import { StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@word/docx';
-import type { Command, Editor, TableEdit } from '@word/editor';
+import type { Command, Editor, ParagraphFormat, TableEdit } from '@word/editor';
 import type { Operation, RunFormat } from '@word/ops';
 import { styleFor } from '../formats/markdownStyles.ts';
 import type { Action, CaseChange, FormatState, Mark } from '../ui/actions.ts';
@@ -32,6 +32,7 @@ export type FormatAction = Extract<
       | 'setStyle'
       | 'setAlignment'
       | 'setLineSpacing'
+      | 'setParagraph'
       | 'toggleList'
       | 'indent';
   }
@@ -53,6 +54,7 @@ export const FORMAT_ACTIONS = new Set<FormatAction['kind']>([
   'setStyle',
   'setAlignment',
   'setLineSpacing',
+  'setParagraph',
   'toggleList',
   'indent',
 ]);
@@ -390,6 +392,40 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
     case 'setLineSpacing': {
       const line = Math.round(action.lines * 240);
       return { kind: 'formatParagraphs', change: (p) => ({ spacing: { ...p.properties.spacing, line, lineRule: 'auto' } }) };
+    }
+    case 'setParagraph': {
+      const { kind: _kind, align, left, right, special, by, before, after, line, lineRule, ...flags } = action;
+      return {
+        kind: 'formatParagraphs',
+        change: (p) => {
+          const change: ParagraphFormat = {};
+          if (align) change.justification = align === 'justify' ? 'both' : align;
+          if (left !== undefined || right !== undefined || special) {
+            const indent = { ...p.properties.indent };
+            if (left !== undefined) indent.left = left;
+            if (right !== undefined) indent.right = right;
+            if (special) {
+              delete indent.firstLine;
+              delete indent.hanging;
+              if (special === 'firstLine') indent.firstLine = by ?? 0;
+              else if (special === 'hanging') indent.hanging = by ?? 0;
+            }
+            change.indent = indent;
+          }
+          if (before !== undefined || after !== undefined || line !== undefined) {
+            const spacing = { ...p.properties.spacing };
+            if (before !== undefined) spacing.before = before;
+            if (after !== undefined) spacing.after = after;
+            if (line !== undefined) {
+              spacing.line = line;
+              spacing.lineRule = lineRule ?? 'auto';
+            }
+            change.spacing = spacing;
+          }
+          for (const key of ['keepNext', 'keepLines', 'pageBreakBefore', 'widowControl'] as const) if (flags[key] !== undefined) change[key] = flags[key];
+          return change;
+        },
+      };
     }
     case 'indent': {
       const increase = action.direction === 'increase';

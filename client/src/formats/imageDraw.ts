@@ -3,12 +3,13 @@
 // final edit, so what was drawn is what is kept. Points are in the picture's own pixels.
 
 /**
- * What can be drawn: strokes, shapes, `text`, and `pixelate` (a box whose picture is blocked out).
+ * What can be drawn: strokes, shapes, `text`, a speech `bubble` (its point is where the tail ends), a
+ * numbered `step` marker (its `text` is the number), and `pixelate` (a box whose picture is blocked out).
  * `eraser` draws nothing: it takes drawn shapes away.
  */
-export type DrawTool = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'pixelate' | 'eraser';
+export type DrawTool = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser';
 
-export const DRAW_TOOLS: readonly DrawTool[] = ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'pixelate', 'eraser'];
+export const DRAW_TOOLS: readonly DrawTool[] = ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser'];
 
 export interface Point {
   x: number;
@@ -36,6 +37,50 @@ export function textBox(shape: Shape): { x: number; y: number; width: number; he
   const size = fontSize(shape.width);
   const p = shape.points[0];
   return { x: p.x, y: p.y, width: (shape.text ?? '').length * size * 0.6, height: size * 1.2 };
+}
+
+/** Where a speech bubble goes: its rounded body, and the tail from the body to the point it speaks about. */
+export interface BubbleGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  /** True when the body is under the tip (the tip was too near the top of the picture for it to go above). */
+  below: boolean;
+  /** Where the tail leaves the body's edge, left and right. */
+  base: [number, number];
+}
+
+/** A bubble for text `textWidth` pixels wide: above the tip, or below it when there is no room above. */
+export function bubbleGeometry(shape: Shape, textWidth: number): BubbleGeometry {
+  const size = fontSize(shape.width);
+  const pad = size * 0.55;
+  const tip = shape.points[0];
+  const width = Math.max(textWidth, size) + 2 * pad;
+  const height = size * 1.2 + 2 * pad;
+  const gap = size * 1.1;
+  const below = tip.y - gap - height < 0;
+  const x = tip.x - width * 0.2;
+  const y = below ? tip.y + gap : tip.y - gap - height;
+  const from = x + Math.min(width * 0.12, size);
+  return { x, y, width, height, radius: Math.min(size * 0.7, height / 2), below, base: [from, from + Math.min(width * 0.3, size * 1.1)] };
+}
+
+/** The disc behind a step marker's number. */
+export const stepRadius = (width: number): number => fontSize(width) * 0.75;
+
+/** The number for the next step marker: one more than the highest so far. */
+export function nextStepNumber(shapes: readonly Shape[]): number {
+  return shapes.reduce((most, s) => (s.tool === 'step' ? Math.max(most, Number(s.text) || 0) : most), 0) + 1;
+}
+
+/** Black or white, whichever reads better on a `#rrggbb` colour (white when it isn't one). */
+export function contrastOn(color: string): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!m) return '#fff';
+  const [r, g, b] = [m[1], m[2], m[3]].map((v) => parseInt(v, 16));
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#000' : '#fff';
 }
 
 /** The block size of a pixelated region: coarse enough to hide detail, whatever the line width. */
@@ -87,6 +132,13 @@ export function hitShape(shape: Shape, p: Point, tolerance: number): boolean {
     case 'pixelate': {
       const b = boxOf(shape);
       return p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height;
+    }
+    case 'step':
+      return Math.hypot(p.x - pts[0].x, p.y - pts[0].y) <= stepRadius(shape.width) + tolerance;
+    case 'bubble': {
+      const g = bubbleGeometry(shape, (shape.text ?? '').length * fontSize(shape.width) * 0.6);
+      const inBody = p.x >= g.x - tolerance && p.x <= g.x + g.width + tolerance && p.y >= g.y - tolerance && p.y <= g.y + g.height + tolerance;
+      return inBody || Math.hypot(p.x - pts[0].x, p.y - pts[0].y) <= tolerance + shape.width;
     }
     case 'text': {
       const b = textBox(shape);
@@ -162,6 +214,61 @@ export function paintShape(ctx: Painter, shape: Shape, preview = false): void {
       ctx.strokeRect(b.x, b.y, b.width, b.height);
       ctx.restore();
     }
+    return;
+  }
+  if (tool === 'step') {
+    const radius = stepRadius(shape.width);
+    ctx.save();
+    ctx.fillStyle = shape.color;
+    ctx.beginPath();
+    ctx.arc(points[0].x, points[0].y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = contrastOn(shape.color);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${radius * (shape.text && shape.text.length > 2 ? 0.9 : 1.15)}px system-ui, sans-serif`;
+    ctx.fillText(shape.text ?? '', points[0].x, points[0].y + radius * 0.05);
+    ctx.restore();
+    return;
+  }
+  if (tool === 'bubble') {
+    if (!shape.text) return;
+    ctx.save();
+    ctx.font = `${fontSize(shape.width)}px system-ui, sans-serif`;
+    const g = bubbleGeometry(shape, ctx.measureText(shape.text).width);
+    const { x, y, width: w, height: h, radius: r } = g;
+    const tip = points[0];
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    if (g.below) {
+      ctx.lineTo(g.base[0], y);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(g.base[1], y);
+    }
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    if (!g.below) {
+      ctx.lineTo(g.base[1], y + h);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(g.base[0], y + h);
+    }
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = shape.color;
+    ctx.lineWidth = Math.max(1.5, shape.width * 0.6);
+    ctx.lineJoin = 'round';
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = shape.color;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(shape.text, x + (w - ctx.measureText(shape.text).width) / 2, y + h / 2);
+    ctx.restore();
     return;
   }
   if (tool === 'text') {

@@ -27,7 +27,7 @@ Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o D
 
 ## Guardado
 
-No hay botón de guardar. Cada cambio se conserva en este navegador un momento después de hacerlo, y no necesitas una cuenta. El Panel, en el menú Archivo, muestra todos tus documentos. Si inicias sesión, se guardan en tu cuenta y puedes abrirlos en cualquier dispositivo.
+No hay botón de guardar. Cada cambio se conserva en este navegador un momento después de hacerlo, y no necesitas una cuenta. Archivo ▸ Abrir muestra todos tus documentos. Si inicias sesión, se guardan en tu cuenta y puedes abrirlos en cualquier dispositivo.
 
 ## Sobre el nombre
 

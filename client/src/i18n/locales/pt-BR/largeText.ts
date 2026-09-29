@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': '{count} linhas copiadas',
   'largeText.copyTooLarge': 'Linhas demais para copiar de uma vez (o limite é {max}).',
   'largeText.notice': '{name} é grande ({size}), então abre em um visualizador: você pode pesquisar, filtrar e copiar, mas ainda não editar.',
+  'largeText.wrap': 'Quebrar linhas longas',
 };

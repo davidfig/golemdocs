@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': 'Copied {count} lines',
   'largeText.copyTooLarge': 'Too many lines to copy at once (the limit is {max}).',
   'largeText.notice': '{name} is large ({size}), so it opens in a viewer: you can search, filter and copy, but not edit it yet.',
+  'largeText.wrap': 'Wrap long lines',
 } as const;

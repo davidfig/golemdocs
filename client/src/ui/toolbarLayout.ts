@@ -81,7 +81,7 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
   {
     name: 'Draw',
     visible: true,
-    items: ['image.pen', 'image.marker', SEPARATOR, 'image.line', 'image.arrow', 'image.rectangle', 'image.ellipse', 'image.fill', SEPARATOR, 'image.text', 'image.pixelate', 'image.eraser', SEPARATOR, 'control.drawColor', 'control.drawSize'],
+    items: ['image.pen', 'image.marker', SEPARATOR, 'image.line', 'image.arrow', 'image.rectangle', 'image.ellipse', 'image.fill', SEPARATOR, 'image.text', 'image.bubble', 'image.step', 'image.pixelate', 'image.eraser', SEPARATOR, 'control.drawColor', 'control.drawSize'],
   },
 ];
 

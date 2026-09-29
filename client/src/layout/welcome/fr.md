@@ -27,7 +27,7 @@ Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document
 
 ## Enregistrement
 
-Il n'y a pas de bouton Enregistrer. Chaque modification est conservée dans ce navigateur un instant après que vous l'avez faite, et vous n'avez pas besoin de compte. Le Tableau de bord, dans le menu Fichier, affiche tous vos documents. Si vous vous connectez, ils sont enregistrés dans votre compte, et vous pouvez les ouvrir sur n'importe quel appareil.
+Il n'y a pas de bouton Enregistrer. Chaque modification est conservée dans ce navigateur un instant après que vous l'avez faite, et vous n'avez pas besoin de compte. Fichier ▸ Ouvrir affiche tous vos documents. Si vous vous connectez, ils sont enregistrés dans votre compte, et vous pouvez les ouvrir sur n'importe quel appareil.
 
 ## À propos du nom
 

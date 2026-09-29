@@ -31,7 +31,7 @@ export type TableOp =
   | 'properties';
 
 /** The tools of the Draw toolbar: each picks what the next stroke draws. */
-export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'pixelate' | 'eraser';
+export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser';
 
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
@@ -59,9 +59,9 @@ export type DialogName =
 export type Action =
   // File
   /** The screen of thumbnails of every document. */
-  | { kind: 'dashboard' }
   | { kind: 'new' }
   | { kind: 'open' }
+  | { kind: 'import' }
   | { kind: 'openSample'; id: string }
   /** One of the user's documents (File ▸ Open Recent); `id` is its source, `local:…` or `cloud:…`. */
   | { kind: 'openSaved'; id: string }
@@ -115,6 +115,7 @@ export type Action =
   | { kind: 'setStyle'; style: string }
   | { kind: 'setAlignment'; align: Alignment }
   | { kind: 'setLineSpacing'; lines: number }
+  | ({ kind: 'setParagraph' } & ParagraphChoice)
   | { kind: 'toggleList'; list: ListKind }
   | { kind: 'indent'; direction: 'increase' | 'decrease' }
   // Insert
@@ -149,7 +150,30 @@ export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epu
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
  * control shows blank / unpressed), which is also what a host that can't report it yet sends.
  */
+/**
+ * What the Paragraph dialog shows and sets (twips, except `line`, see below). In a state a field
+ * is left out when the selected paragraphs differ; in a choice, when it is to stay as it is.
+ */
+export interface ParagraphChoice {
+  align?: Alignment;
+  left?: number;
+  right?: number;
+  special?: 'none' | 'firstLine' | 'hanging';
+  /** Twips of the first-line or hanging indent. */
+  by?: number;
+  before?: number;
+  after?: number;
+  /** 240ths of a line for `auto`; twips for `exact` and `atLeast`. */
+  line?: number;
+  lineRule?: 'auto' | 'exact' | 'atLeast';
+  keepNext?: boolean;
+  keepLines?: boolean;
+  pageBreakBefore?: boolean;
+  widowControl?: boolean;
+}
+
 export interface FormatState {
+  paragraph?: ParagraphChoice;
   marks?: Partial<Record<Mark, boolean>>;
   style?: string;
   font?: string;

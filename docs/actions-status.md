@@ -8,7 +8,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 ## Implemented
 
 **File**
-- Dashboard, New, Open (file picker), Open Sample, Open Recent
+- Open (the documents dashboard), New, Import (file picker), Open Sample, Open Recent
 - Download (in the document's own format)
 - Convert To (Word, ODT, HTML, PDF, Markdown, text)
 - Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab)
@@ -32,6 +32,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Keyboard Shortcuts, About (chrome only)
 
 **Format** (not on a PDF's own pages)
+- Format ▸ Paragraph: two tabs like Word 2003. Indents and Spacing (alignment, left/right indent, first line or hanging, space before/after in points, line spacing single/1.5/double/at least/exactly/multiple) and Line and Page Breaks (widow/orphan, keep with next, keep lines together, page break before). Shows what the selected paragraphs share (a blank field where they differ, left as it is); one undo step. Inches, centimetres outside English
 - Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Code
 - Font, Font Size, Grow/Shrink Font, Font Color, Highlight (also markup on a PDF)
 - Change Case, Clear Formatting, Style
@@ -93,7 +94,8 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - "Selected text" isn't an Apply to choice; "This point forward" is
 
 **Format**
-- Paragraph, Bullets and Numbering, Borders and Shading, Tabs, Styles dialogs
+- Bullets and Numbering, Borders and Shading, Tabs, Styles dialogs
+- Paragraph: no outline level, no tab stops button, no preview pane; the four Word "line and page breaks" extras (suppress line numbers, don't hyphenate) are missing
 - Format Painter: no double-click to keep it on, and it paints only after a mouse selection (not shift+arrows)
 
 **Table**

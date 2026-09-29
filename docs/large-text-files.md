@@ -3,8 +3,9 @@
 **Status.** Done: the guard and threshold (files of 8 MB or more open in the viewer; text, CSV and TSV), line index,
 virtual list, go to line, search, filter, line selection and copy, level colouring, text size, download of
 the original bytes, format profile and chrome. Measured in a browser on a 51 MB, 500,000-line log: first lines
-on screen in about 100 ms, search 240 ms, page heap well under the 200 MB budget. **Not done:** wrapped lines
-(the view scrolls sideways), editing and saving (the piece table), and "open this range as a document".
+on screen in about 100 ms, search 240 ms, page heap well under the 200 MB budget. Wrapped lines are done too (on by default, Alt+Z or the button in the status bar
+toggles it; a monospace column, so a line's rows are estimated from its length and corrected as lines are shown).
+**Not done:** editing and saving (the piece table), and "open this range as a document".
 
 Goal: open, scroll, search and copy from a 50 MB log (about 500,000 lines) without freezing or
 running out of memory, and later edit and save it.

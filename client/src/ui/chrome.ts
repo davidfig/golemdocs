@@ -213,9 +213,9 @@ export class Chrome {
 
     // File
     r.add(
-      a('file.dashboard', t('chrome.file.dashboard'), { kind: 'dashboard' }, { tooltip: t('chrome.file.dashboard.tip') }),
       a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
-      a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
+      a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
+      a('file.import', t('chrome.file.import'), { kind: 'import' }, { tooltip: t('chrome.file.import.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
       a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
       dialog('file.pageSetup', t('chrome.file.pageSetup'), 'pageSetup'),
@@ -408,7 +408,7 @@ export class Chrome {
     );
 
     // Draw: the tools stay picked until Done, so they show as pressed.
-    for (const tool of ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'pixelate', 'eraser'] as const) {
+    for (const tool of ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser'] as const) {
       r.add(a(`image.${tool}`, t(`picture.draw.${tool}`), { kind: 'image', op: tool }, { icon: tool, checked: (s) => s.draw.tool === tool }));
     }
 
@@ -442,10 +442,9 @@ export class Chrome {
       {
         label: t('chrome.menu.file'),
         items: [
-          cmd('file.dashboard'),
-          sep,
           cmd('file.new'),
           cmd('file.open'),
+          cmd('file.import'),
           sub(t('chrome.file.openRecent'), () => {
             const saved = host.saved?.() ?? [];
             if (!saved.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
@@ -631,6 +630,8 @@ export class Chrome {
           cmd('image.ellipse'),
           cmd('image.fill'),
           cmd('image.text'),
+          cmd('image.bubble'),
+          cmd('image.step'),
           cmd('image.pixelate'),
           cmd('image.eraser'),
         ],

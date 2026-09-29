@@ -27,7 +27,7 @@ Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Sca
 
 ## Salvataggio
 
-Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. La Dashboard, nel menu File, mostra tutti i tuoi documenti. Accedi e verranno salvati nel tuo account, così potrai aprirli su qualsiasi dispositivo.
+Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. File ▸ Apri mostra tutti i tuoi documenti. Accedi e verranno salvati nel tuo account, così potrai aprirli su qualsiasi dispositivo.
 
 ## Il significato del nome
 

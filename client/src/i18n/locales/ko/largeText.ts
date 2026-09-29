@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': '{count}줄을 복사했습니다',
   'largeText.copyTooLarge': '한 번에 복사하기에는 줄이 너무 많습니다(한도는 {max}줄).',
   'largeText.notice': '{name}은(는) 크기가 커서({size}) 뷰어로 엽니다. 검색, 필터링, 복사는 할 수 있지만 아직 편집은 할 수 없습니다.',
+  'largeText.wrap': '긴 줄 바꿈',
 };

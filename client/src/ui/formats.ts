@@ -361,7 +361,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     }
   }
   switch (action.kind) {
-    case 'dashboard':
+    case 'import':
     case 'convert':
     case 'new':
     case 'open':
@@ -464,6 +464,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'setAlignment':
       return profile.alignment;
     case 'setLineSpacing':
+    case 'setParagraph':
       return profile.lineSpacing;
     case 'toggleList':
       return profile.lists;

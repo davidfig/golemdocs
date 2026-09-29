@@ -24,6 +24,8 @@ export const picture: Partial<Messages> = {
   'picture.draw.rectangle': 'Retângulo',
   'picture.draw.ellipse': 'Elipse',
   'picture.draw.text': 'Texto',
+  'picture.draw.bubble': 'Balão de fala',
+  'picture.draw.step': 'Marcador numerado',
   'picture.draw.pixelate': 'Ocultar',
   'picture.draw.eraser': 'Borracha',
   'picture.draw.fill': 'Preencher formas',

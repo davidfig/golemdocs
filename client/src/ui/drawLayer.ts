@@ -3,7 +3,7 @@
 // (or Cancel drops them). Like the crop layer, it follows the view as it scrolls and zooms; the shapes
 // are in the picture's own pixels (see formats/imageDraw.ts).
 
-import { DRAW_TOOLS, constrainEnd, fontSize, hitShape, lineWidth, paintShapes } from '../formats/imageDraw.ts';
+import { DRAW_TOOLS, bubbleGeometry, constrainEnd, fontSize, hitShape, lineWidth, nextStepNumber, paintShapes } from '../formats/imageDraw.ts';
 import type { DrawTool, Point, Shape } from '../formats/imageDraw.ts';
 import { t } from '../i18n/index.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
@@ -175,7 +175,13 @@ export class DrawLayer {
     e.stopImmediatePropagation();
     e.preventDefault();
     if (this.typing) this.typing.blur();
-    if (this._tool === 'text') return this.typeAt(at);
+    if (this._tool === 'text' || this._tool === 'bubble') return this.typeAt(at, this._tool);
+    if (this._tool === 'step') {
+      // One click drops the next number.
+      const { color, size } = this.host.style();
+      this.change([...session.shapes, { tool: 'step', color, width: lineWidth(size, session.width, session.height), points: [at], text: String(nextStepNumber(session.shapes)) }]);
+      return this.refresh();
+    }
     this.host.canvas.setPointerCapture(e.pointerId);
     if (this._tool === 'eraser') {
       this.erasing = false;
@@ -240,16 +246,21 @@ export class DrawLayer {
     }
   }
 
-  /** Opens a box at `at` to type a line of text in: Enter puts it in the drawing, Esc drops it. */
-  private typeAt(at: Point): void {
+  /** Opens a box at `at` to type a line of text in (for a bubble, above the point it speaks about): Enter puts it in the drawing, Esc drops it. */
+  private typeAt(at: Point, tool: 'text' | 'bubble'): void {
     const session = this.session;
     const frame = this.frame();
     if (!session || !frame) return;
     const { color, size } = this.host.style();
     const width = lineWidth(size, session.width, session.height);
     const input = h('input', { class: 'wm-draw-text', attrs: { type: 'text', 'aria-label': t('picture.draw.text') } });
-    input.style.left = `${frame.left + at.x * frame.scale}px`;
-    input.style.top = `${frame.top + at.y * frame.scale}px`;
+    let where = at;
+    if (tool === 'bubble') {
+      const g = bubbleGeometry({ tool, color, width, points: [at] }, fontSize(width) * 4);
+      where = { x: g.x + fontSize(width) * 0.55, y: g.y + fontSize(width) * 0.55 };
+    }
+    input.style.left = `${frame.left + where.x * frame.scale}px`;
+    input.style.top = `${frame.top + where.y * frame.scale}px`;
     input.style.font = `${fontSize(width) * frame.scale}px system-ui, sans-serif`;
     input.style.color = color;
     let settled = false;
@@ -259,7 +270,7 @@ export class DrawLayer {
       const text = input.value.trim();
       this.typing = null;
       input.remove();
-      if (keep && text && this.session) this.change([...this.session.shapes, { tool: 'text', color, width, points: [at], text }]);
+      if (keep && text && this.session) this.change([...this.session.shapes, { tool, color, width, points: [at], text }]);
       this.refresh();
       this.host.canvas.focus?.();
     };

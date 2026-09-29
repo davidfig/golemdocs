@@ -6,6 +6,7 @@
 import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
 import { LineIndex, lineText, linesText } from './lineIndex.ts';
+import { RowHeights, wrappedRows } from './rowHeights.ts';
 import { compileSearch, nextMatch, searchLines } from './search.ts';
 import type { SearchOptions } from './search.ts';
 import './view.css';
@@ -15,6 +16,18 @@ const MAX_SCROLL_HEIGHT = 30_000_000;
 const OVERSCAN = 20;
 const MAX_COPY_LINES = 500_000;
 const BASE_SIZE = 13;
+/** How much of one line is shown (the rest is a count), which also bounds how many rows a wrapped line can take. */
+const MAX_LINE_BYTES = 20_000;
+const WRAP_KEY = 'wm.largeWrap';
+
+/** Wrapping is on unless it was turned off (the choice is remembered). */
+function readWrap(): boolean {
+  try {
+    return localStorage.getItem(WRAP_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 export interface LargeTextHost {
   notify(message: string): void;
@@ -57,6 +70,13 @@ export class LargeTextView {
   private widest = 0;
   private frame = 0;
   private lineHeight = 19;
+  private wrap = readWrap();
+  private heights: RowHeights | null = null;
+  /** Characters that fit on a row, and the width of one, for wrapped lines. */
+  private columns = 80;
+  private charWidth = 8;
+  private readonly probe = h('span', { class: 'wm-large-probe', text: 'x'.repeat(100), attrs: { 'aria-hidden': 'true' } });
+  private readonly wrapButton: HTMLButtonElement;
 
   constructor(parent: HTMLElement) {
     this.toggles = {
@@ -71,12 +91,23 @@ export class LargeTextView {
     this.bar.append(this.findInput, this.toggles.caseSensitive, this.toggles.wholeWord, this.toggles.regex, previous, next, this.toggles.filter, this.message, this.lineInput, close);
     this.spacer.append(this.rows);
     this.scroller.append(this.spacer);
-    this.status.append(this.statusLines, this.statusPosition, this.statusProgress);
+    this.wrapButton = h('button', { class: 'wm-button wm-large-toggle wm-large-wrap-button', text: '↵', attrs: { type: 'button', title: `${t('largeText.wrap')} (Alt+Z)`, 'aria-label': t('largeText.wrap'), 'aria-pressed': String(this.wrap) } });
+    this.wrapButton.addEventListener('click', () => this.setWrap(!this.wrap));
+    this.el.classList.toggle('wm-large-wrapping', this.wrap);
+    this.status.append(this.statusLines, this.statusPosition, this.statusProgress, this.wrapButton);
+    this.spacer.append(this.probe);
     this.el.append(this.bar, this.scroller, this.status);
     parent.append(this.el);
 
     this.scroller.addEventListener('scroll', () => this.schedule());
-    new ResizeObserver(() => this.schedule()).observe(this.scroller);
+    let width = 0;
+    new ResizeObserver(() => {
+      // A different width breaks lines differently: the rows are worked out again, from the same line.
+      if (this.wrap && this.index && this.scroller.clientWidth !== width) {
+        width = this.scroller.clientWidth;
+        this.refresh(true);
+      } else this.schedule();
+    }).observe(this.scroller);
     this.rows.addEventListener('pointerdown', (e) => this.select(e));
     this.findInput.addEventListener('input', () => this.searchSoon());
     this.findInput.addEventListener('keydown', (e) => {
@@ -105,6 +136,10 @@ export class LargeTextView {
       });
     }
     this.scroller.addEventListener('keydown', (e) => {
+      if (e.altKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        this.setWrap(!this.wrap);
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && this.selection) {
         e.preventDefault();
         void this.copy();
@@ -189,17 +224,47 @@ export class LargeTextView {
     return Math.min(lo, Math.max(this.matches.length - 1, 0));
   }
 
-  private get totalHeight(): number {
-    return this.rowCount * this.lineHeight;
+  // The list has `rowCount` entries (lines, or the matching ones); each takes one screen row, or with wrapping as many as its
+  // text needs at this width. `visual` counts screen rows. Positions are kept as (entry, rows into it).
+
+  /** Screen rows in all. */
+  private get visualTotal(): number {
+    return this.wrap && this.heights ? this.heights.total : this.rowCount;
   }
 
-  /** Scroll pixels per row: 1 row per line height, less when the file is too tall for the browser to scroll. */
+  private get totalHeight(): number {
+    return this.visualTotal * this.lineHeight;
+  }
+
+  /** Scroll pixels per screen row: 1 row per line height, less when the file is too tall for the browser to scroll. */
   private get ratio(): number {
     return Math.max(1, this.totalHeight / MAX_SCROLL_HEIGHT);
   }
 
-  private get topRow(): number {
+  private get topVisual(): number {
     return Math.floor((this.scroller.scrollTop * this.ratio) / this.lineHeight);
+  }
+
+  private locate(visual: number): { row: number; within: number } {
+    if (this.wrap && this.heights) {
+      const { entry, within } = this.heights.at(visual);
+      return { row: entry, within };
+    }
+    return { row: visual, within: 0 };
+  }
+
+  /** The list entry at the top of the view. */
+  private get topRow(): number {
+    return this.locate(this.topVisual).row;
+  }
+
+  private visualBefore(row: number): number {
+    return this.wrap && this.heights ? this.heights.before(row) : row;
+  }
+
+  /** The scroll position at which an entry starts. */
+  private scrollFor(row: number): number {
+    return (this.visualBefore(row) * this.lineHeight) / this.ratio;
   }
 
   private schedule(): void {
@@ -210,12 +275,46 @@ export class LargeTextView {
     });
   }
 
+  /** How many characters fit on a row of the text, from the width of the view and of the line numbers. */
+  private measure(): void {
+    if (!this.index) return;
+    const measured = this.probe.getBoundingClientRect().width / 100;
+    this.charWidth = measured > 0 ? measured : this.fontSize * 0.6;
+    const digits = String(Math.max(this.index.count, 1)).length;
+    // The number's box: its digits, and the padding and border the style gives it; the text has padding of its own.
+    const gutter = digits * this.charWidth + 8 + 10 + 1;
+    this.columns = Math.max(20, Math.floor((this.scroller.clientWidth - gutter - 10 - 2) / this.charWidth));
+  }
+
+  /** The rows each entry takes, estimated from its length (bytes are never fewer than characters): rendering corrects it as lines are seen. */
+  private estimate(): void {
+    const index = this.index;
+    if (!index || !this.wrap) {
+      this.heights = null;
+      return;
+    }
+    const total = this.rowCount;
+    const counts = new Uint32Array(total);
+    for (let row = 0; row < total; row++) {
+      const line = this.lineOfRow(row);
+      if (line >= index.available && !index.done) {
+        counts[row] = 1;
+        continue;
+      }
+      const { from, to } = index.range(line);
+      counts[row] = wrappedRows(Math.min(to - from, MAX_LINE_BYTES), 0, this.columns) + (to - from > MAX_LINE_BYTES ? 1 : 0);
+    }
+    this.heights = new RowHeights(counts);
+  }
+
   /** The list, its height and the readouts, after the file or the search or the filter changed. */
   private refresh(keepPosition: boolean): void {
     if (!this.index) return;
     const line = this.lineOfRow(this.topRow);
+    this.measure();
+    this.estimate();
     this.spacer.style.height = `${Math.min(this.totalHeight, MAX_SCROLL_HEIGHT)}px`;
-    if (keepPosition) this.scroller.scrollTop = (this.rowOfLine(line) * this.lineHeight) / this.ratio;
+    if (keepPosition) this.scroller.scrollTop = this.scrollFor(this.rowOfLine(line));
     this.render();
   }
 
@@ -231,7 +330,29 @@ export class LargeTextView {
     this.fontSize = reset ? BASE_SIZE : Math.min(Math.max(this.fontSize * factor, 8), 40);
     this.applySize();
     this.refresh(false);
-    this.scroller.scrollTop = (this.rowOfLine(line) * this.lineHeight) / this.ratio;
+    this.scroller.scrollTop = this.scrollFor(this.rowOfLine(line));
+    this.render();
+  }
+
+  /** Whether long lines are broken to fit the width (else the view scrolls sideways). */
+  get wrapping(): boolean {
+    return this.wrap;
+  }
+
+  setWrap(on: boolean): void {
+    const line = this.index ? this.lineOfRow(this.topRow) : 0;
+    this.wrap = on;
+    this.el.classList.toggle('wm-large-wrapping', on);
+    this.wrapButton.setAttribute('aria-pressed', String(on));
+    try {
+      localStorage.setItem(WRAP_KEY, on ? '1' : '0');
+    } catch {
+      // The choice lasts until the page closes.
+    }
+    if (on) this.scroller.scrollLeft = 0;
+    this.widest = 0;
+    this.refresh(false);
+    this.scroller.scrollTop = this.scrollFor(this.rowOfLine(line));
     this.render();
   }
 
@@ -242,18 +363,20 @@ export class LargeTextView {
     const total = this.rowCount;
     this.spacer.style.height = `${Math.min(this.totalHeight, MAX_SCROLL_HEIGHT)}px`;
     const visible = Math.ceil(this.scroller.clientHeight / this.lineHeight) + 2;
-    const first = Math.max(this.topRow - OVERSCAN, 0);
-    const last = Math.min(this.topRow + visible + OVERSCAN, total) - 1;
+    const topVisual = this.topVisual;
+    const first = Math.max(this.locate(topVisual).row - OVERSCAN, 0);
+    const last = Math.min(this.locate(topVisual + visible + OVERSCAN).row + 1, total - 1);
     // The rows sit where their first row belongs in the (possibly compressed) scroll range.
-    this.rows.style.transform = `translateY(${(first * this.lineHeight) / this.ratio}px)`;
+    this.rows.style.transform = `translateY(${(this.visualBefore(first) * this.lineHeight) / this.ratio}px)`;
     const fragment = document.createDocumentFragment();
     const selected = this.selection ? [Math.min(this.selection.anchor, this.selection.focus), Math.max(this.selection.anchor, this.selection.focus)] : null;
     for (let row = first; row <= last; row++) {
       const line = this.lineOfRow(row);
       if (line >= index.available && !index.done) break;
-      const { text, more } = lineText(index, line);
+      const { text, more } = lineText(index, line, MAX_LINE_BYTES);
       const el = h('div', { class: `wm-large-row ${level(text)}${selected && line >= selected[0] && line <= selected[1] ? ' wm-large-selected' : ''}${line === this.current ? ' wm-large-current' : ''}` });
       el.dataset.line = String(line);
+      el.dataset.row = String(row);
       const number = h('span', { class: 'wm-large-num', text: String(line + 1) });
       number.style.width = `${digits}ch`;
       const body = h('span', { class: 'wm-large-text' });
@@ -261,14 +384,40 @@ export class LargeTextView {
       if (more) body.append(h('span', { class: 'wm-large-more', text: `… ${more.toLocaleString()} B` }));
       el.append(number, body);
       fragment.append(el);
-      this.widest = Math.max(this.widest, text.length + digits + 4);
+      if (!this.wrap) this.widest = Math.max(this.widest, text.length + digits + 4);
     }
     this.rows.replaceChildren(fragment);
-    this.rows.style.minWidth = `${this.widest}ch`;
-    this.spacer.style.minWidth = `${this.widest}ch`;
+    this.rows.style.minWidth = this.wrap ? '' : `${this.widest}ch`;
+    this.spacer.style.minWidth = this.wrap ? '' : `${this.widest}ch`;
+    if (this.wrap) this.correct(first);
     this.statusLines.textContent = t('largeText.lines', { count: index.count.toLocaleString() }) + ` · ${sizeText(index.bytes.length)}`;
     this.statusPosition.textContent = total ? t('largeText.line', { line: (this.lineOfRow(Math.min(this.topRow, total - 1)) + 1).toLocaleString() }) : '';
     this.statusProgress.textContent = index.done ? '' : t('largeText.indexing', { percent: Math.floor((index.scanned / Math.max(index.bytes.length, 1)) * 100) });
+  }
+
+  /**
+   * Lines that took more or fewer rows than estimated (tabs, wide characters) are measured as they are shown and the
+   * row counts corrected. The line at the top of the view stays where it is when the ones above it change.
+   */
+  private correct(first: number): void {
+    const heights = this.heights;
+    if (!heights) return;
+    const top = this.topRow;
+    let above = 0;
+    let changed = false;
+    for (const el of this.rows.children as HTMLCollectionOf<HTMLElement>) {
+      const row = Number(el.dataset.row);
+      const actual = Math.max(1, Math.round(el.offsetHeight / this.lineHeight));
+      const before = heights.get(row);
+      if (actual === before) continue;
+      heights.set(row, actual);
+      changed = true;
+      if (row < top) above += actual - before;
+    }
+    if (!changed) return;
+    this.spacer.style.height = `${Math.min(this.totalHeight, MAX_SCROLL_HEIGHT)}px`;
+    if (above) this.scroller.scrollTop += (above * this.lineHeight) / this.ratio;
+    this.rows.style.transform = `translateY(${(heights.before(first) * this.lineHeight) / this.ratio}px)`;
   }
 
   /** A line's text, with the search's matches marked. */
@@ -296,7 +445,7 @@ export class LargeTextView {
     const row = this.rowOfLine(line);
     if (mark) this.current = this.lineOfRow(row);
     const target = Math.max(row - 3, 0);
-    this.scroller.scrollTop = (target * this.lineHeight) / this.ratio;
+    this.scroller.scrollTop = this.scrollFor(target);
     this.render();
   }
 

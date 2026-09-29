@@ -27,7 +27,7 @@ Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, 
 
 ## Speichern
 
-Es gibt keine Schaltfläche zum Speichern. Jede Änderung wird kurz nach dem Vornehmen in diesem Browser gesichert, und Sie brauchen kein Konto. Das Dashboard im Menü Datei zeigt alle Ihre Dokumente. Wenn Sie sich anmelden, werden sie stattdessen in Ihrem Konto gespeichert, sodass Sie sie auf jedem Gerät öffnen können.
+Es gibt keine Schaltfläche zum Speichern. Jede Änderung wird kurz nach dem Vornehmen in diesem Browser gesichert, und Sie brauchen kein Konto. Datei ▸ Öffnen zeigt alle Ihre Dokumente. Wenn Sie sich anmelden, werden sie stattdessen in Ihrem Konto gespeichert, sodass Sie sie auf jedem Gerät öffnen können.
 
 ## Zum Namen
 

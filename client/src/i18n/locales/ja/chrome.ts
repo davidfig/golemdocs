@@ -1,9 +1,9 @@
 import type { Messages } from '../../index.ts';
 
 export const chrome: Partial<Messages> = {
-  'chrome.file.dashboard': 'ダッシュボード(&D)',
   'chrome.file.new': '新規作成(&N)',
   'chrome.file.open': '開く(&O)…',
+  'chrome.file.import': 'インポート(&I)…',
   'chrome.file.download': 'ダウンロード(&W)',
   'chrome.file.share': '共有(&S)…',
   'chrome.file.pageSetup': 'ページ設定(&U)…',
@@ -96,7 +96,8 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.upper': 'すべて大文字(&U)',
   'chrome.format.case.title': '各単語の先頭文字を大文字にする(&T)',
   'chrome.format.case.toggle': '大文字/小文字を切り替える(&O)',
-  'chrome.file.dashboard.tip': 'すべてのドキュメントを表示します',
+  'chrome.file.open.tip': 'すべてのドキュメントを表示します',
+  'chrome.file.import.tip': 'コンピューターからファイルをインポートします',
   'chrome.file.new.tip': '新規白紙ドキュメント',
   'chrome.file.download.tip': 'このドキュメントのコピーをダウンロードします',
   'chrome.file.share.tip': 'リンクを取得して誰でもこのドキュメントを一緒に編集できるようにするか、特定の人と共有します',

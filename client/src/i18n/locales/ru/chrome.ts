@@ -1,9 +1,9 @@
 import type { Catalog } from '../../index.ts';
 
 export const chrome: Catalog = {
-  'chrome.file.dashboard': '&Документы',
   'chrome.file.new': '&Создать',
   'chrome.file.open': '&Открыть…',
+  'chrome.file.import': '&Импорт…',
   'chrome.file.download': 'Ска&чать',
   'chrome.file.share': 'Поде&литься…',
   'chrome.file.pageSetup': 'Пара&метры страницы…',
@@ -96,7 +96,8 @@ export const chrome: Catalog = {
   'chrome.format.case.upper': 'ВСЕ &ПРОПИСНЫЕ',
   'chrome.format.case.title': '&Начинать с прописных',
   'chrome.format.case.toggle': 'и&ЗМЕНИТЬ рЕГИСТР',
-  'chrome.file.dashboard.tip': 'Показать все ваши документы',
+  'chrome.file.open.tip': 'Показать все ваши документы',
+  'chrome.file.import.tip': 'Импортировать файл с компьютера',
   'chrome.file.new.tip': 'Создать пустой документ',
   'chrome.file.download.tip': 'Скачать копию этого документа',
   'chrome.file.share.tip': 'Получить ссылку, с помощью которой любой сможет редактировать этот документ вместе с вами, или предоставить доступ определенным людям',

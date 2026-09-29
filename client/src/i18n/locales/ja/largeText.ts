@@ -20,4 +20,5 @@ export const largeText = {
   'largeText.copied': '{count} 行をコピーしました',
   'largeText.copyTooLarge': '一度にコピーできる行数を超えています(上限は {max} 行)。',
   'largeText.notice': '{name} は大きい ({size}) ため、ビューアーで開きます。検索、絞り込み、コピーはできますが、まだ編集はできません。',
+  'largeText.wrap': '長い行を折り返す',
 };

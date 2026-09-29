@@ -60,7 +60,7 @@ Other things `server/.dev.vars` controls:
 ### Where local state lives
 
 - Saved documents: the browser's IndexedDB (DevTools ▸ Application ▸ IndexedDB ▸ `word`). Each copy has an `owner` (the account's user id) once it belongs to an account; signing in gives the ones without one to that account, and signing out deletes the account's copies. The last signed-in account is remembered in `localStorage` (`golem.account`) so the app still shows its documents offline.
-- Thumbnails for the dashboard (File ▸ Dashboard): rendered from page 1 on every save and kept in IndexedDB next to the document; cloud documents carry theirs (uploaded with the document, fetched only when their card scrolls into view).
+- Thumbnails for the dashboard (File ▸ Open): rendered from page 1 on every save and kept in IndexedDB next to the document; cloud documents carry theirs (uploaded with the document, fetched only when their card scrolls into view).
 - Server state in `local` mode: `server/.wrangler/`. Delete it to reset the simulated D1, R2 and sessions. In `dev` mode the data is in your dev Cloudflare resources (delete the `golemdocs-dev-user-…` databases and empty the bucket from the dashboard to reset).
 
 ### Handy for development

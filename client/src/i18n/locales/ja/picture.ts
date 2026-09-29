@@ -22,6 +22,8 @@ export const picture = {
   'picture.draw.rectangle': '四角形',
   'picture.draw.ellipse': '楕円',
   'picture.draw.text': '文字',
+  'picture.draw.bubble': '吹き出し',
+  'picture.draw.step': '番号マーカー',
   'picture.draw.pixelate': '伏せ字',
   'picture.draw.eraser': '消しゴム',
   'picture.draw.fill': '図形を塗りつぶす',

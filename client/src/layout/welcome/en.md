@@ -27,7 +27,7 @@ When you're ready, choose New from the File menu for a blank document, or Downlo
 
 ## Saving
 
-There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. The Dashboard, in the File menu, shows all your documents. Sign in and they are saved to your account instead, so you can open them on any device.
+There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. File ▸ Open shows all your documents. Sign in and they are saved to your account instead, so you can open them on any device.
 
 ## About the name
 

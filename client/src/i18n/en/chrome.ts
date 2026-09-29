@@ -1,7 +1,7 @@
 export const chrome = {
-  'chrome.file.dashboard': '&Dashboard',
   'chrome.file.new': '&New',
   'chrome.file.open': '&Open…',
+  'chrome.file.import': '&Import…',
   'chrome.file.download': 'Do&wnload',
   'chrome.file.share': '&Share…',
   'chrome.file.pageSetup': 'Page Set&up…',
@@ -94,7 +94,8 @@ export const chrome = {
   'chrome.format.case.upper': '&UPPERCASE',
   'chrome.format.case.title': '&Title Case',
   'chrome.format.case.toggle': 't&OGGLE cASE',
-  'chrome.file.dashboard.tip': 'See all your documents',
+  'chrome.file.open.tip': 'See all your documents',
+  'chrome.file.import.tip': 'Import a file from your computer',
   'chrome.file.new.tip': 'New Blank Document',
   'chrome.file.download.tip': 'Download a copy of this document',
   'chrome.file.share.tip': 'Get a link that lets anyone edit this document with you, or share it with specific people',

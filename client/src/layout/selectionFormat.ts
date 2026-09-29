@@ -11,7 +11,7 @@ import { inlineLength, paragraphLength, StyleResolver, type Inline, type Paragra
 import { withFormat, type Position } from '@word/editor';
 import type { RunFormat } from '@word/ops';
 import { isCode } from './formatting.ts';
-import type { Alignment, FormatState, ListKind, Mark } from '../ui/actions.ts';
+import type { Alignment, FormatState, ListKind, Mark, ParagraphChoice } from '../ui/actions.ts';
 
 /** Most runs examined for one selection, so Select All in a huge document stays fast (a few ms).
  * Past it, marks reflect the runs examined. */
@@ -161,6 +161,14 @@ class Accumulator {
   private readonly style = new Agreement<string | undefined>();
   private readonly align = new Agreement<Alignment>();
   private readonly list = new Agreement<ListKind | null>();
+  /** One agreement per Paragraph dialog field. */
+  private readonly para = new Map<keyof ParagraphChoice, Agreement<string | number | boolean>>();
+
+  private agree(key: keyof ParagraphChoice, value: string | number | boolean): void {
+    let agreement = this.para.get(key);
+    if (!agreement) this.para.set(key, (agreement = new Agreement()));
+    agreement.add(value);
+  }
 
   run(props: RunProperties): void {
     this.runs++;
@@ -190,6 +198,21 @@ class Accumulator {
     const props = styles.paragraph(paragraph.properties);
     this.style.add(styleName(styles, props.style));
     this.align.add(alignment(props.justification));
+    const { indent, spacing } = props;
+    this.agree('left', indent?.left ?? indent?.start ?? 0);
+    this.agree('right', indent?.right ?? indent?.end ?? 0);
+    const hanging = indent?.hanging ?? 0;
+    const firstLine = indent?.firstLine ?? 0;
+    this.agree('special', hanging ? 'hanging' : firstLine ? 'firstLine' : 'none');
+    this.agree('by', hanging || firstLine);
+    this.agree('before', spacing?.before ?? 0);
+    this.agree('after', spacing?.after ?? 0);
+    this.agree('lineRule', spacing?.lineRule ?? 'auto');
+    this.agree('line', spacing?.line ?? 240);
+    this.agree('keepNext', !!props.keepNext);
+    this.agree('keepLines', !!props.keepLines);
+    this.agree('pageBreakBefore', !!props.pageBreakBefore);
+    this.agree('widowControl', props.widowControl !== false);
     const id = props.numbering?.id;
     const level = id ? styles.listLevel(id, props.numbering?.level ?? 0) : undefined;
     this.list.add(!level || level.format === 'none' ? null : level.format === 'bullet' ? 'bullet' : 'number');
@@ -198,7 +221,12 @@ class Accumulator {
   result(): FormatState {
     const marks: Partial<Record<Mark, boolean>> = {};
     for (const mark of MARKS) marks[mark] = this.runs > 0 && this.marks.get(mark)!;
+    const paragraph: Record<string, string | number | boolean> = {};
+    for (const [key, agreement] of this.para) if (agreement.value !== undefined) paragraph[key] = agreement.value;
+    const aligned = this.align.value;
+    if (aligned) paragraph.align = aligned;
     return {
+      paragraph: paragraph as ParagraphChoice,
       marks,
       // Never blank: a mixed selection shows its start's font and size.
       font: this.font.value ?? this.font.first ?? FALLBACK_FAMILY,

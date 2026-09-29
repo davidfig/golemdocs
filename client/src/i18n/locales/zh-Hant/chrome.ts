@@ -1,9 +1,9 @@
 import type { Messages } from '../../index.ts';
 
 export const chrome: Partial<Messages> = {
-  'chrome.file.dashboard': '儀表板(&D)',
   'chrome.file.new': '新增(&N)',
   'chrome.file.open': '開啟(&O)…',
+  'chrome.file.import': '匯入(&I)…',
   'chrome.file.download': '下載(&W)',
   'chrome.file.share': '共用(&S)…',
   'chrome.file.pageSetup': '版面設定(&U)…',
@@ -96,7 +96,8 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.upper': '全部大寫(&U)',
   'chrome.format.case.title': '每個字的第一個字母大寫(&T)',
   'chrome.format.case.toggle': '切換大小寫(&O)',
-  'chrome.file.dashboard.tip': '查看所有文件',
+  'chrome.file.open.tip': '查看所有文件',
+  'chrome.file.import.tip': '從電腦匯入檔案',
   'chrome.file.new.tip': '新增空白文件',
   'chrome.file.download.tip': '下載此文件的複本',
   'chrome.file.share.tip': '取得連結讓任何人與您一起編輯此文件，或與特定人員共用',

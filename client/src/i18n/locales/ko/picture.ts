@@ -24,6 +24,8 @@ export const picture: Partial<Messages> = {
   'picture.draw.rectangle': '사각형',
   'picture.draw.ellipse': '타원',
   'picture.draw.text': '텍스트',
+  'picture.draw.bubble': '말풍선',
+  'picture.draw.step': '번호 표시',
   'picture.draw.pixelate': '가리기',
   'picture.draw.eraser': '지우개',
   'picture.draw.fill': '도형 채우기',

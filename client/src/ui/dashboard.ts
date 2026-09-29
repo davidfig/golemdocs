@@ -1,6 +1,6 @@
 // The dashboard: every document at a glance, as a grid of first-page thumbnails. Signed in, that
 // is the account's documents; signed out, the ones saved in this browser (sync.ts lists them). It
-// is a plain DOM screen laid over the editor's canvas; File ▸ Dashboard shows it, Esc or any open
+// is a plain DOM screen laid over the editor's canvas; File ▸ Open shows it, Esc or any open
 // hides it.
 //
 // Nothing here is loaded before it is needed: what this browser has appears straight away, the

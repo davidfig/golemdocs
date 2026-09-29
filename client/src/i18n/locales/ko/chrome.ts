@@ -1,9 +1,9 @@
 import type { Messages } from '../../index.ts';
 
 export const chrome: Partial<Messages> = {
-  'chrome.file.dashboard': '대시보드(&D)',
   'chrome.file.new': '새로 만들기(&N)',
   'chrome.file.open': '열기(&O)…',
+  'chrome.file.import': '가져오기(&I)…',
   'chrome.file.download': '다운로드(&W)',
   'chrome.file.share': '공유(&S)…',
   'chrome.file.pageSetup': '페이지 설정(&U)…',
@@ -96,7 +96,8 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.upper': '대문자(&U)',
   'chrome.format.case.title': '각 단어의 첫 글자를 대문자로(&T)',
   'chrome.format.case.toggle': '대/소문자 전환(&O)',
-  'chrome.file.dashboard.tip': '모든 문서 보기',
+  'chrome.file.open.tip': '모든 문서 보기',
+  'chrome.file.import.tip': '컴퓨터에서 파일을 가져옵니다',
   'chrome.file.new.tip': '새 빈 문서',
   'chrome.file.download.tip': '이 문서의 사본 다운로드',
   'chrome.file.share.tip': '누구나 이 문서를 함께 편집할 수 있는 링크를 받거나 특정 사용자와 공유합니다',

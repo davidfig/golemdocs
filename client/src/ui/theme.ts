@@ -1,61 +1,106 @@
-// Color schemes: Office 2003's Silver (the default), Blue and Olive Green, plus Dark. A scheme is
-// only a set of --wm-* colors in ui.css, chosen by data-theme on the root element. The choice
-// belongs to this browser (kept in localStorage), not the document. With no choice made, a
-// system that prefers dark gets Dark, else Silver.
+// Color schemes: Office 2003's Silver (the default), Blue and Olive Green, each with a dark
+// counterpart shared by all three. A scheme is only a set of --wm-* colors in ui.css, chosen by
+// data-theme on the root element. Two choices make it: the scheme, and the appearance, which is
+// automatic (dark when the system prefers dark), always light, or always dark. Both belong to this
+// browser (kept in localStorage), not the document.
 
-export const THEMES = [
+export const SCHEMES = [
   { id: 'silver', label: '&Silver' },
   { id: 'blue', label: '&Blue' },
   { id: 'olive', label: '&Olive Green' },
-  { id: 'dark', label: '&Dark' },
 ] as const;
 
-export type ThemeId = (typeof THEMES)[number]['id'];
+export type SchemeId = (typeof SCHEMES)[number]['id'];
+export type Appearance = 'auto' | 'light' | 'dark';
 
-const STORAGE_KEY = 'golem.theme';
+const SCHEME_KEY = 'golem.theme';
+const APPEARANCE_KEY = 'golem.appearance';
 
-function isTheme(value: unknown): value is ThemeId {
-  return THEMES.some((t) => t.id === value);
-}
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
-function loadTheme(): ThemeId {
+function read(key: string): string | null {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (isTheme(saved)) return saved;
+    return localStorage.getItem(key);
   } catch {
-    // Storage unavailable: fall through to the system preference.
+    return null; // Storage unavailable: the defaults apply.
   }
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'silver';
 }
 
-let current = loadTheme();
-let desk: [number, number, number] | null = null;
-const listeners = new Set<() => void>();
-
-document.documentElement.dataset.theme = current;
-
-export function theme(): ThemeId {
-  return current;
-}
-
-export function setTheme(id: ThemeId): void {
-  if (id === current) return;
-  current = id;
-  desk = null;
-  document.documentElement.dataset.theme = id;
+function write(key: string, value: string): void {
   try {
-    localStorage.setItem(STORAGE_KEY, id);
+    localStorage.setItem(key, value);
   } catch {
     // Storage unavailable (private window, blocked): the choice lasts for this session only.
   }
+}
+
+const isScheme = (value: unknown): value is SchemeId => SCHEMES.some((s) => s.id === value);
+const isAppearance = (value: unknown): value is Appearance => value === 'auto' || value === 'light' || value === 'dark';
+
+let scheme: SchemeId = 'silver';
+let appearance: Appearance = 'auto';
+{
+  const savedScheme = read(SCHEME_KEY);
+  const savedAppearance = read(APPEARANCE_KEY);
+  if (isScheme(savedScheme)) scheme = savedScheme;
+  if (isAppearance(savedAppearance)) appearance = savedAppearance;
+  // Before appearance existed the scheme list held Dark, and a saved choice was always explicit.
+  else if (savedScheme === 'dark') appearance = 'dark';
+  else if (isScheme(savedScheme)) appearance = 'light';
+}
+
+let desk: [number, number, number] | null = null;
+const listeners = new Set<() => void>();
+
+export function currentScheme(): SchemeId {
+  return scheme;
+}
+
+export function currentAppearance(): Appearance {
+  return appearance;
+}
+
+/** Whether the dark colors are showing now. */
+export function isDark(): boolean {
+  return appearance === 'auto' ? darkQuery.matches : appearance === 'dark';
+}
+
+function apply(): void {
+  desk = null;
+  document.documentElement.dataset.theme = isDark() ? 'dark' : scheme;
   for (const listener of listeners) listener();
 }
 
-/** Calls `listener` whenever the scheme changes. Returns the way to stop. */
+export function setScheme(id: SchemeId): void {
+  if (id === scheme) return;
+  scheme = id;
+  write(SCHEME_KEY, id);
+  apply();
+}
+
+export function setAppearance(value: Appearance): void {
+  if (value === appearance) return;
+  appearance = value;
+  write(APPEARANCE_KEY, value);
+  apply();
+}
+
+/** Turns dark on or off for good (this leaves automatic). */
+export function toggleDark(): void {
+  setAppearance(isDark() ? 'light' : 'dark');
+}
+
+/** Calls `listener` whenever the colors change, including when the system flips under automatic. Returns the way to stop. */
 export function onThemeChange(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+darkQuery.addEventListener('change', () => {
+  if (appearance === 'auto') apply();
+});
+
+document.documentElement.dataset.theme = isDark() ? 'dark' : scheme;
 
 /** The color behind the pages, 0-1 per channel, as the scheme's --wm-desk. */
 export function deskColor(): readonly [number, number, number] {

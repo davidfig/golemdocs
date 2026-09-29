@@ -869,17 +869,26 @@
   background: #9a9a9a;
 }
 
-.wm-sync[data-state='synced'] .wm-sync-dot {
+/* Signed out it's an offer to sign in, not a status: no dot. */
+.wm-sync[data-state='guest'] .wm-sync-dot {
+  display: none;
+}
+
+.wm-sync[data-state='saved'] .wm-sync-dot {
   background: #2e9d4f;
 }
 
-.wm-sync[data-state='pending'] .wm-sync-dot,
-.wm-sync[data-state='syncing'] .wm-sync-dot {
+.wm-sync[data-state='saving'] .wm-sync-dot {
   background: var(--wm-hot-border);
   animation: wm-sync-pulse 1s ease-in-out infinite alternate;
 }
 
-.wm-sync[data-state='failed'] .wm-sync-dot {
+.wm-sync[data-state='offline'] .wm-sync-dot {
+  background: #d08a00;
+}
+
+.wm-sync[data-state='failed'] .wm-sync-dot,
+.wm-sync[data-state='signedOut'] .wm-sync-dot {
   background: #c62828;
 }
 

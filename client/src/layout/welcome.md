@@ -14,7 +14,7 @@ This page is a document like any other. Click anywhere and start typing to try i
 
 ## Saving
 
-There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. The Dashboard, in the File menu, shows all your documents. If you sign in, Save to Cloud keeps a copy in your account so you can open it anywhere.
+There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. The Dashboard, in the File menu, shows all your documents. Sign in and your documents are saved to your account instead, so you can open them on any device.
 
 ## Getting started
 

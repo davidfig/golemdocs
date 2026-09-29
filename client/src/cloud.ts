@@ -66,8 +66,15 @@ export async function createDocument(name: string, bytes: Uint8Array): Promise<C
   return (await check(response)).json();
 }
 
-export async function saveDocument(id: string, bytes: Uint8Array, name?: string): Promise<CloudDocument> {
-  const query = name ? `?name=${encodeURIComponent(name)}` : '';
+/**
+ * Replaces a document's bytes. With `base` (the `updatedAt` this copy started from), fails with
+ * status 409 if it was changed elsewhere since, instead of overwriting that.
+ */
+export async function saveDocument(id: string, bytes: Uint8Array, name?: string, base?: number): Promise<CloudDocument> {
+  const params = new URLSearchParams();
+  if (name) params.set('name', name);
+  if (base !== undefined) params.set('base', String(base));
+  const query = params.size ? `?${params}` : '';
   const response = await fetch(`/api/documents/${id}${query}`, {
     method: 'PUT',
     headers: { 'content-type': DOCX },

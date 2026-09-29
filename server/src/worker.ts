@@ -178,11 +178,16 @@ const handler: ExportedHandler = {
         });
       }
 
-      // PUT /api/documents/:id[?name=…]: replace the bytes (and optionally rename).
+      // PUT /api/documents/:id[?name=…][&base=…]: replace the bytes (and optionally rename). With
+      // `base` (the `updatedAt` the client's copy started from), a document changed elsewhere since
+      // is refused with 409 instead of overwritten.
       if (request.method === 'PUT') {
+        const base = url.searchParams.get('base');
+        if (base !== null && Number(base) !== row.updated_at) throw new HttpError(409, 'changed elsewhere');
         const bytes = await readDocx(request);
         const name = cleanName(url.searchParams.get('name')) ?? row.name;
-        const now = Date.now();
+        // Strictly increasing, so two saves in the same millisecond still tell versions apart.
+        const now = Math.max(Date.now(), row.updated_at + 1);
         await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX } });
         await db.run('UPDATE documents SET name = ?, size = ?, updated_at = ? WHERE id = ?', [name, bytes.byteLength, now, id]);
         return json(describe({ ...row, name, size: bytes.byteLength, updated_at: now }));

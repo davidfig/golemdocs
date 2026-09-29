@@ -25,10 +25,38 @@ export async function availableProviders(): Promise<AuthProvider[]> {
   return providers.filter((p) => p.id !== 'apple' || isAppleDevice());
 }
 
+const REMEMBERED_KEY = 'golem.account';
+
+/** The account last seen signed in here, so that offline the app still shows that account's documents. */
+function remembered(): User | null {
+  try {
+    return JSON.parse(localStorage.getItem(REMEMBERED_KEY) ?? 'null') as User | null;
+  } catch {
+    return null;
+  }
+}
+
+function remember(user: User | null): void {
+  try {
+    if (user) localStorage.setItem(REMEMBERED_KEY, JSON.stringify(user));
+    else localStorage.removeItem(REMEMBERED_KEY);
+  } catch {
+    // storage blocked: offline, the app will just look signed out
+  }
+}
+
+/** Who is signed in. When the server can't be asked (offline), whoever was last time. */
 export async function currentUser(): Promise<User | null> {
-  const response = await fetch('/api/auth/me');
-  if (!response.ok) return null;
-  return ((await response.json()) as { user: User | null }).user;
+  let response: Response;
+  try {
+    response = await fetch('/api/auth/me');
+  } catch {
+    return remembered();
+  }
+  if (response.status >= 500) return remembered();
+  const user = response.ok ? ((await response.json()) as { user: User | null }).user : null;
+  remember(user);
+  return user;
 }
 
 /** Where to send the browser to sign in; it comes back to `returnTo` (a path on this site). */
@@ -36,8 +64,11 @@ export function signInUrl(providerId: string, returnTo = location.pathname + loc
   return `/api/auth/start/${encodeURIComponent(providerId)}?return=${encodeURIComponent(returnTo)}`;
 }
 
+/** Ends the session. Fails (throws) when the server can't be reached, and then nothing changes. */
 export async function signOut(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  const response = await fetch('/api/auth/logout', { method: 'POST' });
+  if (!response.ok) throw new Error(`sign-out failed (${response.status})`);
+  remember(null);
 }
 
 /** Why the last sign-in attempt failed, if the server sent us back with `?auth_error=`. */

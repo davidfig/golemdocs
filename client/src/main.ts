@@ -846,6 +846,8 @@ function applySelection(update: SelectionUpdate): void {
   clearInterval(blinkTimer);
   if (update.caret) {
     blinkTimer = window.setInterval(() => {
+      // An unfocused editor draws no caret, so there's nothing to redraw (focus redraws).
+      if (document.activeElement !== input || !document.hasFocus()) return;
       caretOn = !caretOn;
       requestRender();
     }, CARET_BLINK_MS);

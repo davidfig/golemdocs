@@ -18,6 +18,7 @@ import {
 import { CommandRegistry, type CommandSpec } from './commands.ts';
 import { h } from './dom.ts';
 import { CONVERT_ORDER, FORMATS } from './formats.ts';
+import { billingPanel } from './billingPanel.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
@@ -36,6 +37,8 @@ export interface ChromeOptions {
    * implemented them yet; they report "isn't available yet". Default false.
    */
   showUnimplemented?: boolean;
+  /** Whether the signed-in user is an admin; admin-only menu items are left out otherwise. */
+  isAdmin?: () => boolean;
   /** For the window title and About box. Default "Golem Docs". */
   appName?: string;
 }
@@ -438,6 +441,7 @@ export class Chrome {
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
           cmd('view.debug'),
+          { type: 'item', label: 'Cloudflare &Billing…', run: () => this.showBilling(), available: () => this.options.isAdmin?.() ?? false },
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),
@@ -849,6 +853,12 @@ export class Chrome {
     this.menuBar.close(false);
     closePopup();
     showDialog('Debug', debugSettings(), () => this.options.host.focusEditor());
+  }
+
+  private showBilling(): void {
+    this.menuBar.close(false);
+    closePopup();
+    showDialog('Cloudflare billing', billingPanel(), () => this.options.host.focusEditor());
   }
 
   // --- Help ----------------------------------------------------------------------------------

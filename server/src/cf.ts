@@ -43,6 +43,8 @@ export interface Env {
   CF_API_TOKEN: string;
   /** `production`, `dev` or `local` (see wrangler.jsonc). */
   ENVIRONMENT?: string;
+  /** Comma-separated emails of admins (verified sign-in emails, or DEV_USER locally). Admins see the billing panel. */
+  ADMIN_EMAILS?: string;
   /** Local development only: treated as the signed-in user. */
   DEV_USER?: string;
 

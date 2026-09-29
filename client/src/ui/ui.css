@@ -967,3 +967,24 @@
   display: block;
   color: #555;
 }
+
+/* --- Cloudflare billing (see billingPanel.ts) ------------------------------------------------- */
+
+.wm-billing table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.wm-billing td {
+  padding: 2px 0;
+}
+
+.wm-billing-cost {
+  padding-left: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.wm-billing-error {
+  color: #b00020;
+}

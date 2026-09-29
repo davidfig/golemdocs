@@ -10,6 +10,8 @@ export interface User {
   id: string;
   email: string | null;
   name: string | null;
+  /** Set by the server for admins, who get the Cloudflare billing panel. */
+  isAdmin?: boolean;
 }
 
 /** iPhone, iPad (which reports itself as a Mac) and Mac. */

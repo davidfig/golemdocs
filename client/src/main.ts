@@ -1281,7 +1281,7 @@ const chromeHost = createChromeHost({
     ...corpusNames.map((name) => ({ id: `corpus:${name}`, label: name.replace(/&/g, '&&') })),
   ],
 });
-const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, showUnimplemented: import.meta.env.DEV });
+const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => account?.isAdmin === true, showUnimplemented: import.meta.env.DEV });
 
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.

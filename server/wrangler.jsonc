@@ -71,7 +71,8 @@
     }
   }
   // Secrets (not committed), set with `pnpm exec wrangler secret put <NAME> --env=""`:
-  //   CF_API_TOKEN, a token with "D1 Edit" permission
+  //   CF_API_TOKEN, a token with "D1 Edit" and "Billing Read" permission
+  //   ADMIN_EMAILS, comma-separated emails of admins (who see the Cloudflare billing panel)
   //   sign-in providers (each is offered only when all of its secrets are set; see AUTH.md):
   //   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
   //   MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET

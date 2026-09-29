@@ -1,6 +1,9 @@
+import { isAdmin } from './accounts.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
+import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
+import { HttpError } from './http.ts';
 import { CloudflareError, userDb } from './userDb.ts';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -8,14 +11,6 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_THUMB_BYTES = 512 * 1024;
 const THUMB_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg']);
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
 
 interface DocumentRow {
   id: string;
@@ -95,6 +90,12 @@ const handler: ExportedHandler = {
       // The session cookie is SameSite=Lax already; this also refuses cross-origin writes outright.
       if (request.method !== 'GET' && request.method !== 'HEAD' && request.headers.get('origin') !== url.origin) {
         throw new HttpError(403, 'bad origin');
+      }
+
+      // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
+      if (path === '/api/admin/billing' && request.method === 'GET') {
+        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
+        return json(await billingSummary(env));
       }
 
       const match = /^\/api\/documents(?:\/([^/]+)(\/thumbnail)?)?$/.exec(path);

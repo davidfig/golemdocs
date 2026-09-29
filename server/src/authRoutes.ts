@@ -5,9 +5,11 @@
 //   GET|POST /api/auth/callback/:provider   the provider sends the user back here (Apple POSTs)
 //   GET  /api/auth/me                   the signed-in user, or { user: null }
 //   POST /api/auth/logout               end the session
+//
+// With DEV_USER set (local development), a "dev" provider signs in as that user with no round trip.
 
 import { describeUser, userForProfile } from './accounts.ts';
-import { authenticate } from './auth.ts';
+import { DEV_SIGNED_OUT, authenticate } from './auth.ts';
 import type { Env } from './cf.ts';
 import { base64url, constantTimeEqual, fromBase64url, pkceChallenge, randomToken } from './crypto.ts';
 import { AuthError, PROVIDERS, providerFor } from './providers.ts';
@@ -48,8 +50,17 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
   const parts = url.pathname.split('/').slice(3); // after /api/auth/
   const [action, providerId] = parts;
 
+  const devUser = env.DEV_USER?.trim();
+
   if (action === 'providers' && request.method === 'GET') {
-    return json(Object.values(PROVIDERS).filter((p) => p.enabled(env)).map((p) => ({ id: p.id, name: p.name })));
+    const providers: { id: string; name: string }[] = Object.values(PROVIDERS).filter((p) => p.enabled(env)).map((p) => ({ id: p.id, name: p.name }));
+    if (devUser) providers.push({ id: 'dev', name: `Dev User (${devUser})` });
+    return json(providers);
+  }
+
+  // Signing in as DEV_USER only lifts the sign-out.
+  if (action === 'start' && providerId === 'dev' && devUser && request.method === 'GET') {
+    return redirect(safeReturnPath(url.searchParams.get('return')), 302, [clearCookie(url, DEV_SIGNED_OUT)]);
   }
 
   if (action === 'me' && request.method === 'GET') {
@@ -60,7 +71,10 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
   if (action === 'logout' && request.method === 'POST') {
     if (request.headers.get('origin') !== url.origin) return json({ error: 'bad origin' }, 403);
     await destroySession(env, request, url);
-    return json({ ok: true }, 200, { 'set-cookie': clearCookie(url, 'session') });
+    const response = json({ ok: true });
+    response.headers.append('set-cookie', clearCookie(url, 'session'));
+    if (devUser) response.headers.append('set-cookie', setCookie(url, DEV_SIGNED_OUT, '1', { maxAgeSeconds: 365 * 24 * 60 * 60 }));
+    return response;
   }
 
   const provider = providerId ? providerFor(providerId) : null;

@@ -277,3 +277,25 @@ test('DEV_USER works only when set and no session exists', async () => {
   env.DEV_USER = 'me@localhost';
   assert.ok(await authenticate(request, env, new URL(request.url)));
 });
+
+test('DEV_USER: signing out sticks until signing in with the dev provider', async () => {
+  env.DEV_USER = 'me@localhost';
+  const providers = (await (await call('/api/auth/providers')).json()) as { id: string }[];
+  assert.ok(providers.some((p) => p.id === 'dev'));
+
+  const out = await call('/api/auth/logout', { method: 'POST', headers: { origin: ORIGIN } });
+  const jar = cookiesFrom(out);
+  assert.equal(jar.get('__Host-dev_signed_out'), '1');
+  const signedOut = new Request(ORIGIN + '/api/documents', { headers: { cookie: cookieHeader(jar) } });
+  assert.equal(await authenticate(signedOut, env, new URL(signedOut.url)), null);
+
+  const back = await call('/api/auth/start/dev?return=/docs', { headers: { cookie: cookieHeader(jar) } });
+  assert.equal(back.status, 302);
+  assert.equal(back.headers.get('location'), '/docs');
+  assert.equal(cookiesFrom(back).get('__Host-dev_signed_out'), '');
+
+  delete env.DEV_USER;
+  assert.equal((await call('/api/auth/start/dev')).status, 404);
+  const none = (await (await call('/api/auth/providers')).json()) as { id: string }[];
+  assert.ok(!none.some((p) => p.id === 'dev'));
+});

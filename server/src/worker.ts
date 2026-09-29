@@ -1,6 +1,6 @@
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
-import type { ExportedHandler } from './cf.ts';
+import type { Env, ExportedHandler } from './cf.ts';
 import { CloudflareError, userDb } from './userDb.ts';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -60,11 +60,31 @@ async function readBody(request: Request, limit: number, what: string): Promise<
 
 const readDocx = (request: Request) => readBody(request, MAX_BYTES, 'document');
 
+/**
+ * The request's URL as the browser sees it. In development the client's Vite server proxies
+ * /api to this Worker, which would otherwise see its own address; production never trusts this.
+ */
+function publicUrl(request: Request, env: Env): URL {
+  const url = new URL(request.url);
+  const development = env.ENVIRONMENT === 'local' || env.ENVIRONMENT === 'dev';
+  const devOrigin = development ? request.headers.get('x-dev-origin') : null;
+  if (!devOrigin) return url;
+  const origin = new URL(devOrigin);
+  url.protocol = origin.protocol;
+  url.host = origin.host;
+  return url;
+}
+
 const handler: ExportedHandler = {
   async fetch(request, env) {
     try {
-      const url = new URL(request.url);
+      const url = publicUrl(request, env);
       const path = url.pathname;
+      // Production is https only: sign-in redirects and secure cookies are built from this URL.
+      if (env.ENVIRONMENT === 'production' && url.protocol === 'http:') {
+        url.protocol = 'https:';
+        return new Response(null, { status: 308, headers: { location: url.href } });
+      }
 
       if (request.method === 'GET' && path === '/api/health') return json({ ok: true });
 

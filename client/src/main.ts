@@ -732,7 +732,9 @@ new ResizeObserver(([entry]) => {
   canvas.width = camera.width;
   canvas.height = camera.height;
   if (grid && !userMoved && pages.length) placeCamera();
-  requestRender();
+  // Resizing clears the canvas to (opaque) black: draw now, before this frame is painted, or
+  // that black shows for a frame.
+  render();
 }).observe(canvas);
 
 window.addEventListener('focus', requestRender);

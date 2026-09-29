@@ -19,10 +19,10 @@ import { exportDocument, importDocument, type Format } from '../formats/convert.
 import { pdfToDocument } from '../formats/pdfImport.ts';
 import { openPdfView, type PdfView } from '../formats/pdfPages.ts';
 import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
-import { PdfDocument, applyAnnotations, readAnnotations } from '@word/pdf';
+import { PdfDocument, applyAnnotations, applyFields, readAnnotations, type FormField } from '@word/pdf';
 import { markupToDocument } from '../formats/pdfMarkup.ts';
 import { PdfAnnotator } from './pdfAnnotator.ts';
-import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
+import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand, type WireField } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import welcomeText from './welcome.md?raw';
 import { FormatReader } from './selectionFormat.ts';
@@ -362,10 +362,36 @@ class OpenDocument {
       canRedo: annotator.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote: [],
+      fields: annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
     };
     this.reveal = false;
     this.commandAt = 0;
     return update;
+  }
+
+  /** A form field as the page sees it, if its page has been laid out. */
+  private wireField(field: FormField): WireField | null {
+    const page = this.pdfPages[field.page];
+    if (!page) return null;
+    const { view } = this.pdf!;
+    const [ax, ay] = view.toPage(field.page, field.rect[0], field.rect[1]);
+    const [bx, by] = view.toPage(field.page, field.rect[2], field.rect[3]);
+    return { ...field, pageId: page.id, box: { x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay) } };
+  }
+
+  /** A field from the page: its box back in the page's user space (unless it didn't move). */
+  private fieldFromWire(wire: WireField, before: Map<string, FormField>): FormField {
+    const { pageId, box, ...field } = wire;
+    const page = this.pdfPages.findIndex((p) => p.id === pageId);
+    if (page >= 0) field.page = page;
+    const was = before.get(field.id);
+    const wasBox = was && was.page === field.page ? this.wireField(was)?.box : undefined;
+    const same = wasBox && Math.abs(wasBox.x - box.x) < 0.01 && Math.abs(wasBox.y - box.y) < 0.01 && Math.abs(wasBox.width - box.width) < 0.01 && Math.abs(wasBox.height - box.height) < 0.01;
+    if (same && was) return { ...field, rect: was.rect };
+    const { view } = this.pdf!;
+    const [ax, ay] = view.toUser(field.page, box.x, box.y);
+    const [bx, by] = view.toUser(field.page, box.x + box.width, box.y + box.height);
+    return { ...field, rect: [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)] };
   }
 
   /** Commands on a PDF shown as its own pages: selecting text, and marking it up. */
@@ -390,6 +416,14 @@ class OpenDocument {
       case 'delete': {
         const page = annotator.deleteSelected();
         if (page !== null) changed = [page];
+        break;
+      }
+      case 'setFields': {
+        const before = new Map(annotator.fields.map((f) => [f.id, f]));
+        annotator.setFields(
+          wire.fields.map((f) => this.fieldFromWire(f, before)),
+          wire.merge,
+        );
         break;
       }
       case 'undo':
@@ -491,7 +525,7 @@ class OpenDocument {
 
   command(wire: WireCommand): void {
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
-    if (wire.kind === 'annotate') return;
+    if (wire.kind === 'annotate' || wire.kind === 'setFields') return;
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session) return;
@@ -540,7 +574,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     const name = loaded.name;
     // Shown as PDF with the original's pages still current (or never reflowed): its own pages.
     if (loaded.lens === 'pdf' && loaded.original && (loaded.pagesCurrent || !loaded.document)) {
-      const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations });
+      const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations, fields: loaded.extensions.pdf?.fields });
       const readMs = performance.now() - t0;
       if (entry.closed) return;
       entry.document = loaded.document; // kept as it is, for saving
@@ -610,21 +644,22 @@ async function reflow(original: Uint8Array, extensions: Extensions): Promise<Wor
   return document;
 }
 
-/** The document's extensions, with the PDF annotations as they are now when its pages are shown. */
+/** The document's extensions, with the PDF's annotations and form fields as they are now when its pages are shown. */
 function currentExtensions(open: OpenDocument): Extensions {
   if (!open.annotator) return open.extensions;
-  return { ...open.extensions, pdf: { annotations: [...open.annotator.annotations] } };
+  return { ...open.extensions, pdf: { annotations: [...open.annotator.annotations], fields: [...open.annotator.fields] } };
 }
 
 /**
- * The original PDF with the document's annotations written in as an incremental update (the
- * original bytes, then the changes), or the original itself when it has no annotation layer.
+ * The original PDF with the document's annotations and form fields written in as an incremental
+ * update (the original bytes, then the changes), or the original itself when it has neither layer.
  */
 async function annotatedPdf(original: Uint8Array, extensions: Extensions): Promise<Uint8Array> {
-  const annotations = extensions.pdf?.annotations;
-  if (!annotations) return original.slice();
+  const { annotations, fields } = extensions.pdf ?? {};
+  if (!annotations && !fields) return original.slice();
   const doc = PdfDocument.load(original);
-  applyAnnotations(doc, annotations);
+  if (annotations) applyAnnotations(doc, annotations);
+  if (fields) applyFields(doc, fields);
   return doc.save({ incremental: true });
 }
 

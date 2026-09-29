@@ -10,6 +10,7 @@ import {
   type CaseChange,
   type ChromeHost,
   type ChromeState,
+  type FormMode,
   type Mark,
   type TableOp,
   type ZoomTarget,
@@ -88,6 +89,8 @@ export class Chrome {
   /** The "Format" selector at the right of the menu bar. */
   private readonly formatBox: HTMLElement;
   private formatSelect!: HTMLSelectElement;
+  /** Fill in a PDF's form or edit it: beside the format selector, for a PDF's pages. */
+  private formModeBox!: HTMLElement;
 
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
@@ -218,6 +221,8 @@ export class Chrome {
       mode('view.web', '&Web Layout', 'web'),
       mode('view.print', '&Print Layout', 'print'),
       mode('view.outline', '&Outline', 'outline'),
+      a('view.fillForm', '&Fill In Form', { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: 'Type in the PDF’s fields' }),
+      a('view.editForm', '&Edit Form', { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: 'Move, add, rename and delete the PDF’s fields' }),
       a('view.grid', 'Page &Grid', { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.ruler', '&Ruler', { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.stats', 'Performance &Stats', { kind: 'toggleStats' }, { checked: (s) => s.statsVisible }),
@@ -439,6 +444,9 @@ export class Chrome {
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
           cmd('view.stats'),
+          sep,
+          cmd('view.fillForm'),
+          cmd('view.editForm'),
           sep,
           cmd('view.grid'),
           cmd('view.fullScreen'),
@@ -705,7 +713,20 @@ export class Chrome {
     });
     // Keep the document's keys out of the selector's way, and its focus with the document.
     select.addEventListener('keydown', (e) => e.stopPropagation());
-    return h('label', { class: 'wm-format' }, h('span', { class: 'wm-format-label', text: 'Format' }), select);
+    const modeButton = (mode: FormMode, label: string, tooltip: string) => {
+      const button = h('button', { class: 'wm-form-mode-button', text: label, title: tooltip, attrs: { type: 'button', 'data-mode': mode } });
+      button.addEventListener('click', () => {
+        void Promise.resolve(this.options.host.perform({ kind: 'setFormMode', mode }));
+      });
+      return button;
+    };
+    this.formModeBox = h(
+      'div',
+      { class: 'wm-form-mode', attrs: { role: 'group', 'aria-label': 'Form' } },
+      modeButton('fill', 'Fill In', 'Type in the PDF’s fields'),
+      modeButton('edit', 'Edit Form', 'Move, add, rename and delete the PDF’s fields'),
+    );
+    return h('div', { class: 'wm-format' }, this.formModeBox, h('label', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: 'Format' }), select));
   }
 
   /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */
@@ -717,6 +738,12 @@ export class Chrome {
       select.replaceChildren(...kinds.map((kind) => h('option', { text: FORMATS[kind].label, attrs: { value: kind } })));
     }
     select.value = this.state.kind;
+    this.formModeBox.hidden = this.state.formMode === null;
+    for (const button of this.formModeBox.querySelectorAll<HTMLButtonElement>('button')) {
+      const on = button.dataset.mode === this.state.formMode;
+      button.classList.toggle('wm-form-mode-on', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
     select.title = FORMATS[this.state.kind].editable
       ? 'Document format: switching changes the tools available'
       : 'Read-only format: switch to Word Document to edit';

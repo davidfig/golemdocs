@@ -9,7 +9,7 @@ import { sourceFromFile } from './formats/source.ts';
 import type { Bounds } from './document/arrange.ts';
 import type { GpuPage } from './view/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
-import { acceptList, kindFromName, type Action, type DocumentKind, type ActionKind, type ChromeHost, type CloudState, type Sample, type ZoomTarget } from './ui/index.ts';
+import { acceptList, kindFromName, type Action, type DocumentKind, type ActionKind, type ChromeHost, type CloudState, type FormMode, type Sample, type ZoomTarget } from './ui/index.ts';
 
 export interface AppHooks {
   /** Show (or hide) the dashboard of all documents. */
@@ -38,6 +38,8 @@ export interface AppHooks {
   send(command: WireCommand): void;
   /** A PDF is shown as its own pages, which take markup annotations. */
   annotating(): boolean;
+  /** Fill in a PDF's form, or edit the form itself. */
+  setFormMode(mode: FormMode): void;
   /** Who new comments are from. */
   author(): string;
   /** The selected text (for copy and cut). */
@@ -156,6 +158,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
 
     supports(action: Action): boolean {
       if (ANNOTATION_ACTIONS.has(action.kind)) return app.annotating();
+      if (action.kind === 'setFormMode') return app.annotating();
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line';
       if (action.kind === 'viewMode') return action.mode === 'print';
@@ -166,6 +169,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       switch (action.kind) {
         case 'dashboard':
           return app.dashboard();
+        case 'setFormMode':
+          return app.setFormMode(action.mode);
         case 'new':
           untitled++;
           app.open({ kind: 'blank', name: `Document${untitled}` });

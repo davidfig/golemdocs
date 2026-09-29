@@ -4,7 +4,7 @@
 // worker the same way local ones do.
 
 import type { Command } from '@word/editor';
-import type { AnnotationKind } from '@word/pdf';
+import type { AnnotationKind, FormField } from '@word/pdf';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
@@ -45,7 +45,15 @@ export type WireCommand =
    * On a PDF shown as its own pages: mark the selected text, or put a note there (see
    * pdfAnnotator.ts). With an annotation selected, changes it instead.
    */
-  | { kind: 'annotate'; annotation: AnnotationKind; color?: string | null; text?: string };
+  | { kind: 'annotate'; annotation: AnnotationKind; color?: string | null; text?: string }
+  /**
+   * On a PDF shown as its own pages: its form fields are now these (filled in, moved, added or
+   * removed). Edits with the same `merge` key as the last one undo together (typing in a field).
+   */
+  | { kind: 'setFields'; fields: WireField[]; merge?: string };
+
+/** A form field as the page sees it: on a page (by id), its box in page coordinates (points, y down). */
+export type WireField = FormField & { pageId: number; box: { x: number; y: number; width: number; height: number } };
 
 /** A collaboration room to open the document in (see ../collab). */
 export interface RoomOptions {
@@ -117,6 +125,8 @@ export interface SelectionUpdate {
   comments: { id: string; author: string; date?: string; text: string; page: number | null; y: number }[];
   /** Highlight over commented text: page id, x, y, width, height per rectangle. */
   commentRects: Float64Array;
+  /** A PDF shown as its own pages: its form fields on the pages laid out so far. */
+  fields?: WireField[];
 }
 
 export type FromWorker =

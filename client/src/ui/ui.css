@@ -784,6 +784,48 @@
   gap: 5px;
 }
 
+.wm-format-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wm-form-mode {
+  display: flex;
+  margin-right: 8px;
+}
+
+.wm-form-mode[hidden] {
+  display: none;
+}
+
+.wm-form-mode-button {
+  height: 19px;
+  padding: 0 7px;
+  font: inherit;
+  color: inherit;
+  background: var(--wm-menu-bg);
+  border: 1px solid var(--wm-etch-dark);
+}
+
+.wm-form-mode-button:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.wm-form-mode-button:last-child {
+  border-left: none;
+  border-radius: 0 3px 3px 0;
+}
+
+.wm-form-mode-button:hover {
+  background: var(--wm-hot);
+}
+
+.wm-form-mode-button.wm-form-mode-on {
+  background: var(--wm-checked-hot);
+  border-color: var(--wm-hot-border);
+}
+
 .wm-format-label {
   color: var(--wm-text);
   opacity: 0.7;

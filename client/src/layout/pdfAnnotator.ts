@@ -1,9 +1,11 @@
 // Marking up a PDF shown as its own pages: selecting its text, and adding, changing and removing
 // markup annotations (highlight, underline, strikeout, sticky notes) over it. The page text never
 // changes; the annotations are a layer kept with the document (the .wdoc's pdf extension) and
-// written into the file only when it's exported (see @word/pdf applyAnnotations).
+// written into the file only when it's exported (see @word/pdf applyAnnotations). Its form fields
+// are a layer the same way, filled in and arranged by the page (see ../ui/formLayer.ts); one undo
+// history covers both.
 
-import { noteRect, quadBoxes, quadsFor, type Annotation, type AnnotationKind } from '@word/pdf';
+import { noteRect, quadBoxes, quadsFor, type Annotation, type AnnotationKind, type FormField } from '@word/pdf';
 import type { PdfCharacter, PdfView } from '../formats/pdfPages.ts';
 
 /** A rectangle to show, on a page (by index), in page coordinates. */
@@ -27,6 +29,12 @@ const DEFAULT_COLORS: Record<AnnotationKind, [number, number, number]> = {
 
 const HISTORY_LIMIT = 200;
 
+/** What undo and redo step between. */
+interface Layers {
+  annotations: readonly Annotation[];
+  fields: readonly FormField[];
+}
+
 export class PdfAnnotator {
   /**
    * Selected text: a page and a range of its characters (anchor may be after focus). A click
@@ -35,9 +43,11 @@ export class PdfAnnotator {
   private text: { page: number; anchor: number; focus: number; collapsed: boolean } | null = null;
   /** The annotation selected by clicking on it. */
   private selectedId: string | null = null;
-  private readonly undoStack: (readonly Annotation[])[] = [];
-  private readonly redoStack: (readonly Annotation[])[] = [];
+  private readonly undoStack: Layers[] = [];
+  private readonly redoStack: Layers[] = [];
   private nextId = 1;
+  /** The last field edit's merge key: a following edit with the same key joins its undo step. */
+  private lastMerge: string | null = null;
 
   constructor(
     private readonly view: PdfView,
@@ -47,6 +57,17 @@ export class PdfAnnotator {
 
   get annotations(): readonly Annotation[] {
     return this.view.annotations;
+  }
+
+  get fields(): readonly FormField[] {
+    return this.view.fields;
+  }
+
+  /** The form fields are now these; with the last edit's `merge` key, it's undone with that edit. */
+  setFields(fields: readonly FormField[], merge?: string): void {
+    if (!merge || merge !== this.lastMerge) this.remember();
+    this.lastMerge = merge ?? null;
+    this.view.setFields(fields);
   }
 
   get canUndo(): boolean {
@@ -207,20 +228,33 @@ export class PdfAnnotator {
     return this.step(this.redoStack, this.undoStack);
   }
 
-  private step(from: (readonly Annotation[])[], to: (readonly Annotation[])[]): number[] {
+  private step(from: Layers[], to: Layers[]): number[] {
     const previous = from.pop();
     if (!previous) return [];
-    const current = this.annotations;
+    const current = this.layers();
     to.push(current);
-    this.view.setAnnotations(previous);
-    if (this.selectedId && !previous.some((a) => a.id === this.selectedId)) this.selectedId = null;
-    return changedPages(current, previous);
+    this.lastMerge = null;
+    if (previous.fields !== current.fields) this.view.setFields(previous.fields);
+    if (previous.annotations === current.annotations) return [];
+    this.view.setAnnotations(previous.annotations);
+    if (this.selectedId && !previous.annotations.some((a) => a.id === this.selectedId)) this.selectedId = null;
+    return changedPages(current.annotations, previous.annotations);
+  }
+
+  private layers(): Layers {
+    return { annotations: this.annotations, fields: this.fields };
+  }
+
+  /** Puts the layers as they are now on the undo stack, before a change. */
+  private remember(): void {
+    this.undoStack.push(this.layers());
+    if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
+    this.redoStack.length = 0;
   }
 
   private replace(next: readonly Annotation[], page: number): number {
-    this.undoStack.push(this.annotations);
-    if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
-    this.redoStack.length = 0;
+    this.remember();
+    this.lastMerge = null;
     this.view.setAnnotations(next);
     return page;
   }

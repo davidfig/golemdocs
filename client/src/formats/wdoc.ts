@@ -14,7 +14,7 @@
 import { ZipArchive, writeZip } from '@word/docx';
 import type { OdtExtension } from '@word/odt';
 import type { HtmlExtension } from './html.ts';
-import type { Annotation } from '@word/pdf';
+import type { Annotation, FormField } from '@word/pdf';
 import type { Format } from './convert.ts';
 
 export const WDOC_MIME = 'application/x-golem-document';
@@ -64,6 +64,8 @@ export interface TextExtension {
 export interface PdfExtension {
   /** The markup annotations over the original PDF's pages (they replace the file's own). */
   annotations: Annotation[];
+  /** The form fields, filled in and arranged (they replace the file's own); missing: as in the file. */
+  fields?: FormField[];
 }
 
 export interface Wdoc {

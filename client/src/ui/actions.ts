@@ -11,6 +11,8 @@ export type ListKind = 'bullet' | 'number';
 export type CaseChange = 'sentence' | 'lower' | 'upper' | 'title' | 'toggle';
 export type BreakKind = 'page' | 'column' | 'line' | 'sectionNextPage' | 'sectionContinuous';
 export type ViewMode = 'normal' | 'print' | 'web' | 'outline';
+/** A PDF's form: filling in its fields, or arranging them (moving, adding, renaming, deleting). */
+export type FormMode = 'fill' | 'edit';
 /** A zoom factor (1 = 100%) or a fit mode. */
 export type ZoomTarget = number | 'pageWidth' | 'wholePage' | 'allPages';
 
@@ -90,6 +92,8 @@ export type Action =
   | { kind: 'toggleStats' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleFormattingMarks' }
+  /** A PDF shown as its pages: fill in its form, or edit the form itself. */
+  | { kind: 'setFormMode'; mode: FormMode }
   // Character formatting
   | { kind: 'toggleMark'; mark: Mark }
   | { kind: 'setFont'; family: string }
@@ -164,6 +168,8 @@ export interface ChromeState {
   formattingMarks: boolean;
   trackChanges: boolean;
   format: FormatState;
+  /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
+  formMode: FormMode | null;
 }
 
 export const DEFAULT_STATE: ChromeState = {
@@ -180,6 +186,7 @@ export const DEFAULT_STATE: ChromeState = {
   formattingMarks: false,
   trackChanges: false,
   format: {},
+  formMode: null,
 };
 
 /** A sample document the File menu can open. */

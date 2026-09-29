@@ -226,6 +226,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'toggleRuler':
     case 'toggleFormattingMarks':
       return true;
+    case 'setFormMode':
+      return profile.kind === 'pdf';
     // Rooms share a Word document; a PDF has no text selection to copy or select yet.
     case 'collaborate':
       return profile.kind === 'docx';

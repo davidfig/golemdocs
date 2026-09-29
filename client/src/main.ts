@@ -8,6 +8,7 @@ import { openFromCloud, uploadToCloud } from './library.ts';
 import { clearAllSaved, getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
+import { FormLayer } from './ui/formLayer.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { showConfirm } from './ui/popup.ts';
@@ -23,7 +24,7 @@ import { PageRenderer } from './view/pageRenderer.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
-import { FORMATS, kindFromName, mountChrome, type DocumentKind, type FormatState } from './ui/index.ts';
+import { FORMATS, kindFromName, mountChrome, type DocumentKind, type FormatState, type FormMode } from './ui/index.ts';
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -68,6 +69,8 @@ let documentName = '';
 let documentKind: DocumentKind = 'docx';
 /** A PDF is shown as its own pages, which take markup annotations. */
 let annotating = false;
+/** A PDF's pages: filling in its form, or editing the form itself. */
+let formMode: FormMode = 'fill';
 let status = '';
 /** Collaboration status, when the document is open in a room. */
 let roomStatus = '';
@@ -108,6 +111,9 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pages = [];
   selection.clear();
   commentsPanel.update([]);
+  formLayer.update(null);
+  formMode = 'fill';
+  formLayer.setMode(formMode);
   selectionFormat = {};
   canUndo = canRedo = false;
   renderer.images?.clear();
@@ -613,6 +619,7 @@ function applySelection(update: SelectionUpdate): void {
   selection.update(update);
   commentsPanel.update(update.comments);
   selectionFormat = update.format;
+  formLayer.update(update.fields ?? null);
   canUndo = update.canUndo;
   canRedo = update.canRedo;
   if (editSent) {
@@ -651,7 +658,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 }
 
 /** Commands that change a PDF's annotations (on its own pages, nothing else changes). */
-const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo']);
+const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields']);
 
 function send(command: WireCommand): void {
   if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll') {
@@ -692,7 +699,9 @@ function render(): void {
     format: selectionFormat,
     canUndo,
     canRedo,
+    formMode: annotating ? formMode : null,
   });
+  formLayer.position();
   statsEl.textContent =
     `${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}\n${stats.visiblePages}/${stats.pages.toLocaleString()} pages visible · ` +
     `${stats.glyphs.toLocaleString()} glyphs drawn · ${stats.drawCalls} draw calls · zoom ${Math.round(camera.zoom * 100)}% · ` +
@@ -982,6 +991,12 @@ const chromeHost = createChromeHost({
   }),
   send,
   annotating: () => annotating,
+  setFormMode: (mode) => {
+    formMode = mode;
+    formLayer.setMode(mode);
+    requestRender();
+    if (mode === 'fill') focusInput();
+  },
   author: () => cloudUser?.name ?? cloudUser?.email ?? userName,
   selectedText: () => selection.text,
   focusEditor: focusInput,
@@ -1026,6 +1041,19 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
 
 // Comments down the right of the editor; edits to them are ordinary (undoable) edits.
+// A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
+const formLayer = new FormLayer(document.getElementById('viewport')!, {
+  camera,
+  canvas,
+  page: (id) => pagesById.get(id),
+  pageAt: (x, y) => {
+    const hit = pageAt(x, y);
+    return hit && { page: hit.page, x: hit.x, y: hit.y };
+  },
+  change: (fields, merge) => send({ kind: 'setFields', fields, merge }),
+  notify: setStatus,
+});
+
 const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   select: (id) => {
     send({ kind: 'selectComment', id });

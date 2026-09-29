@@ -5,7 +5,7 @@
 // @word/pdf annotations), which are drawn from the appearance streams they're given.
 
 import { FontSet, PageLayout, packColor, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@word/layout';
-import { PdfDocument, applyAnnotations, collectFonts, imageBytes, interpretPage, readAnnotations, type Annotation, type DisplayImage, type FontStyle, type GlyphRun } from '@word/pdf';
+import { PdfDocument, applyAnnotations, applyFields, collectFonts, imageBytes, interpretPage, readAnnotations, readFields, type Annotation, type FormField, type DisplayImage, type FontStyle, type GlyphRun } from '@word/pdf';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
 
 export type { PdfCharacter };
@@ -20,6 +20,9 @@ export interface PdfView {
   readonly annotations: readonly Annotation[];
   /** Shows these annotations instead (pages laid out afterwards show them). */
   setAnnotations(annotations: readonly Annotation[]): void;
+  /** The form fields. Pages don't draw them: the app shows them as inputs over the page. */
+  readonly fields: readonly FormField[];
+  setFields(fields: readonly FormField[]): void;
   /** Page `index`'s characters, for selecting text. */
   characters(index: number): PdfCharacter[];
   /** Page coordinates (points from the top-left, y down) to the page's user space (y up). */
@@ -52,12 +55,21 @@ interface FaceChoice {
  * Opens a PDF. Throws PdfError for files that aren't PDFs and PasswordError/EncryptionError
  * for encrypted ones without the right password (exported by @word/pdf).
  */
-export async function openPdfView(bytes: Uint8Array, fonts: FontSet, options: { password?: string; annotations?: readonly Annotation[] } = {}): Promise<PdfView> {
+export async function openPdfView(
+  bytes: Uint8Array,
+  fonts: FontSet,
+  options: { password?: string; annotations?: readonly Annotation[]; fields?: readonly FormField[] } = {},
+): Promise<PdfView> {
   const doc = PdfDocument.load(bytes, { password: options.password });
   let annotations: readonly Annotation[] = readAnnotations(doc);
   if (options.annotations) {
     applyAnnotations(doc, options.annotations);
     annotations = options.annotations;
+  }
+  let fields: readonly FormField[] = readFields(doc);
+  if (options.fields) {
+    applyFields(doc, options.fields);
+    fields = options.fields;
   }
   const characterCache = new Map<number, PdfCharacter[]>();
   const warnings: string[] = [...doc.warnings];
@@ -143,6 +155,15 @@ export async function openPdfView(bytes: Uint8Array, fonts: FontSet, options: { 
       annotations = next;
     },
 
+    get fields() {
+      return fields;
+    },
+
+    setFields(next: readonly FormField[]): void {
+      applyFields(doc, next);
+      fields = next;
+    },
+
     characters(index: number): PdfCharacter[] {
       let chars = characterCache.get(index);
       if (!chars) {
@@ -174,7 +195,7 @@ export async function openPdfView(bytes: Uint8Array, fonts: FontSet, options: { 
       if (!pdfPage) throw new RangeError(`no page ${index} (the document has ${doc.pageCount})`);
       let display;
       try {
-        display = interpretPage(pdfPage);
+        display = interpretPage(pdfPage, { hideFields: true });
       } catch (e) {
         warn(`page ${index + 1} could not be read (${(e as Error).message})`);
         return new PageLayout(id, 612, 792, 0, index + 1);

@@ -25,6 +25,7 @@ import { TextFont } from '../text/font.ts';
 import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, parseColorSpace, type ColorSpace } from './color.ts';
 import { describeFont, type FontStyle } from './fontinfo.ts';
 import { imageSupported } from './image.ts';
+import { isFieldWidget } from '../write/forms.ts';
 
 export interface DisplayGlyph {
   /** The character(s) the PDF font says this glyph stands for (a ligature glyph may carry several). */
@@ -146,7 +147,8 @@ const fontCaches = new WeakMap<PdfDocument, Map<unknown, FontEntry | null>>();
 const pack = (rgb: [number, number, number]): number => (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
 
 /** Interprets one page. Never throws: problems are collected in `warnings`. */
-export function interpretPage(page: PdfPage): PageDisplay {
+/** `hideFields`: leave out fillable form fields' widgets (the app draws those itself, as inputs). */
+export function interpretPage(page: PdfPage, options: { hideFields?: boolean } = {}): PageDisplay {
   const doc = page.doc;
   const size = page.size;
   const out: PageDisplay = { width: size.width, height: size.height, glyphRuns: [], rects: [], images: [], warnings: [] };
@@ -175,6 +177,7 @@ export function interpretPage(page: PdfPage): PageDisplay {
     ctx.pageIndex = page.index;
     run(ctx, page.operations(), page.resources, initialState(base), 0);
     for (const annot of page.annotations) {
+      if (options.hideFields && isFieldWidget(doc, annot)) continue;
       try {
         const ap = appearance(doc, annot);
         if (!ap) continue;

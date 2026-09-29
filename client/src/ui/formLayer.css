@@ -1,0 +1,232 @@
+/* A PDF's form fields over its pages (see formLayer.ts). */
+
+.wm-forms {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-forms[hidden],
+.wm-forms-palette[hidden],
+.wm-forms-catcher[hidden] {
+  display: none;
+}
+
+.wm-forms > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+/* Placing a new field: the whole view takes the click. */
+.wm-forms > .wm-forms-catcher {
+  inset: 0;
+  cursor: crosshair;
+}
+
+/* Fill mode: inputs in the fields' boxes. */
+.wm-field {
+  margin: 0;
+  padding: 0 0.2em;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1.15;
+  color: #000;
+  background: rgb(204 215 255 / 0.55);
+  border: 1px solid transparent;
+  border-radius: 0;
+  outline: none;
+}
+
+.wm-field:hover {
+  border-color: rgb(49 106 197 / 0.6);
+}
+
+.wm-field:focus {
+  background: rgb(204 215 255 / 0.25);
+  border-color: #316ac5;
+}
+
+.wm-field:disabled,
+.wm-field[readonly] {
+  background: rgb(0 0 0 / 0.04);
+}
+
+textarea.wm-field {
+  resize: none;
+  overflow: hidden;
+  padding-top: 0.1em;
+}
+
+.wm-field-checkbox,
+.wm-field-radio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.wm-field-radio {
+  border-radius: 50%;
+}
+
+select.wm-field {
+  padding: 0;
+  appearance: auto;
+}
+
+/* Edit mode: boxes to move and resize. */
+.wm-forms-edit > .wm-field-box {
+  cursor: move;
+  background: rgb(49 106 197 / 0.12);
+  border: 1px dashed #316ac5;
+  touch-action: none;
+}
+
+.wm-field-box.wm-field-selected {
+  background: rgb(49 106 197 / 0.22);
+  border: 1.5px solid #316ac5;
+}
+
+.wm-field-name {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  max-width: calc(100% - 4px);
+  transform: translateY(-50%);
+  overflow: hidden;
+  font: 11px/1.2 var(--wm-font, system-ui, sans-serif) !important;
+  color: #1c3f7a;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Small boxes: the name shows above, only while pointed at or selected (it would cover the page). */
+.wm-field-box-checkbox .wm-field-name,
+.wm-field-box-radio .wm-field-name {
+  display: none;
+  top: auto;
+  bottom: calc(100% + 2px);
+  left: 0;
+  max-width: none;
+  padding: 0 3px;
+  transform: none;
+  background: #fff;
+  border: 1px solid #316ac5;
+}
+
+.wm-field-box-checkbox:is(:hover, .wm-field-selected) .wm-field-name,
+.wm-field-box-radio:is(:hover, .wm-field-selected) .wm-field-name {
+  display: block;
+}
+
+.wm-field-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border: 1px solid #316ac5;
+  cursor: nwse-resize;
+}
+
+.wm-field-box:not(.wm-field-selected) .wm-field-handle {
+  display: none;
+}
+
+/* The palette: add fields, and the selected field's settings. */
+.wm-forms-palette {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 200px;
+  padding: 8px;
+  font: 12px/1.3 var(--wm-font);
+  color: var(--wm-text);
+  background: var(--wm-menu-bg);
+  border: 1px solid var(--wm-border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+}
+
+.wm-forms-palette h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.wm-forms-adds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wm-forms-palette button {
+  font: inherit;
+  padding: 2px 6px;
+}
+
+.wm-forms-placing .wm-forms-add {
+  opacity: 0.6;
+}
+
+.wm-forms-hint {
+  margin: 6px 0 0;
+  opacity: 0.7;
+}
+
+.wm-forms-properties {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--wm-etch-dark);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wm-forms-properties:empty {
+  display: none;
+}
+
+.wm-forms-kind {
+  margin: 0;
+  font-weight: 600;
+}
+
+.wm-forms-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-forms-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+}
+
+.wm-forms-column {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.wm-forms-options {
+  font: inherit;
+  resize: vertical;
+}
+
+.wm-forms-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wm-forms-delete {
+  align-self: flex-start;
+}

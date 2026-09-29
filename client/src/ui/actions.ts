@@ -60,6 +60,7 @@ export type Action =
   | { kind: 'openSaved'; id: string }
   /** Send changes that haven't reached the account yet, now (after a failed upload). */
   | { kind: 'syncNow' }
+  | { kind: 'share' }
   | { kind: 'signIn' }
   | { kind: 'signOut' }
   /** Delete every document and setting kept in this browser (asks first). The account's documents stay. */

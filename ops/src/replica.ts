@@ -100,6 +100,16 @@ export class Replica {
     this.client = new CollabClient(this.engine, send, version);
   }
 
+  /** Stops syncing (the server no longer processes edits); local edits stay in the document. */
+  disconnect(): void {
+    this.client = null;
+  }
+
+  /** Sends what the server may not have (see CollabClient.resubmit). */
+  resubmit(): void {
+    this.client?.resubmit();
+  }
+
   get connected(): boolean {
     return this.client !== null;
   }

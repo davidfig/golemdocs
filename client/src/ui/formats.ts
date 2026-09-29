@@ -211,6 +211,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'openSample':
     case 'openSaved':
     case 'syncNow':
+    case 'share':
     case 'signIn':
     case 'signOut':
     case 'clearLocalData':

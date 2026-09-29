@@ -1,90 +1,20 @@
 // The document API's thumbnails end to end: the real worker against a fake R2 and per-user D1
-// databases (node:sqlite running the real migrations behind a stubbed Cloudflare REST API).
+// databases (see harness.ts).
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
-import type { Env } from '../src/cf.ts';
 import { USER_MIGRATIONS } from '../src/schema.ts';
-import worker from '../src/worker.ts';
+import { DOCX, world, type World } from './harness.ts';
 
-const ORIGIN = 'https://app.example.com';
-const realFetch = globalThis.fetch;
-
-function fakeDirectory(): any {
-  const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_users.sql', '0002_auth.sql']) db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
-  const statement = (sql: string, params: unknown[]): any => ({
-    bind: (...values: unknown[]) => statement(sql, values),
-    first: async () => (db.prepare(sql).get(...(params as any[])) as any) ?? null,
-    run: async () => {
-      db.prepare(sql).run(...(params as any[]));
-      return { results: [], success: true, meta: {} };
-    },
-    all: async () => ({ results: db.prepare(sql).all(...(params as any[])), success: true, meta: {} }),
-  });
-  return { prepare: (sql: string) => statement(sql, []) };
-}
-
-/** Objects by key. */
-let objects: Map<string, { bytes: ArrayBuffer; contentType?: string }>;
-let userDatabases: Map<string, DatabaseSync>;
-let env: Env;
-
-function fakeBucket(): any {
-  return {
-    async get(key: string) {
-      const o = objects.get(key);
-      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, httpEtag: '"etag"', httpMetadata: { contentType: o.contentType } };
-    },
-    async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }) {
-      objects.set(key, { bytes: value, contentType: options?.httpMetadata?.contentType });
-    },
-    async delete(keys: string | string[]) {
-      for (const key of [keys].flat()) objects.delete(key);
-    },
-  };
-}
-
+let w: World;
 beforeEach(() => {
-  objects = new Map();
-  userDatabases = new Map();
-  env = { DIRECTORY: fakeDirectory(), FILES: fakeBucket(), CF_ACCOUNT_ID: 'acct', CF_API_TOKEN: 'tok', DEV_USER: 'dev@example.com' };
-  // Cloudflare's REST API: create a database, run a query in one.
-  globalThis.fetch = (async (input: unknown, init?: { body?: string }) => {
-    const url = new URL(String(input));
-    const body = init?.body ? JSON.parse(init.body) : {};
-    const ok = (result: unknown) => new Response(JSON.stringify({ success: true, errors: [], result }));
-    if (url.pathname.endsWith('/d1/database')) {
-      const uuid = `db-${userDatabases.size + 1}`;
-      userDatabases.set(uuid, new DatabaseSync(':memory:'));
-      return ok({ uuid });
-    }
-    const query = /\/d1\/database\/([^/]+)\/query$/.exec(url.pathname);
-    if (query) {
-      const rows = userDatabases.get(query[1]!)!.prepare(body.sql).all(...body.params);
-      return ok([{ results: rows }]);
-    }
-    throw new Error(`unexpected request to ${url}`);
-  }) as typeof fetch;
+  w = world();
 });
+afterEach(() => w.restore());
 
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+const call = (method: string, path: string, init: { body?: BodyInit; type?: string } = {}) => w.call('dev@example.com', method, path, init);
 
-const call = (method: string, path: string, init: { body?: BodyInit; type?: string } = {}) =>
-  worker.fetch(
-    new Request(`${ORIGIN}${path}`, {
-      method,
-      body: init.body,
-      headers: { origin: ORIGIN, ...(init.type ? { 'content-type': init.type } : {}) },
-    }),
-    env,
-  );
-
-const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const create = async () => (await (await call('POST', '/api/documents?name=Doc.docx', { body: new Uint8Array([1, 2, 3]), type: DOCX })).json()) as any;
 
 test('migration 2 adds thumb_at', () => {
@@ -129,15 +59,14 @@ test('only small images are accepted as thumbnails', async () => {
 test('deleting a document deletes its thumbnail too', async () => {
   const doc = await create();
   await call('PUT', `/api/documents/${doc.id}/thumbnail`, { body: new Uint8Array([1]), type: 'image/png' });
-  assert.equal([...objects.keys()].filter((k) => k.endsWith('.thumb')).length, 1);
+  assert.equal([...w.objects.keys()].filter((k) => k.endsWith('.thumb')).length, 1);
   assert.equal((await call('DELETE', `/api/documents/${doc.id}`)).status, 204);
-  assert.equal(objects.size, 0);
+  assert.equal(w.objects.size, 0);
 });
 
 test('thumbnails of unknown documents are 404, and need a session', async () => {
   assert.equal((await call('GET', '/api/documents/00000000-0000-4000-8000-000000000000/thumbnail')).status, 404);
-  delete env.DEV_USER;
-  assert.equal((await call('GET', '/api/documents/00000000-0000-4000-8000-000000000000/thumbnail')).status, 401);
+  assert.equal((await w.call(null, 'GET', '/api/documents/00000000-0000-4000-8000-000000000000/thumbnail')).status, 401);
 });
 
 test('a save based on an older version is refused, not written over the newer one', async () => {

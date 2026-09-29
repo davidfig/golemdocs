@@ -6,6 +6,7 @@ import { WordDocument } from '@word/docx';
 import { Editor, type Command } from '@word/editor';
 import { Replica, type Selection as OpSelection, type Transaction } from '@word/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
+import { RoomClient, type RoomHost, type RoomStart, type SocketLike } from '../collab/roomClient.ts';
 import {
   describeFace,
   encodePage,
@@ -165,7 +166,10 @@ class OpenDocument {
   editor: Editor | null = null;
   formats: FormatReader | null = null;
   /** Collaboration: the room, other people in it, room messages that came before we were ready. */
-  room: RoomOptions | null = null;
+  room: Extract<RoomOptions, { kind: 'dev' }> | null = null;
+  /** The multiplayer server's room, for a cloud document. */
+  net: RoomClient | null = null;
+  private clientId = '';
   private readonly people = new Map<string, Person>();
   private backlog: RoomServerMessage[] = [];
   private joined: ((m: Extract<RoomServerMessage, { type: 'joined' }>) => void) | null = null;
@@ -447,7 +451,7 @@ class OpenDocument {
   }
 
   /** Joins the room: resolves with the room's document and its log so far. */
-  join(room: RoomOptions, client: string, snapshot: ArrayBuffer): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
+  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
     this.room = room;
     room.port.onmessage = (event: MessageEvent<RoomServerMessage>) => this.fromRoom(event.data);
     return new Promise((resolve) => {
@@ -507,21 +511,130 @@ class OpenDocument {
   }
 
   private sendPresence(): void {
-    if (!this.room || !this.editor) return;
+    if ((!this.room && !this.net) || !this.editor) return;
     const selection = this.editor.selectionIds;
     const key = JSON.stringify(selection);
     if (key === this.lastPresence) return;
     this.lastPresence = key;
-    this.toRoom({ type: 'presence', name: this.room.user, color: this.room.color, selection });
+    if (this.net) this.net.presence(selection);
+    else this.toRoom({ type: 'presence', name: this.room!.user, color: this.room!.color, selection });
   }
 
   private status(): void {
     const sync = this.replica?.sync;
     if (this.room && sync) post({ type: 'room', doc: this.doc, people: this.count, ...sync });
+    if (this.net) this.postRoomState();
   }
 
   leave(): void {
     this.toRoom({ type: 'leave' });
+    this.net?.leave();
+  }
+
+  /**
+   * Joins the room for a document that was already open (a new one, once it has been uploaded). Only
+   * when nobody else is editing it: otherwise the room's document would replace this one, which
+   * can't be done under the user, so it carries on unshared and is merged as a separate copy later.
+   */
+  async joinLate(room: Extract<RoomOptions, { kind: 'network' }>): Promise<void> {
+    if (this.net || this.room || this.format !== 'docx' || !this.replica || !this.editor) return;
+    const start = await this.joinNetwork(room, this.replica.clientId);
+    if (this.closed || !start) return;
+    if (start.kind === 'own') this.net!.ready(start);
+    else {
+      this.net!.leave();
+      this.net = null;
+    }
+  }
+
+  // --- The multiplayer server ---------------------------------------------------------
+
+  /** Viewers, and anyone whose connection to the room is gone, can look but not edit. */
+  get readOnly(): boolean {
+    return this.net !== null && !this.net.canEdit;
+  }
+
+  private postRoomState(): void {
+    const net = this.net;
+    if (!net) return;
+    const { mode, role, people } = net.state;
+    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ name, color }) => ({ name, color })), unconfirmed: this.replica?.sync?.unconfirmed ?? 0 });
+  }
+
+  /**
+   * Joins the multiplayer server's room for this cloud document. Returns where the document comes
+   * from, or null when there is no room to join (signed out, offline, no access, local-only server):
+   * the document is then edited as a plain one and saved as usual.
+   */
+  async joinNetwork(room: Extract<RoomOptions, { kind: 'network' }>, clientId: string): Promise<RoomStart | null> {
+    this.clientId = clientId;
+    const docId = room.docId;
+    const net = new RoomClient({
+      client: clientId,
+      name: room.user,
+      color: room.color,
+      host: this.roomHost(),
+      connect: () => new WebSocket(`${self.location.protocol === 'https:' ? 'wss' : 'ws'}://${self.location.host}/api/rooms/${docId}`) as unknown as SocketLike,
+      fetchDocument: async () => {
+        const response = await fetch(`/api/rooms/${docId}/document`);
+        if (!response.ok) throw new Error(`could not fetch the room's document (${response.status})`);
+        return {
+          bytes: new Uint8Array(await response.arrayBuffer()),
+          epoch: Number(response.headers.get('x-room-epoch')),
+          version: Number(response.headers.get('x-room-version')),
+        };
+      },
+      upload: async (bytes) => {
+        const response = await fetch(`/api/documents/${docId}`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+          body: bytes as Uint8Array<ArrayBuffer>,
+        });
+        if (!response.ok) throw new Error(`upload failed (${response.status})`);
+      },
+    });
+    try {
+      const start = await net.join();
+      this.net = net;
+      return start;
+    } catch (error) {
+      console.warn('no multiplayer room:', (error as Error).message);
+      net.leave();
+      return null;
+    }
+  }
+
+  /** What the room needs from this document. */
+  private roomHost(): RoomHost {
+    return {
+      serialize: () => this.document!.write(),
+      // Commands made while the document is being handed over wait for the handover.
+      freeze: (until) => this.later(() => until.then(() => {}, () => {})),
+      connect: (send, version) => this.replica!.connect(send, version),
+      disconnect: () => this.replica?.disconnect(),
+      receive: (message) => {
+        const { change } = this.editor!.receive(message);
+        if (change) {
+          // Other people's carets move with the text too.
+          for (const person of this.people.values()) if (person.selection) person.selection = Replica.mapSelection(person.selection, change.mapping);
+          this.edited = true;
+          post({ type: 'remoteEdit', doc: this.doc });
+          void this.pump();
+        }
+        this.status();
+      },
+      sync: () => this.replica?.sync ?? null,
+      resubmit: () => this.replica?.resubmit(),
+      changed: () => {
+        this.postRoomState();
+        this.sendSelection();
+      },
+      people: (list) => {
+        this.people.clear();
+        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, color: p.color, selection: p.selection });
+        this.sendSelection();
+      },
+    };
   }
 
   /** Commands waiting for fonts a formatting command needs; later ones queue behind it. */
@@ -536,7 +649,7 @@ class OpenDocument {
   /** Formatting from the menus and toolbars. One that starts using a font loads its faces first. */
   private applyFormat(action: FormatAction): void | Promise<void> {
     const { editor, session } = this;
-    if (!editor || !session || this.annotator) return;
+    if (!editor || !session || this.annotator || this.readOnly) return;
     const fonts = new Set<string>();
     const command = formatCommand(action, editor, this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending), fonts);
     if (!command) return;
@@ -555,7 +668,7 @@ class OpenDocument {
   /** Applies an editor command made here (formatting). */
   private apply(command: Command): void {
     const editor = this.editor;
-    if (!editor || this.closed || this.format === 'pdf') return;
+    if (!editor || this.closed || this.format === 'pdf' || this.readOnly) return;
     this.reveal = false;
     this.commandAt = performance.now();
     if (editor.apply(command).edited) {
@@ -576,7 +689,7 @@ class OpenDocument {
     this.commandAt = performance.now();
     let edited: boolean;
     // Shown as PDF: selecting and moving only.
-    if (this.format === 'pdf' && !VIEW_COMMANDS.has(wire.kind)) return;
+    if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
     if (wire.kind === 'undo') edited = editor.undo().edited;
     else if (wire.kind === 'redo') edited = editor.redo().edited;
     else {
@@ -638,7 +751,13 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     if (entry.closed) return;
     const clientId = crypto.randomUUID().slice(0, 8);
     let log: Transaction[] = [];
-    if (room) {
+    let start: RoomStart | null = null;
+    if (room?.kind === 'network') {
+      start = await entry.joinNetwork(room, clientId);
+      if (entry.closed) return;
+      // Someone else is already editing: everyone starts from the room's copy, not ours.
+      if (start?.kind === 'room') document = await WordDocument.read(start.bytes);
+    } else if (room) {
       // Everyone starts from the room's copy (ours, if we're first): the same bytes, read the
       // same way, then the log so far.
       const joined = await entry.join(room, clientId, (await document.write()).slice().buffer);
@@ -649,7 +768,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Operations need paragraph ids and normalized content: set up before layout sees the document.
     const replica = new Replica(document, { clientId });
     for (const tx of log) replica.engine.apply(tx.ops);
-    if (room) replica.connect((message) => room.port.postMessage(message satisfies RoomClientMessage), log.length);
+    if (room?.kind === 'dev') replica.connect((message) => room.port.postMessage(message satisfies RoomClientMessage), log.length);
     const session = await LayoutSession.create(document, fonts);
     if (entry.closed) return;
     entry.document = document;
@@ -658,6 +777,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
     entry.ready();
+    if (start) entry.net!.ready(start);
     post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
     await entry.pump();
     if (entry.closed) return;
@@ -746,6 +866,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   switch (message.type) {
     case 'open':
       void open(message.doc, message.source, message.room);
+      break;
+    case 'joinRoom':
+      if (current?.doc === message.doc) void current.joinLate(message.room);
       break;
     case 'leave':
       current?.leave();

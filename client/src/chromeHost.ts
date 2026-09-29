@@ -25,6 +25,8 @@ export interface AppHooks {
   collaborate(): void;
   /** Send changes that haven't reached the account yet, now. */
   syncNow(): Promise<void>;
+  /** Share the open cloud document with other people. */
+  share(): void;
   /** Download a copy of the document as a file, in its own format. */
   download(): Promise<void>;
   /** Make a copy of the document in another format next to the original, and open it. */
@@ -61,6 +63,7 @@ const SUPPORTED = new Set<ActionKind>([
   'openSample',
   'openSaved',
   'syncNow',
+  'share',
   'download',
   'signIn',
   'signOut',
@@ -185,6 +188,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.convert(action.to);
         case 'syncNow':
           return app.syncNow();
+        case 'share':
+          return app.share();
         case 'signIn':
           return app.signIn();
         case 'signOut':

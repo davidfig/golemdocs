@@ -4,6 +4,7 @@
 // worker the same way local ones do.
 
 import type { Command } from '@word/editor';
+import type { RoomRole } from '@word/ops';
 import type { AnnotationKind, FormField } from '@word/pdf';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
@@ -59,17 +60,35 @@ export type WireCommand =
 export type WireField = FormField & { pageId: number; box: { x: number; y: number; width: number; height: number } };
 
 /** A collaboration room to open the document in (see ../collab). */
-export interface RoomOptions {
-  name: string;
-  /** Connected to the room server; transferred to the worker. */
-  port: MessagePort;
-  /** How this user appears to others. */
-  user: string;
-  color: number;
+export type RoomOptions =
+  /** A room shared between this browser's tabs, for development (./collab/devServer.ts). */
+  | {
+      kind: 'dev';
+      name: string;
+      /** Connected to the room server; transferred to the worker. */
+      port: MessagePort;
+      /** How this user appears to others. */
+      user: string;
+      color: number;
+    }
+  /** The multiplayer server's room for a cloud document. */
+  | { kind: 'network'; docId: string; user: string; color: number };
+
+/** Where a document stands in the multiplayer server's room. */
+export interface RoomState {
+  /** solo: saved to the cloud from here. shared: the server saves. offline: connection lost for good. */
+  mode: 'solo' | 'shared' | 'offline';
+  role: RoomRole;
+  /** Everyone in the room, including this user. */
+  people: { name: string; color: number }[];
+  /** Edits the server hasn't confirmed (shared only). */
+  unconfirmed: number;
 }
 
 export type ToWorker =
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
+  /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
+  | { type: 'joinRoom'; doc: number; room: Extract<RoomOptions, { kind: 'network' }> }
   /** Leaving the page: tell the room. */
   | { type: 'leave' }
   /** Bytes of an image part of the open document. */
@@ -146,6 +165,10 @@ export type FromWorker =
   | { type: 'error'; doc: number; message: string }
   /** Collaboration status: people in the room, and edits not yet confirmed by the server. */
   | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
+  /** The multiplayer room changed: who is in it, what this user may do, who saves. */
+  | ({ type: 'roomState'; doc: number } & RoomState)
+  /** Someone else's edit changed the document (it needs saving here too). */
+  | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string };
 

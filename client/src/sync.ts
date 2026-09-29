@@ -8,7 +8,7 @@
 // app's job (main.ts), one at a time: this only says which copies have something to send.
 
 import type { User } from './auth.ts';
-import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
+import { CloudError, listDocuments, listShared, type CloudDocument } from './cloud.ts';
 import { deleteSaved, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
 
 export type SyncState =
@@ -100,6 +100,8 @@ export interface Library {
   cloudProblem: string | null;
   /** The session ended: the account needs signing in to again. */
   signedOut: boolean;
+  /** Documents other people shared with the user. */
+  shared: CloudDocument[];
 }
 
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
@@ -113,7 +115,7 @@ export async function loadLocalLibrary(user: User | null): Promise<LibraryEntry[
  */
 export async function loadLibrary(user: User | null): Promise<Library> {
   const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
-  if (!user) return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false };
+  if (!user) return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared: [] };
 
   let cloud: CloudDocument[];
   try {
@@ -121,11 +123,13 @@ export async function loadLibrary(user: User | null): Promise<Library> {
   } catch (error) {
     const signedOut = error instanceof CloudError && error.status === 401;
     const problem = signedOut ? 'You’ve been signed out. Sign in again to see all your documents.' : `Only the documents on this device are shown: your account can’t be reached (${(error as Error).message}).`;
-    return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut };
+    return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut, shared: [] };
   }
 
   const gone = deletedElsewhere(local, cloud);
   for (const l of gone) await deleteSaved(l.id).catch(() => {});
   const kept = gone.length ? local.filter((l) => !gone.includes(l)) : local;
-  return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false };
+  // Not worth failing the dashboard over.
+  const shared = await listShared().catch(() => []);
+  return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared };
 }

@@ -4,7 +4,9 @@ import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
 import { HttpError } from './http.ts';
-import { CloudflareError, userDb } from './userDb.ts';
+import { Room } from './room.ts';
+import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
+import { CloudflareError, userDb, type UserDb } from './userDb.ts';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -24,8 +26,9 @@ interface DocumentRow {
 }
 
 /** What the client sees of a document (the R2 key stays server-side). */
-function describe(row: DocumentRow) {
+function describe(row: DocumentRow, role: Role = 'owner') {
   return {
+    role,
     id: row.id,
     name: row.name,
     size: row.size,
@@ -70,6 +73,33 @@ function publicUrl(request: Request, env: Env): URL {
   return url;
 }
 
+/** The room object for a document. */
+const roomFor = (env: Env, docId: string) => env.ROOMS.get(env.ROOMS.idFromName(docId));
+
+const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: string, docId: string): Headers => {
+  const out = new Headers(headers);
+  // Set here and nowhere else: whatever the client sent is replaced.
+  out.set('x-user', userId);
+  out.set('x-role', role);
+  out.set('x-owner', ownerId);
+  out.set('x-doc', docId);
+  return out;
+};
+
+/**
+ * The user's access to a document. Documents from before sharing existed have no owner record;
+ * finding one in the user's own catalogue claims it.
+ */
+async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb): Promise<Access | null> {
+  const access = await accessFor(env, userId, docId);
+  if (access) return access;
+  if (env.ENVIRONMENT !== 'local' && !env.CF_API_TOKEN) return null;
+  const db = knownDb ?? (await userDb(env, userId));
+  if (!(await db.first('SELECT 1 FROM documents WHERE id = ?', [docId]))) return null;
+  await registerOwner(env, docId, userId);
+  return { role: 'owner', ownerId: userId };
+}
+
 const handler: ExportedHandler = {
   async fetch(request, env) {
     try {
@@ -92,30 +122,64 @@ const handler: ExportedHandler = {
         throw new HttpError(403, 'bad origin');
       }
 
+      const roomMatch = /^\/api\/rooms\/([^/]+)(\/document)?$/.exec(path);
+      if (roomMatch) {
+        const docId = roomMatch[1]!;
+        if (!ID.test(docId) || request.method !== 'GET') throw new HttpError(404, 'not found');
+        // Cookies ride along on cross-site WebSocket handshakes, so their origin is checked here
+        // (a same-origin GET carries none, and the document is readable like any other GET).
+        if (!roomMatch[2] && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
+        if (!env.ROOMS) throw new HttpError(503, 'multiplayer is not configured');
+        const access = await resolveAccess(env, userId, docId);
+        if (!access) throw new HttpError(404, 'not found');
+        const room = roomFor(env, docId);
+        const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId);
+        return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
+      }
+
       // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
       if (path === '/api/admin/billing' && request.method === 'GET') {
         if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
         return json(await billingSummary(env));
       }
 
-      const match = /^\/api\/documents(?:\/([^/]+)(\/thumbnail)?)?$/.exec(path);
-      if (!match) throw new HttpError(404, 'not found');
-      const id = match[1];
-      const thumbnail = match[2] !== undefined;
-      if (id !== undefined && !ID.test(id)) throw new HttpError(404, 'not found');
 
-      if (env.ENVIRONMENT === 'local') throw new HttpError(503, 'cloud storage is off in local-only mode (run pnpm dev without --local)');
-      if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE')) {
+      const match = /^\/api\/(documents|shared)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
+      if (!match) throw new HttpError(404, 'not found');
+      const [, collection, id, sub, granteeId] = match;
+      if (id !== undefined && !ID.test(id)) throw new HttpError(404, 'not found');
+      if (collection === 'shared' && id !== undefined) throw new HttpError(404, 'not found');
+
+      // Locally, catalogues live in the simulated directory database (see userDb.ts).
+      if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
         throw new HttpError(503, 'cloud storage is not configured');
       }
-      const db = await userDb(env, userId);
-      const keyFor = (docId: string) => `${userId}/${docId}.docx`;
-      const thumbKeyFor = (docId: string) => `${userId}/${docId}.thumb`;
+      const ownDb = await userDb(env, userId);
+
+      // GET /api/shared: documents other people shared with this user.
+      if (collection === 'shared') {
+        if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+        const byOwner = new Map<string, Map<string, ShareRole>>();
+        for (const s of await sharedWith(env, userId)) {
+          if (!byOwner.has(s.ownerId)) byOwner.set(s.ownerId, new Map());
+          byOwner.get(s.ownerId)!.set(s.docId, s.role);
+        }
+        const out: unknown[] = [];
+        for (const [ownerId, roles] of byOwner) {
+          const ids = [...roles.keys()];
+          const rows = await (await userDb(env, ownerId)).all<DocumentRow>(`SELECT * FROM documents WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+          const owner = await person(env, ownerId);
+          for (const row of rows) out.push({ ...describe(row, roles.get(row.id)!), owner: { name: owner.name, email: owner.email } });
+        }
+        return json(out);
+      }
 
       // GET /api/documents: the user's documents, newest first.
       if (!id && request.method === 'GET') {
-        const rows = await db.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
-        return json(rows.map(describe));
+        const rows = await ownDb.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
+        // Documents from before sharing existed are claimed here, so rooms and shares can find them.
+        await Promise.all(rows.map((row) => registerOwner(env, row.id, userId)));
+        return json(rows.map((row) => describe(row)));
       }
 
       // POST /api/documents?name=…: a new document from the request body (.docx bytes).
@@ -125,26 +189,63 @@ const handler: ExportedHandler = {
         const name = cleanName(url.searchParams.get('name')) ?? 'Untitled.docx';
         const now = Date.now();
         // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
-        await env.FILES.put(keyFor(docId), bytes, { httpMetadata: { contentType: DOCX } });
-        await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [
+        await env.FILES.put(`${userId}/${docId}.docx`, bytes, { httpMetadata: { contentType: DOCX } });
+        await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [
           docId,
           name,
           bytes.byteLength,
-          keyFor(docId),
+          `${userId}/${docId}.docx`,
           now,
           now,
         ]);
-        return json({ id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null }, 201);
+        await registerOwner(env, docId, userId);
+        return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null }, 201);
       }
 
       if (!id) throw new HttpError(405, 'method not allowed');
 
+      // Whose document is it, and what may this user do with it?
+      const access = await resolveAccess(env, userId, id, ownDb);
+      if (!access) throw new HttpError(404, 'not found');
+      const { role, ownerId } = access;
+      const db: UserDb = ownerId === userId ? ownDb : await userDb(env, ownerId);
+      const thumbKeyFor = (docId: string) => `${ownerId}/${docId}.thumb`;
+
       const row = await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [id]);
       if (!row) throw new HttpError(404, 'not found');
+      const requireWrite = () => {
+        if (!canWrite(role)) throw new HttpError(403, 'this document is read-only for you');
+      };
+
+      // /api/documents/:id/shares[/:userId]: who else can open it. Only the owner manages this
+      // (anyone may remove themselves).
+      if (sub === 'shares') {
+        if (granteeId === undefined && request.method === 'GET') {
+          if (role !== 'owner') throw new HttpError(403, 'only the owner can see who has access');
+          return json(await sharesOf(env, id));
+        }
+        if (granteeId === undefined && request.method === 'PUT') {
+          if (role !== 'owner') throw new HttpError(403, 'only the owner can share this document');
+          const body = (await request.json().catch(() => null)) as { email?: unknown; role?: unknown } | null;
+          if (typeof body?.email !== 'string' || (body.role !== 'editor' && body.role !== 'viewer')) throw new HttpError(400, 'expected { email, role: "editor" | "viewer" }');
+          const target = await userByEmail(env, body.email);
+          if (!target) throw new HttpError(404, 'nobody with that email has signed in to Golem Docs yet');
+          if (target === userId) throw new HttpError(400, 'you already own this document');
+          await shareWith(env, id, target, body.role);
+          return json({ ...(await person(env, target)), role: body.role });
+        }
+        if (granteeId !== undefined && request.method === 'DELETE') {
+          if (role !== 'owner' && granteeId !== userId) throw new HttpError(403, 'only the owner can remove other people');
+          await unshare(env, id, granteeId);
+          if (env.ROOMS) await roomFor(env, id).fetch(new Request(`https://room/kick?user=${encodeURIComponent(granteeId)}`));
+          return new Response(null, { status: 204 });
+        }
+        throw new HttpError(405, 'method not allowed');
+      }
 
       // GET/PUT /api/documents/:id/thumbnail: a small image of the first page, made by the client.
       // The client asks for it as `?v=<thumbAt>`, so a given URL never changes and can be cached hard.
-      if (thumbnail) {
+      if (sub === 'thumbnail') {
         if (request.method === 'GET') {
           if (row.thumb_at == null) throw new HttpError(404, 'no thumbnail');
           const object = await env.FILES.get(thumbKeyFor(id));
@@ -159,13 +260,14 @@ const handler: ExportedHandler = {
           });
         }
         if (request.method === 'PUT') {
+          requireWrite();
           const type = (request.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
           if (!THUMB_TYPES.has(type)) throw new HttpError(415, 'thumbnails are webp, png or jpeg');
           const bytes = await readBody(request, MAX_THUMB_BYTES, 'thumbnail');
           const now = Date.now();
           await env.FILES.put(thumbKeyFor(id), bytes, { httpMetadata: { contentType: type } });
           await db.run('UPDATE documents SET thumb_at = ? WHERE id = ?', [now, id]);
-          return json(describe({ ...row, thumb_at: now }));
+          return json(describe({ ...row, thumb_at: now }, role));
         }
         throw new HttpError(405, 'method not allowed');
       }
@@ -183,6 +285,12 @@ const handler: ExportedHandler = {
       // `base` (the `updatedAt` the client's copy started from), a document changed elsewhere since
       // is refused with 409 instead of overwritten.
       if (request.method === 'PUT') {
+        requireWrite();
+        // While several people are editing, the room writes the file; an upload would be overwritten.
+        // (423, not 409: 409 already means "changed elsewhere", which clients answer with a copy.)
+        if (env.ROOMS && !((await (await roomFor(env, id).fetch(new Request('https://room/state'))).json()) as { maySave: boolean }).maySave) {
+          throw new HttpError(423, 'this document is being edited by several people; the server is saving it');
+        }
         const base = url.searchParams.get('base');
         if (base !== null && Number(base) !== row.updated_at) throw new HttpError(409, 'changed elsewhere');
         const bytes = await readDocx(request);
@@ -191,13 +299,16 @@ const handler: ExportedHandler = {
         const now = Math.max(Date.now(), row.updated_at + 1);
         await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX } });
         await db.run('UPDATE documents SET name = ?, size = ?, updated_at = ? WHERE id = ?', [name, bytes.byteLength, now, id]);
-        return json(describe({ ...row, name, size: bytes.byteLength, updated_at: now }));
+        return json(describe({ ...row, name, size: bytes.byteLength, updated_at: now }, role));
       }
 
       // DELETE /api/documents/:id
       if (request.method === 'DELETE') {
+        if (role !== 'owner') throw new HttpError(403, 'only the owner can delete this document');
         // Row first: a failure leaves an unreferenced object, never a row pointing at nothing.
         await db.run('DELETE FROM documents WHERE id = ?', [id]);
+        await forgetDocument(env, id);
+        if (env.ROOMS) await roomFor(env, id).fetch(new Request('https://room/end'));
         await env.FILES.delete([row.r2_key, thumbKeyFor(id)]);
         return new Response(null, { status: 204 });
       }
@@ -211,4 +322,5 @@ const handler: ExportedHandler = {
   },
 };
 
+export { Room };
 export default handler;

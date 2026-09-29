@@ -134,6 +134,13 @@ importers:
         version: 5.9.3
 
   server:
+    dependencies:
+      '@word/docx':
+        specifier: workspace:*
+        version: link:../docx
+      '@word/ops':
+        specifier: workspace:*
+        version: link:../ops
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

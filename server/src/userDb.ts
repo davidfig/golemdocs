@@ -73,6 +73,31 @@ async function migrate(db: UserDb): Promise<number> {
   return USER_MIGRATIONS.length;
 }
 
+/**
+ * Local development (`ENVIRONMENT=local`): a user's catalogue lives in the simulated DIRECTORY
+ * database instead of a database of their own, because Cloudflare's REST API for creating one
+ * doesn't exist offline. The same SQL runs; the per-user tables just get a per-user name.
+ */
+class LocalUserDb extends UserDb {
+  private readonly prefix: string;
+
+  constructor(
+    private readonly directory: Env['DIRECTORY'],
+    userId: string,
+    env: Env,
+  ) {
+    super(env, 'local');
+    if (!/^[0-9a-f]+$/.test(userId)) throw new Error('unexpected user id');
+    this.prefix = `local_${userId}_`;
+  }
+
+  override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    // Table and index names are the only identifiers the per-user schema uses (see schema.ts).
+    const rewritten = sql.replace(/\b(documents_updated|documents|_migrations)\b/g, `${this.prefix}$1`);
+    return (await this.directory.prepare(rewritten).bind(...params).all<T>()).results;
+  }
+}
+
 async function createDatabase(env: Env, userId: string): Promise<string> {
   // Dev databases live in the same account but can never be mistaken for (or collide with) production's.
   const name = `${env.ENVIRONMENT === 'production' ? 'golemdocs-user-' : 'golemdocs-dev-user-'}${userId}`;
@@ -94,6 +119,11 @@ interface DirectoryRow {
 
 /** The user's database, created and migrated on first use. */
 export async function userDb(env: Env, userId: string): Promise<UserDb> {
+  if (env.ENVIRONMENT === 'local') {
+    const local = new LocalUserDb(env.DIRECTORY, userId, env);
+    await migrate(local);
+    return local;
+  }
   const lookup = () =>
     env.DIRECTORY.prepare('SELECT database_id, schema_version FROM users WHERE user_id = ?').bind(userId).first<DirectoryRow>();
 

@@ -197,6 +197,7 @@ export class Chrome {
       a('file.new', '&New', { kind: 'new' }, { icon: 'new', tooltip: 'New Blank Document' }),
       a('file.open', '&Open…', { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O' }),
       a('file.download', 'Do&wnload', { kind: 'download' }, { tooltip: 'Download a copy of this document' }),
+      a('file.share', '&Share…', { kind: 'share' }, { tooltip: 'Let other people open and edit this document (cloud documents)' }),
       dialog('file.pageSetup', 'Page Set&up…', 'pageSetup'),
       a('file.printPreview', 'Print Pre&view', { kind: 'printPreview' }, { icon: 'printPreview' }),
       a('file.collaborate', '&Collaborate…', { kind: 'collaborate' }, { tooltip: 'Edit this document together (opens a second window)' }),
@@ -411,6 +412,7 @@ export class Chrome {
             return saved.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSaved', id: s.id }, s.label) }));
           }),
           sep,
+          cmd('file.share'),
           sub('Con&vert To', CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
           cmd('file.download'),
           cmd('file.collaborate'),

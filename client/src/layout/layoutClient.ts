@@ -1,6 +1,6 @@
 import type { FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
-import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
+import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
@@ -12,6 +12,10 @@ export interface DocumentListener {
   selection(update: SelectionUpdate): void;
   /** Collaboration status (documents opened in a room). */
   room(people: number, version: number, unconfirmed: number): void;
+  /** The multiplayer room changed (cloud documents). */
+  roomState(state: RoomState): void;
+  /** Another person's edit changed the document. */
+  remoteEdit(): void;
   error(message: string): void;
 }
 
@@ -36,8 +40,13 @@ export class LayoutClient {
     this.doc++;
     this.listener = listener;
     const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
-    if (room) transfer.push(room.port);
+    if (room?.kind === 'dev') transfer.push(room.port);
     this.send({ type: 'open', doc: this.doc, source, room }, transfer);
+  }
+
+  /** The open document is now in the cloud: join its multiplayer room (it had none when it opened). */
+  joinRoom(room: Extract<RoomOptions, { kind: 'network' }>): void {
+    this.send({ type: 'joinRoom', doc: this.doc, room });
   }
 
   /** The page is going away: leave any collaboration room. */
@@ -100,6 +109,12 @@ export class LayoutClient {
         break;
       case 'room':
         this.listener.room(message.people, message.version, message.unconfirmed);
+        break;
+      case 'roomState':
+        this.listener.roomState(message);
+        break;
+      case 'remoteEdit':
+        this.listener.remoteEdit();
         break;
       case 'error':
         this.listener.error(message.message);

@@ -5,3 +5,4 @@ export * from './engine.ts';
 export * from './history.ts';
 export * from './collab.ts';
 export * from './replica.ts';
+export * from './multiplayer.ts';

@@ -21,5 +21,9 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "wrangler": "^4.143.0"
+  },
+  "dependencies": {
+    "@word/docx": "workspace:*",
+    "@word/ops": "workspace:*"
   }
 }

@@ -47,11 +47,10 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
-const statusInfoEl = document.getElementById('statusInfo') as HTMLPreElement;
-const renderInfoEl = document.getElementById('renderInfo') as HTMLDivElement;
-const fpsRowEl = document.getElementById('fpsRow') as HTMLDivElement;
-const fpsEl = document.getElementById('fps') as HTMLSpanElement;
-const statsEl = document.getElementById('stats') as HTMLPreElement;
+const statusInfoEl = document.getElementById('statusInfo') as HTMLElement;
+const renderInfoEl = document.getElementById('renderInfo') as HTMLElement;
+const statusStatsEl = statusInfoEl.querySelector('.debug-stats') as HTMLElement;
+const renderStatsEl = renderInfoEl.querySelector('.debug-stats') as HTMLElement;
 const renderLight = document.getElementById('renderLight') as HTMLSpanElement;
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
 if (!gl) throw new Error('WebGL2 not supported');
@@ -909,35 +908,48 @@ function flashRenderLight(): void {
   lightTimer = window.setTimeout(() => renderLight.classList.remove('on'), 80);
 }
 
-/** The debug overlays: document status, and render information (View > Debug). */
+type DebugRow = [label: string, value: string];
+
+/** Fills a debug panel with label/value pairs (laid out in aligned columns by the CSS). */
+function setDebugRows(el: HTMLElement, rows: DebugRow[]): void {
+  el.replaceChildren(
+    ...rows.flatMap(([label, value]) => {
+      const k = document.createElement('span');
+      k.textContent = label;
+      const v = document.createElement('span');
+      v.textContent = value;
+      return [k, v];
+    }),
+  );
+}
+
+/** The debug panels: document status, and render information (View > Debug). */
 function updateDebug(): void {
   const flags = debugFlags();
   statusInfoEl.hidden = !flags.status;
   if (flags.status) {
-    statusInfoEl.textContent = `${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}`;
+    const rows: DebugRow[] = [['status', status]];
+    if (roomStatus) rows.push(['room', roomStatus]);
+    if (editLatency) rows.push(['edit', editLatency.replace(/^edit → screen /, '')]);
+    setDebugRows(statusStatsEl, rows);
   }
-  const lines: string[] = [];
-  const parts: string[] = [];
+  const rows: DebugRow[] = [];
   if (flags.pages && lastStats) {
-    parts.push(
-      `${lastStats.visiblePages}/${lastStats.pages.toLocaleString()} pages visible`,
-      `${lastStats.glyphs.toLocaleString()} glyphs drawn`,
-      `${lastStats.drawCalls} draw calls`,
+    rows.push(
+      ['pages', `${lastStats.visiblePages}/${lastStats.pages.toLocaleString()}`],
+      ['glyphs', lastStats.glyphs.toLocaleString()],
+      ['draws', String(lastStats.drawCalls)],
     );
   }
-  if (flags.zoom) parts.push(`zoom ${Math.round(camera.zoom * 100)}%`);
-  if (flags.cpu) parts.push(`CPU ${frames.cpuMs.toFixed(2)} ms/frame`);
-  if (parts.length) lines.push(parts.join(' · '));
+  if (flags.zoom) rows.push(['zoom', `${Math.round(camera.zoom * 100)}%`]);
+  if (flags.cpu) rows.push(['cpu', `${frames.cpuMs.toFixed(2)} ms`]);
+  if (flags.fps) rows.push(['fps', String(frames.fps(performance.now()))]);
   if (flags.frameTimes) {
-    lines.push(
-      `slowest frame ${frames.maxCpuMs.toFixed(1)} ms · longest gap ${frames.maxGapMs.toFixed(0)} ms · ${frames.dropped} dropped (click to reset)`,
-    );
+    rows.push(['slowest', `${frames.maxCpuMs.toFixed(1)} ms`], ['gap', `${frames.maxGapMs.toFixed(0)} ms`], ['dropped', String(frames.dropped)]);
   }
-  fpsRowEl.hidden = !flags.fps;
-  if (flags.fps) fpsEl.textContent = `${frames.fps(performance.now())} fps`;
-  statsEl.textContent = lines.join('\n');
-  statsEl.hidden = !lines.length;
-  renderInfoEl.hidden = fpsRowEl.hidden && statsEl.hidden;
+  setDebugRows(renderStatsEl, rows);
+  renderLight.hidden = !flags.fps;
+  renderInfoEl.hidden = !rows.length && !flags.fps;
 }
 
 // Idle, nothing draws: keep the frame rate honest (it falls to 0) and the status text fresh.

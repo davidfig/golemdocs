@@ -45,62 +45,103 @@ body {
   white-space: pre;
 }
 
-/* The debug overlays (View > Debug): document status, and render information with the render
-   light beside the frame rate. Clicking the render information resets the frame times. */
+/* The debug panels (View > Debug): document status, and render information with the render light
+   in its heading. Each is a grid of label/value pairs, two to a row. Clicking the render panel
+   resets the frame times. */
 #debug {
   position: fixed;
   left: 8px;
   bottom: 8px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
   pointer-events: none;
 }
 
-.debug-box {
-  margin: 0;
-  padding: 4px 8px;
+.debug-panel {
+  padding: 3px 8px 4px;
   border-radius: 4px;
   background: rgb(0 0 0 / 0.7);
   color: #fff;
-  font: 12px/1.4 ui-monospace, monospace;
-  white-space: pre;
+  font: 11px/1.35 ui-monospace, monospace;
 }
 
-#renderInfo {
-  white-space: normal;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-#renderInfo[hidden],
-#statusInfo[hidden],
-#fpsRow[hidden],
-#stats[hidden] {
+.debug-panel[hidden] {
   display: none;
 }
 
-#fpsRow {
+.debug-panel h2 {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin: 0 0 1px;
+  font: inherit;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgb(255 255 255 / 0.55);
 }
 
-#stats {
-  margin: 0;
-  font: inherit;
-  white-space: pre;
+.debug-stats {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  column-gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Labels dim, values bright; a second pair on a row is set off from the first. */
+.debug-stats > :nth-child(4n + 1),
+.debug-stats > :nth-child(4n + 3) {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.debug-stats > :nth-child(4n + 2) {
+  text-align: right;
+  margin-right: 10px;
+}
+
+.debug-stats > :nth-child(4n) {
+  text-align: right;
+}
+
+/* Status text is long: one pair per row, wrapped, rather than stretching across the window. */
+#statusInfo {
+  max-width: 340px;
+}
+
+#statusInfo .debug-stats {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+#statusInfo .debug-stats > :nth-child(odd) {
+  color: rgb(255 255 255 / 0.55);
+}
+
+#statusInfo .debug-stats > :nth-child(even) {
+  margin-right: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+#renderInfo {
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 /* Lit while the canvas draws; fades out after. */
 #renderLight {
   flex: none;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #3a3a3a;
   transition: background 0.25s, box-shadow 0.25s;
+}
+
+#renderLight[hidden] {
+  display: none;
 }
 
 #renderLight.on {

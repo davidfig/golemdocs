@@ -12,11 +12,14 @@
       <textarea id="input" aria-label="Document" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
     </main>
     <div id="debug">
-      <pre id="statusInfo" class="debug-box" hidden></pre>
-      <div id="renderInfo" class="debug-box" title="Click to reset the frame times" hidden>
-        <div id="fpsRow" hidden><span id="renderLight" title="Lit while the canvas draws"></span><span id="fps"></span></div>
-        <pre id="stats"></pre>
-      </div>
+      <section id="statusInfo" class="debug-panel" hidden>
+        <h2>Document</h2>
+        <div class="debug-stats"></div>
+      </section>
+      <section id="renderInfo" class="debug-panel" title="Click to reset the frame times" hidden>
+        <h2>Render<span id="renderLight" title="Lit while the canvas draws" hidden></span></h2>
+        <div class="debug-stats"></div>
+      </section>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

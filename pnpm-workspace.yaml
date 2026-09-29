@@ -6,6 +6,7 @@ packages:
   - ops
   - editor
   - pdf
+  - odt
 
 allowBuilds:
   esbuild: true

@@ -4,6 +4,8 @@ import type { DocumentSource } from '../layout/protocol.ts';
 import { isWdoc } from './wdoc.ts';
 
 const DOCX_FILE = /\.(docx|docm|dotx)$/i;
+const ODT_FILE = /\.(odt|fodt)$/i;
+const HTML_FILE = /\.(html?|xhtml)$/i;
 const PDF_FILE = /\.pdf$/i;
 const MARKDOWN_FILE = /\.(md|markdown)$/i;
 const TEXT_FILE = /\.(txt|text)$/i;
@@ -17,6 +19,8 @@ const WDOC_FILE = /\.wdoc$/i;
 export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource | null {
   if (WDOC_FILE.test(name) || isWdoc(bytes)) return { kind: 'wdoc', name, bytes };
   if (DOCX_FILE.test(name)) return { kind: 'docx', name, bytes };
+  if (ODT_FILE.test(name)) return { kind: 'odt', name, bytes };
+  if (HTML_FILE.test(name)) return { kind: 'html', name, bytes };
   if (PDF_FILE.test(name)) return { kind: 'pdf', name, bytes };
   if (MARKDOWN_FILE.test(name)) return { kind: 'md', name, bytes };
   if (TEXT_FILE.test(name)) return { kind: 'txt', name, bytes };
@@ -25,5 +29,5 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
 
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
-  return name.replace(/\.(docx|docm|dotx|doc|odt|rtf|html?|pdf|md|markdown|txt|text|wdoc)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|odt|rtf|html?|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
 }

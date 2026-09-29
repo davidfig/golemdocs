@@ -85,6 +85,8 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     case 'pdf':
       return { name: source.name, document: null, extensions: {}, original: new Uint8Array(source.bytes), lens: 'pdf', origin: 'pdf', pagesCurrent: true };
     case 'md':
+    case 'odt':
+    case 'html':
     case 'txt': {
       const { document, extensions } = await importDocument(source.kind, new Uint8Array(source.bytes));
       return flowing(source.name, document, source.kind, extensions);

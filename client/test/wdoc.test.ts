@@ -111,3 +111,29 @@ test('saved documents open as .wdoc whatever their name', async () => {
   assert.equal(sourceFromFile('Report.md', encode('# Hi').buffer)?.kind, 'md');
   assert.equal(stem('Report.wdoc'), 'Report');
 });
+
+test('ODT imports into the model with its extension, and exports again', async () => {
+  const odt = await exportDocument(await colored(), {}, 'odt', fonts);
+  assert.equal(sourceFromFile('Report.odt', odt.slice().buffer)?.kind, 'odt');
+  const { document, extensions } = await importDocument('odt', odt);
+  assert.ok(extensions.odt, 'the ODT extension is kept');
+  assert.equal(runs(document).find((r) => r.properties.color)?.properties.color?.val, 'FF0000');
+  // Through a .wdoc and out again as ODT.
+  const wdoc = await readWdoc(await writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'odt', origin: 'odt', pagesCurrent: false }, document: await document.write(), original: null, extensions }));
+  assert.deepEqual(wdoc.extensions.odt, extensions.odt);
+  const again = await importDocument('odt', await exportDocument(await WordDocument.read(wdoc.document!), wdoc.extensions, 'odt', fonts));
+  assert.equal(runs(again.document).find((r) => r.properties.color)?.properties.color?.val, 'FF0000');
+});
+
+test('HTML imports with its extension and comes back through a Word switch', async () => {
+  const page = '<!DOCTYPE html><html lang="en"><head><title>Hi</title><script>go()</script></head><body class="x"><section id="intro"><h1>Hello</h1><p>Some <b>bold</b> text.</p></section></body></html>';
+  assert.equal(sourceFromFile('page.html', encode(page).buffer)?.kind, 'html');
+  const { document, extensions } = await importDocument('html', encode(page));
+  assert.ok(extensions.html);
+  const wdoc = await readWdoc(await writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'docx', origin: 'html', pagesCurrent: false }, document: await document.write(), original: null, extensions }));
+  const out = decode(await exportDocument(await WordDocument.read(wdoc.document!), wdoc.extensions, 'html', fonts));
+  assert.match(out, /<title>Hi<\/title>/);
+  assert.match(out, /<script>go\(\)<\/script>/);
+  assert.match(out, /<section id="intro">/);
+  assert.match(out, /<b>bold<\/b>|<strong>bold<\/strong>/);
+});

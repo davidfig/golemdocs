@@ -183,7 +183,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
 };
 
 /** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
-export const CONVERT_ORDER: DocumentKind[] = ['docx', 'pdf', 'md', 'txt'];
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'html', 'pdf', 'md', 'txt'];
 
 /** The kind of a file, from its name; `fallback` when the extension isn't one we know. */
 export function kindFromName(name: string, fallback: DocumentKind = 'docx'): DocumentKind {

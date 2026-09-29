@@ -11,7 +11,7 @@
     "build": "pnpm --recursive build",
     "typecheck": "tsc && pnpm --recursive typecheck",
     "fonts": "tsx scripts/fonts/generate.ts",
-    "test": "pnpm --filter @word/docx --filter @word/layout --filter @word/ops --filter @word/editor --filter @word/server --filter @word/client --filter @word/pdf test"
+    "test": "pnpm --filter @word/docx --filter @word/layout --filter @word/ops --filter @word/editor --filter @word/server --filter @word/client --filter @word/pdf --filter @word/odt test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

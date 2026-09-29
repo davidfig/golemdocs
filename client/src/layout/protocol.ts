@@ -20,6 +20,10 @@ export type DocumentSource =
   | { kind: 'pdf'; name: string; bytes: ArrayBuffer }
   /** A Markdown file, edited as a document that can hold what Markdown can. */
   | { kind: 'md'; name: string; bytes: ArrayBuffer }
+  /** A web page. */
+  | { kind: 'html'; name: string; bytes: ArrayBuffer }
+  /** An OpenDocument text file. */
+  | { kind: 'odt'; name: string; bytes: ArrayBuffer }
   /** A plain-text file, edited one paragraph per line. */
   | { kind: 'txt'; name: string; bytes: ArrayBuffer }
   /** The app's own file (see ../formats/wdoc.ts): the whole document, opened in the format it was being edited as. */

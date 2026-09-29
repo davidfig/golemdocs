@@ -6,7 +6,9 @@
 // writes pages; importing *from* it recovers text and structure (a reflowed document).
 
 import { WordDocument } from '@word/docx';
+import { readOdt, writeOdt } from '@word/odt';
 import type { FontSet } from '@word/layout';
+import { documentToHtml, htmlToDocument } from './html.ts';
 import { documentToMarkdown, markdownToDocument } from './markdown.ts';
 import { documentToPdf } from './pdfExport.ts';
 import { pdfToDocument } from './pdfImport.ts';
@@ -14,9 +16,9 @@ import { documentToText, textToDocument } from './plainText.ts';
 import type { Extensions } from './wdoc.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'pdf' | 'md' | 'txt';
+export type Format = 'docx' | 'odt' | 'html' | 'pdf' | 'md' | 'txt';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'pdf', 'md', 'txt'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'html', 'pdf', 'md', 'txt'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -30,6 +32,10 @@ export async function readDocument(format: Exclude<Format, 'pdf'>, bytes: Uint8A
   switch (format) {
     case 'docx':
       return WordDocument.read(bytes);
+    case 'odt':
+      return (await readOdt(bytes)).document;
+    case 'html':
+      return (await htmlToDocument(decoder.decode(bytes))).document;
     case 'md':
       return markdownToDocument(decoder.decode(bytes));
     case 'txt':
@@ -42,6 +48,10 @@ export async function writeDocument(document: WordDocument, format: Format, font
   switch (format) {
     case 'docx':
       return document.write();
+    case 'odt':
+      return writeOdt(document);
+    case 'html':
+      return encoder.encode(documentToHtml(document));
     case 'md':
       return encoder.encode(documentToMarkdown(document));
     case 'txt':
@@ -70,6 +80,14 @@ export async function importDocument(format: Exclude<Format, 'pdf'>, bytes: Uint
     const txt = { ...(bom && { bom }), ...(ending && ending !== '\n' && { lineEnding: ending as '\r\n' | '\r' }) };
     return { document: await textToDocument(text), extensions: Object.keys(txt).length ? { txt } : {} };
   }
+  if (format === 'odt') {
+    const { document, extension } = await readOdt(bytes);
+    return { document, extensions: { odt: extension } };
+  }
+  if (format === 'html') {
+    const { document, extension } = await htmlToDocument(decoder.decode(bytes));
+    return { document, extensions: { html: extension } };
+  }
   return { document: await readDocument(format, bytes), extensions: {} };
 }
 
@@ -78,6 +96,8 @@ export async function exportDocument(document: WordDocument, extensions: Extensi
   if (format === 'md' && extensions.md?.frontMatter !== undefined) {
     return encoder.encode(`---\n${extensions.md.frontMatter}\n---\n\n${documentToMarkdown(document)}`);
   }
+  if (format === 'odt') return writeOdt(document, extensions.odt);
+  if (format === 'html') return encoder.encode(documentToHtml(document, extensions.html));
   if (format === 'txt' && extensions.txt) {
     const { lineEnding, bom } = extensions.txt;
     let text = documentToText(document);

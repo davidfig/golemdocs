@@ -87,7 +87,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
     const kind = kindFromName(source.name);
     return isFormat(kind) ? kind : 'docx';
   }
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' ? source.kind : 'docx';
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'html' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -493,6 +493,7 @@ async function download(): Promise<void> {
 const LOSSES: Partial<Record<DocumentKind, string>> = {
   md: 'fonts, colors, sizes, alignment and anything else Markdown can’t express',
   txt: 'all formatting, tables and images',
+  html: 'page setup, headers and footers, comments and embedded pictures',
 };
 
 /** Said once the document has opened in its new format. */

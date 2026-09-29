@@ -83,7 +83,7 @@ const SUPPORTED = new Set<ActionKind>([
 const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark']);
 
 /** The formats a document can be converted to. */
-const CONVERTIBLE = new Set<DocumentKind>(['docx', 'pdf', 'md', 'txt']);
+const CONVERTIBLE = new Set<DocumentKind>(['docx', 'odt', 'html', 'pdf', 'md', 'txt']);
 
 export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: File): void } {
   let untitled = 0;

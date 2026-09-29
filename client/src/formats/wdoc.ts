@@ -12,6 +12,8 @@
 //   originals/source.pdf  the original PDF, when the document came from one
 
 import { ZipArchive, writeZip } from '@word/docx';
+import type { OdtExtension } from '@word/odt';
+import type { HtmlExtension } from './html.ts';
 import type { Annotation } from '@word/pdf';
 import type { Format } from './convert.ts';
 
@@ -41,6 +43,10 @@ export interface Extensions {
   md?: MarkdownExtension;
   txt?: TextExtension;
   pdf?: PdfExtension;
+  /** What only ODF can express (styles, sections, frames...), see @word/odt. */
+  odt?: OdtExtension;
+  /** What only HTML can express (head, tags, attributes, unmappable elements), see html.ts. */
+  html?: HtmlExtension;
 }
 
 export interface MarkdownExtension {
@@ -71,7 +77,7 @@ export interface Wdoc {
 
 const encoder = new TextEncoder();
 const MIME_BYTES = encoder.encode(WDOC_MIME);
-const NAMESPACES = ['md', 'txt', 'pdf'] as const satisfies readonly (keyof Extensions)[];
+const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html'] as const satisfies readonly (keyof Extensions)[];
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {

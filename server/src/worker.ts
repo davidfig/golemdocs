@@ -1,7 +1,8 @@
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import type { Env, ExportedHandler } from './cf.ts';
-import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Role, type ShareRole } from './sharing.ts';
+import { Room } from './room.ts';
+import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { CloudflareError, userDb, type UserDb } from './userDb.ts';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -77,6 +78,33 @@ function publicUrl(request: Request, env: Env): URL {
   return url;
 }
 
+/** The room object for a document. */
+const roomFor = (env: Env, docId: string) => env.ROOMS.get(env.ROOMS.idFromName(docId));
+
+const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: string, docId: string): Headers => {
+  const out = new Headers(headers);
+  // Set here and nowhere else: whatever the client sent is replaced.
+  out.set('x-user', userId);
+  out.set('x-role', role);
+  out.set('x-owner', ownerId);
+  out.set('x-doc', docId);
+  return out;
+};
+
+/**
+ * The user's access to a document. Documents from before sharing existed have no owner record;
+ * finding one in the user's own catalogue claims it.
+ */
+async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb): Promise<Access | null> {
+  const access = await accessFor(env, userId, docId);
+  if (access) return access;
+  if (env.ENVIRONMENT === 'local' || !env.CF_API_TOKEN) return null;
+  const db = knownDb ?? (await userDb(env, userId));
+  if (!(await db.first('SELECT 1 FROM documents WHERE id = ?', [docId]))) return null;
+  await registerOwner(env, docId, userId);
+  return { role: 'owner', ownerId: userId };
+}
+
 const handler: ExportedHandler = {
   async fetch(request, env) {
     try {
@@ -97,6 +125,20 @@ const handler: ExportedHandler = {
       // The session cookie is SameSite=Lax already; this also refuses cross-origin writes outright.
       if (request.method !== 'GET' && request.method !== 'HEAD' && request.headers.get('origin') !== url.origin) {
         throw new HttpError(403, 'bad origin');
+      }
+
+      const roomMatch = /^\/api\/rooms\/([^/]+)(\/document)?$/.exec(path);
+      if (roomMatch) {
+        const docId = roomMatch[1]!;
+        if (!ID.test(docId) || request.method !== 'GET') throw new HttpError(404, 'not found');
+        // Cookies ride along on cross-site WebSocket handshakes, so the origin is checked here.
+        if (request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
+        if (!env.ROOMS || env.ENVIRONMENT === 'local') throw new HttpError(503, 'multiplayer is off in local-only mode (run pnpm dev without --local)');
+        const access = await resolveAccess(env, userId, docId);
+        if (!access) throw new HttpError(404, 'not found');
+        const room = roomFor(env, docId);
+        const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId);
+        return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
       }
 
       const match = /^\/api\/(documents|shared)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
@@ -160,11 +202,7 @@ const handler: ExportedHandler = {
       if (!id) throw new HttpError(405, 'method not allowed');
 
       // Whose document is it, and what may this user do with it?
-      let access = await accessFor(env, userId, id);
-      if (!access && (await ownDb.first('SELECT 1 FROM documents WHERE id = ?', [id]))) {
-        await registerOwner(env, id, userId);
-        access = { role: 'owner', ownerId: userId };
-      }
+      const access = await resolveAccess(env, userId, id, ownDb);
       if (!access) throw new HttpError(404, 'not found');
       const { role, ownerId } = access;
       const db: UserDb = ownerId === userId ? ownDb : await userDb(env, ownerId);
@@ -196,6 +234,7 @@ const handler: ExportedHandler = {
         if (granteeId !== undefined && request.method === 'DELETE') {
           if (role !== 'owner' && granteeId !== userId) throw new HttpError(403, 'only the owner can remove other people');
           await unshare(env, id, granteeId);
+          if (env.ROOMS) await roomFor(env, id).fetch(new Request(`https://room/kick?user=${encodeURIComponent(granteeId)}`));
           return new Response(null, { status: 204 });
         }
         throw new HttpError(405, 'method not allowed');
@@ -242,6 +281,10 @@ const handler: ExportedHandler = {
       // PUT /api/documents/:id[?name=…]: replace the bytes (and optionally rename).
       if (request.method === 'PUT') {
         requireWrite();
+        // While several people are editing, the room writes the file; an upload would be overwritten.
+        if (env.ROOMS && !((await (await roomFor(env, id).fetch(new Request('https://room/state'))).json()) as { maySave: boolean }).maySave) {
+          throw new HttpError(409, 'this document is being edited by several people; the server is saving it');
+        }
         const bytes = await readDocx(request);
         const name = cleanName(url.searchParams.get('name')) ?? row.name;
         const now = Date.now();
@@ -256,6 +299,7 @@ const handler: ExportedHandler = {
         // Row first: a failure leaves an unreferenced object, never a row pointing at nothing.
         await db.run('DELETE FROM documents WHERE id = ?', [id]);
         await forgetDocument(env, id);
+        if (env.ROOMS) await roomFor(env, id).fetch(new Request('https://room/end'));
         await env.FILES.delete([row.r2_key, thumbKeyFor(id)]);
         return new Response(null, { status: 204 });
       }
@@ -269,4 +313,5 @@ const handler: ExportedHandler = {
   },
 };
 
+export { Room };
 export default handler;

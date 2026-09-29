@@ -18,6 +18,10 @@
   // The actual .docx files, keyed `<userId>/<documentId>.docx`.
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files" }],
 
+  // One collaboration room per cloud document (see src/room.ts).
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+
   // Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
   // Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
   "d1_databases": [
@@ -48,6 +52,8 @@
     // paste the printed database id here (and your account id below).
     "dev": {
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files-dev", "remote": true }],
+      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
       "d1_databases": [
         {
           "binding": "DIRECTORY",
@@ -64,6 +70,8 @@
     // cloud documents are switched off (the per-user databases need the real Cloudflare API).
     "local": {
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files-local" }],
+      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
       "d1_databases": [
         { "binding": "DIRECTORY", "database_name": "golemdocs-directory-local", "database_id": "local", "migrations_dir": "migrations/directory" }
       ],

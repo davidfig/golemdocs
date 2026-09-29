@@ -35,10 +35,47 @@ export interface R2Bucket {
   delete(keys: string | string[]): Promise<void>;
 }
 
+export interface SqlStorage {
+  exec<T = Record<string, unknown>>(query: string, ...bindings: unknown[]): { toArray(): T[] };
+}
+
+export interface DurableObjectStorage {
+  sql: SqlStorage;
+  setAlarm(time: number): Promise<void>;
+  deleteAlarm(): Promise<void>;
+  transactionSync<T>(closure: () => T): T;
+}
+
+/** A server-side WebSocket, using the hibernation API (the object can be evicted while sockets stay open). */
+export interface WebSocketHandle {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  serializeAttachment(value: unknown): void;
+  deserializeAttachment(): unknown;
+}
+
+export interface DurableObjectState {
+  storage: DurableObjectStorage;
+  getWebSockets(): WebSocketHandle[];
+  acceptWebSocket(socket: WebSocketHandle): void;
+  blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>;
+}
+
+export interface DurableObjectStub {
+  fetch(request: Request): Promise<Response>;
+}
+
+export interface DurableObjectNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): DurableObjectStub;
+}
+
 /** Bindings and variables (see wrangler.jsonc and .dev.vars). */
 export interface Env {
   DIRECTORY: D1Database;
   FILES: R2Bucket;
+  /** One collaboration room per cloud document (see room.ts). */
+  ROOMS: DurableObjectNamespace;
   CF_ACCOUNT_ID: string;
   CF_API_TOKEN: string;
   /** `production`, `dev` or `local` (see wrangler.jsonc). */

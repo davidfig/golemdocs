@@ -31,9 +31,13 @@ export interface World {
   /** R2 objects by key. */
   objects: Map<string, { bytes: ArrayBuffer; contentType?: string }>;
   /** A request to the worker, signed in as `as` (the DEV_USER identity; null: not signed in). */
-  call(as: string | null, method: string, path: string, init?: { body?: BodyInit; type?: string }): Promise<Response>;
+  call(as: string | null, method: string, path: string, init?: { body?: BodyInit; type?: string; headers?: Record<string, string> }): Promise<Response>;
   /** Makes an identity known (so it can be shared with by email); returns its user id. */
   signUp(email: string, name?: string): Promise<string>;
+  /** What reached the (fake) room objects: [document id, path, headers]. */
+  roomCalls: { doc: string; path: string; headers: Headers }[];
+  /** What the fake rooms answer to /state. */
+  room: { maySave: boolean };
   restore(): void;
 }
 
@@ -53,7 +57,19 @@ export function world(): World {
       for (const key of [keys].flat()) objects.delete(key);
     },
   };
-  const env: Env = { DIRECTORY: directory.binding, FILES: bucket, CF_ACCOUNT_ID: 'acct', CF_API_TOKEN: 'tok' };
+  const roomCalls: World['roomCalls'] = [];
+  const room = { maySave: true };
+  const rooms: any = {
+    idFromName: (name: string) => name,
+    get: (doc: string) => ({
+      async fetch(request: Request) {
+        const path = new URL(request.url).pathname;
+        roomCalls.push({ doc, path, headers: request.headers });
+        return path === '/state' ? Response.json({ maySave: room.maySave }) : (path === '/document' ? new Response('room') : new Response(null, { status: 204 }));
+      },
+    }),
+  };
+  const env: Env = { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, CF_ACCOUNT_ID: 'acct', CF_API_TOKEN: 'tok' };
 
   // Cloudflare's REST API: create a database, run a query in one.
   globalThis.fetch = (async (input: unknown, init?: { body?: string }) => {
@@ -74,9 +90,11 @@ export function world(): World {
     env,
     directory: directory.db,
     objects,
+    roomCalls,
+    room,
     call: (as, method, path, init = {}) =>
       worker.fetch(
-        new Request(`${ORIGIN}${path}`, { method, body: init.body, headers: { origin: ORIGIN, ...(init.type ? { 'content-type': init.type } : {}) } }),
+        new Request(`${ORIGIN}${path}`, { method, body: init.body, headers: { origin: ORIGIN, ...(init.type ? { 'content-type': init.type } : {}), ...init.headers } }),
         { ...env, DEV_USER: as ?? undefined },
       ),
     async signUp(email, name) {

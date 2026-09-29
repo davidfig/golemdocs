@@ -30,6 +30,8 @@ export interface AppHooks {
   convert(to: DocumentKind): Promise<void>;
   signIn(): Promise<void>;
   signOut(): Promise<void>;
+  /** Delete every document and setting kept in this browser, once the user confirms. */
+  clearLocalData(): Promise<void>;
   /** Documents saved in this browser. */
   saved(): Sample[];
   cloud(): CloudState;
@@ -62,6 +64,7 @@ const SUPPORTED = new Set<ActionKind>([
   'download',
   'signIn',
   'signOut',
+  'clearLocalData',
   'cut',
   'copy',
   'paste',
@@ -185,6 +188,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.signIn();
         case 'signOut':
           return app.signOut();
+        case 'clearLocalData':
+          return app.clearLocalData();
         case 'viewMode':
           return;
         case 'collaborate':

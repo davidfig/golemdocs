@@ -5,11 +5,13 @@ import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
-import { getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
+import { clearAllSaved, getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { showSignInDialog } from './ui/signIn.ts';
+import { showConfirm } from './ui/popup.ts';
+import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
 import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
@@ -97,7 +99,7 @@ function setStatus(text: string): void {
 
 function open(source: DocumentSource, options: { grid?: boolean; localId?: string } = {}): void {
   const start = performance.now();
-  let name = 'name' in source ? source.name : 'Fonts';
+  let name = 'name' in source ? source.name : source.kind === 'welcome' ? 'Welcome to Golem Docs' : 'Fonts';
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   current = { localId: options.localId ?? null, unsavedSince: 0 };
@@ -265,6 +267,8 @@ function openSource(source: string, keepRoom = false): void {
     void openLocal(source.slice(6), thenSaveToCloud);
   } else if (source.startsWith('cloud:')) {
     void openCloud(source.slice(6));
+  } else if (source === 'welcome') {
+    open({ kind: 'welcome' });
   } else {
     open({ kind: 'fonts' });
   }
@@ -329,6 +333,7 @@ async function refreshLibrary(): Promise<void> {
   savedDocs = await listSaved().catch(() => []);
   cloudUser = await currentUser().catch(() => null);
   cloudDocs = cloudUser ? await listDocuments().catch(() => []) : [];
+  sharedDeviceNotice.update(cloudUser !== null);
 }
 
 /** Tells the user something now, or once the document being loaded has finished. */
@@ -378,9 +383,13 @@ function backfillThumbnail(id: string): void {
   }, 1500);
 }
 
+/** Set once the user clears this browser's data: nothing more is saved before the page reloads. */
+let cleared = false;
+
 /** Saves the open document in this browser. Returns its id, or null if that failed. */
 function saveInBrowser(): Promise<string | null> {
   clearTimeout(autosaveTimer);
+  if (cleared) return Promise.resolve(null);
   const doc = current;
   doc.unsavedSince = 0;
   const name = fileName();
@@ -444,6 +453,39 @@ async function signOut(): Promise<void> {
   await signOutOfCloud().catch(() => {});
   await refreshLibrary();
   setStatus('Signed out');
+}
+
+/**
+ * File ▸ Clear Local Data: deletes every document, thumbnail and setting kept in this browser,
+ * then starts afresh (with the welcome document). Cloud documents and the sign-in stay.
+ */
+async function clearLocalData(): Promise<void> {
+  const count = savedDocs.length;
+  const what = count === 1 ? 'the one document' : `all ${count} documents`;
+  const body = document.createElement('p');
+  body.textContent =
+    `This deletes ${count ? what : 'everything'} saved in this browser, along with your toolbar layout. ` +
+    'It can’t be undone. Documents saved to the cloud are kept.';
+  if (!(await showConfirm('Clear Local Data', body, 'Delete Everything'))) {
+    focusInput();
+    return;
+  }
+  cleared = true;
+  clearTimeout(autosaveTimer);
+  try {
+    await saving.catch(() => {}); // a save still writing would otherwise land after the wipe
+    await clearAllSaved();
+    try {
+      localStorage.clear();
+    } catch {
+      // storage blocked: nothing was kept there either
+    }
+  } catch (e) {
+    cleared = false;
+    setStatus(`Couldn’t clear local data: ${(e as Error).message}`);
+    return;
+  }
+  location.replace(location.pathname);
 }
 
 async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
@@ -931,6 +973,7 @@ const chromeHost = createChromeHost({
   convert: convertTo,
   signIn,
   signOut,
+  clearLocalData,
   saved: () => savedDocs.map((d) => ({ id: d.id, label: d.name.replace(/&/g, '&&') })),
   cloud: () => ({
     signedIn: cloudUser !== null,
@@ -957,6 +1000,7 @@ const chromeHost = createChromeHost({
       .then((r) => r.json() as Promise<{ families: { wordName: string }[] }>)
       .then((m) => m.families.map((f) => f.wordName)),
   samples: () => [
+    { id: 'welcome', label: 'W&elcome to Golem Docs' },
     { id: 'fonts', label: '&Fonts' },
     { id: 'war-and-peace', label: '&War and Peace' },
     ...corpusNames.map((name) => ({ id: `corpus:${name}`, label: name.replace(/&/g, '&&') })),
@@ -977,6 +1021,9 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
   signOut,
   closed: focusInput,
 });
+
+// Signed out, documents live only in this browser: offer to clear them (for shared computers).
+const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
 
 // Comments down the right of the editor; edits to them are ordinary (undoable) edits.
 const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
@@ -1018,5 +1065,10 @@ Object.defineProperties(window, {
   void refreshLibrary();
   // Joining a room without a document: the room has it.
   if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? 'Document' });
-  else openSource(doc ?? 'fonts', true);
+  else if (doc) openSource(doc, true);
+  // Nothing asked for: someone with no documents yet is welcomed with what Golem Docs is.
+  else void listSaved().then(
+    (saved) => openSource(saved.length ? 'fonts' : 'welcome', true),
+    () => openSource('welcome', true),
+  );
 }

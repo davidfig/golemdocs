@@ -1,4 +1,4 @@
-# word
+# Golem Docs
 
 A Word-style editor for the browser. Text is drawn with WebGL (MSDF glyph atlases), so zooming stays sharp and large documents stay fast. Documents are saved in the browser with no account; signing in is only needed to keep a copy in the cloud.
 
@@ -57,7 +57,7 @@ Other things `server/.dev.vars` controls:
 
 ### Handy for development
 
-- `?doc=` in the URL opens a document (`fonts`, `war-and-peace`, `local:<id>`, `cloud:<id>`); `?room=<name>` opens a collaboration room shared between this browser's tabs.
+- `?doc=` in the URL opens a document (`welcome`, `fonts`, `war-and-peace`, `local:<id>`, `cloud:<id>`); `?room=<name>` opens a collaboration room shared between this browser's tabs.
 - `pnpm --filter @word/docx corpus` downloads the .docx round-trip corpus; the dev server then lists it under File ▸ Open Sample.
 - `pnpm fonts` regenerates the font atlases (needs `cmake`, FreeType and libpng; see `scripts/fonts/generate.ts`).
 

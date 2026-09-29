@@ -40,7 +40,14 @@ function openDb(): Promise<IDBDatabase> {
         }
         if (from < 2) request.result.createObjectStore(THUMBS);
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        // Let another tab delete (or upgrade) the database instead of blocking it.
+        request.result.onversionchange = () => {
+          request.result.close();
+          dbPromise = null;
+        };
+        resolve(request.result);
+      };
       request.onerror = () => reject(request.error ?? new Error('could not open browser storage'));
     }).catch((error) => {
       dbPromise = null; // storage can be blocked (private windows, policies); try again next time
@@ -147,4 +154,16 @@ export async function saveThumbnail(id: string, blob: Blob, forUpdatedAt: number
 export async function getThumbnail(id: string): Promise<Thumbnail | null> {
   const db = await openDb();
   return ((await done(db.transaction(THUMBS).objectStore(THUMBS).get(id))) as Thumbnail | undefined) ?? null;
+}
+
+/** Deletes every saved document and thumbnail in this browser. Cloud copies are untouched. */
+export async function clearAllSaved(): Promise<void> {
+  const open = dbPromise;
+  dbPromise = null;
+  (await open?.catch(() => null))?.close();
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error('could not clear browser storage'));
+  });
 }

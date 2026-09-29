@@ -31,7 +31,9 @@ export type DocumentSource =
   /** A new, empty document. */
   | { kind: 'blank'; name: string }
   /** Every font we ship, as a sample document. */
-  | { kind: 'fonts' };
+  | { kind: 'fonts' }
+  /** What Golem Docs is: shown when there are no documents yet. */
+  | { kind: 'welcome' };
 
 /** An editor command as sent from the page: pages are referred to by id. */
 export type WireCommand =

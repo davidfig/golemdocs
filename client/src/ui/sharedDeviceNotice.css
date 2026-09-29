@@ -1,0 +1,39 @@
+/* The shared-computer note (see sharedDeviceNotice.ts), in the bottom right of the window. */
+
+.wm-shared-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5;
+  width: 260px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  border-radius: 6px;
+  background: var(--wm-face, #f0f0f0);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+  font: 12px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: var(--wm-text, #000);
+}
+
+.wm-shared-notice[hidden] {
+  display: none;
+}
+
+.wm-shared-notice p {
+  margin: 0 18px 8px 0;
+}
+
+.wm-shared-notice-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--wm-text, #000);
+  cursor: pointer;
+}

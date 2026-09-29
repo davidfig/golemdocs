@@ -33,7 +33,7 @@ export interface ChromeOptions {
    * implemented them yet; they report "isn't available yet". Default false.
    */
   showUnimplemented?: boolean;
-  /** For the window title and About box. Default "Word". */
+  /** For the window title and About box. Default "Golem Docs". */
   appName?: string;
 }
 
@@ -91,7 +91,7 @@ export class Chrome {
 
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
-    this.appName = options.appName ?? 'Word';
+    this.appName = options.appName ?? 'Golem Docs';
     this.registry = new CommandRegistry({ host, state: () => this.state, showUnimplemented: options.showUnimplemented ?? false });
     this.registerCommands();
     this.defineControls();
@@ -189,6 +189,7 @@ export class Chrome {
       a('file.collaborate', '&Collaborate…', { kind: 'collaborate' }, { tooltip: 'Edit this document together (opens a second window)' }),
       a('file.print', '&Print…', { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
       dialog('file.properties', 'Propert&ies', 'properties', { icon: 'properties' }),
+      a('file.clearLocalData', 'C&lear Local Data…', { kind: 'clearLocalData' }, { tooltip: 'Delete every document and setting kept in this browser' }),
     );
     for (const kind of CONVERT_ORDER) {
       const profile = FORMATS[kind];
@@ -345,7 +346,8 @@ export class Chrome {
     // Help
     r.add(
       { id: 'help.shortcuts', label: '&Keyboard Shortcuts', icon: 'help', shortcut: 'F1', run: () => this.showShortcuts() },
-      { id: 'help.about', label: `&About ${this.options.appName ?? 'Word'}`, run: () => this.showAbout() },
+      // The welcome document says what the app is and where its name comes from.
+      a('help.about', `&About ${this.options.appName ?? 'Golem Docs'}`, { kind: 'openSample', id: 'welcome' }),
     );
   }
 
@@ -403,6 +405,8 @@ export class Chrome {
           cmd('file.print'),
           sep,
           cmd('file.properties'),
+          sep,
+          cmd('file.clearLocalData'),
         ],
       },
       {
@@ -814,17 +818,6 @@ export class Chrome {
       table.append(h('tr', {}, h('td', { text: command.plainLabel }), h('td', {}, h('kbd', { text: command.shortcutText }))));
     }
     showDialog('Keyboard Shortcuts', h('div', { class: 'wm-scroll' }, table), () => this.options.host.focusEditor());
-  }
-
-  private showAbout(): void {
-    const profile = FORMATS[this.state.kind];
-    const body = h(
-      'div',
-      {},
-      h('p', { text: `${this.appName} — a document editor with a WebGL page renderer.` }),
-      h('p', { text: `Open document: ${this.state.documentName || '(none)'} · ${profile.label}${profile.editable ? '' : ' (read-only)'}` }),
-    );
-    showDialog(`About ${this.appName}`, body, () => this.options.host.focusEditor());
   }
 }
 

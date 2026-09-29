@@ -24,6 +24,7 @@ import { markupToDocument } from '../formats/pdfMarkup.ts';
 import { PdfAnnotator } from './pdfAnnotator.ts';
 import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
+import welcomeText from './welcome.md?raw';
 import { FormatReader } from './selectionFormat.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
@@ -116,6 +117,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       return flowing(source.name, await WordDocument.create());
     case 'fonts':
       return flowing('Fonts', await fontShowcase(fonts));
+    case 'welcome': {
+      // Written in Markdown for easy editing, then opened as an ordinary (Word) document.
+      const { document, extensions } = await importDocument('md', new TextEncoder().encode(welcomeText));
+      return flowing('Welcome to Golem Docs', document, 'docx', extensions);
+    }
   }
 }
 

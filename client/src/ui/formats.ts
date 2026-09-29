@@ -214,6 +214,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'saveToCloud':
     case 'signIn':
     case 'signOut':
+    case 'clearLocalData':
     case 'download':
     case 'print':
     case 'printPreview':

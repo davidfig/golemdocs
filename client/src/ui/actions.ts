@@ -61,6 +61,8 @@ export type Action =
   | { kind: 'saveToCloud' }
   | { kind: 'signIn' }
   | { kind: 'signOut' }
+  /** Delete every document and setting kept in this browser (asks first). Cloud documents stay. */
+  | { kind: 'clearLocalData' }
   /** Download a copy of the document, in its own format. */
   | { kind: 'download' }
   /**

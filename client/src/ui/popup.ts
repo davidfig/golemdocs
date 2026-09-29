@@ -99,3 +99,33 @@ export function showDialog(title: string, body: Node, onClose?: () => void): voi
   dialog.showModal();
   ok.focus();
 }
+
+/** Asks before doing something that can't be undone. Resolves true only if `action` is clicked. */
+export function showConfirm(title: string, body: Node, action: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialog = h('dialog', { class: 'wm-dialog' });
+    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { 'aria-label': 'Close' } });
+    const cancel = h('button', { class: 'wm-button', text: 'Cancel' });
+    const confirm = h('button', { class: 'wm-button', text: action });
+    dialog.append(
+      h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close),
+      h('div', { class: 'wm-dialog-body' }, body),
+      h('div', { class: 'wm-dialog-buttons' }, cancel, confirm),
+    );
+    let confirmed = false;
+    dialog.addEventListener('keydown', (e) => e.stopPropagation());
+    close.addEventListener('click', () => dialog.close());
+    cancel.addEventListener('click', () => dialog.close());
+    confirm.addEventListener('click', () => {
+      confirmed = true;
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(confirmed);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    cancel.focus(); // Enter shouldn't destroy anything
+  });
+}

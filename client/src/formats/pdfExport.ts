@@ -234,8 +234,8 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
   const pdf = PdfDocument.create();
   const title = await coreTitle(doc);
   if (title) pdf.setMetadata('Title', title);
-  pdf.setMetadata('Creator', 'Word');
-  pdf.setMetadata('Producer', 'Word PDF export');
+  pdf.setMetadata('Creator', 'Golem Docs');
+  pdf.setMetadata('Producer', 'Golem Docs PDF export');
 
   const pdfFonts = new Map<string, PdfFont>();
   const fontFor = (font: ResolvedFont): PdfFont => {

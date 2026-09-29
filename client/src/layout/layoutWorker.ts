@@ -531,6 +531,22 @@ class OpenDocument {
     this.net?.leave();
   }
 
+  /**
+   * Joins the room for a document that was already open (a new one, once it has been uploaded). Only
+   * when nobody else is editing it: otherwise the room's document would replace this one, which
+   * can't be done under the user, so it carries on unshared and is merged as a separate copy later.
+   */
+  async joinLate(room: Extract<RoomOptions, { kind: 'network' }>): Promise<void> {
+    if (this.net || this.room || this.format !== 'docx' || !this.replica || !this.editor) return;
+    const start = await this.joinNetwork(room, this.replica.clientId);
+    if (this.closed || !start) return;
+    if (start.kind === 'own') this.net!.ready(start);
+    else {
+      this.net!.leave();
+      this.net = null;
+    }
+  }
+
   // --- The multiplayer server ---------------------------------------------------------
 
   /** Viewers, and anyone whose connection to the room is gone, can look but not edit. */
@@ -850,6 +866,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   switch (message.type) {
     case 'open':
       void open(message.doc, message.source, message.room);
+      break;
+    case 'joinRoom':
+      if (current?.doc === message.doc) void current.joinLate(message.room);
       break;
     case 'leave':
       current?.leave();

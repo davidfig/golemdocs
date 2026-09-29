@@ -44,6 +44,11 @@ export class LayoutClient {
     this.send({ type: 'open', doc: this.doc, source, room }, transfer);
   }
 
+  /** The open document is now in the cloud: join its multiplayer room (it had none when it opened). */
+  joinRoom(room: Extract<RoomOptions, { kind: 'network' }>): void {
+    this.send({ type: 'joinRoom', doc: this.doc, room });
+  }
+
   /** The page is going away: leave any collaboration room. */
   leave(): void {
     this.send({ type: 'leave' });

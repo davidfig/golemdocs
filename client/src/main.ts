@@ -132,6 +132,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     localId: options.localId ?? null,
     unsavedSince: 0,
     room: null,
+    roomRequested: false,
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
   };
   showSync();
@@ -161,6 +162,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   sharedDeviceNotice.update({ welcome: source.kind === 'welcome' });
   setStatus(`Loading ${name}…`);
 
+  const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
+  current.roomRequested = requestedRoom !== undefined;
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = documentName = docName;
@@ -217,7 +220,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       loaded = true;
       setStatus(`${name}: ${message}`);
     },
-  }, roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id));
+  }, requestedRoom);
   focusInput();
 }
 
@@ -237,7 +240,7 @@ function roomOptions(): RoomOptions | undefined {
 }
 
 /** The multiplayer server's room for a cloud document, when signed in (else the document is edited on its own). */
-function networkRoom(cloudId: string | undefined): RoomOptions | undefined {
+function networkRoom(cloudId: string | undefined): Extract<RoomOptions, { kind: 'network' }> | undefined {
   if (!cloudId || !account) return undefined;
   return { kind: 'network', docId: cloudId, user: account.name ?? account.email ?? userName, color: userColor };
 }
@@ -385,6 +388,8 @@ interface OpenDocument {
   unsavedSince: number;
   /** Where it stands in the multiplayer server's room (cloud documents), once joined. */
   room: RoomState | null;
+  /** A multiplayer room has been asked for (at open, or once the document was first uploaded). */
+  roomRequested: boolean;
   /**
    * A document someone else owns, opened straight from the cloud: it has no copy in this browser
    * and edits go to the cloud directly (or through the room), never to a copy of it here.
@@ -393,7 +398,7 @@ interface OpenDocument {
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0, room: null, shared: null };
+let current: OpenDocument = { localId: null, unsavedSince: 0, room: null, roomRequested: false, shared: null };
 let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
@@ -605,6 +610,14 @@ async function upload(id: string): Promise<void> {
   try {
     const { doc, conflictCopy } = await uploadToCloud(id);
     failures.delete(id);
+    // A document made in this session gets its room once it is in the account.
+    if (id === current.localId && !current.roomRequested && !conflictCopy) {
+      const room = networkRoom(doc.id);
+      if (room) {
+        current.roomRequested = true;
+        worker.joinRoom(room);
+      }
+    }
     cloudDocs = [doc, ...cloudDocs.filter((d) => d.id !== doc.id)];
     if (conflictCopy) {
       if (id === current.localId) {

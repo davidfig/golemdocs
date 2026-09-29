@@ -87,6 +87,8 @@ export interface RoomState {
 
 export type ToWorker =
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
+  /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
+  | { type: 'joinRoom'; doc: number; room: Extract<RoomOptions, { kind: 'network' }> }
   /** Leaving the page: tell the room. */
   | { type: 'leave' }
   /** Bytes of an image part of the open document. */

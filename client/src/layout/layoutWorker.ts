@@ -19,7 +19,8 @@ import { exportDocument, importDocument, type Format } from '../formats/convert.
 import { pdfToDocument } from '../formats/pdfImport.ts';
 import { openPdfView, type PdfView } from '../formats/pdfPages.ts';
 import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
-import { PdfDocument, applyAnnotations } from '@word/pdf';
+import { PdfDocument, applyAnnotations, readAnnotations } from '@word/pdf';
+import { markupToDocument } from '../formats/pdfMarkup.ts';
 import { PdfAnnotator } from './pdfAnnotator.ts';
 import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
@@ -90,9 +91,12 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     }
     case 'wdoc': {
       const wdoc = await readWdoc(new Uint8Array(source.bytes));
+      // A PDF edited as something else, with its text unedited, is reflowed afresh: that picks up
+      // annotations added on its own pages since.
+      const reflowAgain = wdoc.original && wdoc.manifest.pagesCurrent && wdoc.manifest.lens !== 'pdf';
       return {
         name: source.name,
-        document: wdoc.document ? await WordDocument.read(wdoc.document) : null,
+        document: wdoc.document && !reflowAgain ? await WordDocument.read(wdoc.document) : null,
         extensions: wdoc.extensions,
         original: wdoc.original,
         lens: wdoc.manifest.lens,
@@ -541,7 +545,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       return;
     }
     // A PDF edited as anything else is reflowed into a flowing document the first time.
-    let document = loaded.document ?? (await pdfToDocument(loaded.original!));
+    let document = loaded.document ?? (await reflow(loaded.original!, loaded.extensions));
     // Rooms share a .docx, so only a Word document can be in one.
     const room = entry.format === 'docx' ? requestedRoom : undefined;
     const readMs = performance.now() - t0;
@@ -590,6 +594,14 @@ async function media(doc: number, request: number, part: string): Promise<void> 
   post({ type: 'media', request, bytes }, bytes ? [bytes] : []);
 }
 
+/** A PDF reflowed into a flowing document, its markup annotations carried into the text. */
+async function reflow(original: Uint8Array, extensions: Extensions): Promise<WordDocument> {
+  const document = await pdfToDocument(original);
+  const pdf = PdfDocument.load(original);
+  markupToDocument(document, pdf, extensions.pdf?.annotations ?? readAnnotations(pdf));
+  return document;
+}
+
 /** The document's extensions, with the PDF annotations as they are now when its pages are shown. */
 function currentExtensions(open: OpenDocument): Extensions {
   if (!open.annotator) return open.extensions;
@@ -634,7 +646,7 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
     let bytes: Uint8Array;
     // A PDF whose text wasn't edited exports as the original, pages and all.
     if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
-    else bytes = await exportDocument(open.document ?? (await pdfToDocument(open.original!)), open.extensions, to, await fontsReady);
+    else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {

@@ -344,6 +344,23 @@ export function deleteText(paragraph: Paragraph, from: number, to: number): Inli
   return removed;
 }
 
+/** Changes the formatting of every run in positions [from, to) (splitting runs at the ends). */
+export function formatText(paragraph: Paragraph, from: number, to: number, change: (properties: RunProperties) => void): void {
+  if (to <= from) return;
+  const [before, rest] = splitInlines(paragraph.children, from);
+  const [middle, after] = splitInlines(rest, to - from, true);
+  const visit = (inlines: Inline[]) => {
+    for (const inline of inlines) {
+      if (inline.kind === 'run') {
+        inline.properties = clone(inline.properties);
+        change(inline.properties);
+      } else if (inline.kind !== 'raw') visit(inline.children);
+    }
+  };
+  visit(middle);
+  paragraph.children = normalizeInlines([...before, ...middle, ...after]);
+}
+
 /** Inserts inline content (runs, hyperlinks...) at a model offset. */
 export function insertInlines(paragraph: Paragraph, offset: number, content: Inline[]): void {
   const [a, b] = splitInlines(paragraph.children, offset);

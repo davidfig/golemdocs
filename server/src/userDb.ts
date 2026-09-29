@@ -75,7 +75,7 @@ async function migrate(db: UserDb): Promise<number> {
 
 async function createDatabase(env: Env, userId: string): Promise<string> {
   // Dev databases live in the same account but can never be mistaken for (or collide with) production's.
-  const name = `${env.ENVIRONMENT === 'production' ? 'word-user-' : 'word-dev-user-'}${userId}`;
+  const name = `${env.ENVIRONMENT === 'production' ? 'golemdocs-user-' : 'golemdocs-dev-user-'}${userId}`;
   try {
     return (await api<{ uuid: string }>(env, '/d1/database', { name })).uuid;
   } catch (error) {

@@ -11,3 +11,7 @@ packages:
 allowBuilds:
   esbuild: true
   workerd: true
+
+# The lockfile can hold packages newer than a machine's minimumReleaseAge allows.
+minimumReleaseAgeExclude:
+  - wrangler

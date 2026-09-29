@@ -29,9 +29,9 @@ The server has three Cloudflare environments in `server/wrangler.jsonc`, and loc
 
 | Environment | Used by | D1 and R2 | Cloud documents |
 | --- | --- | --- | --- |
-| `dev` | `pnpm dev` (once set up) | The real **dev** database and bucket (`word-directory-dev`, `word-files-dev`). The Worker runs on your machine; only D1 and R2 are remote. | On. Per-user databases are named `word-dev-user-<id>`. |
+| `dev` | `pnpm dev` (once set up) | The real **dev** database and bucket (`golemdocs-directory-dev`, `golemdocs-files-dev`). The Worker runs on your machine; only D1 and R2 are remote. | On. Per-user databases are named `golemdocs-dev-user-<id>`. |
 | `local` | `pnpm dev --local`, or `pnpm dev` before dev is set up | Simulated on your machine (`server/.wrangler/`); works offline. | Off (they need the real Cloudflare API). Sign-in still works. |
-| production | `pnpm --filter @word/server deploy` only | `word-directory`, `word-files`, `word-user-<id>` | On |
+| production | `pnpm --filter @word/server deploy` only | `golemdocs-directory`, `golemdocs-files`, `golemdocs-user-<id>` | On |
 
 Set up the dev environment once:
 
@@ -53,7 +53,7 @@ Other things `server/.dev.vars` controls:
 
 - Saved documents: the browser's IndexedDB (DevTools ▸ Application ▸ IndexedDB ▸ `word`).
 - Thumbnails for the dashboard (File ▸ Dashboard): rendered from page 1 on every save and kept in IndexedDB next to the document; cloud documents carry theirs (uploaded with the document, fetched only when their card scrolls into view).
-- Server state in `local` mode: `server/.wrangler/`. Delete it to reset the simulated D1, R2 and sessions. In `dev` mode the data is in your dev Cloudflare resources (delete the `word-dev-user-…` databases and empty the bucket from the dashboard to reset).
+- Server state in `local` mode: `server/.wrangler/`. Delete it to reset the simulated D1, R2 and sessions. In `dev` mode the data is in your dev Cloudflare resources (delete the `golemdocs-dev-user-…` databases and empty the bucket from the dashboard to reset).
 
 ### Handy for development
 
@@ -72,7 +72,7 @@ pnpm test
 
 One Worker serves both the API and the built client. The steps, in order:
 
-1. `pnpm --filter @word/server cf:setup` creates the `word-directory` D1 database and the `word-files` R2 bucket. Paste the printed database id and your account id into the top level of `server/wrangler.jsonc` (production).
+1. `pnpm --filter @word/server cf:setup` creates the `golemdocs-directory` D1 database and the `golemdocs-files` R2 bucket. Paste the printed database id and your account id into the top level of `server/wrangler.jsonc` (production).
 2. Set secrets with `pnpm --filter @word/server exec wrangler secret put <NAME> --env=""`: `CF_API_TOKEN` (D1 Edit) plus each sign-in provider's values ([server/AUTH.md](server/AUTH.md)).
 3. `pnpm --filter @word/server cf:migrate` applies the directory migrations to the remote database.
 4. `pnpm --filter @word/server deploy` builds the client and deploys.

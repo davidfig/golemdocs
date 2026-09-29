@@ -1,8 +1,12 @@
 // One Worker serves both the API (src/worker.ts) and the built client (../client/dist).
 {
-  "name": "word",
+  "name": "golemdocs",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-01",
+
+  // Production is served at golemdocs.com (the zone is on this Cloudflare account). Deploying
+  // creates the DNS record and certificate for it.
+  "routes": [{ "pattern": "golemdocs.com", "custom_domain": true }],
 
   // The client is a static SPA. Only /api/* runs the Worker; everything else is served from assets.
   "assets": {
@@ -12,25 +16,25 @@
   },
 
   // The actual .docx files, keyed `<userId>/<documentId>.docx`.
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "word-files" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files" }],
 
   // Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
   // Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
   "d1_databases": [
     {
       "binding": "DIRECTORY",
-      "database_name": "word-directory",
-      "database_id": "REPLACE_WITH_DATABASE_ID",
+      "database_name": "golemdocs-directory",
+      "database_id": "5c644ff5-3e2b-42c1-b684-b649e30c7943",
       "migrations_dir": "migrations/directory"
     }
   ],
 
   "vars": {
-    // production | dev | local. Decides what per-user databases are called (word-user-… in
-    // production, word-dev-user-… otherwise) and whether cloud storage is on (not when "local").
+    // production | dev | local. Decides what per-user databases are called (golemdocs-user-… in
+    // production, golemdocs-dev-user-… otherwise) and whether cloud storage is on (not when "local").
     "ENVIRONMENT": "production",
     // Your Cloudflare account id (per-user databases are created and queried through the REST API).
-    "CF_ACCOUNT_ID": "REPLACE_WITH_ACCOUNT_ID",
+    "CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
     // Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
     "MICROSOFT_TENANT": "common"
   },
@@ -43,11 +47,11 @@
     // touching production data. Create them with `pnpm --filter @word/server cf:setup:dev`, then
     // paste the printed database id here (and your account id below).
     "dev": {
-      "r2_buckets": [{ "binding": "FILES", "bucket_name": "word-files-dev", "remote": true }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files-dev", "remote": true }],
       "d1_databases": [
         {
           "binding": "DIRECTORY",
-          "database_name": "word-directory-dev",
+          "database_name": "golemdocs-directory-dev",
           "database_id": "REPLACE_WITH_DEV_DATABASE_ID",
           "migrations_dir": "migrations/directory",
           "remote": true
@@ -59,9 +63,9 @@
     // `pnpm dev --local`: everything simulated on your machine, works offline. Sign-in works;
     // cloud documents are switched off (the per-user databases need the real Cloudflare API).
     "local": {
-      "r2_buckets": [{ "binding": "FILES", "bucket_name": "word-files-local" }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "golemdocs-files-local" }],
       "d1_databases": [
-        { "binding": "DIRECTORY", "database_name": "word-directory-local", "database_id": "local", "migrations_dir": "migrations/directory" }
+        { "binding": "DIRECTORY", "database_name": "golemdocs-directory-local", "database_id": "local", "migrations_dir": "migrations/directory" }
       ],
       "vars": { "ENVIRONMENT": "local", "CF_ACCOUNT_ID": "", "MICROSOFT_TENANT": "common" }
     }

@@ -1,0 +1,25 @@
+import type { Messages } from '../../index.ts';
+
+export const columns: Partial<Messages> = {
+  'columns.title': '段組み',
+  'columns.close': '閉じる',
+  'columns.presets': '種類',
+  'columns.one': '1 段',
+  'columns.two': '2 段',
+  'columns.three': '3 段',
+  'columns.number': '段数:',
+  'columns.numberLabel': '段数',
+  'columns.spacing': '間隔:',
+  'columns.spacingLabel': '段の間隔 (インチ)',
+  'columns.width': '各段の幅:',
+  'columns.inches': '{value}"',
+  'columns.line': '境界線を引く',
+  'columns.apply': '設定対象:',
+  'columns.applyDocument': '文書全体',
+  'columns.applySection': 'このセクション',
+  'columns.applyForward': 'これ以降',
+  'columns.ok': 'OK',
+  'columns.cancel': 'キャンセル',
+  'columns.bad': '段数は 1 ～ {max}、間隔は 0 ～ 4 インチで指定してください。',
+  'columns.tooNarrow': '段の幅が狭すぎます。段数を減らすか、間隔を小さくしてください。',
+};

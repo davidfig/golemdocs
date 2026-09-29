@@ -2,7 +2,7 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { paragraphLength, paragraphText, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@word/docx';
+import { paragraphLength, paragraphText, plainText, type DocumentProperties, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@word/docx';
 import { Editor, type Command } from '@word/editor';
 import { Replica, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@word/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
@@ -12,22 +12,53 @@ import {
   encodePage,
   FontSet,
   LayoutSession,
+  setFormattingMarks,
+  setReflowWidth,
+  toModel,
   type EncodedPage,
   PageLayout,
   type FaceDescriptor,
 } from '@word/layout';
 import { exportDocument, importDocument, type Format } from '../formats/convert.ts';
 import type { PdfView } from '../formats/pdfPages.ts';
+import { sniffImage } from '../formats/images.ts';
 import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
 import type { FormField } from '@word/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
-import { loadLocale } from '../i18n/index.ts';
+import { getLocale, loadLocale, t } from '../i18n/index.ts';
+
+/** The welcome text in the current language (`welcome/<locale>.md`), else English. Each is its own small chunk. */
+const WELCOMES = import.meta.glob<string>('./welcome/*.md', { query: '?raw', import: 'default' });
+/** The app's icon, inline at the start of the title (the first paragraph), level with its letters. Optional. */
+async function addWelcomeIcon(document: WordDocument): Promise<void> {
+  const title = document.body[0];
+  if (title?.kind !== 'paragraph') return;
+  try {
+    const image = document.addImage(new Uint8Array(await (await fetchOk('/icon-512.png')).arrayBuffer()), 'png');
+    const size = 24 * 12700; // 24 pt, in EMUs
+    const drawing = { kind: 'drawing' as const, inline: true, width: size, height: size, image, name: 'Golem Docs', description: 'Golem Docs icon' };
+    title.children.unshift(
+      { kind: 'run', properties: { position: -6 }, content: [drawing], attrs: {} }, // lowered 3 pt: centered on the title's letters
+      { kind: 'run', properties: {}, content: [{ kind: 'text', text: '  ' }], attrs: {} },
+    );
+    // A bigger title, to go with the icon.
+    for (const run of title.children) if (run.kind === 'run') run.properties = { ...run.properties, size: 56, sizeCs: 56 };
+  } catch {
+    // no icon
+  }
+}
+
+async function welcomeText(): Promise<string> {
+  const load = WELCOMES[`./welcome/${getLocale()}.md`] ?? WELCOMES['./welcome/en.md'];
+  return load();
+}
 import { DICTIONARY_BASE, FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type ToWorker, type WireCommand, type WireField } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
-import welcomeText from './welcome.md?raw';
 import { FormatReader } from './selectionFormat.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { findIssues } from '../spelling/check.ts';
+import { countText } from './wordCount.ts';
+import { htmlToPaste } from '../formats/paste.ts';
 import { Dictionary } from '../spelling/dictionary.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
@@ -97,12 +128,26 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     case 'adoc':
     case 'rst':
     case 'org':
+    case 'mediawiki':
+    case 'eml':
+    case 'ipynb':
+    case 'textile':
     case 'tsv':
     case 'mhtml':
     case 'html':
     case 'txt': {
       const { document, extensions } = await importDocument(source.kind, new Uint8Array(source.bytes));
       return flowing(source.name, document, source.kind, extensions);
+    }
+    case 'image': {
+      const type = sniffImage(new Uint8Array(source.bytes))?.type;
+      const lens: Format = type === 'jpeg' || type === 'webp' ? type : 'png';
+      const { document, extensions } = await importDocument(lens, new Uint8Array(source.bytes));
+      return flowing(source.name, document, lens, extensions);
+    }
+    case 'doc': {
+      const { docToDocument } = await import('../formats/docImport.ts');
+      return flowing(source.name, await docToDocument(new Uint8Array(source.bytes)));
     }
     case 'wdoc': {
       const wdoc = await readWdoc(new Uint8Array(source.bytes));
@@ -125,20 +170,24 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       return flowing(source.name, await WordDocument.read(new Uint8Array(await (await fetchOk(source.url)).arrayBuffer())));
     case 'text-url':
       return flowing(source.name, await plainTextDocument(await (await fetchOk(source.url)).text()));
-    case 'blank':
-      return flowing(source.name, await WordDocument.create());
+    case 'blank': {
+      const blank = await WordDocument.create();
+      blank.properties.created = now();
+      return flowing(source.name, blank);
+    }
     case 'fonts':
       return flowing('Fonts', await fontShowcase(fonts));
     case 'welcome': {
       // Written in Markdown for easy editing, then opened as an ordinary (Word) document.
-      const { document, extensions } = await importDocument('md', new TextEncoder().encode(welcomeText));
-      return flowing('Welcome to Golem Docs', document, 'docx', extensions);
+      const { document, extensions } = await importDocument('md', new TextEncoder().encode(await welcomeText()));
+      await addWelcomeIcon(document);
+      return flowing(t('app.welcomeName'), document, 'docx', extensions);
     }
   }
 }
 
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -200,6 +249,10 @@ class OpenDocument {
   private search: SelectionUpdate['search'] | null = null;
   /** What the last Spelling and Grammar step found, sent with the next selection. */
   private spell: SelectionUpdate['spell'] | null = null;
+  /** The last Word Count's answer, sent with the next selection (null: none to give). */
+  private stats: SelectionUpdate['stats'] = undefined;
+  /** The document's properties, asked for by File ▸ Properties, sent with the next selection. */
+  private props: DocumentProperties | undefined = undefined;
   /** Formatting the Format Painter has picked up: the paragraph's only when a whole paragraph was copied. */
   private painter: { run: RunProperties; paragraph: ParagraphProperties | null } | null = null;
 
@@ -207,6 +260,14 @@ class OpenDocument {
 
   get closed(): boolean {
     return this.controller.signal.aborted;
+  }
+
+  /** Lays the whole document out again (the pages' look changed, not the text). */
+  relayout(): void {
+    const session = this.session;
+    if (!session || this.closed || this.format === 'pdf') return;
+    session.invalidate([], { structural: true });
+    void this.pump();
   }
 
   /** Lays out until the pages are current, sending updates as it goes. */
@@ -368,10 +429,17 @@ class OpenDocument {
       remoteRects,
       painting: this.painter !== null,
       link: editor.selectedLink(),
+      inTable: editor.inTable(),
+      columns: editor.sectionColumns(),
+      page: editor.sectionPage(),
       spell: this.spell ?? undefined,
+      stats: this.stats,
+      docProperties: this.props,
     };
     this.search = null;
     this.spell = null;
+    this.stats = undefined;
+    this.props = undefined;
     this.reveal = false;
     this.commandAt = 0;
     this.sendPresence();
@@ -397,6 +465,8 @@ class OpenDocument {
       canRedo: annotator.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote: [],
+      stats: this.stats,
+      docProperties: this.props,
       fields: annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
     };
     this.reveal = false;
@@ -695,6 +765,20 @@ class OpenDocument {
     };
   }
 
+  /** A picture at the caret, no wider than the page's text. Not in a room: the others would have no bytes for it. */
+  insertImage(bytes: Uint8Array, ext: string, width: number, height: number, description?: string): void {
+    const document = this.document;
+    if (!document || this.readOnly || this.room || this.net || this.pdf) return;
+    const { pageSize, margins } = document.section;
+    const most = ((pageSize?.w ?? 12240) - (margins?.left ?? 1440) - (margins?.right ?? 1440)) * 635;
+    if (most > 0 && width > most) {
+      height = Math.round((height * most) / width);
+      width = most;
+    }
+    const image = document.addImage(bytes, ext);
+    this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image, ...(description && { description }) }], attrs: {} }] });
+  }
+
   /** Commands waiting for fonts a formatting command needs; later ones queue behind it. */
   private waiting: Promise<void> | null = null;
 
@@ -751,6 +835,61 @@ class OpenDocument {
         change: () => ({ style: source.style, justification: source.justification, spacing: source.spacing && { ...source.spacing }, indent: source.indent && { ...source.indent } }),
       });
     }
+  }
+
+  /** Pastes formatted text (the clipboard's HTML) at the caret, or its plain text if the HTML can't be used. */
+  private async pasteHtml(html: string, text: string): Promise<void> {
+    const { editor, session, document } = this;
+    if (!editor || !session || !document || this.annotator || this.readOnly) return;
+    let pasted: Awaited<ReturnType<typeof htmlToPaste>> = null;
+    try {
+      pasted = await htmlToPaste(html, document);
+      if (pasted?.fonts.size) await session.ensureFonts(pasted.fonts);
+    } catch {
+      pasted = null;
+    }
+    if (this.closed) return;
+    if (pasted) this.apply({ kind: 'pasteContent', blocks: pasted.blocks, define: pasted.define });
+    else if (text) this.apply({ kind: 'insertText', text });
+    this.reveal = true;
+  }
+
+  /** Counts the words and the rest of the selection, or of the whole document if nothing is selected. */
+  private countWords(whole: boolean): void {
+    const { editor, session } = this;
+    if (!editor || !session || this.closed || this.annotator) this.stats = null;
+    else {
+      const list = editor.paragraphs();
+      const [start, end] = editor.ordered();
+      const selection = !editor.collapsed && !whole;
+      const first = selection ? list.indexOf(start.paragraph) : 0;
+      const last = selection ? list.indexOf(end.paragraph) : list.length - 1;
+      const texts: string[] = [];
+      for (let k = first; k <= last; k++) {
+        const p = list[k];
+        const from = selection && k === first ? start.offset : 0;
+        const to = selection && k === last ? end.offset : Infinity;
+        texts.push(plainText(p, from, to));
+      }
+      // Lines and pages: those of the paragraphs counted, and (for a selection) that the selected text touches.
+      const inRange = new Set(list.slice(first, last + 1));
+      let lines = 0;
+      const pagesUsed = new Set<PageLayout>();
+      for (const page of session.displayPages) {
+        for (const line of page.lines) {
+          if (!inRange.has(line.paragraph)) continue;
+          if (selection) {
+            const model = (offset: number) => toModel(line.spans, offset);
+            if (line.paragraph === start.paragraph && model(line.end) <= start.offset && line.end > line.start) continue;
+            if (line.paragraph === end.paragraph && model(line.start) >= end.offset && end.offset > 0) continue;
+          }
+          lines++;
+          pagesUsed.add(page);
+        }
+      }
+      this.stats = { ...countText(texts), pages: selection ? pagesUsed.size : session.displayPages.length, lines, selection };
+    }
+    this.sendSelection();
   }
 
   /** Selects the next spelling or grammar mistake at or after the place `from` says, and reports it. */
@@ -811,9 +950,15 @@ class OpenDocument {
     } else this.sendSelection();
   }
 
-  private runCommand(wire: WireCommand): void | Promise<void> {
+  private runCommand(wire: WireCommand, cjkReady = false): void | Promise<void> {
     if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (wire.kind === 'applyPainter') return this.applyPainter();
+    if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false);
+    if (wire.kind === 'pasteHtml') return this.pasteHtml(wire.html, wire.text);
+    if (wire.kind === 'getProperties') {
+      this.props = { ...this.document?.properties };
+      return this.sendSelection();
+    }
     if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? [], wire.rules ?? []);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
@@ -821,6 +966,11 @@ class OpenDocument {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session) return;
+    // Typed, pasted or replaced Japanese and Chinese text needs its font pages before it is laid out.
+    if (!cjkReady && !this.annotator) {
+      const text = commandText(wire);
+      if (text && /[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7ff\uf900-\ufaff\uff00-\uffef]/.test(text)) return session.ensureCjk(text).then(() => this.runCommand(wire, true));
+    }
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
     let edited: boolean;
@@ -997,10 +1147,15 @@ async function annotatedPdf(original: Uint8Array, extensions: Extensions): Promi
 }
 
 /** The whole open document as a .wdoc, to be edited as `lens` (default: as now) when next opened. */
+/** The time now as a document property (W3CDTF, to the second, in UTC). */
+const now = (): string => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+
 async function save(doc: number, request: number, lens?: Format): Promise<void> {
   try {
     const open = current;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    // A document changed since it was opened records when.
+    if (open.document && open.edited) open.document.properties.modified = now();
     const bytes = await writeWdoc({
       manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
       document: open.document ? await open.document.write() : null,
@@ -1030,6 +1185,39 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
   }
 }
 
+/** The text a command puts in the document (typing, IME commits, paste, replace). */
+function commandText(wire: WireCommand): string {
+  switch (wire.kind) {
+    case 'insertText':
+      return wire.text;
+    case 'replaceAll':
+      return wire.with;
+    case 'setLink':
+      return wire.text;
+    case 'insertContent': {
+      let text = '';
+      const walk = (inlines: readonly { kind: string; [key: string]: any }[]) => {
+        for (const inline of inlines) {
+          if (inline.kind === 'run') for (const c of inline.content) if (c.kind === 'text') text += c.text;
+          if (inline.children) walk(inline.children);
+        }
+      };
+      walk(wire.content);
+      return text;
+    }
+    default:
+      return '';
+  }
+}
+
+/** Text without a language of its own is drawn in the catalog for the app's language. */
+function setCjkLang(): Promise<void> {
+  return fontsReady.then((fonts) => {
+    const locale = getLocale();
+    fonts.defaultCjkLang = locale.startsWith('zh-Hant') ? 'zh-Hant' : locale.startsWith('ko') ? 'ko' : 'ja';
+  });
+}
+
 /** Settles once the page's language is loaded; documents wait for it so their errors are translated. */
 let localeReady: Promise<unknown> = Promise.resolve();
 
@@ -1037,7 +1225,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   const message = event.data;
   switch (message.type) {
     case 'locale':
-      localeReady = loadLocale(message.locale);
+      localeReady = loadLocale(message.locale).then(setCjkLang);
       break;
     case 'open':
       void localeReady.then(() => open(message.doc, message.source, message.room));
@@ -1050,6 +1238,14 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     case 'leave':
       current?.leave();
+      break;
+    case 'marks':
+      setFormattingMarks(message.on);
+      current?.relayout();
+      break;
+    case 'reflow':
+      setReflowWidth(message.width);
+      current?.relayout();
       break;
     case 'media':
       void media(message.doc, message.request, message.part);
@@ -1065,6 +1261,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
           current.sendSelection();
         }
       }
+      break;
+    case 'insertImage':
+      if (current?.doc === message.doc) current.insertImage(new Uint8Array(message.bytes), message.ext, message.width, message.height, message.description);
       break;
     case 'save':
       void save(message.doc, message.request, message.lens);

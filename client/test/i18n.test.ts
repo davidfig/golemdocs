@@ -17,9 +17,9 @@ test('every key is namespaced and every message is a string', () => {
 test('browser languages pick a catalog, with English as the fallback', async () => {
   const { pickLocale } = await import('../src/i18n/index.ts');
   assert.equal(pickLocale(['zh-TW']), 'zh-Hant');
-  assert.equal(pickLocale(['fr-CA', 'zh-Hant-TW']), 'zh-Hant');
+  assert.equal(pickLocale(['nl-NL', 'zh-Hant-TW']), 'zh-Hant');
   assert.equal(pickLocale(['en-US']), 'en');
-  assert.equal(pickLocale(['de']), 'en');
+  assert.equal(pickLocale(['nl']), 'en');
   // Simplified Chinese has no catalog yet; it must not be shown Traditional.
   assert.equal(pickLocale(['zh-CN']), 'en');
 });
@@ -53,4 +53,41 @@ test('Spanish and other prefixes resolve to their catalog', async () => {
   const { pickLocale } = await import('../src/i18n/index.ts');
   assert.equal(pickLocale(['es-MX']), 'es');
   assert.equal(pickLocale(['es']), 'es');
+});
+
+test('French regional tags resolve to French', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  assert.equal(pickLocale(['fr-CA']), 'fr');
+});
+
+test('German regional tags resolve to German', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  assert.equal(pickLocale(['de-AT']), 'de');
+});
+
+test('Japanese regional tags resolve to Japanese', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  assert.equal(pickLocale(['ja-JP']), 'ja');
+});
+
+test('Korean regional tags resolve to Korean', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  assert.equal(pickLocale(['ko-KR']), 'ko');
+});
+
+test('Italian regional tags resolve to Italian', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  assert.equal(pickLocale(['it-CH']), 'it');
+});
+
+test('Portuguese, Brazilian or European, resolves to the Brazilian catalog', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  for (const tag of ['pt', 'pt-BR', 'pt-PT', 'pt-br']) assert.equal(pickLocale([tag]), 'pt-BR', tag);
+});
+
+test('Russian resolves, and its plural forms are found for counts', async () => {
+  const { pickLocale } = await import('../src/i18n/index.ts');
+  assert.equal(pickLocale(['ru-RU']), 'ru');
+  const rules = new Intl.PluralRules('ru');
+  assert.deepEqual([1, 2, 5, 21, 22, 25].map((n) => rules.select(n)), ['one', 'few', 'many', 'one', 'few', 'many']);
 });

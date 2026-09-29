@@ -22,7 +22,7 @@ import {
   type SavedInfo,
 } from './storage/local.ts';
 import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
-import { capturePageThumbnail } from './thumbnail.ts';
+import { capturePageThumbnail, drawPages, pictureLayout } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
@@ -32,6 +32,7 @@ import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
+import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
 import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
@@ -43,14 +44,35 @@ import { PageRenderer, type FrameStats } from './view/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
+import { showColumnsDialog } from './ui/columnsDialog.ts';
+import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
+import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/pasteSpecialDialog.ts';
+import { PropertiesDialog } from './ui/propertiesDialog.ts';
+import { WordCountDialog } from './ui/wordCountDialog.ts';
+import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
+import { CropLayer } from './ui/cropLayer.ts';
+import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
+import { askDropChoice } from './ui/dropChoice.ts';
+import { LargeTextView } from './largeText/view.ts';
+import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
+import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
+import type { ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
-import { FORMATS, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus } from './ui/index.ts';
+import { sniffImage } from './formats/images.ts';
+import { hasExtension, toUtf8 } from './formats/textFiles.ts';
+import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
+import { encodeCanvas, toPng } from './formats/imageCodec.ts';
+import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
+import { FORMATS, PICTURE_KINDS, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
+// The static welcome text in index.html is for crawlers; the canvas is the page for everyone else.
+document.getElementById('seo')?.setAttribute('aria-hidden', 'true');
+
 const localeReady = initLocale();
 // Who is signed in decides whether a saved document joins its room, so ask straight away too.
 const accountLookup = currentUser().catch(() => null);
@@ -88,6 +110,26 @@ const worker = new LayoutClient((faces) => {
   for (const face of faces) atlases.define(face);
 });
 await localeReady;
+worker.setLocale(getLocale());
+
+// Formatting marks (¶): remembered in this browser, and told to the worker before any document opens.
+const MARKS_KEY = 'word.formattingMarks';
+let formattingMarks = false;
+try {
+  formattingMarks = localStorage.getItem(MARKS_KEY) === 'on';
+} catch {
+  // Storage unavailable: marks start off.
+}
+if (formattingMarks) worker.setMarks(true);
+
+// View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
+const VIEW_KEY = 'word.viewMode';
+let viewMode: ViewMode = 'print';
+try {
+  if (localStorage.getItem(VIEW_KEY) === 'normal') viewMode = 'normal';
+} catch {
+  // Storage unavailable: start in Print layout.
+}
 
 // The document to carry on with is read from this browser while the rest of the page is built.
 const LAST_DOC_KEY = 'golemdocs.lastDoc';
@@ -98,10 +140,21 @@ function lastDoc(): string | null {
     return null;
   }
 }
+/** The address of the unedited welcome document; the app is at `/` for everything else. */
+const WELCOME_PATH = '/welcome';
+/** The document the address asks for: `?doc=…`, or the welcome path. */
+const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? (location.pathname === WELCOME_PATH ? 'welcome' : null);
+/** Sets the address to `params` at the app's root, or at the welcome path when it holds only the welcome document. */
+function setUrl(params: URLSearchParams): void {
+  const welcome = params.get('doc') === 'welcome';
+  if (welcome) params.delete('doc');
+  history.replaceState(null, '', `${welcome ? WELCOME_PATH : '/'}${params.size ? `?${params}` : ''}`);
+}
+
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
 {
   const params = new URLSearchParams(location.search);
-  const wanted = params.get('doc') ?? (params.get('room') ? null : lastDoc());
+  const wanted = wantedDoc(params) ?? (params.get('room') ? null : lastDoc());
   if (wanted?.startsWith('local:')) earlySaved = { id: wanted.slice(6), saved: getSaved(wanted.slice(6)).catch(() => null) };
 }
 
@@ -153,7 +206,8 @@ function kindOfSource(source: DocumentSource): DocumentKind {
     const kind = kindFromName(source.name);
     return isFormat(kind) ? kind : 'docx';
   }
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
+  if (source.kind === 'image') return kindFromName(source.name, 'png');
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -161,11 +215,22 @@ function setStatus(text: string): void {
   requestRender();
 }
 
-function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument } = {}): void {
+/** A message the person needs to see (something failed or can't be done): the status, and a toast. */
+function reportError(text: string): void {
+  setStatus(text);
+  showToast(text);
+}
+
+function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean } = {}): void {
   const start = performance.now();
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : t('app.fontsName');
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
+  cropLayer.cancel();
+  largeView.close();
+  drawLayer.cancel();
+  // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
+  if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
   current = {
     localId: options.localId ?? null,
     unsavedSince: 0,
@@ -174,6 +239,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     roomRequested: false,
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
   };
+  const opening = current;
   showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
   pagesById.clear();
@@ -230,6 +296,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
         pendingNotice = null;
       }
       if (current.localId) backfillThumbnail(current.localId);
+      // A file the person added is kept in the document store as soon as it is open, edited or not.
+      else if (options.store && opening === current) documentEdited();
     },
     selection(update) {
       applySelection(update);
@@ -266,7 +334,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
     error(message) {
       loaded = true;
-      setStatus(t('app.documentError', { name, message }));
+      reportError(t('app.documentError', { name, message }));
     },
   }, requestedRoom);
   focusInput();
@@ -327,27 +395,26 @@ function describeRoom(state: RoomState): string {
   return parts.join(' · ');
 }
 
-/** Puts the document, as it is now, in a new room, and opens a second window on it. */
-async function collaborate(): Promise<void> {
+/**
+ * Puts the document, as it is now, in a room (unless it is in one), and gives the link that lets
+ * others join it. Throws, with a message to show, when it can't.
+ */
+async function enterRoom(): Promise<string> {
   const params = new URLSearchParams(location.search);
-  if (documentKind !== 'docx') {
-    setStatus(t('app.collabNeedsWord'));
-    return;
-  }
+  if (documentKind !== 'docx') throw new Error(t('app.collabNeedsWord'));
   if (!params.get('room')) {
     let bytes: Uint8Array;
     try {
       bytes = await worker.convert('docx');
     } catch (e) {
-      setStatus(t('app.collabFailed', { message: (e as Error).message }));
-      return;
+      throw new Error(t('app.collabFailed', { message: (e as Error).message }));
     }
     // Others join with just the room: its first member's copy is the document.
     const name = documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
-    history.replaceState(null, '', `?${new URLSearchParams({ room: Math.random().toString(36).slice(2, 8), name })}`);
+    setUrl(new URLSearchParams({ room: Math.random().toString(36).slice(2, 8), name }));
     open({ kind: 'docx', name, bytes: bytes.slice().buffer });
   }
-  window.open(location.href, '_blank', 'popup,width=900,height=900');
+  return location.href;
 }
 window.addEventListener('pagehide', () => {
   saveIfEdited();
@@ -372,15 +439,49 @@ function applyLayout(update: LayoutUpdate): void {
 /** Positions pages; places the camera the first time, and keeps a grid fitted while it grows. */
 function arrange(): void {
   const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
-  bounds = arrangePages(pages, grid ? columnsToFill(pages, aspect, PAGE_GAP) : 1, PAGE_GAP);
+  const gap = reflowing() ? 0 : PAGE_GAP;
+  bounds = arrangePages(pages, grid ? columnsToFill(pages, aspect, gap) : 1, gap);
   if (pages.length && (!cameraPlaced || (grid && !userMoved))) placeCamera();
   requestRender();
 }
 
+/** Normal view is on, and applies to this document (not a PDF's own pages, a picture or the page grid). */
+function reflowing(): boolean {
+  return viewMode === 'normal' && !annotating && !isPicture() && !grid;
+}
+
+/** Normal view: the width in points the text should fill at the current zoom. */
+function reflowTarget(): number | null {
+  return reflowing() ? Math.round(canvas.clientWidth / (camera.zoom * CSS_PX_PER_POINT)) : null;
+}
+
+let reflowSent: number | null = null;
+let reflowTimer = 0;
+
+/** Tells the worker the width to lay out at when it has changed (a resize or zoom), once things settle. */
+function syncReflow(immediate = false): void {
+  const target = reflowTarget();
+  if (target === reflowSent) return;
+  const send = (): void => {
+    reflowSent = reflowTarget();
+    worker.setReflow(reflowSent);
+  };
+  clearTimeout(reflowTimer);
+  if (immediate || target === null) send();
+  else reflowTimer = window.setTimeout(send, 150);
+}
+
 function placeCamera(): void {
   cameraPlaced = true;
-  if (grid) {
+  if (reflowing()) {
+    // Normal view: the text fills the window from the top, at the zoom the user has.
+    camera.x = bounds.x;
+    camera.y = bounds.y;
+  } else if (grid) {
     camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
+  } else if (PICTURE_KINDS.includes(documentKind)) {
+    // A picture: the whole page in view.
+    camera.fit(bounds, canvas.clientWidth, canvas.clientHeight, 32);
   } else {
     // Word's view: first page at 100%, centered, with a little gray above it.
     camera.zoom = 1;
@@ -391,7 +492,7 @@ function placeCamera(): void {
 }
 
 function openFile(file: File): void {
-  history.replaceState(null, '', location.pathname);
+  setUrl(new URLSearchParams());
   chromeHost.openFile(file);
 }
 
@@ -400,9 +501,9 @@ function openSource(source: string, keepRoom = false): void {
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
   if (!keepRoom) params.delete('room');
-  history.replaceState(null, '', `?${params}`);
+  setUrl(params);
   if (source === 'war-and-peace') {
-    open({ kind: 'text-url', name: t('app.warAndPeaceName'), url: warAndPeaceUrl }, { grid: true });
+    open({ kind: 'text-url', name: t('app.warAndPeaceName'), url: warAndPeaceUrl });
   } else if (source.startsWith('corpus:')) {
     const name = source.slice(7);
     open({ kind: 'docx-url', name, url: CORPUS_URL + encodeURIComponent(name) });
@@ -484,6 +585,7 @@ function sharedEdited(): void {
   clearTimeout(sharedTimer);
   sharedTimer = window.setTimeout(() => void uploadShared(), UPLOAD_DELAY_MS);
   showSync();
+  chrome.accountChanged();
 }
 
 async function uploadShared(): Promise<void> {
@@ -625,7 +727,8 @@ function syncStatus(): SyncStatus {
   else if (signedOutRemotely) document = 'signedOut';
   else if (offline) document = 'offline';
   else document = 'saving';
-  return { user, document, error: document === 'failed' ? failures.get(id!)! : null };
+  const savedAt = document === 'saved' ? (info?.cloudSyncedAt ?? null) : null;
+  return { user, document, error: document === 'failed' ? failures.get(id!)! : null, savedAt };
 }
 
 function showSync(): void {
@@ -737,7 +840,7 @@ function rememberInUrl(doc: string): void {
   const params = new URLSearchParams(location.search);
   if (params.get('room')) return;
   params.set('doc', doc);
-  history.replaceState(null, '', `?${params}`);
+  setUrl(params);
   if (doc.startsWith('local:')) {
     try {
       localStorage.setItem(LAST_DOC_KEY, doc);
@@ -746,7 +849,8 @@ function rememberInUrl(doc: string): void {
 }
 
 /** The document's file name, with the extension of its current format. */
-const fileName = () => stem(documentName) + FORMATS[documentKind].extensions[0];
+/** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
+const fileName = () => (documentKind === 'txt' && hasExtension(documentName) ? documentName : stem(documentName) + FORMATS[documentKind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /**
@@ -821,7 +925,7 @@ function saveInBrowser(): Promise<string | null> {
       return info.id;
     } catch (e) {
       if (!doc.unsavedSince) doc.unsavedSince = performance.now(); // still unsaved: the next edit tries again
-      if (doc === current) setStatus(t('app.saveFailed', { message: (e as Error).message }));
+      if (doc === current) reportError(t('app.saveFailed', { message: (e as Error).message }));
       return null;
     }
   });
@@ -860,7 +964,7 @@ async function signOut(): Promise<void> {
   try {
     await signOutOfCloud();
   } catch (e) {
-    setStatus(e instanceof TypeError ? t('app.signOutOffline') : t('app.signOutFailed', { message: (e as Error).message }));
+    reportError(e instanceof TypeError ? t('app.signOutOffline') : t('app.signOutFailed', { message: (e as Error).message }));
     return;
   }
   cleared = true; // nothing more is saved for this account here
@@ -916,7 +1020,7 @@ async function clearLocalData(): Promise<void> {
     }
   } catch (e) {
     cleared = false;
-    setStatus(t('app.clearFailed', { message: (e as Error).message }));
+    reportError(t('app.clearFailed', { message: (e as Error).message }));
     return;
   }
   location.replace(location.pathname);
@@ -967,17 +1071,25 @@ async function openShared(id: string): Promise<void> {
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
-    else setStatus(t('app.openSharedFailed', { message: (e as Error).message }));
+    else reportError(t('app.openSharedFailed', { message: (e as Error).message }));
   }
 }
 
-/** File ▸ Share: who else can open the open document. */
+/** File ▸ Share: a link that lets anyone edit the open document with you, and the people it is shared with. */
 function share(): void {
-  if (!account) return notify(t('app.signInToShare'));
-  if (current.shared) return notify(t('app.ownerOnlyShare'));
+  const inRoom = new URLSearchParams(location.search).has('room');
+  const room = documentKind !== 'docx' ? { unavailable: t('app.collabNeedsWord') } : inRoom ? { link: location.href } : { create: enterRoom };
   const info = savedDocs.find((d) => d.id === current.localId);
-  if (!info?.cloudId) return notify(t('app.notInAccountYet'));
-  showShareDialog({ id: info.cloudId, name: info.name });
+  const people = !account
+    ? { unavailable: t('app.signInToShare') }
+    : current.shared
+      ? { unavailable: t('app.ownerOnlyShare') }
+      : !info
+        ? { unavailable: t('app.notSavedYet') } // e.g. the welcome document, until it is edited
+        : !info.cloudId
+          ? { unavailable: t('app.notInAccountYet') }
+          : { id: info.cloudId };
+  showShareDialog({ name: info?.name ?? documentName, room, people });
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -993,22 +1105,24 @@ async function openCloud(id: string): Promise<void> {
     void refreshLibrary();
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `cloud:${id}` }));
-    else setStatus(t('app.openFailed', { message: (e as Error).message }));
+    else reportError(t('app.openFailed', { message: (e as Error).message }));
   }
 }
 
 /** Downloads a copy of the document as a file of the format it is edited as (an export: only what that format holds). */
 async function download(): Promise<void> {
   try {
-    const bytes = await worker.convert(documentKind as Format);
-    const name = fileName();
-    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS[documentKind].mime }));
+    // The large-text viewer holds the file as it was, and gives it back as it was.
+    const large = largeView.active ? largeView.bytes : null;
+    const bytes = large ?? (await worker.convert(documentKind as Format));
+    const name = large ? largeView.fileName : fileName();
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: large ? 'text/plain' : FORMATS[documentKind].mime }));
     const link = Object.assign(document.createElement('a'), { href: url, download: name });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus(t('app.downloaded', { name }));
   } catch (e) {
-    setStatus(t('app.downloadFailed', { message: (e as Error).message }));
+    reportError(t('app.downloadFailed', { message: (e as Error).message }));
   }
 }
 
@@ -1020,7 +1134,7 @@ async function print(preview: boolean): Promise<void> {
   const bytes = await worker.convert('pdf');
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
-    if (!window.open(url, '_blank')) setStatus(t('app.allowPopups'));
+    if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return;
   }
@@ -1048,6 +1162,7 @@ function switchedNotice(to: Format): string {
   if (to === 'md') return t('app.switchedMd', params);
   if (to === 'txt') return t('app.switchedTxt', params);
   if (to === 'html') return t('app.switchedHtml', params);
+  if (to === 'jpeg' || to === 'webp') return t('app.switchedPictureLossy', params);
   return t('app.switchedLossless', params);
 }
 
@@ -1062,9 +1177,10 @@ function switchedNotice(to: Format): string {
 async function convertTo(to: DocumentKind): Promise<void> {
   const from = documentKind;
   if (to === from) return;
+  if (PICTURE_KINDS.includes(to) && !PICTURE_KINDS.includes(from)) return convertToPicture(to as 'png' | 'jpeg' | 'webp');
   if (!isFormat(to) || !isFormat(from)) throw new Error(t('app.unsupportedFormat', { label: FORMATS[isFormat(to) ? from : to].label }));
   if (new URLSearchParams(location.search).get('room')) {
-    setStatus(t('app.leaveRoomToSwitch'));
+    reportError(t('app.leaveRoomToSwitch'));
     return;
   }
   setStatus(t('app.switching', { label: FORMATS[to].label }));
@@ -1087,13 +1203,231 @@ async function convertTo(to: DocumentKind): Promise<void> {
   doc.localId = info.id;
   const source = sourceFromFile(name, (await bytes).slice().buffer);
   if (!source) throw new Error(t('app.cannotOpenFormat', { label: FORMATS[to].label }));
-  history.replaceState(null, '', location.pathname);
+  setUrl(new URLSearchParams());
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName, kind: documentKind });
   pendingNotice = switchedNotice(to);
   void refreshLibrary();
   if (account) scheduleUpload(info.id, 0);
+}
+
+/**
+ * Convert To a picture format from a document: the pages as they are laid out, one under another, become a picture,
+ * saved and opened as a document of its own. The document stays as it is (a picture can't be switched back to text).
+ */
+async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
+  if (!gl || !loaded || !pages.length) return reportError(t('app.notReadyToConvert'));
+  setStatus(t('app.switching', { label: FORMATS[to].label }));
+  try {
+    const layout = pictureLayout(pages.map((p) => ({ width: p.width, height: p.height })), { side: MAX_SIDE, pixels: MAX_PIXELS });
+    const canvas = drawPages(gl, renderer, pages, layout);
+    if (!canvas) throw new Error(t('app.imageTooBig'));
+    const bytes = await encodeCanvas(canvas, to);
+    const name = stem(documentName) + FORMATS[to].extensions[0];
+    open({ kind: 'image', name, bytes: bytes.slice().buffer });
+    documentEdited(); // saved, so it is there in the library next to the document it was made from
+    pendingNotice = layout.count < pages.length ? t('app.pictureShortened', { name, count: layout.count }) : t('app.convertedToPicture', { name });
+  } catch (e) {
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+  }
+}
+
+// --- Pictures ------------------------------------------------------------------------------
+// A picture opens as a document that is one page showing it (see formats/imageDoc.ts). The picture
+// tools change its pixels and open the result in place of it: the same saved document, the same
+// name. Undo and redo keep the earlier pictures, since the editor's own history is of text.
+
+const PICTURE_HISTORY = 12;
+let pictureHistory: { undo: Uint8Array[]; redo: Uint8Array[] } = { undo: [], redo: [] };
+const isPicture = (): boolean => PICTURE_KINDS.includes(documentKind);
+
+/** The open picture as a file, of the type it is edited as. */
+const pictureBytes = (): Promise<Uint8Array> => worker.convert(documentKind as Format);
+
+/** Opens a picture in place of the open one, and saves it soon. */
+function showPicture(bytes: Uint8Array): void {
+  open({ kind: 'image', name: documentName, bytes: bytes.slice().buffer }, { grid, localId: current.localId ?? undefined, pictureEdit: true });
+  documentEdited();
+}
+
+async function changePicture(edit: ImageEdit): Promise<void> {
+  const doc = current;
+  try {
+    const before = await pictureBytes();
+    const after = await applyImageEdit(before, edit);
+    if (doc !== current) return; // another document was opened meanwhile
+    pictureHistory.undo.push(before);
+    if (pictureHistory.undo.length > PICTURE_HISTORY) pictureHistory.undo.shift();
+    pictureHistory.redo = [];
+    showPicture(after.bytes);
+  } catch (e) {
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+  }
+}
+
+async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
+  const from = direction === 'undo' ? pictureHistory.undo : pictureHistory.redo;
+  const to = direction === 'undo' ? pictureHistory.redo : pictureHistory.undo;
+  const target = from.pop();
+  if (!target) return;
+  const doc = current;
+  try {
+    const now = await pictureBytes();
+    if (doc !== current) {
+      from.push(target);
+      return;
+    }
+    to.push(now);
+    showPicture(target);
+  } catch (e) {
+    from.push(target);
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+  }
+}
+
+/** What the Draw tools draw with; the colour is CSS, the size a step from thin (0) to extra thick (3). */
+const drawStyle = { color: '#e5322d', size: 1, fill: false };
+/** The last drawing being put into the picture, for what comes next to wait on. */
+let drawing: Promise<void> = Promise.resolve();
+
+async function pictureAction(op: ImageOp): Promise<void> {
+  if (!isPicture()) return;
+  if (isDrawTool(op)) {
+    cropLayer.cancel();
+    if (drawLayer.active) return drawLayer.setTool(op);
+    const doc = current;
+    try {
+      const size = sniffImage(await pictureBytes());
+      if (!size || doc !== current) return;
+      drawLayer.start(size.width, size.height, op, (shapes) => {
+        if (shapes) drawing = changePicture({ op: 'draw', shapes });
+        focusInput();
+      });
+    } catch (e) {
+      reportError(t('picture.editFailed', { message: (e as Error).message }));
+    }
+    return;
+  }
+  // Any other tool takes the picture as drawn so far.
+  drawLayer.apply();
+  await drawing;
+  const page = pages[0];
+  if (op === 'rotateLeft') return changePicture({ op: 'rotate', turns: 3 });
+  if (op === 'rotateRight') return changePicture({ op: 'rotate', turns: 1 });
+  if (op === 'rotate180') return changePicture({ op: 'rotate', turns: 2 });
+  if (op === 'grayscale' || op === 'sepia' || op === 'invert' || op === 'blur' || op === 'sharpen' || op === 'autoLevels') return changePicture({ op: 'effect', effect: op });
+  if (op === 'flipHorizontal') return changePicture({ op: 'flip', axis: 'horizontal' });
+  if (op === 'flipVertical') return changePicture({ op: 'flip', axis: 'vertical' });
+  const doc = current;
+  try {
+    const bytes = await pictureBytes();
+    const size = sniffImage(bytes);
+    if (!size || doc !== current) return;
+    if (op === 'crop') {
+      if (!page) return;
+      cropLayer.start(size.width, size.height, (box) => {
+        if (box) void changePicture({ op: 'crop', ...box });
+        focusInput();
+      });
+      return;
+    }
+    if (op === 'resize') {
+      const to = await showResizeDialog(size.width, size.height);
+      if (to && (to.width !== size.width || to.height !== size.height)) await changePicture({ op: 'resize', ...to });
+    } else {
+      const adjustments = await showAdjustDialog(bytes);
+      if (adjustments) await changePicture({ op: 'adjust', ...adjustments });
+    }
+    focusInput();
+  } catch (e) {
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+  }
+}
+
+// --- Text too big to be a document ---------------------------------------------------------------
+// A file of many megabytes would need gigabytes as paragraphs (docs/large-text-files.md), so it opens in a
+// viewer over the page instead: the file stays bytes, and only the lines in view are drawn. An empty document
+// is opened under it (with the file's name) so that the rest of the app has something to stand on.
+
+function openLarge(name: string, bytes: Uint8Array): void {
+  open({ kind: 'blank', name });
+  largeView.open(name, toUtf8(bytes));
+  documentName = name;
+  pendingNotice = t('largeText.notice', { name, size: `${(bytes.length / (1 << 20)).toFixed(bytes.length < 10 << 20 ? 1 : 0)} MB` });
+  focusInput();
+}
+
+// --- Links to other documents ----------------------------------------------------------------
+// A link to `doc:Title` (what [[Title]] is in wiki markup) opens the stored document of that title,
+// this browser's copy or the account's. With none, it offers to make one, in the format of the
+// document the link is in when that is text (so a wiki links to more wiki pages).
+
+/** The formats a new, empty document can be made in from nothing: the text ones. */
+const EMPTY_TEXT = new Set<DocumentKind>(['md', 'txt', 'mediawiki', 'textile', 'tex', 'adoc', 'rst', 'org', 'html']);
+
+async function openDocumentLink(title: string): Promise<void> {
+  await saving;
+  const found = findByTitle(title, mergeLibrary(savedDocs, account ? cloudDocs : null));
+  if (found) return openSource(sourceOf(found));
+  if (!window.confirm(t('app.createLinkedDocument', { title }))) return;
+  const extension = FORMATS[documentKind].extensions[0] ?? '.docx';
+  const text = EMPTY_TEXT.has(documentKind) ? sourceFromFile(`${title}${extension}`, new ArrayBuffer(0)) : null;
+  open(text ?? { kind: 'blank', name: `${title}.docx` });
+  // Saved at once, so that the link finds it next time.
+  documentEdited();
+}
+
+// --- Putting a picture in a document ---------------------------------------------------------
+// A picture file can be opened (as a picture, to change with the picture tools) or put in the open
+// document. Insert ▸ Picture inserts; dropping one on a document asks which was meant.
+
+const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
+const isPictureFile = (file: File): boolean => PICTURE_FILE.test(file.name) || (file.type.startsWith('image/') && file.type !== 'image/tiff');
+
+/** Whether a picture can go into the open document now. */
+const canInsertPicture = (): boolean => loaded && !isPicture() && !annotating && !dashboard.visible && FORMATS[documentKind].images;
+
+async function dropped(file: File, x: number, y: number): Promise<void> {
+  if (isPictureFile(file) && canInsertPicture()) {
+    const choice = await askDropChoice(file.name, x, y);
+    if (choice === undefined) return focusInput();
+    if (choice === 'insert') return insertPicture(file, { x, y });
+  }
+  openFile(file);
+}
+
+/** Puts a picture file in the document, at `at` (a point on the screen) or else the caret. */
+async function insertPicture(file: File, at?: { x: number; y: number }): Promise<void> {
+  if (new URLSearchParams(location.search).get('room')) return reportError(t('picture.notInRoom'));
+  try {
+    let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
+    let name = file.name;
+    // SVG is drawn to a PNG (the document holds pictures, not drawings); the other types go in as they are.
+    if (!sniffImage(bytes)) ({ bytes, name } = await toPng(name, bytes));
+    const image = sniffImage(bytes);
+    if (!image) throw new Error(t('app.notImage'));
+    if (at) {
+      const rect = canvas.getBoundingClientRect();
+      const hit = pageAt(at.x - rect.left, at.y - rect.top);
+      if (hit) send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
+    }
+    // At 96 dpi, in EMUs; the document trims it to the page.
+    worker.insertImage(bytes, image.type, Math.max(image.width, 1) * 9525, Math.max(image.height, 1) * 9525, name.replace(/\.[^.]*$/, ''));
+    focusInput();
+  } catch (e) {
+    reportError(t('picture.insertFailed', { message: (e as Error).message }));
+  }
+}
+
+/** Insert ▸ Picture: choose a file, then put it in the document. */
+function pickPicture(): void {
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml' });
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (file) void insertPicture(file);
+  });
+  input.click();
 }
 
 // --- Selection and caret ---------------------------------------------------------------
@@ -1103,6 +1437,12 @@ let caretOn = true;
 let selectionFormat: FormatState = {};
 /** The Format Painter is waiting for a selection to paint. */
 let painting = false;
+/** The selection is in a table cell. */
+let inTable = false;
+/** The columns of the section the selection is in. */
+let sectionColumns: SelectionUpdate['columns'];
+/** The page setup of the section the selection is in. */
+let sectionPage: SelectionUpdate['page'];
 /** The link the selection is in. */
 let link: SelectionUpdate['link'] = null;
 /** Ctrl/Cmd was down for the last click: open the link it lands on, once the selection says which. */
@@ -1121,14 +1461,23 @@ function applySelection(update: SelectionUpdate): void {
   selectionFormat = update.format;
   comments = update.comments;
   painting = update.painting ?? false;
+  inTable = update.inTable ?? false;
+  sectionColumns = update.columns;
+  sectionPage = update.page;
   link = update.link ?? null;
   if (followLinkUntil > performance.now()) {
     followLinkUntil = 0;
     if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
+    else if (link && parseDocAddress(link.url)) void openDocumentLink(parseDocAddress(link.url)!.title);
   }
   canvas.style.cursor = painting ? 'copy' : '';
   if (update.search) findDialog.report(update.search);
   if (update.spell) spellDialog.report(update.spell);
+  if (update.stats !== undefined) {
+    wordCountDialog.report(update.stats);
+    propertiesDialog.reportStats(update.stats);
+  }
+  if (update.docProperties) propertiesDialog.reportProperties(update.docProperties);
   formLayer.update(update.fields ?? null);
   canUndo = update.canUndo;
   canRedo = update.canRedo;
@@ -1173,7 +1522,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields']);
 
 function send(command: WireCommand): void {
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -1181,6 +1530,7 @@ function send(command: WireCommand): void {
 }
 
 function focusInput(): void {
+  if (largeView.active) return largeView.focus();
   input.focus({ preventScroll: true });
 }
 
@@ -1289,7 +1639,6 @@ function updateDebug(): void {
       ['draws', String(lastStats.drawCalls)],
     );
   }
-  if (flags.zoom) rows.push(['zoom', `${Math.round(camera.zoom * 100)}%`]);
   if (flags.cpu) rows.push(['cpu', `${frames.cpuMs.toFixed(2)} ms`]);
   if (flags.fps) rows.push(['fps', String(Math.round(frames.rate))]);
   if (flags.frameTimes) {
@@ -1313,7 +1662,10 @@ function render(): void {
   frameCaretOnly = true;
   const start = performance.now();
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
+  syncReflow();
+  renderer.flat = reflowing();
   camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight);
+  if (renderer.flat) camera.x = bounds.x;
   lastStats = renderer.render(camera, pages, selection, caretVisible);
   const end = performance.now();
   // The caret blinks on an idle document; counting that would make idle read as a steady frame rate.
@@ -1323,18 +1675,24 @@ function render(): void {
   }
   chrome.update({
     documentName,
-    kind: documentKind,
+    kind: largeView.active ? 'largetext' : documentKind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
     grid,
     format: selectionFormat,
-    canUndo,
-    canRedo,
+    canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
+    canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
+    draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
+    inTable,
+    formattingMarks,
+    viewMode,
   });
   formLayer.position();
   pointerLayer.position();
+  cropLayer.position();
+  drawLayer.position();
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
@@ -1545,7 +1903,8 @@ function editingCommand(e: KeyboardEvent): WireCommand[] | null {
     case 'Enter':
       return [{ kind: e.shiftKey ? 'insertLineBreak' : 'insertParagraph' }];
     case 'Tab':
-      return [{ kind: 'insertText', text: '\t' }];
+      // Between a table's cells, or a tab character.
+      return [{ kind: 'tab', backward: e.shiftKey }];
   }
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key.toLowerCase() === 'a') return [{ kind: 'selectAll' }];
@@ -1634,10 +1993,19 @@ input.addEventListener('cut', (e) => {
   e.clipboardData?.setData('text/plain', selection.text);
   if (selection.text) send({ kind: 'delete', direction: 'backward' });
 });
+/** HTML larger than this is pasted as plain text (reading it would take too long). */
+const MAX_PASTED_HTML = 2_000_000;
+
+/** Pastes what came from the clipboard: formatted if it has formatting and the document can hold it. */
+function pasteClipboard(clip: Clipboard, form: 'auto' | 'html' | 'text' = 'auto'): void {
+  const formatted = FORMATS[documentKind].marks.length > 0;
+  if (clip.html && form !== 'text' && formatted && clip.html.length <= MAX_PASTED_HTML) send({ kind: 'pasteHtml', html: clip.html, text: clip.text ?? '' });
+  else if (clip.text) send({ kind: 'insertText', text: clip.text });
+}
+
 input.addEventListener('paste', (e) => {
   e.preventDefault();
-  const text = e.clipboardData?.getData('text/plain');
-  if (text) send({ kind: 'insertText', text });
+  pasteClipboard({ html: e.clipboardData?.getData('text/html') || undefined, text: e.clipboardData?.getData('text/plain') || undefined });
 });
 
 // --- Navigation ------------------------------------------------------------------------
@@ -1650,20 +2018,54 @@ const chromeHost = createChromeHost({
   pages: () => pages,
   bounds: () => bounds,
   open: (source) => {
-    history.replaceState(null, '', location.pathname);
-    open(source);
+    setUrl(new URLSearchParams());
+    open(source, { store: true });
   },
   openSample: openSource,
-  collaborate,
   syncNow,
   share,
   download,
   print,
-  showFind: (tab) => findDialog.show(tab),
+  showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
+  showWordCount: () => wordCountDialog.open(),
+  paste: async () => {
+    const clip = await readClipboard();
+    if (clip) pasteClipboard(clip);
+  },
+  showPasteSpecial: () => {
+    void readClipboard()
+      .then((clip) => showPasteSpecialDialog(clip).then((form) => (form && clip ? pasteClipboard(clip, form) : undefined)))
+      .then(focusInput);
+  },
+  showProperties: () => propertiesDialog.open(),
+  showPageSetup: () => {
+    void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
+      if (choice) send({ kind: 'setPage', ...choice });
+      focusInput();
+    });
+  },
+  showColumnsDialog: () => {
+    void showColumnsDialog(sectionColumns ?? { count: 1, space: 720, sep: false, width: 9360 }).then((choice) => {
+      if (choice) send({ kind: 'setColumns', ...choice });
+      focusInput();
+    });
+  },
+  showSplitDialog: () => {
+    void showSplitDialog().then((size) => {
+      if (size) send({ kind: 'format', action: { kind: 'table', op: 'splitCells', ...size } });
+      focusInput();
+    });
+  },
+  showTableDialog: () => {
+    void showTableDialog().then((size) => {
+      if (size) send({ kind: 'format', action: { kind: 'insertTable', ...size } });
+      focusInput();
+    });
+  },
   showLinkDialog: () => {
     const selected = selection.text;
-    if (selected.includes('\n')) return setStatus(t('app.linkOneParagraph'));
+    if (selected.includes('\n')) return reportError(t('app.linkOneParagraph'));
     void showLinkDialog(link ?? null, selected).then((choice) => {
       if (choice === undefined) return;
       send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
@@ -1671,6 +2073,23 @@ const chromeHost = createChromeHost({
     });
   },
   convert: convertTo,
+  imageAction: pictureAction,
+  isLargeText: () => largeView.active,
+  openLarge,
+  largeZoom: (factor, reset) => largeView.zoomBy(factor, reset),
+  largeCopy: async () => {
+    const text = await largeView.copy();
+    if (text !== null) setStatus(t('largeText.copied', { count: text.split('\n').length.toLocaleString() }));
+  },
+  drawStyle: (color, size, fill) => {
+    if (color !== undefined) drawStyle.color = color;
+    if (size !== undefined) drawStyle.size = size;
+    if (fill !== undefined) drawStyle.fill = fill;
+    requestRender();
+  },
+  pickPicture,
+  isPicture,
+  stepPicture,
   signIn,
   signOut,
   clearLocalData,
@@ -1686,16 +2105,37 @@ const chromeHost = createChromeHost({
   author: () => account?.name ?? account?.email ?? guestName(),
   selectedText: () => selection.text,
   focusEditor: focusInput,
-  notify: setStatus,
+  notify: reportError,
   toggleGrid,
+  setViewMode: (mode) => {
+    viewMode = mode;
+    try {
+      localStorage.setItem(VIEW_KEY, mode);
+    } catch {
+      // Storage unavailable: the choice lasts for this session only.
+    }
+    cameraPlaced = false;
+    userMoved = false;
+    syncReflow(true);
+    arrange();
+  },
+  toggleFormattingMarks: () => {
+    formattingMarks = !formattingMarks;
+    try {
+      localStorage.setItem(MARKS_KEY, formattingMarks ? 'on' : 'off');
+    } catch {
+      // Storage unavailable: the choice lasts for this session only.
+    }
+    worker.setMarks(formattingMarks);
+  },
   viewChanged: () => {
     userMoved = true;
     requestRender();
   },
   fonts: () =>
     fetch(`${FONT_BASE}manifest.json`)
-      .then((r) => r.json() as Promise<{ families: { wordName: string }[] }>)
-      .then((m) => m.families.map((f) => f.wordName)),
+      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown }[] }>)
+      .then((m) => m.families.filter((f) => !f.cjk).map((f) => f.wordName)),
   samples: () => [
     { id: 'welcome', label: t('app.sampleWelcome') },
     { id: 'fonts', label: t('app.sampleFonts') },
@@ -1741,6 +2181,12 @@ const findDialog = new FindDialog(document.body, {
   focusEditor: focusInput,
 });
 
+// File ▸ Properties.
+const propertiesDialog = new PropertiesDialog({ send, focusEditor: focusInput });
+
+// Tools ▸ Word Count.
+const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput });
+
 // Tools ▸ Spelling and Grammar. The words the user adds to the dictionary are kept in this browser.
 const USER_WORDS_KEY = 'word.userDictionary.v1';
 const userWords = (): string[] => {
@@ -1772,7 +2218,7 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
   open: (entry) => openSource(sourceOf(entry)),
   delete: deleteEverywhere,
   account: () => account,
-  share: (id, name) => showShareDialog({ id, name }),
+  share: (id, name) => showShareDialog({ name, people: { id } }),
   openShared: (doc) => {
     sharedDocs.set(doc.id, doc);
     openSource(`shared:${doc.id}`);
@@ -1787,6 +2233,12 @@ const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clea
 
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
+// Cropping a picture (see ui/cropLayer.ts).
+const cropLayer = new CropLayer(document.getElementById('viewport')!, { camera, page: () => pages[0] });
+// Text files too big to be documents (see largeText/view.ts).
+const largeView = new LargeTextView(document.getElementById('viewport')!);
+// Drawing on a picture (see ui/drawLayer.ts).
+const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });
 
 // A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
 const formLayer = new FormLayer(document.getElementById('viewport')!, {
@@ -1815,7 +2267,8 @@ window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => {
   e.preventDefault();
   const file = e.dataTransfer?.files[0];
-  if (file) openFile(file);
+  if (!file) return;
+  void dropped(file, e.clientX, e.clientY);
 });
 
 // Debug/automation hooks.
@@ -1829,15 +2282,17 @@ Object.defineProperties(window, {
 
 {
   const params = new URLSearchParams(location.search);
-  const doc = params.get('doc');
+  const doc = wantedDoc(params);
   // Coming back from signing in on the dashboard: open it again.
   if (params.get('dashboard') === '1') {
     params.delete('dashboard');
-    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+    if (doc) params.set('doc', doc);
+    setUrl(params);
     void dashboard.show();
   }
   accountKnown = accountLookup.then((user) => {
     account = user;
+    chrome.accountChanged();
   });
   firstConnect = connect(accountLookup);
   // Joining a room without a document: the room has it.

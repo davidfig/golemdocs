@@ -4,7 +4,7 @@
 // paragraph so they survive saving. Paragraphs without one (or with a duplicate) get one on
 // load, deterministically, so every client loading the same file assigns the same ids.
 
-import { paragraphsIn, type Block, type Paragraph, type WordDocument } from '@word/docx';
+import { paragraphsIn, type Block, type Paragraph, type Table, type TableCell, type TableRow, type WordDocument } from '@word/docx';
 
 const ID_ATTR = 'w14:paraId';
 const MAX_ID = 0x80000000;
@@ -36,6 +36,10 @@ export class DocumentIndex {
   private readonly byId = new Map<string, Paragraph>();
   /** The block list each block is in (body, table cell, content control). */
   private readonly parents = new Map<Block, Block[]>();
+  /** The cell a list of blocks is the content of, and the row and table a cell is in. */
+  private readonly cellOfContent = new WeakMap<Block[], TableCell>();
+  private readonly rowOfCell = new WeakMap<TableCell, TableRow>();
+  private readonly tableOfRow = new WeakMap<TableRow, Table>();
 
   constructor(readonly doc: WordDocument) {
     // Existing ids first (so generated ones never take an id a later paragraph has).
@@ -69,11 +73,40 @@ export class DocumentIndex {
   private addChildren(block: Block): void {
     if (block.kind === 'wrapper') this.addParents(block.children);
     else if (block.kind === 'table') {
-      for (const row of block.rows) {
-        if (row.kind !== 'row') continue;
-        for (const cell of row.cells) if (cell.kind === 'cell') this.addParents(cell.children);
-      }
+      for (const row of block.rows) if (row.kind === 'row') this.addRow(block, row);
     }
+  }
+
+  private addRow(table: Table, row: TableRow): void {
+    this.tableOfRow.set(row, table);
+    for (const cell of row.cells) if (cell.kind === 'cell') this.addCell(row, cell);
+  }
+
+  private addCell(row: TableRow, cell: TableCell): void {
+    this.rowOfCell.set(cell, row);
+    this.cellOfContent.set(cell.children, cell);
+    this.addParents(cell.children);
+  }
+
+  /** The table, row and cell a paragraph is directly in, or undefined if it isn't in a table cell. */
+  locate(paragraph: Paragraph): { table: Table; row: TableRow; cell: TableCell } | undefined {
+    const content = this.parents.get(paragraph);
+    const cell = content && this.cellOfContent.get(content);
+    const row = cell && this.rowOfCell.get(cell);
+    const table = row && this.tableOfRow.get(row);
+    return cell && row && table ? { table, row, cell } : undefined;
+  }
+
+  /** Records a row put into a table (its paragraphs must carry unused ids). */
+  addedRow(table: Table, row: TableRow): void {
+    for (const p of paragraphsIn(row.cells.flatMap((c) => (c.kind === 'cell' ? c.children : [])))) this.byId.set(p.attrs[ID_ATTR], p);
+    this.addRow(table, row);
+  }
+
+  /** Records a cell put into a row. */
+  addedCell(row: TableRow, cell: TableCell): void {
+    for (const p of paragraphsIn(cell.children)) this.byId.set(p.attrs[ID_ATTR], p);
+    this.addCell(row, cell);
   }
 
   id(paragraph: Paragraph): string {
@@ -129,6 +162,11 @@ export class DocumentIndex {
       }
     };
     forget(blocks);
+  }
+
+  /** Forgets the content of removed table cells. */
+  removedCells(cells: TableCell[]): void {
+    for (const cell of cells) this.removed(cell.children);
   }
 
   /** Whether blocks can't be added: a paragraph without a valid id, or one already in use. */

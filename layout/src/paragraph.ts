@@ -9,6 +9,8 @@ import { BLACK, type LayoutContext, type RunStyle } from './context.ts';
 import { TAB, TextCollector } from './runs.ts';
 import type { SourceSpan } from './offsets.ts';
 import { layerKey } from './context.ts';
+import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
+import { emitMarks, formattingMarksOn } from './marks.ts';
 
 const SPACE = 0x20;
 const twips = (v: number | undefined) => (v ?? 0) / 20;
@@ -43,8 +45,10 @@ export interface LineLayout {
   /** Left edge and width of the line's content, for hit testing. */
   left: number;
   width: number;
-  /** The line ends with a page (or column) break. */
+  /** The line ends with a page or column break. */
   pageBreak: boolean;
+  /** ...and it is a column break (the next column, not the next page, in a section with columns). */
+  columnBreak: boolean;
   /**
    * Caret positions: x (relative to the column's left edge) before each visible offset from
    * start to end inclusive, so stops[end - start] is the end of the line.
@@ -95,7 +99,7 @@ function isBreakAfter(code: number, next: number): boolean {
   if (code === SPACE || code === 0x09 || code === 0x00ad) return true;
   // Hyphens and dashes allow a break after them when followed by more text.
   if ((code === 0x2d || code === 0x2013 || code === 0x2014) && isWordChar(next)) return true;
-  return false;
+  return code >= 0x3000 || next >= 0x3000 ? cjkBreakBetween(code, next) : false;
 }
 
 /** Letters and digits (a break after a dash needs one to follow, not punctuation). */
@@ -178,7 +182,7 @@ export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width:
   // Reuse the last layout if nothing it depends on changed. Edits drop a paragraph's entry;
   // page-dependent layouts (headers and footers with page fields) aren't cached.
   const cache = ctx.fields ? undefined : ctx.paragraphCache;
-  const key = cache ? `${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
+  const key = cache ? `${ctx.fonts.cjkVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
   const cached = cache?.get(paragraph);
   if (cached && cached.key === key) return cached.layout;
   const layout = layoutParagraphUncached(paragraph, ctx, width, props, label);
@@ -219,13 +223,15 @@ function layoutParagraphUncached(
 
   // Faces used, including fallbacks: glyphs remember which one they came from.
   const fonts: ParagraphLayout['fonts'] = [];
-  const fontIndex = new Map<FaceMetrics, number>();
+  // Keyed by the font's own key, not its metrics: bold and regular text in a face with no bold (every
+  // CJK page) share metrics but differ in what they draw (synthetic bold or slant).
+  const fontIndex = new Map<string, number>();
   const fontOf = (font: ResolvedFont, metrics: FaceMetrics) => {
-    let index = fontIndex.get(metrics);
+    let index = fontIndex.get(font.key);
     if (index === undefined) {
       index = fonts.length;
       fonts.push({ font, metrics });
-      fontIndex.set(metrics, index);
+      fontIndex.set(font.key, index);
     }
     return index;
   };
@@ -248,7 +254,10 @@ function layoutParagraphUncached(
     let face = fontOf(style.font, metrics);
     let glyph = code < 0x20 || code === 0xfffc || code === 0xad ? -1 : metrics.glyph(code);
     if (glyph < 0 && code > 0x20 && code !== 0xfffc && code !== 0xad) {
-      for (const fallback of style.fallbacks) {
+      // Ordinary text never tries the CJK pages.
+      const tries = isCjk(code) ? style.fallbacks.length : style.cjkStart;
+      for (let f = 0; f < tries; f++) {
+        const fallback = style.fallbacks[f];
         const g = fallback.metrics.glyph(code);
         if (g >= 0) {
           glyph = g;
@@ -261,7 +270,7 @@ function layoutParagraphUncached(
     glyphs[i] = glyph;
     faceOf[i] = face;
     if (code === 0xfffc) advances[i] = (objects.get(i)?.width ?? 0) / 12700;
-    else if (code === 0xad || code === 0x0a || code === 0x0c) advances[i] = 0;
+    else if (code === 0xad || code === 0x0a || code === 0x0c || code === 0x0b) advances[i] = 0;
     // Advances are floored to whole twips, as word processors lay text out in twips; this
     // decides line breaks on the last few points of a line.
     else advances[i] = Math.floor((metrics.advance(glyph) * size + style.letterSpacing) * 20) / 20;
@@ -304,7 +313,7 @@ function layoutParagraphUncached(
       let segment = 0;
       for (let j = i + 1; j < n; j++) {
         const c = text.charCodeAt(j);
-        if (c === 0x09 || c === 0x0a || c === 0x0c || (type === 'decimal' && c === 0x2e)) break;
+        if (c === 0x09 || c === 0x0a || c === 0x0c || c === 0x0b || (type === 'decimal' && c === 0x2e)) break;
         segment += advances[j];
       }
       advance = type === 'center' ? pos - x - segment / 2 : pos - x - segment;
@@ -326,13 +335,13 @@ function layoutParagraphUncached(
     let x = lineLeft;
     let i = start;
     let lastBreak = -1;
-    let breakType: 'none' | 'line' | 'page' = 'none';
+    let breakType: 'none' | 'line' | 'page' | 'column' = 'none';
     leaders.clear();
 
     while (i < n) {
       const code = text.charCodeAt(i);
-      if (code === 0x0a || code === 0x0c) {
-        breakType = code === 0x0a ? 'line' : 'page';
+      if (code === 0x0a || code === 0x0c || code === 0x0b) {
+        breakType = code === 0x0a ? 'line' : code === 0x0b ? 'column' : 'page';
         i++;
         break;
       }
@@ -358,7 +367,7 @@ function layoutParagraphUncached(
     let contentEnd = end;
     while (contentEnd > start) {
       const c = text.charCodeAt(contentEnd - 1);
-      if (c === SPACE || c === 0x0a || c === 0x0c) contentEnd--;
+      if (c === SPACE || c === 0x0a || c === 0x0c || c === 0x0b) contentEnd--;
       else break;
     }
     let contentWidth = 0;
@@ -372,7 +381,7 @@ function layoutParagraphUncached(
     const lastLine = end === n && !needEmptyLine;
     if (justification === 'center') offset = (available - contentWidth) / 2;
     else if (justification === 'right' || justification === 'end') offset = available - contentWidth;
-    else if ((justification === 'both' || justification === 'distribute') && (!lastLine || justification === 'distribute') && breakType !== 'page') {
+    else if ((justification === 'both' || justification === 'distribute') && (!lastLine || justification === 'distribute') && breakType !== 'page' && breakType !== 'column') {
       // Only spaces after the last tab stretch.
       for (let j = start; j < contentEnd; j++) if (text.charCodeAt(j) === 0x09) justifyFrom = j + 1;
       let spaces = 0;
@@ -390,7 +399,16 @@ function layoutParagraphUncached(
       const size = sizes[j];
       ascent = Math.max(ascent, style.metrics.ascent * size + Math.max(style.rise, 0));
       descent = Math.max(descent, style.metrics.descent * size - Math.min(style.rise, 0));
-      if (text.charCodeAt(j) === 0xfffc) objectHeight = Math.max(objectHeight, (objects.get(j)?.height ?? 0) / 12700);
+      // A CJK face is taller than the Latin one (win ascent + descent about 1.45em against 1.22em).
+      if (glyphs[j] >= 0) {
+        const face = fonts[faceOf[j]];
+        if (face.font.family.cjk) {
+          ascent = Math.max(ascent, face.metrics.ascent * size + Math.max(style.rise, 0));
+          descent = Math.max(descent, face.metrics.descent * size - Math.min(style.rise, 0));
+        }
+      }
+      // A picture is raised or lowered with its run, like text.
+      if (text.charCodeAt(j) === 0xfffc) objectHeight = Math.max(objectHeight, (objects.get(j)?.height ?? 0) / 12700 + Math.max(style.rise, 0));
     }
     if (start >= n || end === start) {
       ascent = markMetrics.metrics.ascent * markMetrics.size;
@@ -464,7 +482,7 @@ function layoutParagraphUncached(
       } else if (code === 0xfffc) {
         const d = objects.get(j);
         const h = (d?.height ?? 0) / 12700;
-        if (d?.image) builder.images.push({ part: d.image, x: pen, y: baseline - h, width: w, height: h });
+        if (d?.image) builder.images.push({ part: d.image, x: pen, y: baseline - h - styles[s].rise, width: w, height: h });
       } else if (code === 0x09 && leaders.has(j)) {
         const leader = leaders.get(j)!;
         const style = styles[s];
@@ -521,7 +539,8 @@ function layoutParagraphUncached(
         end: Math.max(0, end - labelLength),
         left: lineLeft + offset,
         width: contentWidth,
-        pageBreak: breakType === 'page',
+        pageBreak: breakType === 'page' || breakType === 'column',
+        columnBreak: breakType === 'column',
         trailingSpace: !lastLine && end > firstVisible && (text.charCodeAt(end - 1) === SPACE || breakType !== 'none'),
       }, stops),
     );
@@ -559,6 +578,8 @@ export function emitLine(
   line: LineLayout,
   x: number,
   y: number,
+  /** The column's width, when the page has columns. */
+  columnWidth?: number,
 ): void {
   const { styles, fonts } = paragraph;
   for (let i = 0; i < line.glyph.length; i++) {
@@ -585,9 +606,11 @@ export function emitLine(
     height: line.height,
     baseline: line.baseline,
     column: x,
+    columnWidth,
     stops: line.stops,
     spans: paragraph.spans,
     trailingSpace: line.trailingSpace,
     last: line === paragraph.lines[paragraph.lines.length - 1],
   });
+  if (formattingMarksOn()) emitMarks(page, paragraph, line, x, y);
 }

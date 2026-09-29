@@ -1,0 +1,25 @@
+import type { Messages } from '../../index.ts';
+
+export const columns: Partial<Messages> = {
+  'columns.title': 'Spalten',
+  'columns.close': 'Schließen',
+  'columns.presets': 'Voreinstellungen',
+  'columns.one': 'Eine',
+  'columns.two': 'Zwei',
+  'columns.three': 'Drei',
+  'columns.number': 'Anzahl der Spalten:',
+  'columns.numberLabel': 'Anzahl der Spalten',
+  'columns.spacing': 'Abstand:',
+  'columns.spacingLabel': 'Abstand zwischen den Spalten in Zoll',
+  'columns.width': 'Breite jeder Spalte:',
+  'columns.inches': '{value}"',
+  'columns.line': 'Trennlinie',
+  'columns.apply': 'Übernehmen für:',
+  'columns.applyDocument': 'Gesamtes Dokument',
+  'columns.applySection': 'Diesen Abschnitt',
+  'columns.applyForward': 'Ab hier',
+  'columns.ok': 'OK',
+  'columns.cancel': 'Abbrechen',
+  'columns.bad': 'Wählen Sie 1 bis {max} Spalten mit einem Abstand von 0 bis 4 Zoll.',
+  'columns.tooNarrow': 'Die Spalten wären zu schmal. Verwenden Sie weniger Spalten oder einen kleineren Abstand.',
+};

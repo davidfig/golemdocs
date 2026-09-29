@@ -50,6 +50,23 @@ export interface Extensions {
   html?: HtmlExtension;
   /** How a CSV or TSV file was written (delimiter, line endings, encoding), see csv.ts. */
   csv?: CsvExtension;
+  /** What an email message has that the document doesn't show (headers, attachments), see eml.ts. */
+  eml?: EmlExtension;
+  /** What a Jupyter notebook has that the document doesn't show (its output, metadata), see ipynb.ts. */
+  ipynb?: IpynbExtension;
+}
+
+export interface IpynbExtension {
+  notebook: { metadata: Record<string, unknown>; nbformat: number; nbformat_minor: number };
+  /** Each code cell of the notebook as opened, to give its output back to the same code when written. */
+  code: { source: string; outputs: unknown[]; executionCount: number | null; metadata: Record<string, unknown> }[];
+}
+
+export interface EmlExtension {
+  /** The headers that are written back (who, when, which message), in order. */
+  headers: [string, string][];
+  /** The attachments, kept with the document so the message can be written again with them. */
+  attachments?: { name: string; type: string; data: string }[];
 }
 
 export interface CsvExtension {
@@ -57,8 +74,8 @@ export interface CsvExtension {
   delimiter?: ';' | '|' | '\t';
   lineEnding?: '\r\n' | '\r';
   bom?: boolean;
-  /** Not UTF-8: the file is written back in the same encoding. */
-  encoding?: 'windows-1252';
+  /** Not UTF-8: the file is written back in the same encoding (UTF-16 keeps its byte order mark). */
+  encoding?: 'windows-1252' | 'utf-16le' | 'utf-16be';
   /** The file had no line ending after its last row. */
   trailingNewline?: false;
 }
@@ -73,6 +90,8 @@ export interface TextExtension {
   lineEnding?: '\r\n' | '\r';
   /** The original file started with a byte order mark. */
   bom?: boolean;
+  /** Not UTF-8: the file is written back in the same encoding (UTF-16 keeps its byte order mark). */
+  encoding?: 'windows-1252' | 'utf-16le' | 'utf-16be';
 }
 
 export interface PdfExtension {
@@ -93,7 +112,7 @@ export interface Wdoc {
 
 const encoder = new TextEncoder();
 const MIME_BYTES = encoder.encode(WDOC_MIME);
-const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv'] as const satisfies readonly (keyof Extensions)[];
+const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv', 'eml', 'ipynb'] as const satisfies readonly (keyof Extensions)[];
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {

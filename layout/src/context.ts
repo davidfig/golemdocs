@@ -1,5 +1,6 @@
 import type { FormattingLayer, ListCounter, RunProperties, StyleResolver, WordDocument } from '@word/docx';
 import { packColor, parseHexColor } from './display.ts';
+import { langOfFontName, langOfTag, type CjkLang } from './fonts/cjk.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import { FALLBACK_FAMILY, type FontSet, type ResolvedFont } from './fonts/fontSet.ts';
 
@@ -49,7 +50,8 @@ export function layerKey(ctx: LayoutContext): number {
 export function cachedRunStyle(ctx: LayoutContext, paragraphStyle: string | undefined, direct: RunProperties): RunStyle {
   const cache = (ctx.runStyles ??= new Map());
   const layerId = layerKey(ctx);
-  const context = `${layerId}|${paragraphStyle ?? ''}|${ctx.background ?? ''}`;
+  // CJK pages that load later join the fallbacks of styles resolved from then on.
+  const context = `${layerId}|${paragraphStyle ?? ''}|${ctx.background ?? ''}|${ctx.fonts.cjkVersion}|${ctx.fonts.defaultCjkLang}`;
   // Same properties object in the same context (re-layout after an edit): no work at all.
   const byObject = directCache.get(direct);
   if (byObject && byObject.context === context && byObject.cache === cache) return byObject.style;
@@ -69,6 +71,8 @@ export interface RunStyle {
   metrics: FaceMetrics;
   /** Faces to try, in order, for characters the primary face lacks. */
   fallbacks: { font: ResolvedFont; metrics: FaceMetrics }[];
+  /** Fallbacks from this index on are CJK pages (only tried for CJK characters). */
+  cjkStart: number;
   size: number;
   color: number;
   /** Baseline shift in points, positive up (superscript, subscript, w:position). */
@@ -122,6 +126,19 @@ function isDark(color: number): boolean {
   return (r * 76 + g * 151 + b * 29) >> 8 <= 156;
 }
 
+/**
+ * The CJK language a run's East Asian text is in: from its East Asian font's name, else its
+ * East Asian (then general) language, else the app's language. Simplified Chinese has no catalog.
+ */
+export function cjkLangOf(ctx: Pick<LayoutContext, 'resolver' | 'fonts'>, props: RunProperties): CjkLang {
+  return (
+    langOfFontName(ctx.resolver.eastAsiaFont(props)) ??
+    langOfTag(props.lang?.eastAsia) ??
+    langOfTag(props.lang?.val) ??
+    ctx.fonts.defaultCjkLang
+  );
+}
+
 /** Resolves effective run properties into a RunStyle. Fonts must already be loaded. */
 export function runStyle(ctx: LayoutContext, props: RunProperties): RunStyle {
   const fontName = ctx.resolver.font(props.fonts) ?? FALLBACK_FAMILY;
@@ -135,6 +152,10 @@ export function runStyle(ctx: LayoutContext, props: RunProperties): RunStyle {
   const fallbackFont = ctx.fonts.resolve({ font: FALLBACK_FAMILY, bold, italic });
   const fallbackMetrics = ctx.fonts.metrics(fallbackFont.face);
   const fallbacks = fallbackMetrics && fallbackMetrics !== metrics ? [{ font: fallbackFont, metrics: fallbackMetrics }] : [];
+  const cjkStart = fallbacks.length;
+  for (const cjk of ctx.fonts.cjkFonts(cjkLangOf(ctx, props), bold, italic)) {
+    fallbacks.push({ font: cjk, metrics: ctx.fonts.metrics(cjk.face)! });
+  }
 
   let size = (props.size ?? 20) / 2;
   let rise = (props.position ?? 0) / 2;
@@ -162,6 +183,7 @@ export function runStyle(ctx: LayoutContext, props: RunProperties): RunStyle {
     font,
     metrics,
     fallbacks,
+    cjkStart,
     size,
     color: parseHexColor(props.color?.val) ?? autoColor,
     rise,

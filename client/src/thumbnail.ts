@@ -35,12 +35,11 @@ export function toTopDownOpaque(pixels: Uint8Array, width: number, height: numbe
 }
 
 /**
- * Renders a page to an image (WebP where the browser can encode it, else PNG). Returns null if
- * the framebuffer can't be made. Leaves the GL state the editor's frame loop relies on as found.
+ * Draws a page into an offscreen framebuffer at a pixel size and reads it back, top row first and
+ * opaque. Null if the framebuffer can't be made. Leaves the GL state the editor's frame loop relies on
+ * as found.
  */
-export async function capturePageThumbnail(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage): Promise<Blob | null> {
-  const { width, height } = thumbnailSize(page.width, page.height);
-
+export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
   const camera = new Camera();
   camera.width = width;
   camera.height = height;
@@ -70,13 +69,74 @@ export async function capturePageThumbnail(gl: WebGL2RenderingContext, renderer:
     gl.deleteFramebuffer(framebuffer);
     gl.deleteTexture(texture);
   }
-  if (!ok) return null;
+  return ok ? toTopDownOpaque(pixels, width, height) : null;
+}
 
+/**
+ * Renders a page to an image (WebP where the browser can encode it, else PNG). Returns null if
+ * the framebuffer can't be made.
+ */
+export async function capturePageThumbnail(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage): Promise<Blob | null> {
+  const { width, height } = thumbnailSize(page.width, page.height);
+  const pixels = readPage(gl, renderer, page, width, height);
+  if (!pixels) return null;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d');
   if (!context) return null;
-  context.putImageData(new ImageData(toTopDownOpaque(pixels, width, height), width, height), 0, 0);
+  context.putImageData(new ImageData(pixels, width, height), 0, 0);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
+}
+
+/** Points of grey between pages when several are drawn in one picture. */
+export const PAGE_GAP_POINTS = 12;
+
+/** Pixels per point of a page picture (2: about 144 dpi), lowered when the pages together would be too large for a canvas. */
+const PICTURE_SCALE = 2;
+
+/**
+ * How pages stacked top to bottom fit in one picture: the pixels per point, and how many pages go in. The scale is
+ * PICTURE_SCALE unless that would pass a canvas's limits (then the largest that fits, but not below a quarter of it,
+ * after which pages are left out instead).
+ */
+export function pictureLayout(pageSizes: readonly { width: number; height: number }[], limits: { side: number; pixels: number }): { scale: number; count: number; width: number; height: number } {
+  const fits = (count: number, scale: number) => {
+    const width = Math.max(...pageSizes.slice(0, count).map((p) => p.width));
+    const height = pageSizes.slice(0, count).reduce((sum, p) => sum + p.height, 0) + PAGE_GAP_POINTS * (count - 1);
+    const w = Math.ceil(width * scale);
+    const h = Math.ceil(height * scale);
+    return w <= limits.side && h <= limits.side && w * h <= limits.pixels ? { w, h } : null;
+  };
+  for (let count = pageSizes.length; count >= 1; count--) {
+    // The largest scale, up to the default, at which these pages fit (stepping down to a quarter of it).
+    for (let scale = PICTURE_SCALE; scale >= PICTURE_SCALE / 4 - 1e-9; scale /= 1.25) {
+      const size = fits(count, scale);
+      if (size) return { scale, count, width: size.w, height: size.h };
+    }
+  }
+  const first = pageSizes[0] ?? { width: 612, height: 792 };
+  const scale = Math.min(limits.side / first.width, limits.side / first.height, Math.sqrt(limits.pixels / (first.width * first.height)));
+  return { scale, count: 1, width: Math.floor(first.width * scale), height: Math.floor(first.height * scale) };
+}
+
+/** The pages drawn one under another on a canvas, white pages on grey, as the layout gives them. Null if a page can't be drawn. */
+export function drawPages(gl: WebGL2RenderingContext, renderer: PageRenderer, pages: readonly GpuPage[], layout: { scale: number; count: number; width: number; height: number }): HTMLCanvasElement | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = layout.width;
+  canvas.height = layout.height;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.fillStyle = '#e0e0e0';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  let y = 0;
+  for (const page of pages.slice(0, layout.count)) {
+    const width = Math.max(1, Math.round(page.width * layout.scale));
+    const height = Math.max(1, Math.round(page.height * layout.scale));
+    const pixels = readPage(gl, renderer, page, width, height);
+    if (!pixels) return null;
+    context.putImageData(new ImageData(pixels, width, height), Math.round((canvas.width - width) / 2), Math.round(y));
+    y += height + PAGE_GAP_POINTS * layout.scale;
+  }
+  return canvas;
 }

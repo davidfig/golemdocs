@@ -1,6 +1,7 @@
 // HTML: the handler loaded when an HTML file is opened or exported to.
 
 import { documentToHtml, htmlToDocument } from '../html.ts';
+import { collectImages } from '../images.ts';
 import type { FormatHandler } from '../convert.ts';
 
 const handler: FormatHandler = {
@@ -9,7 +10,7 @@ const handler: FormatHandler = {
     return { document, extensions: { html: extension } };
   },
   async write(document, extensions) {
-    return new TextEncoder().encode(documentToHtml(document, extensions.html));
+    return new TextEncoder().encode(documentToHtml(document, extensions.html, { images: await collectImages(document) }));
   },
 };
 

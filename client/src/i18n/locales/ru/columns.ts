@@ -1,0 +1,25 @@
+import type { Catalog } from '../../index.ts';
+
+export const columns: Catalog = {
+  'columns.title': 'Колонки',
+  'columns.close': 'Закрыть',
+  'columns.presets': 'Шаблоны',
+  'columns.one': 'Одна',
+  'columns.two': 'Две',
+  'columns.three': 'Три',
+  'columns.number': 'Число колонок:',
+  'columns.numberLabel': 'Число колонок',
+  'columns.spacing': 'Промежуток:',
+  'columns.spacingLabel': 'Промежуток между колонками, в дюймах',
+  'columns.width': 'Ширина колонки:',
+  'columns.inches': '{value}"',
+  'columns.line': 'Разделитель',
+  'columns.apply': 'Применить:',
+  'columns.applyDocument': 'Ко всему документу',
+  'columns.applySection': 'К этому разделу',
+  'columns.applyForward': 'До конца документа',
+  'columns.ok': 'OK',
+  'columns.cancel': 'Отмена',
+  'columns.bad': 'Укажите от 1 до {max} колонок, а промежуток между ними — от 0 до 4 дюймов.',
+  'columns.tooNarrow': 'Колонки получатся слишком узкими. Уменьшите их число или промежуток между ними.',
+};

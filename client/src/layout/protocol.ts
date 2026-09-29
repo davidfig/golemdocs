@@ -3,6 +3,7 @@
 // back encoded pages and selection geometry. Remote edits (multiplayer) will arrive in the
 // worker the same way local ones do.
 
+import type { DocumentProperties } from '@word/docx';
 import type { Command } from '@word/editor';
 import type { Pointer, RoomRole } from '@word/ops';
 import type { AnnotationKind, FormField } from '@word/pdf';
@@ -14,6 +15,8 @@ import type { FormatAction } from './formatting.ts';
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
   | { kind: 'docx'; name: string; bytes: ArrayBuffer }
+  /** A Word 97-2003 (.doc) file, read into the same model. */
+  | { kind: 'doc'; name: string; bytes: ArrayBuffer }
   /** A .docx file to fetch. */
   | { kind: 'docx-url'; name: string; url: string }
   /** A plain-text file to fetch and turn into a document (paragraphs at blank lines). */
@@ -26,12 +29,22 @@ export type DocumentSource =
   | { kind: 'html'; name: string; bytes: ArrayBuffer }
   /** An OpenDocument text file. */
   | { kind: 'odt'; name: string; bytes: ArrayBuffer }
+  /** A picture (PNG, JPEG or WebP), opened as a page showing it. */
+  | { kind: 'image'; name: string; bytes: ArrayBuffer }
   /** LaTeX source. */
   | { kind: 'tex'; name: string; bytes: ArrayBuffer }
   /** AsciiDoc source. */
   | { kind: 'adoc'; name: string; bytes: ArrayBuffer }
   /** reStructuredText source. */
   | { kind: 'rst'; name: string; bytes: ArrayBuffer }
+  /** An email message. */
+  | { kind: 'eml'; name: string; bytes: ArrayBuffer }
+  /** A Jupyter notebook. */
+  | { kind: 'ipynb'; name: string; bytes: ArrayBuffer }
+  /** MediaWiki markup. */
+  | { kind: 'mediawiki'; name: string; bytes: ArrayBuffer }
+  /** Textile markup. */
+  | { kind: 'textile'; name: string; bytes: ArrayBuffer }
   /** Org mode source. */
   | { kind: 'org'; name: string; bytes: ArrayBuffer }
   /** Comma-, semicolon- or pipe-delimited text, opened as a table. */
@@ -70,6 +83,12 @@ export type WireCommand =
   | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
   /** Words to accept as spelled correctly (the user's dictionary, or ones ignored), and grammar rules to ignore. */
   | { kind: 'spellWords'; words?: string[]; rules?: string[] }
+  /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
+  | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean }
+  /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */
+  | { kind: 'pasteHtml'; html: string; text: string }
+  /** Ask for the document's properties (title, author…): the answer is `SelectionUpdate.docProperties`. */
+  | { kind: 'getProperties' }
   /** The pointer was released: with the Format Painter picked up, paint the selection (if there is one). */
   | { kind: 'applyPainter' }
   /**
@@ -113,6 +132,10 @@ export interface RoomState {
 }
 
 export type ToWorker =
+  /** Normal view: lay pages out this many points wide, with slim margins (null: the document's own page sizes), and lay the open document out again. */
+  | { type: 'reflow'; width: number | null }
+  /** Draw formatting marks (¶, dots for spaces, tab arrows) on pages laid out from now on, and lay the open document out again. */
+  | { type: 'marks'; on: boolean }
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
@@ -125,6 +148,8 @@ export type ToWorker =
   /** Bytes of an image part of the open document. */
   | { type: 'media'; doc: number; request: number; part: string }
   | { type: 'command'; doc: number; command: WireCommand }
+  /** Puts a picture in the document at the caret (its bytes go into the document; its size is in EMUs). */
+  | { type: 'insertImage'; doc: number; bytes: ArrayBuffer; ext: string; width: number; height: number; description?: string }
   /** The whole document as a .wdoc; `lens` records a different format to edit it as next time. */
   | { type: 'save'; doc: number; request: number; lens?: Format }
   /** The document exported as a file of a format (the open document is left as it is). */
@@ -169,6 +194,16 @@ export interface SelectionUpdate {
   format: FormatState;
   /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
   spell?: { issue: SpellIssue | null };
+  /** Set once after `getProperties`. */
+  docProperties?: DocumentProperties;
+  /** Set once after `countWords`: the counts, or null when this document has none to give (a PDF shown as pages). */
+  stats?: WordStats | null;
+  /** The page size and margins of the section the selection is in, for the Page Setup dialog (twips). */
+  page?: { width: number; height: number; landscape: boolean; top: number; bottom: number; left: number; right: number; gutter: number; header: number; footer: number };
+  /** The columns of the section the selection is in, for the Columns dialog (spacing and width in twips). */
+  columns?: { count: number; space: number; sep: boolean; width: number };
+  /** The selection is in a table cell (the Table menu works on it). */
+  inTable?: boolean;
   /** The link the selection is in (or starts in), for Insert Hyperlink and Ctrl+click. */
   link?: { url: string; text: string } | null;
   /** The Format Painter has picked up formatting and is waiting for a selection. */
@@ -217,6 +252,17 @@ export type FromWorker =
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string };
 
 /** Font files, relative to the site root (the worker and the page both load from here). */
+/** What Tools ▸ Word Count shows. `selection`: they are for the selected text, not the document. */
+export interface WordStats {
+  pages: number;
+  words: number;
+  charactersWithSpaces: number;
+  charactersWithoutSpaces: number;
+  paragraphs: number;
+  lines: number;
+  selection: boolean;
+}
+
 /** A problem the Spelling and Grammar check found, with the sentence around it. */
 export interface SpellIssue {
   kind: 'spelling' | 'grammar';

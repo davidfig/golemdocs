@@ -112,6 +112,69 @@ export const ICONS: Record<string, string> = {
       `<path d="M2.5 17l5.5-6 4.5 4.5 3-3 6 6V18a2.5 2.5 0 0 1-2.5 2.5H5A2.5 2.5 0 0 1 2.5 18z" fill="${GREEN}"/>` +
       `<circle cx="16.2" cy="8.3" r="2.2" fill="${YELLOW}"/>`,
   ),
+  rotateLeft: svg(
+    `<rect x="9.5" y="9.5" width="11" height="11" rx="2" fill="${SKY}"/>` +
+      `<path d="M4.5 12.5a7 7 0 0 1 6.5-6.7" stroke-width="2.2"/><path d="M9 3.5l2.4 2.5-2.9 1.9" fill="${ORANGE}"/>`,
+  ),
+  rotateRight: svg(
+    `<rect x="3.5" y="9.5" width="11" height="11" rx="2" fill="${SKY}"/>` +
+      `<path d="M19.5 12.5a7 7 0 0 0-6.5-6.7" stroke-width="2.2"/><path d="M15 3.5l-2.4 2.5 2.9 1.9" fill="${ORANGE}"/>`,
+  ),
+  flipHorizontal: svg(
+    `<path d="M11 4v16" stroke-dasharray="2 2.2"/><path d="M9 6.5L3 19h6z" fill="${SKY}"/><path d="M15 6.5L21 19h-6z" fill="${BLUE}"/>`,
+  ),
+  flipVertical: svg(
+    `<path d="M4 12h16" stroke-dasharray="2 2.2"/><path d="M6.5 10V4L19 10z" fill="${SKY}"/><path d="M6.5 14v6L19 14z" fill="${BLUE}"/>`,
+  ),
+  crop: svg(
+    `<rect x="6.5" y="6.5" width="11" height="11" fill="${SKY}" stroke-width="1.2"/>` +
+      `<path d="M7 2.5v14.5a1 1 0 0 0 1 1h14.5" stroke-width="2.4"/><path d="M2.5 7H17a1 1 0 0 1 1 1v14.5" stroke-width="2.4"/>`,
+  ),
+  resize: svg(
+    `<rect x="2.5" y="9.5" width="11" height="11" rx="1.5" fill="${SKY}"/><path d="M11 13l8.5-8.5M14 4.5h5.5V10" stroke-width="2"/>`,
+  ),
+  adjust: svg(
+    `<circle cx="12" cy="12" r="8.5" fill="${PAPER}"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="${INK}"/><path d="M12 3.5v17" stroke-width="1.2"/>`,
+  ),
+  rotate180: svg(
+    `<rect x="7" y="9.5" width="10" height="10" rx="2" fill="${SKY}"/>` +
+      `<path d="M4.5 13.5a7.5 7.5 0 0 1 14-3" stroke-width="2.2"/><path d="M19.8 6.5l-.4 4.3-4-1.2" fill="${ORANGE}"/>`,
+  ),
+  autoLevels: svg(
+    `<path d="M4 20V4M20 20V4" stroke-width="1.2"/><path d="M7 19c2.5 0 3-13 5-13s2.5 13 5 13" fill="${SKY}"/><path d="M4.5 21h15" stroke-width="2.2"/>`,
+  ),
+  grayscale: svg(
+    `<rect x="2.5" y="3.5" width="19" height="17" rx="2.5" fill="${MIST}"/><path d="M12 3.5h7a2.5 2.5 0 0 1 2.5 2.5v12a2.5 2.5 0 0 1-2.5 2.5h-7z" fill="${LINE}"/>`,
+  ),
+  sepia: svg(
+    `<rect x="2.5" y="3.5" width="19" height="17" rx="2.5" fill="#e9c99a"/><path d="M2.5 17l5.5-6 4.5 4.5 3-3 6 6V18a2.5 2.5 0 0 1-2.5 2.5H5A2.5 2.5 0 0 1 2.5 18z" fill="#a9743f"/><circle cx="16.2" cy="8.3" r="2.2" fill="#f6e3c0"/>`,
+  ),
+  invert: svg(
+    `<rect x="2.5" y="3.5" width="19" height="17" rx="2.5" fill="${PAPER}"/><path d="M12 3.5h7a2.5 2.5 0 0 1 2.5 2.5v12a2.5 2.5 0 0 1-2.5 2.5h-7z" fill="${INK}"/>`,
+  ),
+  blur: svg(
+    `<circle cx="12" cy="12" r="8.5" fill="${SKY}" stroke-dasharray="2 2.6"/><circle cx="12" cy="12" r="4.5" fill="${BLUE}" stroke="none" opacity=".7"/>`,
+  ),
+  sharpen: svg(
+    `<path d="M12 3.5l8.5 15.5h-17z" fill="${YELLOW}"/><path d="M12 9.5v4.5" stroke-width="2"/><circle cx="12" cy="16.6" r=".6" fill="${INK}"/>`,
+  ),
+  pen: svg(`<path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z" fill="${YELLOW}"/><path d="M14.5 6l3.5 3.5M4 20l4.5-1-3.5-3.5z" fill="${MIST}"/>`),
+  marker: svg(
+    `<path d="M14.5 3.3l6.2 6.2-8 8-6.2-6.2z" fill="${YELLOW}"/><path d="M6.5 11.3l6.2 6.2-2.6 2.3H7.6l-3.5-3.5v-2.5z" fill="${MIST}"/><path d="M3 21.5h8" stroke="${YELLOW}" stroke-width="2.6"/>`,
+  ),
+  line: svg(`<path d="M5 19L19 5" stroke-width="2.6"/><circle cx="5" cy="19" r="1.8" fill="${SKY}"/><circle cx="19" cy="5" r="1.8" fill="${SKY}"/>`),
+  arrow: svg(`<path d="M5 19L18 6" stroke-width="2.6"/><path d="M11 5.5h8.5V14z" fill="${RED}"/>`),
+  rectangle: svg(`<rect x="3.5" y="6" width="17" height="12" rx="1.5" stroke-width="2.4" fill="${SKY}"/>`),
+  ellipse: svg(`<ellipse cx="12" cy="12" rx="9" ry="6.5" stroke-width="2.4" fill="${SKY}"/>`),
+  text: svg(`<path d="M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6" stroke-width="2.4"/>`),
+  pixelate: svg(
+    `<rect x="3.5" y="4.5" width="17" height="15" rx="1.5" fill="${MIST}"/>` +
+      `<path d="M3.5 9.5h17M3.5 14.5h17M9.2 4.5v15M14.8 4.5v15" stroke-width="1"/>` +
+      `<rect x="9.2" y="9.5" width="5.6" height="5" fill="${BLUE}" stroke="none"/><rect x="3.5" y="14.5" width="5.7" height="5" fill="${LINE}" stroke="none"/><rect x="14.8" y="4.5" width="5.7" height="5" fill="${LINE}" stroke="none"/>`,
+  ),
+  eraser: svg(`<path d="M14.5 4l6 6-8.5 8.5H7.5L3.5 14.5z" fill="${PINK}"/><path d="M9 9l6 6M8 20.5h12.5" stroke-width="2"/>`),
+  fill: svg(`<rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="${BLUE}" stroke-width="2.2"/>`),
+  drawColor: svg(`<path d="M4 17l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 16z" fill="${YELLOW}"/><path d="M4 17l4-1-3-3z" fill="${MIST}"/>` + SWATCH),
   comment: svg(
     `<path d="M4.5 3.5h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11.5l-5 4.5v-4.5h-2a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" fill="${BUTTER}"/>` +
       `<path d="M6.5 8h11M6.5 11.5h7" stroke-width="1.8"/>`,

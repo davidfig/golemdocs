@@ -1,0 +1,23 @@
+/* The message toast (see toast.ts), centered near the bottom of the window. */
+
+.wm-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 20;
+  max-width: min(480px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid var(--wm-error, #b00020);
+  border-radius: 6px;
+  background: var(--wm-face, #f0f0f0);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+  font: 13px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: var(--wm-text, #000);
+  cursor: pointer;
+}
+
+.wm-toast[hidden] {
+  display: none;
+}

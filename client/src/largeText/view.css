@@ -1,0 +1,143 @@
+/* The large-text viewer (see view.ts). */
+
+.wm-large {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  background: var(--wm-field-bg, #fff);
+  color: var(--wm-text, #000);
+  font: 13px var(--wm-font, system-ui);
+}
+
+.wm-large[hidden] {
+  display: none;
+}
+
+.wm-large-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--wm-border, #b9b9b9);
+  background: var(--wm-face, #f0f0f0);
+}
+
+.wm-large-bar[hidden] {
+  display: none;
+}
+
+.wm-large-bar input[type='text'] {
+  min-width: 14em;
+  flex: 1 1 14em;
+  max-width: 32em;
+}
+
+.wm-large-bar .wm-large-line {
+  width: 7em;
+  flex: 0 0 auto;
+}
+
+.wm-large-toggle[aria-pressed='true'] {
+  background: var(--wm-checked, #e1e6f0);
+  border-color: var(--wm-hot-border, #316ac5);
+}
+
+.wm-large-message {
+  color: var(--wm-muted, #666);
+  min-width: 8em;
+}
+
+.wm-large-message.wm-large-error {
+  color: var(--wm-error, #b00020);
+}
+
+.wm-large-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: auto;
+  outline: none;
+  --wm-large-size: 13px;
+  --wm-large-line: 19px;
+}
+
+.wm-large-spacer {
+  position: relative;
+  min-width: 100%;
+}
+
+.wm-large-rows {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 100%;
+  font: var(--wm-large-size) / var(--wm-large-line) ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+.wm-large-row {
+  display: flex;
+  height: var(--wm-large-line);
+  white-space: pre;
+  tab-size: 8;
+}
+
+.wm-large-num {
+  position: sticky;
+  left: 0;
+  flex: 0 0 auto;
+  box-sizing: content-box;
+  padding: 0 10px 0 8px;
+  text-align: right;
+  color: var(--wm-muted, #666);
+  background: var(--wm-gutter, #eeeeea);
+  border-right: 1px solid var(--wm-border, #b9b9b9);
+  cursor: pointer;
+  user-select: none;
+}
+
+.wm-large-text {
+  padding-left: 10px;
+}
+
+.wm-large-row.wm-large-selected {
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-large-row.wm-large-current {
+  outline: 1px solid var(--wm-hot-border, #316ac5);
+  outline-offset: -1px;
+}
+
+.wm-large-row.wm-large-error .wm-large-text {
+  color: #b00020;
+}
+
+.wm-large-row.wm-large-warn .wm-large-text {
+  color: #9a5b00;
+}
+
+.wm-large-row.wm-large-dim .wm-large-text {
+  color: var(--wm-muted, #666);
+}
+
+.wm-large-row mark {
+  background: #ffe066;
+  color: inherit;
+}
+
+.wm-large-more {
+  color: var(--wm-muted, #666);
+  font-style: italic;
+}
+
+.wm-large-status {
+  display: flex;
+  gap: 16px;
+  padding: 3px 10px;
+  border-top: 1px solid var(--wm-border, #b9b9b9);
+  background: var(--wm-face, #f0f0f0);
+  color: var(--wm-muted, #666);
+  font-variant-numeric: tabular-nums;
+}

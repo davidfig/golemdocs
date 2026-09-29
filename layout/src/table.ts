@@ -257,6 +257,11 @@ export function layoutTable(table: Table, ctx: LayoutContext, available: number)
       width = target;
     }
   }
+  // An autofit table wider than the room it is in (a table in a column, say) narrows to fit.
+  if (props.layout !== 'fixed' && props.width?.type !== 'dxa' && width > available + 0.5 && available > 0) {
+    grid = grid.map((w) => (w * available) / width);
+    width = available;
+  }
   const columnX = [0];
   for (const w of grid) columnX.push(columnX[columnX.length - 1] + w);
 

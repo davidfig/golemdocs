@@ -52,6 +52,7 @@ export const app: Partial<Messages> = {
   'app.signInToShare': 'Inicia sesión para compartir este documento',
   'app.ownerOnlyShare': 'Solo el propietario puede compartir este documento',
   'app.notInAccountYet': 'Este documento aún no está en tu cuenta: espera un momento a que se cargue e inténtalo de nuevo',
+  'app.notSavedYet': 'Haz primero un cambio: el documento se guarda en tu cuenta una vez que se ha editado',
   'app.opening': 'Abriendo “{name}”…',
   'app.openFailed': 'No se pudo abrir el documento: {message}',
   'app.openingShared': 'Abriendo el documento compartido…',
@@ -114,8 +115,25 @@ export const app: Partial<Messages> = {
   'app.wdocNoContent': 'Este archivo .wdoc no tiene contenido.',
   'app.notRtf': 'Este no es un archivo RTF.',
 
+  'app.notImage': 'Esto no es una imagen que podamos leer.',
+  'app.notEmail': 'Esto no es un mensaje de correo electrónico.',
+  'app.convertedToPicture': 'Se creó {name} a partir de las páginas del documento. El documento no ha cambiado.',
+  'app.pictureShortened': 'Solo las primeras {count} páginas caben en una imagen, así que {name} muestra esas. El documento no ha cambiado.',
+  'app.notReadyToConvert': 'El documento aún no está listo para convertirse.',
+  'app.notNotebook': 'Esto no es un cuaderno de Jupyter.',
+  'app.emailAttachments': 'Archivos adjuntos',
+  'app.imageTooBig': 'Esa imagen sería demasiado grande para editarla aquí.',
+
+  'app.switchedPictureLossy': 'Ahora se edita como {label}. Se comprime al guardarla como archivo, por lo que se pierde algo de detalle.',
+
+  'app.createLinkedDocument': 'No hay ningún documento llamado «{title}». ¿Crearlo?',
+
   // Browser storage
   'app.storageOpenFailed': 'No se pudo abrir el almacenamiento del navegador.',
   'app.storageAborted': 'Se anuló la transacción de almacenamiento.',
   'app.storageClearFailed': 'No se pudo borrar el almacenamiento del navegador.',
+  'app.notDoc': 'Este no es un archivo de Word 97–2003 (.doc).',
+  'app.docTooOld': 'Este archivo se guardó con Word 6 o 95, que no es compatible. Ábrelo en Word y guárdalo en un formato más reciente.',
+  'app.docEncrypted': 'Este documento de Word está protegido con contraseña. Quita la contraseña en Word e inténtalo de nuevo.',
+  'app.docDamaged': 'Este documento de Word está dañado o usa un diseño que no podemos leer.',
 };

@@ -1,0 +1,186 @@
+/* The picture tools: the crop box over a picture, and the Resize and Adjust dialogs (see cropLayer.ts, pictureDialogs.ts). */
+
+.wm-crop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-crop[hidden] {
+  display: none;
+}
+
+.wm-crop-box {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  border: 1.5px solid #fff;
+  /* Everything outside the box is dimmed: a shadow bigger than any screen. */
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.5), 0 0 0 1px rgb(0 0 0 / 0.6) inset;
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+  /* The rule-of-thirds lines. */
+  background:
+    linear-gradient(to right, transparent calc(33.33% - 0.5px), rgb(255 255 255 / 0.55) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)),
+    linear-gradient(to right, transparent calc(66.66% - 0.5px), rgb(255 255 255 / 0.55) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.33% - 0.5px), rgb(255 255 255 / 0.55) calc(33.33% - 0.5px) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(66.66% - 0.5px), rgb(255 255 255 / 0.55) calc(66.66% - 0.5px) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px));
+}
+
+.wm-crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -8px 0 0 -8px;
+  box-sizing: border-box;
+  border: 1.5px solid #316ac5;
+  border-radius: 3px;
+  background: #fff;
+  touch-action: none;
+}
+
+.wm-crop-handle[data-handle='nw'] { left: 0; top: 0; cursor: nwse-resize; }
+.wm-crop-handle[data-handle='n'] { left: 50%; top: 0; cursor: ns-resize; }
+.wm-crop-handle[data-handle='ne'] { left: 100%; top: 0; cursor: nesw-resize; }
+.wm-crop-handle[data-handle='e'] { left: 100%; top: 50%; cursor: ew-resize; }
+.wm-crop-handle[data-handle='se'] { left: 100%; top: 100%; cursor: nwse-resize; }
+.wm-crop-handle[data-handle='s'] { left: 50%; top: 100%; cursor: ns-resize; }
+.wm-crop-handle[data-handle='sw'] { left: 0; top: 100%; cursor: nesw-resize; }
+.wm-crop-handle[data-handle='w'] { left: 0; top: 50%; cursor: ew-resize; }
+
+.wm-crop-size {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgb(0 0 0 / 0.7);
+  color: #fff;
+  font: 12px var(--wm-font, system-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.wm-crop-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--wm-menu-border, #8a8a8a);
+  border-radius: 6px;
+  background: var(--wm-face, #f0f0f0);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+  font: 13px var(--wm-font, system-ui);
+  color: var(--wm-text, #000);
+  pointer-events: auto;
+}
+
+.wm-crop-bar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-picture-dialog .wm-dialog-body {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 320px;
+}
+
+.wm-picture-dialog .wm-picture-wide {
+  grid-column: 1 / -1;
+}
+
+.wm-picture-dialog input[type='range'] {
+  width: 100%;
+}
+
+.wm-picture-dialog .wm-picture-value {
+  min-width: 2.5em;
+  text-align: right;
+  color: var(--wm-muted, #666);
+  font-variant-numeric: tabular-nums;
+}
+
+.wm-picture-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  margin: 0 auto;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  background: repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 0 / 14px 14px;
+}
+
+.wm-picture-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wm-picture-choice .wm-button {
+  text-align: left;
+  padding: 8px 12px;
+}
+
+.wm-drop-choice {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 300px;
+  padding: 10px 12px;
+  border: 1px solid var(--wm-menu-border, #8a8a8a);
+  border-radius: 6px;
+  background: var(--wm-face, #f0f0f0);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 0.35);
+  font: 13px var(--wm-font, system-ui);
+  color: var(--wm-text, #000);
+}
+
+.wm-drop-choice-title {
+  overflow-wrap: anywhere;
+}
+
+/* Drawing on a picture (see drawLayer.ts): the sketch is painted on a canvas over the view. */
+.wm-draw {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-draw[hidden] {
+  display: none;
+}
+
+.wm-draw-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wm-draw-text {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  min-width: 6ch;
+  border: 1px dashed currentColor;
+  background: rgb(255 255 255 / 0.4);
+  outline: none;
+  line-height: 1.2;
+  pointer-events: auto;
+}

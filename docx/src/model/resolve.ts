@@ -204,6 +204,17 @@ export class StyleResolver {
     return fonts.ascii ?? fonts.hAnsi;
   }
 
+  /** The concrete font name for a run's East Asian text (theme references resolved). */
+  eastAsiaFont(props: RunProperties): string | undefined {
+    const fonts = props.fonts;
+    if (!fonts) return undefined;
+    if (fonts.eastAsiaTheme) {
+      const set = fonts.eastAsiaTheme.startsWith('major') ? this.theme.major : this.theme.minor;
+      if (set.eastAsia) return set.eastAsia;
+    }
+    return fonts.eastAsia;
+  }
+
   /** The numbering level definition for a list reference, with overrides and style links applied. */
   listLevel(numId: number | undefined, ilvl: number): NumberingLevel | undefined {
     if (!this.numbering || !numId) return undefined;

@@ -6,10 +6,13 @@
 // bold/italic variants). Their widths differ from the substituted face, so each glyph is
 // placed with its own TJ adjustment: positions match layout exactly, text stays real,
 // selectable text. Characters are WinAnsi encoded; anything else becomes '?' (or a close
-// ASCII equivalent, see ASCII_FALLBACKS).
+// ASCII equivalent, see ASCII_FALLBACKS). That includes all CJK text: the standard-14 fonts have
+// no such glyphs and embedding a font would mean shipping multi-MB font files, so each CJK
+// character exports as a visible '?' in its laid-out position and a warning is logged once.
 
 import type { WordDocument } from '@word/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@word/layout';
+import { standardFamily } from './standardFonts.ts';
 import { PdfDocument, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@word/pdf';
 
 /** Characters WinAnsi lacks, with a close ASCII stand-in. */
@@ -21,19 +24,6 @@ const ASCII_FALLBACKS: Record<number, string> = {
   0x0143: 'N', 0x0144: 'n', 0x0179: 'Z', 0x017a: 'z', 0x017b: 'Z', 0x017c: 'z',
   0x2022: '•', 0x25cf: '•', 0x25aa: '•', 0x2023: '•',
 };
-
-type Standard = 'Times' | 'Helvetica' | 'Courier';
-
-/** Which standard family stands in for a manifest family. */
-function standardFamily(font: ResolvedFont): Standard {
-  const id = font.family.id;
-  if (id === 'courier-new') return 'Courier';
-  if (id === 'times-new-roman' || id === 'cambria' || id === 'georgia') return 'Times';
-  const name = `${font.family.substitute} ${font.family.wordName}`.toLowerCase();
-  if (/mono|courier|consolas/.test(name)) return 'Courier';
-  if (/serif|times|garamond|georgia|gelasio|caladea|cambria/.test(name) && !/sans/.test(name)) return 'Times';
-  return 'Helvetica';
-}
 
 function standardName(font: ResolvedFont): string {
   const bold = font.face.weight >= 600 || font.syntheticBold;
@@ -68,11 +58,32 @@ interface PlacedGlyph {
   font: ResolvedFont;
 }
 
+const CP1252_EXTRAS = new Set([
+  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160, 0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d,
+  0x2022, 0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
+]);
+
+/** Whether a standard-14 font (WinAnsi) can show this code point. */
+export function inWinAnsi(code: number): boolean {
+  return (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || CP1252_EXTRAS.has(code);
+}
+
+/** The text to write for a code point: itself, an ASCII stand-in, or '?' when the PDF fonts can't show it. */
+export function pdfChar(code: number | undefined): { text: string; lost: boolean } {
+  if (code === undefined) return { text: '?', lost: true };
+  const fallback = ASCII_FALLBACKS[code];
+  if (fallback !== undefined) return { text: fallback, lost: false };
+  if (inWinAnsi(code)) return { text: String.fromCodePoint(code), lost: false };
+  return { text: '?', lost: true };
+}
+
+/** Characters exported as '?' during the current export, for the one-time notice. */
+let lostCount = 0;
+
 function charOf(metrics: FaceMetrics, glyph: number): string {
-  const code = metrics.layout.glyphs[glyph]?.unicode;
-  if (code === undefined) return '?';
-  const s = String.fromCodePoint(code);
-  return ASCII_FALLBACKS[code] ?? s;
+  const c = pdfChar(metrics.layout.glyphs[glyph]?.unicode);
+  if (c.lost) lostCount++;
+  return c.text;
 }
 
 function collect(page: PageLayout): PlacedGlyph[] {
@@ -231,6 +242,7 @@ function drawRects(d: PageDrawing, list: { count: number; rect(i: number): [numb
 export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<Uint8Array> {
   // Fresh layout: the editor's pages have had their buffers transferred away.
   const layout = await layoutDocument(doc, fonts);
+  lostCount = 0;
   const pdf = PdfDocument.create();
   const title = await coreTitle(doc);
   if (title) pdf.setMetadata('Title', title);
@@ -283,6 +295,10 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     await drawImages(false);
     drawRects(d, laid.foreground);
     d.finish();
+  }
+  if (lostCount) {
+    console.warn(`PDF export: ${lostCount} character(s) the PDF standard fonts can't show (e.g. Japanese or Chinese text) were written as '?'.`);
+    lostCount = 0;
   }
   return pdf.save();
 }

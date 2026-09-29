@@ -12,9 +12,9 @@ import txtHandler from './handlers/txt.ts';
 import { csv as csvHandler, tsv as tsvHandler } from './handlers/csv.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'pdf' | 'md' | 'txt';
+export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'pdf' | 'md' | 'txt';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'pdf', 'md', 'txt'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -58,6 +58,13 @@ const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   adoc: async () => (await import('./handlers/markup.ts')).adoc,
   rst: async () => (await import('./handlers/markup.ts')).rst,
   org: async () => (await import('./handlers/markup.ts')).org,
+  mediawiki: async () => (await import('./handlers/markup.ts')).mediawiki,
+  textile: async () => (await import('./handlers/markup.ts')).textile,
+  eml: async () => (await import('./handlers/webArchives.ts')).eml,
+  ipynb: async () => (await import('./handlers/ipynb.ts')).default,
+  png: async () => (await import('./handlers/image.ts')).png,
+  jpeg: async () => (await import('./handlers/image.ts')).jpeg,
+  webp: async () => (await import('./handlers/image.ts')).webp,
   txt: async () => txtHandler,
 };
 
@@ -104,8 +111,10 @@ export async function convertContent(content: OpenContent, to: Format, fonts: Fo
  */
 export function conversionIsLossy(from: Format, to: Format): boolean {
   if (from === to) return false;
+  // A picture document is a page with the picture on it: nothing is lost going to Word or PDF, or to PNG; JPEG and WebP compress.
+  if (from === 'png' || from === 'jpeg' || from === 'webp') return to === 'png' || to === 'jpeg' || to === 'webp' ? to !== 'png' : false;
   if (from === 'txt' || from === 'csv' || from === 'tsv') return to === 'pdf';
-  if (from === 'tex' || from === 'adoc' || from === 'rst' || from === 'org') return to === 'txt' || to === 'pdf';
+  if (from === 'tex' || from === 'adoc' || from === 'rst' || from === 'org' || from === 'mediawiki' || from === 'textile' || from === 'eml' || from === 'ipynb') return to === 'txt' || to === 'pdf';
   if (from === 'md') return to === 'txt' || to === 'pdf';
   return true;
 }

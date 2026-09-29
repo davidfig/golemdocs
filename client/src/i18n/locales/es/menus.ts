@@ -40,6 +40,12 @@ export const menus: Partial<Messages> = {
   'menus.format.tsv': 'TSV (delimitado por tabulaciones)',
   'menus.format.txt': 'Texto sin formato',
   'menus.format.pdf': 'PDF',
+  'menus.format.group.popular': 'Populares',
+  'menus.format.group.documents': 'Documentos',
+  'menus.format.group.web': 'Web',
+  'menus.format.group.data': 'Datos',
+  'menus.format.group.markup': 'Marcado',
+  'menus.format.group.images': 'Imágenes',
 
   'menus.combo.list': 'Lista de {label}',
   'menus.split.options': 'Opciones de {label}',

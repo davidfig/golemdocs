@@ -15,6 +15,7 @@ import { DOCUMENT_NAMESPACES, NS } from '../xml/namespaces.ts';
 import { child, el, elements, type XmlElement } from '../xml/xml.ts';
 import { BLANK_STYLES, BLANK_SETTINGS, BLANK_SECTION } from './blank.ts';
 import { readComments, writeComments, type CommentsPart } from './comments.ts';
+import { hasAppProperties, readAppProperties, readCoreProperties, writeAppProperties, writeCoreProperties, type DocumentProperties } from './metadata.ts';
 import { readBlocks, writeBlocks, type ContentWriteContext } from './content.ts';
 import { readSection, writeSection } from './properties.ts';
 import { readNumbering, readSettings, readStyles, readThemeFonts, writeNumbering, writeStyles } from './styles.ts';
@@ -33,6 +34,8 @@ export class WordDocument {
   settings: Settings = { defaultTabStop: 720, evenAndOddHeaders: false };
   /** Comments, in the order of the comments part. Their ranges are markers in the body (edit/comments.ts). */
   comments: Comment[] = [];
+  /** The title, author and other File ▸ Properties. Written back only when changed. */
+  properties: DocumentProperties = {};
 
   private rootAttrs: Record<string, string> = { ...DOCUMENT_NAMESPACES };
   private rootChildren: { before: XmlElement[]; after: XmlElement[] } = { before: [], after: [] };
@@ -42,6 +45,10 @@ export class WordDocument {
   private numberingPart?: string;
   private commentsPart?: string;
   private commentsRead?: CommentsPart;
+  private corePart?: string;
+  private appPart?: string;
+  /** The properties as read, to leave the parts alone unless they changed. */
+  private propertiesRead = '{}';
 
   private constructor(
     readonly pkg: OpcPackage,
@@ -96,6 +103,22 @@ export class WordDocument {
       doc.commentsRead = readComments(await pkg.xml(doc.commentsPart));
       doc.comments = doc.commentsRead.comments.map((c) => structuredClone(c));
     }
+
+    const rootRels = await pkg.relationships('');
+    const packagePart = (type: string) => {
+      const rel = rootRels.byType(type)[0];
+      return rel && !rel.external ? pkg.resolveName(rootRels.partName(rel)) : undefined;
+    };
+    doc.corePart = packagePart(REL.coreProperties);
+    doc.appPart = packagePart(REL.extendedProperties);
+    // A part that can't be read is left as it is: the properties are then just empty.
+    try {
+      if (doc.corePart) Object.assign(doc.properties, readCoreProperties(await pkg.xml(doc.corePart)));
+      if (doc.appPart) Object.assign(doc.properties, readAppProperties(await pkg.xml(doc.appPart)));
+    } catch {
+      doc.corePart = doc.appPart = undefined;
+    }
+    doc.propertiesRead = JSON.stringify(doc.properties);
 
     for (const kind of ['header', 'footer'] as const) {
       for (const rel of rels.byType(kind === 'header' ? REL.header : REL.footer)) {
@@ -209,6 +232,24 @@ export class WordDocument {
       });
       declareNamespaces(comments);
       pkg.set(this.commentsPart, comments, CONTENT_TYPE.comments);
+    }
+
+    // The properties parts, only if the properties were changed.
+    if (JSON.stringify(this.properties) !== this.propertiesRead) {
+      const rootRels = await pkg.relationships('');
+      if (!this.corePart) {
+        this.corePart = 'docProps/core.xml';
+        rootRels.add(REL.coreProperties, this.corePart);
+      }
+      pkg.set(this.corePart, writeCoreProperties(pkg.has(this.corePart) ? await pkg.xml(this.corePart) : undefined, this.properties), CONTENT_TYPE.coreProperties);
+      if (this.appPart || hasAppProperties(this.properties)) {
+        if (!this.appPart) {
+          this.appPart = 'docProps/app.xml';
+          rootRels.add(REL.extendedProperties, this.appPart);
+        }
+        pkg.set(this.appPart, writeAppProperties(pkg.has(this.appPart) ? await pkg.xml(this.appPart) : undefined, this.properties), CONTENT_TYPE.extendedProperties);
+      }
+      this.propertiesRead = JSON.stringify(this.properties);
     }
 
     for (const hf of this.headersFooters.values()) {

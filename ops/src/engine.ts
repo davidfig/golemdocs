@@ -20,6 +20,9 @@ import {
   splitContent,
   type Block,
   type Paragraph,
+  type Table,
+  type TableCell,
+  type TableRow,
   type WordDocument,
 } from '@word/docx';
 import { blockKey, DocumentIndex } from './ids.ts';
@@ -48,6 +51,8 @@ export interface Applied {
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
+const cellsOf = (row: TableRow): TableCell[] => row.cells.filter((c): c is TableCell => c.kind === 'cell');
+const rowsOf = (table: Table): TableRow[] => table.rows.filter((r): r is TableRow => r.kind === 'row');
 const IDENTITY: PosMap = { kind: 'identity' };
 const NOTHING: Step = { inverse: [], map: IDENTITY };
 
@@ -177,7 +182,7 @@ export class Engine {
         const container = after && index.container(after);
         if (!after || !container || op.blocks.length === 0 || index.conflicts(op.blocks)) return NOTHING;
         const blocks: Block[] = clone(op.blocks);
-        const at = container.indexOf(after) + 1;
+        const at = container.indexOf(after) + (op.before ? 0 : 1);
         container.splice(at, 0, ...blocks);
         index.added(blocks, container);
         const paragraphs = paragraphsIn(blocks);
@@ -186,7 +191,7 @@ export class Engine {
         const following = container[at + blocks.length];
         if (following?.kind === 'paragraph') changed.add(following);
         if (paragraphs.some((x) => x.properties.section)) state.structural = true;
-        return { inverse: [{ type: 'removeBlocks', after: op.after, keys: blocks.map(blockKey) }], map: IDENTITY };
+        return { inverse: [{ type: 'removeBlocks', after: op.after, keys: blocks.map(blockKey), ...(op.before && { before: true }) }], map: IDENTITY };
       }
       case 'removeBlocks': {
         const after = index.paragraph(op.after);
@@ -194,9 +199,11 @@ export class Engine {
         if (!after || !container) return NOTHING;
         // Each key in order, searching on from the previous match (normally they're adjacent).
         const removed: Block[] = [];
-        let from = container.indexOf(after) + 1;
+        // After the paragraph: search on from the previous match. Before it: the same, within what precedes it.
+        let from = op.before ? 0 : container.indexOf(after) + 1;
         for (const key of op.keys) {
-          const i = container.findIndex((b, k) => k >= from && b !== after && blockKey(b) === key);
+          const limit = op.before ? container.indexOf(after) : container.length;
+          const i = container.findIndex((b, k) => k >= from && k < limit && b !== after && blockKey(b) === key);
           if (i < 0) continue;
           removed.push(container[i]);
           container.splice(i, 1);
@@ -210,8 +217,9 @@ export class Engine {
         if (following?.kind === 'paragraph') changed.add(following);
         if (paragraphs.some((x) => x.properties.section)) state.structural = true;
         return {
-          inverse: [{ type: 'insertBlocks', after: op.after, blocks: clone(removed) }],
-          map: removeMap(paragraphs, op.after, paragraphLength(after)),
+          inverse: [{ type: 'insertBlocks', after: op.after, blocks: clone(removed), ...(op.before && { before: true }) }],
+          // Positions in what was removed go to the end of the paragraph before it, or the start of the one after.
+          map: removeMap(paragraphs, op.after, op.before ? 0 : paragraphLength(after)),
         };
       }
       case 'formatText': {
@@ -246,6 +254,98 @@ export class Engine {
         });
         changed.add(p);
         return { inverse, map: IDENTITY };
+      }
+      case 'insertRow': {
+        const p = index.paragraph(op.paragraph);
+        const at = p && index.locate(p);
+        if (!p || !at) return NOTHING;
+        const row: TableRow = clone(op.row);
+        const content = cellsOf(row).flatMap((c) => c.children);
+        if (content.length === 0 || index.conflicts(content)) return NOTHING;
+        at.table.rows.splice(at.table.rows.indexOf(at.row) + (op.after ? 1 : 0), 0, row);
+        index.addedRow(at.table, row);
+        const paragraphs = paragraphsIn(content);
+        for (const x of paragraphs) changed.add(x);
+        changed.add(p);
+        return { inverse: [{ type: 'removeRow', paragraph: paragraphs[0].attrs['w14:paraId'] }], map: IDENTITY };
+      }
+      case 'removeRow': {
+        const p = index.paragraph(op.paragraph);
+        const at = p && index.locate(p);
+        if (!p || !at || rowsOf(at.table).length < 2) return NOTHING;
+        const i = at.table.rows.indexOf(at.row);
+        // A paragraph that stays, to put the row back beside (and to say where the table is for layout).
+        const near = (rows: (TableRow | { kind: 'raw' })[]) => rows.find((r): r is TableRow => r.kind === 'row' && paragraphsIn(cellsOf(r).flatMap((c) => c.children)).length > 0);
+        const next = near(at.table.rows.slice(i + 1));
+        const previous = near(at.table.rows.slice(0, i).reverse());
+        const beside = next ?? previous;
+        if (!beside) return NOTHING;
+        const anchor = paragraphsIn(cellsOf(beside).flatMap((c) => c.children))[0];
+        const removed = paragraphsIn(cellsOf(at.row).flatMap((c) => c.children));
+        const inverse: Operation = { type: 'insertRow', paragraph: anchor.attrs['w14:paraId'], after: !next, row: clone(at.row) };
+        at.table.rows.splice(i, 1);
+        index.removedCells(cellsOf(at.row));
+        changed.add(anchor);
+        return { inverse: [inverse], map: removeMap(removed, anchor.attrs['w14:paraId'], 0) };
+      }
+      case 'insertCell': {
+        const p = index.paragraph(op.paragraph);
+        const at = p && index.locate(p);
+        if (!p || !at) return NOTHING;
+        const cell: TableCell = clone(op.cell);
+        if (cell.children.length === 0 || index.conflicts(cell.children)) return NOTHING;
+        at.row.cells.splice(at.row.cells.indexOf(at.cell) + (op.after ? 1 : 0), 0, cell);
+        index.addedCell(at.row, cell);
+        const paragraphs = paragraphsIn(cell.children);
+        for (const x of paragraphs) changed.add(x);
+        changed.add(p);
+        return { inverse: [{ type: 'removeCell', paragraph: paragraphs[0].attrs['w14:paraId'] }], map: IDENTITY };
+      }
+      case 'removeCell': {
+        const p = index.paragraph(op.paragraph);
+        const at = p && index.locate(p);
+        if (!p || !at || cellsOf(at.row).length < 2) return NOTHING;
+        const i = at.row.cells.indexOf(at.cell);
+        const near = (cells: readonly (TableCell | { kind: 'raw' })[]) => cells.find((c): c is TableCell => c.kind === 'cell' && paragraphsIn(c.children).length > 0);
+        const next = near(at.row.cells.slice(i + 1));
+        const beside = next ?? near(at.row.cells.slice(0, i).reverse());
+        if (!beside) return NOTHING;
+        const anchor = paragraphsIn(beside.children)[0];
+        const removed = paragraphsIn(at.cell.children);
+        const inverse: Operation = { type: 'insertCell', paragraph: anchor.attrs['w14:paraId'], after: !next, cell: clone(at.cell) };
+        at.row.cells.splice(i, 1);
+        index.removedCells([at.cell]);
+        changed.add(anchor);
+        return { inverse: [inverse], map: removeMap(removed, anchor.attrs['w14:paraId'], 0) };
+      }
+      case 'setTableGrid': {
+        const p = index.paragraph(op.paragraph);
+        const at = p && index.locate(p);
+        if (!p || !at || op.grid.length === 0 || op.grid.some((w) => !Number.isFinite(w) || w < 0)) return NOTHING;
+        const old = at.table.grid;
+        at.table.grid = [...op.grid];
+        changed.add(p);
+        return { inverse: [{ type: 'setTableGrid', paragraph: op.paragraph, grid: [...old] }], map: IDENTITY };
+      }
+      case 'setDocumentProperties': {
+        const old = this.doc.properties;
+        this.doc.properties = clone(op.properties);
+        return { inverse: [{ type: 'setDocumentProperties', properties: clone(old) }], map: IDENTITY };
+      }
+      case 'setDocumentSection': {
+        const old = this.doc.section;
+        this.doc.section = clone(op.properties);
+        state.structural = true;
+        return { inverse: [{ type: 'setDocumentSection', properties: clone(old) }], map: IDENTITY };
+      }
+      case 'setCellProperties': {
+        const p = index.paragraph(op.paragraph);
+        const at = p && index.locate(p);
+        if (!p || !at) return NOTHING;
+        const old = at.cell.properties;
+        at.cell.properties = clone(op.properties);
+        changed.add(p);
+        return { inverse: [{ type: 'setCellProperties', paragraph: op.paragraph, properties: clone(old) }], map: IDENTITY };
       }
       case 'setParagraphProperties': {
         const p = index.paragraph(op.paragraph);

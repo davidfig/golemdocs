@@ -1,6 +1,7 @@
 // Insert ▸ Hyperlink: the address a piece of text links to, and the text that shows. A modal
 // dialog like the others; the editor does the linking (see @word/editor).
 
+import { docAddress, parseDocAddress } from '../formats/wikiLinks.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 
@@ -16,6 +17,10 @@ export function linkAddress(text: string): string | null {
   const address = text.trim();
   if (!address) return null;
   if (address.startsWith('#')) return address.length > 1 ? address : null;
+  // A link to another stored document: doc:Title, or [[Title]] as a wiki writes it.
+  const wiki = /^\[\[([^\]|]+)\]\]$/.exec(address);
+  if (wiki) return docAddress(wiki[1].trim());
+  if (/^doc:/i.test(address)) return parseDocAddress(address) ? address : null;
   if (/^[a-z][a-z0-9+.-]*:/i.test(address)) return SAFE.test(address) ? address : null;
   if (/^[^\s@/]+@[^\s@/]+$/.test(address)) return `mailto:${address}`;
   return /\s/.test(address) ? null : `https://${address}`;

@@ -133,6 +133,8 @@ export interface ComboSpec {
   optionStyle?(option: string): string;
   /** A separator after these options (the "recently used" group). */
   headerCount?(state: ChromeState): number;
+  /** A heading before an option, when it starts a new group. */
+  groupLabel?(option: string): string | undefined;
   /** A pick-only list: the text field can't be typed in (a "select"). */
   readOnly?: boolean;
   /** Tooltip for the current state (defaults to the label). */
@@ -172,11 +174,12 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
     done();
   };
 
+  let rows: HTMLElement[] = [];
   const highlight = (i: number, scroll = true) => {
     if (!list) return;
-    list.children[highlighted]?.classList.remove('active');
+    rows[highlighted]?.classList.remove('active');
     highlighted = i;
-    const row = list.children[i] as HTMLElement | undefined;
+    const row = rows[i];
     row?.classList.add('active');
     if (row && scroll) row.scrollIntoView({ block: 'nearest' });
   };
@@ -186,7 +189,14 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
     options = spec.options(state);
     const headers = spec.headerCount?.(state) ?? 0;
     list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': spec.label } });
+    rows = [];
+    let group: string | undefined;
     options.forEach((option, i) => {
+      const heading = spec.groupLabel?.(option);
+      if (heading !== group) {
+        group = heading;
+        if (heading) list!.append(h('div', { class: 'wm-list-heading', text: heading, attrs: { role: 'presentation' } }));
+      }
       const row = h('div', { class: 'wm-option', text: option, attrs: { role: 'option' } });
       if (i === headers - 1) row.classList.add('group-end');
       const style = spec.optionStyle?.(option);
@@ -196,6 +206,7 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
         input.value = option;
         commit(option);
       });
+      rows.push(row);
       list!.append(row);
     });
     const current = options.findIndex((o) => o.toLowerCase() === input.value.trim().toLowerCase());
@@ -216,7 +227,9 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
     }
   });
 
-  input.addEventListener('focus', () => input.select());
+  input.addEventListener('focus', () => {
+    if (!spec.readOnly) input.select();
+  });
   input.addEventListener('click', () => {
     if (!spec.readOnly || input.disabled) return;
     if (popupOpenFor(el)) closePopup();
@@ -242,7 +255,7 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
         const i = highlighted + (e.key === 'ArrowDown' ? 1 : -1);
         highlight(Math.min(Math.max(i, 0), n - 1));
         input.value = options[highlighted] ?? input.value;
-        input.select();
+        if (!spec.readOnly) input.select();
         return;
       }
       case 'Enter': {

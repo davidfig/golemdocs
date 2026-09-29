@@ -1,0 +1,25 @@
+import type { Messages } from '../../index.ts';
+
+export const columns: Partial<Messages> = {
+  'columns.title': 'Colonne',
+  'columns.close': 'Chiudi',
+  'columns.presets': 'Predefinito',
+  'columns.one': 'Una',
+  'columns.two': 'Due',
+  'columns.three': 'Tre',
+  'columns.number': 'Numero di colonne:',
+  'columns.numberLabel': 'Numero di colonne',
+  'columns.spacing': 'Spaziatura:',
+  'columns.spacingLabel': 'Spaziatura tra le colonne, in pollici',
+  'columns.width': 'Larghezza di ogni colonna:',
+  'columns.inches': '{value}"',
+  'columns.line': 'Linea tra le colonne',
+  'columns.apply': 'Applica a:',
+  'columns.applyDocument': 'Intero documento',
+  'columns.applySection': 'Questa sezione',
+  'columns.applyForward': 'Da questo punto in poi',
+  'columns.ok': 'OK',
+  'columns.cancel': 'Annulla',
+  'columns.bad': 'Scegli da 1 a {max} colonne, con uno spazio tra di esse da 0 a 4 pollici.',
+  'columns.tooNarrow': 'Le colonne risulterebbero troppo strette. Usa meno colonne o meno spazio tra di esse.',
+};

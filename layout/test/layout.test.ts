@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { WordDocument, type Paragraph, type Run, type Table } from '@word/docx';
-import { encodePage, FontSet, GLYPH_INSTANCE_BYTES, layoutDocument } from '../src/index.ts';
+import { encodePage, FontSet, GLYPH_INSTANCE_BYTES, layoutDocument, setFormattingMarks, setReflowWidth, type PageLayout } from '../src/index.ts';
 
 // Uses the generated font metrics in client/public/fonts (run `pnpm fonts` first).
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');
@@ -184,4 +184,149 @@ test('encoded pages carry glyph instances as plain buffers', skip, async () => {
     });
     assert.ok(clone.id > 0 && clone.index === i, 'pages carry their id and position');
   });
+});
+
+test('formatting marks add a ¶ per paragraph, a dot per space and an arrow per tab, and move nothing', skip, async () => {
+  const doc = await WordDocument.create();
+  const run = (content: Run['content']): Run => ({ kind: 'run', properties: {}, attrs: {}, content });
+  doc.body = [
+    { kind: 'paragraph', properties: {}, attrs: {}, children: [run([{ kind: 'text', text: 'one two three' }, { kind: 'tab' }, { kind: 'text', text: 'x' }])] },
+    { kind: 'paragraph', properties: {}, attrs: {}, children: [] },
+  ];
+  const glyphs = (pages: PageLayout[]) => pages.flatMap((p) => [...p.glyphs.values()].map((l) => l.count)).reduce((a, b) => a + b, 0);
+  const plain = await layoutDocument(doc, fonts!);
+  setFormattingMarks(true);
+  try {
+    const marked = await layoutDocument(doc, fonts!);
+    // Two spaces (·), one tab (→) and two paragraph marks (¶, one of them on an empty paragraph).
+    assert.equal(glyphs(marked.pages) - glyphs(plain.pages), 5);
+    // The text itself is where it was: the same lines at the same places.
+    const places = (pages: PageLayout[]) => JSON.stringify(pages.flatMap((p) => p.lines.map((l) => [l.start, l.end, l.x, l.y, l.width])));
+    assert.equal(places(marked.pages), places(plain.pages));
+  } finally {
+    setFormattingMarks(false);
+  }
+  assert.equal(glyphs((await layoutDocument(doc, fonts!)).pages), glyphs(plain.pages), 'off again: as it was');
+});
+
+test('reflow lays pages out at the window width, and off again restores the page size', skip, async () => {
+  const doc = await WordDocument.create();
+  doc.body = [paragraph([run(LOREM.repeat(4))])];
+  setReflowWidth(300);
+  try {
+    const { pages } = await layoutDocument(doc, fonts!);
+    assert.ok(pages.every((p) => p.width === 300));
+    assert.ok(pages.every((p) => p.lines.every((l) => l.x >= 24 && l.x + l.width <= 300 - 24 + 0.5)));
+  } finally {
+    setReflowWidth(null);
+  }
+  assert.equal((await layoutDocument(doc, fonts!)).pages[0].width, 612);
+});
+
+// --- Columns -----------------------------------------------------------------------------
+
+const textParagraph = (text: string, extra: Paragraph['properties'] = {}): Paragraph => ({
+  kind: 'paragraph',
+  properties: extra,
+  attrs: {},
+  children: [{ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'text', text }] }],
+});
+const SENTENCE = 'The quick brown fox jumps over the lazy dog and keeps running through the field.';
+
+test('a two-column section fills a column, then the next, then the next page', skip, async () => {
+  const doc = await WordDocument.create();
+  doc.body = Array.from({ length: 60 }, (_, i) => textParagraph(`${i}. ${SENTENCE}`));
+  doc.section = { ...doc.section, columns: { num: 2, space: 720 } };
+  const { pages, sections } = await layoutDocument(doc, fonts!);
+  const [section] = sections;
+  assert.equal(section.columns, 2);
+  assert.equal(section.columnGap, 36);
+  assert.equal(section.columnWidth, 216, '468pt of text, less the 36pt gap, over two');
+  const first = pages[0].lines;
+  const lefts = [...new Set(first.map((l) => l.column))].sort((a, b) => a - b);
+  assert.deepEqual(lefts, [72, 324], 'lines start at the two columns');
+  // The whole of the left column comes before the right one, both starting at the same height.
+  const left = first.filter((l) => l.column === 72);
+  const right = first.filter((l) => l.column === 324);
+  assert.ok(left.length > 10 && right.length > 10);
+  assert.equal(first.indexOf(right[0]), left.length, 'document order: the left column, then the right');
+  assert.equal(left[0].y, right[0].y, 'the columns start level');
+  assert.ok(right[0].y < left[left.length - 1].y, 'the right column starts back at the top');
+  // Lines fit the column, not the page.
+  assert.ok(first.every((l) => l.width <= 216 + 0.5));
+  // More lines per page than one column would give: fewer pages than in a single column.
+  const single = await WordDocument.create();
+  single.body = Array.from({ length: 60 }, (_, i) => textParagraph(`${i}. ${SENTENCE}`));
+  assert.ok(pages.length < (await layoutDocument(single, fonts!)).pages.length + 1);
+});
+
+test('a column break moves on to the next column, and a page break still starts a page', skip, async () => {
+  const doc = await WordDocument.create();
+  const run = (content: Run['content']): Run => ({ kind: 'run', properties: {}, attrs: {}, content });
+  doc.body = [
+    { kind: 'paragraph', properties: {}, attrs: {}, children: [run([{ kind: 'text', text: 'First' }, { kind: 'break', type: 'column' }, { kind: 'text', text: 'Second' }])] },
+    { kind: 'paragraph', properties: {}, attrs: {}, children: [run([{ kind: 'text', text: 'Third' }, { kind: 'break', type: 'page' }, { kind: 'text', text: 'Fourth' }])] },
+  ];
+  doc.section = { ...doc.section, columns: { num: 2, space: 720 } };
+  const { pages } = await layoutDocument(doc, fonts!);
+  assert.equal(pages.length, 2, 'the page break began a second page');
+  const on = (page: PageLayout) => page.lines.map((l) => [l.column, Math.round(l.y)]);
+  // "First" ends the left column; "Second" and "Third" are at the top of the right; "Fourth" starts page 2 at the left.
+  assert.deepEqual(on(pages[0]).map(([x]) => x), [72, 324, 324]);
+  assert.equal(on(pages[0])[1][1], on(pages[0])[0][1], 'the right column starts level with the left');
+  assert.deepEqual(on(pages[1]).map(([x]) => x), [72]);
+});
+
+test('with columns of a single column a column break is a page break', skip, async () => {
+  const doc = await WordDocument.create();
+  const run = (content: Run['content']): Run => ({ kind: 'run', properties: {}, attrs: {}, content });
+  doc.body = [{ kind: 'paragraph', properties: {}, attrs: {}, children: [run([{ kind: 'text', text: 'A' }, { kind: 'break', type: 'column' }, { kind: 'text', text: 'B' }])] }];
+  assert.equal((await layoutDocument(doc, fonts!)).pages.length, 2);
+});
+
+test('a line between the columns is drawn once per page, and only when asked for', skip, async () => {
+  const make = async (sep: boolean) => {
+    const doc = await WordDocument.create();
+    doc.body = Array.from({ length: 60 }, (_, i) => textParagraph(`${i}. ${SENTENCE}`));
+    doc.section = { ...doc.section, columns: { num: 3, space: 360, sep } };
+    return (await layoutDocument(doc, fonts!)).pages;
+  };
+  const [without, withLine] = [await make(false), await make(true)];
+  for (let p = 0; p < withLine.length; p++) assert.equal(withLine[p].foreground.count - without[p].foreground.count, 2, 'two lines between three columns');
+});
+
+test('a continuous section starts below the one before, in its own columns', skip, async () => {
+  const doc = await WordDocument.create();
+  const one = { ...doc.section, columns: { num: 1 } };
+  doc.body = [
+    textParagraph('A title long enough to run across the whole width of the page in one line', { section: { ...one } }),
+    ...Array.from({ length: 8 }, (_, i) => textParagraph(`${i}. ${SENTENCE}`)),
+  ];
+  // The body's own (last) section: continuous, two columns.
+  doc.section = { ...doc.section, type: 'continuous', columns: { num: 2, space: 720 } };
+  const { pages } = await layoutDocument(doc, fonts!);
+  assert.equal(pages.length, 1);
+  const [title, ...rest] = pages[0].lines;
+  assert.equal(title.column, 72);
+  assert.ok(title.width > 216 && rest[0].y > title.y, 'the title is one line as wide as the page');
+  assert.ok(rest.every((l) => l.y > title.y), 'the columns start below it');
+  assert.ok(rest.every((l) => l.width <= 216 + 0.5), 'and are as narrow as columns');
+});
+
+test('an autofit table wider than its column narrows to it; a fixed one keeps its width', skip, async () => {
+  const cell = (text: string) => ({ kind: 'cell' as const, properties: {}, attrs: {}, children: [textParagraph(text)] });
+  const make = (layout?: 'fixed'): Table => ({ kind: 'table', properties: layout ? { layout } : {}, grid: [4680, 4680], rows: [{ kind: 'row', properties: {}, attrs: {}, cells: [cell('a'), cell('b')] }] });
+  const widthOf = async (table: Table, columns: number) => {
+    const doc = await WordDocument.create();
+    doc.body = [table, textParagraph('after')];
+    doc.section = { ...doc.section, columns: { num: columns, space: 720 } };
+    const { pages } = await layoutDocument(doc, fonts!);
+    const xs = pages[0].lines.filter((l) => paragraphTextOf(l.paragraph) === 'b').map((l) => l.column);
+    return xs[0];
+  };
+  const paragraphTextOf = (p: Paragraph) => (p.children as Run[]).map((r) => r.content.map((c) => (c.kind === 'text' ? c.text : '')).join('')).join('');
+  // The second cell starts half way across: at the middle of the page (72 + 234), or of the column (72 + 108).
+  assert.ok(Math.abs((await widthOf(make(), 1)) - (72 + 234)) < 6);
+  assert.ok(Math.abs((await widthOf(make(), 2)) - (72 + 108)) < 6, 'shrunk to the 216pt column');
+  assert.ok((await widthOf(make('fixed'), 2)) > 72 + 200, 'a fixed table is left as it was');
 });

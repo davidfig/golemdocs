@@ -10,7 +10,10 @@
 
 import { WordDocument } from '@word/docx';
 import type { Block, Border, Inline, Paragraph, Table, TableCell, TableRow } from '@word/docx';
+import { encodeText } from './textFiles.ts';
 import type { CsvExtension } from './wdoc.ts';
+
+export { decodeText } from './textFiles.ts';
 
 export type Delimiter = ',' | '\t' | ';' | '|';
 
@@ -29,16 +32,6 @@ const PADDING = 216; // the default 108 twip cell margins
 const SAMPLE = 500;
 
 // --- Decoding ----------------------------------------------------------------------------------
-
-/** Text of a file's bytes: UTF-8, else Windows-1252 (what a spreadsheet exports without saying). */
-export function decodeText(bytes: Uint8Array): { text: string; encoding: 'utf-8' | 'windows-1252'; bom: boolean } {
-  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
-  try {
-    return { text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes).replace(/^﻿/, ''), encoding: 'utf-8', bom };
-  } catch {
-    return { text: new TextDecoder('windows-1252').decode(bytes), encoding: 'windows-1252', bom: false };
-  }
-}
 
 /** The delimiter that splits the first lines into the same, greater-than-one, number of fields. */
 export function sniffDelimiter(text: string): Delimiter {
@@ -378,20 +371,5 @@ export function writeDelimited(rows: string[][], delimiter: string, ext: CsvExte
   // A single empty field would vanish from the file; quoting it keeps the row.
   if (rows.length === 1 && rows[0].length === 1 && rows[0][0] === '') text = '""';
   if (rows.length && ext.trailingNewline !== false) text += ending;
-  if (ext.encoding === 'windows-1252') {
-    const bytes = new Uint8Array(text.length);
-    for (let i = 0; i < text.length; i++) bytes[i] = WINDOWS_1252.get(text[i]) ?? (text.charCodeAt(i) < 256 ? text.charCodeAt(i) : 63);
-    return bytes;
-  }
-  const encoded = new TextEncoder().encode(text);
-  if (!ext.bom) return encoded;
-  const out = new Uint8Array(encoded.length + 3);
-  out.set([0xef, 0xbb, 0xbf]);
-  out.set(encoded, 3);
-  return out;
+  return encodeText(text, ext.encoding ?? 'utf-8', !!ext.bom);
 }
-
-/** Characters Windows-1252 has in its 0x80-0x9F block, which differ from Latin-1. */
-const WINDOWS_1252 = new Map<string, number>(
-  Array.from({ length: 32 }, (_, i) => [new TextDecoder('windows-1252').decode(new Uint8Array([0x80 + i])), 0x80 + i] as const).filter(([c]) => c.charCodeAt(0) > 0x9f),
-);

@@ -3,12 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Golem Docs</title>
+    <title>Golem Docs: edit Word, PDF, Markdown and more in your browser</title>
+    <meta name="description" content="Golem Docs is a document editor that lives in your browser. Open, edit and convert Word, OpenDocument, PDF, Markdown, HTML and plain text, and work on them together live. No account needed." />
+    <link rel="canonical" href="https://golemdocs.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Golem Docs" />
+    <meta property="og:title" content="Golem Docs: edit Word, PDF, Markdown and more in your browser" />
+    <meta property="og:description" content="Open, edit and convert Word, OpenDocument, PDF, Markdown, HTML and plain text in your browser, and work on them together live." />
+    <meta property="og:url" content="https://golemdocs.com/" />
+    <meta property="og:image" content="https://golemdocs.com/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Golem Docs",
+        "url": "https://golemdocs.com/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Any (web browser)",
+        "description": "A document editor that lives in your browser: open, edit and convert Word, OpenDocument, PDF, Markdown, HTML and plain text, and work together live.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- The desk color from the very first paint, before any script or stylesheet has loaded (mirrors ui/theme.ts). -->
     <style>
+      /* The welcome text below is for crawlers and screen readers: off screen, but not display:none. */
+      #seo { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       html { background: #e5e5e5; }
       html[data-theme='dark'] { background: #1c1d20; }
     </style>
@@ -17,10 +40,27 @@
         var appearance = localStorage.getItem('golem.appearance');
         if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
       } catch (e) {}
+      // Shared links, rooms and specific documents are private or repeat the home page: keep them out of search.
+      if (location.search || location.pathname !== '/') {
+        var robots = document.createElement('meta');
+        robots.name = 'robots';
+        robots.content = 'noindex';
+        document.head.appendChild(robots);
+      }
     </script>
+    <noscript>
+      <style>
+        #seo { position: static; width: auto; height: auto; margin: 2rem auto; max-width: 40rem; overflow: visible; clip-path: none; white-space: normal; font-family: system-ui, sans-serif; line-height: 1.5; }
+        #viewport { display: none; }
+      </style>
+    </noscript>
   </head>
   <body>
     <header id="chrome"></header>
+    <article id="seo">
+      <!--welcome-->
+      <p>Golem Docs needs JavaScript turned on to edit documents.</p>
+    </article>
     <main id="viewport">
       <canvas id="canvas"></canvas>
       <textarea id="input" aria-label="Document" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>

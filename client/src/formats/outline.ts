@@ -79,7 +79,7 @@ export function tidy(spans: readonly Span[]): Span[] {
 // --- Document -> outline -------------------------------------------------------------------------
 
 const MONO_RE = /courier|consolas|mono|menlo|monaco|source code|lucida console/i;
-const CODE_STYLES = new Set(['code', 'sourcecode', 'htmlpreformatted', 'codeblock', 'preformattedtext', 'htmlcode', 'codechar', 'inlinecode']);
+const CODE_STYLES = new Set(['code', 'codeoutput', 'sourcecode', 'htmlpreformatted', 'codeblock', 'preformattedtext', 'htmlcode', 'codechar', 'inlinecode']);
 const QUOTE_STYLES = new Set(['quote', 'intensequote', 'blocktext', 'blockquote']);
 
 type Kind = { kind: 'heading'; level: number } | { kind: 'quote' } | { kind: 'code' } | { kind: 'normal' };
@@ -114,15 +114,17 @@ class Extractor {
       if (kind.kind === 'code') {
         this.stack = [];
         const lines = [this.rawText(block)];
+        // Output (of a notebook cell) is code of its own kind, never run together with the code before or after it.
+        const output = block.properties.style === 'CodeOutput';
         while (i + 1 < blocks.length) {
           const next = blocks[i + 1];
-          if (next.kind !== 'paragraph' || this.classify(next).kind !== 'code') break;
+          if (next.kind !== 'paragraph' || this.classify(next).kind !== 'code' || (next.properties.style === 'CodeOutput') !== output) break;
           lines.push(this.rawText(next));
           i++;
         }
         while (lines.length && !lines[0].trim()) lines.shift();
         while (lines.length && !lines.at(-1)!.trim()) lines.pop();
-        if (lines.length) this.out.push({ t: 'code', text: lines.join('\n') });
+        if (lines.length) this.out.push({ t: 'code', text: lines.join('\n'), ...(output && { lang: 'output' }) });
       } else if (kind.kind === 'quote') {
         this.stack = [];
         const paras: Span[][] = [];
@@ -399,14 +401,16 @@ class Builder {
         out.push(newParagraph({}, this.inlines(node.spans)));
         return;
       case 'code': {
-        this.used.add('Code');
+        // Output shown under a notebook's code is a code block of its own look.
+        const style = node.lang === 'output' ? 'CodeOutput' : 'Code';
+        this.used.add(style);
         for (const line of node.text.split('\n')) {
           const content: RunContent[] = [];
           line.split('\t').forEach((part, i) => {
             if (i > 0) content.push({ kind: 'tab' });
             if (part) content.push({ kind: 'text', text: part });
           });
-          out.push(newParagraph({ style: 'Code' }, content.length ? [newRun({}, content)] : []));
+          out.push(newParagraph({ style }, content.length ? [newRun({}, content)] : []));
         }
         return;
       }

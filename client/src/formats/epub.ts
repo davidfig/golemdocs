@@ -20,8 +20,11 @@ function resolve(base: string, href: string): string {
   return parts.join('/');
 }
 
-/** The book's chapters as one HTML string, in spine order, and its title if it has one. */
-export async function epubToHtml(bytes: Uint8Array): Promise<{ html: string; title: string | null }> {
+/**
+ * The book's chapters as one HTML string, in spine order, its title if it has one, and its pictures.
+ * Each <img> address is rewritten to the picture's path in the book, which `images` is keyed by.
+ */
+export async function epubToHtml(bytes: Uint8Array): Promise<{ html: string; title: string | null; images: Map<string, Uint8Array> }> {
   const zip = ZipArchive.read(bytes);
   const text = async (name: string) => (await zip.entries.get(name)?.text()) ?? null;
   const container = await text('META-INF/container.xml');
@@ -37,16 +40,33 @@ export async function epubToHtml(bytes: Uint8Array): Promise<{ html: string; tit
   const title = named(named(pkg, 'metadata')[0] ?? pkg, 'title')[0]?.children.find((c) => typeof c === 'string');
 
   let html = '';
+  const wanted = new Set<string>();
   for (const ref of named(named(pkg, 'spine')[0], 'itemref')) {
     const item = manifest.get(ref.attrs.idref);
     if (!item || !/x?html/.test(item.attrs['media-type'] ?? '') || ref.attrs.linear === 'no') continue;
     const chapter = await text(resolve(opfPath, item.attrs.href));
     if (chapter === null) continue;
-    html += /<body[^>]*>([\s\S]*?)<\/body>/i.exec(chapter)?.[1] ?? chapter;
+    const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(chapter)?.[1] ?? chapter;
+    const chapterPath = resolve(opfPath, item.attrs.href);
+    html += body.replace(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])(.*?)\2/gi, (whole, before: string, quote: string, src: string) => {
+      if (/^(data:|https?:|\/\/)/i.test(src)) return whole;
+      try {
+        const path = resolve(chapterPath, src.replace(/&amp;/g, '&'));
+        wanted.add(path);
+        return `${before}${quote}${path.replace(/&/g, '&amp;')}${quote}`;
+      } catch {
+        return whole;
+      }
+    });
     html += '\n';
   }
+  const images = new Map<string, Uint8Array>();
+  for (const path of wanted) {
+    const entry = zip.entries.get(path);
+    if (entry) images.set(path, await entry.read().catch(() => new Uint8Array(0)));
+  }
   if (!html.trim()) throw new Error(t('app.epubNoChapters'));
-  return { html: `<html><body>${html}</body></html>`, title: typeof title === 'string' ? title.trim() : null };
+  return { html: `<html><body>${html}</body></html>`, title: typeof title === 'string' ? title.trim() : null, images };
 }
 
 const xmlEscape = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -61,7 +81,14 @@ export function xhtmlize(html: string): string {
     .replace(/(<[a-z][^>]*?\s)(data-[\w-]+)(?=[\s>/])/gi, '$1$2=""');
 }
 
-export async function htmlToEpub(html: string, title: string): Promise<Uint8Array> {
+/** A picture in the book: its path under OEBPS, type and bytes. */
+export interface EpubImage {
+  href: string;
+  mime: string;
+  bytes: Uint8Array;
+}
+
+export async function htmlToEpub(html: string, title: string, images: EpubImage[] = []): Promise<Uint8Array> {
   const encoder = new TextEncoder();
   const file = (name: string, content: string, compress = true) => ({ name, data: encoder.encode(content), compress });
   const heading = xmlEscape(title || t('app.untitled'));
@@ -80,7 +107,7 @@ export async function htmlToEpub(html: string, title: string): Promise<Uint8Arra
         `<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">${id}</dc:identifier><dc:title>${heading}</dc:title><dc:language>en</dc:language>` +
         `<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</meta></metadata>` +
         `<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>` +
-        `<item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="chapter"/></spine></package>`,
+        `<item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>${images.map((image, i) => `<item id="img${i + 1}" href="${xmlEscape(image.href)}" media-type="${image.mime}"/>`).join('')}</manifest><spine><itemref idref="chapter"/></spine></package>`,
     ),
     file(
       'OEBPS/nav.xhtml',
@@ -88,5 +115,7 @@ export async function htmlToEpub(html: string, title: string): Promise<Uint8Arra
         `<body><nav epub:type="toc"><ol><li><a href="chapter.xhtml">${heading}</a></li></ol></nav></body></html>`,
     ),
     file('OEBPS/chapter.xhtml', chapter),
+    // Pictures are already compressed.
+    ...images.map((image) => ({ name: `OEBPS/${image.href}`, data: image.bytes, compress: false })),
   ]);
 }

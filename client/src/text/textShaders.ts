@@ -10,7 +10,7 @@ layout(location = 1) in float a_size;    // document units per em
 layout(location = 2) in uint a_glyph;
 layout(location = 3) in vec4 a_color;
 
-uniform highp sampler2D u_glyphTable; // row per glyph: texel 0 = plane bounds (em), texel 1 = atlas UVs
+uniform highp sampler2D u_glyphTable; // glyph g: row g >> 7, texel (g & 127) * 2 = plane bounds (em), next = atlas UVs
 uniform vec2 u_translate;             // batch origin on screen, device px
 uniform float u_scale;                // device px per document unit
 uniform vec2 u_viewport;              // device px
@@ -24,9 +24,10 @@ flat out vec4 v_color;
 void main() {
   // Triangle strip corners: (0,0) (1,0) (0,1) (1,1)
   vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
-  int row = int(a_glyph);
-  vec4 plane = texelFetch(u_glyphTable, ivec2(0, row), 0);
-  vec4 atlas = texelFetch(u_glyphTable, ivec2(1, row), 0);
+  int g = int(a_glyph);
+  ivec2 at = ivec2((g & 127) * 2, g >> 7); // see glyphTable.ts
+  vec4 plane = texelFetch(u_glyphTable, at, 0);
+  vec4 atlas = texelFetch(u_glyphTable, at + ivec2(1, 0), 0);
 
   vec2 local = mix(plane.xy, plane.zw, corner);
   local.x -= local.y * u_skew;

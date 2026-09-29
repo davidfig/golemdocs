@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, WordDocument, type Paragraph } from '@word/docx';
+import { paragraphsIn, paragraphText, WordDocument, type Inline, type Paragraph } from '@word/docx';
 import { FontSet, LayoutSession, layoutDocument } from '@word/layout';
 import { Replica } from '@word/ops';
 import { Editor, type Command } from '../src/index.ts';
@@ -16,7 +16,7 @@ const LOREM =
   'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore ' +
   'magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.';
 
-async function setup(texts: string[]) {
+async function setup(texts: string[], configure?: (doc: WordDocument) => void) {
   const doc = await WordDocument.create();
   doc.body = texts.map((text): Paragraph => ({
     kind: 'paragraph',
@@ -24,6 +24,7 @@ async function setup(texts: string[]) {
     children: text ? [{ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'text', text }] }] : [],
     attrs: {},
   }));
+  configure?.(doc);
   const replica = new Replica(doc);
   const session = await LayoutSession.create(doc, fonts!);
   await session.run();
@@ -310,4 +311,550 @@ test('whole-word find and replace, and replace all staying at the selected match
   assert.deepEqual(texts(), ['xyz abc xyz', 'cab xyz']);
   assert.equal(editor.collapsed, true);
   assert.equal(`${editor.paragraphs().indexOf(editor.selection.focus.paragraph)}:${editor.selection.focus.offset}`, '0:11');
+});
+
+test('insertTable adds a grid of empty cells, with a paragraph after it, and undoes', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['Before']);
+  await apply({ kind: 'move', to: 'documentEnd' });
+  await apply({ kind: 'insertTable', rows: 2, columns: 3 });
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph'], 'the table is followed by a paragraph');
+  const table = doc.body[1] as Extract<typeof doc.body[number], { kind: 'table' }>;
+  assert.equal(table.rows.length, 2);
+  assert.deepEqual(table.grid.length, 3);
+  assert.equal(table.grid.reduce((a, b) => a + b, 0) <= 9360, true, 'the columns fit the page');
+  assert.equal(table.properties.style, 'TableGrid');
+  const cells = paragraphsIn([table]);
+  assert.equal(cells.length, 6);
+  assert.equal(new Set(cells.map((p) => p.attrs['w14:paraId'])).size, 6, 'every cell paragraph has its own id');
+  assert.equal(editor.paragraphs().indexOf(editor.selection.focus.paragraph), 1, 'the caret is in the first cell');
+  // Typing goes in the cell.
+  await apply({ kind: 'insertText', text: 'A1' });
+  assert.deepEqual(texts(), ['Before', 'A1', '', '', '', '', '', '']);
+  editor.undo();
+  editor.undo();
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph']);
+  assert.deepEqual(texts(), ['Before']);
+});
+
+test('insertTable in the middle of a paragraph puts the rest below the table', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['Hello world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' });
+  await apply({ kind: 'insertTable', rows: 1, columns: 2 });
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph']);
+  assert.deepEqual(texts(), ['Hello ', '', '', 'world']);
+  assert.equal(editor.paragraphs().indexOf(editor.selection.focus.paragraph), 1);
+  // Between two paragraphs no extra one is added.
+  const two = await setup(['One', 'Two']);
+  await two.apply({ kind: 'move', to: 'lineEnd' }, { kind: 'insertTable', rows: 1, columns: 1 });
+  assert.deepEqual(two.doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph']);
+});
+
+test('insertTable refuses sizes it cannot make, and tables inside tables', skip, async () => {
+  const { doc, editor } = await setup(['Text']);
+  for (const [rows, columns] of [[0, 2], [2, 0], [501, 1], [1, 64], [Number.NaN, 2]]) assert.equal(editor.apply({ kind: 'insertTable', rows, columns }).edited, false, `${rows}x${columns}`);
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph']);
+  editor.apply({ kind: 'move', to: 'documentEnd' });
+  editor.apply({ kind: 'insertTable', rows: 1, columns: 1 });
+  assert.equal(editor.apply({ kind: 'insertTable', rows: 1, columns: 1 }).edited, false, 'the caret is in a cell now');
+  assert.equal(doc.body.filter((b) => b.kind === 'table').length, 1);
+});
+
+// --- Table editing -----------------------------------------------------------------------
+
+type Doc = Awaited<ReturnType<typeof setup>>['doc'];
+const tablesOf = (doc: Doc) => doc.body.filter((b) => b.kind === 'table') as Extract<Doc['body'][number], { kind: 'table' }>[];
+/** The text of each cell, row by row, of the first table. */
+const gridText = (doc: Doc) =>
+  tablesOf(doc)[0].rows.map((row) => (row.kind === 'row' ? row.cells.map((c) => (c.kind === 'cell' ? paragraphsIn(c.children).map(paragraphText).join('|') : '?')) : []));
+const widths = (doc: Doc) => tablesOf(doc)[0].grid;
+
+/** A document with a 2×2 table, cells "a" "b" / "c" "d", after a paragraph "Top", and the caret in "a". */
+async function withTable() {
+  const t = await setup(['Top']);
+  await t.apply({ kind: 'move', to: 'documentEnd' }, { kind: 'insertTable', rows: 2, columns: 2 });
+  await t.apply({ kind: 'insertText', text: 'a' }, { kind: 'tab', backward: false }, { kind: 'insertText', text: 'b' }, { kind: 'tab', backward: false }, { kind: 'insertText', text: 'c' }, { kind: 'tab', backward: false }, { kind: 'insertText', text: 'd' });
+  // Back to the first cell.
+  await t.apply({ kind: 'tab', backward: true }, { kind: 'tab', backward: true }, { kind: 'tab', backward: true });
+  return t;
+}
+
+test('tab moves through a table\'s cells, selecting each, and adds a row after the last', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  assert.equal(editor.selectedText(), 'a');
+  await apply({ kind: 'tab', backward: false });
+  assert.equal(editor.selectedText(), 'b');
+  await apply({ kind: 'tab', backward: false }, { kind: 'tab', backward: false });
+  assert.equal(editor.selectedText(), 'd');
+  await apply({ kind: 'tab', backward: false });
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd'], ['', '']], 'a row was added');
+  assert.equal(editor.collapsed, true, 'the caret is in its first cell');
+  await apply({ kind: 'insertText', text: 'e' });
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd'], ['e', '']]);
+  editor.undo();
+  editor.undo();
+  assert.equal(gridText(doc).length, 2);
+  // Shift+Tab stops at the first cell.
+  await apply({ kind: 'tab', backward: true }, { kind: 'tab', backward: true }, { kind: 'tab', backward: true }, { kind: 'tab', backward: true }, { kind: 'tab', backward: true });
+  assert.equal(editor.selectedText(), 'a');
+});
+
+test('tab outside a table types a tab', skip, async () => {
+  const { editor, apply, texts } = await setup(['ab']);
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'tab', backward: false }, { kind: 'insertText', text: 'c' });
+  // (A tab is one object in the paragraph.)
+  assert.deepEqual(texts(), ['ab\uFFFCc']);
+  assert.equal(editor.apply({ kind: 'tab', backward: true }).edited, false);
+});
+
+test('rows are inserted above and below and deleted, each one undoable', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  await apply({ kind: 'tableEdit', edit: 'insertRowBelow' });
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['', ''], ['c', 'd']]);
+  await apply({ kind: 'tableEdit', edit: 'insertRowAbove' });
+  assert.deepEqual(gridText(doc), [['', ''], ['a', 'b'], ['', ''], ['c', 'd']]);
+  editor.undo();
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  // Several selected rows: as many are inserted.
+  await apply({ kind: 'tableEdit', edit: 'selectTable' });
+  await apply({ kind: 'tableEdit', edit: 'insertRowBelow' });
+  assert.equal(gridText(doc).length, 4);
+  editor.undo();
+  // Delete the row with the caret (back in the first cell); deleting every row deletes the table.
+  await apply({ kind: 'select', paragraph: 1, from: 0, to: 0 });
+  await apply({ kind: 'tableEdit', edit: 'deleteRows' });
+  assert.deepEqual(gridText(doc), [['c', 'd']]);
+  assert.equal(editor.paragraphs().indexOf(editor.selection.focus.paragraph), 1, 'the caret is where the row was');
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  await apply({ kind: 'tableEdit', edit: 'selectTable' }, { kind: 'tableEdit', edit: 'deleteRows' });
+  assert.equal(tablesOf(doc).length, 0);
+});
+
+test('columns are inserted left and right, the grid follows, and they are deleted', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  assert.equal(widths(doc).length, 2);
+  await apply({ kind: 'tableEdit', edit: 'insertColumnRight' });
+  assert.deepEqual(gridText(doc), [['a', '', 'b'], ['c', '', 'd']]);
+  assert.equal(widths(doc).length, 3);
+  assert.ok(widths(doc).reduce((a, b) => a + b, 0) <= 9360, 'the table still fits the page');
+  const cellWidths = (tablesOf(doc)[0].rows[0] as { cells: { properties: { width?: { w: string } } }[] }).cells.map((c) => Number(c.properties.width?.w));
+  assert.deepEqual(cellWidths, widths(doc), 'cell widths follow the grid');
+  await apply({ kind: 'tableEdit', edit: 'insertColumnLeft' });
+  assert.deepEqual(gridText(doc), [['', 'a', '', 'b'], ['', 'c', '', 'd']]);
+  editor.undo();
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  assert.equal(widths(doc).length, 2);
+  await apply({ kind: 'tableEdit', edit: 'deleteColumns' });
+  assert.deepEqual(gridText(doc), [['b'], ['d']]);
+  assert.equal(widths(doc).length, 1);
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  await apply({ kind: 'tableEdit', edit: 'selectTable' }, { kind: 'tableEdit', edit: 'deleteColumns' });
+  assert.equal(tablesOf(doc).length, 0, 'deleting every column deletes the table');
+});
+
+test('a column inserted in a table across a merged cell widens that cell', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  // Merge "a" and "b" into one cell (as an imported table might have): a spans both columns.
+  const table = tablesOf(doc)[0];
+  const row = table.rows[0] as { cells: { kind: string; properties: { gridSpan?: number; width?: { w: string; type: string } } }[] };
+  row.cells.splice(1, 1);
+  row.cells[0].properties.gridSpan = 2;
+  // The caret in "c" (below the left half of the merged cell): the new column goes between "c" and "d".
+  await apply({ kind: 'tab', backward: false });
+  assert.equal(editor.selectedText(), 'c');
+  await apply({ kind: 'tableEdit', edit: 'insertColumnRight' });
+  // The first row's cell crosses the new column, so it spans three; the second row gets a cell.
+  assert.equal(row.cells.length, 1);
+  assert.equal(row.cells[0].properties.gridSpan, 3);
+  assert.deepEqual(gridText(doc)[1], ['c', '', 'd']);
+});
+
+test('the table can be deleted, selected, and put above a paragraph', skip, async () => {
+  const { doc, editor, apply, texts } = await withTable();
+  await apply({ kind: 'tableEdit', edit: 'selectTable' });
+  assert.equal(editor.selectedText().replace(/\n/g, ''), 'abcd');
+  await apply({ kind: 'tableEdit', edit: 'deleteTable' });
+  assert.equal(tablesOf(doc).length, 0);
+  assert.deepEqual(texts().filter((t) => t), ['Top']);
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  // A table at the very start of the document can be deleted too.
+  const start = await setup(['First']);
+  await start.apply({ kind: 'move', to: 'documentStart' }, { kind: 'insertTable', rows: 1, columns: 2 });
+  assert.deepEqual(start.doc.body.map((b) => b.kind), ['table', 'paragraph'], 'above the paragraph, with none added');
+  await start.apply({ kind: 'tableEdit', edit: 'deleteTable' });
+  assert.deepEqual(start.doc.body.map((b) => b.kind), ['paragraph']);
+  assert.deepEqual(start.texts(), ['First']);
+  start.editor.undo();
+  assert.deepEqual(start.doc.body.map((b) => b.kind), ['table', 'paragraph']);
+  // Outside a table these do nothing.
+  assert.equal(editor.apply({ kind: 'move', to: 'documentStart' }) && editor.apply({ kind: 'tableEdit', edit: 'deleteRows' }).edited, false);
+});
+
+test('merging the selected cells and splitting them again are one undo step each', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  await apply({ kind: 'tableEdit', edit: 'selectTable' });
+  await apply({ kind: 'tableEdit', edit: 'mergeCells' });
+  assert.equal(tablesOf(doc).length, 1);
+  assert.deepEqual(gridText(doc), [['a|b|c|d'], ['']], 'one cell over two rows, with all the text');
+  const merged = tablesOf(doc)[0].rows[0] as { cells: { properties: { gridSpan?: number; vMerge?: string } }[] };
+  assert.equal(merged.cells[0].properties.gridSpan, 2);
+  assert.equal(merged.cells[0].properties.vMerge, 'restart');
+  assert.equal(editor.collapsed, true, 'the caret is in the merged cell');
+  // Typing lands in it.
+  await apply({ kind: 'insertText', text: '!' });
+  assert.deepEqual(gridText(doc)[0], ['!a|b|c|d']);
+  editor.undo();
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']], 'undone in one step');
+  // Merge, then split it back into its four cells.
+  await apply({ kind: 'tableEdit', edit: 'selectTable' });
+  await apply({ kind: 'tableEdit', edit: 'mergeCells' });
+  await apply({ kind: 'splitCells', columns: 2, rows: 2 });
+  assert.deepEqual(gridText(doc), [['a|b|c|d', ''], ['', '']]);
+  editor.undo();
+  assert.deepEqual(gridText(doc), [['a|b|c|d'], ['']]);
+});
+
+test('splitting a plain cell adds a column, and merging needs more than one cell', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  // Merge with the caret in one cell does nothing.
+  assert.equal(editor.apply({ kind: 'tableEdit', edit: 'mergeCells' }).edited, false);
+  await apply({ kind: 'splitCells', columns: 2, rows: 1 });
+  assert.deepEqual(gridText(doc), [['a', '', 'b'], ['c', 'd']], 'a and a new cell in the first row; the second row has its two cells');
+  assert.equal(widths(doc).length, 3);
+  const first = tablesOf(doc)[0].rows[1] as { cells: { properties: { gridSpan?: number } }[] };
+  assert.equal(first.cells[0].properties.gridSpan, 2, 'the cell below it spans the two new columns');
+  assert.equal(editor.paragraphs()[1] === editor.selection.focus.paragraph, true, 'the caret is in the first piece, which has the text');
+  editor.undo();
+  assert.equal(widths(doc).length, 2);
+  assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);
+  // Outside a table: nothing.
+  await apply({ kind: 'move', to: 'documentStart' });
+  assert.equal(editor.apply({ kind: 'splitCells', columns: 2, rows: 1 }).edited, false);
+});
+
+test('with columns a click belongs to its column, and Down and Up carry on into the next one', skip, async () => {
+  const text = 'The quick brown fox jumps over the lazy dog and keeps running through the field.';
+  const { editor, session, apply } = await setup(Array.from({ length: 30 }, (_, i) => `${i}. ${text}`), (doc) => {
+    doc.section = { ...doc.section, columns: { num: 2, space: 720 } };
+  });
+  const [page] = session.displayPages;
+  const left = page.lines.filter((l) => l.column === 72);
+  const right = page.lines.filter((l) => l.column === 324);
+  assert.ok(left.length > 10 && right.length > 3 && right.length < left.length, 'the right column is the shorter one');
+  const lastRight = right[right.length - 1];
+  // Below where the right column ends, but level with the left column's text: still the right column.
+  const belowRight = lastRight.y + lastRight.height + 40;
+  assert.ok(left.some((l) => l.y <= belowRight && l.y + l.height >= belowRight), 'the left column has a line at that height');
+  const hit = editor.hitTest(page, 400, belowRight)!;
+  assert.equal(hit.paragraph, lastRight.paragraph, 'in the right column');
+  const hitLeft = editor.hitTest(page, 150, belowRight)!;
+  assert.notEqual(hitLeft.paragraph, lastRight.paragraph, 'and the left one still gets clicks in it');
+  // Down from the last line of the left column goes to the top of the right one.
+  const lastLeft = left[left.length - 1];
+  editor.selection = { anchor: { paragraph: lastLeft.paragraph, offset: lastLeft.start }, focus: { paragraph: lastLeft.paragraph, offset: lastLeft.start } };
+  await apply({ kind: 'move', to: 'down' });
+  const caret = editor.geometry().caret!;
+  assert.equal(caret.x >= 324, true, 'the caret is in the right column');
+  assert.ok(caret.y <= right[0].y + 1, 'at its top');
+  // And Up from there goes back to the bottom of the left one.
+  await apply({ kind: 'move', to: 'up' });
+  const back = editor.geometry().caret!;
+  assert.ok(back.x < 324 && back.y >= lastLeft.y - 1, 'the caret is back at the foot of the left column');
+});
+
+// --- Columns -----------------------------------------------------------------------------
+
+test('columns for the whole document, one section, or from the caret on', skip, async () => {
+  const filler = 'The quick brown fox jumps over the lazy dog and keeps running through the field.';
+  const { doc, editor, session, apply, texts } = await setup(['Title', filler, filler, filler]);
+  const sectionOf = (p: Paragraph) => p.properties.section;
+  // Whole document: the last section (the only one) gets them.
+  assert.deepEqual(editor.sectionColumns(), { count: 1, space: 720, sep: false, width: 9360 });
+  await apply({ kind: 'setColumns', count: 2, space: 360, sep: true, scope: 'document' });
+  assert.deepEqual(doc.section.columns, { num: 2, space: 360, equalWidth: true, sep: true });
+  assert.deepEqual(editor.sectionColumns(), { count: 2, space: 360, sep: true, width: 9360 });
+  const [page] = session.displayPages;
+  assert.equal(page.lines.every((l) => l.columnWidth !== undefined), true, 'laid out in columns');
+  editor.undo();
+  assert.deepEqual(doc.section.columns, { space: 720 }, 'as the blank document had it');
+  assert.deepEqual(editor.sectionColumns().count, 1);
+  // One column takes the element away.
+  await apply({ kind: 'setColumns', count: 3, space: 720, sep: false, scope: 'document' });
+  await apply({ kind: 'setColumns', count: 1, space: 720, sep: false, scope: 'document' });
+  assert.equal(doc.section.columns, undefined);
+  // From the caret on: the paragraph is split, the first half ends a section as it was, the rest has the columns.
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'down' }, { kind: 'move', to: 'lineStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'wordRight' });
+  await apply({ kind: 'setColumns', count: 2, space: 720, sep: false, scope: 'forward' });
+  assert.equal(texts().length, 5, 'one paragraph became two');
+  const ends = paragraphsIn(doc.body).filter(sectionOf);
+  assert.equal(ends.length, 1, 'one section break');
+  assert.equal(sectionOf(ends[0])!.columns?.num, undefined, 'before it: as it was');
+  assert.deepEqual(doc.section.columns, { num: 2, space: 720, equalWidth: true });
+  assert.equal(doc.section.type, 'continuous', 'the new section starts on the same page');
+  const lines = session.displayPages[0].lines;
+  const before = lines.filter((l) => paragraphText(l.paragraph) === 'Title' || l.paragraph === ends[0]);
+  assert.ok(before.every((l) => l.columnWidth === undefined), 'the first part is one column');
+  assert.ok(lines.some((l) => l.columnWidth !== undefined), 'and the rest is in columns');
+  // Undo puts it all back in one step.
+  editor.undo();
+  assert.equal(texts().length, 4);
+  assert.equal(paragraphsIn(doc.body).filter(sectionOf).length, 0);
+  const finalSection = () => doc.section;
+  assert.equal(finalSection().columns?.num, undefined);
+  assert.equal(finalSection().type, undefined);
+});
+
+test('columns "in this section" leave the other sections alone; bad values and tables are refused', skip, async () => {
+  const { doc, editor, apply } = await setup(['One', 'Two', 'Three']);
+  // Two sections: "One" ends the first.
+  const [first] = paragraphsIn(doc.body);
+  first.properties.section = { ...doc.section };
+  await apply({ kind: 'move', to: 'documentEnd' });
+  await apply({ kind: 'setColumns', count: 2, space: 720, sep: false, scope: 'section' });
+  assert.deepEqual(doc.section.columns?.num, 2, 'the last section, where the caret is');
+  assert.equal(first.properties.section.columns?.num, undefined, 'not the first');
+  await apply({ kind: 'move', to: 'documentStart' });
+  await apply({ kind: 'setColumns', count: 3, space: 720, sep: false, scope: 'section' });
+  assert.equal(first.properties.section.columns?.num, 3, 'now the first');
+  assert.equal(doc.section.columns?.num, 2, 'and not the last');
+  for (const count of [0, 13, Number.NaN]) assert.equal(editor.apply({ kind: 'setColumns', count, space: 720, sep: false, scope: 'document' }).edited, false, `${count} columns`);
+  assert.equal(editor.apply({ kind: 'setColumns', count: 2, space: -1, sep: false, scope: 'document' }).edited, false);
+  // From the caret on isn't done inside a table.
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'insertTable', rows: 1, columns: 1 });
+  assert.equal(editor.apply({ kind: 'setColumns', count: 2, space: 720, sep: false, scope: 'forward' }).edited, false);
+});
+
+test('insertContent puts inline content at the caret, replacing a selection, as one undo step', skip, async () => {
+  const { doc, editor, apply, session, texts } = await setup(['Hello world']);
+  const picture: Inline = { kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'drawing', inline: true, width: 914400, height: 914400, image: 'word/media/image1.png' }] };
+  const drawings = () => paragraphsIn(doc.body).flatMap((p) => p.children).flatMap((c) => (c.kind === 'run' ? c.content : [])).filter((c) => c.kind === 'drawing').length;
+  // After "Hello ": the text is split around the picture, and the caret is after it.
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'insertContent', content: [picture] });
+  assert.equal(drawings(), 1);
+  assert.equal(texts()[0].replace(/\uFFFC/g, '|'), 'Hello |world');
+  assert.equal(editor.selection.focus.offset, 'Hello '.length + 1);
+  // Over a selection the text goes and the picture takes its place.
+  await apply({ kind: 'selectAll' }, { kind: 'insertContent', content: [picture] });
+  assert.equal(drawings(), 1);
+  assert.equal(texts()[0].replace(/\uFFFC/g, '|'), '|');
+  // One undo brings back the text, and the picture that was there before.
+  editor.undo();
+  await session.run();
+  assert.equal(texts()[0].replace(/\uFFFC/g, '|'), 'Hello |world');
+  assert.equal(drawings(), 1);
+});
+
+// --- CJK word boundaries and grapheme clusters ------------------------------------------------
+
+/** Every caret offset wordRight visits from the start of a single-paragraph document. */
+async function wordStops(text: string): Promise<number[]> {
+  const { editor, apply } = await setup([text]);
+  await apply({ kind: 'move', to: 'documentStart' });
+  const stops = [0];
+  for (let i = 0; i < text.length + 2 && editor.selection.focus.offset < text.length; i++) {
+    await apply({ kind: 'move', to: 'wordRight' });
+    stops.push(editor.selection.focus.offset);
+  }
+  return stops;
+}
+
+test('Ctrl+Arrow splits Japanese text into words and keeps a Han/Latin boundary', skip, async () => {
+  const text = '日本語のテキストです。Hello world';
+  const stops = await wordStops(text);
+  assert.ok(stops.length > 4, `not one word: ${stops}`);
+  assert.ok(stops.includes(text.indexOf('Hello')), 'stops where Latin starts');
+  assert.ok(stops.includes(text.indexOf('world')));
+  assert.ok(stops.includes(3) || stops.includes(2), 'ends the first Han word before の');
+  // Leftwards visits the same starts.
+  const { editor, apply } = await setup([text]);
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'move', to: 'wordLeft' });
+  assert.equal(editor.selection.focus.offset, text.indexOf('world'));
+  await apply({ kind: 'move', to: 'wordLeft' });
+  assert.equal(editor.selection.focus.offset, text.indexOf('Hello'));
+  await apply({ kind: 'move', to: 'wordLeft' });
+  assert.ok(editor.selection.focus.offset < text.indexOf('Hello') && editor.selection.focus.offset > 0, 'does not jump to the paragraph start');
+});
+
+test('double-click selects a Japanese word, not the whole run', skip, async () => {
+  const text = '日本語のテキストです。Hello world';
+  const { editor } = await setup([text]);
+  const p = editor.selection.focus.paragraph;
+  const [a, b] = (editor as unknown as { wordAt(pos: { paragraph: unknown; offset: number }): [{ offset: number }, { offset: number }] }).wordAt({ paragraph: p, offset: 1 });
+  assert.equal(a.offset, 0);
+  assert.ok(b.offset >= 2 && b.offset <= 3, `日本語 or 日本: ${b.offset}`);
+  const [c, d] = (editor as unknown as { wordAt(pos: { paragraph: unknown; offset: number }): [{ offset: number }, { offset: number }] }).wordAt({ paragraph: p, offset: text.indexOf('Hello') + 2 });
+  assert.equal(text.slice(c.offset, d.offset), 'Hello');
+});
+
+test('Ctrl+Backspace deletes one word of mixed text', skip, async () => {
+  const { apply, texts } = await setup(['Hello 日本語のテキスト']);
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'delete', direction: 'backward', unit: 'word' });
+  const [after] = texts();
+  assert.ok(after.startsWith('Hello 日本語') && after.length < 'Hello 日本語のテキスト'.length && after.length > 'Hello '.length - 1, after);
+  await apply({ kind: 'delete', direction: 'backward', unit: 'word' });
+  await apply({ kind: 'delete', direction: 'backward', unit: 'word' });
+  assert.ok(texts()[0].length <= 'Hello '.length, texts()[0]);
+});
+
+test('English word movement is unchanged', skip, async () => {
+  const stops = await wordStops("don't stop, me");
+  assert.deepEqual(stops, [0, 6, 10, 12, 14]);
+});
+
+test('caret steps over surrogate pairs and combining sequences as one cluster', skip, async () => {
+  const { editor, apply, texts } = await setup(['a😀がb👨‍👩‍👧é']);
+  await apply({ kind: 'move', to: 'documentStart' });
+  const offsets: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    await apply({ kind: 'move', to: 'right' });
+    offsets.push(editor.selection.focus.offset);
+  }
+  const t = texts()[0];
+  assert.deepEqual(offsets, [1, 3, 5, 6, t.length - 2, t.length]);
+  // Backspace removes a whole cluster.
+  await apply({ kind: 'delete', direction: 'backward' });
+  assert.equal(texts()[0], t.slice(0, t.length - 2));
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'right' }, { kind: 'move', to: 'right' }, { kind: 'delete', direction: 'forward' });
+  assert.equal(texts()[0], 'a😀b👨‍👩‍👧');
+});
+
+// --- Page setup --------------------------------------------------------------------------
+
+const LANDSCAPE_LETTER = { width: 15840, height: 12240, landscape: true, top: 1080, bottom: 1080, left: 720, right: 720, gutter: 0, header: 360, footer: 360 };
+
+test('page setup for the whole document changes the size of every page', skip, async () => {
+  const { doc, editor, session, apply } = await setup(['One', 'Two']);
+  assert.deepEqual(editor.sectionPage(), { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 });
+  await apply({ kind: 'setPage', ...LANDSCAPE_LETTER, scope: 'document' });
+  assert.deepEqual(doc.section.pageSize?.orient, 'landscape');
+  assert.equal(doc.section.margins?.left, 720);
+  assert.deepEqual(editor.sectionPage(), { ...LANDSCAPE_LETTER });
+  const [page] = session.displayPages;
+  assert.deepEqual([page.width, page.height], [792, 612], 'the page is 11 by 8.5 inches');
+  editor.undo();
+  await session.run();
+  const [portrait] = session.displayPages;
+  assert.deepEqual([portrait.width, portrait.height], [612, 792]);
+  assert.equal(doc.section.pageSize?.orient === 'landscape', false);
+});
+
+test('page setup from the caret on starts a new page of the new size', skip, async () => {
+  const { doc, session, apply, texts } = await setup(['Before', 'After the change', 'Last']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'down' });
+  await apply({ kind: 'setPage', ...LANDSCAPE_LETTER, scope: 'forward' });
+  assert.equal(texts().length, 4, 'the paragraph was split');
+  assert.equal(doc.section.type, 'nextPage');
+  assert.deepEqual(doc.section.pageSize?.orient, 'landscape');
+  const sizes = session.displayPages.map((p) => [p.width, p.height]);
+  assert.deepEqual(sizes, [[612, 792], [792, 612]], 'a portrait page, then a landscape one');
+  // The first part keeps its own setup.
+  const ends = paragraphsIn(doc.body).filter((p) => p.properties.section);
+  assert.equal(ends.length, 1);
+  assert.equal(ends[0].properties.section!.pageSize?.orient === 'landscape', false);
+});
+
+test('page setup in this section leaves the others alone; sizes that leave no text area are refused', skip, async () => {
+  const { doc, editor, apply } = await setup(['One', 'Two']);
+  const [first] = paragraphsIn(doc.body);
+  first.properties.section = { ...doc.section };
+  await apply({ kind: 'setPage', ...LANDSCAPE_LETTER, scope: 'section' });
+  assert.equal(first.properties.section.pageSize?.orient, 'landscape', 'the first section, where the caret is');
+  assert.equal(doc.section.pageSize?.orient === 'landscape', false, 'not the last');
+  const ok = { ...LANDSCAPE_LETTER, scope: 'document' as const };
+  assert.equal(editor.apply({ kind: 'setPage', ...ok, left: 9000, right: 7000 }).edited, false, 'margins wider than the page');
+  assert.equal(editor.apply({ kind: 'setPage', ...ok, top: 7000, bottom: 5500 }).edited, false, 'margins taller than the page');
+  assert.equal(editor.apply({ kind: 'setPage', ...ok, width: 100 }).edited, false, 'a sliver of a page');
+  assert.equal(editor.apply({ kind: 'setPage', ...ok, top: -1 }).edited, false);
+  assert.equal(editor.apply({ kind: 'setPage', ...ok, width: 12240.5 }).edited, false);
+});
+
+test('document properties are set and undone like an edit', skip, async () => {
+  const { doc, editor, apply } = await setup(['Hello']);
+  assert.deepEqual(doc.properties, {});
+  const result = editor.apply({ kind: 'setProperties', properties: { title: 'Notes', author: 'Ada' } });
+  assert.equal(result.edited, true);
+  assert.deepEqual(doc.properties, { title: 'Notes', author: 'Ada' });
+  await apply({ kind: 'setProperties', properties: { title: 'Notes 2' } });
+  assert.deepEqual(doc.properties, { title: 'Notes 2' });
+  editor.undo();
+  assert.deepEqual(doc.properties, { title: 'Notes', author: 'Ada' });
+  editor.undo();
+  assert.deepEqual(doc.properties, {});
+  editor.undo();
+  assert.deepEqual(doc.properties, {}, 'and nothing more to undo');
+});
+
+// --- Pasting -----------------------------------------------------------------------------
+
+const pasted = (text: string, properties: Paragraph['properties'] = {}, run: Extract<Paragraph['children'][number], { kind: 'run' }>['properties'] = {}): Paragraph => ({
+  kind: 'paragraph',
+  properties,
+  attrs: {},
+  children: [{ kind: 'run', properties: run, attrs: {}, content: [{ kind: 'text', text }] }],
+});
+
+test('pasting one paragraph puts its text (formatting kept) at the caret', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['Hello world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' });
+  await apply({ kind: 'pasteContent', blocks: [pasted('big ', { style: 'Heading1' }, { bold: true })] });
+  assert.deepEqual(texts(), ['Hello big world'], 'the pasted paragraph\'s own formatting is left behind');
+  const [p] = paragraphsIn(doc.body);
+  assert.equal(p.properties.style, undefined);
+  const bold = p.children.filter((c) => c.kind === 'run' && c.properties.bold);
+  assert.equal(bold.length, 1);
+  assert.equal(editor.selection.focus.offset, 10, 'the caret is after it');
+  editor.undo();
+  assert.deepEqual(texts(), ['Hello world']);
+});
+
+test('pasting several paragraphs splits the one the caret is in', skip, async () => {
+  const { editor, apply, texts, doc } = await setup(['Hello world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' });
+  await apply({ kind: 'pasteContent', blocks: [pasted('A'), pasted('B', { style: 'Heading2' }), pasted('C')] });
+  assert.deepEqual(texts(), ['Hello A', 'B', 'Cworld'], 'first joins the start, last the rest');
+  assert.equal(paragraphsIn(doc.body)[1].properties.style, 'Heading2', 'the middle keeps its own formatting');
+  assert.equal(editor.paragraphs().indexOf(editor.selection.focus.paragraph), 2);
+  assert.equal(editor.selection.focus.offset, 1, 'the caret is between the pasted text and the rest');
+  editor.undo();
+  assert.deepEqual(texts(), ['Hello world'], 'one undo step');
+  // At the end of a paragraph the last stays a paragraph of its own.
+  await apply({ kind: 'move', to: 'documentEnd' });
+  await apply({ kind: 'pasteContent', blocks: [pasted('X'), pasted('Y', { style: 'Quote' })] });
+  assert.deepEqual(texts(), ['Hello worldX', 'Y']);
+  assert.equal(paragraphsIn(doc.body)[1].properties.style, 'Quote');
+});
+
+test('pasting into an empty paragraph takes on the look of the first pasted one; a selection is replaced', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['']);
+  await apply({ kind: 'pasteContent', blocks: [pasted('Title', { style: 'Heading1' }), pasted('Body')] });
+  assert.deepEqual(texts(), ['Title', 'Body']);
+  assert.equal(paragraphsIn(doc.body)[0].properties.style, 'Heading1');
+  const over = await setup(['One two three']);
+  await over.apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'wordRight', extend: true });
+  await over.apply({ kind: 'pasteContent', blocks: [pasted('2'), pasted('3')] });
+  assert.deepEqual(over.texts(), ['One 2', '3three']);
+  over.editor.undo();
+  assert.deepEqual(over.texts(), ['One two three'], 'the replacing and the pasting undo together');
+  void editor;
+});
+
+test('pasted styles and lists are defined first; a table goes in as a table, but not in a cell', skip, async () => {
+  const { doc, editor, apply } = await setup(['Before']);
+  await apply({ kind: 'move', to: 'documentEnd' });
+  const table = { kind: 'table' as const, properties: {}, grid: [4000], rows: [{ kind: 'row' as const, properties: {}, attrs: {}, cells: [{ kind: 'cell' as const, properties: {}, attrs: {}, children: [pasted('cell')] }] }] };
+  const style = { type: 'paragraph' as const, id: 'Fancy', name: 'Fancy', attrs: {} };
+  await apply({ kind: 'pasteContent', blocks: [pasted('Above', { style: 'Fancy' }), table], define: [{ type: 'setStyle', id: 'Fancy', style }] });
+  assert.ok(doc.styles.styles.some((s) => s.id === 'Fancy'));
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph'], 'the first paragraph joined the line; a paragraph follows the table');
+  // In a cell: the paragraphs go in, the table doesn't.
+  await apply({ kind: 'select', paragraph: 1, from: 0, to: 0 });
+  assert.equal(editor.paragraphs()[1], editor.selection.focus.paragraph, 'the caret is in the cell');
+  await apply({ kind: 'pasteContent', blocks: [pasted('one'), table] });
+  assert.equal(doc.body.filter((b) => b.kind === 'table').length, 1, 'no table inside the table');
 });

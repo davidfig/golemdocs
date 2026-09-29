@@ -54,7 +54,14 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.remove': 'Quitar',
   'dialogs.share.nobody': 'Aún no se ha compartido con nadie.',
   'dialogs.share.done': 'Listo',
+  'dialogs.share.linkHeading': 'Enlace',
+  'dialogs.share.peopleHeading': 'Personas',
+  'dialogs.share.getLink': 'Obtener enlace',
   'dialogs.share.note': 'Las personas deben haber iniciado sesión en Golem Docs al menos una vez. Quienes editan y quienes ven los documentos ven los cambios en directo.',
+  'dialogs.roomLink.label': 'Enlace a este documento compartido',
+  'dialogs.roomLink.note': 'Cualquiera que tenga este enlace puede abrir el documento y editarlo contigo. Los cambios se ven en directo para todos.',
+  'dialogs.roomLink.copy': 'Copiar enlace',
+  'dialogs.roomLink.copied': 'Copiado',
 
   // Sign in
   'dialogs.signIn.title': 'Iniciar sesión',
@@ -83,6 +90,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.guest.tooltip': 'Inicie sesión para conservar sus documentos en su cuenta',
   'dialogs.sync.guest.title': 'Guardado en este explorador',
   'dialogs.sync.guest.body': 'Inicie sesión para conservar sus documentos en su cuenta y abrirlos en cualquier dispositivo. Los documentos que ha creado aquí se incluyen.',
+  'dialogs.sync.lastSaved': 'Último guardado: {time}',
   'dialogs.sync.saved.text': 'Guardado',
   'dialogs.sync.saved.tooltip': 'Todos los cambios se han guardado en su cuenta',
   'dialogs.sync.saved.title': 'Todos los cambios guardados',

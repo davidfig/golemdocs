@@ -40,6 +40,12 @@ export const menus: Partial<Messages> = {
   'menus.format.tsv': 'TSV (以定位點分隔)',
   'menus.format.txt': '純文字',
   'menus.format.pdf': 'PDF',
+  'menus.format.group.popular': '常用',
+  'menus.format.group.documents': '文件',
+  'menus.format.group.web': '網頁',
+  'menus.format.group.data': '資料',
+  'menus.format.group.markup': '標記語言',
+  'menus.format.group.images': '圖片',
 
   'menus.combo.list': '{label}清單',
   'menus.split.options': '{label}選項',

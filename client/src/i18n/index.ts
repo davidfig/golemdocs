@@ -16,6 +16,14 @@ import { LOCALES } from './locales.ts';
 export type Messages = { [K in keyof typeof en]: string };
 /** A key, or the base of a `.one`/`.other` plural family (`t('x', { count })` finds `x.other`). */
 export type MessageKey = keyof Messages | (keyof Messages extends infer K ? (K extends `${infer B}.other` ? B : never) : never);
+/**
+ * What a translation may hold: any of the English keys, plus the plural forms English doesn't need.
+ * English has `x` (other) and `x.one`; a language may add `x.zero`, `x.two`, `x.few` and `x.many`
+ * (Russian: one 1, 21…; few 2–4; many 5–20; other for fractions).
+ */
+export type Catalog = Partial<Messages> & {
+  [K in keyof Messages as K extends `${infer B}.one` ? `${B}.${'zero' | 'two' | 'few' | 'many'}` : never]?: string;
+};
 export type Params = Record<string, string | number>;
 
 const STORAGE_KEY = 'wm.locale';

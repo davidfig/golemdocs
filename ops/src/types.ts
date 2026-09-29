@@ -6,7 +6,7 @@
 // applied yields its inverse (for undo and for rebasing) and a position map (to move
 // selections, pending operations and undo history through it).
 
-import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, ParagraphProperties, RunContent, RunProperties, Style } from '@word/docx';
+import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, DocumentProperties, ParagraphProperties, RunContent, RunProperties, SectionProperties, Style, TableCell, TableCellProperties, TableRow } from '@word/docx';
 
 /** Changes to run formatting, per property: a value to set, or null to remove it. */
 export type RunFormat = { [K in keyof RunProperties]?: RunProperties[K] | null };
@@ -32,10 +32,26 @@ export type Operation =
   | { type: 'merge'; paragraph: string; next: string }
   /** Removes the blocks between two paragraphs of one container (paragraphs, tables...). */
   | { type: 'removeBetween'; after: string; before: string }
-  /** Inserts blocks right after a paragraph. */
-  | { type: 'insertBlocks'; after: string; blocks: Block[] }
-  /** Removes particular blocks (by blockKey) from the container of paragraph `after`. */
-  | { type: 'removeBlocks'; after: string; keys: string[] }
+  /** Inserts blocks right after a paragraph, or right before it with `before`. */
+  | { type: 'insertBlocks'; after: string; blocks: Block[]; before?: boolean }
+  /** Removes particular blocks (by blockKey) that follow paragraph `after` in its container (or, with `before`, precede it). */
+  | { type: 'removeBlocks'; after: string; keys: string[]; before?: boolean }
+  /** Adds a row below (`after`) or above the row that holds `paragraph`. Its paragraphs need ids nothing else has. */
+  | { type: 'insertRow'; paragraph: string; after: boolean; row: TableRow }
+  /** Removes the row that holds `paragraph`. Does nothing to a table's only row (remove the table instead). */
+  | { type: 'removeRow'; paragraph: string }
+  /** Adds a cell to the right of (`after`) or left of the cell that holds `paragraph`. */
+  | { type: 'insertCell'; paragraph: string; after: boolean; cell: TableCell }
+  /** Removes the cell that holds `paragraph`. Does nothing to a row's only cell. */
+  | { type: 'removeCell'; paragraph: string }
+  /** Sets the column widths of the table that holds `paragraph`, twips. */
+  | { type: 'setTableGrid'; paragraph: string; grid: number[] }
+  /** Replaces the document's properties (title, author... of File ▸ Properties). */
+  | { type: 'setDocumentProperties'; properties: DocumentProperties }
+  /** Replaces the document's last section's properties (the earlier sections' are in their last paragraph's properties). */
+  | { type: 'setDocumentSection'; properties: SectionProperties }
+  /** Replaces the properties (width, span, shading...) of the cell that holds `paragraph`. */
+  | { type: 'setCellProperties'; paragraph: string; properties: TableCellProperties }
   /** Changes the formatting of the text in positions [from, to); `to` past the end means to the end. */
   | { type: 'formatText'; paragraph: string; from: number; to: number; format: RunFormat }
   | { type: 'setParagraphProperties'; paragraph: string; properties: ParagraphProperties }

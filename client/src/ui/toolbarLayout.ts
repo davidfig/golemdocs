@@ -71,11 +71,23 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
       'control.fontColor',
     ],
   },
+  // Only there for pictures: it has nothing to show for any other document, so it is left out.
+  {
+    name: 'Picture',
+    visible: true,
+    items: ['image.rotateLeft', 'image.rotateRight', 'image.flipHorizontal', 'image.flipVertical', SEPARATOR, 'image.crop', 'image.resize', 'image.adjust', SEPARATOR, 'image.autoLevels', 'image.grayscale', 'image.sepia', 'image.invert', 'image.blur', 'image.sharpen'],
+  },
+  // Drawing on a picture; like the Picture toolbar, only there for pictures.
+  {
+    name: 'Draw',
+    visible: true,
+    items: ['image.pen', 'image.marker', SEPARATOR, 'image.line', 'image.arrow', 'image.rectangle', 'image.ellipse', 'image.fill', SEPARATOR, 'image.text', 'image.pixelate', 'image.eraser', SEPARATOR, 'control.drawColor', 'control.drawSize'],
+  },
 ];
 
 /** A toolbar's name as shown (its `name` is an id, kept as saved). */
 export function toolbarTitle(name: string): string {
-  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name;
+  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name === 'Picture' ? t('picture.menu').replace('&', '') : name === 'Draw' ? t('picture.draw.toolbar') : name;
 }
 
 const STORAGE_KEY = 'word.toolbars.v1';

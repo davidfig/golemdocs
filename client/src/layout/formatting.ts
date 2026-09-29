@@ -7,7 +7,7 @@
 // at the selection, and hands the editor commands it can apply as one undoable step.
 
 import { StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@word/docx';
-import type { Command, Editor } from '@word/editor';
+import type { Command, Editor, TableEdit } from '@word/editor';
 import type { Operation, RunFormat } from '@word/ops';
 import { styleFor } from '../formats/markdownStyles.ts';
 import type { Action, CaseChange, FormatState, Mark } from '../ui/actions.ts';
@@ -26,6 +26,8 @@ export type FormatAction = Extract<
       | 'setHighlight'
       | 'changeCase'
       | 'clearFormatting'
+      | 'insertTable'
+      | 'table'
       | 'formatPainter'
       | 'setStyle'
       | 'setAlignment'
@@ -45,6 +47,8 @@ export const FORMAT_ACTIONS = new Set<FormatAction['kind']>([
   'setHighlight',
   'changeCase',
   'clearFormatting',
+  'insertTable',
+  'table',
   'formatPainter',
   'setStyle',
   'setAlignment',
@@ -60,6 +64,9 @@ const DEFAULT_HALF_POINTS = 20;
 /** One indent step, twips (half an inch). */
 const INDENT_STEP = 720;
 const MONO = 'Courier New';
+
+/** The Table menu's operations the editor can do. */
+export const TABLE_EDITS = new Set<string>(['insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'deleteRows', 'deleteColumns', 'deleteTable', 'selectTable', 'mergeCells', 'splitCells']);
 
 /** Word's highlight colors by name, as the toolbar's palette shows them. */
 const HIGHLIGHT_NAMES: Record<string, string> = {
@@ -351,6 +358,12 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
           return keys.length ? Object.fromEntries(keys.map((k) => [k, null])) : null;
         },
       };
+    case 'insertTable':
+      return action.rows && action.columns ? { kind: 'insertTable', rows: action.rows, columns: action.columns, define: defineStyle(doc, 'TableGrid') } : null;
+    case 'table':
+      // Table Properties isn't there yet.
+      if (action.op === 'splitCells') return action.columns && action.rows ? { kind: 'splitCells', columns: action.columns, rows: action.rows } : null;
+      return TABLE_EDITS.has(action.op) ? { kind: 'tableEdit', edit: action.op as TableEdit } : null;
     // Handled by the worker, which holds what was picked up (see OpenDocument.applyPainter).
     case 'formatPainter':
       return null;

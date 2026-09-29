@@ -625,6 +625,18 @@
   cursor: default;
 }
 
+.wm-list-heading {
+  padding: 4px 8px 2px;
+  font-size: 0.85em;
+  font-weight: bold;
+  opacity: 0.65;
+  cursor: default;
+}
+
+.wm-list-heading:not(:first-child) {
+  margin-top: 6px;
+}
+
 .wm-option.active {
   background: var(--wm-hot);
   border-color: var(--wm-hot-border);
@@ -780,9 +792,11 @@
   margin: 0 0 8px;
 }
 
+/* Buttons side by side are 8px apart, in every dialog (see also .wm-link-actions). */
 .wm-dialog-buttons {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   padding: 8px 12px 12px;
 }
 
@@ -1006,7 +1020,7 @@
 
 .wm-format {
   position: absolute;
-  top: 1px;
+  top: 2px;
   right: 6px;
   height: 20px;
   display: flex;
@@ -1056,19 +1070,19 @@
   border-color: var(--wm-hot-border);
 }
 
-.wm-format-label {
-  color: var(--wm-text);
-  opacity: 0.7;
-}
-
 /* The format picker is a read-only combo box; it sits in the menu bar's row. */
 .wm-format .wm-combo {
+  box-sizing: border-box;
   height: 19px;
   margin: 0;
 }
 
+/* A pick-only list: its text is a label, not something to select or edit. */
 .wm-combo-input.readonly {
   cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
 }
 
 /* --- Sync button (top right) --------------------------------------------------------------- */
@@ -1387,7 +1401,7 @@
 
 .wm-link-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 /* --- Spelling and Grammar -------------------------------------------------------------------- */
@@ -1425,4 +1439,209 @@
 .wm-spell-suggestions {
   height: auto;
   padding: 1px;
+}
+
+/* --- Columns --------------------------------------------------------------------------------- */
+
+.wm-columns-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.wm-columns-width {
+  min-height: 1.4em;
+  color: var(--wm-muted);
+}
+
+/* --- Feedback (see feedback.ts) --------------------------------------------------------------- */
+
+.wm-feedback-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-width: none;
+}
+
+.wm-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wm-feedback textarea.wm-feedback-text {
+  height: min(50vh, 360px);
+  min-height: 160px;
+  margin: 0;
+  padding: 8px 10px;
+  resize: vertical;
+  font: 14px/1.5 var(--wm-font);
+}
+
+.wm-feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Fills the dialog (max 520px) less its 14px padding on each side. */
+  width: min(492px, calc(100vw - 64px));
+  max-height: min(65vh, 560px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.wm-feedback-entry {
+  padding: 10px 12px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+}
+
+.wm-feedback-entry.resolved {
+  opacity: 0.65;
+}
+
+.wm-feedback-entry header,
+.wm-feedback-entry footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wm-feedback-entry time {
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.wm-feedback-entry .wm-feedback-message {
+  margin: 8px 0 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wm-feedback-badge {
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.wm-feedback-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* --- Word Count ------------------------------------------------------------------------------ */
+
+.wm-stats {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wm-stats th,
+.wm-stats td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--wm-etch-dark);
+}
+
+.wm-stats th {
+  text-align: left;
+  font-weight: 400;
+}
+
+.wm-stat-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.wm-wordcount .wm-find-message {
+  color: var(--wm-muted);
+}
+
+/* --- Page Setup ------------------------------------------------------------------------------ */
+
+.wm-dialog.wm-pagesetup {
+  width: 440px;
+}
+
+.wm-page-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wm-page-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+
+.wm-page-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-page-field > span:first-child {
+  min-width: 64px;
+}
+
+.wm-page-field .wm-input {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.wm-page-unit {
+  color: var(--wm-muted);
+  min-width: 2ch;
+}
+
+.wm-page-orientation {
+  display: flex;
+  gap: 16px;
+}
+
+.wm-pagesetup .wm-find-tabs {
+  padding-top: 8px;
+}
+
+.wm-pagesetup [hidden] {
+  display: none;
+}
+
+.wm-properties .wm-page-tab label {
+  margin-top: 4px;
+}
+
+.wm-properties-comments {
+  height: auto;
+  padding: 3px 4px;
+  resize: vertical;
+}
+
+.wm-draw-size {
+  height: 24px;
+  font: 12px var(--wm-font, system-ui);
+}
+
+/* --- Paste Special --------------------------------------------------------------------------- */
+
+.wm-paste-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.wm-paste-preview {
+  box-sizing: border-box;
+  min-height: 56px;
+  max-height: 120px;
+  overflow: auto;
+  padding: 3px 5px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }

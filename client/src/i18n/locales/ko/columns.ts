@@ -1,0 +1,25 @@
+import type { Messages } from '../../index.ts';
+
+export const columns: Partial<Messages> = {
+  'columns.title': '단',
+  'columns.close': '닫기',
+  'columns.presets': '기본 설정',
+  'columns.one': '하나',
+  'columns.two': '둘',
+  'columns.three': '셋',
+  'columns.number': '단 개수:',
+  'columns.numberLabel': '단 개수',
+  'columns.spacing': '간격:',
+  'columns.spacingLabel': '단 사이의 간격(인치)',
+  'columns.width': '각 단의 너비:',
+  'columns.inches': '{value}"',
+  'columns.line': '구분선 넣기',
+  'columns.apply': '적용 대상:',
+  'columns.applyDocument': '전체 문서',
+  'columns.applySection': '현재 구역',
+  'columns.applyForward': '현재 위치 이후',
+  'columns.ok': '확인',
+  'columns.cancel': '취소',
+  'columns.bad': '단은 1개에서 {max}개까지 선택하고, 단 사이의 간격은 0인치에서 4인치 사이로 지정하세요.',
+  'columns.tooNarrow': '단 너비가 너무 좁아집니다. 단 개수를 줄이거나 단 사이의 간격을 줄이세요.',
+};

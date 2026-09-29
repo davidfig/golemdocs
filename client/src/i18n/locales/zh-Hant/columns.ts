@@ -1,0 +1,25 @@
+import type { Messages } from '../../index.ts';
+
+export const columns: Partial<Messages> = {
+  'columns.title': '欄',
+  'columns.close': '關閉',
+  'columns.presets': '預設',
+  'columns.one': '一欄',
+  'columns.two': '兩欄',
+  'columns.three': '三欄',
+  'columns.number': '欄數：',
+  'columns.numberLabel': '欄數',
+  'columns.spacing': '間距：',
+  'columns.spacingLabel': '欄與欄的間距 (英吋)',
+  'columns.width': '每欄寬度：',
+  'columns.inches': '{value}"',
+  'columns.line': '分隔線',
+  'columns.apply': '套用至：',
+  'columns.applyDocument': '整份文件',
+  'columns.applySection': '此章節',
+  'columns.applyForward': '從此處往後',
+  'columns.ok': '確定',
+  'columns.cancel': '取消',
+  'columns.bad': '請選擇 1 到 {max} 欄，欄間距為 0 到 4 英吋。',
+  'columns.tooNarrow': '欄位太窄。請減少欄數或縮小間距。',
+};

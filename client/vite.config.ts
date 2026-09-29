@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
+import { welcomeContent } from './seo';
 
 const CORPUS_DIR = path.resolve(import.meta.dirname, '../.cache/docx-corpus');
 const CORPUS_URL = '/__corpus/';
@@ -36,7 +37,7 @@ function docxCorpus(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [docxCorpus()],
+  plugins: [docxCorpus(), welcomeContent()],
   // The layout worker is an ES module (it imports the docx and layout packages).
   worker: { format: 'es' },
   server: {

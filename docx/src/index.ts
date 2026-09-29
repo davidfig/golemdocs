@@ -7,4 +7,5 @@ export * from './edit/comments.ts';
 export { WordDocument } from './docx/document.ts';
 export { OpcPackage, PackageError, REL, CONTENT_TYPE } from './opc/package.ts';
 export { ZipArchive, ZipError, writeZip } from './zip/zip.ts';
-export { parseXml, serializeXml, XmlError, type XmlElement, type XmlNode } from './xml/xml.ts';
+export { parseXml, serializeXml, el, XmlError, type XmlElement, type XmlNode } from './xml/xml.ts';
+export * from './docx/metadata.ts';

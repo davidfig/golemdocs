@@ -30,6 +30,8 @@ export const CONTENT_TYPE = {
   header: 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
   footer: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
   settings: 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
+  coreProperties: 'application/vnd.openxmlformats-package.core-properties+xml',
+  extendedProperties: 'application/vnd.openxmlformats-officedocument.extended-properties+xml',
   comments: 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
   relationships: 'application/vnd.openxmlformats-package.relationships+xml',
   xml: 'application/xml',

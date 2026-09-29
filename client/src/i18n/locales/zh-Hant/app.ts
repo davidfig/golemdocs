@@ -49,6 +49,7 @@ export const app: Partial<Messages> = {
   'app.signInToShare': '請登入以分享此文件',
   'app.ownerOnlyShare': '只有擁有者可以分享此文件',
   'app.notInAccountYet': '此文件尚未加入你的帳號：請稍候片刻等待上傳完成，然後再試一次',
+  'app.notSavedYet': '請先進行一項變更：文件經過編輯後才會儲存到你的帳號',
   'app.opening': '正在開啟「{name}」…',
   'app.openFailed': '無法開啟文件：{message}',
   'app.openingShared': '正在開啟共用文件…',
@@ -108,8 +109,25 @@ export const app: Partial<Messages> = {
   'app.wdocNoContent': '此 .wdoc 檔案沒有內容。',
   'app.notRtf': '這不是 RTF 檔案。',
 
+  'app.notImage': '這不是我們能讀取的圖片。',
+  'app.notEmail': '這不是電子郵件。',
+  'app.convertedToPicture': '已從文件的頁面製作 {name}。文件本身沒有變更。',
+  'app.pictureShortened': '一張圖片只放得下前 {count} 頁,因此 {name} 顯示這些頁面。文件本身沒有變更。',
+  'app.notReadyToConvert': '文件尚未準備好轉換。',
+  'app.notNotebook': '這不是 Jupyter 筆記本。',
+  'app.emailAttachments': '附件',
+  'app.imageTooBig': '這張圖片太大,無法在此編輯。',
+
+  'app.switchedPictureLossy': '目前以 {label} 編輯。另存為檔案時會壓縮,因此會損失少許細節。',
+
+  'app.createLinkedDocument': '沒有名為「{title}」的文件。要建立嗎?',
+
   // Browser storage
   'app.storageOpenFailed': '無法開啟瀏覽器儲存空間。',
   'app.storageAborted': '儲存交易已中止。',
   'app.storageClearFailed': '無法清除瀏覽器儲存空間。',
+  'app.notDoc': '這不是 Word 97–2003 (.doc) 檔案。',
+  'app.docTooOld': '此檔案是由 Word 6 或 95 儲存的，不受支援。請在 Word 中開啟並另存為較新的格式。',
+  'app.docEncrypted': '此 Word 文件已設定密碼保護。請在 Word 中移除密碼後再試一次。',
+  'app.docDamaged': '此 Word 文件已損毀，或使用了我們無法讀取的版面配置。',
 };

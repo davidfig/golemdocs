@@ -36,6 +36,16 @@ export interface FaceSpec {
   variations?: Record<string, number>;
 }
 
+/** Atlas generation settings for a family whose atlas differs from the shared ATLAS (the CJK pages). */
+export interface AtlasOverride {
+  /** `msdf` has no true-distance channel; the renderer only reads RGB, so text atlases don't need it. */
+  type: 'msdf' | 'mtsdf';
+  size: number;
+  pxrange: number;
+  /** Fixed atlas size in pixels; generation fails if the charset doesn't fit. */
+  dimensions: [number, number];
+}
+
 export interface FamilySpec {
   /** Output directory name under public/fonts. */
   id: string;
@@ -48,6 +58,15 @@ export interface FamilySpec {
   /** Other Word font names that map to a specific weight of this family. */
   aliases?: Record<string, number>;
   faces: FaceSpec[];
+  /** Overrides ATLAS for this family. */
+  atlas?: AtlasOverride;
+  /** A file in charsets/ (msdf-atlas-gen syntax) instead of the default charset.txt. */
+  charset?: string;
+  /**
+   * A page of a CJK font: never chosen by name, only used to draw characters the document's own font
+   * lacks (see ManifestFamily.cjk in layout/src/fonts/fontTypes.ts). Not offered in the font list.
+   */
+  cjk?: { lang: 'ja' | 'zh-Hant' | 'ko'; order: number };
 }
 
 export const ARCHIVES = {
@@ -67,6 +86,28 @@ const GOOGLE_FONTS = 'https://raw.githubusercontent.com/google/fonts/23e54b51ddf
 const gf = (path: string, sha256: string): FileRef => ({ url: `${GOOGLE_FONTS}/${path}`, sha256 });
 const lib = (file: string): FileRef => ({ archive: 'liberation', path: `liberation-fonts-ttf-2.1.5/${file}` });
 const LIBERATION_LICENSE = lib('LICENSE');
+
+const NOTO_LICENSE = '1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9';
+
+/**
+ * A CJK font as several atlas pages of at most 3,200 characters each (charsets/<lang>-<n>.txt, see
+ * charsets.ts), so a document only downloads the pages holding characters it uses. One page is a
+ * 2048 x 2048 texture; at 32 px/em with a 4 px range a glyph takes ~1,100 px, so kanji fill their cell, so a page holds ~3,300.
+ * Only regular weight is generated: bold is synthesized, as for other families without one.
+ */
+function cjkPages(lang: 'ja' | 'zh-Hant' | 'ko', substitute: string, dir: string, file: string, sha256: string, pages: number): FamilySpec[] {
+  return Array.from({ length: pages }, (_, i) => ({
+    id: `${dir.replace('notosans', 'noto-sans-')}-${i + 1}`,
+    wordName: `${substitute} (${i + 1})`,
+    substitute,
+    license: 'OFL-1.1',
+    licenseFile: gf(`${dir}/OFL.txt`, NOTO_LICENSE),
+    faces: [{ weight: 400, italic: false, font: gf(`${dir}/${file}`, sha256), variations: { wght: 400 } }],
+    atlas: { type: 'msdf' as const, size: 32, pxrange: 4, dimensions: [2048, 2048] as [number, number] },
+    charset: `${lang}-${i + 1}.txt`,
+    cjk: { lang, order: i },
+  }));
+}
 
 export const FAMILIES: FamilySpec[] = [
   {
@@ -182,4 +223,8 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 700, italic: false, font: gf('comicrelief/ComicRelief-Bold.ttf', '33aee007212b696afd57d50c901135cd723cd188f7ad98f3a1c572ea64e8f0d5') },
     ],
   },
+  ...cjkPages('ja', 'Noto Sans JP', 'notosansjp', 'NotoSansJP%5Bwght%5D.ttf', 'c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f', 5),
+  ...cjkPages('ko', 'Noto Sans KR', 'notosanskr', 'NotoSansKR%5Bwght%5D.ttf', '194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252', 6),
+  ...cjkPages('zh-Hant', 'Noto Sans TC', 'notosanstc', 'NotoSansTC%5Bwght%5D.ttf', '864727d210d54f2537bbe23b3a839436c3992af72de9322af5270897246bd44f', 5),
 ];
+

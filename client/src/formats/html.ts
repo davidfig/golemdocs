@@ -8,7 +8,8 @@
 // nesting depth; further paragraphs of an item are un-numbered ListParagraph paragraphs); links are
 // Hyperlink inlines in the "Hyperlink" character style; tables use TableGrid with header rows
 // (<thead>, or leading rows of <th>), colspan/rowspan as gridSpan/vMerge; <img> becomes a Hyperlink
-// to its src whose "ImagePlaceholder" run reads "[Image: alt]" (there are no bytes to embed); <hr> is
+// to its src whose "ImagePlaceholder" run reads "[Image: alt]" unless the picture's bytes are at hand (a
+// data: URI, or supplied by the caller for the address), when it is an inline picture; <hr> is
 // an empty paragraph with a bottom border. Inline CSS (and <font>, align=, bgcolor=, valign=) maps to
 // run properties (color, background, font family/size/weight/style, decoration, caps, super/sub)
 // and paragraph properties (alignment, margins/indent, line height, shading, page break).
@@ -23,13 +24,15 @@
 // (the head keeps it, so it still applies to the exported page, but the editor doesn't show it),
 // inline CSS the model has no property for (kept in the block's style attribute when the element is
 // a block), and the position of an unmappable element within a line (it moves to the start or end
-// of its paragraph). Images are never embedded, data: URIs included: they stay placeholders.
+// of its paragraph). Pictures the reader can't get bytes for stay placeholders.
 //
 // Export writes a complete HTML5 document. Without an extension (a Word or Markdown document) it adds
 // a generated <style data-word-styles> block for the document's paragraph styles, which the importer
 // reads back into styles, so pages the app wrote round-trip. Nothing here throws on odd input.
 
 import { StyleResolver, WordDocument, paragraphText } from '@word/docx';
+import { decodeDataUri, sniffImage, toDataUri } from './images.ts';
+import type { ImageData } from './images.ts';
 import type {
   Block,
   Hyperlink,
@@ -1139,10 +1142,13 @@ class Importer {
   private nextAbstract: number;
   private nextInstance: number;
   private readonly keys = new WeakMap<Ctx, string>();
+  /** Pictures already added to the document, by the address they were found at. */
+  private readonly embedded = new Map<string, { part: string; pixels: { w: number; h: number } }>();
 
   constructor(
     readonly doc: WordDocument,
     readonly tree: HtmlTree,
+    private readonly images?: ImageSource,
   ) {
     this.src = tree.source;
     this.nextAbstract = doc.numbering.abstracts.reduce((m, a) => Math.max(m, a.id), -1) + 1;
@@ -1457,15 +1463,61 @@ class Importer {
   private image(flow: Flow, ctx: Ctx, el: HElement): void {
     const st = this.ensure(flow, ctx);
     const alt = (el.attrs.alt ?? '').replace(/\s+/g, ' ').trim();
+    const src = (el.attrs.src ?? '').trim();
+    const picture = this.picture(src, el, alt);
+    if (picture) {
+      this.append(st, ctx, picture);
+      st.content = true;
+      st.lastSpace = false;
+      st.trailing = false;
+      return;
+    }
     const run = newRun({ style: 'ImagePlaceholder' }, [{ kind: 'text', text: alt ? `[Image: ${alt}]` : '[Image]' }]);
     this.used.add('ImagePlaceholder');
-    st.p.children.push({ kind: 'hyperlink', url: (el.attrs.src ?? '').trim(), children: [run], attrs: {} });
+    st.p.children.push({ kind: 'hyperlink', url: src, children: [run], attrs: {} });
     st.run = null;
     st.hyperlink = null;
     st.linkEl = null;
     st.content = true;
     st.lastSpace = false;
     st.trailing = false;
+  }
+
+  /** The picture an <img> shows, when its bytes are at hand (a data: URI, or what the caller supplies for the address). */
+  private picture(src: string, el: HElement, alt: string): RunContent | null {
+    let known = this.embedded.get(src);
+    if (!known) {
+      const bytes = decodeDataUri(src) ?? this.images?.(src) ?? null;
+      const image = bytes ? sniffImage(bytes) : null;
+      if (!image) return null;
+      try {
+        known = { part: this.doc.addImage(image.bytes, image.type), pixels: { w: image.width, h: image.height } };
+      } catch {
+        return null;
+      }
+      this.embedded.set(src, known);
+    }
+    const { part, pixels } = known;
+    // Size: the element's width and height (pixels), one of them keeping the picture's shape, else its own size; never wider than the page.
+    const attr = (name: string): number => {
+      const v = Number.parseFloat(el.attrs[name] ?? '');
+      return v > 0 ? v : 0;
+    };
+    let w = attr('width');
+    let h = attr('height');
+    const ratio = pixels.w > 0 && pixels.h > 0 ? pixels.w / pixels.h : 0;
+    if (w && !h) h = ratio ? w / ratio : w;
+    else if (h && !w) w = ratio ? h * ratio : h;
+    else if (!w && !h) {
+      w = pixels.w || 96;
+      h = pixels.h || 96;
+    }
+    const most = 624; // 6.5 inches at 96 dpi
+    if (w > most) {
+      h = (h * most) / w;
+      w = most;
+    }
+    return { kind: 'drawing', inline: true, width: Math.round(w * 9525), height: Math.round(h * 9525), image: part, ...(alt && { description: alt }) };
   }
 
   /** Keeps source HTML verbatim, anchored where it was. */
@@ -2105,10 +2157,13 @@ function textContentRaw(el: HElement): string {
  * Parses HTML into a new document plus what only HTML can express (see the header comment).
  * Every paragraph gets a w14:paraId. Never throws: whatever can't be mapped is kept verbatim.
  */
-export async function htmlToDocument(source: string): Promise<{ document: WordDocument; extension: HtmlExtension }> {
+/** Supplies the bytes of a picture by the address in its <img>; null when they aren't available. */
+export type ImageSource = (src: string) => Uint8Array | null;
+
+export async function htmlToDocument(source: string, images?: ImageSource): Promise<{ document: WordDocument; extension: HtmlExtension }> {
   try {
     const document = await WordDocument.create();
-    const extension = new Importer(document, parseHtml(source)).run();
+    const extension = new Importer(document, parseHtml(source), images).run();
     return { document, extension };
   } catch {
     // Safety net: the text without tags, one paragraph per line.
@@ -2239,6 +2294,7 @@ class Writer {
   constructor(
     readonly doc: WordDocument,
     readonly ext: HtmlExtension | undefined,
+    private readonly options: HtmlWriteOptions = {},
   ) {
     this.resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
     this.info = ext?.blocks ?? {};
@@ -2562,7 +2618,9 @@ class Writer {
                 atoms.push({ t: 'text', s: '\u00ad', marks, link });
                 break;
               case 'drawing': {
-                const name = item.image ? item.image.slice(item.image.lastIndexOf('/') + 1) : '';
+                const picture = item.image ? this.options.images?.get(item.image) : undefined;
+                // Without the picture's bytes, the name it had in the package is all there is to point at.
+                const name = picture ? (this.options.imageSrc?.(item.image!, picture) ?? toDataUri(picture)) : item.image ? item.image.slice(item.image.lastIndexOf('/') + 1) : '';
                 const size = item.width && item.height ? ` width="${Math.round(item.width / 9525)}" height="${Math.round(item.height / 9525)}"` : '';
                 atoms.push({ t: 'html', s: `<img src="${escAttr(name)}" alt="${escAttr(item.description || item.name || '')}"${size}>`, marks: [], link: null });
                 break;
@@ -2983,6 +3041,13 @@ function fixSpaces(atoms: Atom[]): void {
  * With the HTML extension from `htmlToDocument`, the head, html/body attributes, block tags and
  * attributes, wrapper containers and verbatim fragments come back for the paragraphs still there.
  */
-export function documentToHtml(document: WordDocument, extension?: HtmlExtension): string {
-  return new Writer(document, extension).write();
+export interface HtmlWriteOptions {
+  /** The document's pictures by package part (see collectImages); without them, pictures are not written. */
+  images?: Map<string, ImageData>;
+  /** The address to write for a picture; by default the picture is embedded as a data: URI. */
+  imageSrc?: (part: string, image: ImageData) => string;
+}
+
+export function documentToHtml(document: WordDocument, extension?: HtmlExtension, options: HtmlWriteOptions = {}): string {
+  return new Writer(document, extension, options).write();
 }

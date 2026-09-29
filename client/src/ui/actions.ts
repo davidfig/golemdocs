@@ -10,7 +10,8 @@ export type Alignment = 'left' | 'center' | 'right' | 'justify';
 export type ListKind = 'bullet' | 'number';
 export type CaseChange = 'sentence' | 'lower' | 'upper' | 'title' | 'toggle';
 export type BreakKind = 'page' | 'column' | 'line' | 'sectionNextPage' | 'sectionContinuous';
-export type ViewMode = 'normal' | 'print' | 'web' | 'outline';
+/** Print: pages as they print. Normal: the text reflowed to the window, without page edges (Word's Web Layout). */
+export type ViewMode = 'print' | 'normal';
 /** A PDF's form: filling in its fields, or arranging them (moving, adding, renaming, deleting). */
 export type FormMode = 'fill' | 'edit';
 /** A zoom factor (1 = 100%) or a fit mode. */
@@ -28,6 +29,12 @@ export type TableOp =
   | 'splitCells'
   | 'selectTable'
   | 'properties';
+
+/** The tools of the Draw toolbar: each picks what the next stroke draws. */
+export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'pixelate' | 'eraser';
+
+/** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
+export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
 
 export type DialogName =
   | 'font'
@@ -74,8 +81,6 @@ export type Action =
   | { kind: 'convert'; to: DocumentKind }
   | { kind: 'print' }
   | { kind: 'printPreview' }
-  /** Edit the document together with other people. */
-  | { kind: 'collaborate' }
   // Edit
   | { kind: 'undo' }
   | { kind: 'redo' }
@@ -126,14 +131,19 @@ export type Action =
   | { kind: 'insertCodeBlock' }
   | { kind: 'insertHorizontalRule' }
   // Table
-  | { kind: 'table'; op: TableOp }
+  /** `columns` and `rows` say how to split cells; without them the host asks. */
+  | { kind: 'table'; op: TableOp; columns?: number; rows?: number }
+  // Picture
+  | { kind: 'image'; op: ImageOp }
+  /** The colour (CSS) and line thickness step (0 thin to 3 extra thick) the Draw tools use. */
+  | { kind: 'drawStyle'; color?: string; size?: number; fill?: boolean }
   // Tools
   | { kind: 'toggleTrackChanges' };
 
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'txt';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'txt';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
@@ -168,8 +178,12 @@ export interface ChromeState {
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
   formMode: FormMode | null;
+  /** The selection is in a table: the Table menu's row, column and cell commands apply. */
+  inTable: boolean;
   /** The Format Painter has picked up formatting and is waiting for a selection to paint. */
   painting: boolean;
+  /** The Draw toolbar: the tool picked (if any), its colour and its thickness step. */
+  draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
 }
@@ -187,6 +201,8 @@ export interface SyncStatus {
   user: string | null;
   document: DocumentSync;
   error: string | null;
+  /** When the open document was last saved to the account (ms since the epoch), if known. */
+  savedAt?: number | null;
 }
 
 export const DEFAULT_STATE: ChromeState = {
@@ -204,6 +220,8 @@ export const DEFAULT_STATE: ChromeState = {
   format: {},
   formMode: null,
   painting: false,
+  draw: { tool: null, color: '#e5322d', size: 1, fill: false },
+  inTable: false,
   sync: { user: null, document: 'guest', error: null },
 };
 

@@ -39,6 +39,9 @@ export class PageRenderer {
     this.text = new TextRenderer(gl);
   }
 
+  /** Draw pages edge to edge with no shadow or border (Normal view). */
+  flat = false;
+
   render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true): FrameStats {
     const gl = this.gl;
     const scale = camera.scale;
@@ -70,14 +73,15 @@ export class PageRenderer {
     for (const page of this.visible) {
       const x0 = Math.round((page.x - left) * scale);
       const y0 = Math.round((page.y - top) * scale);
-      const x1 = Math.round((page.x + page.width - left) * scale);
+      // Normal view: the text lags a zoom by a moment, so the sheet meets the window's edge meanwhile.
+      const x1 = this.flat ? Math.max(Math.round((page.x + page.width - left) * scale), camera.width) : Math.round((page.x + page.width - left) * scale);
       const y1 = Math.round((page.y + page.height - top) * scale);
       // A soft drop shadow: a few faint layers, each larger than the last, sinking below the sheet.
-      for (let i = 0; i < SHADOW_LAYERS; i++) {
+      for (let i = 0; !this.flat && i < SHADOW_LAYERS; i++) {
         const grow = (i + 1) * scale;
         this.sheets.add(x0 - grow, y0 - grow + 2 * scale, x1 - x0 + 2 * grow, y1 - y0 + 2 * grow, PAGE_SHADOW);
       }
-      this.sheets.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
+      if (!this.flat) this.sheets.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
       this.sheets.add(x0, y0, x1 - x0, y1 - y0, PAGE_COLOR);
     }
     this.sheets.flush(camera.width, camera.height);

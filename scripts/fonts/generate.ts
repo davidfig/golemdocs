@@ -48,6 +48,7 @@ interface ManifestFamily {
   licenseFile: string;
   aliases: Record<string, number>;
   faces: ManifestFace[];
+  cjk?: { lang: 'ja' | 'zh-Hant' | 'ko'; order: number; coverage: string };
 }
 
 interface Manifest {
@@ -179,6 +180,25 @@ async function pngToWebp(png: string, webp: string): Promise<void> {
   writeFileSync(webp, encoded);
 }
 
+/**
+ * Writes `<family>/coverage.json`, the code points a generated layout has glyphs for as a flat list of
+ * inclusive ranges `[from, to, from, to, …]`, and returns its path relative to the manifest. It is a
+ * separate small file, fetched only for documents with CJK text, so the manifest every user loads
+ * stays small.
+ */
+function writeCoverage(id: string, layoutPath: string): string {
+  const layout = JSON.parse(readFileSync(path.join(OUT, layoutPath), 'utf8')) as { glyphs: { unicode?: number }[] };
+  const cps = layout.glyphs.flatMap((g) => (g.unicode === undefined ? [] : [g.unicode])).sort((a, b) => a - b);
+  const ranges: [number, number][] = [];
+  for (const cp of cps) {
+    const last = ranges[ranges.length - 1];
+    if (last && cp === last[1] + 1) last[1] = cp;
+    else if (!last || cp > last[1]) ranges.push([cp, cp]);
+  }
+  writeFileSync(path.join(OUT, id, 'coverage.json'), JSON.stringify(ranges.flat()));
+  return `${id}/coverage.json`;
+}
+
 async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fontPath: string): Promise<ManifestFace> {
   const name = faceName(face);
   const dir = path.join(OUT, family.id);
@@ -191,13 +211,15 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
     ? ['-varfont', `${fontPath}?${Object.entries(face.variations).map(([axis, value]) => `${axis}=${value}`).join('&')}`]
     : ['-font', fontPath];
 
+  const atlas = family.atlas ?? ATLAS;
   const output = run(tool, [
     ...input,
-    '-charset', CHARSET,
+    '-charset', family.charset ? path.join(HERE, 'charsets', family.charset) : CHARSET,
     '-fontname', `${family.substitute} ${name}`,
-    '-type', ATLAS.type,
-    '-size', String(ATLAS.size),
-    '-pxrange', String(ATLAS.pxrange),
+    '-type', atlas.type,
+    '-size', String(atlas.size),
+    '-pxrange', String(atlas.pxrange),
+    ...(family.atlas ? ['-dimensions', ...family.atlas.dimensions.map(String)] : []),
     '-yorigin', ATLAS.yOrigin,
     '-imageout', png,
     '-json', path.join(dir, `${name}.json`),
@@ -258,7 +280,7 @@ async function main(): Promise<void> {
     copyFileSync(licenses.get(family)!, path.join(OUT, family.id, 'LICENSE.txt'));
     // Files are overwritten in place (a running dev server keeps serving the folder); remove
     // anything left over from an earlier configuration.
-    const produced = new Set(['LICENSE.txt', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout)])]);
+    const produced = new Set(['LICENSE.txt', 'coverage.json', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout)])]);
     for (const file of readdirSync(path.join(OUT, family.id))) {
       if (!produced.has(file)) rmSync(path.join(OUT, family.id, file));
     }
@@ -270,6 +292,7 @@ async function main(): Promise<void> {
       licenseFile: `${family.id}/LICENSE.txt`,
       aliases: family.aliases ?? {},
       faces,
+      ...(family.cjk ? { cjk: { ...family.cjk, coverage: writeCoverage(family.id, faces[0].layout) } } : {}),
     });
   }
 

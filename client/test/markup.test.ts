@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { paragraphText } from '@word/docx';
 import type { Paragraph, Table } from '@word/docx';
-import { adoc, org, rst, tex } from '../src/formats/handlers/markup.ts';
+import { adoc, mediawiki, org, rst, tex, textile } from '../src/formats/handlers/markup.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
 import { documentToOutline } from '../src/formats/outline.ts';
 
@@ -49,7 +49,7 @@ const FIXTURE = [
   '',
 ].join('\n');
 
-const handlers = { LaTeX: tex, AsciiDoc: adoc, reStructuredText: rst, Org: org };
+const handlers = { LaTeX: tex, AsciiDoc: adoc, reStructuredText: rst, Org: org, MediaWiki: mediawiki, Textile: textile };
 
 for (const [name, handler] of Object.entries(handlers)) {
   test(`${name}: a document survives a round trip`, async () => {
@@ -68,7 +68,7 @@ test('marks that a format has no syntax for are kept as text', async () => {
   const source = await markdownToDocument('Some ~~struck~~ text and **bold**.\n');
   const text = str(await rst.write(source, {}, fonts));
   assert.ok(text.includes('struck') && text.includes('**bold**') && !text.includes('~~'));
-  for (const handler of [adoc, org, tex]) {
+  for (const handler of [adoc, org, tex, mediawiki, textile]) {
     const outline = documentToOutline((await handler.read(await handler.write(source, {}, fonts))).document);
     assert.ok(JSON.stringify(outline).includes('"strike":true'));
   }

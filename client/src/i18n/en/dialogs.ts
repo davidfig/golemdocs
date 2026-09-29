@@ -52,7 +52,14 @@ export const dialogs = {
   'dialogs.share.remove': 'Remove',
   'dialogs.share.nobody': 'Not shared with anyone yet.',
   'dialogs.share.done': 'Done',
+  'dialogs.share.linkHeading': 'Link',
+  'dialogs.share.peopleHeading': 'People',
+  'dialogs.share.getLink': 'Get Link',
   'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors and viewers see changes live.',
+  'dialogs.roomLink.label': 'Link to this shared document',
+  'dialogs.roomLink.note': 'Anyone with this link can open the document and edit it with you. Changes show up live for everyone.',
+  'dialogs.roomLink.copy': 'Copy Link',
+  'dialogs.roomLink.copied': 'Copied',
 
   // Sign in
   'dialogs.signIn.title': 'Sign in',
@@ -81,6 +88,7 @@ export const dialogs = {
   'dialogs.sync.guest.tooltip': 'Sign in to keep your documents in your account',
   'dialogs.sync.guest.title': 'Saved in this browser',
   'dialogs.sync.guest.body': 'Sign in to keep your documents in your account and open them on any device. The documents you’ve made here come with you.',
+  'dialogs.sync.lastSaved': 'Last saved {time}',
   'dialogs.sync.saved.text': 'Saved',
   'dialogs.sync.saved.tooltip': 'All changes saved to your account',
   'dialogs.sync.saved.title': 'All changes saved',

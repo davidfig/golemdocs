@@ -1,7 +1,7 @@
 import type { FaceDescriptor } from '@word/layout';
 import type { Pointer } from '@word/ops';
 import type { Format } from '../formats/convert.ts';
-import { getLocale, t } from '../i18n/index.ts';
+import { t } from '../i18n/index.ts';
 import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -37,9 +37,16 @@ export class LayoutClient {
     /** New faces, before any page that uses them. Called for every document, stale or not. */
     private readonly onFaces: (faces: FaceDescriptor[]) => void,
   ) {
-    this.worker.postMessage({ type: 'locale', locale: getLocale() } satisfies ToWorker);
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
     this.worker.onerror = (event) => this.listener?.error(event.message || t('app.workerFailed'));
+  }
+
+  /**
+   * Tells the worker the page's language, so the errors and default names it makes are in it.
+   * Call once the language is loaded, before opening any document.
+   */
+  setLocale(locale: string): void {
+    this.send({ type: 'locale', locale });
   }
 
   /** Opens a document, cancelling any layout in progress; in a collaboration room if given. */
@@ -66,8 +73,24 @@ export class LayoutClient {
     this.send({ type: 'leave' });
   }
 
+  /** Show or hide formatting marks (paragraph marks, spaces, tabs) on the pages. */
+  setMarks(on: boolean): void {
+    this.send({ type: 'marks', on });
+  }
+
+  /** Lay pages out `width` points wide (Normal view), or at the document's own sizes (null). */
+  setReflow(width: number | null): void {
+    this.send({ type: 'reflow', width });
+  }
+
   command(command: WireCommand): void {
     this.send({ type: 'command', doc: this.doc, command });
+  }
+
+  /** Puts a picture in the open document at the caret. */
+  insertImage(bytes: Uint8Array, ext: string, width: number, height: number, description?: string): void {
+    const copy = bytes.slice().buffer;
+    this.send({ type: 'insertImage', doc: this.doc, bytes: copy, ext, width, height, description }, [copy]);
   }
 
   /** An image part of the open document. */

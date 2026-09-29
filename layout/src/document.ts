@@ -19,10 +19,12 @@ import {
   type Table,
   type WordDocument,
 } from '@word/docx';
-import { PageLayout, type LineRecord } from './display.ts';
+import { packColor, PageLayout, type LineRecord } from './display.ts';
 import { FALLBACK_FAMILY, type FontSet } from './fonts/fontSet.ts';
 import type { ManifestFace } from './fonts/fontTypes.ts';
-import type { FieldValues, LayoutContext, RunStyle } from './context.ts';
+import { cjkLangOf, type FieldValues, type LayoutContext, type RunStyle } from './context.ts';
+import type { CjkLang } from './fonts/cjk.ts';
+import { REFLOW_SIDE, REFLOW_VERTICAL, reflowWidth } from './reflow.ts';
 import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout } from './paragraph.ts';
 import { cutBox, emitBox, emitRow, emitRowSlice, flattenBlocks, layoutBox, layoutTable, type BoxLayout, type TableLayout } from './table.ts';
 
@@ -46,6 +48,10 @@ export interface SectionGeometry {
   header: number;
   footer: number;
   contentWidth: number;
+  /** Columns of text (1 for an ordinary page): how many, the gap between them, and the width of each (points). Equal widths only. */
+  columns: number;
+  columnGap: number;
+  columnWidth: number;
   /** Header/footer parts by kind, inherited from earlier sections where missing. */
   headers: Partial<Record<HeaderFooterReference['type'], string>>;
   footers: Partial<Record<HeaderFooterReference['type'], string>>;
@@ -99,6 +105,28 @@ export interface PageStart {
 }
 
 function geometry(props: SectionProperties, previous: SectionGeometry | undefined): SectionGeometry {
+  const reflow = reflowWidth();
+  if (reflow !== null) {
+    const height = twips(props.pageSize?.h, 15840);
+    const contentWidth = Math.max(reflow - 2 * REFLOW_SIDE, 36);
+    return {
+      properties: props,
+      width: reflow,
+      height,
+      top: REFLOW_VERTICAL,
+      bottom: REFLOW_VERTICAL,
+      left: REFLOW_SIDE,
+      right: REFLOW_SIDE,
+      header: 0,
+      footer: 0,
+      contentWidth,
+      columns: 1,
+      columnGap: 0,
+      columnWidth: contentWidth,
+      headers: {},
+      footers: {},
+    };
+  }
   const width = twips(props.pageSize?.w, 12240);
   const height = twips(props.pageSize?.h, 15840);
   const m = props.margins ?? {};
@@ -109,6 +137,9 @@ function geometry(props: SectionProperties, previous: SectionGeometry | undefine
     for (const ref of refs) out[ref.type] = ref.part;
     return out;
   };
+  const contentWidth = Math.max(width - left - right, 36);
+  const columns = Math.max(1, Math.min(Math.floor(props.columns?.num ?? 1), 12));
+  const columnGap = columns > 1 ? Math.max(twips(props.columns?.space, 720), 0) : 0;
   return {
     properties: props,
     width,
@@ -119,7 +150,10 @@ function geometry(props: SectionProperties, previous: SectionGeometry | undefine
     right,
     header: twips(m.header, 720),
     footer: twips(m.footer, 720),
-    contentWidth: Math.max(width - left - right, 36),
+    contentWidth,
+    columns,
+    columnGap,
+    columnWidth: Math.max((contentWidth - columnGap * (columns - 1)) / columns, 36),
     headers: inherit(props.headers, previous?.headers),
     footers: inherit(props.footers, previous?.footers),
   };
@@ -196,6 +230,60 @@ function facesFor(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): S
     for (const bold of [false, true]) for (const italic of [false, true]) faces.add(fonts.resolve({ font: name, bold, italic }).face);
   }
   return faces;
+}
+
+const CJK_TEXT = /[\u1100-\u11ff\u3000-\u30ff\u3100-\u312f\u31a0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\ua960-\ua97f\uac00-\ud7ff]/;
+
+/** Adds the CJK characters of a string to a set. */
+function addCjk(text: string, into: Set<number>): void {
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0x1100 && CJK_TEXT.test(text[i])) into.add(c);
+  }
+}
+
+/**
+ * The CJK characters in the document's text (body, headers and footers), by the language of the
+ * run they are in, so the pages that draw them can be loaded before layout.
+ */
+function cjkTextOf(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): Map<CjkLang, Set<number>> {
+  const found = new Map<CjkLang, Set<number>>();
+  const ctx = { resolver, fonts };
+  const visit = (node: { kind: string; [key: string]: any }, paragraphStyle: string | undefined): void => {
+    switch (node.kind) {
+      case 'run': {
+        let chars: Set<number> | undefined;
+        for (const item of node.content as { kind: string; text?: string }[]) {
+          if (item.kind !== 'text' || !item.text || !CJK_TEXT.test(item.text)) continue;
+          chars ??= new Set();
+          addCjk(item.text, chars);
+        }
+        if (!chars) break;
+        const lang = cjkLangOf(ctx, resolver.run(paragraphStyle, node.properties));
+        const into = found.get(lang);
+        if (into) for (const c of chars) into.add(c);
+        else found.set(lang, chars);
+        break;
+      }
+      case 'paragraph':
+        for (const child of node.children) visit(child, node.properties.style);
+        break;
+      case 'hyperlink':
+      case 'wrapper':
+      case 'cell':
+        for (const child of node.children) visit(child, paragraphStyle);
+        break;
+      case 'table':
+        for (const row of node.rows) visit(row, paragraphStyle);
+        break;
+      case 'row':
+        for (const cell of node.cells) visit(cell, paragraphStyle);
+        break;
+    }
+  };
+  for (const block of doc.body) visit(block as any, undefined);
+  for (const hf of doc.headersFooters.values()) for (const block of hf.children) visit(block as any, undefined);
+  return found;
 }
 
 /** Whether header/footer content has fields (its layout then depends on page numbers). */
@@ -384,7 +472,10 @@ export class LayoutSession {
     const t0 = performance.now();
     const resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
     await fonts.ensure(facesFor(doc, resolver, fonts));
+    const cjk = cjkTextOf(doc, resolver, fonts);
+    await Promise.all([...cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)));
     const session = new LayoutSession(doc, fonts, resolver);
+    for (const lang of cjk.keys()) session.cjkLangs.add(lang);
     session.timings.fonts = performance.now() - t0;
     return session;
   }
@@ -462,6 +553,21 @@ export class LayoutSession {
     // Nothing located (a paragraph never laid out): be safe.
     if (restart === Infinity) restart = 0;
     this.restartAt = Math.min(this.restartAt, restart);
+  }
+
+  /** The CJK languages the document's text is in, and the app's (see ensureCjk). */
+  readonly cjkLangs = new Set<CjkLang>();
+
+  /**
+   * Loads the CJK pages that draw the given text (typed, pasted or replaced in), before the edit is
+   * applied, for the languages of the document and the app's.
+   */
+  async ensureCjk(text: string): Promise<void> {
+    const chars = new Set<number>();
+    addCjk(text, chars);
+    if (chars.size === 0) return;
+    const langs = new Set<CjkLang>([...this.cjkLangs, this.fonts.defaultCjkLang]);
+    await Promise.all([...langs].map((lang) => this.fonts.ensureCjk(lang, chars)));
   }
 
   /** Loads the faces of fonts the document starts to use (a font picked for some text), before laying it out. */
@@ -585,6 +691,26 @@ export class LayoutSession {
     let pendingAfter = 0;
     let dirtyPlaced = 0;
 
+    // Columns: the one being filled, where columns start on this page (a continuous section starts
+    // part way down), and the lowest point any column reached (where the next section starts).
+    let column = 0;
+    let columnTop = 0;
+    let lowest = 0;
+    let columnsOpen = false;
+    const columnLeft = () => section.left + column * (section.columnWidth + section.columnGap);
+    /** Draws the lines between the columns of the section on the page just finished. */
+    const closeColumns = () => {
+      if (!columnsOpen) return;
+      columnsOpen = false;
+      if (!page || section.columns < 2 || !section.properties.columns?.sep) return;
+      const bottomY = Math.max(lowest, y);
+      if (bottomY <= columnTop) return;
+      for (let k = 0; k < section.columns - 1; k++) {
+        const x = section.left + (k + 1) * section.columnWidth + k * section.columnGap + section.columnGap / 2;
+        page.foreground.push(x - 0.25, columnTop, 0.5, bottomY - columnTop, packColor(0));
+      }
+    };
+
     /** Where the next page resumes, as known by whoever breaks the page. */
     interface Resume {
       blockIndex: number;
@@ -617,9 +743,26 @@ export class LayoutSession {
       atTop = true;
       naturalBreak = start.natural;
       firstOfSection = false;
+      column = 0;
+      columnTop = top;
+      lowest = top;
+      columnsOpen = true;
     };
 
-    const newPage = (natural: boolean, at: Resume) => {
+    /**
+     * Continues at the top of the next column, or, after the last (or with `forcePage`, for a page
+     * break or the start of a section), on a new page.
+     */
+    const newPage = (natural: boolean, at: Resume, forcePage = false) => {
+      if (!forcePage && column < section.columns - 1) {
+        lowest = Math.max(lowest, y);
+        column++;
+        y = columnTop;
+        atTop = true;
+        naturalBreak = natural;
+        return;
+      }
+      closeColumns();
       pageNumber++;
       const area = bodyArea(firstOfSection, pageNumber);
       const block = blocks.block(at.blockIndex);
@@ -694,11 +837,11 @@ export class LayoutSession {
       const lines = p.lines;
       let i = fromLine;
       if (fromLine === 0) {
-        if (p.pageBreakBefore && !atTop) newPage(false, { blockIndex: index });
+        if (p.pageBreakBefore && !atTop) newPage(false, { blockIndex: index }, true);
         const suppress = atTop && naturalBreak;
         y += suppress ? 0 : spaceAbove;
         const room = bottom - y;
-        const pageRoom = bottom - top;
+        const pageRoom = bottom - columnTop;
         // Keep with next: a chain of keep-with-next paragraphs that doesn't fit starts on a new
         // page (checked where the chain starts; one longer than a page then breaks normally).
         // Keep lines together: a paragraph that doesn't fit but would fit a page moves as a whole.
@@ -722,6 +865,8 @@ export class LayoutSession {
           if (line.pageBreak) break;
         }
         const endsWithBreak = fit > 0 && lines[i + fit - 1].pageBreak;
+        // A column break goes on to the next column; a page break always starts a page.
+        const forcePage = endsWithBreak && !lines[i + fit - 1].columnBreak;
         if (i + fit < lines.length && !endsWithBreak && p.widowControl && lines.length > 1) {
           // Orphan: don't leave a paragraph's first line alone at the bottom of a page.
           if (i === 0 && fit === 1 && !atTop) fit = 0;
@@ -734,13 +879,13 @@ export class LayoutSession {
             placeFloats(p.floats, y);
             floatsPlaced = true;
           }
-          emitLine(page, p, line, section.left, y);
+          emitLine(page, p, line, columnLeft(), y, section.columns > 1 ? section.columnWidth : undefined);
           y += line.height;
           atTop = false;
         }
         i += fit;
-        if (i < lines.length) newPage(!endsWithBreak, { blockIndex: index, line: i });
-        else if (endsWithBreak) newPage(false, { blockIndex: index + 1, previous: info(p), pendingAfter: p.spaceAfter });
+        if (i < lines.length) newPage(!endsWithBreak, { blockIndex: index, line: i }, forcePage);
+        else if (endsWithBreak) newPage(false, { blockIndex: index + 1, previous: info(p), pendingAfter: p.spaceAfter }, forcePage);
       }
     };
 
@@ -749,7 +894,7 @@ export class LayoutSession {
       for (let r = 0; r < table.rows.length && table.rows[r].header; r++) headerRows.push(r);
       const emitHeaders = () => {
         for (const hr of headerRows) {
-          emitRow(page, table, hr, section.left, y);
+          emitRow(page, table, hr, columnLeft(), y);
           y += table.rows[hr].height;
         }
       };
@@ -762,7 +907,7 @@ export class LayoutSession {
       for (let r = fromRow; r < table.rows.length; r++) {
         const row = table.rows[r];
         if (y + row.height <= bottom + 0.01) {
-          emitRow(page, table, r, section.left, y);
+          emitRow(page, table, r, columnLeft(), y);
           y += row.height;
           atTop = false;
           continue;
@@ -771,7 +916,7 @@ export class LayoutSession {
         const splittable = !row.cantSplit && !row.header && row.cells.every((c) => c.rowSpan <= 1);
         if (!splittable) {
           if (!atTop) continuePage(r);
-          emitRow(page, table, r, section.left, y);
+          emitRow(page, table, r, columnLeft(), y);
           y += row.height;
           atTop = false;
           continue;
@@ -782,7 +927,7 @@ export class LayoutSession {
         if (remaining() <= bottom - y + 0.01 || (atTop && remaining() > row.height)) {
           // The content fits; only a specified row height doesn't. Move the row whole.
           if (!atTop) continuePage(r);
-          emitRow(page, table, r, section.left, y);
+          emitRow(page, table, r, columnLeft(), y);
           y += row.height;
           atTop = false;
           continue;
@@ -790,7 +935,7 @@ export class LayoutSession {
         for (let guard = 0; guard < 100_000; guard++) {
           const rest = remaining();
           if (rest <= bottom - y + 0.01) {
-            emitRowSlice(page, table, r, section.left, y, { from: cut, to: row.cells.map(() => Infinity), height: rest });
+            emitRowSlice(page, table, r, columnLeft(), y, { from: cut, to: row.cells.map(() => Infinity), height: rest });
             y += rest;
             atTop = false;
             break;
@@ -805,7 +950,7 @@ export class LayoutSession {
             // Nothing fits even on an empty page: take one item from each cell to make progress.
             to = row.cells.map((c, i) => nextItemEnd(c.content, cut[i]));
           }
-          emitRowSlice(page, table, r, section.left, y, { from: cut, to, height: bottom - y });
+          emitRowSlice(page, table, r, columnLeft(), y, { from: cut, to, height: bottom - y });
           cut = to;
           continuePage(r, false);
         }
@@ -853,9 +998,10 @@ export class LayoutSession {
           previous = resume.previous;
           pendingAfter = resume.pendingAfter;
           ctx.lists!.restore(resume.lists);
-          blocks = new LazyBlocks(sb.blocks, ctx, section.contentWidth, firstBlock);
+          blocks = new LazyBlocks(sb.blocks, ctx, section.columnWidth, firstBlock);
           openPage(resume);
         } else {
+          closeColumns();
           section = geometry(sb.properties, sections[s - 1]);
           sections[s] = section;
           firstOfSection = true;
@@ -866,15 +1012,22 @@ export class LayoutSession {
             ctx.lists!.restore(new Map());
           }
           if (sb.properties.pageNumbering?.start !== undefined) pageNumber = sb.properties.pageNumbering.start - 1;
-          blocks = new LazyBlocks(sb.blocks, ctx, section.contentWidth, 0);
+          blocks = new LazyBlocks(sb.blocks, ctx, section.columnWidth, 0);
           const type = sb.properties.type ?? 'nextPage';
           const prevSection = sections[s - 1];
           const samePageSize = prevSection && prevSection.width === section.width && prevSection.height === section.height;
           if (s === 0 || type !== 'continuous' || !samePageSize || pages.length === 0) {
             // Odd/even section starts may need a blank page first.
             const blank = (type === 'oddPage' && pageNumber % 2 === 1) || (type === 'evenPage' && pageNumber % 2 === 0);
-            if (blank) newPage(false, { blockIndex: 0, restartable: false });
-            newPage(false, { blockIndex: 0 });
+            if (blank) newPage(false, { blockIndex: 0, restartable: false }, true);
+            newPage(false, { blockIndex: 0 }, true);
+          } else {
+            // A continuous section carries on below the lowest column of the one before.
+            column = 0;
+            y = Math.max(y, lowest);
+            columnTop = y;
+            lowest = y;
+            columnsOpen = true;
           }
         }
 
@@ -905,6 +1058,7 @@ export class LayoutSession {
           if (onSlice && performance.now() - sliceStart >= sliceMs) await slice();
         }
       }
+      closeColumns();
     } catch (e) {
       if (e instanceof Converged) convergedAt = e.oldIndex;
       else {

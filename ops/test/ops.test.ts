@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { findContainer, paragraphLength, paragraphsIn, WordDocument, type Paragraph } from '@word/docx';
-import { CollabServer, Engine, Replica, END, type ClientMessage, type Operation, type ServerMessage } from '../src/index.ts';
+import { CollabServer, Engine, Mapping, Replica, END, mapOperation, type ClientMessage, type Operation, type ServerMessage } from '../src/index.ts';
 
 const CORPUS = path.resolve(import.meta.dirname, '../../.cache/docx-corpus');
 
@@ -283,4 +283,105 @@ test('a pending edit keeps its place when a remote edit lands first', async () =
   assert.equal(text(a), 'Very very Last paragraph!');
   assert.equal(text(b), 'Very very Last paragraph!');
   assert.equal(body(a.doc), body(b.doc));
+});
+
+// --- Tables ------------------------------------------------------------------------------
+
+/** A document with a paragraph, a 2×2 table (cells "a1".."b2") and a last paragraph, and an engine on it. */
+async function tableEngine() {
+  const doc = await WordDocument.create();
+  const run = (text: string) => ({ kind: 'run' as const, properties: {}, attrs: {}, content: text ? [{ kind: 'text' as const, text }] : [] });
+  const para = (text: string): Paragraph => ({ kind: 'paragraph', properties: {}, children: text ? [run(text)] : [], attrs: {} });
+  const cell = (text: string) => ({ kind: 'cell' as const, properties: { width: { w: '4000', type: 'dxa' as const } }, attrs: {}, children: [para(text)] });
+  const row = (a: string, b: string) => ({ kind: 'row' as const, properties: {}, attrs: {}, cells: [cell(a), cell(b)] });
+  doc.body = [para('Before'), { kind: 'table', properties: {}, grid: [4000, 4000], rows: [row('a1', 'b1'), row('a2', 'b2')] }, para('After')];
+  const engine = new Engine(doc);
+  const ids = () => Object.fromEntries(paragraphsIn(doc.body).map((p) => [p.children.length ? (p.children[0] as { content: { text: string }[] }).content[0].text : '', p.attrs['w14:paraId']]));
+  const texts = () => paragraphsIn(doc.body).map((p) => (p.children as { content: { text: string }[] }[]).map((c) => c.content.map((t) => t.text).join('')).join(''));
+  const table = () => doc.body[1] as Extract<(typeof doc.body)[number], { kind: 'table' }>;
+  /** A fresh row/cell with paragraphs of ids no other has. */
+  let n = 0x1000;
+  const fresh = (text: string) => ({ ...para(text), attrs: { 'w14:paraId': (n++).toString(16).toUpperCase().padStart(8, '0') } });
+  const newCell = (text: string) => ({ kind: 'cell' as const, properties: { width: { w: '4000', type: 'dxa' as const } }, attrs: {}, children: [fresh(text)] });
+  return { doc, engine, ids, texts, table, newCell, newRow: (a: string, b: string) => ({ kind: 'row' as const, properties: {}, attrs: {}, cells: [newCell(a), newCell(b)] }) };
+}
+
+/** Applies operations, then their inverse, and checks the document is as it was. */
+function roundTrip(doc: WordDocument, engine: Engine, ops: Operation[]): void {
+  const before = JSON.stringify(doc.body);
+  const applied = engine.apply(ops);
+  assert.notEqual(JSON.stringify(doc.body), before, 'the operations changed the document');
+  engine.apply(applied.inverse);
+  assert.equal(JSON.stringify(doc.body), before, 'their inverse puts it back');
+}
+
+test('table rows: insert above and below, remove, and undo', async () => {
+  const { doc, engine, ids, texts, table, newRow } = await tableEngine();
+  const { a1, a2 } = ids();
+  roundTrip(doc, engine, [{ type: 'insertRow', paragraph: a1, after: true, row: newRow('x1', 'y1') }]);
+  engine.apply([{ type: 'insertRow', paragraph: a1, after: false, row: newRow('top1', 'top2') }, { type: 'insertRow', paragraph: a2, after: true, row: newRow('end1', 'end2') }]);
+  assert.deepEqual(texts(), ['Before', 'top1', 'top2', 'a1', 'b1', 'a2', 'b2', 'end1', 'end2', 'After']);
+  assert.equal(table().rows.length, 4);
+  roundTrip(doc, engine, [{ type: 'removeRow', paragraph: a2 }]);
+  engine.apply([{ type: 'removeRow', paragraph: a2 }]);
+  assert.deepEqual(texts(), ['Before', 'top1', 'top2', 'a1', 'b1', 'end1', 'end2', 'After']);
+  // The last row of a table can't go this way; a paragraph outside a table isn't a row.
+  const only = await tableEngine();
+  only.engine.apply([{ type: 'removeRow', paragraph: only.ids().a1 }]);
+  const gone = only.engine.apply([{ type: 'removeRow', paragraph: only.ids().a2 }]);
+  assert.equal(gone.steps[0].inverse.length, 0, 'the only row stays');
+  assert.equal(only.engine.apply([{ type: 'removeRow', paragraph: only.ids().Before }]).steps[0].inverse.length, 0);
+  // The new paragraphs are known to the document (they can be addressed), the removed ones aren't.
+  assert.ok(engine.index.has(ids().top1));
+  assert.equal(engine.index.has(a2), false);
+});
+
+test('table cells: insert either side, remove, and undo', async () => {
+  const { doc, engine, ids, texts, table, newCell } = await tableEngine();
+  const { a1, b1, b2 } = ids();
+  roundTrip(doc, engine, [{ type: 'insertCell', paragraph: a1, after: false, cell: newCell('left') }]);
+  engine.apply([{ type: 'insertCell', paragraph: b1, after: true, cell: newCell('right') }]);
+  assert.deepEqual(texts(), ['Before', 'a1', 'b1', 'right', 'a2', 'b2', 'After']);
+  roundTrip(doc, engine, [{ type: 'removeCell', paragraph: b1 }]);
+  engine.apply([{ type: 'removeCell', paragraph: b2 }]);
+  assert.deepEqual(texts(), ['Before', 'a1', 'b1', 'right', 'a2', 'After']);
+  assert.equal((table().rows[0] as { cells: unknown[] }).cells.length, 3);
+  // A row keeps at least one cell.
+  const single = await tableEngine();
+  single.engine.apply([{ type: 'removeCell', paragraph: single.ids().b1 }]);
+  assert.equal(single.engine.apply([{ type: 'removeCell', paragraph: single.ids().a1 }]).steps[0].inverse.length, 0);
+});
+
+test('table grid and cell properties are set and undone; blocks can go in and out before a paragraph', async () => {
+  const { doc, engine, ids, table } = await tableEngine();
+  const { a1, Before, After } = ids();
+  roundTrip(doc, engine, [{ type: 'setTableGrid', paragraph: a1, grid: [1000, 2000, 3000] }]);
+  roundTrip(doc, engine, [{ type: 'setCellProperties', paragraph: a1, properties: { gridSpan: 2, width: { w: '8000', type: 'dxa' } } }]);
+  assert.equal(engine.apply([{ type: 'setTableGrid', paragraph: a1, grid: [] }]).steps[0].inverse.length, 0, 'an empty grid is refused');
+  // The table out from before "After", and back in again, in place: no paragraph before it needed.
+  const key = `table:${a1}`;
+  const removed = engine.apply([{ type: 'removeBlocks', after: After, keys: [key], before: true }]);
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'paragraph']);
+  assert.equal(engine.index.has(a1), false);
+  engine.apply(removed.inverse);
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph']);
+  assert.equal(table().grid.length, 2);
+  // A table before the first paragraph of the document.
+  const first = { kind: 'table' as const, properties: {}, grid: [9000], rows: [{ kind: 'row' as const, properties: {}, attrs: {}, cells: [{ kind: 'cell' as const, properties: {}, attrs: {}, children: [{ kind: 'paragraph' as const, properties: {}, children: [], attrs: { 'w14:paraId': '00002000' } }] }] }] };
+  const inserted = engine.apply([{ type: 'insertBlocks', after: Before, blocks: [first], before: true }]);
+  assert.deepEqual(doc.body.map((b) => b.kind), ['table', 'paragraph', 'table', 'paragraph']);
+  engine.apply(inserted.inverse);
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph']);
+});
+
+test('table operations follow their paragraph when others edit around them', async () => {
+  const { ids, newRow } = await tableEngine();
+  const { a1 } = ids();
+  // The anchor was removed by someone else: the operation maps to nothing.
+  const mapping = new Mapping();
+  mapping.append({ kind: 'remove', ids: [a1], to: { paragraph: ids().Before, offset: 6 } });
+  assert.deepEqual(mapOperation({ type: 'insertRow', paragraph: a1, after: true, row: newRow('x', 'y') }, mapping), []);
+  // One whose anchor is still there is kept.
+  const kept = mapOperation({ type: 'setTableGrid', paragraph: ids().b2, grid: [1, 2] }, mapping);
+  assert.equal(kept.length, 1);
 });

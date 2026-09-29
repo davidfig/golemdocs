@@ -1,5 +1,7 @@
-// Who a cloud document is shared with: the owner adds people by the email they signed in with,
-// as editors (who can change the document) or viewers (who can only look, live), and removes them.
+// Sharing, in one dialog: a link that lets anyone edit the document live together (no account
+// needed), and, for a cloud document, the people it is shared with: the owner adds them by the
+// email they signed in with, as editors (who can change the document) or viewers (who can only
+// look, live), and removes them.
 
 import { addShare, listShares, removeShare, type Share, type ShareRole } from '../cloud.ts';
 import { t } from '../i18n/index.ts';
@@ -19,11 +21,73 @@ function roleSelect(value: ShareRole): HTMLSelectElement {
   return select;
 }
 
-/** A modal for sharing the cloud document `doc`. */
-export function showShareDialog(doc: { id: string; name: string }): void {
-  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: doc.name }) } });
-  dialog.style.width = 'min(420px, 90vw)';
+export interface ShareTarget {
+  name: string;
+  /**
+   * The live link. `link` is set when the document is already in a room; otherwise `create` puts it
+   * in one and gives the link, and `unavailable` says why it can't be. Left out where only people
+   * are shared with (the Dashboard).
+   */
+  room?: { link?: string; create?: () => Promise<string>; unavailable?: string };
+  /** The cloud document to share with people by email, or why that can't be done. */
+  people: { id: string } | { unavailable: string };
+}
 
+const section = (heading: string, ...content: (HTMLElement | null)[]): HTMLElement => {
+  const title = h('h3', { text: heading });
+  title.style.cssText = 'margin:14px 0 6px;font-size:1em';
+  return h('section', {}, title, ...content);
+};
+
+/** The link section: a read-only field and a button that gets the link, then copies it. */
+function roomSection(room: NonNullable<ShareTarget['room']>): HTMLElement {
+  if (!room.link && !room.create) return section(t('dialogs.share.linkHeading'), h('p', { text: room.unavailable ?? '' }));
+  const note = h('p', { text: t('dialogs.roomLink.note') });
+  note.style.margin = '0 0 8px';
+  const field = h('input', { attrs: { type: 'text', readonly: '', 'aria-label': t('dialogs.roomLink.label') } });
+  field.style.cssText = 'flex:1;min-width:0;padding:6px';
+  field.addEventListener('focus', () => field.select());
+  const button = h('button', { attrs: { type: 'button' } });
+  const status = h('p', { attrs: { role: 'status' } });
+  status.style.cssText = 'margin:6px 0 0;min-height:1.2em';
+
+  let link = room.link ?? '';
+  const show = () => {
+    field.value = link;
+    button.textContent = t(link ? 'dialogs.roomLink.copy' : 'dialogs.share.getLink');
+  };
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      if (!link) {
+        link = await room.create!();
+        show();
+        field.select();
+        return;
+      }
+      await navigator.clipboard.writeText(link).then(
+        () => (status.textContent = t('dialogs.roomLink.copied')),
+        () => field.select(), // no clipboard access: leave it selected for the user to copy
+      );
+    } catch (error) {
+      status.textContent = (error as Error).message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  show();
+  const row = h('div', {}, field, button);
+  row.style.cssText = 'display:flex;gap:6px';
+  return section(t('dialogs.share.linkHeading'), note, row, status);
+}
+
+/** A modal for sharing the open document: a link to edit it live, and the people it is shared with. */
+export function showShareDialog(target: ShareTarget): void {
+  const doc = { name: target.name };
+  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: doc.name }) } });
+  dialog.style.width = 'min(460px, 90vw)';
+
+  const personId = 'id' in target.people ? target.people.id : '';
   const people = h('div', { attrs: { role: 'list' } });
   people.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin:12px 0';
   const message = h('p', { attrs: { role: 'status' } });
@@ -47,7 +111,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
     const access = roleSelect(share.role);
     access.addEventListener('change', () => {
       if (!share.email) return;
-      addShare(doc.id, share.email, access.value as ShareRole).then(
+      addShare(personId, share.email, access.value as ShareRole).then(
         () => say(''),
         (error: Error) => say(error.message, true),
       );
@@ -55,7 +119,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
     const remove = h('button', { text: t('dialogs.share.remove'), attrs: { type: 'button' } });
     remove.addEventListener('click', () => {
       remove.disabled = true;
-      removeShare(doc.id, share.userId).then(
+      removeShare(personId, share.userId).then(
         () => void refresh(),
         (error: Error) => {
           remove.disabled = false;
@@ -70,7 +134,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
 
   async function refresh(): Promise<void> {
     try {
-      const shares = await listShares(doc.id);
+      const shares = await listShares(personId);
       people.replaceChildren(...(shares.length ? shares.map(row) : [h('p', { text: t('dialogs.share.nobody') })]));
     } catch (error) {
       say((error as Error).message, true);
@@ -82,7 +146,7 @@ export function showShareDialog(doc: { id: string; name: string }): void {
     const address = email.value.trim();
     if (!address) return;
     add.disabled = true;
-    addShare(doc.id, address, role.value as ShareRole).then(
+    addShare(personId, address, role.value as ShareRole).then(
       () => {
         email.value = '';
         say('');
@@ -93,17 +157,21 @@ export function showShareDialog(doc: { id: string; name: string }): void {
   });
 
   const done = h('button', { text: t('dialogs.share.done'), attrs: { type: 'button' } });
-  done.style.cssText = 'margin-top:12px;padding:6px 14px';
+  done.style.cssText = 'margin-top:16px;padding:6px 14px';
   done.addEventListener('click', () => dialog.close());
 
   const note = h('p', { text: t('dialogs.share.note') });
   note.style.margin = '0';
 
-  const body = h('div', { class: 'wm-dialog-body' }, note, people, form, message, done);
+  const peopleSection =
+    'id' in target.people
+      ? section(t('dialogs.share.peopleHeading'), note, people, form, message)
+      : section(t('dialogs.share.peopleHeading'), h('p', { text: target.people.unavailable }));
+  const body = h('div', { class: 'wm-dialog-body' }, target.room ? roomSection(target.room) : null, peopleSection, done);
   body.style.paddingBottom = '14px';
   dialog.append(dialogTitleBar(t('dialogs.share.title', { name: doc.name }), () => dialog.close()), body);
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();
-  void refresh();
+  if ('id' in target.people) void refresh();
 }

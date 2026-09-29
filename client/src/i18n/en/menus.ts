@@ -38,6 +38,12 @@ export const menus = {
   'menus.format.tsv': 'TSV (Tab-Separated)',
   'menus.format.txt': 'Plain Text',
   'menus.format.pdf': 'PDF',
+  'menus.format.group.popular': 'Popular',
+  'menus.format.group.documents': 'Documents',
+  'menus.format.group.web': 'Web',
+  'menus.format.group.data': 'Data',
+  'menus.format.group.markup': 'Markup',
+  'menus.format.group.images': 'Images',
 
   'menus.combo.list': '{label} list',
   'menus.split.options': '{label} options',

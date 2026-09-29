@@ -3,6 +3,7 @@ import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
+import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
@@ -143,6 +144,39 @@ const handler: ExportedHandler = {
         return json(await billingSummary(env));
       }
 
+      // GET /api/admin/feedback: everything people have sent. Admins only.
+      if (path === '/api/admin/feedback' && request.method === 'GET') {
+        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
+        return json(await allFeedback(env));
+      }
+
+      // PATCH /api/admin/feedback/:id { resolved }, DELETE /api/admin/feedback/:id. Admins only.
+      const feedbackMatch = /^\/api\/admin\/feedback\/(\d+)$/.exec(path);
+      if (feedbackMatch) {
+        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
+        const id = Number(feedbackMatch[1]);
+        if (request.method === 'DELETE') {
+          if (!(await deleteFeedback(env, id))) throw new HttpError(404, 'not found');
+          return json({ ok: true });
+        }
+        if (request.method === 'PATCH') {
+          const body = (await request.json().catch(() => null)) as { resolved?: unknown } | null;
+          if (typeof body?.resolved !== 'boolean') throw new HttpError(400, 'expected { resolved: boolean }');
+          if (!(await resolveFeedback(env, id, body.resolved))) throw new HttpError(404, 'not found');
+          return json({ ok: true });
+        }
+        throw new HttpError(405, 'method not allowed');
+      }
+
+      // POST /api/feedback { message }: send feedback to the admins.
+      if (path === '/api/feedback' && request.method === 'POST') {
+        const body = (await request.json().catch(() => null)) as { message?: unknown } | null;
+        const message = typeof body?.message === 'string' ? body.message.trim() : '';
+        if (!message) throw new HttpError(400, 'expected { message }');
+        if (message.length > MAX_FEEDBACK_CHARS) throw new HttpError(413, 'feedback is too long');
+        await addFeedback(env, userId, message);
+        return json({ ok: true }, 201);
+      }
 
       const match = /^\/api\/(documents|shared)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');

@@ -9,8 +9,10 @@ import { cachedRunStyle, runStyle, type LayoutContext, type RunStyle } from './c
 /** Control characters in collected text. */
 export const TAB = '\t';
 export const LINE_BREAK = '\n';
-/** Page or column break: ends the line and the page. */
+/** Page break: ends the line and the page. */
 export const PAGE_BREAK = '\f';
+/** Column break: ends the line and the column (a page, in a section with one column). */
+export const COLUMN_BREAK = '\v';
 /** Placeholder for an inline object (drawing). */
 export const OBJECT = '￼';
 export const SOFT_HYPHEN = '­';
@@ -230,7 +232,7 @@ export class TextCollector {
         one(TAB);
         break;
       case 'break':
-        one(c.type === 'page' || c.type === 'column' ? PAGE_BREAK : LINE_BREAK);
+        one(c.type === 'page' ? PAGE_BREAK : c.type === 'column' ? COLUMN_BREAK : LINE_BREAK);
         break;
       case 'cr':
         one(LINE_BREAK);

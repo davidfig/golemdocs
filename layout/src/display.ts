@@ -165,6 +165,8 @@ export interface LineRecord {
   baseline: number;
   /** Left edge of the column the line was laid out in; caret x = column + stops[offset - start]. */
   column: number;
+  /** Width of the column, for a line of the body in a section with columns (not for table cells or a page with one column). */
+  columnWidth?: number;
   /** Caret positions relative to `column`, for visible offsets start..end inclusive. */
   stops: Float32Array;
   /** Visible to model offsets for the paragraph (shared by its lines). */

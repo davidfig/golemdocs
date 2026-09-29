@@ -1,4 +1,5 @@
 import type { FaceDescriptor } from '@word/layout';
+import { GLYPH_TABLE_WIDTH, glyphTableHeight, padGlyphTable } from './glyphTable.ts';
 
 let nextId = 0;
 
@@ -27,12 +28,13 @@ export class GpuFace {
     this.atlasWidth = descriptor.atlasWidth;
     this.atlasHeight = descriptor.atlasHeight;
 
-    // Two RGBA32F texels per glyph: [plane l, t, r, b] in ems, [atlas l, t, r, b] in UVs.
-    const glyphs = descriptor.glyphTable.length / 8;
+    // Two RGBA32F texels per glyph: [plane l, t, r, b] in ems, [atlas l, t, r, b] in UVs, folded
+    // into rows of GLYPH_COLUMNS glyphs (see glyphTable.ts).
+    const rows = glyphTableHeight(descriptor.glyphTable.length / 8);
     this.glyphTable = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.glyphTable);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 2, glyphs);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 2, glyphs, gl.RGBA, gl.FLOAT, descriptor.glyphTable);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, GLYPH_TABLE_WIDTH, rows);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GLYPH_TABLE_WIDTH, rows, gl.RGBA, gl.FLOAT, padGlyphTable(descriptor.glyphTable));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -71,6 +73,8 @@ export class GpuFace {
 /** GPU faces by key, each created once and kept across documents. */
 export class AtlasLibrary {
   private readonly faces = new Map<string, GpuFace>();
+  /** gl.MAX_TEXTURE_SIZE, read once. */
+  private maxTextureSize: number | undefined;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -85,9 +89,15 @@ export class AtlasLibrary {
   }
 
   /** Registers a face and starts loading its atlas image. */
-  define(descriptor: FaceDescriptor): GpuFace {
+  define(descriptor: FaceDescriptor): GpuFace | undefined {
     let face = this.faces.get(descriptor.key);
     if (face) return face;
+    const limit = (this.maxTextureSize ??= this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) as number);
+    const rows = glyphTableHeight(descriptor.glyphTable.length / 8);
+    if (Math.max(descriptor.atlasWidth, descriptor.atlasHeight, rows) > limit) {
+      console.warn(`${descriptor.key}: atlas ${descriptor.atlasWidth}x${descriptor.atlasHeight} exceeds this GPU's MAX_TEXTURE_SIZE (${limit}); face skipped`);
+      return undefined;
+    }
     face = new GpuFace(this.gl, descriptor);
     this.faces.set(descriptor.key, face);
     void this.load(face);

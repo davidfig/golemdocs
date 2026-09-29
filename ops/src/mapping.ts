@@ -175,6 +175,15 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
       const after = paragraphOf(op.after);
       return after ? [{ ...op, after }] : [];
     }
+    case 'insertRow':
+    case 'removeRow':
+    case 'insertCell':
+    case 'removeCell':
+    case 'setTableGrid':
+    case 'setCellProperties': {
+      const paragraph = paragraphOf(op.paragraph);
+      return paragraph ? [{ ...op, paragraph }] : [];
+    }
     case 'setParagraphProperties': {
       const paragraph = paragraphOf(op.paragraph);
       return paragraph ? [{ ...op, paragraph }] : [];
@@ -182,6 +191,8 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
     case 'setComment':
     case 'setStyle':
     case 'setList':
+    case 'setDocumentSection':
+    case 'setDocumentProperties':
       return [op];
   }
 }

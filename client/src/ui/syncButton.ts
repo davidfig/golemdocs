@@ -17,6 +17,13 @@ const labels = (): Record<DocumentSync, { text: string; tooltip: string }> => ({
   signedOut: { text: t('dialogs.sync.signedOut.text'), tooltip: t('dialogs.sync.signedOut.tooltip') },
 });
 
+/** A save time as the reader's locale writes it: just the time today, the date and time otherwise. */
+function formatSavedAt(ms: number): string {
+  const d = new Date(ms);
+  const today = d.toDateString() === new Date().toDateString();
+  return d.toLocaleString(undefined, today ? { timeStyle: 'short' } : { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 export class SyncButton {
   readonly el: HTMLButtonElement;
   private readonly label: HTMLSpanElement;
@@ -64,6 +71,7 @@ export class SyncButton {
         return panel;
       case 'saved':
         say(t('dialogs.sync.saved.title'), t('dialogs.sync.saved.body'));
+        if (status?.savedAt) panel.append(h('p', { class: 'wm-sync-note', text: t('dialogs.sync.lastSaved', { time: formatSavedAt(status.savedAt) }) }));
         break;
       case 'saving':
         say(t('dialogs.sync.saving.title'), t('dialogs.sync.saving.body'));

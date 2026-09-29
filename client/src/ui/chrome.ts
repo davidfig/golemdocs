@@ -11,6 +11,7 @@ import {
   type ChromeHost,
   type ChromeState,
   type FormMode,
+  type ImageOp,
   type Mark,
   type TableOp,
   type ZoomTarget,
@@ -19,8 +20,9 @@ import { CommandRegistry, type CommandSpec } from './commands.ts';
 import { h } from './dom.ts';
 import { format, getLocale, setLocale, t } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
-import { CONVERT_ORDER, FORMATS } from './formats.ts';
+import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
+import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
@@ -170,6 +172,11 @@ export class Chrome {
     return this.state;
   }
 
+  /** Who is signed in changed: the Admin menu appears or goes. */
+  accountChanged(): void {
+    this.menuBar.refresh();
+  }
+
   private refresh(): void {
     for (const toolbar of this.toolbars) toolbar.refresh(this.state);
     this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden);
@@ -213,12 +220,11 @@ export class Chrome {
       a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
       dialog('file.pageSetup', t('chrome.file.pageSetup'), 'pageSetup'),
       a('file.printPreview', t('chrome.file.printPreview'), { kind: 'printPreview' }, { icon: 'printPreview' }),
-      a('file.collaborate', t('chrome.file.collaborate'), { kind: 'collaborate' }, { tooltip: t('chrome.file.collaborate.tip') }),
       a('file.print', t('chrome.file.print'), { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
       dialog('file.properties', t('chrome.file.properties'), 'properties', { icon: 'properties' }),
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
     );
-    for (const kind of CONVERT_ORDER) {
+    for (const kind of new Set([...CONVERT_ORDER, ...PICTURE_CONVERT_ORDER])) {
       const profile = FORMATS[kind];
       r.add(a(`file.convertTo.${kind}`, `${profile.label} (${profile.extensions[0]})`, { kind: 'convert', to: kind }, { enabled: (s) => s.kind !== kind }));
     }
@@ -242,14 +248,11 @@ export class Chrome {
       a(id, label, { kind: 'viewMode', mode: m }, { checked: (s) => s.viewMode === m, radio: true });
     r.add(
       mode('view.normal', t('chrome.view.normal'), 'normal'),
-      mode('view.web', t('chrome.view.web'), 'web'),
       mode('view.print', t('chrome.view.print'), 'print'),
-      mode('view.outline', t('chrome.view.outline'), 'outline'),
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
-      { id: 'view.debug', label: t('chrome.view.debug'), run: () => this.showDebug() },
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
         tooltip: t('chrome.view.formattingMarks.tip'),
@@ -369,7 +372,8 @@ export class Chrome {
     );
 
     // Table
-    const table = (op: TableOp, label: string) => a(`table.${op}`, label, { kind: 'table', op });
+    // Row, column and cell commands work on the table the selection is in.
+    const table = (op: TableOp, label: string) => a(`table.${op}`, label, { kind: 'table', op }, { enabled: (s) => s.inTable });
     r.add(
       table('insertRowAbove', t('chrome.table.insertRowAbove')),
       table('insertRowBelow', t('chrome.table.insertRowBelow')),
@@ -384,10 +388,37 @@ export class Chrome {
       table('properties', t('chrome.table.properties')),
     );
 
+    // Picture
+    const picture = (op: ImageOp, label: string, icon: string) => a(`image.${op}`, label, { kind: 'image', op }, { icon });
+    r.add(
+      picture('rotateLeft', t('picture.rotateLeft'), 'rotateLeft'),
+      picture('rotateRight', t('picture.rotateRight'), 'rotateRight'),
+      picture('rotate180', t('picture.rotate180'), 'rotate180'),
+      picture('flipHorizontal', t('picture.flipHorizontal'), 'flipHorizontal'),
+      picture('flipVertical', t('picture.flipVertical'), 'flipVertical'),
+      picture('crop', t('picture.crop'), 'crop'),
+      picture('resize', t('picture.resize'), 'resize'),
+      picture('adjust', t('picture.adjust'), 'adjust'),
+      picture('autoLevels', t('picture.autoLevels'), 'autoLevels'),
+      picture('grayscale', t('picture.grayscale'), 'grayscale'),
+      picture('sepia', t('picture.sepia'), 'sepia'),
+      picture('invert', t('picture.invert'), 'invert'),
+      picture('blur', t('picture.blur'), 'blur'),
+      picture('sharpen', t('picture.sharpen'), 'sharpen'),
+    );
+
+    // Draw: the tools stay picked until Done, so they show as pressed.
+    for (const tool of ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'pixelate', 'eraser'] as const) {
+      r.add(a(`image.${tool}`, t(`picture.draw.${tool}`), { kind: 'image', op: tool }, { icon: tool, checked: (s) => s.draw.tool === tool }));
+    }
+
+    r.add({ id: 'image.fill', label: t('picture.draw.fill'), icon: 'fill', action: (s) => ({ kind: 'drawStyle', fill: !s.draw.fill }), checked: (s) => s.draw.fill });
+
     // Help
     r.add(
       { id: 'help.shortcuts', label: t('chrome.help.shortcuts'), icon: 'help', shortcut: 'F1', run: () => this.showShortcuts() },
       // The welcome document says what the app is and where its name comes from.
+      { id: 'help.feedback', label: t('chrome.help.feedback'), run: () => this.sendFeedback() },
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
     );
   }
@@ -395,6 +426,7 @@ export class Chrome {
   // --- Menus -------------------------------------------------------------------------------
 
   private menus(): TopMenu[] {
+    const isAdmin = () => this.options.isAdmin?.() ?? false;
     const host = this.options.host;
     const r = this.registry;
     const insertText = (text: string, label: string, hint?: string): MenuItem => ({
@@ -414,11 +446,6 @@ export class Chrome {
           sep,
           cmd('file.new'),
           cmd('file.open'),
-          sub(t('chrome.file.openSample'), () => {
-            const samples = host.samples?.() ?? [];
-            if (!samples.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
-            return samples.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSample', id: s.id }, s.label) }));
-          }),
           sub(t('chrome.file.openRecent'), () => {
             const saved = host.saved?.() ?? [];
             if (!saved.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
@@ -426,9 +453,8 @@ export class Chrome {
           }),
           sep,
           cmd('file.share'),
-          sub(t('chrome.file.convertTo'), CONVERT_ORDER.map((k) => cmd(`file.convertTo.${k}`))),
+          sub(t('chrome.file.convertTo'), () => convertTargets(this.state.kind).map((k) => cmd(`file.convertTo.${k}`))),
           cmd('file.download'),
-          cmd('file.collaborate'),
           sep,
           cmd('file.pageSetup'),
           cmd('file.printPreview'),
@@ -461,16 +487,12 @@ export class Chrome {
         label: t('chrome.menu.view'),
         items: [
           cmd('view.normal'),
-          cmd('view.web'),
           cmd('view.print'),
-          cmd('view.outline'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.matchSystem')]),
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
-          cmd('view.debug'),
-          { type: 'item', label: t('chrome.view.billing'), run: () => this.showBilling(), available: () => this.options.isAdmin?.() ?? false },
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),
@@ -582,8 +604,54 @@ export class Chrome {
         ],
       },
       {
+        label: t('picture.menu'),
+        items: [
+          cmd('image.rotateLeft'),
+          cmd('image.rotateRight'),
+          cmd('image.rotate180'),
+          cmd('image.flipHorizontal'),
+          cmd('image.flipVertical'),
+          sep,
+          cmd('image.crop'),
+          cmd('image.resize'),
+          cmd('image.adjust'),
+          sep,
+          cmd('image.autoLevels'),
+          cmd('image.grayscale'),
+          cmd('image.sepia'),
+          cmd('image.invert'),
+          cmd('image.blur'),
+          cmd('image.sharpen'),
+          sep,
+          cmd('image.pen'),
+          cmd('image.marker'),
+          cmd('image.line'),
+          cmd('image.arrow'),
+          cmd('image.rectangle'),
+          cmd('image.ellipse'),
+          cmd('image.fill'),
+          cmd('image.text'),
+          cmd('image.pixelate'),
+          cmd('image.eraser'),
+        ],
+      },
+      {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), sep, cmd('help.about')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.about')],
+      },
+      {
+        // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).
+        label: t('chrome.menu.admin'),
+        items: [
+          { type: 'item', label: t('chrome.admin.debug'), run: () => this.showDebug(), available: isAdmin },
+          { type: 'item', label: t('chrome.admin.billing'), run: () => this.showBilling(), available: isAdmin },
+          { type: 'item', label: t('chrome.admin.feedback'), run: () => this.showFeedback(), available: isAdmin },
+          sub(t('chrome.file.openSample'), () => {
+            const samples = host.samples?.() ?? [];
+            if (!samples.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
+            return samples.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSample', id: s.id }, s.label) }));
+          }),
+        ],
       },
     ];
   }
@@ -712,6 +780,36 @@ export class Chrome {
         () => profile().colors,
       ),
     );
+    define('control.drawColor', t('picture.draw.color'), t('picture.menu').replace('&', ''), 'drawColor', () =>
+      gated(
+        colorButton({ label: t('picture.draw.color'), icon: 'drawColor', noneLabel: t('picture.draw.black'), initial: '#E5322D', palette: 'full', action: (color) => ({ kind: 'drawStyle', color: color ?? '#000000' }) }, r),
+        () => profile().imageTools,
+      ),
+    );
+    define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
+  }
+
+  /** The line thickness to draw with: a small list of steps. */
+  private drawSizeBox(): Control {
+    const r = this.registry;
+    const label = t('picture.draw.size');
+    const select = h('select', { class: 'wm-draw-size', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
+    (['thin', 'medium', 'thick', 'huge'] as const).forEach((name, step) => {
+      const option = h('option', { text: t(`picture.draw.size.${name}`) });
+      option.value = String(step);
+      select.append(option);
+    });
+    select.addEventListener('change', () => {
+      r.perform({ kind: 'drawStyle', size: Number(select.value) }, label);
+      r.focusEditor();
+    });
+    return {
+      el: select,
+      refresh: (state) => {
+        select.value = String(state.draw.size);
+        select.disabled = !r.allows({ kind: 'drawStyle', size: state.draw.size });
+      },
+    };
   }
 
   // --- Format selector ---------------------------------------------------------------------
@@ -726,6 +824,10 @@ export class Chrome {
         width: 104,
         readOnly: true,
         options: () => this.formatKinds().map((kind) => FORMATS[kind].label),
+        groupLabel: (label) => {
+          const kind = kindOf(label);
+          return kind && t(`menus.format.group.${formatGroup(kind)}`);
+        },
         value: (s) => FORMATS[s.kind].label,
         enabled: () => !this.converting,
         title: (s) =>
@@ -772,14 +874,14 @@ export class Chrome {
       'div',
       { class: 'wm-format' },
       this.formModeBox,
-      h('div', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: t('chrome.formatBox.title') }), combo.el),
+      h('div', { class: 'wm-format-field' }, combo.el),
       this.syncButton.el,
     );
   }
 
   /** The switchable formats, plus the current one if it isn't switchable. */
   private formatKinds(): (keyof typeof FORMATS)[] {
-    return CONVERT_ORDER.includes(this.state.kind) ? CONVERT_ORDER : [...CONVERT_ORDER, this.state.kind];
+    return convertTargets(this.state.kind);
   }
 
   /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */
@@ -892,7 +994,22 @@ export class Chrome {
     showDialog(t('chrome.billing.title'), billingPanel(), () => this.options.host.focusEditor());
   }
 
+  private showFeedback(): void {
+    this.menuBar.close(false);
+    closePopup();
+    showDialog(t('chrome.feedback.title'), feedbackPanel(), () => this.options.host.focusEditor());
+  }
+
   // --- Help ----------------------------------------------------------------------------------
+
+  private sendFeedback(): void {
+    this.menuBar.close(false);
+    closePopup();
+    void showFeedbackDialog().then((sent) => {
+      if (sent) this.options.host.notify(t('chrome.feedback.thanks'));
+      this.options.host.focusEditor();
+    });
+  }
 
   private showShortcuts(): void {
     const table = h('table', { class: 'wm-shortcuts' });

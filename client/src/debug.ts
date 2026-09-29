@@ -9,7 +9,6 @@ export const DEBUG_FLAGS = [
   { key: 'edit', panel: 'Document', label: 'Edit times', hint: 'How long the last edit took to reach the screen, and how much of that was the layout worker' },
   { key: 'load', panel: 'Document', label: 'Load times', hint: 'How long the document took to load, in parts' },
   { key: 'pages', panel: 'Render', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
-  { key: 'zoom', panel: 'Render', label: 'Zoom', hint: 'The current zoom level' },
   { key: 'cpu', panel: 'Render', label: 'CPU time', hint: 'How long the last frame took to submit to the GPU' },
   { key: 'fps', panel: 'Render', label: 'FPS and render light', hint: 'Frame rate of the last stretch of drawing (it holds there while the canvas is idle: it only draws on demand), beside a light that flashes whenever the canvas draws' },
   { key: 'frameTimes', panel: 'Render', label: 'Slowest and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },

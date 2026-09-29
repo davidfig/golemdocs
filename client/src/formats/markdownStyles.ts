@@ -22,7 +22,7 @@ export function styleFor(id: string): Style | undefined {
       paragraphProperties: {
         keepNext: true,
         keepLines: true,
-        spacing: { before: level === 1 ? 240 : 40, after: 0 },
+        spacing: { before: level === 1 ? 240 : 40, after: level === 1 ? 240 : 0 },
         outlineLevel: level - 1,
       },
       runProperties: {
@@ -62,6 +62,20 @@ export function styleFor(id: string): Style | undefined {
           shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' },
         },
         runProperties: { fonts: MONO_FONTS, size: 20, sizeCs: 20 },
+        attrs: {},
+      };
+    case 'CodeOutput':
+      return {
+        type: 'paragraph',
+        id,
+        name: 'Code Output',
+        basedOn: 'Normal',
+        paragraphProperties: {
+          spacing: { before: 0, after: 0, line: 240, lineRule: 'auto' },
+          borders: { left: { val: 'single', sz: 12, space: 6, color: 'BFBFBF' } },
+          indent: { left: 120 },
+        },
+        runProperties: { fonts: MONO_FONTS, size: 20, sizeCs: 20, color: { val: '595959' } },
         attrs: {},
       };
     case 'InlineCode':

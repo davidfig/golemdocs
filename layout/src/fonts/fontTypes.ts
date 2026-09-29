@@ -34,6 +34,21 @@ export interface ManifestFamily {
   /** Other Word font names that select a specific weight of this family. */
   aliases: Record<string, number>;
   faces: ManifestFace[];
+  /**
+   * Set on the pages of a CJK font. Such a family is never chosen by name (and isn't offered in the
+   * font list): its pages, in `order`, draw the characters of `lang` that the run's own font lacks.
+   */
+  cjk?: {
+    lang: 'ja' | 'zh-Hant' | 'ko';
+    /** 0 for the page with the most used characters. */
+    order: number;
+    /**
+     * A JSON file (path relative to the manifest) holding the code points this page has glyphs for as a
+     * flat list of inclusive ranges, `[from, to, from, to, …]`, so layout can tell which pages a text
+     * needs without loading their metrics. Loaded only for documents that contain CJK text.
+     */
+    coverage: string;
+  };
 }
 
 export interface FontManifest {

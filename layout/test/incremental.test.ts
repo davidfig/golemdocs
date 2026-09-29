@@ -151,6 +151,41 @@ test('incremental layout matches full layout: long plain document', skip, async 
   console.log(`plain: incremental median ${median(incremental).toFixed(1)} ms vs full ${median(full).toFixed(1)} ms; converged ${converged}/${incremental.length}`);
 });
 
+/** A long document of paragraphs (some headings, a few page breaks); `sections` shapes its sections. */
+async function columnsDocument(seed: number, shape: (doc: WordDocument, paragraphs: Paragraph[]) => void): Promise<WordDocument> {
+  const doc = await WordDocument.create();
+  const rand = random(seed);
+  const paragraphs = Array.from({ length: 300 }, (_, i): Paragraph => {
+    const heading = i % 30 === 0;
+    const words = Array.from({ length: heading ? 4 : 15 + Math.floor(rand() * 90) }, () => WORDS[Math.floor(rand() * WORDS.length)]);
+    return { kind: 'paragraph', properties: heading ? { style: 'Heading1' } : i % 89 === 40 ? { pageBreakBefore: true } : {}, children: [run(words.join(' '))], attrs: {} };
+  });
+  doc.body = paragraphs;
+  shape(doc, paragraphs);
+  return doc;
+}
+
+test('incremental layout matches full layout: two columns with a line between them', skip, async () => {
+  const doc = await columnsDocument(11, (d) => {
+    d.section = { ...d.section, columns: { num: 2, space: 720, sep: true } };
+  });
+  const { incremental, full, converged } = await editAndCompare(doc, 3 + STRESS * 1000, 60 * STRESS);
+  console.log(`two columns: incremental median ${median(incremental).toFixed(1)} ms vs full ${median(full).toFixed(1)} ms; converged ${converged}/${incremental.length}`);
+});
+
+test('incremental layout matches full layout: sections with different columns', skip, async () => {
+  const doc = await columnsDocument(13, (d, paragraphs) => {
+    // One column, then three continuous columns, then two on a new page, then (the last section) one again.
+    const base = d.section;
+    paragraphs[60].properties.section = { ...base, columns: { num: 1 } };
+    paragraphs[140].properties.section = { ...base, type: 'continuous', columns: { num: 3, space: 360, sep: true } };
+    paragraphs[220].properties.section = { ...base, type: 'nextPage', columns: { num: 2, space: 720 } };
+    d.section = { ...base, type: 'continuous', columns: { num: 1 } };
+  });
+  const { incremental, full, converged } = await editAndCompare(doc, 5 + STRESS * 1000, 60 * STRESS);
+  console.log(`mixed sections: incremental median ${median(incremental).toFixed(1)} ms vs full ${median(full).toFixed(1)} ms; converged ${converged}/${incremental.length}`);
+});
+
 for (const name of ['bug65649.docx', 'Numbering.docx', 'bug59058.docx', 'TestTableColumns.docx', '60329.docx', 'ThreeColHeadFoot.docx']) {
   const file = path.join(CORPUS, name);
   test(`incremental layout matches full layout: ${name}`, hasFonts && existsSync(file) ? {} : { skip: 'needs fonts and the corpus' }, async () => {

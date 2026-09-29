@@ -36,6 +36,8 @@ export interface AppHooks {
   send(command: WireCommand): void;
   /** A PDF is shown as its own pages, which take markup annotations. */
   annotating(): boolean;
+  /** Who new comments are from. */
+  author(): string;
   /** The selected text (for copy and cut). */
   selectedText(): string;
   focusEditor(): void;
@@ -73,11 +75,12 @@ const SUPPORTED = new Set<ActionKind>([
   'toggleStats',
   'insertText',
   'convert',
+  'insertComment',
 ]);
 
 
 /** Actions that mark up a PDF shown as its own pages (see layout/pdfAnnotator.ts). */
-const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark', 'insertComment']);
+const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark']);
 
 /** The formats a document can be converted to. */
 const CONVERTIBLE = new Set<DocumentKind>(['docx', 'pdf', 'md', 'txt']);
@@ -230,8 +233,10 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (action.mark === 'strikethrough') return app.send({ kind: 'annotate', annotation: 'strikeout' });
           return app.notify(`${action.mark} isn't available yet`);
         case 'insertComment': {
-          const text = window.prompt('Note');
-          if (text !== null) app.send({ kind: 'annotate', annotation: 'note', text });
+          const text = window.prompt(app.annotating() ? 'Note' : 'Comment');
+          if (text === null) return;
+          if (app.annotating()) app.send({ kind: 'annotate', annotation: 'note', text });
+          else app.send({ kind: 'addComment', text, author: app.author() });
           return;
         }
         default:

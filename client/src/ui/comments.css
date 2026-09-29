@@ -1,0 +1,70 @@
+/* The comments panel (see commentsPanel.ts), over the right edge of the editor's canvas. */
+
+.wm-comments {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  width: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font: 12px/1.35 var(--wm-font, system-ui, sans-serif);
+  color: var(--wm-text, #000);
+  pointer-events: none;
+}
+
+.wm-comments[hidden] {
+  display: none;
+}
+
+.wm-comments h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wm-text-muted, #555);
+}
+
+.wm-comment {
+  pointer-events: auto;
+  padding: 8px 10px;
+  border: 1px solid #e3c36b;
+  border-left: 4px solid #ffc83d;
+  border-radius: 4px;
+  background: #fffbea;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.wm-comment:focus-visible {
+  outline: 2px solid #3390ff;
+}
+
+.wm-comment header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wm-comment time {
+  color: var(--wm-text-muted, #555);
+}
+
+.wm-comment p {
+  margin: 4px 0 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wm-comment footer {
+  display: flex;
+  gap: 6px;
+}
+
+.wm-comment button {
+  font: inherit;
+  padding: 1px 8px;
+  cursor: pointer;
+}

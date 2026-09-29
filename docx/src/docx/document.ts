@@ -2,6 +2,7 @@
 
 import type {
   Block,
+  Comment,
   HeaderFooter,
   Numbering,
   SectionProperties,
@@ -12,6 +13,7 @@ import type {
 import { CONTENT_TYPE, OpcPackage, PackageError, REL, contentTypeForExtension, type Relationships } from '../opc/package.ts';
 import { DOCUMENT_NAMESPACES, NS } from '../xml/namespaces.ts';
 import { child, el, elements, type XmlElement } from '../xml/xml.ts';
+import { readComments, writeComments, type CommentsPart } from './comments.ts';
 import { readBlocks, writeBlocks, type ContentWriteContext } from './content.ts';
 import { readSection, writeSection } from './properties.ts';
 import { readNumbering, readSettings, readStyles, readThemeFonts, writeNumbering, writeStyles } from './styles.ts';
@@ -28,6 +30,8 @@ export class WordDocument {
   /** Read-only views of preserved parts. */
   theme: ThemeFonts = { major: {}, minor: {} };
   settings: Settings = { defaultTabStop: 720, evenAndOddHeaders: false };
+  /** Comments, in the order of the comments part. Their ranges are markers in the body (edit/comments.ts). */
+  comments: Comment[] = [];
 
   private rootAttrs: Record<string, string> = { ...DOCUMENT_NAMESPACES };
   private rootChildren: { before: XmlElement[]; after: XmlElement[] } = { before: [], after: [] };
@@ -35,6 +39,8 @@ export class WordDocument {
   private stylesPart?: string;
   private sectionAbsent = false;
   private numberingPart?: string;
+  private commentsPart?: string;
+  private commentsRead?: CommentsPart;
 
   private constructor(
     readonly pkg: OpcPackage,
@@ -84,6 +90,11 @@ export class WordDocument {
     if (doc.numberingPart) doc.numbering = readNumbering(await pkg.xml(doc.numberingPart), ctx);
     if (themePart) doc.theme = readThemeFonts(await pkg.xml(themePart));
     if (settingsPart) doc.settings = readSettings(await pkg.xml(settingsPart));
+    doc.commentsPart = partFor(REL.comments);
+    if (doc.commentsPart) {
+      doc.commentsRead = readComments(await pkg.xml(doc.commentsPart));
+      doc.comments = doc.commentsRead.comments.map((c) => structuredClone(c));
+    }
 
     for (const kind of ['header', 'footer'] as const) {
       for (const rel of rels.byType(kind === 'header' ? REL.header : REL.footer)) {
@@ -186,6 +197,18 @@ export class WordDocument {
       const numbering = writeNumbering(this.numbering, ctx);
       declareNamespaces(numbering);
       pkg.set(this.numberingPart, numbering, CONTENT_TYPE.numbering);
+    }
+
+    if (this.commentsPart || this.comments.length) {
+      this.commentsPart ??= 'word/comments.xml';
+      rels.add(REL.comments, this.commentsPart);
+      const comments = writeComments({
+        comments: this.comments,
+        rootAttrs: this.commentsRead?.rootAttrs ?? {},
+        originals: this.commentsRead?.originals ?? new Map(),
+      });
+      declareNamespaces(comments);
+      pkg.set(this.commentsPart, comments, CONTENT_TYPE.comments);
     }
 
     for (const hf of this.headersFooters.values()) {

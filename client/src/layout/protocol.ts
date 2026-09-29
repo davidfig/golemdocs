@@ -107,6 +107,10 @@ export interface SelectionUpdate {
   workerMs: number;
   /** Other people's carets (in a collaboration room). */
   remote: { page: number; x: number; y: number; height: number; color: number; name: string }[];
+  /** The document's comments, in order, and where each one's text starts (page id and y), if laid out. */
+  comments: { id: string; author: string; date?: string; text: string; page: number | null; y: number }[];
+  /** Highlight over commented text: page id, x, y, width, height per rectangle. */
+  commentRects: Float64Array;
 }
 
 export type FromWorker =

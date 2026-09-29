@@ -168,5 +168,7 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
       const paragraph = paragraphOf(op.paragraph);
       return paragraph ? [{ ...op, paragraph }] : [];
     }
+    case 'setComment':
+      return [op];
   }
 }

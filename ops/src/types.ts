@@ -6,7 +6,7 @@
 // applied yields its inverse (for undo and for rebasing) and a position map (to move
 // selections, pending operations and undo history through it).
 
-import type { Attributes, Block, Inline, ParagraphProperties, RunContent } from '@word/docx';
+import type { Attributes, Block, Comment, Inline, ParagraphProperties, RunContent } from '@word/docx';
 
 /** A position: a paragraph (by id) and a model offset in it. */
 export interface Pos {
@@ -33,7 +33,9 @@ export type Operation =
   | { type: 'insertBlocks'; after: string; blocks: Block[] }
   /** Removes particular blocks (by blockKey) from the container of paragraph `after`. */
   | { type: 'removeBlocks'; after: string; keys: string[] }
-  | { type: 'setParagraphProperties'; paragraph: string; properties: ParagraphProperties };
+  | { type: 'setParagraphProperties'; paragraph: string; properties: ParagraphProperties }
+  /** Adds, replaces (by id) or, with `comment` null, removes a comment's text and author. Its range is markers in the text. */
+  | { type: 'setComment'; id: string; comment: Comment | null };
 
 /** Operations applied together: one edit, one undo step, one unit of collaboration. */
 export interface Transaction {

@@ -4,6 +4,8 @@ import { RectBatch } from '../shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';
 
 const HIGHLIGHT = packColor(0x3390ff, 0.28);
+/** Commented text, under the selection. */
+const COMMENTED = packColor(0xffc83d, 0.35);
 const CARET = packColor(0x000000);
 /** Caret width in points; the rect shader keeps it at least one device pixel wide. */
 const CARET_WIDTH = 0.01;
@@ -53,14 +55,17 @@ export class SelectionLayer {
 
   update(selection: SelectionUpdate): void {
     this.clear();
-    const byPage = new Map<number, number[][]>();
-    const r = selection.rects;
-    for (let i = 0; i < r.length; i += 5) {
-      let list = byPage.get(r[i]);
-      if (!list) byPage.set(r[i], (list = []));
-      list.push([r[i + 1], r[i + 2], r[i + 3], r[i + 4]]);
-    }
-    for (const [page, list] of byPage) this.highlights.set(page, rects(list, HIGHLIGHT));
+    const byPage = new Map<number, { rect: number[]; color: number }[]>();
+    const add = (r: Float64Array, color: number) => {
+      for (let i = 0; i < r.length; i += 5) {
+        let list = byPage.get(r[i]);
+        if (!list) byPage.set(r[i], (list = []));
+        list.push({ rect: [r[i + 1], r[i + 2], r[i + 3], r[i + 4]], color });
+      }
+    };
+    add(selection.commentRects, COMMENTED);
+    add(selection.rects, HIGHLIGHT);
+    for (const [page, list] of byPage) this.highlights.set(page, coloredRects(list));
     this.caret = selection.caret;
     this.focus = selection.focus;
     this.text = selection.text;

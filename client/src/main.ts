@@ -7,6 +7,7 @@ import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
 import { getSaved, getThumbnail, listSaved, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
+import { CommentsPanel } from './ui/commentsPanel.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { arrangePages, columnsToFill, type Bounds } from './document/arrange.ts';
@@ -104,6 +105,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pagesById.clear();
   pages = [];
   selection.clear();
+  commentsPanel.update([]);
   selectionFormat = {};
   canUndo = canRedo = false;
   renderer.images?.clear();
@@ -566,6 +568,7 @@ let editSent = 0;
 
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
+  commentsPanel.update(update.comments);
   selectionFormat = update.format;
   canUndo = update.canUndo;
   canRedo = update.canRedo;
@@ -935,6 +938,7 @@ const chromeHost = createChromeHost({
   }),
   send,
   annotating: () => annotating,
+  author: () => cloudUser?.name ?? cloudUser?.email ?? userName,
   selectedText: () => selection.text,
   focusEditor: focusInput,
   notify: setStatus,
@@ -971,6 +975,16 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
   signIn: () => signIn({ dashboard: true }),
   signOut,
   closed: focusInput,
+});
+
+// Comments down the right of the editor; edits to them are ordinary (undoable) edits.
+const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
+  select: (id) => {
+    send({ kind: 'selectComment', id });
+    focusInput();
+  },
+  edit: (id, text) => send({ kind: 'editComment', id, text }),
+  remove: (id) => send({ kind: 'deleteComment', id }),
 });
 
 window.addEventListener('dragover', (e) => e.preventDefault());

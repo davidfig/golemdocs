@@ -7,6 +7,11 @@
 // hidden text, caret x positions).
 
 import {
+  commentEnd,
+  commentMarkerOffsets,
+  commentRanges,
+  commentReference,
+  commentStart,
   newParagraphProperties,
   paragraphLength,
   paragraphsIn,
@@ -52,7 +57,15 @@ export type Command =
   | { kind: 'move'; to: MoveTarget; extend?: boolean }
   /** A click or drag at page-relative points; `unit` selects a word or paragraph (double/triple click). */
   | { kind: 'pointer'; page: PageLayout; x: number; y: number; extend?: boolean; unit?: 'character' | 'word' | 'paragraph' }
-  | { kind: 'selectAll' };
+  | { kind: 'selectAll' }
+  /** Comments the selection (or, with none, the word at the caret). */
+  | { kind: 'addComment'; text: string; author: string; date?: string }
+  /** Changes a comment's text. */
+  | { kind: 'editComment'; id: string; text: string }
+  /** Removes a comment and its markers from the text. */
+  | { kind: 'deleteComment'; id: string }
+  /** Selects the text a comment is on. */
+  | { kind: 'selectComment'; id: string };
 
 export interface Rect {
   page: PageLayout;
@@ -85,6 +98,16 @@ const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
 const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
 const WORD = /[\p{L}\p{N}_'’]/u;
 const SPACE = /\s/u;
+
+/** A comment's text and where it is shown. */
+export interface CommentGeometry {
+  id: string;
+  author: string;
+  date?: string;
+  text: string;
+  /** Highlight over its range (empty when that isn't laid out yet). */
+  rects: Rect[];
+}
 
 /** What a command did to the document (to lay out again). */
 export interface CommandResult {
@@ -237,7 +260,73 @@ export class Editor {
         this.selection = { anchor: { paragraph: list[0], offset: 0 }, focus: { paragraph: last, offset: paragraphLength(last) } };
         return NO_CHANGE;
       }
+      case 'addComment':
+        return this.edit(this.addCommentOps(command));
+      case 'editComment': {
+        const comment = this.doc.comments.find((c) => c.id === command.id);
+        if (!comment) return NO_CHANGE;
+        const ops: Operation[] = [{ type: 'setComment', id: command.id, comment: { ...comment, paragraphs: command.text.split(/\r\n?|\n/) } }];
+        return this.edit([ops, this.selectionIds.focus]);
+      }
+      case 'deleteComment':
+        return this.edit(this.deleteCommentOps(command.id));
+      case 'selectComment': {
+        const range = commentRanges(this.paragraphs()).get(command.id);
+        if (range) this.selection = { anchor: { ...range.start }, focus: { ...range.end } };
+        return NO_CHANGE;
+      }
     }
+  }
+
+  // --- Comments --------------------------------------------------------------------------
+
+  private addCommentOps(command: Extract<Command, { kind: 'addComment' }>): [Operation[], Pos] {
+    let [start, end] = this.ordered();
+    if (this.collapsed) [start, end] = this.wordAt(start);
+    // Ids are decimal (w:id); random so that two people commenting at once don't collide.
+    const taken = new Set([...this.doc.comments.map((c) => c.id), ...commentRanges(this.paragraphs()).keys()]);
+    let id: string;
+    do id = String(Math.floor(Math.random() * 0x7fffffff));
+    while (taken.has(id));
+    const startPos = this.pos(start);
+    const endPos = this.pos(end);
+    const ops: Operation[] = [
+      { type: 'setComment', id, comment: { id, author: command.author, date: command.date ?? new Date().toISOString().replace(/\.\d+Z$/, 'Z'), paragraphs: command.text.split(/\r\n?|\n/) } },
+      // The end first, so the start's offset still holds when both are in one paragraph.
+      { type: 'insertContent', paragraph: endPos.paragraph, offset: endPos.offset, content: [commentEnd(id), commentReference(id)] },
+      { type: 'insertContent', paragraph: startPos.paragraph, offset: startPos.offset, content: [commentStart(id)] },
+    ];
+    const shift = start.paragraph === end.paragraph ? 1 : 0;
+    return [ops, { paragraph: endPos.paragraph, offset: endPos.offset + shift + 2 }];
+  }
+
+  private deleteCommentOps(id: string): [Operation[], Pos] | null {
+    const ops: Operation[] = [];
+    for (const p of this.paragraphs()) {
+      for (const offset of commentMarkerOffsets(p, id)) ops.push({ type: 'delete', paragraph: this.replica.id(p), from: offset, to: offset + 1 });
+    }
+    if (this.doc.comments.some((c) => c.id === id)) ops.push({ type: 'setComment', id, comment: null });
+    if (!ops.length) return null;
+    // Keep the caret where it is, moved back over any markers before it.
+    const focus = this.selection.focus;
+    const before = commentMarkerOffsets(focus.paragraph, id).filter((o) => o < focus.offset).length;
+    return [ops, { paragraph: this.replica.id(focus.paragraph), offset: focus.offset - before }];
+  }
+
+  /** Every comment, with the highlight over its range. */
+  comments(): CommentGeometry[] {
+    if (!this.doc.comments.length) return [];
+    const ranges = commentRanges(this.paragraphs());
+    return this.doc.comments.map((c) => {
+      const range = ranges.get(c.id);
+      return {
+        id: c.id,
+        author: c.author,
+        ...(c.date && { date: c.date }),
+        text: c.paragraphs.join('\n'),
+        rects: range ? this.rangeRects(range.start, range.end) : [],
+      };
+    });
   }
 
   /** Applies planned operations as one local edit and moves the selection. */
@@ -671,6 +760,11 @@ export class Editor {
 
   private selectionRects(): Rect[] {
     const [start, end] = this.ordered();
+    return this.rangeRects(start, end);
+  }
+
+  /** Highlight rectangles over the text from `start` to `end` (in document order). */
+  private rangeRects(start: Position, end: Position): Rect[] {
     const ia = this.indexOf(start.paragraph);
     const ib = this.indexOf(end.paragraph);
     const first = this.session.linesOf(start.paragraph, this.hint)[0];

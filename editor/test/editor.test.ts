@@ -164,3 +164,39 @@ test('deleting all of a paragraph keeps its formatting for what is typed next', 
   assert.equal(run.properties.bold, true);
   assert.equal(editor.selectedText(), '');
 });
+
+test('comments: add on the selection, edit, undo, select and delete', skip, async () => {
+  const { doc, editor, apply } = await setup(['Hello big world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'wordRight', extend: true });
+  assert.equal(editor.selectedText(), 'big ');
+  await apply({ kind: 'addComment', text: 'Too casual?', author: 'Ada', date: '2026-01-01T00:00:00Z' });
+  assert.equal(doc.comments.length, 1);
+  const [comment] = editor.comments();
+  assert.equal(comment.text, 'Too casual?');
+  assert.equal(comment.author, 'Ada');
+  assert.ok(comment.rects.length > 0, 'the commented text is highlighted');
+  // The markers add no visible text.
+  assert.equal(editor.selectedText(), '');
+  await apply({ kind: 'selectComment', id: comment.id });
+  assert.equal(editor.selectedText(), 'big ');
+  await apply({ kind: 'editComment', id: comment.id, text: 'Fine' });
+  assert.deepEqual(doc.comments[0].paragraphs, ['Fine']);
+  editor.undo();
+  assert.deepEqual(doc.comments[0].paragraphs, ['Too casual?']);
+  await apply({ kind: 'deleteComment', id: comment.id });
+  assert.equal(doc.comments.length, 0);
+  assert.deepEqual(editor.comments(), []);
+  assert.equal(paragraphText(paragraphsIn(doc.body)[0]), 'Hello big world');
+  // Undo brings back the comment and its markers; it survives saving.
+  editor.undo();
+  const back = await WordDocument.read(await doc.write());
+  assert.deepEqual(back.comments.map((c) => c.paragraphs), [['Too casual?']]);
+});
+
+test('a comment with nothing selected goes on the word at the caret', skip, async () => {
+  const { editor, apply } = await setup(['Hello world']);
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'move', to: 'left' }, { kind: 'addComment', text: 'Which?', author: 'Ada' });
+  const [comment] = editor.comments();
+  await apply({ kind: 'selectComment', id: comment.id });
+  assert.equal(editor.selectedText(), 'world');
+});

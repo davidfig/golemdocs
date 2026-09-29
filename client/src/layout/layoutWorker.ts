@@ -285,14 +285,14 @@ class OpenDocument {
     const order = Int32Array.from(display, (page) => page.id);
     transfer.push(order.buffer);
     const selection = this.selection();
-    if (selection) transfer.push(selection.rects.buffer);
+    if (selection) transfer.push(selection.rects.buffer, selection.commentRects.buffer);
     const update: LayoutUpdate = { faces, pages, overlays, order, drop, selection };
     post({ type: 'layout', doc: this.doc, ...update }, transfer);
   }
 
   sendSelection(): void {
     const selection = this.selection();
-    if (selection) post({ type: 'selection', doc: this.doc, ...selection }, [selection.rects.buffer]);
+    if (selection) post({ type: 'selection', doc: this.doc, ...selection }, [selection.rects.buffer, selection.commentRects.buffer]);
   }
 
   private selection(): SelectionUpdate | undefined {
@@ -308,9 +308,15 @@ class OpenDocument {
       const at = person.selection && editor.caretAt(person.selection.focus);
       if (at) remote.push({ page: at.page.id, x: at.x, y: at.y, height: at.height, color: person.color, name: person.name });
     }
+    const commented = editor.comments();
+    const commentRects = new Float64Array(commented.reduce((n, c) => n + c.rects.length, 0) * 5);
+    let k = 0;
+    for (const c of commented) for (const r of c.rects) commentRects.set([r.page.id, r.x, r.y, r.width, r.height], 5 * k++);
     const update: SelectionUpdate = {
       caret: caret(g.caret),
       rects,
+      comments: commented.map((c) => ({ id: c.id, author: c.author, date: c.date, text: c.text, page: c.rects[0]?.page.id ?? null, y: c.rects[0]?.y ?? 0 })),
+      commentRects,
       focus: caret(g.focus),
       reveal: this.reveal,
       text: editor.selectedText(CLIPBOARD_LIMIT),
@@ -334,6 +340,8 @@ class OpenDocument {
     const update: SelectionUpdate = {
       caret: null,
       rects: packed,
+      comments: [],
+      commentRects: new Float64Array(0),
       focus: first && this.pdfPages[first.page] ? { page: this.pdfPages[first.page].id, x: first.x, y: first.y, height: first.height } : null,
       reveal: this.reveal,
       text: annotator.selectedText(CLIPBOARD_LIMIT),

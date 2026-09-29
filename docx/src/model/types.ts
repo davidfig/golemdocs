@@ -260,6 +260,22 @@ export interface Wrapper<T> {
 
 export type Inline = Run | Hyperlink | Wrapper<Inline> | Raw;
 
+/**
+ * A comment (w:comment in the comments part). Its range in the text is marked by
+ * w:commentRangeStart / w:commentRangeEnd (Raw inlines) and a run holding w:commentReference,
+ * all with the comment's id (see edit/comments.ts).
+ */
+export interface Comment {
+  /** w:id, as a decimal string. */
+  id: string;
+  author: string;
+  initials?: string;
+  /** ISO 8601, as stored. */
+  date?: string;
+  /** The comment's text, one string per paragraph. */
+  paragraphs: string[];
+}
+
 // --- Paragraphs --------------------------------------------------------------------------
 
 export interface Spacing extends ExtraAttributes {

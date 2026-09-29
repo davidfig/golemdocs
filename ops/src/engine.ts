@@ -219,6 +219,18 @@ export class Engine {
         if (JSON.stringify(old.section) !== JSON.stringify(op.properties.section)) state.structural = true;
         return { inverse: [{ type: 'setParagraphProperties', paragraph: op.paragraph, properties: clone(old) }], map: IDENTITY };
       }
+      case 'setComment': {
+        const comments = this.doc.comments;
+        const i = comments.findIndex((c) => c.id === op.id);
+        const old = i >= 0 ? comments[i] : null;
+        if (!old && !op.comment) return NOTHING;
+        if (op.comment) {
+          const comment = { ...clone(op.comment), id: op.id };
+          if (i >= 0) comments[i] = comment;
+          else comments.push(comment);
+        } else comments.splice(i, 1);
+        return { inverse: [{ type: 'setComment', id: op.id, comment: old && clone(old) }], map: IDENTITY };
+      }
     }
   }
 }

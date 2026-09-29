@@ -64,7 +64,7 @@ body {
   padding: 3px 8px 4px;
   border: 1px solid #4a5263;
   border-radius: 4px;
-  background: #262b36;
+  background: rgb(38 43 54 / 0.75);
   color: #fff;
   font: 11px/1.35 ui-monospace, monospace;
 }

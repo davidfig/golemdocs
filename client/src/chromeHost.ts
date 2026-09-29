@@ -25,6 +25,8 @@ export interface AppHooks {
   collaborate(): void;
   /** Save in this browser, then to the cloud; asks the user to sign in if they haven't. */
   saveToCloud(): Promise<void>;
+  /** Share the open cloud document with other people. */
+  share(): void;
   /** Download a copy of the document as a file, in its own format. */
   download(): Promise<void>;
   /** Make a copy of the document in another format next to the original, and open it. */
@@ -64,6 +66,7 @@ const SUPPORTED = new Set<ActionKind>([
   'openSaved',
   'openCloud',
   'saveToCloud',
+  'share',
   'download',
   'signIn',
   'signOut',
@@ -191,6 +194,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.convert(action.to);
         case 'saveToCloud':
           return app.saveToCloud();
+        case 'share':
+          return app.share();
         case 'signIn':
           return app.signIn();
         case 'signOut':

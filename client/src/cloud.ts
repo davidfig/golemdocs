@@ -9,6 +9,20 @@ export interface CloudDocument {
   updatedAt: number;
   /** When its thumbnail was uploaded; null if it has none yet. */
   thumbAt: number | null;
+  /** What this user may do with it. Anything but 'owner' is a document someone shared with them. */
+  role?: 'owner' | 'editor' | 'viewer';
+  /** Who shared it (documents shared with this user). */
+  owner?: { name: string | null; email: string | null };
+}
+
+export type ShareRole = 'editor' | 'viewer';
+
+/** Someone a document is shared with. */
+export interface Share {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  role: ShareRole;
 }
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -78,4 +92,25 @@ export async function saveDocument(id: string, bytes: Uint8Array, name?: string)
 
 export async function deleteDocument(id: string): Promise<void> {
   await check(await fetch(`/api/documents/${id}`, { method: 'DELETE' }));
+}
+
+/** Documents other people shared with this user. */
+export async function listShared(): Promise<CloudDocument[]> {
+  return (await check(await fetch('/api/shared'))).json();
+}
+
+/** Who a document is shared with (owner only). */
+export async function listShares(id: string): Promise<Share[]> {
+  return (await check(await fetch(`/api/documents/${id}/shares`))).json();
+}
+
+/** Shares a document with the person who signed in with this email, or changes their role. */
+export async function addShare(id: string, email: string, role: ShareRole): Promise<Share> {
+  const response = await fetch(`/api/documents/${id}/shares`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, role }) });
+  return (await check(response)).json();
+}
+
+/** Stops sharing with someone (or, for the user themselves, leaves a document shared with them). */
+export async function removeShare(id: string, userId: string): Promise<void> {
+  await check(await fetch(`/api/documents/${id}/shares/${userId}`, { method: 'DELETE' }));
 }

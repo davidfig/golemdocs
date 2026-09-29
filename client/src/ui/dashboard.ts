@@ -6,7 +6,7 @@
 // cloud's follow once the catalogue arrives, and each thumbnail is fetched only when its card
 // scrolls into view.
 
-import { deleteDocument, thumbnailUrl } from '../cloud.ts';
+import { deleteDocument, removeShare, thumbnailUrl, type CloudDocument } from '../cloud.ts';
 import { deleteSaved, getThumbnail } from '../storage/local.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
@@ -21,6 +21,10 @@ export interface DashboardHost {
   openCloud(id: string): void;
   /** Saves a browser document to the cloud (asks the user to sign in if they haven't). */
   saveToCloud(localId: string): Promise<void>;
+  /** Opens the sharing dialog for a cloud document the user owns. */
+  share(cloudId: string, name: string): void;
+  /** Opens a document someone else shared with the user. */
+  openShared(doc: CloudDocument): void;
   signIn(): Promise<void>;
   signOut(): Promise<void>;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
@@ -35,6 +39,9 @@ export class Dashboard {
   private readonly account: HTMLElement;
   private readonly notice: HTMLElement;
   private readonly grid: HTMLElement;
+  private readonly sharedTitle: HTMLElement;
+  private readonly sharedGrid: HTMLElement;
+  private shared: CloudDocument[] = [];
   private readonly scroller: HTMLElement;
   private observer: IntersectionObserver | null = null;
   private objectUrls: string[] = [];
@@ -55,7 +62,9 @@ export class Dashboard {
     this.grid = h('div', { class: 'wm-dash-grid' });
     const close = h('button', { class: 'wm-dash-close', text: 'Back to document', attrs: { type: 'button' } });
     close.addEventListener('click', () => this.dismiss());
-    this.scroller = h('div', { class: 'wm-dash-scroll' }, this.notice, this.grid);
+    this.sharedTitle = h('h2', { class: 'wm-dash-section', text: 'Shared with me' });
+    this.sharedGrid = h('div', { class: 'wm-dash-grid' });
+    this.scroller = h('div', { class: 'wm-dash-scroll' }, this.notice, this.grid, this.sharedTitle, this.sharedGrid);
     this.root = h(
       'section',
       { class: 'wm-dashboard', attrs: { 'aria-label': 'Documents' } },
@@ -114,6 +123,7 @@ export class Dashboard {
     const library = await loadLibrary();
     if (generation !== this.generation) return;
     this.entries = library.entries;
+    this.shared = library.shared;
     this.user = library.user;
     this.notice.textContent = library.cloudProblem ?? '';
     this.setAccount(library.user, false);
@@ -161,6 +171,10 @@ export class Dashboard {
     }
     this.grid.replaceChildren(...children);
 
+    const sharedShown = this.shared.filter((d) => d.name.toLowerCase().includes(this.search.value.trim().toLowerCase()));
+    this.sharedTitle.hidden = this.sharedGrid.hidden = sharedShown.length === 0;
+    this.sharedGrid.replaceChildren(...sharedShown.map((d) => this.sharedCard(d)));
+
     this.observer = new IntersectionObserver(
       (records) => {
         for (const record of records) {
@@ -171,7 +185,31 @@ export class Dashboard {
       },
       { root: this.scroller, rootMargin: '200px' },
     );
-    for (const el of this.grid.querySelectorAll<HTMLElement>('.wm-thumb')) this.observer.observe(el);
+    for (const el of this.scroller.querySelectorAll<HTMLElement>('.wm-thumb')) this.observer.observe(el);
+  }
+
+  /** A document someone else shared: open it, or leave it. */
+  private sharedCard(doc: CloudDocument): HTMLElement {
+    const thumb = h('div', { class: 'wm-thumb' }, h('div', { class: 'wm-thumb-empty', attrs: { 'aria-hidden': 'true' } }));
+    this.sharedThumbs.set(thumb, doc);
+    const by = doc.owner?.name ?? doc.owner?.email;
+    const meta = [by ? `From ${by}` : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
+    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': `Open ${doc.name}` } }, thumb, h('span', { class: 'wm-card-name', text: doc.name, title: doc.name }), h('span', { class: 'wm-card-meta', text: meta }));
+    open.addEventListener('click', () => {
+      this.hide();
+      this.host.openShared(doc);
+    });
+    const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: doc.role === 'viewer' ? 'View only' : 'Can edit' }));
+    const actions = h('div', { class: 'wm-card-actions' });
+    if (this.user) {
+      const userId = this.user.id;
+      actions.append(
+        this.confirmButton('Leave', async () => {
+          await removeShare(doc.id, userId);
+        }),
+      );
+    }
+    return h('article', { class: 'wm-card' }, open, badges, actions);
   }
 
   private card(entry: LibraryEntry): HTMLElement {
@@ -207,6 +245,9 @@ export class Dashboard {
       }));
     }
     if (entry.cloud) {
+      const share = h('button', { text: 'Share…', attrs: { type: 'button' } });
+      share.addEventListener('click', () => this.host.share(entry.cloud!.id, entry.cloud!.name));
+      actions.append(share);
       actions.append(this.confirmButton('Delete from cloud', async () => {
         await deleteDocument(entry.cloud!.id);
       }));
@@ -249,9 +290,12 @@ export class Dashboard {
   // --- Thumbnails --------------------------------------------------------------------------
 
   private readonly entryFor = new WeakMap<HTMLElement, LibraryEntry>();
+  private readonly sharedThumbs = new WeakMap<HTMLElement, CloudDocument>();
 
   /** Fills a card's thumbnail: this device's when it has the current one, else the cloud's. */
   private async loadThumbnail(thumb: HTMLElement): Promise<void> {
+    const shared = this.sharedThumbs.get(thumb);
+    if (shared) return this.showThumbnail(thumb, thumbnailUrl(shared));
     const entry = this.entryFor.get(thumb);
     if (!entry) return;
     const generation = this.generation;
@@ -267,9 +311,11 @@ export class Dashboard {
         this.objectUrls.push(src);
       }
     }
-    src ??= cloudUrl;
-    if (!src) return;
+    this.showThumbnail(thumb, src ?? cloudUrl);
+  }
 
+  private showThumbnail(thumb: HTMLElement, src: string | null): void {
+    if (!src) return;
     const img = h('img', { attrs: { alt: '', decoding: 'async', draggable: 'false' } });
     img.addEventListener('load', () => thumb.replaceChildren(img), { once: true });
     img.src = src; // on failure the placeholder stays

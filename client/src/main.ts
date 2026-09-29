@@ -3,13 +3,14 @@ import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@word/editor';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
+import { CloudError, documentUrl, listDocuments, listShared, saveDocument, type CloudDocument } from './cloud.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
 import { clearAllSaved, getSaved, getThumbnail, listSaved, markSynced, saveSaved, saveThumbnail, type SavedInfo } from './storage/local.ts';
 import { capturePageThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
 import { Dashboard } from './ui/dashboard.ts';
+import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
@@ -100,12 +101,17 @@ function setStatus(text: string): void {
   requestRender();
 }
 
-function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string } = {}): void {
+function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument } = {}): void {
   const start = performance.now();
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? 'Welcome to Golem Docs' : 'Fonts';
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
-  current = { localId: options.localId ?? null, unsavedSince: 0, room: null };
+  current = {
+    localId: options.localId ?? null,
+    unsavedSince: 0,
+    room: null,
+    shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
+  };
   syncError = null;
   showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
@@ -193,7 +199,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       loaded = true;
       setStatus(`${name}: ${message}`);
     },
-  }, roomOptions() ?? networkRoom(options.cloudId));
+  }, roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id));
   focusInput();
 }
 
@@ -313,6 +319,8 @@ function openSource(source: string, keepRoom = false): void {
     void openLocal(source.slice(6), thenSaveToCloud);
   } else if (source.startsWith('cloud:')) {
     void openCloud(source.slice(6));
+  } else if (source.startsWith('shared:')) {
+    void openShared(source.slice(7));
   } else if (source === 'welcome') {
     open({ kind: 'welcome' });
   } else {
@@ -337,16 +345,22 @@ interface OpenDocument {
   unsavedSince: number;
   /** Where it stands in the multiplayer server's room (cloud documents), once joined. */
   room: RoomState | null;
+  /**
+   * A document someone else owns, opened straight from the cloud: it has no copy in this browser
+   * and edits go to the cloud directly (or through the room), never to a copy of it here.
+   */
+  shared: { id: string; role: 'editor' | 'viewer'; dirty: boolean; uploading: boolean; error: string | null } | null;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0, room: null };
+let current: OpenDocument = { localId: null, unsavedSince: 0, room: null, shared: null };
 let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
 
 /** Schedules a save for once editing pauses. */
 function documentEdited(): void {
+  if (current.shared) return sharedEdited();
   const now = performance.now();
   if (!current.unsavedSince) current.unsavedSince = now;
   clearTimeout(autosaveTimer);
@@ -356,7 +370,47 @@ function documentEdited(): void {
 
 /** Saves now if there are unsaved edits (another document is opening, or the page is going away). */
 function saveIfEdited(): void {
+  if (current.shared) {
+    if (current.shared.dirty) void uploadShared();
+    return;
+  }
   if (current.unsavedSince) void saveInBrowser();
+}
+
+// A shared document has no copy in this browser. When this user is the only one editing it, the
+// document goes to the cloud a moment after each edit; while several people edit, the server saves.
+let sharedTimer = 0;
+
+function sharedEdited(): void {
+  const shared = current.shared!;
+  if (shared.role === 'viewer' || current.room?.mode === 'shared' || current.room?.mode === 'offline') return;
+  shared.dirty = true;
+  clearTimeout(sharedTimer);
+  sharedTimer = window.setTimeout(() => void uploadShared(), CLOUD_SYNC_DELAY_MS);
+  showSync();
+}
+
+async function uploadShared(): Promise<void> {
+  const doc = current;
+  const shared = doc.shared;
+  if (!shared || !shared.dirty || shared.uploading) return;
+  clearTimeout(sharedTimer);
+  shared.dirty = false;
+  shared.uploading = true;
+  shared.error = null;
+  showSync();
+  try {
+    await saveDocument(shared.id, await worker.convert('docx'));
+  } catch (e) {
+    // Refused because the room started saving: the edits are in the room's hands now.
+    if (!(e instanceof CloudError && e.status === 409)) {
+      shared.dirty = true;
+      shared.error = (e as Error).message;
+    }
+  } finally {
+    shared.uploading = false;
+    if (doc === current) showSync();
+  }
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -366,6 +420,7 @@ document.addEventListener('visibilitychange', () => {
 /** The open document's id in this browser, saving it first if it has unsaved edits or was never saved. */
 function saveNow(): Promise<string | null> {
   const doc = current;
+  if (doc.shared) return Promise.resolve(null); // no copy in this browser
   return doc.unsavedSince || !doc.localId ? saveInBrowser() : saving.then(() => doc.localId);
 }
 
@@ -403,6 +458,15 @@ function syncStatus(): SyncStatus {
   const user = cloudUser?.email ?? cloudUser?.name ?? null;
   const info = savedDocs.find((d) => d.id === current.localId);
   let document: DocumentSync;
+  const shared = current.shared;
+  if (shared) {
+    if (shared.role === 'viewer' || (current.room?.mode === 'shared' && !current.room.unconfirmed)) document = 'synced';
+    else if (current.room?.mode === 'shared') document = 'pending';
+    else if (shared.uploading) document = 'syncing';
+    else if (shared.error) document = 'failed';
+    else document = shared.dirty ? 'pending' : 'synced';
+    return { signedIn, user, document, error: document === 'failed' ? shared.error : null };
+  }
   if (!signedIn || !info?.cloudId) document = 'local';
   else if (current.room?.mode === 'shared') document = current.room.unconfirmed ? 'pending' : 'synced';
   else if (uploading === info.id) document = 'syncing';
@@ -625,6 +689,39 @@ async function openLocal(id: string, thenSaveToCloud: boolean): Promise<void> {
   if (saved.info.cloudId && !cloudUser) await refreshLibrary(); // whether to join the room depends on who is signed in
   open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id, cloudId: saved.info.cloudId });
   if (thenSaveToCloud) await sendToCloud(id);
+}
+
+/** Documents other people shared with this user, as last listed (the dashboard hands them over). */
+const sharedDocs = new Map<string, CloudDocument>();
+
+/** Opens a document someone shared with this user, straight from the cloud. */
+async function openShared(id: string): Promise<void> {
+  try {
+    let doc = sharedDocs.get(id);
+    if (!doc) {
+      for (const d of await listShared()) sharedDocs.set(d.id, d);
+      doc = sharedDocs.get(id);
+    }
+    if (!doc) {
+      open({ kind: 'blank', name: 'Document1' });
+      pendingNotice = 'That document is no longer shared with you';
+      return;
+    }
+    setStatus('Opening the shared document…');
+    open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
+  } catch (e) {
+    if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
+    else setStatus(`Couldn’t open the shared document: ${(e as Error).message}`);
+  }
+}
+
+/** File ▸ Share: who else can open the open document. */
+function share(): void {
+  if (!cloudUser) return notify('Sign in and save the document to the cloud to share it');
+  if (current.shared) return notify('Only the owner can share this document');
+  const info = savedDocs.find((d) => d.id === current.localId);
+  if (!info?.cloudId) return notify('Save the document to the cloud first, then you can share it');
+  showShareDialog({ id: info.cloudId, name: info.name });
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -1045,7 +1142,8 @@ window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
     // Documents save themselves; the habit just saves a little sooner.
     e.preventDefault();
-    if (current.unsavedSince || !current.localId) void saveInBrowser();
+    if (current.shared) void uploadShared();
+    else if (current.unsavedSince || !current.localId) void saveInBrowser();
     else setStatus('All changes are saved in this browser');
     return;
   }
@@ -1105,6 +1203,7 @@ const chromeHost = createChromeHost({
   openSample: openSource,
   collaborate,
   saveToCloud,
+  share,
   download,
   convert: convertTo,
   signIn,
@@ -1158,6 +1257,11 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
   openCloud: (id) => openSource(`cloud:${id}`),
   saveToCloud: async (id) => {
     await sendToCloud(id);
+  },
+  share: (id, name) => showShareDialog({ id, name }),
+  openShared: (doc) => {
+    sharedDocs.set(doc.id, doc);
+    openSource(`shared:${doc.id}`);
   },
   signIn: () => signIn({ dashboard: true }),
   signOut,

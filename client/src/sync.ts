@@ -9,7 +9,7 @@
 // never saved to the cloud stay on this device until the user says otherwise.
 
 import { currentUser, type User } from './auth.ts';
-import { CloudError, listDocuments, type CloudDocument } from './cloud.ts';
+import { CloudError, listDocuments, listShared, type CloudDocument } from './cloud.ts';
 import { uploadToCloud } from './library.ts';
 import { listSaved, type SavedInfo } from './storage/local.ts';
 
@@ -103,6 +103,8 @@ export interface Library {
   user: User | null;
   /** Why the cloud's documents aren't listed even though someone is signed in. */
   cloudProblem: string | null;
+  /** Documents other people shared with the user. */
+  shared: CloudDocument[];
 }
 
 /** Documents saved in this browser only: instant, and all there is while signed out or offline. */
@@ -114,7 +116,7 @@ export async function loadLocalLibrary(): Promise<LibraryEntry[]> {
 export async function loadLibrary(): Promise<Library> {
   const local = await listSaved().catch(() => []);
   const user = await currentUser().catch(() => null);
-  if (!user) return { entries: mergeLibrary(local, null), user: null, cloudProblem: null };
+  if (!user) return { entries: mergeLibrary(local, null), user: null, cloudProblem: null, shared: [] };
 
   let cloud: CloudDocument[];
   try {
@@ -125,6 +127,7 @@ export async function loadLibrary(): Promise<Library> {
       entries: mergeLibrary(local, null),
       user: signedOut ? null : user,
       cloudProblem: signedOut ? null : `Your cloud documents can’t be listed right now (${(error as Error).message}).`,
+      shared: [],
     };
   }
 
@@ -134,5 +137,7 @@ export async function loadLibrary(): Promise<Library> {
     const [freshLocal, freshCloud] = await Promise.all([listSaved().catch(() => local), listDocuments().catch(() => cloud)]);
     entries = mergeLibrary(freshLocal, freshCloud);
   }
-  return { entries, user, cloudProblem: null };
+  // Not worth failing the dashboard over.
+  const shared = await listShared().catch(() => []);
+  return { entries, user, cloudProblem: null, shared };
 }

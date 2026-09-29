@@ -61,6 +61,7 @@ export type Action =
   /** A document in the user's cloud storage (needs an account). */
   | { kind: 'openCloud'; id: string }
   | { kind: 'saveToCloud' }
+  | { kind: 'share' }
   | { kind: 'signIn' }
   | { kind: 'signOut' }
   /** Delete every document and setting kept in this browser (asks first). Cloud documents stay. */

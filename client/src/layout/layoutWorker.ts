@@ -39,7 +39,7 @@ async function addWelcomeIcon(document: WordDocument): Promise<void> {
     const drawing = { kind: 'drawing' as const, inline: true, width: size, height: size, image, name: 'Golem Docs', description: 'Golem Docs icon' };
     title.children.unshift(
       { kind: 'run', properties: { position: -6 }, content: [drawing], attrs: {} }, // lowered 3 pt: centered on the title's letters
-      { kind: 'run', properties: {}, content: [{ kind: 'text', text: '  ' }], attrs: {} },
+      { kind: 'run', properties: {}, content: [{ kind: 'text', text: ' ' }], attrs: {} },
     );
     // A bigger title, to go with the icon.
     for (const run of title.children) if (run.kind === 'run') run.properties = { ...run.properties, size: 56, sizeCs: 56 };

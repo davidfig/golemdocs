@@ -88,7 +88,9 @@ export class Chrome {
   private layout: ToolbarLayout[];
   /** The "Format" selector at the right of the menu bar. */
   private readonly formatBox: HTMLElement;
-  private formatSelect!: HTMLSelectElement;
+  private formatCombo!: Control;
+  /** A format conversion is in flight. */
+  private converting = false;
   /** Fill in a PDF's form or edit it: beside the format selector, for a PDF's pages. */
   private formModeBox!: HTMLElement;
 
@@ -691,28 +693,42 @@ export class Chrome {
 
   /** "Format: [Word Document ▾]": switches the open document to another format (Action 'convert'). */
   private buildFormatBox(): HTMLElement {
-    const select = h('select', { class: 'wm-format-select', attrs: { 'aria-label': 'Document format', title: 'Document format: switching changes the tools available' } });
-    this.formatSelect = select;
-    select.addEventListener('change', () => {
-      const { host } = this.options;
-      const to = select.value as keyof typeof FORMATS;
-      const action: Action = { kind: 'convert', to };
-      if (!host.supports(action)) {
-        host.notify(`Converting to ${FORMATS[to].label} isn't available yet`);
-        select.value = this.state.kind;
-        return;
-      }
-      select.disabled = true;
-      Promise.resolve(host.perform(action))
-        .catch((e: unknown) => host.notify(`Couldn't convert: ${(e as Error).message ?? e}`))
-        .finally(() => {
-          select.disabled = false;
-          select.value = this.state.kind;
-          host.focusEditor();
-        });
-    });
-    // Keep the document's keys out of the selector's way, and its focus with the document.
-    select.addEventListener('keydown', (e) => e.stopPropagation());
+    const { host } = this.options;
+    const kindOf = (label: string) => (Object.keys(FORMATS) as (keyof typeof FORMATS)[]).find((k) => FORMATS[k].label === label);
+    const combo = comboBox(
+      {
+        label: 'Document format',
+        width: 104,
+        readOnly: true,
+        options: () => this.formatKinds().map((kind) => FORMATS[kind].label),
+        value: (s) => FORMATS[s.kind].label,
+        enabled: () => !this.converting,
+        title: (s) =>
+          FORMATS[s.kind].editable ? 'Document format: switching changes the tools available' : 'Read-only format: switch to Word Document to edit',
+        commit: (text) => {
+          const to = kindOf(text);
+          if (!to) return false;
+          const action: Action = { kind: 'convert', to };
+          if (!host.supports(action)) {
+            host.notify(`Converting to ${FORMATS[to].label} isn't available yet`);
+            return false;
+          }
+          this.converting = true;
+          this.formatCombo.refresh(this.state);
+          Promise.resolve(host.perform(action))
+            .catch((e: unknown) => host.notify(`Couldn't convert: ${(e as Error).message ?? e}`))
+            .finally(() => {
+              this.converting = false;
+              this.formatCombo.refresh(this.state);
+              host.focusEditor();
+            });
+          return true;
+        },
+      },
+      () => this.state,
+      () => host.focusEditor(),
+    );
+    this.formatCombo = combo;
     const modeButton = (mode: FormMode, label: string, tooltip: string) => {
       const button = h('button', { class: 'wm-form-mode-button', text: label, title: tooltip, attrs: { type: 'button', 'data-mode': mode } });
       button.addEventListener('click', () => {
@@ -726,27 +742,28 @@ export class Chrome {
       modeButton('fill', 'Fill In', 'Type in the PDF’s fields'),
       modeButton('edit', 'Edit Form', 'Move, add, rename and delete the PDF’s fields'),
     );
-    return h('div', { class: 'wm-format' }, this.formModeBox, h('label', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: 'Format' }), select));
+    return h(
+      'div',
+      { class: 'wm-format' },
+      this.formModeBox,
+      h('div', { class: 'wm-format-field' }, h('span', { class: 'wm-format-label', text: 'Format' }), combo.el),
+    );
+  }
+
+  /** The switchable formats, plus the current one if it isn't switchable. */
+  private formatKinds(): (keyof typeof FORMATS)[] {
+    return CONVERT_ORDER.includes(this.state.kind) ? CONVERT_ORDER : [...CONVERT_ORDER, this.state.kind];
   }
 
   /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */
   private syncFormatBox(): void {
-    const select = this.formatSelect;
-    const kinds = CONVERT_ORDER.includes(this.state.kind) ? CONVERT_ORDER : [...CONVERT_ORDER, this.state.kind];
-    const have = [...select.options].map((o) => o.value).join();
-    if (have !== kinds.join()) {
-      select.replaceChildren(...kinds.map((kind) => h('option', { text: FORMATS[kind].label, attrs: { value: kind } })));
-    }
-    select.value = this.state.kind;
+    this.formatCombo.refresh(this.state);
     this.formModeBox.hidden = this.state.formMode === null;
     for (const button of this.formModeBox.querySelectorAll<HTMLButtonElement>('button')) {
       const on = button.dataset.mode === this.state.formMode;
       button.classList.toggle('wm-form-mode-on', on);
       button.setAttribute('aria-pressed', String(on));
     }
-    select.title = FORMATS[this.state.kind].editable
-      ? 'Document format: switching changes the tools available'
-      : 'Read-only format: switch to Word Document to edit';
   }
 
   /** (Re)creates the toolbars from the layout. */

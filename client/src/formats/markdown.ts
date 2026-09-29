@@ -72,7 +72,8 @@ function appendText(content: RunContent[], text: string): void {
   }
 }
 
-function styleFor(id: string): Style | undefined {
+/** Definitions of the styles Markdown documents use (headings, quotes, code, lists…), by id. */
+export function styleFor(id: string): Style | undefined {
   const heading = /^Heading([1-6])$/.exec(id);
   if (heading) {
     const level = Number(heading[1]);

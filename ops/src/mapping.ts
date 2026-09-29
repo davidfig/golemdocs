@@ -145,6 +145,17 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
         ...(b.offset > 0 ? [{ ...op, paragraph: b.paragraph, from: 0, to: maxOffset(b.offset, 0) }] : []),
       ];
     }
+    case 'formatText': {
+      // Text inserted at either end isn't included; split apart, both sides are formatted.
+      const a = at(op.paragraph, op.from, 1);
+      const b = op.to >= END ? null : at(op.paragraph, op.to, -1);
+      if (!b) return [{ ...op, paragraph: a.paragraph, from: a.offset, to: END }];
+      if (a.paragraph === b.paragraph) return b.offset > a.offset ? [{ ...op, paragraph: a.paragraph, from: a.offset, to: b.offset }] : [];
+      return [
+        { ...op, paragraph: a.paragraph, from: a.offset, to: END },
+        ...(b.offset > 0 ? [{ ...op, paragraph: b.paragraph, from: 0, to: b.offset }] : []),
+      ];
+    }
     case 'split': {
       const pos = at(op.paragraph, op.offset, 1);
       return [{ ...op, paragraph: pos.paragraph, offset: pos.offset }];
@@ -169,6 +180,8 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
       return paragraph ? [{ ...op, paragraph }] : [];
     }
     case 'setComment':
+    case 'setStyle':
+    case 'setList':
       return [op];
   }
 }

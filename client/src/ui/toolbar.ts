@@ -131,6 +131,10 @@ export interface ComboSpec {
   optionStyle?(option: string): string;
   /** A separator after these options (the "recently used" group). */
   headerCount?(state: ChromeState): number;
+  /** A pick-only list: the text field can't be typed in (a "select"). */
+  readOnly?: boolean;
+  /** Tooltip for the current state (defaults to the label). */
+  title?(state: ChromeState): string;
 }
 
 export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEditor: () => void): Control {
@@ -139,6 +143,10 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
     attrs: { type: 'text', role: 'combobox', 'aria-label': spec.label, 'aria-autocomplete': 'list', 'aria-expanded': 'false', spellcheck: 'false', autocomplete: 'off' },
   });
   input.style.width = `${spec.width}px`;
+  if (spec.readOnly) {
+    input.readOnly = true;
+    input.classList.add('readonly');
+  }
   const arrow = h('button', { class: 'wm-combo-arrow', attrs: { type: 'button', tabindex: '-1', 'aria-label': `${spec.label} list` } });
   arrow.innerHTML = ICONS.dropdown;
   keepFocus(arrow);
@@ -207,6 +215,11 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
   });
 
   input.addEventListener('focus', () => input.select());
+  input.addEventListener('click', () => {
+    if (!spec.readOnly || input.disabled) return;
+    if (popupOpenFor(el)) closePopup();
+    else openList();
+  });
   input.addEventListener('blur', () => {
     if (!list) revert();
   });
@@ -232,6 +245,7 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
       }
       case 'Enter': {
         e.preventDefault();
+        if (spec.readOnly && !list) return openList();
         commit(input.value);
         return;
       }
@@ -255,6 +269,7 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
       toggleClass(el, 'disabled', !enabled);
       shown = enabled ? spec.value(state) : '';
       if (document.activeElement !== input && input.value !== shown) input.value = shown;
+      el.title = spec.title?.(state) ?? spec.label;
     },
   };
 }

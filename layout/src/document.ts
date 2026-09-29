@@ -464,8 +464,23 @@ export class LayoutSession {
     this.restartAt = Math.min(this.restartAt, restart);
   }
 
+  /** Loads the faces of fonts the document starts to use (a font picked for some text), before laying it out. */
+  async ensureFonts(names: Iterable<string>): Promise<void> {
+    const faces = new Set<ManifestFace>();
+    for (const font of names) {
+      for (const bold of [false, true]) for (const italic of [false, true]) faces.add(this.fonts.resolve({ font, bold, italic }).face);
+    }
+    await this.fonts.ensure(faces);
+  }
+
   /** Call after changing styles, numbering or the theme. */
   invalidateStyles(): void {
+    // The style sheet or numbering may be new objects: resolve against them from now on.
+    const { doc } = this;
+    const resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
+    this.ctx.resolver = resolver;
+    this.ctx.lists = new ListCounter(resolver);
+    this.measureCtx.resolver = resolver;
     runStyleCaches.delete(this.doc);
     this.ctx.runStyles = new Map();
     runStyleCaches.set(this.doc, this.ctx.runStyles);

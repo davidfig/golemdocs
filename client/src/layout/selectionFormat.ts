@@ -8,7 +8,9 @@
 
 import { FALLBACK_FAMILY } from '@word/layout';
 import { inlineLength, paragraphLength, StyleResolver, type Inline, type Paragraph, type Run, type RunProperties, type WordDocument } from '@word/docx';
-import type { Position } from '@word/editor';
+import { withFormat, type Position } from '@word/editor';
+import type { RunFormat } from '@word/ops';
+import { isCode } from './formatting.ts';
 import type { Alignment, FormatState, ListKind, Mark } from '../ui/actions.ts';
 
 /** Most runs examined for one selection, so Select All in a huge document stays fast (a few ms).
@@ -17,26 +19,31 @@ const RUN_BUDGET = 5_000;
 /** Word's size when nothing sets one: 10pt. */
 const DEFAULT_HALF_POINTS = 20;
 
-const MARKS: Mark[] = ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript'];
+const MARKS: Mark[] = ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript', 'code'];
 
 /** Style resolution for a document, rebuilt when its style sheet is replaced. */
 export class FormatReader {
   private resolver: StyleResolver | null = null;
   private sheet: unknown = null;
+  private numbering: unknown = null;
 
   constructor(private readonly doc: WordDocument) {}
 
   private styles(): StyleResolver {
     const { doc } = this;
-    if (!this.resolver || this.sheet !== doc.styles) {
+    if (!this.resolver || this.sheet !== doc.styles || this.numbering !== doc.numbering) {
       this.resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
       this.sheet = doc.styles;
+      this.numbering = doc.numbering;
     }
     return this.resolver;
   }
 
-  /** Formatting between two positions in document order (equal for a caret). */
-  read(start: Position, end: Position, paragraphs: readonly Paragraph[]): FormatState {
+  /**
+   * Formatting between two positions in document order (equal for a caret). `pending` is
+   * formatting chosen at a caret for what's typed next.
+   */
+  read(start: Position, end: Position, paragraphs: readonly Paragraph[], pending?: RunFormat | null): FormatState {
     const styles = this.styles();
     const acc = new Accumulator(styles);
     const collapsed = start.paragraph === end.paragraph && start.offset === end.offset;
@@ -65,7 +72,7 @@ export class FormatReader {
     if (!acc.runs) {
       const { paragraph, offset } = start;
       acc.paragraph(paragraph);
-      acc.run(caretRunProperties(paragraph, offset, styles));
+      acc.run(caretRunProperties(paragraph, offset, styles, pending));
     }
     return acc.result();
   }
@@ -96,7 +103,7 @@ function forEachRun(inlines: readonly Inline[], from: number, to: number, fn: (r
 }
 
 /** The run formatting typing at `offset` would get: the character before, else after, else the mark. */
-function caretRunProperties(paragraph: Paragraph, offset: number, styles: StyleResolver): RunProperties {
+function caretRunProperties(paragraph: Paragraph, offset: number, styles: StyleResolver, pending?: RunFormat | null): RunProperties {
   const paragraphStyle = styles.paragraph(paragraph.properties).style;
   let before = null as Run | null;
   let after = null as Run | null;
@@ -119,7 +126,8 @@ function caretRunProperties(paragraph: Paragraph, offset: number, styles: StyleR
   };
   walk(paragraph.children);
   const run = before ?? after;
-  return styles.run(paragraphStyle, run ? run.properties : (paragraph.properties.runProperties ?? {}));
+  const direct = run ? run.properties : (paragraph.properties.runProperties ?? {});
+  return styles.run(paragraphStyle, pending ? withFormat(direct, pending) : direct);
 }
 
 /** One value, or "mixed" once two differ. */
@@ -163,7 +171,7 @@ class Accumulator {
       strikethrough: !!(props.strike || props.doubleStrike),
       superscript: props.vertAlign === 'superscript',
       subscript: props.vertAlign === 'subscript',
-      code: false,
+      code: isCode(props),
     };
     for (const mark of MARKS) if (!on[mark]) this.marks.set(mark, false);
     this.font.add(this.fontName(props));

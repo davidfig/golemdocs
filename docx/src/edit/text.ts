@@ -361,6 +361,30 @@ export function formatText(paragraph: Paragraph, from: number, to: number, chang
   paragraph.children = normalizeInlines([...before, ...middle, ...after]);
 }
 
+/**
+ * The runs over positions [from, to): each one's part of the range, its formatting, and
+ * whether it's inside a hyperlink or wrapper.
+ */
+export function runsIn(paragraph: Paragraph, from: number, to: number): { from: number; to: number; properties: RunProperties; nested: boolean }[] {
+  const out: { from: number; to: number; properties: RunProperties; nested: boolean }[] = [];
+  let pos = 0;
+  const walk = (inlines: readonly Inline[], nested: boolean) => {
+    for (const inline of inlines) {
+      if (pos >= to) return;
+      if (inline.kind === 'run') {
+        const length = inlineLength(inline);
+        const a = Math.max(pos, from);
+        const b = Math.min(pos + length, to);
+        if (b > a) out.push({ from: a, to: b, properties: inline.properties, nested });
+        pos += length;
+      } else if (inline.kind === 'raw') pos += 1;
+      else walk(inline.children, true);
+    }
+  };
+  walk(paragraph.children, false);
+  return out;
+}
+
 /** Inserts inline content (runs, hyperlinks...) at a model offset. */
 export function insertInlines(paragraph: Paragraph, offset: number, content: Inline[]): void {
   const [a, b] = splitInlines(paragraph.children, offset);

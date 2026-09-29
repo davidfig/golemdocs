@@ -128,6 +128,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   documentName = name;
   documentKind = kindOfSource(source);
   annotating = false;
+  sharedDeviceNotice.update({ welcome: source.kind === 'welcome' });
   setStatus(`Loading ${name}…`);
 
   worker.open(source, {
@@ -340,7 +341,7 @@ async function refreshLibrary(): Promise<void> {
   savedDocs = await listSaved().catch(() => []);
   cloudUser = await currentUser().catch(() => null);
   cloudDocs = cloudUser ? await listDocuments().catch(() => []) : [];
-  sharedDeviceNotice.update(cloudUser !== null);
+  sharedDeviceNotice.update({ signedIn: cloudUser !== null });
 }
 
 /** Tells the user something now, or once the document being loaded has finished. */

@@ -18,11 +18,14 @@ import {
   paragraphText,
   plainText,
   runPropertiesAt,
+  runsIn,
+  OBJECT_CHAR,
   type Paragraph,
   type ParagraphProperties,
+  type RunProperties,
   type WordDocument,
 } from '@word/docx';
-import { END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type Selection as OpSelection, type ServerMessage } from '@word/ops';
+import { END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type RunFormat, type Selection as OpSelection, type ServerMessage } from '@word/ops';
 import { toModel, toVisible, visibleLength, type LayoutSession, type LineRecord, type PageLayout, type SourceSpan } from '@word/layout';
 
 /** A position between two model positions of a paragraph. */
@@ -49,10 +52,25 @@ export type MoveTarget =
   | 'documentStart'
   | 'documentEnd';
 
+/** Paragraph property changes: a value to set, or undefined to remove it. */
+export type ParagraphFormat = { [K in keyof ParagraphProperties]?: ParagraphProperties[K] | undefined };
+
 export type Command =
   | { kind: 'insertText'; text: string }
   | { kind: 'insertParagraph' }
-  | { kind: 'insertLineBreak' }
+  /** A line break, or a page or column break. */
+  | { kind: 'insertLineBreak'; type?: 'page' | 'column' }
+  /**
+   * Formats the selected text: the same change everywhere, or one worked out per run from its
+   * direct formatting (growing each run's size, say). A caret inside a word formats the word;
+   * anywhere else the change applies to what's typed next there. `define` are operations to
+   * apply first in the same step (a style the formatting uses, say).
+   */
+  | { kind: 'formatText'; format: RunFormat | ((run: RunProperties, paragraph: Paragraph) => RunFormat | null); define?: Operation[] }
+  /** Changes the properties of each paragraph the selection touches (null: leave it as is). */
+  | { kind: 'formatParagraphs'; change: (paragraph: Paragraph, index: number) => ParagraphFormat | null; define?: Operation[] }
+  /** Changes the case of the selected text (or the word at the caret), keeping its formatting. */
+  | { kind: 'changeCase'; change: (text: string) => string }
   | { kind: 'delete'; direction: 'backward' | 'forward'; unit?: 'character' | 'word' }
   | { kind: 'move'; to: MoveTarget; extend?: boolean }
   /** A click or drag at page-relative points; `unit` selects a word or paragraph (double/triple click). */
@@ -114,6 +132,8 @@ export interface CommandResult {
   edited: boolean;
   changed: Set<Paragraph>;
   structural: boolean;
+  /** Styles or list definitions changed. */
+  styles?: boolean;
 }
 
 const NO_CHANGE: CommandResult = { edited: false, changed: new Set(), structural: false };
@@ -127,6 +147,8 @@ export class Editor {
   /** Display page index near the caret, to find lines quickly. */
   private hint = 0;
   private commands = 0;
+  /** Formatting chosen at a caret, for the text typed next there. */
+  pending: RunFormat | null = null;
 
   constructor(
     /** The document, edited through operations (undo, collaboration). */
@@ -225,6 +247,8 @@ export class Editor {
   /** Applies a command. Edits invalidate the session; run it afterwards to update layout. */
   apply(command: Command): CommandResult {
     if (command.kind !== 'move' || (command.to !== 'up' && command.to !== 'down')) this.goalX = null;
+    const pending = this.pending;
+    if (command.kind !== 'formatText') this.pending = null;
     switch (command.kind) {
       case 'insertText':
       case 'insertParagraph':
@@ -236,10 +260,17 @@ export class Editor {
         const at = this.selection.focus;
         let ops: Operation[];
         let after: Pos;
-        if (command.kind === 'insertText') [ops, after] = this.insertOps(at, command.text);
-        else if (command.kind === 'insertParagraph') [ops, after] = this.splitOps(at);
+        if (command.kind === 'insertText') {
+          [ops, after] = this.insertOps(at, command.text);
+          if (pending) {
+            for (const op of [...ops]) {
+              if (op.type === 'insertText') ops.push({ type: 'formatText', paragraph: op.paragraph, from: op.offset, to: op.offset + op.text.length, format: pending });
+            }
+          }
+        } else if (command.kind === 'insertParagraph') [ops, after] = this.splitOps(at);
         else {
-          ops = [{ type: 'insertItem', paragraph: this.replica.id(at.paragraph), offset: at.offset, item: { kind: 'break' } }];
+          const item = command.type ? ({ kind: 'break', type: command.type } as const) : ({ kind: 'break' } as const);
+          ops = [{ type: 'insertItem', paragraph: this.replica.id(at.paragraph), offset: at.offset, item }];
           after = { paragraph: this.replica.id(at.paragraph), offset: at.offset + 1 };
         }
         const typing = command.kind === 'insertText' && !command.text.includes('\n') ? 'typing' : undefined;
@@ -260,6 +291,18 @@ export class Editor {
         this.selection = { anchor: { paragraph: list[0], offset: 0 }, focus: { paragraph: last, offset: paragraphLength(last) } };
         return NO_CHANGE;
       }
+      case 'formatText':
+        return this.formatText(command);
+      case 'formatParagraphs': {
+        const ops = [...(command.define ?? [])];
+        this.selectedParagraphs().forEach((p, i) => {
+          const change = command.change(p, i);
+          if (change && Object.keys(change).length) ops.push(this.setProperties(p, change));
+        });
+        return this.editInPlace(ops);
+      }
+      case 'changeCase':
+        return this.editInPlace(this.changeCaseOps(command.change));
       case 'addComment':
         return this.edit(this.addCommentOps(command));
       case 'editComment': {
@@ -276,6 +319,113 @@ export class Editor {
         return NO_CHANGE;
       }
     }
+  }
+
+  // --- Formatting ------------------------------------------------------------------------
+
+  /** Paragraphs the selection touches, in order (the end one only if the selection reaches into it). */
+  selectedParagraphs(): Paragraph[] {
+    const [start, end] = this.ordered();
+    const list = this.paragraphs();
+    const last = end.offset === 0 && end.paragraph !== start.paragraph ? this.indexOf(end.paragraph) - 1 : this.indexOf(end.paragraph);
+    return list.slice(this.indexOf(start.paragraph), last + 1);
+  }
+
+  /** The word a caret is inside (not at either edge of), if any. */
+  private wordAround(pos: Position): [Position, Position] | null {
+    const text = paragraphText(pos.paragraph);
+    if (!WORD.test(text[pos.offset - 1] ?? '') || !WORD.test(text[pos.offset] ?? '')) return null;
+    return this.wordAt(pos);
+  }
+
+  private formatText(command: Extract<Command, { kind: 'formatText' }>): CommandResult {
+    const { format } = command;
+    const ops = [...(command.define ?? [])];
+    const formatRange = (p: Paragraph, from: number, to: number) => {
+      const id = this.replica.id(p);
+      if (typeof format !== 'function') {
+        ops.push({ type: 'formatText', paragraph: id, from, to, format });
+        return;
+      }
+      for (const run of runsIn(p, from, to)) {
+        const change = format(run.properties, p);
+        if (!change) continue;
+        const last = ops.at(-1);
+        if (last?.type === 'formatText' && last.paragraph === id && last.to === run.from && JSON.stringify(last.format) === JSON.stringify(change)) last.to = run.to;
+        else ops.push({ type: 'formatText', paragraph: id, from: run.from, to: run.to, format: change });
+      }
+    };
+    /** An empty paragraph's mark carries the formatting typed text there gets. */
+    const formatMark = (p: Paragraph) => {
+      const current = p.properties.runProperties ?? {};
+      const change = typeof format === 'function' ? format(current, p) : format;
+      if (change) ops.push(this.setProperties(p, { runProperties: withFormat(current, change) }));
+    };
+
+    if (this.collapsed) {
+      const at = this.selection.focus;
+      const word = this.wordAround(at);
+      if (word) formatRange(at.paragraph, word[0].offset, word[1].offset);
+      else if (paragraphLength(at.paragraph) === 0) formatMark(at.paragraph);
+      else {
+        // Nothing to format yet: it applies to what's typed next here.
+        const current = withFormat(runPropertiesAt(at.paragraph, at.offset) ?? {}, this.pending ?? {});
+        const change = typeof format === 'function' ? format(current, at.paragraph) : format;
+        if (change) this.pending = { ...this.pending, ...change };
+        return ops.length ? this.editInPlace(ops) : NO_CHANGE;
+      }
+      return this.editInPlace(ops);
+    }
+    const [start, end] = this.ordered();
+    for (const p of this.selectedParagraphs()) {
+      const from = p === start.paragraph ? start.offset : 0;
+      const to = p === end.paragraph ? end.offset : paragraphLength(p);
+      if (paragraphLength(p) === 0) formatMark(p);
+      else if (to > from) formatRange(p, from, to);
+    }
+    return this.editInPlace(ops);
+  }
+
+  private changeCaseOps(change: (text: string) => string): Operation[] {
+    let [start, end] = this.ordered();
+    if (this.collapsed) {
+      const word = this.wordAround(start);
+      if (!word) return [];
+      [start, end] = word;
+    }
+    const ops: Operation[] = [];
+    for (const p of this.selectedParagraphs()) {
+      const from = p === start.paragraph ? start.offset : 0;
+      const to = p === end.paragraph ? end.offset : paragraphLength(p);
+      const text = paragraphText(p);
+      const changed = change(text.slice(from, to));
+      if (changed.length !== to - from) continue;
+      const id = this.replica.id(p);
+      // Each run's text is replaced by a run with its formatting; objects (tabs, fields) stay.
+      for (const run of runsIn(p, from, to)) {
+        if (run.nested) continue;
+        let a = run.from;
+        while (a < run.to) {
+          let b = a;
+          while (b < run.to && text[b] !== OBJECT_CHAR) b++;
+          const next = changed.slice(a - from, b - from);
+          if (b > a && next !== text.slice(a, b)) {
+            ops.push({ type: 'delete', paragraph: id, from: a, to: b });
+            ops.push({ type: 'insertContent', paragraph: id, offset: a, content: [{ kind: 'run', properties: structuredClone(run.properties), content: [{ kind: 'text', text: next }], attrs: {} }] });
+          }
+          a = b + 1;
+        }
+      }
+    }
+    return ops;
+  }
+
+  /** Applies operations that don't move text as one local edit, keeping the selection. */
+  private editInPlace(ops: Operation[]): CommandResult {
+    if (ops.length === 0) return NO_CHANGE;
+    const selection = this.selectionIds;
+    const change = this.replica.edit(ops, { before: selection, after: selection });
+    return this.changed(change.applied, selection);
   }
 
   // --- Comments --------------------------------------------------------------------------
@@ -340,10 +490,11 @@ export class Editor {
   /** After the document changed: lay out again, put the selection where it belongs. */
   private changed(applied: Applied, selection: OpSelection | null): CommandResult {
     this.structureChanged();
+    if (applied.styles) this.session.invalidateStyles();
     this.session.invalidate(applied.changed, { structural: applied.structural });
     if (selection) this.setSelectionIds(selection);
     else this.setSelectionIds(this.selectionIds);
-    return { edited: true, changed: applied.changed, structural: applied.structural };
+    return { edited: true, changed: applied.changed, structural: applied.structural, styles: applied.styles };
   }
 
   undo(): CommandResult {
@@ -369,9 +520,10 @@ export class Editor {
     if (!change) return { result: NO_CHANGE, change: null };
     const selection = Replica.mapSelection(before, change.mapping);
     this.structureChanged();
+    if (change.styles) this.session.invalidateStyles();
     this.session.invalidate(change.changed, { structural: change.structural });
     this.setSelectionIds(selection);
-    return { result: { edited: true, changed: change.changed, structural: change.structural }, change };
+    return { result: { edited: true, changed: change.changed, structural: change.structural, styles: change.styles }, change };
   }
 
   /** Text (with tabs and line breaks as new paragraphs) at a position. */
@@ -412,7 +564,7 @@ export class Editor {
     return [ops, { paragraph: id, offset: 0 }];
   }
 
-  private setProperties(p: Paragraph, changes: Partial<ParagraphProperties>): Operation {
+  private setProperties(p: Paragraph, changes: ParagraphFormat): Operation {
     const properties: ParagraphProperties = { ...structuredClone(p.properties), ...structuredClone(changes) };
     for (const key of Object.keys(changes) as (keyof ParagraphProperties)[]) if (changes[key] === undefined) delete properties[key];
     return { type: 'setParagraphProperties', paragraph: this.replica.id(p), properties };
@@ -796,10 +948,20 @@ export class Editor {
   }
 }
 
+/** Run properties with a formatting change made. */
+export function withFormat(properties: RunProperties, format: RunFormat): RunProperties {
+  const out = structuredClone(properties) as Record<string, unknown>;
+  for (const [key, value] of Object.entries(format)) {
+    if (value === null || value === undefined) delete out[key];
+    else out[key] = structuredClone(value);
+  }
+  return out as RunProperties;
+}
+
 function combine(a: CommandResult, b: CommandResult): CommandResult {
   if (!a.edited) return b;
   if (!b.edited) return a;
-  return { edited: true, changed: new Set([...a.changed, ...b.changed]), structural: a.structural || b.structural };
+  return { edited: true, changed: new Set([...a.changed, ...b.changed]), structural: a.structural || b.structural, styles: a.styles || b.styles };
 }
 
 function charRange(spans: readonly SourceSpan[], visible: number): [number, number] {

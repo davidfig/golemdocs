@@ -51,7 +51,11 @@ function randomOps(replica: Replica, rand: () => number): Operation[] {
     const text = rand() < 0.5 ? WORDS[Math.floor(rand() * WORDS.length)] + ' ' : String.fromCharCode(97 + Math.floor(rand() * 26));
     return [{ type: 'insertText', paragraph: id, offset: at, text }];
   }
-  if (r < 0.55) return [{ type: 'delete', paragraph: id, from: at, to: at + 1 + Math.floor(rand() * 12) }];
+  if (r < 0.5) return [{ type: 'delete', paragraph: id, from: at, to: at + 1 + Math.floor(rand() * 12) }];
+  if (r < 0.55) {
+    const format = rand() < 0.5 ? { bold: rand() < 0.7 ? true : null } : { size: rand() < 0.7 ? 20 + 2 * Math.floor(rand() * 10) : null, italic: true };
+    return [{ type: 'formatText', paragraph: id, from: at, to: at + 1 + Math.floor(rand() * 15), format }];
+  }
   if (r < 0.62) return [{ type: 'insertItem', paragraph: id, offset: at, item: rand() < 0.5 ? { kind: 'tab' } : { kind: 'break' } }];
   if (r < 0.75) return [{ type: 'split', paragraph: id, offset: at, id: replica.newId(), properties: structuredClone(p.properties) }];
   const container = findContainer(doc.body, p)!;

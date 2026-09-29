@@ -39,6 +39,8 @@ export interface RemoteChange {
   remoteTo: number;
   changed: Set<Paragraph>;
   structural: boolean;
+  /** Styles or list definitions changed. */
+  styles: boolean;
   /** New inverses of pending transactions (for undo history). */
   rebased: { tx: string; inverse: Operation[] }[];
 }
@@ -110,9 +112,11 @@ export class CollabClient {
     const mapping = new Mapping();
     const changed = new Set<Paragraph>();
     let structural = false;
+    let styles = false;
     const note = (applied: ReturnType<Engine['apply']>) => {
       for (const p of applied.changed) changed.add(p);
       structural ||= applied.structural;
+      styles ||= applied.styles;
       mapping.appendAll(applied.maps);
     };
 
@@ -159,7 +163,7 @@ export class CollabClient {
     });
 
     this.flush();
-    return { mapping, remoteFrom, remoteTo, changed, structural, rebased };
+    return { mapping, remoteFrom, remoteTo, changed, structural, styles, rebased };
   }
 }
 

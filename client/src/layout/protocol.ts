@@ -8,6 +8,7 @@ import type { AnnotationKind, FormField } from '@word/pdf';
 import type { EncodedPage, FaceDescriptor } from '@word/layout';
 import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
+import type { FormatAction } from './formatting.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -37,10 +38,12 @@ export type DocumentSource =
 
 /** An editor command as sent from the page: pages are referred to by id. */
 export type WireCommand =
-  | Exclude<Command, { kind: 'pointer' }>
+  | Exclude<Command, { kind: 'pointer' | 'formatText' | 'formatParagraphs' | 'changeCase' }>
   | (Omit<Extract<Command, { kind: 'pointer' }>, 'page'> & { page: number })
   | { kind: 'undo' }
   | { kind: 'redo' }
+  /** Formatting from the menus and toolbars (see formatting.ts). */
+  | { kind: 'format'; action: FormatAction }
   /**
    * On a PDF shown as its own pages: mark the selected text, or put a note there (see
    * pdfAnnotator.ts). With an annotation selected, changes it instead.

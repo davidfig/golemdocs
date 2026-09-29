@@ -26,6 +26,7 @@ import { FONT_BASE, type DocumentSource, type FromWorker, type LayoutUpdate, typ
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import welcomeText from './welcome.md?raw';
 import { FormatReader } from './selectionFormat.ts';
+import { formatCommand, type FormatAction } from './formatting.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
 const SLICE_MS = 12;
@@ -332,7 +333,7 @@ class OpenDocument {
       focus: caret(g.focus),
       reveal: this.reveal,
       text: editor.selectedText(CLIPBOARD_LIMIT),
-      format: this.formats!.read(...editor.ordered(), editor.paragraphs()),
+      format: this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
       canUndo: this.replica!.history.canUndo,
       canRedo: this.replica!.history.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
@@ -523,7 +524,49 @@ class OpenDocument {
     this.toRoom({ type: 'leave' });
   }
 
+  /** Commands waiting for fonts a formatting command needs; later ones queue behind it. */
+  private waiting: Promise<void> | null = null;
+
   command(wire: WireCommand): void {
+    if (this.waiting) return this.later(() => this.runCommand(wire));
+    const done = this.runCommand(wire);
+    if (done) this.later(() => done);
+  }
+
+  /** Formatting from the menus and toolbars. One that starts using a font loads its faces first. */
+  private applyFormat(action: FormatAction): void | Promise<void> {
+    const { editor, session } = this;
+    if (!editor || !session || this.annotator) return;
+    const fonts = new Set<string>();
+    const command = formatCommand(action, editor, this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending), fonts);
+    if (!command) return;
+    if (fonts.size) return session.ensureFonts(fonts).then(() => this.apply(command));
+    this.apply(command);
+  }
+
+  private later(task: () => void | Promise<void>): void {
+    const next = (this.waiting ?? Promise.resolve()).then(task).catch((e: unknown) => console.error(e));
+    this.waiting = next;
+    void next.then(() => {
+      if (this.waiting === next) this.waiting = null;
+    });
+  }
+
+  /** Applies an editor command made here (formatting). */
+  private apply(command: Command): void {
+    const editor = this.editor;
+    if (!editor || this.closed || this.format === 'pdf') return;
+    this.reveal = false;
+    this.commandAt = performance.now();
+    if (editor.apply(command).edited) {
+      this.edited = true;
+      void this.pump();
+      this.status();
+    } else this.sendSelection();
+  }
+
+  private runCommand(wire: WireCommand): void | Promise<void> {
+    if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
     if (wire.kind === 'annotate' || wire.kind === 'setFields') return;
     const editor = this.editor;

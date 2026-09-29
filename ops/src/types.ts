@@ -6,7 +6,10 @@
 // applied yields its inverse (for undo and for rebasing) and a position map (to move
 // selections, pending operations and undo history through it).
 
-import type { Attributes, Block, Comment, Inline, ParagraphProperties, RunContent } from '@word/docx';
+import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, ParagraphProperties, RunContent, RunProperties, Style } from '@word/docx';
+
+/** Changes to run formatting, per property: a value to set, or null to remove it. */
+export type RunFormat = { [K in keyof RunProperties]?: RunProperties[K] | null };
 
 /** A position: a paragraph (by id) and a model offset in it. */
 export interface Pos {
@@ -33,7 +36,16 @@ export type Operation =
   | { type: 'insertBlocks'; after: string; blocks: Block[] }
   /** Removes particular blocks (by blockKey) from the container of paragraph `after`. */
   | { type: 'removeBlocks'; after: string; keys: string[] }
+  /** Changes the formatting of the text in positions [from, to); `to` past the end means to the end. */
+  | { type: 'formatText'; paragraph: string; from: number; to: number; format: RunFormat }
   | { type: 'setParagraphProperties'; paragraph: string; properties: ParagraphProperties }
+  /** Adds, replaces (by id) or, with `style` null, removes a style of the style sheet. */
+  | { type: 'setStyle'; id: string; style: Style | null }
+  /**
+   * Adds, replaces or, with `list` null, removes a list definition: numbering instance `id`
+   * and the abstract numbering it uses (which no other instance may share).
+   */
+  | { type: 'setList'; id: number; list: { instance: NumberingInstance; abstract: AbstractNumbering } | null }
   /** Adds, replaces (by id) or, with `comment` null, removes a comment's text and author. Its range is markers in the text. */
   | { type: 'setComment'; id: string; comment: Comment | null };
 

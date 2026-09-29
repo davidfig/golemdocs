@@ -3,6 +3,7 @@
 // (formatting, undo, tables…), add them to SUPPORTED and to perform(); the UI enables them.
 
 import type { WireCommand } from './layout/protocol.ts';
+import { FORMAT_ACTIONS, type FormatAction } from './layout/formatting.ts';
 import type { DocumentSource } from './layout/protocol.ts';
 import { WDOC_EXTENSION } from './formats/wdoc.ts';
 import { sourceFromFile } from './formats/source.ts';
@@ -157,10 +158,11 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     openFile,
 
     supports(action: Action): boolean {
-      if (ANNOTATION_ACTIONS.has(action.kind)) return app.annotating();
+      if (ANNOTATION_ACTIONS.has(action.kind) && app.annotating()) return true;
+      if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
-      if (action.kind === 'insertBreak') return action.break === 'line';
+      if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode === 'print';
       return SUPPORTED.has(action.kind);
     },
@@ -235,13 +237,29 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':
           if (action.break === 'line') app.send({ kind: 'insertLineBreak' });
+          else if (action.break === 'page' || action.break === 'column') app.send({ kind: 'insertLineBreak', type: action.break });
           return;
         case 'setHighlight':
+          if (!app.annotating()) return app.send({ kind: 'format', action });
           return app.send({ kind: 'annotate', annotation: 'highlight', color: action.color });
         case 'toggleMark':
+          if (!app.annotating()) return app.send({ kind: 'format', action });
           if (action.mark === 'underline') return app.send({ kind: 'annotate', annotation: 'underline' });
           if (action.mark === 'strikethrough') return app.send({ kind: 'annotate', annotation: 'strikeout' });
           return app.notify(`${action.mark} isn't available yet`);
+        case 'setFont':
+        case 'setFontSize':
+        case 'growFont':
+        case 'shrinkFont':
+        case 'setColor':
+        case 'changeCase':
+        case 'clearFormatting':
+        case 'setStyle':
+        case 'setAlignment':
+        case 'setLineSpacing':
+        case 'toggleList':
+        case 'indent':
+          return app.send({ kind: 'format', action });
         case 'insertComment': {
           const text = window.prompt(app.annotating() ? 'Note' : 'Comment');
           if (text === null) return;

@@ -47,11 +47,9 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const input = document.getElementById('input') as HTMLTextAreaElement;
-const statusInfoEl = document.getElementById('statusInfo') as HTMLPreElement;
-const renderInfoEl = document.getElementById('renderInfo') as HTMLDivElement;
-const fpsRowEl = document.getElementById('fpsRow') as HTMLDivElement;
-const fpsEl = document.getElementById('fps') as HTMLSpanElement;
-const statsEl = document.getElementById('stats') as HTMLPreElement;
+const statusPanelsEl = document.getElementById('statusPanels') as HTMLElement;
+const renderInfoEl = document.getElementById('renderInfo') as HTMLElement;
+const renderStatsEl = renderInfoEl.querySelector('.debug-stats') as HTMLElement;
 const renderLight = document.getElementById('renderLight') as HTMLSpanElement;
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
 if (!gl) throw new Error('WebGL2 not supported');
@@ -93,9 +91,11 @@ let annotating = false;
 let formMode: FormMode = 'fill';
 let status = '';
 /** Collaboration status, when the document is open in a room. */
-let roomStatus = '';
+let room: { id: string; people: number; version: number; unsent: number } | null = null;
 /** Latest edit round trip (command sent to its selection update), ms. */
-let editLatency = '';
+let editTimes: { total: number; worker: number } | null = null;
+/** How long the current document took to open, ms. */
+let loadTimes: { pages: number; glyphs: number; firstPage: number; total: number; read: number; fonts: number; body: number; headers: number } | null = null;
 /** Layout finished for the current document. */
 let loaded = false;
 /** The camera has been placed for the current document. */
@@ -143,8 +143,9 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   loaded = false;
   cameraPlaced = false;
   userMoved = false;
-  editLatency = '';
-  roomStatus = '';
+  editTimes = null;
+  room = null;
+  loadTimes = null;
   pendingNotice = null;
   documentName = name;
   documentKind = kindOfSource(source);
@@ -170,11 +171,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       loaded = true;
       arrange();
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
-      setStatus(
-        `${name}: ${count.toLocaleString()} pages, ${glyphs.toLocaleString()} glyphs · first page ${firstPage.toFixed(0)} ms, ` +
-          `all ${(performance.now() - start).toFixed(0)} ms (worker: read ${t.read.toFixed(0)}, fonts ${t.fonts.toFixed(0)}, ` +
-          `body ${t.body.toFixed(0)}, headers ${t.headers.toFixed(0)} ms)`,
-      );
+      loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: t.read, fonts: t.fonts, body: t.body, headers: t.headers };
+      setStatus(`${name}: ready`);
       if (pendingNotice) {
         setStatus(pendingNotice);
         pendingNotice = null;
@@ -185,7 +183,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       applySelection(update);
     },
     room(people, version, unconfirmed) {
-      roomStatus = `room ${new URLSearchParams(location.search).get('room')} · ${people} ${people === 1 ? 'person' : 'people'} · v${version}${unconfirmed ? ` · ${unconfirmed} unsent` : ''}`;
+      room = { id: new URLSearchParams(location.search).get('room') ?? '', people, version, unsent: unconfirmed };
       requestRender();
     },
     error(message) {
@@ -839,7 +837,7 @@ function applySelection(update: SelectionUpdate): void {
   canUndo = update.canUndo;
   canRedo = update.canRedo;
   if (editSent) {
-    editLatency = `edit → screen ${(performance.now() - editSent).toFixed(1)} ms (worker ${update.workerMs.toFixed(1)} ms)`;
+    editTimes = { total: performance.now() - editSent, worker: update.workerMs };
     editSent = 0;
   }
   // Copy and cut read the selected text from `selection` (see the clipboard handlers).
@@ -848,6 +846,8 @@ function applySelection(update: SelectionUpdate): void {
   clearInterval(blinkTimer);
   if (update.caret) {
     blinkTimer = window.setInterval(() => {
+      // An unfocused editor draws no caret, so there's nothing to redraw (focus redraws).
+      if (document.activeElement !== input || !document.hasFocus()) return;
       caretOn = !caretOn;
       requestRender();
     }, CARET_BLINK_MS);
@@ -909,35 +909,85 @@ function flashRenderLight(): void {
   lightTimer = window.setTimeout(() => renderLight.classList.remove('on'), 80);
 }
 
-/** The debug overlays: document status, and render information (View > Debug). */
+type DebugRow = [label: string, value: string];
+
+/** Fills a debug panel with label/value pairs (laid out in aligned columns by the CSS). */
+function setDebugRows(el: HTMLElement, rows: DebugRow[]): void {
+  el.replaceChildren(
+    ...rows.flatMap(([label, value]) => {
+      const k = document.createElement('span');
+      k.textContent = label;
+      const v = document.createElement('span');
+      v.textContent = value;
+      return [k, v];
+    }),
+  );
+}
+
+/** A debug panel (a heading over label/value pairs). `list`: one pair per row, for long values. */
+function debugPanel(title: string, rows: DebugRow[], list = false): HTMLElement {
+  const panel = document.createElement('section');
+  panel.className = list ? 'debug-panel debug-list' : 'debug-panel';
+  const heading = document.createElement('h2');
+  heading.textContent = title;
+  const stats = document.createElement('div');
+  stats.className = 'debug-stats';
+  setDebugRows(stats, rows);
+  panel.append(heading, stats);
+  return panel;
+}
+
+const ms = (n: number, digits = 0) => `${n.toFixed(digits)} ms`;
+
+/** The debug panels: render information, then the document's status in parts (View > Debug). */
 function updateDebug(): void {
   const flags = debugFlags();
-  statusInfoEl.hidden = !flags.status;
+  const panels: HTMLElement[] = [];
   if (flags.status) {
-    statusInfoEl.textContent = `${status}${roomStatus ? ` · ${roomStatus}` : ''}${editLatency ? ` · ${editLatency}` : ''}`;
+    panels.push(debugPanel('Document', [['status', status], ...(loadTimes ? ([['pages', loadTimes.pages.toLocaleString()], ['glyphs', loadTimes.glyphs.toLocaleString()]] as DebugRow[]) : [])], true));
+    if (loadTimes) {
+      const t = loadTimes;
+      panels.push(
+        debugPanel('Load', [
+          ['first page', ms(t.firstPage)],
+          ['all', ms(t.total)],
+          ['read', ms(t.read)],
+          ['fonts', ms(t.fonts)],
+          ['body', ms(t.body)],
+          ['headers', ms(t.headers)],
+        ]),
+      );
+    }
+    if (editTimes) panels.push(debugPanel('Edit', [['to screen', ms(editTimes.total, 1)], ['worker', ms(editTimes.worker, 1)]]));
+    if (room) {
+      panels.push(
+        debugPanel('Room', [
+          ['id', room.id],
+          ['people', String(room.people)],
+          ['version', `v${room.version}`],
+          ['unsent', String(room.unsent)],
+        ]),
+      );
+    }
   }
-  const lines: string[] = [];
-  const parts: string[] = [];
+  statusPanelsEl.replaceChildren(...panels);
+  const rows: DebugRow[] = [];
   if (flags.pages && lastStats) {
-    parts.push(
-      `${lastStats.visiblePages}/${lastStats.pages.toLocaleString()} pages visible`,
-      `${lastStats.glyphs.toLocaleString()} glyphs drawn`,
-      `${lastStats.drawCalls} draw calls`,
+    rows.push(
+      ['pages', `${lastStats.visiblePages}/${lastStats.pages.toLocaleString()}`],
+      ['glyphs', lastStats.glyphs.toLocaleString()],
+      ['draws', String(lastStats.drawCalls)],
     );
   }
-  if (flags.zoom) parts.push(`zoom ${Math.round(camera.zoom * 100)}%`);
-  if (flags.cpu) parts.push(`CPU ${frames.cpuMs.toFixed(2)} ms/frame`);
-  if (parts.length) lines.push(parts.join(' · '));
+  if (flags.zoom) rows.push(['zoom', `${Math.round(camera.zoom * 100)}%`]);
+  if (flags.cpu) rows.push(['cpu', `${frames.cpuMs.toFixed(2)} ms`]);
+  if (flags.fps) rows.push(['fps', String(frames.fps(performance.now()))]);
   if (flags.frameTimes) {
-    lines.push(
-      `slowest frame ${frames.maxCpuMs.toFixed(1)} ms · longest gap ${frames.maxGapMs.toFixed(0)} ms · ${frames.dropped} dropped (click to reset)`,
-    );
+    rows.push(['slowest', `${frames.maxCpuMs.toFixed(1)} ms`], ['gap', `${frames.maxGapMs.toFixed(0)} ms`], ['dropped', String(frames.dropped)]);
   }
-  fpsRowEl.hidden = !flags.fps;
-  if (flags.fps) fpsEl.textContent = `${frames.fps(performance.now())} fps`;
-  statsEl.textContent = lines.join('\n');
-  statsEl.hidden = !lines.length;
-  renderInfoEl.hidden = fpsRowEl.hidden && statsEl.hidden;
+  setDebugRows(renderStatsEl, rows);
+  renderLight.hidden = !flags.fps;
+  renderInfoEl.hidden = !rows.length && !flags.fps;
 }
 
 // Idle, nothing draws: keep the frame rate honest (it falls to 0) and the status text fresh.
@@ -1334,8 +1384,6 @@ Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },
   status: { get: () => status },
-  roomStatus: { get: () => roomStatus },
-  editLatency: { get: () => editLatency },
   selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others }) },
 });
 

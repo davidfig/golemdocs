@@ -3,6 +3,7 @@
 // each glyph at its laid-out position, so wrapping and page breaks match the editor.
 
 import type { WordDocument } from '@word/docx';
+import { TrueTypeFont } from '@word/pdf';
 import { layoutDocument, type FontSet, type GlyphList } from '@word/layout';
 import { decodeImage, encodeCanvas, makeCanvas, type OutputType } from './imageCodec.ts';
 import { standardFamily } from './standardFonts.ts';
@@ -22,6 +23,25 @@ function css(packed: number): string {
 export async function documentToImage(doc: WordDocument, fonts: FontSet, type: OutputType): Promise<Uint8Array> {
   const layout = await layoutDocument(doc, fonts);
   const pages = layout.pages;
+  // The math font's outlines, loaded when an equation is on a page (and Path2D exists to draw them).
+  let program: TrueTypeFont | undefined | null = null;
+  const mathProgram = async (): Promise<TrueTypeFont | undefined> => {
+    if (program === null) {
+      const file = fonts.mathFace?.font && typeof Path2D !== 'undefined' ? await fonts.fontFile(fonts.mathFace.font) : undefined;
+      program = file ? TrueTypeFont.parse(file) : undefined;
+    }
+    return program;
+  };
+  const outlines = new Map<number, Path2D | null>();
+  const outline = (font: TrueTypeFont, gid: number): Path2D | null => {
+    let path = outlines.get(gid);
+    if (path === undefined) {
+      const d = font.glyphPath(gid);
+      path = d ? new Path2D(d) : null;
+      outlines.set(gid, path);
+    }
+    return path;
+  };
   const width = Math.max(1, ...pages.map((p) => p.width));
   const height = Math.max(1, pages.reduce((sum, p) => sum + p.height, 0));
   const scale = Math.min(SCALE, LARGEST_SIDE / width, LARGEST_SIDE / height);
@@ -63,6 +83,22 @@ export async function documentToImage(doc: WordDocument, fonts: FontSet, type: O
     ctx.textBaseline = 'alphabetic';
     for (const list of page.glyphs.values() as Iterable<GlyphList>) {
       const { font, metrics } = list;
+      if (font.family.math) {
+        // Equation glyphs (many have no character) are drawn from their outlines in the math font's TrueType build.
+        const program = await mathProgram();
+        if (!program) continue;
+        for (let i = 0; i < list.count; i++) {
+          const path = outline(program, metrics.layout.glyphs[list.glyph(i)]?.index ?? list.glyph(i));
+          if (!path) continue;
+          ctx.save();
+          ctx.translate(list.x(i), list.y(i));
+          ctx.scale(list.size(i) / program.unitsPerEm, -list.size(i) / program.unitsPerEm);
+          ctx.fillStyle = css(list.color(i));
+          ctx.fill(path);
+          ctx.restore();
+        }
+        continue;
+      }
       const bold = font.face.weight >= 600 || font.syntheticBold;
       const italic = font.face.italic || font.syntheticItalic;
       for (let i = 0; i < list.count; i++) {

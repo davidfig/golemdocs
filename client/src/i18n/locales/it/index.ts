@@ -7,6 +7,7 @@ import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
 import { largeText } from './largeText.ts';
 import { link } from './link.ts';
+import { math } from './math.ts';
 import { menus } from './menus.ts';
 import { panels } from './panels.ts';
 import { paragraph } from './paragraph.ts';
@@ -18,4 +19,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...menus, ...panels, ...picture, ...spelling, ...table, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

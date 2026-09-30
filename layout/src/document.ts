@@ -10,6 +10,7 @@
 import {
   ListCounter,
   StyleResolver,
+  isMathInline,
   type HeaderFooterReference,
   type Inline,
   type ListState,
@@ -230,6 +231,33 @@ function facesFor(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): S
     for (const bold of [false, true]) for (const italic of [false, true]) faces.add(fonts.resolve({ font: name, bold, italic }).face);
   }
   return faces;
+}
+
+/** Whether the document has an equation anywhere in its body, headers or footers. */
+function hasMath(doc: WordDocument): boolean {
+  const stack: unknown[] = [...doc.body];
+  for (const hf of doc.headersFooters.values()) stack.push(...hf.children);
+  while (stack.length) {
+    const node = stack.pop() as { kind: string; [key: string]: any };
+    switch (node.kind) {
+      case 'raw':
+        if (isMathInline(node as Inline)) return true;
+        break;
+      case 'paragraph':
+      case 'hyperlink':
+      case 'wrapper':
+      case 'cell':
+        stack.push(...node.children);
+        break;
+      case 'table':
+        stack.push(...node.rows);
+        break;
+      case 'row':
+        stack.push(...node.cells);
+        break;
+    }
+  }
+  return false;
 }
 
 const CJK_TEXT = /[\u1100-\u11ff\u3000-\u30ff\u3100-\u312f\u31a0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\ua960-\ua97f\uac00-\ud7ff]/;
@@ -474,6 +502,7 @@ export class LayoutSession {
     await fonts.ensure(facesFor(doc, resolver, fonts));
     const cjk = cjkTextOf(doc, resolver, fonts);
     await Promise.all([...cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)));
+    if (hasMath(doc)) await fonts.ensureMath();
     const session = new LayoutSession(doc, fonts, resolver);
     for (const lang of cjk.keys()) session.cjkLangs.add(lang);
     session.timings.fonts = performance.now() - t0;
@@ -568,6 +597,11 @@ export class LayoutSession {
     if (chars.size === 0) return;
     const langs = new Set<CjkLang>([...this.cjkLangs, this.fonts.defaultCjkLang]);
     await Promise.all([...langs].map((lang) => this.fonts.ensureCjk(lang, chars)));
+  }
+
+  /** Loads the math font, before an equation is added (typed, pasted or inserted). */
+  async ensureMath(): Promise<void> {
+    await this.fonts.ensureMath();
   }
 
   /** Loads the faces of fonts the document starts to use (a font picked for some text), before laying it out. */

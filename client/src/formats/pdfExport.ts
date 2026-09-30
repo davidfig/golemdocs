@@ -13,7 +13,7 @@
 import type { WordDocument } from '@word/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@word/layout';
 import { standardFamily } from './standardFonts.ts';
-import { PdfDocument, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@word/pdf';
+import { PdfDocument, type EmbeddedFont, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@word/pdf';
 
 /** Characters WinAnsi lacks, with a close ASCII stand-in. */
 const ASCII_FALLBACKS: Record<number, string> = {
@@ -56,6 +56,8 @@ interface PlacedGlyph {
   advance: number;
   color: number;
   font: ResolvedFont;
+  /** Equation glyphs: the glyph's index in the math font, which is embedded and addressed by index. */
+  gid?: number;
 }
 
 const CP1252_EXTRAS = new Set([
@@ -86,20 +88,26 @@ function charOf(metrics: FaceMetrics, glyph: number): string {
   return c.text;
 }
 
-function collect(page: PageLayout): PlacedGlyph[] {
+function collect(page: PageLayout, math: boolean): PlacedGlyph[] {
   const out: PlacedGlyph[] = [];
   for (const list of page.glyphs.values() as Iterable<GlyphList>) {
+    const isMath = list.font.family.math !== undefined;
+    // Without the math font's file, an equation can't be written: it is left out.
+    if (isMath && !math) continue;
     for (let i = 0; i < list.count; i++) {
       const g = list.glyph(i);
       const size = list.size(i);
+      const entry = list.metrics.layout.glyphs[g];
       out.push({
         x: list.x(i),
         y: list.y(i),
         size,
-        char: charOf(list.metrics, g),
+        // Equation glyphs stand for their character (for copying), where they have one.
+        char: isMath ? (entry?.unicode === undefined ? '' : String.fromCodePoint(entry.unicode)) : charOf(list.metrics, g),
         advance: list.metrics.advance(g) * size,
         color: list.color(i),
         font: list.font,
+        ...(isMath && { gid: entry?.index ?? g }),
       });
     }
   }
@@ -178,7 +186,9 @@ function lineRuns(line: PlacedGlyph[]): Run[] {
       const spaceOrigin = prev.x + prev.advance;
       const gap = g.x - spaceOrigin;
       const last = run!.pieces[run!.pieces.length - 1];
-      if (gap > 0.1 * Math.max(prev.size, g.size)) {
+      // Equation glyphs are placed exactly; no spaces are put between them.
+      const equation = prev.gid !== undefined || g.gid !== undefined;
+      if (!equation && gap > 0.1 * Math.max(prev.size, g.size)) {
         // Spaces are not glyphs in layout; a gap between words becomes a real space so text
         // extracts (and copies) with its word breaks.
         last.advance = prev.advance;
@@ -190,7 +200,7 @@ function lineRuns(line: PlacedGlyph[]): Run[] {
       run = { first: g, pieces: [] };
       runs.push(run);
     }
-    run!.pieces.push({ text: g.char });
+    run!.pieces.push(g.gid === undefined ? { text: g.char } : { text: g.char, glyph: g.gid });
     prev = g;
   }
   return runs;
@@ -249,8 +259,17 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
   pdf.setMetadata('Creator', 'Golem Docs');
   pdf.setMetadata('Producer', 'Golem Docs PDF export');
 
+  // The math font is embedded (a subset of its TrueType build) when an equation is on a page.
+  let mathFont: EmbeddedFont | undefined;
+  const mathFace = fonts.mathFace;
+  if (mathFace?.font && layout.pages.some((page) => [...page.glyphs.values()].some((list) => list.font.family.math))) {
+    const file = await fonts.fontFile(mathFace.font);
+    if (file) mathFont = pdf.embedFont(file);
+    else console.warn('PDF export: the math font file could not be loaded, so equations were left out.');
+  }
   const pdfFonts = new Map<string, PdfFont>();
   const fontFor = (font: ResolvedFont): PdfFont => {
+    if (font.family.math && mathFont) return mathFont;
     const name = standardName(font);
     let f = pdfFonts.get(name);
     if (!f) pdfFonts.set(name, (f = pdf.standardFont(name)));
@@ -285,7 +304,7 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     };
     await drawImages(true);
 
-    for (const line of readingOrder(laid, collect(laid))) {
+    for (const line of readingOrder(laid, collect(laid, mathFont !== undefined))) {
       for (const run of lineRuns(line)) {
         const { color } = unpack(run.first.color);
         d.textRun(run.pieces, run.first.x, run.first.y, { font: fontFor(run.first.font), size: run.first.size, color });

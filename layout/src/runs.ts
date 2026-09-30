@@ -2,7 +2,7 @@
 // formatting, evaluates fields, drops deleted and hidden text, maps symbol fonts and collects
 // inline and floating drawings.
 
-import { formatNumber, inlineLength, inlinesLength, itemLength, type Drawing, type Inline, type Run, type RunContent, type RunProperties } from '@word/docx';
+import { formatNumber, inlineLength, inlinesLength, isMathInline, itemLength, readMathInline, type Drawing, type Inline, type MathEquation, type Run, type RunContent, type RunProperties } from '@word/docx';
 import type { SourceSpan } from './offsets.ts';
 import { cachedRunStyle, runStyle, type LayoutContext, type RunStyle } from './context.ts';
 
@@ -24,6 +24,8 @@ export interface CollectedText {
   styles: RunStyle[];
   /** Inline drawings by position in `text`. */
   objects: Map<number, Drawing>;
+  /** Equations by position in `text` (each is one OBJECT placeholder). */
+  maths: Map<number, MathEquation>;
   /** Anchored (floating) drawings in this paragraph. */
   floats: Drawing[];
   /** Absolute-position tabs (w:ptab) by position in `text`. */
@@ -69,6 +71,14 @@ function mapSymbol(code: number): string {
   }
 }
 
+/** Equations read from their XML once per element (an edit replaces the element). */
+const equations = new WeakMap<object, MathEquation>();
+function equationOf(inline: Inline & { kind: 'raw' }): MathEquation {
+  let equation = equations.get(inline.xml);
+  if (!equation) equations.set(inline.xml, (equation = readMathInline(inline)));
+  return equation;
+}
+
 export class TextCollector {
   private readonly chunks: string[] = [];
   private readonly chunkStyles: number[] = [];
@@ -76,6 +86,7 @@ export class TextCollector {
   readonly styles: RunStyle[] = [];
   private readonly styleIndex = new Map<RunStyle, number>();
   readonly objects = new Map<number, Drawing>();
+  readonly maths = new Map<number, MathEquation>();
   readonly floats: Drawing[] = [];
   readonly ptabs = new Map<number, PositionalTab>();
   private readonly fields: Field[] = [];
@@ -170,6 +181,10 @@ export class TextCollector {
           break;
         }
         case 'raw':
+          if (isMathInline(inline)) {
+            this.maths.set(this.position, equationOf(inline));
+            this.emit(OBJECT, this.style({}), this.model, 1, false);
+          }
           this.model += 1;
           break;
       }
@@ -285,6 +300,9 @@ export class TextCollector {
     const tabs = [...this.ptabs];
     this.ptabs.clear();
     for (const [pos, t] of tabs) this.ptabs.set(pos + text.length, t);
+    const maths = [...this.maths];
+    this.maths.clear();
+    for (const [pos, m] of maths) this.maths.set(pos + text.length, m);
   }
 
   finish(): CollectedText {
@@ -295,7 +313,7 @@ export class TextCollector {
       styleOf.fill(this.chunkStyles[i], p, p + this.chunks[i].length);
       p += this.chunks[i].length;
     }
-    return { text, styleOf, styles: this.styles, objects: this.objects, floats: this.floats, ptabs: this.ptabs, spans: this.spans };
+    return { text, styleOf, styles: this.styles, objects: this.objects, maths: this.maths, floats: this.floats, ptabs: this.ptabs, spans: this.spans };
   }
 
   /** Label text in a symbol font maps to Unicode stand-ins, like run text does. */

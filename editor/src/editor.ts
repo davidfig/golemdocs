@@ -14,16 +14,19 @@ import {
   commentStart,
   inlineLength,
   inlinesLength,
+  mathAt,
   newParagraphProperties,
   paragraphLength,
   paragraphsIn,
   paragraphText,
   plainText,
+  readMathInline,
   runPropertiesAt,
   runsIn,
   splitInlines,
   OBJECT_CHAR,
   type Block,
+  type MathEquation,
   type DocumentProperties,
   type Hyperlink,
   type Inline,
@@ -972,6 +975,28 @@ export class Editor {
     return at ? (at.link.url ?? (at.link.anchor ? `#${at.link.anchor}` : '')) : null;
   }
 
+  /** The equation the selection is exactly (one selected position holding one), for Insert Equation to edit. */
+  selectedMath(): MathEquation | null {
+    if (this.collapsed) return null;
+    const [start, end] = this.ordered();
+    if (start.paragraph !== end.paragraph || end.offset - start.offset !== 1) return null;
+    const at = mathAt(start.paragraph, start.offset);
+    if (!at) return null;
+    return readMathInline(at);
+  }
+
+  /** The position of the equation under a point on a page, if the point is over one. */
+  mathUnder(page: PageLayout, x: number, y: number): Position | null {
+    const line = page.lines.find((l) => y >= l.y && y <= l.y + l.height && x >= l.x && x <= l.x + l.width);
+    if (!line) return null;
+    for (let i = 0; i < line.stops.length - 1; i++) {
+      if (x < line.column + line.stops[i] || x >= line.column + line.stops[i + 1]) continue;
+      const offset = toModel(line.spans, line.start + i);
+      return mathAt(line.paragraph, offset) ? { paragraph: line.paragraph, offset } : null;
+    }
+    return null;
+  }
+
   /** The link at the selection (its start, if it's a range), for the toolbar and the Insert Hyperlink dialog. */
   selectedLink(): { url: string; text: string } | null {
     const [start] = this.ordered();
@@ -1730,7 +1755,9 @@ export class Editor {
     const hit = this.hitTest(command.page, command.x, command.y);
     if (!hit) return;
     if (command.unit === 'word') {
-      const [a, b] = this.wordAt(hit);
+      // A double click on an equation selects it, whole.
+      const math = this.mathUnder(command.page, command.x, command.y);
+      const [a, b] = math ? [math, { paragraph: math.paragraph, offset: math.offset + 1 }] : this.wordAt(hit);
       this.selection = { anchor: a, focus: b };
     } else if (command.unit === 'paragraph') {
       this.selection = { anchor: { paragraph: hit.paragraph, offset: 0 }, focus: { paragraph: hit.paragraph, offset: paragraphLength(hit.paragraph) } };

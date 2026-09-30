@@ -2,7 +2,7 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { paragraphLength, paragraphText, plainText, type DocumentProperties, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@word/docx';
+import { isMathInline, paragraphLength, paragraphText, plainText, type DocumentProperties, type Inline, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@word/docx';
 import { Editor, type Command } from '@word/editor';
 import { Replica, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@word/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
@@ -73,11 +73,18 @@ const SLICE_MS = 12;
 /** Longest selection text kept for the clipboard. */
 const CLIPBOARD_LIMIT = 4_000_000;
 
-const fontsReady = FontSet.load(async (path) => {
-  const response = await fetch(FONT_BASE + path);
-  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}. Run \`pnpm fonts\`.`);
-  return response.json();
-});
+const fontsReady = FontSet.load(
+  async (path) => {
+    const response = await fetch(FONT_BASE + path);
+    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}. Run \`pnpm fonts\`.`);
+    return response.json();
+  },
+  async (path) => {
+    const response = await fetch(FONT_BASE + path);
+    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  },
+);
 
 function post(message: FromWorker, transfer: Transferable[] = []): void {
   self.postMessage(message, { transfer });
@@ -443,6 +450,7 @@ class OpenDocument {
       remoteRects,
       painting: this.painter !== null,
       link: editor.selectedLink(),
+      math: editor.selectedMath(),
       inTable: editor.inTable(),
       columns: editor.sectionColumns(),
       page: editor.sectionPage(),
@@ -1272,7 +1280,7 @@ class OpenDocument {
     } else this.sendSelection();
   }
 
-  private runCommand(wire: WireCommand, cjkReady = false): void | Promise<void> {
+  private runCommand(wire: WireCommand, cjkReady = false, mathReady = false): void | Promise<void> {
     if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (wire.kind === 'applyPainter') return this.applyPainter();
     if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false);
@@ -1294,10 +1302,12 @@ class OpenDocument {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session) return;
+    // An equation needs the math font before it is laid out.
+    if (!mathReady && commandHasMath(wire)) return session.ensureMath().then(() => this.runCommand(wire, cjkReady, true));
     // Typed, pasted or replaced Japanese and Chinese text needs its font pages before it is laid out.
     if (!cjkReady && !this.annotator) {
       const text = commandText(wire);
-      if (text && /[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7ff\uf900-\ufaff\uff00-\uffef]/.test(text)) return session.ensureCjk(text).then(() => this.runCommand(wire, true));
+      if (text && /[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7ff\uf900-\ufaff\uff00-\uffef]/.test(text)) return session.ensureCjk(text).then(() => this.runCommand(wire, true, mathReady));
     }
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
@@ -1554,6 +1564,24 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
   } catch (e) {
     post({ type: 'saved', request, bytes: null, error: (e as Error).message });
   }
+}
+
+/** Whether a command puts an equation in the document (an inserted one, or a paste that holds one). */
+function commandHasMath(wire: WireCommand): boolean {
+  if (wire.kind === 'insertContent') return containsMath(wire.content);
+  if (wire.kind === 'pasteContent') return containsMath(wire.blocks);
+  return false;
+}
+
+function containsMath(nodes: readonly { kind: string; [key: string]: any }[]): boolean {
+  for (const node of nodes) {
+    if (node.kind === 'raw') {
+      if (isMathInline(node as Inline)) return true;
+    } else {
+      for (const key of ['children', 'rows', 'cells']) if (Array.isArray(node[key]) && containsMath(node[key])) return true;
+    }
+  }
+  return false;
 }
 
 /** The text a command puts in the document (typing, IME commits, paste, replace). */

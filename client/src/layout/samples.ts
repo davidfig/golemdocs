@@ -29,7 +29,7 @@ export async function fontShowcase(fonts: FontSet): Promise<WordDocument> {
   const doc = await WordDocument.create();
   const body: Paragraph[] = [paragraph([run('Fonts')], 'Title')];
   for (const family of fonts.families) {
-    if (family.cjk) continue; // CJK pages are internal fallbacks, not fonts to show
+    if (family.cjk || family.math) continue; // CJK pages and the math font are internal, not fonts to show
     const name = family.wordName;
     const face = (props: RunProperties): RunProperties => ({ ...props, fonts: { ascii: name, hAnsi: name, cs: name } });
     body.push(paragraph([run(`${name} – ${family.substitute}`, face({}))], 'Heading1'));

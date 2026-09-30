@@ -31,6 +31,8 @@ export interface FormatProfile {
   tables: boolean;
   images: boolean;
   links: boolean;
+  /** Equations: only where the format can hold them (Word documents). */
+  math: boolean;
   bookmarks: boolean;
   comments: boolean;
   footnotes: boolean;
@@ -78,6 +80,7 @@ const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   tables: true,
   images: true,
   links: true,
+  math: false,
   bookmarks: true,
   comments: true,
   footnotes: true,
@@ -106,6 +109,7 @@ const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   tables: false,
   images: false,
   links: false,
+  math: false,
   bookmarks: false,
   comments: false,
   footnotes: false,
@@ -160,6 +164,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     get label() {
       return t('menus.format.docx');
     },
+    math: true,
     extensions: ['.docx', '.docm', '.dotx', '.doc'],
     mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   },
@@ -479,6 +484,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.images;
     case 'insertLink':
       return profile.links;
+    case 'insertMath':
+      return profile.math;
     case 'insertComment':
       return profile.comments;
     case 'insertFootnote':

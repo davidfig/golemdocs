@@ -310,6 +310,7 @@ export class Chrome {
       a('insert.codeBlock', t('chrome.insert.codeBlock'), { kind: 'insertCodeBlock' }),
       a('insert.link', t('chrome.insert.link'), { kind: 'insertLink' }, { icon: 'link', shortcut: 'Mod+K', tooltip: t('chrome.insert.link.tip') }),
       a('insert.bookmark', t('chrome.insert.bookmark'), { kind: 'insertBookmark' }),
+      a('insert.math', t('math.insert'), { kind: 'insertMath' }, { icon: 'math', tooltip: t('math.insert.tip') }),
     );
 
     // Format: character
@@ -610,6 +611,7 @@ export class Chrome {
           sep,
           cmd('insert.link'),
           cmd('insert.bookmark'),
+          cmd('insert.math'),
         ],
       },
       {

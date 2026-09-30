@@ -1545,6 +1545,66 @@
       ]
     },
     {
+      "id": "libertinus-math",
+      "wordName": "Libertinus Math",
+      "substitute": "Libertinus Math",
+      "license": "OFL-1.1",
+      "licenseFile": "libertinus-math/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "libertinus-math/regular.webp",
+          "layout": "libertinus-math/regular.json",
+          "font": "libertinus-math/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 894,
+              "descender": -246,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 894,
+              "descender": -246,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 894,
+              "descent": 246
+            },
+            "xHeight": 429,
+            "capHeight": 658,
+            "underline": {
+              "position": -78,
+              "thickness": 40
+            },
+            "strikeout": {
+              "size": 40,
+              "position": 257
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "math": {
+        "data": "libertinus-math/math.json"
+      }
+    },
+    {
       "id": "noto-sans-jp-1",
       "wordName": "Noto Sans JP (1)",
       "substitute": "Noto Sans JP",

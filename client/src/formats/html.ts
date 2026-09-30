@@ -30,7 +30,7 @@
 // a generated <style data-word-styles> block for the document's paragraph styles, which the importer
 // reads back into styles, so pages the app wrote round-trip. Nothing here throws on odd input.
 
-import { StyleResolver, WordDocument, paragraphText } from '@word/docx';
+import { StyleResolver, WordDocument, fromMathML, isMathInline, mathInline, paragraphText, readMathInline, toMathML, type MathMLElement } from '@word/docx';
 import { decodeDataUri, sniffImage, toDataUri } from './images.ts';
 import type { ImageData } from './images.ts';
 import type {
@@ -1460,6 +1460,23 @@ class Importer {
     st.trailing = false;
   }
 
+  /** A <math> element as an equation. */
+  private equation(flow: Flow, ctx: Ctx, el: HElement): void {
+    const convert = (e: HElement): MathMLElement => ({
+      name: e.name,
+      attrs: e.attrs,
+      children: e.children.flatMap((c): (MathMLElement | string)[] => (c.type === 'element' ? [convert(c)] : c.type === 'text' ? [c.text] : [])),
+    });
+    const st = this.ensure(flow, ctx);
+    st.p.children.push(mathInline(fromMathML(convert(el))));
+    st.run = null;
+    st.hyperlink = null;
+    st.linkEl = null;
+    st.content = true;
+    st.lastSpace = false;
+    st.trailing = false;
+  }
+
   private image(flow: Flow, ctx: Ctx, el: HElement): void {
     const st = this.ensure(flow, ctx);
     const alt = (el.attrs.alt ?? '').replace(/\s+/g, ' ').trim();
@@ -1710,6 +1727,7 @@ class Importer {
     if (name === 'br') this.lineBreak(flow, ctx);
     else if (name === 'wbr' || name === 'col' || name === 'colgroup') return;
     else if (name === 'img') this.image(flow, ctx, el);
+    else if (name === 'math') this.equation(flow, ctx, el);
     else if (name === 'hr') this.rule(flow, ctx, el);
     else if (INLINE.has(name)) this.inline(el, flow, ctx);
     else if (PARAGRAPHS.has(name)) this.paragraph(el, flow, ctx);
@@ -2637,6 +2655,7 @@ class Writer {
             walk(inline.children, href !== undefined ? { href } : link);
           }
         } else if (inline.kind === 'wrapper') walk(inline.children, link);
+        else if (isMathInline(inline)) atoms.push({ t: 'html', s: toMathML(readMathInline(inline)), marks: [], link: null });
       }
     };
     walk(p.children, null);

@@ -45,7 +45,10 @@ export interface TextOptions {
 
 /** One piece of a positioned run: its text and the advance layout gave it, in points. */
 export interface RunGlyph {
+  /** The text it stands for (for extraction and, without `glyph`, the characters shown). */
   text: string;
+  /** A glyph of an embedded font by its index, for glyphs no character reaches (size variants of a brace). */
+  glyph?: number;
   /** Distance to the next glyph's origin; omitted = the font's natural advance. */
   advance?: number;
 }
@@ -352,6 +355,15 @@ export class PageDrawing {
       pending = '';
     };
     for (const g of glyphs) {
+      if (g.glyph !== undefined && font.encodeGlyphs && font.glyphWidth) {
+        flush();
+        const natural = (font.glyphWidth(g.glyph) * o.size) / 1000 + cs;
+        parts.push(new PdfString(font.encodeGlyphs([g.glyph], [g.text || undefined]), true));
+        const wanted = g.advance === undefined ? natural : g.advance / scale;
+        const adjust = ((natural - wanted) * 1000) / o.size;
+        if (Math.abs(adjust) > 0.01) parts.push(round3(adjust));
+        continue;
+      }
       if (!g.text) continue;
       pending += g.text;
       const spaces = countSpaces(g.text);

@@ -57,7 +57,9 @@ export class FaceMetrics {
     this.fastLookup = new Int16Array(FAST_LOOKUP_LIMIT).fill(-1);
     glyphs.forEach((glyph, i) => {
       this.advances[i] = glyph.advance;
-      if (glyph.unicode < FAST_LOOKUP_LIMIT) this.fastLookup[glyph.unicode] = i;
+      if (glyph.unicode === undefined) {
+        // Reached by position only (a math font's size variants), never by code point.
+      } else if (glyph.unicode < FAST_LOOKUP_LIMIT) this.fastLookup[glyph.unicode] = i;
       else this.lookup.set(glyph.unicode, i);
       if (glyph.planeBounds && glyph.atlasBounds) this.visible[i] = 1;
     });

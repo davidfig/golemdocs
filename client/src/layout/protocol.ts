@@ -3,7 +3,7 @@
 // back encoded pages and selection geometry. Remote edits (multiplayer) will arrive in the
 // worker the same way local ones do.
 
-import type { DocumentProperties } from '@word/docx';
+import type { DocumentProperties, MathEquation } from '@word/docx';
 import type { Command } from '@word/editor';
 import type { Pointer, RoomRole } from '@word/ops';
 import type { AnnotationKind, FormField } from '@word/pdf';
@@ -280,6 +280,8 @@ export interface SelectionUpdate {
   inTable?: boolean;
   /** The link the selection is in (or starts in), for Insert Hyperlink and Ctrl+click. */
   link?: { url: string; text: string } | null;
+  /** The equation the selection is (exactly), for Insert Equation to change. */
+  math?: MathEquation | null;
   /** The Format Painter has picked up formatting and is waiting for a selection. */
   painting?: boolean;
   /** Set once after a Find (whether it found a match) or Replace All (how many it replaced). */

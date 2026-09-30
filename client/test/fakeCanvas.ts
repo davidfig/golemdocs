@@ -28,6 +28,7 @@ export class FakeContext {
   fillRect = (...a: unknown[]) => this.record('fillRect', a);
   fillText = (...a: unknown[]) => this.record('fillText', a);
   drawImage = (...a: unknown[]) => this.record('drawImage', a);
+  fill = (...a: unknown[]) => this.record('fill', a);
   ops = (op: string) => this.calls.filter((c) => c.op === op);
 }
 

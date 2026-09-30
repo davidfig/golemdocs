@@ -11,6 +11,8 @@ import type { SourceSpan } from './offsets.ts';
 import { layerKey } from './context.ts';
 import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
 import { emitMarks, formattingMarksOn } from './marks.ts';
+import type { MathLayout } from './math/layout.ts';
+import type { MathEquation } from '@word/docx';
 
 const SPACE = 0x20;
 const twips = (v: number | undefined) => (v ?? 0) / 20;
@@ -30,8 +32,10 @@ export interface LineLayout {
   x: Float32Array;
   /** Index into ParagraphLayout.styles (color, baseline shift). */
   style: Uint16Array;
-  /** Font size per glyph, points (differs from the style's for small caps). */
+  /** Font size per glyph, points (differs from the style's for small caps, and for the parts of an equation). */
   size: Float32Array;
+  /** Vertical offset per glyph from the baseline, points, downward (equation glyphs; 0 for text). */
+  dy: Float32Array;
   /** Index into ParagraphLayout.fonts (the face actually used, after fallback). */
   font: Uint8Array;
   /** Rectangles: x, y (from line top), width, height per entry. */
@@ -120,6 +124,7 @@ class LineBuilder {
   x: number[] = [];
   style: number[] = [];
   size: number[] = [];
+  dy: number[] = [];
   font: number[] = [];
   rects: number[] = [];
   rectColors: number[] = [];
@@ -133,13 +138,14 @@ class LineBuilder {
     this.rectLayers.push(layer);
   }
 
-  finish(line: Omit<LineLayout, 'glyph' | 'x' | 'style' | 'size' | 'font' | 'rects' | 'rectColors' | 'rectLayers' | 'images' | 'stops'>, stops: Float32Array): LineLayout {
+  finish(line: Omit<LineLayout, 'glyph' | 'x' | 'style' | 'size' | 'dy' | 'font' | 'rects' | 'rectColors' | 'rectLayers' | 'images' | 'stops'>, stops: Float32Array): LineLayout {
     const out: LineLayout = {
       ...line,
       glyph: Uint16Array.from(this.glyph),
       x: Float32Array.from(this.x),
       style: Uint16Array.from(this.style),
       size: Float32Array.from(this.size),
+      dy: Float32Array.from(this.dy),
       font: Uint8Array.from(this.font),
       rects: Float32Array.from(this.rects),
       rectColors: Uint32Array.from(this.rectColors),
@@ -147,7 +153,7 @@ class LineBuilder {
       images: this.images,
       stops,
     };
-    this.glyph.length = this.x.length = this.style.length = this.size.length = this.font.length = 0;
+    this.glyph.length = this.x.length = this.style.length = this.size.length = this.dy.length = this.font.length = 0;
     this.rects.length = this.rectColors.length = this.rectLayers.length = 0;
     this.images = [];
     return out;
@@ -190,6 +196,14 @@ function readFloat(d: Drawing): FloatSpec {
   return spec;
 }
 
+/** An equation's layout, once per equation (its object is replaced when it is edited). */
+const mathCache = new WeakMap<MathEquation, MathLayout>();
+function mathOf(equation: MathEquation, face: FaceMetrics, data: import('./fonts/fontTypes.ts').MathData, engine: typeof import('./math/layout.ts').layoutMath): MathLayout {
+  let layout = mathCache.get(equation);
+  if (!layout) mathCache.set(equation, (layout = engine(equation.content, face, data, { display: equation.display })));
+  return layout;
+}
+
 export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width: number): ParagraphLayout {
   const resolver = ctx.resolver;
   const props = resolver.paragraph(paragraph.properties, ctx.layer);
@@ -199,7 +213,7 @@ export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width:
   // Reuse the last layout if nothing it depends on changed. Edits drop a paragraph's entry;
   // page-dependent layouts (headers and footers with page fields) aren't cached.
   const cache = ctx.fields ? undefined : ctx.paragraphCache;
-  const key = cache ? `${ctx.fonts.cjkVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
+  const key = cache ? `${ctx.fonts.cjkVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
   const cached = cache?.get(paragraph);
   if (cached && cached.key === key) return cached.layout;
   const layout = layoutParagraphUncached(paragraph, ctx, width, props, label);
@@ -235,7 +249,7 @@ function layoutParagraphUncached(
     collector.prepend(text, style);
     labelLength = text.length;
   }
-  const { text, styleOf, styles, objects, floats, ptabs, spans } = collector.finish();
+  const { text, styleOf, styles, objects, maths, floats, ptabs, spans } = collector.finish();
   const n = text.length;
 
   // Faces used, including fallbacks: glyphs remember which one they came from.
@@ -252,6 +266,14 @@ function layoutParagraphUncached(
     }
     return index;
   };
+
+  // Equations, once the math font is loaded (until then they take no room).
+  const mathFont = maths.size ? ctx.fonts.mathFont() : undefined;
+  const mathMetrics = mathFont && ctx.fonts.metrics(mathFont.face);
+  const mathData = ctx.fonts.mathData;
+  const mathEngine = ctx.fonts.mathEngine;
+  const mathLayouts = new Map<number, MathLayout>();
+  if (mathMetrics && mathData && mathEngine) for (const [at, equation] of maths) mathLayouts.set(at, mathOf(equation, mathMetrics, mathData, mathEngine));
 
   // Per-character shaping: glyph, face, size and advance.
   const glyphs = new Int32Array(n);
@@ -286,7 +308,7 @@ function layoutParagraphUncached(
     }
     glyphs[i] = glyph;
     faceOf[i] = face;
-    if (code === 0xfffc) advances[i] = (objects.get(i)?.width ?? 0) / 12700;
+    if (code === 0xfffc) advances[i] = mathLayouts.has(i) ? mathLayouts.get(i)!.width * size : (objects.get(i)?.width ?? 0) / 12700;
     else if (code === 0xad || code === 0x0a || code === 0x0c || code === 0x0b) advances[i] = 0;
     // Advances are floored to whole twips, as word processors lay text out in twips; this
     // decides line breaks on the last few points of a line.
@@ -306,7 +328,9 @@ function layoutParagraphUncached(
     .filter((t) => t.val !== 'clear' && t.val !== 'bar' && t.pos !== undefined)
     .sort((a, b) => a.pos! - b.pos!);
   const defaultTab = ctx.defaultTabStop > 0 ? ctx.defaultTabStop : 36;
-  const justification = props.justification ?? 'left';
+  // An equation alone in its paragraph, in display style, is centered.
+  const soloDisplay = maths.size === 1 && n - labelLength === 1 && maths.values().next().value!.display;
+  const justification = soloDisplay ? 'center' : (props.justification ?? 'left');
   const markMetrics = styles[markStyle];
 
   const tabAdvance = (i: number, x: number, first: boolean): { advance: number; leader?: string } => {
@@ -424,6 +448,11 @@ function layoutParagraphUncached(
           descent = Math.max(descent, face.metrics.descent * size - Math.min(style.rise, 0));
         }
       }
+      const math = mathLayouts.get(j);
+      if (math) {
+        ascent = Math.max(ascent, math.ascent * size + Math.max(style.rise, 0));
+        descent = Math.max(descent, math.descent * size - Math.min(style.rise, 0));
+      }
       // A picture is raised or lowered with its run, like text.
       if (text.charCodeAt(j) === 0xfffc) objectHeight = Math.max(objectHeight, (objects.get(j)?.height ?? 0) / 12700 + Math.max(style.rise, 0));
     }
@@ -495,7 +524,22 @@ function layoutParagraphUncached(
         builder.x.push(pen);
         builder.style.push(s);
         builder.size.push(sizes[j]);
+        builder.dy.push(0);
         builder.font.push(faceOf[j]);
+      } else if (code === 0xfffc && mathLayouts.has(j)) {
+        const math = mathLayouts.get(j)!;
+        const size = sizes[j];
+        const mathFace = fontOf(mathFont!, mathMetrics!);
+        for (const g of math.glyphs) {
+          if (!mathMetrics!.visible[g.glyph]) continue;
+          builder.glyph.push(g.glyph);
+          builder.x.push(pen + g.x * size);
+          builder.style.push(s);
+          builder.size.push(g.size * size);
+          builder.dy.push(g.y * size);
+          builder.font.push(mathFace);
+        }
+        for (const r of math.rules) builder.rect(OVER, pen + r.x * size, baseline - styles[s].rise + r.y * size, r.width * size, r.height * size, styles[s].color);
       } else if (code === 0xfffc) {
         const d = objects.get(j);
         const h = (d?.height ?? 0) / 12700;
@@ -517,6 +561,7 @@ function layoutParagraphUncached(
               builder.x.push(lx);
               builder.style.push(s);
               builder.size.push(style.size);
+              builder.dy.push(0);
               builder.font.push(fontOf(style.font, style.metrics));
             }
           }
@@ -604,7 +649,7 @@ export function emitLine(
     const face = fonts[line.font[i]];
     page
       .glyphList(face.font, face.metrics)
-      .push(x + line.x[i], y + line.baseline - style.rise, line.size[i], line.glyph[i], style.color);
+      .push(x + line.x[i], y + line.baseline - style.rise + line.dy[i], line.size[i], line.glyph[i], style.color);
   }
   for (let r = 0; r < line.rectColors.length; r++) {
     const target = line.rectLayers[r] === BEHIND ? page.background : page.foreground;

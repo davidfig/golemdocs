@@ -3,7 +3,7 @@
 // line, nothing inferred, and `documentToText(await textToDocument(s)) === s` for any `s`
 // (after CRLF/CR normalisation and BOM removal).
 
-import { ListCounter, StyleResolver, WordDocument } from '@word/docx';
+import { isMathInline, ListCounter, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
 import type { Block, Inline, Paragraph, RunContent, Table } from '@word/docx';
 
 const MONOSPACE = 'Courier New';
@@ -144,6 +144,11 @@ function inlineText(inlines: readonly Inline[]): string {
         out += inlineText(inline.children);
         break;
       case 'raw':
+        // An equation is its LaTeX.
+        if (isMathInline(inline)) {
+          const equation = readMathInline(inline);
+          out += equation.display ? `$$${toLatex(equation)}$$` : `$${toLatex(equation)}$`;
+        }
         break;
     }
   }

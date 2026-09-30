@@ -15,11 +15,14 @@
 // and indexes around their first..last paragraphs, frames around their pictures.
 
 import {
+  isMathInline,
   paragraphLength,
   paragraphText,
   parseXml,
+  readMathInline,
   serializeXml,
   StyleResolver,
+  toLatex,
   writeZip,
   type Block,
   type Border,
@@ -1124,10 +1127,17 @@ class InlineWriter {
         case 'wrapper':
           this.walk(inline.children, link, linkStyle);
           break;
-        case 'raw':
-          this.at();
+        case 'raw': {
+          const skip = this.at(null, link);
+          // An equation is its LaTeX, as text.
+          if (!skip && isMathInline(inline)) {
+            const equation = readMathInline(inline);
+            const latex = toLatex(equation);
+            for (const ch of equation.display ? `$$${latex}$$` : `$${latex}$`) this.char(ch, null, link);
+          }
           this.pos++;
           break;
+        }
       }
     }
   }

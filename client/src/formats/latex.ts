@@ -56,6 +56,7 @@ const format: SpanFormat = {
     }
   },
   link: (url, inner) => `\\href{${url.replace(/([%#\\{}])/g, '\\$1')}}{${inner}}`,
+  math: (latex, display) => (display ? `\\[${latex}\\]` : `$${latex}$`),
 };
 
 const inline = (spans: Span[]): string => renderSpans(spans, format);
@@ -296,7 +297,7 @@ class Parser {
         const close = rest.startsWith('\\[') ? rest.indexOf('\\]') : rest.indexOf('$$', 2);
         if (close > 0) {
           flush();
-          out.push({ t: 'para', spans: [{ text: rest.slice(0, close + 2) }] });
+          out.push({ t: 'para', spans: [{ text: rest.slice(2, close).trim(), math: 'display' }] });
           i += close + 2;
           continue;
         }
@@ -406,7 +407,7 @@ class Parser {
       case 'displaymath':
       case 'eqnarray':
         flush();
-        out.push({ t: 'para', spans: [{ text: `\\begin{${env}}${inner}\\end{${env}}` }] });
+        out.push({ t: 'para', spans: [{ text: `\\begin{${env}}${inner}\\end{${env}}`, math: 'display' }] });
         return true;
       default:
         return false;
@@ -488,6 +489,15 @@ class Parser {
       const c = s[i];
       if (c === '\\') {
         const next = s[i + 1];
+        // An equation in \( … \).
+        if (next === '(') {
+          const close = s.indexOf('\\)', i + 2);
+          if (close > 0) {
+            push([{ text: s.slice(i + 2, close).trim(), math: 'inline' }]);
+            i = close + 2;
+            continue;
+          }
+        }
         // Line break.
         if (next === '\\') {
           flush();
@@ -606,15 +616,17 @@ class Parser {
         continue;
       }
       if (c === '$') {
-        // Math is kept as TeX source, in one piece.
+        // An equation, from its TeX source.
         const double = s[i + 1] === '$';
-        const close = s.indexOf(double ? '$$' : '$', i + (double ? 2 : 1));
+        const from = i + (double ? 2 : 1);
+        const close = s.indexOf(double ? '$$' : '$', from);
         if (close > 0) {
-          text += s.slice(i, close + (double ? 2 : 1));
+          push([{ text: s.slice(from, close).trim(), math: double ? 'display' : 'inline' }]);
           i = close + (double ? 2 : 1);
           continue;
         }
       }
+
       if (c === '~') {
         text += '\u00a0';
         i++;

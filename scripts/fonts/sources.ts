@@ -32,6 +32,8 @@ export interface FaceSpec {
   weight: number;
   italic: boolean;
   font: FileRef;
+  /** The file PDFs embed, when it isn't `font` (which the atlas is made from): the math font's atlas comes from its OpenType/CFF file, PDFs embed the TrueType build (same glyph order, subsettable). */
+  embed?: FileRef;
   /** Variation axis values, for variable fonts. */
   variations?: Record<string, number>;
 }
@@ -42,8 +44,8 @@ export interface AtlasOverride {
   type: 'msdf' | 'mtsdf';
   size: number;
   pxrange: number;
-  /** Fixed atlas size in pixels; generation fails if the charset doesn't fit. */
-  dimensions: [number, number];
+  /** Fixed atlas size in pixels; generation fails if the charset doesn't fit. Omitted: sized to fit. */
+  dimensions?: [number, number];
 }
 
 export interface FamilySpec {
@@ -67,7 +69,30 @@ export interface FamilySpec {
    * lacks (see ManifestFamily.cjk in layout/src/fonts/fontTypes.ts). Not offered in the font list.
    */
   cjk?: { lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'; order: number };
+  /**
+   * An OpenType math font: never chosen by name, used to lay out equations. Its atlas holds the glyphs
+   * math needs (see MATH_RANGES and mathGlyphSet), including size variants and assembly pieces that
+   * have no code point, and generation also writes math.json (the MATH table, in ems).
+   */
+  math?: boolean;
 }
+
+/** Unicode ranges of the characters an equation can use; a math font's atlas has these and what its MATH table refers to. */
+export const MATH_RANGES: readonly (readonly [number, number])[] = [
+  [0x20, 0x7e], // Basic Latin
+  [0xa0, 0x17f], // Latin-1 and Latin Extended-A
+  [0x300, 0x36f], // combining marks (accents)
+  [0x370, 0x3ff], // Greek
+  [0x2000, 0x206f], // general punctuation, spaces
+  [0x2070, 0x209f], // super- and subscripts
+  [0x20d0, 0x20ff], // combining marks for symbols
+  [0x2100, 0x214f], // letterlike symbols
+  [0x2190, 0x23ff], // arrows, math operators, technical
+  [0x25a0, 0x25ff], // geometric shapes
+  [0x27c0, 0x27ff], // misc math symbols A, supplemental arrows A
+  [0x2900, 0x2aff], // supplemental arrows B, misc math symbols B, supplemental operators
+  [0x1d400, 0x1d7ff], // math alphanumerics
+];
 
 export const ARCHIVES = {
   liberation: {
@@ -78,6 +103,11 @@ export const ARCHIVES = {
   selawik: {
     url: 'https://github.com/microsoft/Selawik/releases/download/1.01/Selawik_Release.zip',
     sha256: '3f62c51e05e3b5a1e6241cf92a371f0be2ea1183aa87b30718bbd40832a8d423',
+    format: 'zip',
+  },
+  libertinus: {
+    url: 'https://github.com/alerque/libertinus/releases/download/v7.051/Libertinus-7.051.zip',
+    sha256: '4d9be29b5cb380c35af8ba967abcc752ad1e07be1f738a9789c33e0dd7478c92',
     format: 'zip',
   },
 } as const satisfies Record<string, { url: string; sha256: string; format: 'tar.gz' | 'zip' }>;
@@ -222,6 +252,26 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 400, italic: false, font: gf('comicrelief/ComicRelief-Regular.ttf', '9ef4958ab06385d91f635f83a15569786b243f9d010cfb3f9a5cdda593c7bc22') },
       { weight: 700, italic: false, font: gf('comicrelief/ComicRelief-Bold.ttf', '33aee007212b696afd57d50c901135cd723cd188f7ad98f3a1c572ea64e8f0d5') },
     ],
+  },
+  {
+    // The OpenType (CFF) file has the MATH and GSUB tables the release's TrueType build lacks, so the atlas and
+    // math.json come from it. The two builds have the same glyphs in the same order, so PDFs embed the TrueType
+    // one (and subset it), addressing glyphs by their index.
+    id: 'libertinus-math',
+    wordName: 'Libertinus Math',
+    substitute: 'Libertinus Math',
+    license: 'OFL-1.1',
+    licenseFile: { archive: 'libertinus', path: 'Libertinus-7.051/OFL.txt' },
+    faces: [
+      {
+        weight: 400,
+        italic: false,
+        font: { archive: 'libertinus', path: 'Libertinus-7.051/static/OTF/LibertinusMath-Regular.otf' },
+        embed: { archive: 'libertinus', path: 'Libertinus-7.051/static/TTF/LibertinusMath-Regular.ttf' },
+      },
+    ],
+    atlas: { type: 'mtsdf', size: 32, pxrange: 4 },
+    math: true,
   },
   ...cjkPages('ja', 'Noto Sans JP', 'notosansjp', 'NotoSansJP%5Bwght%5D.ttf', 'c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f', 5),
   ...cjkPages('ko', 'Noto Sans KR', 'notosanskr', 'NotoSansKR%5Bwght%5D.ttf', '194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252', 6),

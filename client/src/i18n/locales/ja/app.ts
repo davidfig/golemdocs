@@ -36,6 +36,9 @@ export const app: Partial<Messages> = {
   'app.linkOneParagraph': 'リンクにするには、1 つの段落内でテキストを選択してください',
   'app.allowPopups': '印刷プレビューを表示するには、ポップアップを許可してください',
   'app.downloaded': '「{name}」をダウンロードしました',
+  'app.downloadAllNone': 'ダウンロードできる保存済みドキュメントがありません',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': '保存済みのドキュメントをすべてダウンロードしました',
   'app.downloadFailed': 'ダウンロードに失敗しました：{message}',
 
   // Collaboration

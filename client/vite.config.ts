@@ -39,7 +39,20 @@ function docxCorpus(): Plugin {
 export default defineConfig({
   plugins: [docxCorpus(), welcomeContent()],
   // The layout worker is an ES module (it imports the docx and layout packages).
-  worker: { format: 'es' },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: {
+        // The lazily loaded chunks (formats, dictionaries) import the code they share with the
+        // worker. Left alone, that shared code stays in the worker's entry file, so those chunks
+        // import the entry. Safari runs a worker's entry script again when it is imported, which
+        // starts a second copy of the worker with no open document and takes over its messages.
+        // The worker's code is kept in its own chunk, so the entry (layoutWorkerEntry.ts) is a stub
+        // that nothing imports.
+        manualChunks: (id) => (/[\\/]src[\\/]layout[\\/]layoutWorker\.ts$/.test(id) ? 'layoutCore' : undefined),
+      },
+    },
+  },
   server: {
     port: 5173,
     // Forward API calls to the server package during development. The Worker sees its own address

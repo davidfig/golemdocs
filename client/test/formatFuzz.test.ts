@@ -405,7 +405,7 @@ test('property: damaged .wdoc files never hang or throw anything but an Error', 
 });
 
 // --- Known bugs (found by the properties above) ------------------------------------------------------------
-// Each is a minimal input that should work and does not; remove `todo` when fixed.
+// Each is a minimal input that once failed to round-trip; the fixes stay covered here.
 
 const roundTrip = async (format: Format, nodes: Node[]) => {
   const document = await outlineToDocument(nodes);
@@ -431,7 +431,7 @@ const bugs: [string, Format, Node[], object?][] = [
 ];
 
 for (const [name, format, nodes] of bugs) {
-  test(`${format}: ${name}`, { todo: 'found by the fuzz properties; see the test name' }, async () => {
+  test(`${format}: ${name}`, async () => {
     const { wanted, got } = await roundTrip(format, nodes);
     assert.deepEqual(got, wanted);
   });

@@ -452,6 +452,13 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
       i += m[0].length;
       continue;
     }
+    // reStructuredText has no nested markup; bold italic is written ***x*** (as in Markdown).
+    if (rest.startsWith('***') && before(i) && (m = /^\*\*\*(\S|\S.*?\S)\*\*\*/.exec(rest))) {
+      flush();
+      out.push(...parseInline(m[1], { ...marks, bold: true, italic: true }));
+      i += m[0].length;
+      continue;
+    }
     if (rest.startsWith('**') && before(i) && (m = /^\*\*(\S|\S.*?\S)\*\*/.exec(rest))) {
       flush();
       out.push(...parseInline(m[1], { ...marks, bold: true }));

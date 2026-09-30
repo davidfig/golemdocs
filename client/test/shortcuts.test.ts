@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { formatShortcut, IS_MAC, matches, parseShortcut } from '../src/ui/shortcuts.ts';
+import {
+  formatShortcut,
+  IS_MAC,
+  isUsableShortcut,
+  loadShortcutOverrides,
+  matches,
+  parseShortcut,
+  sameShortcut,
+  saveShortcutOverrides,
+  shortcutFromEvent,
+  shortcutSpec,
+} from '../src/ui/shortcuts.ts';
 
 const parsed = (spec: string) => parseShortcut(spec)!;
 /** A key event as the browser reports it (only what matches() reads). */
@@ -68,5 +79,49 @@ test('shortcuts read back in the platform’s style', () => {
     assert.equal(formatShortcut(parsed('Mod+Shift+Z')), 'Ctrl+Shift+Z');
     assert.equal(formatShortcut(parsed('Alt+Enter')), 'Alt+Enter');
     assert.equal(formatShortcut(parsed('Ctrl+Escape')), 'Ctrl+Esc');
+  }
+});
+
+test('a key event becomes the shortcut it presses, and lone modifiers become none', () => {
+  const pressed = shortcutFromEvent(key('KeyK', 'k', { ...mod, shift: true }))!;
+  assert.deepEqual(pressed, { mod: true, ctrl: false, shift: true, alt: false, key: 'k' });
+  assert.equal(shortcutFromEvent(key('ShiftLeft', 'Shift', { shift: true })), null);
+  assert.ok(matches(pressed, key('KeyK', 'k', { ...mod, shift: true })));
+});
+
+test('shortcutSpec round-trips through parseShortcut', () => {
+  for (const spec of ['Mod+Shift+Z', 'Ctrl+Alt+Delete', 'F7', 'Mod+Enter', 'Alt+G', 'Mod++']) {
+    const parsedSpec = parsed(spec);
+    assert.ok(sameShortcut(parseShortcut(shortcutSpec(parsedSpec)), parsedSpec), spec);
+  }
+});
+
+test('only keys the global handler acts on are usable shortcuts', () => {
+  assert.equal(isUsableShortcut(parsed('Mod+K')), true);
+  assert.equal(isUsableShortcut(parsed('Alt+G')), true);
+  assert.equal(isUsableShortcut(parsed('F7')), true);
+  assert.equal(isUsableShortcut(parsed('Shift+K')), false);
+  assert.equal(isUsableShortcut(parsed('K')), false);
+});
+
+test('overrides are loaded defensively and saved only when there are some', () => {
+  const store = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+  };
+  try {
+    assert.deepEqual(loadShortcutOverrides(), {});
+    store.set('wm-shortcuts', '{"a":"Mod+K","b":"","c":5}');
+    assert.deepEqual(loadShortcutOverrides(), { a: 'Mod+K', b: '' });
+    store.set('wm-shortcuts', '[1]');
+    assert.deepEqual(loadShortcutOverrides(), {});
+    saveShortcutOverrides({ a: 'F7' });
+    assert.equal(store.get('wm-shortcuts'), '{"a":"F7"}');
+    saveShortcutOverrides({});
+    assert.equal(store.has('wm-shortcuts'), false);
+  } finally {
+    delete (globalThis as { localStorage?: unknown }).localStorage;
   }
 });

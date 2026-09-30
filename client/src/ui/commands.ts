@@ -5,7 +5,7 @@
 
 import type { Action, ChromeHost, ChromeState } from './actions.ts';
 import { FORMATS, formatAllows } from './formats.ts';
-import { formatShortcut, parseShortcut, type Shortcut, type ShortcutSpec } from './shortcuts.ts';
+import { formatShortcut, loadShortcutOverrides, parseShortcut, saveShortcutOverrides, shortcutSpec, sameShortcut, type Shortcut, type ShortcutOverrides, type ShortcutSpec } from './shortcuts.ts';
 import { t } from '../i18n/index.ts';
 import { stripMnemonic } from './dom.ts';
 
@@ -35,7 +35,10 @@ export interface CommandSpec {
 }
 
 export interface Command extends CommandSpec {
+  /** The shortcut in use: the user's, or the built-in one. */
   shortcutParsed: Shortcut | null;
+  /** The built-in shortcut on this platform. */
+  defaultShortcut: Shortcut | null;
   shortcutText: string;
   plainLabel: string;
 }
@@ -52,20 +55,63 @@ export interface CommandContext {
 
 export class CommandRegistry {
   private readonly commands = new Map<string, Command>();
+  private overrides: ShortcutOverrides = loadShortcutOverrides();
+
+  /** Called with the id of each command that runs, from a menu, toolbar, shortcut or the palette. */
+  onExecute?: (id: string) => void;
 
   constructor(private readonly context: CommandContext) {}
 
   add(...specs: CommandSpec[]): void {
     for (const spec of specs) {
       if (this.commands.has(spec.id)) throw new Error(`duplicate command ${spec.id}`);
-      const shortcutParsed = parseShortcut(spec.shortcut);
+      const defaultShortcut = parseShortcut(spec.shortcut);
+      const custom = !spec.nativeShortcut && spec.id in this.overrides;
+      const shortcutParsed = custom ? parseShortcut(this.overrides[spec.id]) : defaultShortcut;
       this.commands.set(spec.id, {
         ...spec,
         shortcutParsed,
+        defaultShortcut,
         shortcutText: shortcutParsed ? formatShortcut(shortcutParsed) : '',
         plainLabel: stripMnemonic(spec.label).replace(/…$/, ''),
       });
     }
+  }
+
+  /**
+   * Gives a command a shortcut (null for none) and remembers it. Another command using the same
+   * keys loses them; its label is returned.
+   */
+  setShortcut(id: string, shortcut: Shortcut | null): string | null {
+    let taken: string | null = null;
+    if (shortcut) {
+      for (const other of this.commands.values()) {
+        if (other.id === id || other.nativeShortcut || !sameShortcut(other.shortcutParsed, shortcut)) continue;
+        this.assign(other, null);
+        taken = other.plainLabel;
+      }
+    }
+    this.assign(this.get(id), shortcut);
+    saveShortcutOverrides(this.overrides);
+    return taken;
+  }
+
+  /** Puts every shortcut back to its built-in one. */
+  resetShortcuts(): void {
+    this.overrides = {};
+    for (const command of this.commands.values()) this.apply(command, command.defaultShortcut);
+    saveShortcutOverrides(this.overrides);
+  }
+
+  private assign(command: Command, shortcut: Shortcut | null): void {
+    this.apply(command, shortcut);
+    if (sameShortcut(shortcut, command.defaultShortcut) || (!shortcut && !command.defaultShortcut)) delete this.overrides[command.id];
+    else this.overrides[command.id] = shortcut ? shortcutSpec(shortcut) : '';
+  }
+
+  private apply(command: Command, shortcut: Shortcut | null): void {
+    command.shortcutParsed = shortcut;
+    command.shortcutText = shortcut ? formatShortcut(shortcut) : '';
   }
 
   state(): ChromeState {
@@ -130,6 +176,7 @@ export class CommandRegistry {
     const command = typeof id === 'string' ? this.get(id) : id;
     if (!this.isEnabled(command)) return false;
     const { host } = this.context;
+    this.onExecute?.(command.id);
     if (command.run) {
       command.run();
     } else {

@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://golemdocs.com/</loc></url>
+  <url><loc>https://golemdocs.com/home</loc></url>
+  <url><loc>https://golemdocs.com/home/convert</loc></url>
+  <url><loc>https://golemdocs.com/home/pdf</loc></url>
+  <url><loc>https://golemdocs.com/home/images</loc></url>
+  <url><loc>https://golemdocs.com/home/documents</loc></url>
+  <url><loc>https://golemdocs.com/home/collaborate</loc></url>
+  <url><loc>https://golemdocs.com/home/customize</loc></url>
+  <url><loc>https://golemdocs.com/home/large-files</loc></url>
+  <url><loc>https://golemdocs.com/home/privacy</loc></url>
+  <url><loc>https://golemdocs.com/home/terms</loc></url>
 </urlset>

@@ -27,7 +27,7 @@ export interface DocumentListener {
 
 /** The page's side of the layout worker. One document is open at a time. */
 export class LayoutClient {
-  private readonly worker = new Worker(new URL('./layoutWorker.ts', import.meta.url), { type: 'module', name: 'layout' });
+  private readonly worker = new Worker(new URL('./layoutWorkerEntry.ts', import.meta.url), { type: 'module', name: 'layout' });
   private doc = 0;
   private listener: DocumentListener | null = null;
   private nextRequest = 1;

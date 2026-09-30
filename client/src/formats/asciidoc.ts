@@ -417,7 +417,7 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
       i += m[0].length;
       continue;
     }
-    if (c === '#' && (m = /^#((?:[^#\\]|\\.)+)#/.exec(rest))) {
+    if (c === '#' && (m = /^#([^\s#](?:(?:[^#\\]|\\.)*?[^\s#])?)#/.exec(rest))) {
       withMark({}, m[1]);
       i += m[0].length;
       continue;

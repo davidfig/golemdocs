@@ -37,6 +37,9 @@ export const app = {
   'app.linkOneParagraph': 'Select text within one paragraph to make it a link',
   'app.allowPopups': 'Allow pop-ups to see the print preview',
   'app.downloaded': 'Downloaded “{name}”',
+  'app.downloadAllNone': 'There are no saved documents to download',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': 'Downloaded all saved documents',
   'app.downloadFailed': 'Download failed: {message}',
 
   // Collaboration

@@ -212,6 +212,12 @@ export function parseLatex(source: string): Node[] {
 
 /** Removes % comments (but not \%), and whole-line comments' newlines. */
 function stripComments(s: string): string {
+  // Verbatim code keeps its % signs: only the text between such environments is stripped.
+  const parts = s.split(/(\\begin\{(verbatim\*?|lstlisting|minted)\}[\s\S]*?\\end\{\2\})/);
+  return parts.map((part, i) => (i % 3 === 0 ? stripPlainComments(part) : i % 3 === 1 ? part : '')).join('');
+}
+
+function stripPlainComments(s: string): string {
   return s.replace(/(^|[^\\])((?:\\\\)*)%[^\n]*(\n[ \t]*)?/g, (_m, before: string, slashes: string, nl: string | undefined) => `${before}${slashes}${nl ? '\n' : ''}`);
 }
 
@@ -467,7 +473,7 @@ class Parser {
     if (!rows.length) return null;
     const columns = rows.reduce((m, r) => Math.max(m, r.length), 0);
     for (const r of rows) while (r.length < columns) r.push([]);
-    return { t: 'table', rows, header: header && rows.length > 1 };
+    return { t: 'table', rows, header };
   }
 
   // --- Inline ---

@@ -6,10 +6,10 @@ import { t } from '../i18n/index.ts';
 import type { CommandRegistry } from './commands.ts';
 import { h, mnemonicLabel, stripMnemonic } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
-import { describeItem, visibleItems, type MenuItem } from './menu.ts';
+import { describeItem, visibleItems, type MenuItem, type RowItem } from './menu.ts';
 
 /** A drawer list holds menu items and small headings that group them. */
-export type DrawerEntry = MenuItem | { type: 'heading'; label: string };
+export type DrawerEntry = MenuItem;
 
 interface Level {
   title: string;
@@ -58,7 +58,7 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
     render();
   };
 
-  const row = (item: Exclude<MenuItem, { type: 'separator' }>): HTMLElement => {
+  const row = (item: RowItem): HTMLElement => {
     const info = describeItem(registry, item);
     const gutter = h('span', { class: 'wm-gutter' });
     if (info.checked) gutter.innerHTML = info.radio ? ICONS.radio : ICONS.check;
@@ -85,24 +85,12 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
     list.replaceChildren();
     list.scrollTop = 0;
     const entries = typeof level.items === 'function' ? level.items() : level.items;
-    // A heading is only shown when some row under it is.
-    let heading: string | null = null;
-    let run: MenuItem[] = [];
-    const flush = () => {
-      const rows = visibleItems(registry, run);
-      run = [];
-      if (!rows.length) return;
-      if (heading) list.append(h('div', { class: 'wm-drawer-heading', text: heading, attrs: { role: 'presentation' } }));
-      heading = null;
-      for (const item of rows) list.append(item === 'separator' ? h('div', { class: 'wm-sep', attrs: { role: 'separator' } }) : row(item));
-    };
-    for (const entry of entries) {
-      if (entry.type === 'heading') {
-        flush();
-        heading = stripMnemonic(entry.label);
-      } else run.push(entry);
+    // A heading is only shown when some row under it is (see visibleItems).
+    for (const item of visibleItems(registry, entries)) {
+      if (item === 'separator') list.append(h('div', { class: 'wm-sep', attrs: { role: 'separator' } }));
+      else if (item.type === 'heading') list.append(h('div', { class: 'wm-drawer-heading', text: stripMnemonic(item.label), attrs: { role: 'presentation' } }));
+      else list.append(row(item));
     }
-    flush();
     // A list with no icons or checks (the menu titles) needs no gutter.
     list.classList.toggle('no-gutter', !list.querySelector('.wm-gutter > *'));
   };

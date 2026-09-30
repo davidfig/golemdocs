@@ -378,6 +378,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'signOut':
     case 'clearLocalData':
     case 'download':
+    case 'downloadAll':
     case 'print':
     case 'printPreview':
     case 'viewMode':

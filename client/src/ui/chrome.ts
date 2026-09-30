@@ -15,7 +15,7 @@ import {
   type TableOp,
   type ZoomTarget,
 } from './actions.ts';
-import { CommandRegistry, type CommandSpec } from './commands.ts';
+import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h } from './dom.ts';
 import { format, getLocale, setLocale, t } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
@@ -25,12 +25,13 @@ import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
-import { matches } from './shortcuts.ts';
+import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { SCHEMES, currentAppearance, currentScheme, isDark, setAppearance, setScheme, toggleDark } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
+import { CommandPalette } from './commandPalette.ts';
 import { SyncButton } from './syncButton.ts';
 import { DEFAULT_LAYOUT, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import './ui.css';
@@ -114,6 +115,8 @@ export class Chrome {
   private converting = false;
   /** Whether the document is saved (or, signed out, an offer to sign in), at the far right. */
   private syncButton!: SyncButton;
+  /** The command palette button, left of the format selector. */
+  private palette!: CommandPalette;
 
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
@@ -215,6 +218,7 @@ export class Chrome {
       a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
       a('file.import', t('chrome.file.import'), { kind: 'import' }, { tooltip: t('chrome.file.import.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
+      a('file.downloadAll', t('chrome.file.downloadAll'), { kind: 'downloadAll' }, { tooltip: t('chrome.file.downloadAll.tip') }),
       a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
       dialog('file.pageSetup', t('chrome.file.pageSetup'), 'pageSetup'),
       a('file.printPreview', t('chrome.file.printPreview'), { kind: 'printPreview' }, { icon: 'printPreview' }),
@@ -291,6 +295,7 @@ export class Chrome {
         checked: () => currentAppearance() === 'auto',
       },
     );
+    r.add({ id: 'tools.commandPalette', label: t('chrome.palette.label'), icon: 'commandPalette', shortcut: 'Mod+Shift+P', run: () => this.palette.toggle() });
     r.add({ id: 'view.customizeToolbars', label: t('chrome.view.customizeToolbars'), run: () => this.customize() });
 
     // Insert
@@ -419,6 +424,8 @@ export class Chrome {
       // The welcome document says what the app is and where its name comes from.
       { id: 'help.feedback', label: t('chrome.help.feedback'), run: () => this.sendFeedback() },
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
+      // The marketing site (public/home), a page of its own outside the app.
+      { id: 'help.website', label: t('chrome.help.website', { name: this.options.appName ?? 'Golem Docs' }), run: () => void window.open('/home', '_blank', 'noopener') },
       a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
       a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
       a('help.changelog', t('chrome.help.changelog'), { kind: 'openSample', id: 'changelog' }),
@@ -435,7 +442,20 @@ export class Chrome {
   }
 
   private convertToItem(): MenuItem {
-    return sub(t('chrome.file.convertTo'), () => convertTargets(this.state.kind).map((k) => cmd(`file.convertTo.${k}`)));
+    // The same kinds, order and group headings as the format box.
+    return sub(t('chrome.file.convertTo'), () => {
+      const items: MenuItem[] = [];
+      let group: string | undefined;
+      for (const kind of convertTargets(this.state.kind)) {
+        const id = formatGroup(kind);
+        if (id !== group) {
+          group = id;
+          items.push({ type: 'heading', label: t(`menus.format.group.${id}`) });
+        }
+        items.push(cmd(`file.convertTo.${kind}`));
+      }
+      return items;
+    });
   }
 
   /**
@@ -452,6 +472,7 @@ export class Chrome {
       cmd('file.share'),
       this.convertToItem(),
       cmd('file.download'),
+      cmd('file.downloadAll'),
       cmd('file.print'),
       heading(t('chrome.menu.edit')),
       cmd('edit.find'),
@@ -515,6 +536,7 @@ export class Chrome {
           cmd('file.share'),
           this.convertToItem(),
           cmd('file.download'),
+          cmd('file.downloadAll'),
           sep,
           cmd('file.pageSetup'),
           cmd('file.printPreview'),
@@ -648,7 +670,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),
@@ -701,7 +723,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.privacy'), cmd('help.terms')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).
@@ -921,9 +943,11 @@ export class Chrome {
     );
     this.formatCombo = combo;
     this.syncButton = new SyncButton(this.options.host);
+    this.palette = new CommandPalette(this.registry, (command) => this.commandInfo(command, command.plainLabel));
     return h(
       'div',
       { class: 'wm-format' },
+      this.palette.el,
       h('div', { class: 'wm-format-field' }, combo.el),
       this.syncButton.el,
     );
@@ -982,8 +1006,8 @@ export class Chrome {
     this.setLayout(this.layout.map((t) => (t.name === name ? { ...t, visible: !t.visible } : t)));
   }
 
-  /** Everything that can go on a toolbar, grouped by menu. */
-  private catalog(): CatalogItem[] {
+  /** A command's category (its menu) and its label, given its own name for it, as lists of every command show it. */
+  private commandInfo(command: Command, own: string): { label: string; category: string } {
     const categories: Record<string, string> = {
       file: t('chrome.category.file'),
       edit: t('chrome.category.edit'),
@@ -1002,14 +1026,18 @@ export class Chrome {
       ['table.', t('chrome.catalog.table')],
       ['view.toolbar.', t('chrome.catalog.toolbar')],
     ];
+    const category = categories[command.id.split('.')[0]] ?? t('chrome.category.other');
+    const prefix = prefixes.find(([p]) => command.id.startsWith(p))?.[1];
+    return { label: prefix ? format(prefix, { label: own }) : own, category };
+  }
+
+  /** Everything that can go on a toolbar, grouped by menu. */
+  private catalog(): CatalogItem[] {
     const items: CatalogItem[] = [];
     const byCategory = new Map<string, CatalogItem[]>();
     for (const command of this.registry.all()) {
       if (command.id === 'view.customizeToolbars') continue;
-      const category = categories[command.id.split('.')[0]] ?? t('chrome.category.other');
-      const own = command.tooltip ?? command.plainLabel;
-      const prefix = prefixes.find(([p]) => command.id.startsWith(p))?.[1];
-      const label = prefix ? format(prefix, { label: own }) : own;
+      const { label, category } = this.commandInfo(command, command.tooltip ?? command.plainLabel);
       if (!byCategory.has(category)) byCategory.set(category, []);
       byCategory.get(category)!.push({ id: command.id, label, category });
     }
@@ -1065,13 +1093,83 @@ export class Chrome {
 
   private showShortcuts(): void {
     const table = h('table', { class: 'wm-shortcuts' });
-    const seen = new Set<string>();
-    for (const command of this.registry.all()) {
-      if (!command.shortcutText || seen.has(command.shortcutText)) continue;
-      seen.add(command.shortcutText);
-      table.append(h('tr', {}, h('td', { text: command.plainLabel }), h('td', {}, h('kbd', { text: command.shortcutText }))));
-    }
-    showDialog(t('chrome.shortcuts.title'), h('div', { class: 'wm-scroll' }, table), () => this.options.host.focusEditor());
+    const status = h('div', { class: 'wm-shortcuts-status', attrs: { role: 'status' } });
+    const reset = h('button', { class: 'wm-button', text: t('chrome.shortcuts.default'), attrs: { type: 'button' } });
+    let recording: (() => void) | null = null;
+
+    const render = () => {
+      recording = null;
+      table.replaceChildren();
+      for (const command of this.registry.all()) {
+        if (!command.shortcutParsed && !command.defaultShortcut) continue;
+        const key = h('button', {
+          class: 'wm-shortcut-key',
+          attrs: { type: 'button', 'aria-label': t('chrome.shortcuts.change', { label: command.plainLabel }) },
+        });
+        const show = () => {
+          key.classList.remove('recording');
+          key.textContent = command.shortcutText || t('chrome.shortcuts.none');
+          key.classList.toggle('none', !command.shortcutText);
+        };
+        show();
+        if (command.nativeShortcut) {
+          // The browser handles these keys itself (clipboard), so they are shown but fixed.
+          key.disabled = true;
+        } else {
+          const stop = () => {
+            key.removeEventListener('keydown', onKey);
+            key.removeEventListener('blur', stop);
+            recording = null;
+            show();
+          };
+          const onKey = (e: KeyboardEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === 'Tab') return stop();
+            const bare = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+            if (bare && e.key === 'Escape') return stop();
+            let shortcut: Shortcut | null = null;
+            if (bare && (e.key === 'Backspace' || e.key === 'Delete')) {
+              status.textContent = '';
+            } else {
+              shortcut = shortcutFromEvent(e);
+              if (!shortcut) return; // a modifier on its own: wait for the rest
+              if (!isUsableShortcut(shortcut)) {
+                status.textContent = t('chrome.shortcuts.needModifier');
+                return;
+              }
+            }
+            const taken = this.registry.setShortcut(command.id, shortcut);
+            status.textContent = taken ? t('chrome.shortcuts.moved', { label: taken }) : '';
+            this.refresh();
+            const focused = command.id;
+            render();
+            table.querySelector<HTMLElement>(`[data-command="${focused}"]`)?.focus();
+          };
+          key.dataset.command = command.id;
+          key.addEventListener('click', () => {
+            recording?.();
+            key.classList.add('recording');
+            key.textContent = t('chrome.shortcuts.press');
+            status.textContent = '';
+            recording = stop;
+            key.addEventListener('keydown', onKey);
+            key.addEventListener('blur', stop);
+          });
+        }
+        table.append(h('tr', {}, h('td', { text: command.plainLabel }), h('td', {}, key)));
+      }
+    };
+    render();
+    reset.addEventListener('click', () => {
+      this.registry.resetShortcuts();
+      this.refresh();
+      status.textContent = '';
+      render();
+    });
+
+    const footer = h('div', { class: 'wm-shortcuts-footer' }, h('span', { class: 'wm-shortcuts-hint', text: t('chrome.shortcuts.hint') }), reset);
+    showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
   }
 }
 

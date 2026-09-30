@@ -93,6 +93,11 @@ export const ICONS: Record<string, string> = {
       `<path d="M17.5 6.2h2a1 1 0 0 1 1 1v3.8a1 1 0 0 1-1 1H12v2.3" />` +
       `<rect x="10" y="14" width="4" height="8" rx="1.6" fill="${RED}"/>`,
   ),
+  commandPalette: svg(
+    `<rect x="2.5" y="4.5" width="19" height="15" rx="3" fill="${PAPER}"/>` +
+      outlined('M7 9.5l3.2 2.5L7 14.5', BLUE, 2) +
+      outlined('M12.5 15h4.5', ORANGE, 2),
+  ),
   undo: svg(outlined('M8.5 8.5h6.5a5 5 0 0 1 0 10h-4', BLUE) + `<path d="M9.8 3.8L4 8.5l5.8 4.7z" fill="${BLUE}"/>`),
   redo: svg(outlined('M15.5 8.5H9a5 5 0 0 0 0 10h4', BLUE) + `<path d="M14.2 3.8L20 8.5l-5.8 4.7z" fill="${BLUE}"/>`),
   link: svg(

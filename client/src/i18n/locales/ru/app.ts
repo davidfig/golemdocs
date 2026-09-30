@@ -39,6 +39,9 @@ export const app: Catalog = {
   'app.linkOneParagraph': 'Чтобы сделать ссылку, выделите текст в пределах одного абзаца',
   'app.allowPopups': 'Разрешите всплывающие окна, чтобы увидеть предварительный просмотр печати',
   'app.downloaded': 'Файл «{name}» скачан',
+  'app.downloadAllNone': 'Нет сохранённых документов для скачивания',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': 'Все сохранённые документы скачаны',
   'app.downloadFailed': 'Не удалось скачать: {message}',
 
   // Collaboration

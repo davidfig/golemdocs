@@ -74,6 +74,8 @@ export type Action =
   | { kind: 'clearLocalData' }
   /** Download a copy of the document, in its own format. */
   | { kind: 'download' }
+  /** Download every saved document as one ZIP. */
+  | { kind: 'downloadAll' }
   /**
    * Make a copy of the document in another format (Word ⇄ PDF ⇄ Markdown ⇄ text), saved next to
    * the original, and open it. The original is kept as it is.

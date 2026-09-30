@@ -36,6 +36,6 @@ In Jewish tradition, a golem is a figure shaped from clay and brought to life by
 
 A document is much the same: a shapeless thing that words bring to life. Golem Docs lets yours take whatever form you need, Word or Markdown or PDF or a web page, while what you wrote stays true underneath.
 
-## Privacy and terms
+## Privacy, terms and more
 
-Read the [Privacy Policy](/privacy) and the [Terms of Service](/terms), both in the Help menu.
+Read the [Privacy Policy](/privacy) and the [Terms of Service](/terms), both in the Help menu. To learn more about Golem Docs, visit the [Golem Docs website](https://golemdocs.com/home/).

@@ -1822,7 +1822,8 @@ class Exporter {
       // An empty paragraph carrying a bottom border is a horizontal rule.
       const bottom = resolved.borders?.bottom;
       if (bottom && bottom.val && bottom.val !== 'none' && bottom.val !== 'nil' && !p.children.length) {
-        this.emit('---', false);
+        // A rule opening the file is written *** so a later --- is not read as the end of front matter.
+        this.emit(this.chunks.length ? '---' : '***', false);
         this.reset();
       }
       return;

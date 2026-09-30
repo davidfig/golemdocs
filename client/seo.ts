@@ -1,30 +1,28 @@
 import type { Plugin } from 'vite';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const WELCOME = path.resolve(import.meta.dirname, 'src/layout/welcome/en.md');
-/** The built-in legal documents, each written as its own plain HTML page (`/privacy`, `/terms`) that never loads the editor. */
+const HOME = path.resolve(import.meta.dirname, 'public/home/index.html');
+const SITE = path.resolve(import.meta.dirname, 'site');
+/** The built-in legal documents (`src/layout/legal/<name>/en.md`), each written as its own plain HTML page (`/home/privacy`, `/home/terms`) that never loads the editor. */
 const LEGAL_PAGES = [
   { name: 'privacy', description: 'What Golem Docs collects, why, and what it does with it.' },
   { name: 'terms', description: 'The terms for using Golem Docs.' },
 ];
-
-/** The app's icon before the first heading (the title), as the app draws it: 24 pt, level with the letters. */
-const withIcon = (html: string): string => html.replace('<h1>', '<h1><img class="icon" src="/favicon.svg" alt="" width="32" height="32"> ');
-
 /**
- * The app's Calibri (Carlito) for the plain legal pages, so they match the canvas. A page that declares these fetches
- * a face only when its text uses it.
+ * The feature pages of the marketing site (`site/<name>.md`, served at `/home/<name>`). `label` and `blurb` are the name and line shown where a page
+ * is linked from another; the home page (`public/home/index.html`) links each of them by hand.
  */
-const FONT_CSS = `<style>${[
-  ['regular', 'normal', 400],
-  ['bold', 'normal', 700],
-  ['italic', 'italic', 400],
-  ['bold-italic', 'italic', 700],
-]
-  .map(([file, style, weight]) => `@font-face{font-family:Carlito;font-style:${style};font-weight:${weight};font-display:swap;src:url(/fonts/calibri/${file}.ttf) format('truetype')}`)
-  .join('')}</style>`;
-const withFonts = (html: string): string => html.replace('</head>', () => `${FONT_CSS}\n  </head>`);
+const FEATURE_PAGES = [
+  { name: 'convert', label: 'Convert formats', blurb: 'Switch a document between 20+ formats, and back again.', description: 'Convert Word, PDF, Markdown, HTML, OpenDocument, EPUB, CSV, LaTeX and more in your browser. Change a document\u2019s format and keep working, with nothing uploaded.' },
+  { name: 'pdf', label: 'Edit PDFs', blurb: 'Fill in forms, mark up, edit text, redact, and rearrange pages.', description: 'Edit PDFs in your browser: change text where it sits, fill in forms, highlight and comment, redact private details, and rearrange pages. Free, with nothing uploaded.' },
+  { name: 'images', label: 'Edit pictures', blurb: 'Crop, correct, annotate, and redact PNG, JPEG, and WebP.', description: 'Edit pictures in your browser: crop, resize, adjust colors, draw arrows and text, and pixelate private details in PNG, JPEG, and WebP images.' },
+  { name: 'documents', label: 'Word documents', blurb: 'A real word processor for .docx, with tables, columns, and equations.', description: 'Write and edit Word documents in your browser: true page layout, tables, columns, comments, LaTeX equations, and spelling and grammar checking.' },
+  { name: 'collaborate', label: 'Work together', blurb: 'Share a link and edit together, live.', description: 'Share a document and edit it together in real time, with names and cursors. Sign in to share; editing and downloading never need an account.' },
+  { name: 'customize', label: 'Make it yours', blurb: 'Word 2003 menus, five color schemes, dark mode, and 11 languages.', description: 'A Word 2003-style editor you can make your own: color schemes, dark mode, customizable toolbars, and 11 languages.' },
+  { name: 'large-files', label: 'Huge text files', blurb: 'Open, search, and filter 50 MB log files without freezing.', description: 'Open text and log files of 50 MB and more in your browser, then scroll, search, filter, and copy without freezing.' },
+];
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -79,77 +77,87 @@ export function markdownToHtml(md: string): string {
   return out.join('\n');
 }
 
-/**
- * A page laid out like the editor's own: a white sheet on the gray desk, Letter width with 1 in margins, Calibri 11 pt,
- * shrunk to fit a narrow window (`--s` is one sheet pixel). No toolbars, no scripts.
- */
-const PLAIN_CSS = `<style>
-      html { background: #e5e5e5; }
-      html[data-theme='dark'] { background: #1c1d20; }
-      body { margin: 0; }
-      #seo { --s: min(1px, calc((100vw - 26px) / 816)); position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; white-space: normal; padding: 24px 13px; font-family: Carlito, Calibri, 'Segoe UI', system-ui, sans-serif; }
-      #seo .open { width: calc(816 * var(--s)); margin: 0 auto 12px; font-size: 14px; }
-      #seo .open a { color: #2f5496; text-decoration: none; }
-      #seo > .page { box-sizing: border-box; width: calc(816 * var(--s)); margin: 0 auto; padding: calc(96 * var(--s)); min-height: calc(1056 * var(--s)); background: #fff; color: #000; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 14px rgba(0, 0, 0, 0.12); font-size: calc(14.667 * var(--s)); line-height: 1.316; }
-      #seo p { margin: 0 0 0.73em; }
-      #seo h1, #seo h2, #seo h3 { font-weight: 400; color: #2f5496; }
-      #seo h1 { margin: 0.43em 0; font-size: 2.545em; line-height: 1.2; }
-      #seo h1 .icon { height: 0.857em; width: 0.857em; vertical-align: -0.107em; margin-right: 0.15em; }
-      #seo h2 { margin: 0.2em 0 0; font-size: 1.18em; }
-      #seo h3 { margin: 0.2em 0 0; font-size: 1.09em; color: #1f3763; }
-      #seo ul, #seo ol { margin: 0 0 0.73em; padding-left: 3.27em; }
-      #seo code { font-family: 'Courier New', monospace; background: #f2f2f2; }
-      html[data-theme='dark'] #seo > .page { background: #2a2b30; color: #e5e5e5; }
-      html[data-theme='dark'] #seo h1, html[data-theme='dark'] #seo h2, html[data-theme='dark'] #seo h3, html[data-theme='dark'] #seo a { color: #8ab4f8; }
-      html[data-theme='dark'] #seo code { background: #1c1d20; }
-    </style>`;
+/** Prose styles for a page inside the marketing site (its colors, fonts and header come from the home page). */
+const PROSE_CSS = `
+      .doc { padding: 56px 0 72px; }
+      .doc article { width: min(46rem, 100% - 32px); margin: 0 auto; }
+      .doc .back { display: inline-block; margin-bottom: 24px; font-size: 0.95rem; text-decoration: none; }
+      .doc h1 { margin: 0 0 20px; font-size: clamp(2rem, 4.5vw, 2.6rem); }
+      .doc.feature h1 + p { font-size: 1.2rem; color: var(--muted); }
+      .doc h2 { margin: 2.2em 0 0.5em; font-size: 1.4rem; line-height: 1.25; letter-spacing: -0.01em; }
+      .doc h3 { margin: 1.6em 0 0.4em; font-size: 1.1rem; }
+      .doc p, .doc li { color: var(--ink); }
+      .doc ul, .doc ol { padding-left: 1.4em; }
+      .doc li { margin-bottom: 0.4em; }
+      .doc code { padding: 1px 6px; border-radius: 4px; background: var(--tint); font-size: 0.9em; }
+      .doc .try { margin: 48px 0 0; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-align: center; }
+      .doc .try p { margin: 0 0 16px; font-size: 1.15rem; font-weight: 600; }
+      .doc .more { margin-top: 56px; }
+      .doc .more h2 { margin-top: 0; }
+      .doc .more ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 14px; padding: 0; list-style: none; }
+      .doc .more li { margin: 0; }
+      .doc .more a { display: block; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-decoration: none; }
+      .doc .more a:hover { border-color: var(--brand); }
+      .doc .more strong { display: block; margin-bottom: 4px; color: var(--brand); }
+      .doc .more span { color: var(--muted); font-size: 0.93rem; }`;
 
-interface PlainPage {
-  md: string;
-  title: string;
+interface SitePage {
+  /** The path under `/home`. */
+  name: string;
   description: string;
-  url: string;
+  md: string;
+  /** A feature page ends with a call to open the app and links to the other feature pages; a legal page doesn't. */
+  feature: boolean;
 }
 
 /**
- * The built index.html turned into a page of plain HTML: the text of `md` as a sheet, and none of the editor (no
- * scripts, styles, toolbars or canvas), so nothing is drawn twice and nothing loads that the text doesn't need.
+ * A page of the marketing site under `/home`: the home page's header, footer and styles around the Markdown text of a legal
+ * document or feature page. Documents link the app's own paths (`/terms`); here those links go to the sibling pages.
  */
-export function plainPage(index: string, { md, title, description, url }: PlainPage): string {
-  const meta = (attr: string, name: string, value: string): ((s: string) => string) => (s) =>
-    s.replace(new RegExp(`(<meta ${attr}="${name}" content=")[^"]*"`), (_, head: string) => `${head}${escapeHtml(value)}"`);
-  let page = index
-    .replace(/<script type="module"[^>]*><\/script>\s*/g, '')
-    .replace(/<link rel="(?:modulepreload|stylesheet)"[^>]*>\s*/g, '')
-    .replace(/<header id="chrome"><\/header>\s*/, '')
-    .replace(/<main id="viewport">[\s\S]*?<\/main>\s*/, '')
-    .replace(/<div id="debug">[\s\S]*?<\/div>\s*(?=<\/body>)/, '')
-    .replace(/<aside id="intro"[\s\S]*?<\/aside>\s*/, '')
-    .replace(/<script>\s*\(function \(\) \{\s*var intro[\s\S]*?<\/script>\s*/, '')
-    .replace(/<noscript>[\s\S]*?<\/noscript>\s*/, '')
+function sitePage({ name, description, md, feature }: SitePage): string {
+  const heading = /^#\s+(.*)$/m.exec(md)?.[1] ?? name;
+  const title = feature ? `${heading} | Golem Docs` : heading;
+  const url = `https://golemdocs.com/home/${name}`;
+  const meta = (attr: string, key: string, value: string) => (s: string) => s.replace(new RegExp(`(<meta ${attr}="${key}" content=")[^"]*"`), (_, head: string) => `${head}${escapeHtml(value)}"`);
+  const extras = feature
+    ? `\n<p class="try"><a class="btn" href="/">Open Golem Docs</a></p>\n<div class="more">\n<h2>More you can do</h2>\n<ul>\n${FEATURE_PAGES.filter((f) => f.name !== name)
+        .map((f) => `<li><a href="/home/${f.name}"><strong>${escapeHtml(f.label)}</strong><span>${escapeHtml(f.blurb)}</span></a></li>`)
+        .join('\n')}\n</ul>\n</div>`
+    : '';
+  let page = readFileSync(HOME, 'utf8')
     .replace(/<title>.*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`)
     .replace(/(<link rel="canonical" href=")[^"]*"/, (_, head: string) => `${head}${url}"`)
     .replace(/(<meta property="og:url" content=")[^"]*"/, (_, head: string) => `${head}${url}"`)
-    .replace(/(<article id="seo">)[\s\S]*?(<\/article>)/, (_, open: string, close: string) => `${open}\n<p class="open"><a href="/">Open Golem Docs</a></p>\n<div class="page">\n${withIcon(markdownToHtml(md))}\n</div>\n    ${close}`)
-    .replace('</head>', () => `${PLAIN_CSS}\n  </head>`);
+    .replace(/(<nav[^>]*>[\s\S]*?<\/nav>)/, (nav: string) => nav.replace(/href="#/g, 'href="/home#'))
+    .replace(/<main>[\s\S]*?<\/main>/, () => `<main class="doc${feature ? ' feature' : ''}">\n<article>\n<a class="back" href="/home">&larr; Golem Docs</a>\n${markdownToHtml(md)}${extras}\n</article>\n</main>`)
+    .replace('</style>', () => `${PROSE_CSS}\n    </style>`);
   page = meta('name', 'description', description)(page);
   page = meta('property', 'og:description', description)(page);
   page = meta('property', 'og:title', title)(page);
-  return withFonts(page);
+  return page;
 }
 
-/** A legal document (`src/layout/legal/<name>/en.md`) as a plain page. */
-function legalPage(index: string, name: string, description: string): string {
-  const md = readFileSync(path.resolve(import.meta.dirname, `src/layout/legal/${name}/en.md`), 'utf8');
-  const title = /^#\s+(.*)$/m.exec(md)?.[1] ?? name;
-  return plainPage(index, { md, title, description, url: `https://golemdocs.com/${name}` });
+/** The source of a feature page. */
+const featureSource = (name: string): string => readFileSync(path.join(SITE, `${name}.md`), 'utf8');
+/** Every page under `/home` other than the home page itself, by path. */
+function sitePages(): SitePage[] {
+  return [
+    ...FEATURE_PAGES.map(({ name, description }) => ({ name, description, md: featureSource(name), feature: true })),
+    ...LEGAL_PAGES.map(({ name, description }) => ({
+      name,
+      description,
+      md: readFileSync(path.resolve(import.meta.dirname, `src/layout/legal/${name}/en.md`), 'utf8').replace(/\]\(\/(privacy|terms)\)/g, '](/home/$1)'),
+      feature: false,
+    })),
+  ];
 }
 
 /**
  * Replaces `<!--welcome-->` in index.html with the welcome document as plain HTML. The editor draws
  * to a canvas, so without this a crawler (or a browser with scripts off) finds no text to read.
- * After the build, plain pages without the editor are written next to it: `privacy.html` and `terms.html`,
- * served at `/privacy` and `/terms`.
+ * After the build, plain pages without the editor are written under `home/` (`home/pdf.html`, `home/privacy.html`...), served
+ * at `/home/pdf`, `/home/privacy` and so on beside the marketing page (`public/home/index.html`).
+ * (`/privacy` and `/terms` are the app's own addresses for the same documents, opened in the editor.)
  */
 export function welcomeContent(): Plugin {
   let outDir = '';
@@ -162,29 +170,35 @@ export function welcomeContent(): Plugin {
       order: 'pre',
       handler: (html) => html.replace('<!--welcome-->', () => markdownToHtml(readFileSync(WELCOME, 'utf8'))),
     },
-    // The dev server answers every path with the editor, so the plain pages are at /privacy.html and /terms.html here
-    // (in production `/privacy` and `/terms` are these pages).
+    // In production these addresses are files or redirects (public/_redirects); the dev server answers every unknown path
+    // with the editor, so it does the same here: /home and /home/ are the marketing page, /home/<page> the others, and the old /privacy and /terms redirect to them.
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const page = LEGAL_PAGES.find(({ name }) => req.url?.split('?')[0] === `/${name}.html`);
-        if (!page) return next();
+        const url = req.url?.split('?')[0] ?? '';
+        const old = LEGAL_PAGES.find(({ name }) => url === `/${name}` || url === `/${name}.html`);
+        if (old) {
+          res.statusCode = 301;
+          res.setHeader('location', `/home/${old.name}`);
+          return void res.end();
+        }
         try {
-          const index = await server.transformIndexHtml('/', readFileSync(path.resolve(import.meta.dirname, 'index.html'), 'utf8'));
+          if (url === '/home' || url === '/home/' || url === '/home/index.html') {
+            res.setHeader('content-type', 'text/html');
+            return void res.end(readFileSync(path.resolve(import.meta.dirname, 'public/home/index.html'), 'utf8'));
+          }
+          const page = sitePages().find(({ name }) => url === `/home/${name}` || url === `/home/${name}.html` || url === `/home/${name}/`);
+          if (!page) return next();
           res.setHeader('content-type', 'text/html');
-          res.end(legalPage(index, page.name, page.description));
+          res.end(sitePage(page));
         } catch (error) {
           next(error);
         }
       });
     },
     closeBundle() {
-      let index: string;
-      try {
-        index = readFileSync(path.join(outDir, 'index.html'), 'utf8');
-      } catch {
-        return; // not a full build
-      }
-      for (const { name, description } of LEGAL_PAGES) writeFileSync(path.join(outDir, `${name}.html`), legalPage(index, name, description));
+      if (!existsSync(path.join(outDir, 'index.html'))) return; // not a full build
+      mkdirSync(path.join(outDir, 'home'), { recursive: true });
+      for (const page of sitePages()) writeFileSync(path.join(outDir, 'home', `${page.name}.html`), sitePage(page));
     },
   };
 }

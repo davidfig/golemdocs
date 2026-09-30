@@ -37,6 +37,9 @@ export const app: Partial<Messages> = {
   'app.linkOneParagraph': 'Markieren Sie Text innerhalb eines Absatzes, um daraus einen Link zu machen',
   'app.allowPopups': 'Erlauben Sie Pop-ups, um die Druckvorschau zu sehen',
   'app.downloaded': '„{name}“ heruntergeladen',
+  'app.downloadAllNone': 'Es gibt keine gespeicherten Dokumente zum Herunterladen',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': 'Alle gespeicherten Dokumente heruntergeladen',
   'app.downloadFailed': 'Herunterladen fehlgeschlagen: {message}',
 
   // Collaboration

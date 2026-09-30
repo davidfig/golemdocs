@@ -7,6 +7,7 @@ import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFe
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
+import { handlePolarWebhook, subscriptionFor } from './subscriptions.ts';
 import { CloudflareError, userDb, type UserDb } from './userDb.ts';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -116,6 +117,9 @@ const handler: ExportedHandler = {
 
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
+      // Polar's webhook has no session or origin; its signature is checked inside.
+      if (path === '/api/webhooks/polar' && request.method === 'POST') return await handlePolarWebhook(request, env);
+
       const userId = await authenticate(request, env, url);
       if (!userId) throw new HttpError(401, 'not signed in');
       // The session cookie is SameSite=Lax already; this also refuses cross-origin writes outright.
@@ -137,6 +141,9 @@ const handler: ExportedHandler = {
         const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId);
         return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
       }
+
+      // GET /api/subscription: whether this user has paid for sync.
+      if (path === '/api/subscription' && request.method === 'GET') return json((await subscriptionFor(env, userId)) ?? { status: 'none', active: false, currentPeriodEnd: null, cancelAtPeriodEnd: false });
 
       // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
       if (path === '/api/admin/billing' && request.method === 'GET') {

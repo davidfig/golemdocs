@@ -117,7 +117,7 @@ export class Toolbar {
   }
 }
 
-function tooltip(label: string, shortcut: string): string {
+export function tooltip(label: string, shortcut: string): string {
   return shortcut ? `${label} (${shortcut})` : label;
 }
 
@@ -141,6 +141,7 @@ export function commandButton(registry: CommandRegistry, id: string): Control {
     available: () => registry.isAvailable(command),
     refresh() {
       el.disabled = !registry.isEnabled(command);
+      el.title = tooltip(command.tooltip ?? command.plainLabel, command.shortcutText);
       if (command.checked) setAttr(el, 'aria-pressed', String(registry.isChecked(command)));
     },
   };
@@ -428,7 +429,7 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
 export function tableGridButton(registry: CommandRegistry, commandId: string): Control {
   const command = registry.get(commandId);
   const label = command.tooltip ?? command.plainLabel;
-  const el = h('button', { class: 'wm-tbutton', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'true' } }, iconElement(command.icon));
+  const el = h('button', { class: 'wm-tbutton', title: tooltip(label, command.shortcutText), attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'true' } }, iconElement(command.icon));
   keepFocus(el);
   el.addEventListener('click', () => {
     if (popupOpenFor(el)) return closePopup();

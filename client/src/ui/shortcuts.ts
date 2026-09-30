@@ -116,3 +116,63 @@ export function formatShortcut(shortcut: Shortcut): string {
   parts.push(KEY_WORDS[key] ? t(KEY_WORDS[key]) : key);
   return parts.join('+');
 }
+
+/** The shortcut a key event presses, or null for a lone modifier key. */
+export function shortcutFromEvent(e: KeyboardEvent): Shortcut | null {
+  if (/^(Shift|Control|Alt|Meta|OS)(Left|Right)?$/.test(e.code) || ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return null;
+  return {
+    mod: IS_MAC ? e.metaKey : e.ctrlKey,
+    ctrl: IS_MAC && e.ctrlKey,
+    shift: e.shiftKey,
+    alt: e.altKey,
+    key: eventKey(e),
+  };
+}
+
+/** The "Mod+Shift+Z" text `parseShortcut` reads back. */
+export function shortcutSpec(shortcut: Shortcut): string {
+  const parts: string[] = [];
+  if (shortcut.mod) parts.push('Mod');
+  if (shortcut.ctrl) parts.push('Ctrl');
+  if (shortcut.alt) parts.push('Alt');
+  if (shortcut.shift) parts.push('Shift');
+  parts.push(shortcut.key);
+  return parts.join('+');
+}
+
+export function sameShortcut(a: Shortcut | null, b: Shortcut | null): boolean {
+  return !!a && !!b && a.mod === b.mod && a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt && a.key === b.key;
+}
+
+/** The global key handler only acts on keys with Ctrl, ⌘ or Alt held, and on function keys. */
+export function isUsableShortcut(shortcut: Shortcut): boolean {
+  return shortcut.mod || shortcut.ctrl || shortcut.alt || /^F\d+$/.test(shortcut.key);
+}
+
+// --- Customized shortcuts ----------------------------------------------------------------
+
+const STORAGE_KEY = 'wm-shortcuts';
+
+/** Command id → shortcut text for this browser; '' means the command has no shortcut. */
+export type ShortcutOverrides = Record<string, string>;
+
+export function loadShortcutOverrides(): ShortcutOverrides {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const overrides: ShortcutOverrides = {};
+    for (const [id, spec] of Object.entries(parsed)) if (typeof spec === 'string') overrides[id] = spec;
+    return overrides;
+  } catch {
+    return {};
+  }
+}
+
+export function saveShortcutOverrides(overrides: ShortcutOverrides): void {
+  try {
+    if (Object.keys(overrides).length) localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage unavailable (private window, blocked): the changes last for this session only.
+  }
+}

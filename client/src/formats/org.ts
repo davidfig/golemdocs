@@ -23,7 +23,7 @@ const format: SpanFormat = {
     const ch = MARKERS[kind];
     return `${isWord(before.slice(-1)) ? ZWSP : ''}${ch}${inner}${ch}${isWord(after[0]) ? ZWSP : ''}`;
   },
-  link: (url, inner) => (inner === url ? `[[${url}]]` : `[[${url}][${inner.replace(/[[\]]/g, '')}]]`),
+  link: (url, inner) => (inner === url ? `[[${url}]]` : `[[${url}][${inner.replace(/[[\]\\]/g, '\\$&')}]]`),
 };
 
 const inline = (spans: Span[]): string => renderSpans(spans, format);
@@ -44,7 +44,7 @@ function block(node: Node, indent: number): string {
       return `${'*'.repeat(Math.min(node.level, 6))} ${inline(node.spans).replace(/\\\\\n/g, ' ')}`;
     case 'para':
       // A line that starts like a list, heading or table is set off by a zero-width space.
-      return indented(inline(node.spans).replace(/^(\s*)([*+|#-]|\d+[.)])(?=\s)/gm, `$1${ZWSP}$2`));
+      return indented(inline(node.spans).replace(/^(\s*)(\*+|[+|#-]|\d+[.)])(?=\s|$)/gm, `$1${ZWSP}$2`));
     case 'rule':
       return indented('-----');
     case 'code':
@@ -250,7 +250,7 @@ class Parser {
     if (!rows.length) return null;
     const columns = rows.reduce((mx, r) => Math.max(mx, r.length), 0);
     for (const r of rows) while (r.length < columns) r.push([]);
-    return { t: 'table', rows, header: header && rows.length > 1 };
+    return { t: 'table', rows, header };
   }
 }
 
@@ -294,7 +294,7 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
       i++;
       continue;
     }
-    if (c === '[' && (m = /^\[\[([^\]]+)\](?:\[([^\]]*)\])?\]/.exec(rest))) {
+    if (c === '[' && (m = /^\[\[([^\]]+)\](?:\[((?:[^\]\\]|\\.)*)\])?\]/.exec(rest))) {
       flush();
       const url = m[1].replace(/^(file|http):(?=\/\/)/, '$1:');
       out.push(...parseInline(m[2] ?? url, { ...marks, link: url }));

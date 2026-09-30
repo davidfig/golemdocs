@@ -36,6 +36,9 @@ export const app: Partial<Messages> = {
   'app.linkOneParagraph': '링크로 만들려면 한 문단 안에서 텍스트를 선택하십시오',
   'app.allowPopups': '인쇄 미리 보기를 보려면 팝업을 허용하십시오',
   'app.downloaded': '“{name}”을(를) 다운로드했습니다',
+  'app.downloadAllNone': '다운로드할 저장된 문서가 없습니다',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': '저장된 모든 문서를 다운로드했습니다',
   'app.downloadFailed': '다운로드하지 못했습니다: {message}',
 
   // Collaboration

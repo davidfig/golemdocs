@@ -83,6 +83,8 @@ export interface AppHooks {
   signOut(): Promise<void>;
   /** Delete every document and setting kept in this browser, once the user confirms. */
   clearLocalData(): Promise<void>;
+  /** Download every saved document as one ZIP. */
+  downloadAll(): Promise<void>;
   /** The user's documents (ids are sources: `local:…` or `cloud:…`). */
   saved(): Sample[];
   send(command: WireCommand): void;
@@ -117,6 +119,7 @@ const SUPPORTED = new Set<ActionKind>([
   'syncNow',
   'share',
   'download',
+  'downloadAll',
   'print',
   'printPreview',
   'signIn',
@@ -289,6 +292,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.signIn();
         case 'signOut':
           return app.signOut();
+        case 'downloadAll':
+          return app.downloadAll();
         case 'clearLocalData':
           return app.clearLocalData();
         case 'viewMode':

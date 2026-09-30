@@ -32,17 +32,6 @@
     <style>
       /* The welcome text below is for crawlers and screen readers: off screen, but not display:none. */
       #seo { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-      /* The first-visit note: plain HTML, so it reads without the editor. Not modal; dismissed for good with the button. */
-      #intro { position: fixed; right: 16px; bottom: 16px; z-index: 20; box-sizing: border-box; width: min(22rem, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid #c8c8c8; border-radius: 8px; background: #fff; color: #1c1d20; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); font: 14px/1.45 system-ui, sans-serif; }
-      #intro[hidden], html.intro-seen #intro { display: none; }
-      #intro h1 { margin: 0 0 4px; font-size: 1.15em; font-weight: 600; }
-      #intro h1 img { width: 1.1em; height: 1.1em; vertical-align: -0.2em; margin-right: 0.3em; }
-      #intro p { margin: 0 0 8px; }
-      #intro a { color: #2f5496; }
-      #intro button { padding: 4px 14px; border: 1px solid #2f5496; border-radius: 6px; background: #2f5496; color: #fff; font: inherit; cursor: pointer; }
-      html[data-theme='dark'] #intro { border-color: #4a4b50; background: #2a2b30; color: #e5e5e5; }
-      html[data-theme='dark'] #intro a { color: #8ab4f8; }
-      html[data-theme='dark'] #intro button { border-color: #8ab4f8; background: #8ab4f8; color: #1c1d20; }
       html { background: #e5e5e5; }
       html[data-theme='dark'] { background: #1c1d20; }
     </style>
@@ -51,15 +40,9 @@
         var appearance = localStorage.getItem('golem.appearance');
         if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
       } catch (e) {}
-      // The first-visit note (#intro) stays hidden for anyone who has dismissed it.
-      try {
-        if (localStorage.getItem('golem.introSeen')) document.documentElement.classList.add('intro-seen');
-      } catch (e) {}
-      // Only the plain home page gets it: not a shared link, a room or a legal page.
-      if (location.search || location.pathname !== '/') document.documentElement.classList.add('intro-seen');
       // Shared links, rooms and specific documents are private or repeat the home page: keep them out of search.
-      // (The privacy policy and terms are pages of their own, see seo.ts.)
-      if (location.search || (location.pathname !== '/' && location.pathname !== '/privacy' && location.pathname !== '/terms')) {
+      // (The marketing site under /home, with the privacy policy and terms, is static pages that never load this script.)
+      if (location.search || location.pathname !== '/') {
         var robots = document.createElement('meta');
         robots.name = 'robots';
         robots.content = 'noindex';
@@ -74,12 +57,6 @@
     </noscript>
   </head>
   <body>
-    <aside id="intro" aria-labelledby="introTitle">
-      <h1 id="introTitle"><img src="/favicon.svg" alt="" />Golem Docs</h1>
-      <p>A document editor in your browser for Word, PDF, Markdown and more. No account needed to use. Sign in to sync documents on any device and share them.</p>
-      <p><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></p>
-      <button type="button" id="introClose">Got it</button>
-    </aside>
     <header id="chrome"></header>
     <article id="seo">
       <!--welcome-->
@@ -96,16 +73,6 @@
       </section>
       <div id="statusPanels"></div>
     </div>
-    <script>
-      (function () {
-        var intro = document.getElementById('intro');
-        function close() {
-          intro.hidden = true;
-          try { localStorage.setItem('golem.introSeen', '1'); } catch (e) {}
-        }
-        document.getElementById('introClose').addEventListener('click', close);
-      })();
-    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

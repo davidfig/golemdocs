@@ -130,11 +130,13 @@ if (formattingMarks) worker.setMarks(true);
 
 // View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
 const VIEW_KEY = 'word.viewMode';
-let viewMode: ViewMode = 'print';
+// With no saved choice, a phone-sized screen starts in Normal (a page shrunk to fit is unreadable there).
+let viewMode: ViewMode = window.matchMedia('(max-width: 720px)').matches ? 'normal' : 'print';
 try {
-  if (localStorage.getItem(VIEW_KEY) === 'normal') viewMode = 'normal';
+  const saved = localStorage.getItem(VIEW_KEY);
+  if (saved === 'normal' || saved === 'print') viewMode = saved;
 } catch {
-  // Storage unavailable: start in Print layout.
+  // Storage unavailable: use the default for this screen.
 }
 
 // The document to carry on with is read from this browser while the rest of the page is built.
@@ -146,8 +148,8 @@ function lastDoc(): string | null {
     return null;
   }
 }
-/** The built-in documents with an address of their own (the welcome text, privacy policy, terms and changelog); the app is at `/` for everything else. */
-const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', privacy: '/privacy', terms: '/terms', changelog: '/changelog' };
+/** The built-in documents with an address of their own (the welcome text and changelog); the app is at `/` for everything else. (`/privacy` and `/terms` redirect to the plain pages under `/home`, see public/_redirects.) */
+const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', changelog: '/changelog' };
 /** The document the address asks for: `?doc=…`, or a page's path. */
 const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === location.pathname) ?? null;
 /** Sets the address to `params` at the app's root, or at a page's path when it holds only that built-in document. */
@@ -885,6 +887,23 @@ function rememberInUrl(doc: string): void {
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
 const fileName = () => (documentKind === 'txt' && hasExtension(documentName) ? documentName : stem(documentName) + FORMATS[documentKind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
+
+/** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
+async function downloadAll(): Promise<void> {
+  try {
+    const docs = (await Promise.all(savedDocs.map((d) => getSaved(d.id)))).filter((d) => d !== null);
+    if (docs.length === 0) return setStatus(t('app.downloadAllNone'));
+    const { zipDocuments } = await import('./storage/archive.ts');
+    const bytes = await zipDocuments(docs.map((d) => ({ name: d.info.name, bytes: d.bytes })));
+    const name = t('app.downloadAllName');
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/zip' }));
+    Object.assign(document.createElement('a'), { href: url, download: name }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(t('app.downloadedAll', { count: docs.length }));
+  } catch (e) {
+    reportError(t('app.downloadFailed', { message: (e as Error).message }));
+  }
+}
 
 /**
  * Renders the first page as this saved copy's thumbnail (for the dashboard, and for the cloud
@@ -2225,6 +2244,7 @@ const chromeHost = createChromeHost({
   syncNow,
   share,
   download,
+  downloadAll,
   print,
   showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),

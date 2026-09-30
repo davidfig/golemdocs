@@ -98,6 +98,8 @@ interface Frame {
   uc: number;
   /** Set on an \fldrslt that replaces a hyperlink: its runs are wrapped when the group closes. */
   link?: { url?: string; anchor?: string; runs: Inline[] };
+  /** The link of an enclosing \fldrslt: runs in a group nested inside the result (as our own writer makes) join it too. */
+  inLink?: { url?: string; anchor?: string; runs: Inline[] };
 }
 
 interface Picture {
@@ -165,6 +167,8 @@ class RtfReader {
   private nextInstance = 1000;
 
   private fldinst = '';
+  /** Set by \trhdr: the row being read repeats as a header. */
+  private rowHeader = false;
   private pict: Picture | null = null;
 
   private readonly body: Block[] = [];
@@ -205,7 +209,7 @@ class RtfReader {
         this.pos++;
         depth++;
         this.stack.push(this.frame);
-        this.frame = { ...this.frame, char: { ...this.frame.char }, para: { ...this.frame.para }, link: undefined };
+        this.frame = { ...this.frame, char: { ...this.frame.char }, para: { ...this.frame.para }, link: undefined, inLink: this.frame.link ?? this.frame.inLink };
         // A group opened with \* is a destination we don't know unless a handler claims it.
         if (src.startsWith('\\*', this.pos)) {
           this.pos += 2;
@@ -419,7 +423,8 @@ class RtfReader {
 
   private pushRun(content: RunContent[]): void {
     const run = newRun(this.runProperties(), content);
-    if (this.frame.link) this.frame.link.runs.push(run);
+    const link = this.frame.link ?? this.frame.inLink;
+    if (link) link.runs.push(run);
     else this.inlines.push(run);
   }
 
@@ -714,7 +719,11 @@ class RtfReader {
       // Tables
       case 'trowd':
         this.rowDefs = [];
+        this.rowHeader = false;
         this.pendingDef = { right: 0, merge: null, fill: null };
+        return;
+      case 'trhdr':
+        this.rowHeader = true;
         return;
       case 'clmgf':
         this.pendingDef.merge = 'first';
@@ -984,7 +993,8 @@ class RtfReader {
       return new Array<number>(span).fill(Math.round(Number(c.properties.width?.w ?? 0) / span));
     });
     if (grid.length > this.tableGrid.length) this.tableGrid = grid;
-    this.tableRows.push({ kind: 'row', properties: {}, cells, attrs: {} });
+    this.tableRows.push({ kind: 'row', properties: this.rowHeader ? { header: true } : {}, cells, attrs: {} });
+    this.rowHeader = false;
   }
 
   private flushTable(): void {

@@ -37,6 +37,9 @@ export const app: Partial<Messages> = {
   'app.linkOneParagraph': 'Selecione texto dentro de um único parágrafo para transformá-lo em link',
   'app.allowPopups': 'Permita pop-ups para ver a visualização de impressão',
   'app.downloaded': '“{name}” foi baixado',
+  'app.downloadAllNone': 'Não há documentos salvos para baixar',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': 'Todos os documentos salvos foram baixados',
   'app.downloadFailed': 'Falha ao baixar: {message}',
 
   // Collaboration

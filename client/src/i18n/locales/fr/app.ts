@@ -37,6 +37,9 @@ export const app: Partial<Messages> = {
   'app.linkOneParagraph': 'Sélectionnez du texte dans un seul paragraphe pour en faire un lien',
   'app.allowPopups': 'Autorisez les fenêtres contextuelles pour afficher l’aperçu avant impression',
   'app.downloaded': '« {name} » téléchargé',
+  'app.downloadAllNone': 'Aucun document enregistré à télécharger',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': 'Tous les documents enregistrés ont été téléchargés',
   'app.downloadFailed': 'Échec du téléchargement : {message}',
 
   // Collaboration

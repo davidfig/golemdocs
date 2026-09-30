@@ -82,6 +82,8 @@ export interface Env {
   ENVIRONMENT?: string;
   /** Comma-separated emails of admins (verified sign-in emails, or DEV_USER locally). Admins see the billing panel. */
   ADMIN_EMAILS?: string;
+  /** Polar's webhook secret (Polar dashboard > Webhooks). Without it, /api/webhooks/polar answers 503. */
+  POLAR_WEBHOOK_SECRET?: string;
   /** Local development only: treated as the signed-in user. */
   DEV_USER?: string;
 

@@ -395,6 +395,18 @@
   padding: 4px;
 }
 
+.wm-menu-heading {
+  padding: 4px 12px 2px;
+  font-size: 0.85em;
+  font-weight: bold;
+  opacity: 0.65;
+  cursor: default;
+}
+
+.wm-menu-heading:not(:first-child) {
+  margin-top: 6px;
+}
+
 .wm-drawer-heading {
   padding: 14px 8px 4px;
   font-size: 12px;
@@ -972,12 +984,49 @@
   white-space: nowrap;
 }
 
-.wm-shortcuts kbd {
+.wm-shortcut-key {
   font: 11px var(--wm-font);
-  padding: 1px 4px;
+  min-width: 70px;
+  padding: 1px 6px;
   border: 1px solid var(--wm-border);
   border-radius: 3px;
   background: var(--wm-bar-top);
+  color: inherit;
+  cursor: pointer;
+}
+
+.wm-shortcut-key:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.wm-shortcut-key.none {
+  opacity: 0.6;
+}
+
+.wm-shortcut-key.recording {
+  border-color: var(--wm-hot-border);
+  background: var(--wm-hot);
+  font-style: italic;
+}
+
+.wm-shortcuts-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.wm-shortcuts-hint {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.wm-shortcuts-status {
+  min-height: 1.3em;
+  margin-bottom: 4px;
+  font-size: 11px;
 }
 
 /* A command without a picture shows its name. */
@@ -1199,11 +1248,10 @@
   align-items: center;
   gap: 5px;
   height: 19px;
-  margin-left: 6px;
   padding: 0 8px;
   background: var(--wm-menu-bg);
-  border: 1px solid var(--wm-etch-dark);
-  border-radius: 3px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
   cursor: default;
 }
 
@@ -1951,4 +1999,102 @@
   .wm-button {
     height: 36px;
   }
+}
+
+/* --- Command palette button (top right) and its list ---------------------------------------- */
+
+.wm-palette-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 19px;
+  padding: 0;
+  background: var(--wm-menu-bg);
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  cursor: default;
+  transition: background var(--wm-ease), border-color var(--wm-ease);
+}
+
+.wm-palette-button:hover,
+.wm-palette-button.open {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-palette-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wm-palette {
+  width: 340px;
+  max-width: calc(100vw - 8px);
+}
+
+.wm-palette-input {
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin: 4px;
+  padding: 3px 6px;
+  font: inherit;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  border: 1px solid var(--wm-field-border);
+  border-radius: 3px;
+  outline: none;
+}
+
+.wm-palette-input:focus {
+  box-shadow: 0 0 0 2px var(--wm-hot);
+}
+
+.wm-palette-list {
+  max-height: 360px;
+}
+
+.wm-palette-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-palette-row.active {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-palette-row.disabled {
+  color: var(--wm-disabled);
+}
+
+.wm-palette-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.wm-palette-icon .icon,
+.wm-palette-icon .icon svg {
+  display: flex;
+  width: 18px;
+  height: 18px;
+}
+
+.wm-palette-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-palette-meta {
+  flex: none;
+  font-size: 0.85em;
+  color: var(--wm-muted);
+}
+
+.wm-palette-empty {
+  padding: 8px;
+  color: var(--wm-muted);
 }

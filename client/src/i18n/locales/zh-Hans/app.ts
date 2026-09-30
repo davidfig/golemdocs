@@ -36,6 +36,9 @@ export const app: Partial<Messages> = {
   'app.linkOneParagraph': '请在单一段落内选择文本，才能将其设为链接',
   'app.allowPopups': '请允许弹出窗口以查看打印预览',
   'app.downloaded': '已下载“{name}”',
+  'app.downloadAllNone': '没有可下载的已保存文档',
+  'app.downloadAllName': 'documents.zip',
+  'app.downloadedAll': '已下载所有已保存的文档',
   'app.downloadFailed': '下载失败：{message}',
 
   // Collaboration

@@ -235,7 +235,7 @@ class Parser {
       while (cells.length < columns) cells.push([]);
       return cells;
     });
-    return { t: 'table', rows: grid, header: rows[0].header && rows.length > 1 };
+    return { t: 'table', rows: grid, header: rows[0].header };
   }
 }
 

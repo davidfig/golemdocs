@@ -7,7 +7,7 @@
 
 import { t } from '../i18n/index.ts';
 import type { CommandRegistry } from './commands.ts';
-import { h, mnemonicLabel, setAttr } from './dom.ts';
+import { h, mnemonicLabel, setAttr, stripMnemonic } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { showMenuDrawer, type DrawerEntry } from './menuDrawer.ts';
@@ -15,6 +15,8 @@ import { showMenuDrawer, type DrawerEntry } from './menuDrawer.ts';
 export type MenuItem =
   | { type: 'command'; id: string }
   | { type: 'separator' }
+  /** A small label over the rows that follow it (not selectable). */
+  | { type: 'heading'; label: string }
   | { type: 'submenu'; label: string; icon?: string; items: MenuItem[] | (() => MenuItem[]); enabled?: () => boolean }
   /** A one-off item (a sample document, a date format) that doesn't need a command. */
   | { type: 'item'; label: string; run: () => void; enabled?: boolean; checked?: boolean; hint?: string; /** False when the open format can't use it: it is left out. */ available?: () => boolean };
@@ -37,22 +39,28 @@ export function hasAvailable(registry: CommandRegistry, items: MenuItem[] | (() 
       case 'item':
         return item.available?.() ?? true;
       case 'separator':
+      case 'heading':
         return false;
     }
   });
 }
 
-/** A menu entry that is a row (not a separator). */
-export type RowItem = Exclude<MenuItem, { type: 'separator' }>;
+/** A menu entry that is a row (not a separator or heading). */
+export type RowItem = Exclude<MenuItem, { type: 'separator' | 'heading' }>;
+type HeadingItem = Extract<MenuItem, { type: 'heading' }>;
 
 export const sep: MenuItem = { type: 'separator' };
 export const cmd = (id: string): MenuItem => ({ type: 'command', id });
 export const sub = (label: string, items: MenuItem[] | (() => MenuItem[]), icon?: string): MenuItem => ({ type: 'submenu', label, items, icon });
 
 /** The items of a menu that the open format can express, with no separator at either end or doubled. */
-export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (RowItem | 'separator')[] {
-  const out: (RowItem | 'separator')[] = [];
+export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (RowItem | HeadingItem | 'separator')[] {
+  const out: (RowItem | HeadingItem | 'separator')[] = [];
   for (const item of items) {
+    if (item.type === 'heading') {
+      out.push(item);
+      continue;
+    }
     if (item.type === 'separator') {
       if (out.length && out[out.length - 1] !== 'separator') out.push('separator');
       continue;
@@ -64,7 +72,12 @@ export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (Row
     out.push(item);
   }
   if (out[out.length - 1] === 'separator') out.pop();
-  return out;
+  // A heading with no row under it is left out.
+  return out.filter((entry, i) => {
+    if (typeof entry !== 'object' || entry.type !== 'heading') return true;
+    const next = out[i + 1];
+    return next !== undefined && next !== 'separator' && next.type !== 'heading';
+  });
 }
 
 /** What a menu row shows and does, whether it is drawn in a drop-down or the phone drawer. */
@@ -150,6 +163,7 @@ class MenuPopup {
     this.el.addEventListener('contextmenu', (e) => e.preventDefault());
     for (const item of visibleItems(bar.registry, items)) {
       if (item === 'separator') this.el.append(h('div', { class: 'wm-sep', attrs: { role: 'separator' } }));
+      else if (item.type === 'heading') this.el.append(h('div', { class: 'wm-menu-heading', text: stripMnemonic(item.label), attrs: { role: 'presentation' } }));
       else this.addRow(item);
     }
   }

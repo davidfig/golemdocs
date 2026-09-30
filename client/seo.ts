@@ -124,7 +124,7 @@ export function plainPage(index: string, { md, title, description, url }: PlainP
     .replace(/<header id="chrome"><\/header>\s*/, '')
     .replace(/<main id="viewport">[\s\S]*?<\/main>\s*/, '')
     .replace(/<div id="debug">[\s\S]*?<\/div>\s*(?=<\/body>)/, '')
-    .replace(/<div id="intro"[\s\S]*?<\/div>\s*<\/div>\s*/, '')
+    .replace(/<aside id="intro"[\s\S]*?<\/aside>\s*/, '')
     .replace(/<script>\s*\(function \(\) \{\s*var intro[\s\S]*?<\/script>\s*/, '')
     .replace(/<noscript>[\s\S]*?<\/noscript>\s*/, '')
     .replace(/<title>.*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`)
@@ -136,6 +136,13 @@ export function plainPage(index: string, { md, title, description, url }: PlainP
   page = meta('property', 'og:description', description)(page);
   page = meta('property', 'og:title', title)(page);
   return withFonts(page);
+}
+
+/** A legal document (`src/layout/legal/<name>/en.md`) as a plain page. */
+function legalPage(index: string, name: string, description: string): string {
+  const md = readFileSync(path.resolve(import.meta.dirname, `src/layout/legal/${name}/en.md`), 'utf8');
+  const title = /^#\s+(.*)$/m.exec(md)?.[1] ?? name;
+  return plainPage(index, { md, title, description, url: `https://golemdocs.com/${name}` });
 }
 
 /**
@@ -155,6 +162,21 @@ export function welcomeContent(): Plugin {
       order: 'pre',
       handler: (html) => html.replace('<!--welcome-->', () => markdownToHtml(readFileSync(WELCOME, 'utf8'))),
     },
+    // The dev server answers every path with the editor, so the plain pages are at /privacy.html and /terms.html here
+    // (in production `/privacy` and `/terms` are these pages).
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const page = LEGAL_PAGES.find(({ name }) => req.url?.split('?')[0] === `/${name}.html`);
+        if (!page) return next();
+        try {
+          const index = await server.transformIndexHtml('/', readFileSync(path.resolve(import.meta.dirname, 'index.html'), 'utf8'));
+          res.setHeader('content-type', 'text/html');
+          res.end(legalPage(index, page.name, page.description));
+        } catch (error) {
+          next(error);
+        }
+      });
+    },
     closeBundle() {
       let index: string;
       try {
@@ -162,11 +184,7 @@ export function welcomeContent(): Plugin {
       } catch {
         return; // not a full build
       }
-      const titleOf = (md: string, fallback: string): string => /^#\s+(.*)$/m.exec(md)?.[1] ?? fallback;
-      for (const { name, description } of LEGAL_PAGES) {
-        const md = readFileSync(path.resolve(import.meta.dirname, `src/layout/legal/${name}/en.md`), 'utf8');
-        writeFileSync(path.join(outDir, `${name}.html`), plainPage(index, { md, title: titleOf(md, name), description, url: `https://golemdocs.com/${name}` }));
-      }
+      for (const { name, description } of LEGAL_PAGES) writeFileSync(path.join(outDir, `${name}.html`), legalPage(index, name, description));
     },
   };
 }

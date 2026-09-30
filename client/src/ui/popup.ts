@@ -10,7 +10,8 @@ interface Open {
   onClose?: () => void;
 }
 
-let current: Open | null = null;
+/** Open popups, outermost first: one opened from inside another (a palette in the toolbar's overflow panel) stacks on it. */
+const stack: Open[] = [];
 let layer: HTMLElement | null = null;
 let listening = false;
 
@@ -19,27 +20,32 @@ export function setPopupLayer(el: HTMLElement): void {
 }
 
 export function popupOpenFor(owner: HTMLElement): boolean {
-  return current?.owner === owner;
+  return stack.some((open) => open.owner === owner);
 }
 
-export function closePopup(): void {
-  const open = current;
+function closeTop(): void {
+  const open = stack.pop();
   if (!open) return;
-  current = null;
   open.panel.remove();
   open.owner.classList.remove('open');
   open.owner.setAttribute('aria-expanded', 'false');
   open.onClose?.();
 }
 
+/** Closes every open popup. */
+export function closePopup(): void {
+  while (stack.length) closeTop();
+}
+
 /** Shows `panel` under `owner` (flipping above or left to stay in the window). */
 export function openPopup(owner: HTMLElement, panel: HTMLElement, onClose?: () => void): void {
-  closePopup();
+  // Popups the owner isn't inside of are closed; the ones it is inside of stay.
+  while (stack.length && !stack[stack.length - 1].panel.contains(owner)) closeTop();
   listen();
   panel.classList.add('wm-popup');
   panel.addEventListener('mousedown', (e) => e.preventDefault());
   (layer ?? document.body).append(panel);
-  current = { panel, owner, onClose };
+  stack.push({ panel, owner, onClose });
   owner.classList.add('open');
   owner.setAttribute('aria-expanded', 'true');
   const anchor = owner.getBoundingClientRect();
@@ -60,19 +66,22 @@ function listen(): void {
   window.addEventListener(
     'pointerdown',
     (e) => {
-      if (!current) return;
       const target = e.target as Node;
-      if (!current.panel.contains(target) && !current.owner.contains(target)) closePopup();
+      while (stack.length) {
+        const top = stack[stack.length - 1];
+        if (top.panel.contains(target) || top.owner.contains(target)) break;
+        closeTop();
+      }
     },
     true,
   );
   window.addEventListener(
     'keydown',
     (e) => {
-      if (current && e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) {
+      if (stack.length && e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        closePopup();
+        closeTop();
       }
     },
     true,

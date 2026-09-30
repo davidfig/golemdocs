@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>Golem Docs: edit Word, PDF, Markdown and more in your browser</title>
     <meta name="description" content="Golem Docs is a document editor that lives in your browser. Open, edit and convert Word, OpenDocument, PDF, Markdown, HTML and plain text, and work on them together live. No account needed." />
     <link rel="canonical" href="https://golemdocs.com/" />
@@ -32,19 +32,17 @@
     <style>
       /* The welcome text below is for crawlers and screen readers: off screen, but not display:none. */
       #seo { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-      /* The first-visit card: plain HTML, so it reads without the editor, and dismissed for good with the button. */
-      #intro { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: rgba(0, 0, 0, 0.45); font: 15px/1.5 system-ui, sans-serif; }
+      /* The first-visit note: plain HTML, so it reads without the editor. Not modal; dismissed for good with the button. */
+      #intro { position: fixed; right: 16px; bottom: 16px; z-index: 20; box-sizing: border-box; width: min(22rem, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid #c8c8c8; border-radius: 8px; background: #fff; color: #1c1d20; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); font: 14px/1.45 system-ui, sans-serif; }
       #intro[hidden], html.intro-seen #intro { display: none; }
-      #intro .card { box-sizing: border-box; max-width: 32rem; max-height: 100%; overflow: auto; padding: 24px 28px; border-radius: 8px; background: #fff; color: #1c1d20; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); }
-      #intro h1 { margin: 0 0 8px; font-size: 1.6em; font-weight: 600; }
+      #intro h1 { margin: 0 0 4px; font-size: 1.15em; font-weight: 600; }
       #intro h1 img { width: 1.1em; height: 1.1em; vertical-align: -0.2em; margin-right: 0.3em; }
-      #intro p, #intro ul { margin: 0 0 12px; }
-      #intro ul { padding-left: 1.25em; }
+      #intro p { margin: 0 0 8px; }
       #intro a { color: #2f5496; }
-      #intro button { padding: 8px 20px; border: 0; border-radius: 6px; background: #2f5496; color: #fff; font: inherit; cursor: pointer; }
-      html[data-theme='dark'] #intro .card { background: #2a2b30; color: #e5e5e5; }
+      #intro button { padding: 4px 14px; border: 1px solid #2f5496; border-radius: 6px; background: #2f5496; color: #fff; font: inherit; cursor: pointer; }
+      html[data-theme='dark'] #intro { border-color: #4a4b50; background: #2a2b30; color: #e5e5e5; }
       html[data-theme='dark'] #intro a { color: #8ab4f8; }
-      html[data-theme='dark'] #intro button { background: #8ab4f8; color: #1c1d20; }
+      html[data-theme='dark'] #intro button { border-color: #8ab4f8; background: #8ab4f8; color: #1c1d20; }
       html { background: #e5e5e5; }
       html[data-theme='dark'] { background: #1c1d20; }
     </style>
@@ -53,7 +51,7 @@
         var appearance = localStorage.getItem('golem.appearance');
         if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
       } catch (e) {}
-      // The first-visit card (#intro) stays hidden for anyone who has dismissed it.
+      // The first-visit note (#intro) stays hidden for anyone who has dismissed it.
       try {
         if (localStorage.getItem('golem.introSeen')) document.documentElement.classList.add('intro-seen');
       } catch (e) {}
@@ -76,18 +74,12 @@
     </noscript>
   </head>
   <body>
-    <div id="intro" role="dialog" aria-labelledby="introTitle">
-      <div class="card">
-        <h1 id="introTitle"><img src="/favicon.svg" alt="" />Golem Docs</h1>
-        <p>Golem Docs is a document editor that lives in your browser. Open, edit and convert Word, PDF, Markdown, HTML and plain text files, and work on them together live. No account needed.</p>
-        <ul>
-          <li>Without an account, your documents stay in your browser and are never sent to us.</li>
-          <li>Sign in with Google, Microsoft, GitHub or Apple to keep your documents on any device and share them. We ask the provider only for your name and email address.</li>
-        </ul>
-        <p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p>
-        <button type="button" id="introClose">Get started</button>
-      </div>
-    </div>
+    <aside id="intro" aria-labelledby="introTitle">
+      <h1 id="introTitle"><img src="/favicon.svg" alt="" />Golem Docs</h1>
+      <p>A document editor in your browser for Word, PDF, Markdown and more. No account needed; sign in with Google, Microsoft, GitHub or Apple only to keep documents on any device and share them.</p>
+      <p><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a></p>
+      <button type="button" id="introClose">Got it</button>
+    </aside>
     <header id="chrome"></header>
     <article id="seo">
       <!--welcome-->
@@ -112,7 +104,6 @@
           try { localStorage.setItem('golem.introSeen', '1'); } catch (e) {}
         }
         document.getElementById('introClose').addEventListener('click', close);
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !intro.hidden) close(); });
       })();
     </script>
     <script type="module" src="/src/main.ts"></script>

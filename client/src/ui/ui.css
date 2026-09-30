@@ -1624,3 +1624,81 @@
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* --- Phones and tablets ------------------------------------------------------------------ */
+
+/* Narrow screens: the menu bar and each toolbar scroll sideways in one row instead of wrapping into
+   several, which would leave the document little room. */
+@media (max-width: 720px) {
+  .wm-chrome {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .wm-menubar {
+    overflow-x: auto;
+    padding-right: 170px; /* room for the format picker and sync button on the right */
+    scrollbar-width: none;
+  }
+  .wm-menubar::-webkit-scrollbar,
+  .wm-toolbars::-webkit-scrollbar {
+    display: none;
+  }
+  .wm-title {
+    flex: none;
+  }
+  .wm-toolbars {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .wm-toolbar {
+    flex: none;
+    flex-wrap: nowrap;
+  }
+  .wm-dialog {
+    min-width: 0;
+    max-width: calc(100vw - 16px);
+  }
+}
+
+/* Fingers need bigger targets than a mouse. */
+@media (pointer: coarse) {
+  .wm-menubar {
+    height: 36px;
+  }
+  .wm-title {
+    padding: 0 12px;
+  }
+  .wm-format {
+    top: 6px;
+    height: 26px;
+  }
+  .wm-format .wm-combo,
+  .wm-sync {
+    height: 26px;
+  }
+  .wm-toolbar {
+    min-height: 40px;
+  }
+  .wm-tbutton {
+    min-width: 36px;
+    height: 36px;
+  }
+  .wm-combo {
+    height: 32px;
+  }
+  .wm-combo-arrow {
+    width: 24px;
+  }
+  .wm-item {
+    height: 38px;
+  }
+  .wm-option {
+    min-height: 36px;
+  }
+  .wm-button {
+    height: 36px;
+  }
+}

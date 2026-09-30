@@ -1786,7 +1786,7 @@ const MULTI_CLICK_MS = 500;
 const MULTI_CLICK_PX = 4;
 let lastClick = { time: 0, x: 0, y: 0, count: 0 };
 
-function clickCount(e: PointerEvent): number {
+function clickCount(e: Press): number {
   const near = Math.abs(e.clientX - lastClick.x) <= MULTI_CLICK_PX && Math.abs(e.clientY - lastClick.y) <= MULTI_CLICK_PX;
   const count = near && e.timeStamp - lastClick.time < MULTI_CLICK_MS ? lastClick.count + 1 : 1;
   lastClick = { time: e.timeStamp, x: e.clientX, y: e.clientY, count };
@@ -1798,16 +1798,10 @@ let selecting = false;
 /** Latest drag position, sent once per frame. */
 let pendingDrag: { x: number; y: number } | null = null;
 
-canvas.addEventListener('pointerdown', (e) => {
-  canvas.setPointerCapture(e.pointerId);
-  if (e.button === 1 || (e.button === 0 && e.altKey)) {
-    // Middle button (or Alt+drag) pans.
-    pan = { x: e.clientX, y: e.clientY };
-    e.preventDefault();
-    return;
-  }
-  if (e.button !== 0) return;
-  e.preventDefault();
+/** The parts of a pointer event a press needs, so a touch tap can replay the press it held back. */
+type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 'timeStamp' | 'shiftKey' | 'metaKey' | 'ctrlKey'>;
+
+function press(e: Press): void {
   focusInput();
   const hit = pageAt(e.offsetX, e.offsetY);
   // Editing a PDF: a click picks the text under it to edit there (or, over nothing, puts the text down).
@@ -1824,6 +1818,71 @@ canvas.addEventListener('pointerdown', (e) => {
   const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
   selecting = unit === 'character';
+}
+
+// Touch: one finger drags the page, two pinch and pan it, and a tap (a press that never moved) puts the caret down.
+const TOUCH_SLOP_PX = 8;
+const touches = new Map<number, { x: number; y: number }>();
+let touchTap: Press | null = null;
+let pinch: { distance: number; x: number; y: number } | null = null;
+
+function pinchState(): { distance: number; x: number; y: number } {
+  const [a, b] = [...touches.values()];
+  return { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function touchDown(e: PointerEvent): void {
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 1) {
+    touchTap = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false };
+  } else {
+    touchTap = null;
+    pinch = touches.size === 2 ? pinchState() : null;
+  }
+}
+
+function touchMove(e: PointerEvent): void {
+  const last = touches.get(e.pointerId);
+  if (!last) return;
+  const dx = e.clientX - last.x;
+  const dy = e.clientY - last.y;
+  if (touchTap && Math.hypot(e.clientX - touchTap.clientX, e.clientY - touchTap.clientY) > TOUCH_SLOP_PX) touchTap = null;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchTap) return;
+  userMoved = true;
+  const rect = canvas.getBoundingClientRect();
+  if (pinch && touches.size === 2) {
+    const now = pinchState();
+    camera.panBy(pinch.x - now.x, pinch.y - now.y);
+    camera.zoomAt(now.x - rect.left, now.y - rect.top, now.distance / pinch.distance);
+    pinch = now;
+  } else if (touches.size === 1) camera.panBy(-dx, -dy);
+  requestRender();
+}
+
+function touchUp(e: PointerEvent): void {
+  touches.delete(e.pointerId);
+  pinch = touches.size === 2 ? pinchState() : null;
+  if (touchTap && e.type === 'pointerup') press(touchTap);
+  touchTap = null;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  if (e.pointerType === 'touch') {
+    e.preventDefault();
+    touchDown(e);
+    return;
+  }
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    // Middle button (or Alt+drag) pans.
+    pan = { x: e.clientX, y: e.clientY };
+    e.preventDefault();
+    return;
+  }
+  if (e.button !== 0) return;
+  e.preventDefault();
+  press(e);
 });
 
 // Where this user's mouse is, for the other people in the document's room (about 20 times a second).
@@ -1910,6 +1969,7 @@ canvas.addEventListener('pointerleave', () => {
 });
 
 canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'touch') return touchMove(e);
   pointerMoved(e.offsetX, e.offsetY);
   hoverInside = true;
   linkKeyChanged(e);
@@ -1937,12 +1997,13 @@ const endPointer = () => {
   pan = null;
   selecting = false;
 };
-canvas.addEventListener('pointerup', () => {
+canvas.addEventListener('pointerup', (e) => {
+  if (e.pointerType === 'touch') return touchUp(e);
   endPointer();
   // With the Format Painter picked up, what was just selected is painted.
   if (painting) send({ kind: 'applyPainter' });
 });
-canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointercancel', (e) => (e.pointerType === 'touch' ? touchUp(e) : endPointer()));
 
 // Trackpad pinch arrives as ctrl+wheel; cmd/ctrl+wheel zooms with a mouse; plain wheel scrolls.
 // Browsers don't flag macOS momentum events, so while a scroll is still coasting, cmd only takes

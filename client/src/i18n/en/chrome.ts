@@ -137,6 +137,7 @@ export const chrome = {
   'chrome.help.feedback': 'Send &Feedback…',
   'chrome.help.privacy': '&Privacy Policy',
   'chrome.help.terms': '&Terms of Service',
+  'chrome.help.changelog': '&What’s New',
   'chrome.perform.insert': 'Insert',
   'chrome.menu.file': '&File',
   'chrome.menu.edit': '&Edit',
@@ -257,4 +258,7 @@ export const chrome = {
   'chrome.feedback.thanks': 'Thanks for your feedback.',
   'chrome.feedback.title': 'Feedback',
   'chrome.shortcuts.title': 'Keyboard Shortcuts',
+  'chrome.changelog.title': 'What’s New',
+  'chrome.changelog.unreleased': 'Unreleased',
+  'chrome.changelog.empty': 'Nothing has been recorded yet.',
 } as const;

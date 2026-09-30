@@ -485,6 +485,12 @@ function syncReflow(immediate = false): void {
   else reflowTimer = window.setTimeout(send, 150);
 }
 
+/** Word's page view (not reflowed text, a grid or a picture). */
+const wordView = (): boolean => !reflowing() && !grid && !PICTURE_KINDS.includes(documentKind);
+
+/** Gray kept beside a page that was zoomed to fit the screen's width. */
+const PAGE_FIT_MARGIN_PX = 16;
+
 function placeCamera(): void {
   cameraPlaced = true;
   if (reflowing()) {
@@ -497,8 +503,9 @@ function placeCamera(): void {
     // A picture: the whole page in view.
     camera.fit(bounds, canvas.clientWidth, canvas.clientHeight, 32);
   } else {
-    // Word's view: first page at 100%, centered, with a little gray above it.
-    camera.zoom = 1;
+    // Word's view: first page at 100%, centered, with a little gray above it. On a screen narrower
+    // than the page, zoomed out until the page's width fits.
+    camera.zoom = Math.min(1, Math.max(0.1, (canvas.clientWidth - PAGE_FIT_MARGIN_PX) / (bounds.width * CSS_PX_PER_POINT)));
     const pointsPerCss = 1 / (camera.zoom * CSS_PX_PER_POINT);
     camera.x = bounds.x + bounds.width / 2 - (canvas.clientWidth / 2) * pointsPerCss;
     camera.y = bounds.y - 24 * pointsPerCss;
@@ -1740,6 +1747,22 @@ function render(): void {
   }
 }
 
+let lastCanvasHeight = 0;
+
+// The on-screen keyboard. Chrome shrinks the page for it (see the viewport meta in index.html); iOS
+// Safari doesn't: it covers the bottom of the page and scrolls the page to show the focused field.
+// So the app is sized to the visible part of the window (the CSS variable), and kept from scrolling.
+const visual = window.visualViewport;
+if (visual) {
+  const fitVisual = () => {
+    const covered = window.innerHeight - visual.height > 1;
+    document.documentElement.style.setProperty('--app-height', covered ? `${visual.height}px` : '100%');
+    if (covered && (window.scrollY || visual.offsetTop)) window.scrollTo(0, 0);
+  };
+  visual.addEventListener('resize', fitVisual);
+  visual.addEventListener('scroll', fitVisual);
+}
+
 // Size the canvas in exact device pixels so glyph edges aren't resampled by the compositor.
 new ResizeObserver(([entry]) => {
   const box = entry.devicePixelContentBoxSize?.[0];
@@ -1750,7 +1773,10 @@ new ResizeObserver(([entry]) => {
   camera.dpr = camera.width / cssWidth;
   canvas.width = camera.width;
   canvas.height = camera.height;
-  if (grid && !userMoved && pages.length) placeCamera();
+  if ((grid || wordView()) && !userMoved && pages.length) placeCamera();
+  // The on-screen keyboard came up over the caret: scroll it back into view.
+  if (camera.height < lastCanvasHeight && document.activeElement === input && selection.caret) reveal(selection.caret);
+  lastCanvasHeight = camera.height;
   // Resizing clears the canvas to (opaque) black: draw now, before this frame is painted, or
   // that black shows for a frame.
   frameCaretOnly = false;

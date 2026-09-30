@@ -46,6 +46,9 @@ export const menus = {
   'menus.format.group.images': 'Images',
 
   'menus.combo.list': '{label} list',
+  'menus.toolbar.more': 'More buttons',
+  'menus.drawer.back': 'Back',
+  'menus.drawer.all': 'All menus',
   'menus.split.options': '{label} options',
   'menus.palette.more': 'More Colors…',
   'menus.palette.document': 'Document Colors',

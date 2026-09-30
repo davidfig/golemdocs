@@ -23,6 +23,7 @@ import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, convertTargets, formatGr
 import { billingPanel } from './billingPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
+import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { matches } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
@@ -31,7 +32,7 @@ import { SCHEMES, currentAppearance, currentScheme, isDark, setAppearance, setSc
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
 import { SyncButton } from './syncButton.ts';
-import { DEFAULT_LAYOUT, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
+import { DEFAULT_LAYOUT, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import './ui.css';
 
 export interface ChromeOptions {
@@ -126,7 +127,7 @@ export class Chrome {
     document.body.append(this.layer);
     setPopupLayer(this.layer);
 
-    this.menuBar = new MenuBar(this.registry, this.menus(), this.layer);
+    this.menuBar = new MenuBar(this.registry, this.menus(), this.layer, () => this.mobileMenu());
     this.toolbarsEl = h('div', { class: 'wm-toolbars' });
     this.toolbarsEl.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -176,7 +177,7 @@ export class Chrome {
 
   private refresh(): void {
     for (const toolbar of this.toolbars) toolbar.refresh(this.state);
-    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden);
+    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
     this.menuBar.refresh();
     this.syncFormatBox();
     this.syncButton.update(this.state.sync);
@@ -419,7 +420,71 @@ export class Chrome {
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
       a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
       a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
+      { id: 'help.changelog', label: t('chrome.help.changelog'), run: () => this.showChangelog() },
     );
+  }
+
+  private openRecentItem(): MenuItem {
+    const host = this.options.host;
+    return sub(t('chrome.file.openRecent'), () => {
+      const saved = host.saved?.() ?? [];
+      if (!saved.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
+      return saved.map((s) => ({ type: 'item', label: s.label, run: () => this.registry.perform({ kind: 'openSaved', id: s.id }, s.label) }));
+    });
+  }
+
+  private convertToItem(): MenuItem {
+    return sub(t('chrome.file.convertTo'), () => convertTargets(this.state.kind).map((k) => cmd(`file.convertTo.${k}`)));
+  }
+
+  /**
+   * The phone's menu: not the desktop menus behind a button but one list of what is used on a
+   * phone, grouped under small headings, with the full menus last for everything else.
+   */
+  private mobileMenu(): DrawerEntry[] {
+    const heading = (label: string): DrawerEntry => ({ type: 'heading', label });
+    return [
+      heading(t('chrome.menu.file')),
+      cmd('file.new'),
+      cmd('file.open'),
+      this.openRecentItem(),
+      cmd('file.share'),
+      this.convertToItem(),
+      cmd('file.download'),
+      cmd('file.print'),
+      heading(t('chrome.menu.edit')),
+      cmd('edit.find'),
+      cmd('edit.replace'),
+      cmd('edit.selectAll'),
+      cmd('edit.pasteSpecial'),
+      heading(t('chrome.menu.insert')),
+      cmd('insert.image'),
+      cmd('insert.table'),
+      cmd('insert.link'),
+      cmd('insert.comment'),
+      cmd('insert.footnote'),
+      cmd('insert.pageBreak'),
+      cmd('insert.horizontalRule'),
+      heading(t('chrome.menu.view')),
+      cmd('view.normal'),
+      cmd('view.print'),
+      cmd('view.formattingMarks'),
+      cmd('view.pageWidth'),
+      cmd('view.darkMode'),
+      heading(t('chrome.menu.tools')),
+      cmd('tools.spelling'),
+      cmd('tools.wordCount'),
+      cmd('tools.trackChanges'),
+      cmd('file.pageSetup'),
+      cmd('file.properties'),
+      cmd('tools.options'),
+      heading(t('chrome.menu.help')),
+      cmd('help.shortcuts'),
+      cmd('help.feedback'),
+      cmd('help.about'),
+      { type: 'separator' },
+      sub(t('menus.drawer.all'), () => this.menus().map((menu) => sub(menu.label, menu.items))),
+    ];
   }
 
   // --- Menus -------------------------------------------------------------------------------
@@ -444,14 +509,10 @@ export class Chrome {
           cmd('file.new'),
           cmd('file.open'),
           cmd('file.import'),
-          sub(t('chrome.file.openRecent'), () => {
-            const saved = host.saved?.() ?? [];
-            if (!saved.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
-            return saved.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSaved', id: s.id }, s.label) }));
-          }),
+          this.openRecentItem(),
           sep,
           cmd('file.share'),
-          sub(t('chrome.file.convertTo'), () => convertTargets(this.state.kind).map((k) => cmd(`file.convertTo.${k}`))),
+          this.convertToItem(),
           cmd('file.download'),
           sep,
           cmd('file.pageSetup'),
@@ -638,7 +699,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.about'), cmd('help.privacy'), cmd('help.terms')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.privacy'), cmd('help.terms')],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).
@@ -895,8 +956,16 @@ export class Chrome {
       this.toolbars.push(toolbar);
       this.toolbarsEl.append(toolbar.el);
     }
+    // On a phone there is one row instead: the main buttons, then every other button from the visible toolbars.
+    const primary = new Set(MOBILE_PRIMARY);
+    const rest = this.layout.filter((t) => t.visible).flatMap((t) => [SEPARATOR, ...t.items.filter((id) => !primary.has(id))]);
+    const mobile = new Toolbar('Standard', r, [...MOBILE_PRIMARY, ...rest].map(item));
+    mobile.el.classList.add('wm-mobile-only');
+    mobile.setShown(this.layout.some((t) => t.visible && t.items.length > 0));
+    this.toolbars.push(mobile);
+    this.toolbarsEl.append(mobile.el);
     // The document area changes size; the canvas's ResizeObserver takes it from there.
-    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden);
+    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
     this.refresh();
   }
 
@@ -990,6 +1059,12 @@ export class Chrome {
       if (sent) this.options.host.notify(t('chrome.feedback.thanks'));
       this.options.host.focusEditor();
     });
+  }
+
+  private showChangelog(): void {
+    this.menuBar.close(false);
+    closePopup();
+    void import('./changelogDialog.ts').then((m) => m.showChangelog(() => this.options.host.focusEditor()));
   }
 
   private showShortcuts(): void {

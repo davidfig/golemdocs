@@ -85,6 +85,26 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
   },
 ];
 
+/**
+ * The phone toolbar is one row: these first, then every other button from the visible toolbars
+ * (they end up behind the row's "…" button, see Toolbar.fit).
+ */
+export const MOBILE_PRIMARY: readonly string[] = [
+  'edit.undo',
+  'edit.redo',
+  SEPARATOR,
+  'format.bold',
+  'format.italic',
+  'format.underline',
+  SEPARATOR,
+  'format.bullets',
+  'format.numbering',
+  SEPARATOR,
+  'insert.link',
+  'insert.image',
+  'insert.table',
+];
+
 /** A toolbar's name as shown (its `name` is an id, kept as saved). */
 export function toolbarTitle(name: string): string {
   return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name === 'Picture' ? t('picture.menu').replace('&', '') : name === 'Draw' ? t('picture.draw.toolbar') : name;

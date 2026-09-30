@@ -299,6 +299,137 @@
   text-decoration: underline;
 }
 
+.wm-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  outline: none;
+}
+
+.wm-hamburger:active {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+/* --- Menu drawer (phones) ------------------------------------------------------------------ */
+
+.wm-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.wm-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(88vw, 340px);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--wm-menu-bg);
+  border-right: 1px solid var(--wm-menu-border);
+  box-shadow: 0 0 24px var(--wm-shadow-strong);
+  font-size: 16px;
+  animation: wm-drawer-in 160ms ease-out;
+}
+
+@keyframes wm-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-drawer {
+    animation: none;
+  }
+}
+
+.wm-drawer-head {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 52px;
+  border-bottom: 1px solid var(--wm-border);
+  background: var(--wm-face);
+}
+
+.wm-drawer-title {
+  flex: 1;
+  padding: 0 8px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-drawer-back,
+.wm-drawer-close {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wm-drawer-back[hidden] {
+  display: none;
+}
+
+.wm-drawer-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+}
+
+.wm-drawer-heading {
+  padding: 14px 8px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wm-muted);
+}
+
+.wm-drawer .wm-item {
+  height: 48px;
+  padding: 0 4px;
+}
+
+.wm-drawer .wm-item:active {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-drawer .wm-gutter {
+  width: 32px;
+}
+
+.wm-drawer-list.no-gutter .wm-gutter {
+  display: none;
+}
+
+.wm-drawer .wm-arrow {
+  width: 24px;
+}
+
+.wm-drawer .wm-sep {
+  margin: 4px 8px;
+}
+
 /* --- Drop-down menus ---------------------------------------------------------------------- */
 
 .wm-layer {
@@ -1015,11 +1146,17 @@
   }
 }
 
+/* The one-row phone toolbar exists only on narrow screens; the desktop toolbars are hidden there. */
+.wm-toolbar.wm-mobile-only {
+  display: none;
+}
+
 /* --- Format selector and formats that can't use a control ----------------------------------- */
 
 /* Author `display` rules on buttons would otherwise beat the hidden attribute. */
 .wm-menubar [hidden],
 .wm-toolbar [hidden],
+.wm-overflow [hidden],
 .wm-tsep[hidden] {
   display: none !important;
 }
@@ -1635,32 +1772,57 @@
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
-  .wm-menubar {
-    overflow-x: auto;
-    padding-right: 170px; /* room for the format picker and sync button on the right */
-    scrollbar-width: none;
-  }
-  .wm-menubar::-webkit-scrollbar,
-  .wm-toolbars::-webkit-scrollbar {
+  /* The menu titles give way to one hamburger button that opens the drawer (menuDrawer.ts). */
+  .wm-title {
     display: none;
   }
-  .wm-title {
-    flex: none;
+  .wm-hamburger {
+    display: flex;
   }
+  .wm-toolbars > .wm-toolbar:not(.wm-mobile-only) {
+    display: none;
+  }
+  .wm-toolbars > .wm-toolbar.wm-mobile-only:not([hidden]) {
+    display: flex;
+  }
+  /* Each toolbar is one full-width row; what doesn't fit goes behind its "…" button (see Toolbar.fit). */
   .wm-toolbars {
+    flex-direction: column;
     flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    overscroll-behavior-x: contain;
+    align-items: stretch;
   }
   .wm-toolbar {
-    flex: none;
     flex-wrap: nowrap;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .wm-toolbar > * {
+    flex: none;
+  }
+  .wm-toolbar .wm-more {
+    margin-left: auto;
+    flex: none;
+    font-size: 18px;
+    line-height: 1;
   }
   .wm-dialog {
     min-width: 0;
     max-width: calc(100vw - 16px);
   }
+}
+
+/* The buttons that didn't fit in a toolbar row, in a panel under its "…" button. */
+.wm-overflow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100vw - 8px);
+  padding: 3px;
+  background: var(--wm-bar-top);
+  border: 1px solid var(--wm-menu-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px var(--wm-shadow);
 }
 
 /* Fingers need bigger targets than a mouse. */
@@ -1680,14 +1842,18 @@
     height: 26px;
   }
   .wm-toolbar {
-    min-height: 40px;
+    min-height: 46px;
   }
   .wm-tbutton {
-    min-width: 36px;
-    height: 36px;
+    min-width: 42px;
+    height: 42px;
+    margin: 0 2px;
+  }
+  .wm-tbutton .icon {
+    transform: scale(1.25);
   }
   .wm-combo {
-    height: 32px;
+    height: 36px;
   }
   .wm-combo-arrow {
     width: 24px;
@@ -1701,4 +1867,34 @@
   .wm-button {
     height: 36px;
   }
+}
+
+/* --- What's New ------------------------------------------------------------------------------ */
+
+.wm-changelog {
+  padding: 4px 12px 8px;
+  min-width: 320px;
+}
+
+.wm-changelog h3 {
+  margin: 12px 0 2px;
+  font-size: 14px;
+}
+
+.wm-changelog-date {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--wm-muted);
+}
+
+.wm-changelog h4 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  color: var(--wm-muted);
+}
+
+.wm-changelog ul {
+  margin: 0;
+  padding-left: 20px;
 }

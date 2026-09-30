@@ -139,6 +139,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.feedback': 'Enviar &Comentários…',
   'chrome.help.privacy': '&Privacidade',
   'chrome.help.terms': '&Termos de Serviço',
+  'chrome.help.changelog': '&Novidades',
   'chrome.perform.insert': 'Inserir',
   'chrome.menu.file': '&Arquivo',
   'chrome.menu.edit': '&Editar',
@@ -259,4 +260,7 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': 'Obrigado pelos seus comentários.',
   'chrome.feedback.title': 'Comentários',
   'chrome.shortcuts.title': 'Atalhos de Teclado',
+  'chrome.changelog.title': 'Novidades',
+  'chrome.changelog.unreleased': 'Não lançada',
+  'chrome.changelog.empty': 'Nada foi registrado ainda.',
 };

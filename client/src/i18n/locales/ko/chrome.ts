@@ -139,6 +139,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.feedback': '피드백 보내기(&F)…',
   'chrome.help.privacy': '개인정보 처리방침(&P)',
   'chrome.help.terms': '이용 약관(&T)',
+  'chrome.help.changelog': '새로운 기능(&W)',
   'chrome.perform.insert': '삽입',
   'chrome.menu.file': '파일(&F)',
   'chrome.menu.edit': '편집(&E)',
@@ -259,4 +260,7 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': '피드백을 보내 주셔서 감사합니다.',
   'chrome.feedback.title': '피드백',
   'chrome.shortcuts.title': '바로 가기 키',
+  'chrome.changelog.title': '새로운 기능',
+  'chrome.changelog.unreleased': '출시 전',
+  'chrome.changelog.empty': '아직 기록된 내용이 없습니다.',
 };

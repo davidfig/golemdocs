@@ -48,6 +48,9 @@ export const menus: Catalog = {
   'menus.format.group.images': 'Изображения',
 
   'menus.combo.list': '{label}: список',
+  'menus.toolbar.more': 'Ещё кнопки',
+  'menus.drawer.back': 'Назад',
+  'menus.drawer.all': 'Все меню',
   'menus.split.options': '{label}: параметры',
   'menus.palette.more': 'Другие цвета…',
   'menus.palette.document': 'Цвета документа',

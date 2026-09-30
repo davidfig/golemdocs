@@ -22,6 +22,9 @@ export interface Control {
 
 export type ToolbarItem = { type: 'button'; id: string } | { type: 'separator' } | { type: 'control'; create: () => Control };
 
+/** Phones and small windows, where the toolbars are one row and the rest goes behind "…". Matches the CSS. */
+const NARROW = window.matchMedia('(max-width: 720px)');
+
 export const tsep: ToolbarItem = { type: 'separator' };
 export const btn = (id: string): ToolbarItem => ({ type: 'button', id });
 export const control = (create: () => Control): ToolbarItem => ({ type: 'control', create });
@@ -33,6 +36,9 @@ export class Toolbar {
   private readonly entries: { el: HTMLElement; control: Control | null }[] = [];
   /** The toolbar's own visibility setting (View ▸ Toolbars); formats can only hide it further. */
   private shown = true;
+  /** On a narrow screen, buttons that don't fit go in `overflow`, opened by the "…" button. */
+  private readonly more: HTMLButtonElement;
+  private readonly overflow: HTMLDivElement;
 
   constructor(
     readonly name: string,
@@ -52,6 +58,28 @@ export class Toolbar {
       this.entries.push({ el: c.el, control: c });
       this.el.append(c.el);
     }
+    this.more = h('button', { class: 'wm-tbutton wm-more', title: t('menus.toolbar.more'), attrs: { type: 'button', tabindex: '-1', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-label': t('menus.toolbar.more') } }, '…');
+    this.more.hidden = true;
+    keepFocus(this.more);
+    this.overflow = h('div', { class: 'wm-overflow' });
+    this.more.addEventListener('click', () => (popupOpenFor(this.more) ? closePopup() : openPopup(this.more, this.overflow)));
+    this.el.append(this.more);
+    new ResizeObserver(() => this.fit()).observe(this.el);
+    NARROW.addEventListener('change', () => this.fit());
+  }
+
+  /** Moves the buttons that don't fit into the overflow panel (all of them stay in the row when it is wide). */
+  private fit(): void {
+    if (this.el.hidden || !this.el.clientWidth || popupOpenFor(this.more)) return;
+    for (const { el } of this.entries) this.el.insertBefore(el, this.more);
+    this.more.hidden = true;
+    if (!NARROW.matches || this.el.scrollWidth <= this.el.clientWidth) return;
+    this.more.hidden = false;
+    let kept = this.entries.length;
+    const push = () => this.overflow.prepend(this.entries[--kept].el);
+    while (kept > 0 && this.el.scrollWidth > this.el.clientWidth) push();
+    // A separator left dangling at the end of the row goes with the rest.
+    while (kept > 0 && !this.entries[kept - 1].control) push();
   }
 
   /** Whether the user has this toolbar turned on (it can still be empty for the format). */
@@ -85,6 +113,7 @@ export class Toolbar {
     }
     this.empty = visible === 0;
     this.el.hidden = !this.shown || this.empty;
+    this.fit();
   }
 }
 

@@ -48,6 +48,9 @@ export const menus: Partial<Messages> = {
   'menus.format.group.images': 'Bilder',
 
   'menus.combo.list': 'Liste: {label}',
+  'menus.toolbar.more': 'Weitere Schaltflächen',
+  'menus.drawer.back': 'Zurück',
+  'menus.drawer.all': 'Alle Menüs',
   'menus.split.options': 'Optionen für {label}',
   'menus.palette.more': 'Weitere Farben…',
   'menus.palette.document': 'Dokumentfarben',

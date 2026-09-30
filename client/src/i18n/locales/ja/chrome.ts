@@ -139,6 +139,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.feedback': 'フィードバックを送信(&F)…',
   'chrome.help.privacy': 'プライバシー ポリシー(&P)',
   'chrome.help.terms': '利用規約(&T)',
+  'chrome.help.changelog': '新機能(&W)',
   'chrome.perform.insert': '挿入',
   'chrome.menu.file': 'ファイル(&F)',
   'chrome.menu.edit': '編集(&E)',
@@ -259,4 +260,7 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': 'フィードバックをありがとうございます。',
   'chrome.feedback.title': 'フィードバック',
   'chrome.shortcuts.title': 'キーボード ショートカット',
+  'chrome.changelog.title': '新機能',
+  'chrome.changelog.unreleased': '未リリース',
+  'chrome.changelog.empty': 'まだ記録はありません。',
 };

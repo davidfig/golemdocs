@@ -61,6 +61,6 @@ If this policy changes, we'll update the date at the top. If a change is signifi
 
 ## Contact
 
-Questions or requests about your data: use Help ▸ Send Feedback in the app, or write to CONTACT_EMAIL.
+Questions or requests about your data: use Help ▸ Send Feedback in the app, or write to support@golemdocs.com.
 
 See also our [Terms of Service](/terms).

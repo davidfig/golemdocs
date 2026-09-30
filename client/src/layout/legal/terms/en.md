@@ -49,6 +49,6 @@ We may update these terms. The date at the top shows the latest version. If you 
 
 ## Contact
 
-Questions about these terms: use Help ▸ Send Feedback in the app, or write to CONTACT_EMAIL.
+Questions about these terms: use Help ▸ Send Feedback in the app, or write to support@golemdocs.com.
 
 See also our [Privacy Policy](/privacy).

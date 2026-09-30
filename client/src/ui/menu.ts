@@ -10,6 +10,7 @@ import type { CommandRegistry } from './commands.ts';
 import { h, mnemonicLabel, setAttr } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { IS_MAC } from './shortcuts.ts';
+import { showMenuDrawer, type DrawerEntry } from './menuDrawer.ts';
 
 export type MenuItem =
   | { type: 'command'; id: string }
@@ -41,9 +42,84 @@ export function hasAvailable(registry: CommandRegistry, items: MenuItem[] | (() 
   });
 }
 
+/** A menu entry that is a row (not a separator). */
+export type RowItem = Exclude<MenuItem, { type: 'separator' }>;
+
 export const sep: MenuItem = { type: 'separator' };
 export const cmd = (id: string): MenuItem => ({ type: 'command', id });
 export const sub = (label: string, items: MenuItem[] | (() => MenuItem[]), icon?: string): MenuItem => ({ type: 'submenu', label, items, icon });
+
+/** The items of a menu that the open format can express, with no separator at either end or doubled. */
+export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (RowItem | 'separator')[] {
+  const out: (RowItem | 'separator')[] = [];
+  for (const item of items) {
+    if (item.type === 'separator') {
+      if (out.length && out[out.length - 1] !== 'separator') out.push('separator');
+      continue;
+    }
+    // What the format can't express isn't offered at all (see CommandRegistry.isAvailable).
+    if (item.type === 'command' && !registry.isAvailable(registry.get(item.id))) continue;
+    if (item.type === 'submenu' && !hasAvailable(registry, item.items)) continue;
+    if (item.type === 'item' && item.available && !item.available()) continue;
+    out.push(item);
+  }
+  if (out[out.length - 1] === 'separator') out.pop();
+  return out;
+}
+
+/** What a menu row shows and does, whether it is drawn in a drop-down or the phone drawer. */
+export interface RowInfo {
+  label: string;
+  icon?: string;
+  shortcut: string;
+  enabled: boolean;
+  checked: boolean;
+  radio: boolean;
+  role: string;
+  submenu: MenuItem[] | (() => MenuItem[]) | null;
+  /** Runs a leaf item (the caller closes the menu first). */
+  run: () => void;
+}
+
+export function describeItem(registry: CommandRegistry, item: RowItem): RowInfo {
+  const info: RowInfo = { label: '', shortcut: '', enabled: true, checked: false, radio: false, role: 'menuitem', submenu: null, run: () => {} };
+  switch (item.type) {
+    case 'command': {
+      const command = registry.get(item.id);
+      info.label = command.label;
+      info.icon = command.icon;
+      info.shortcut = command.shortcutText;
+      info.enabled = registry.isEnabled(command);
+      if (command.checked) {
+        info.checked = registry.isChecked(command);
+        info.radio = !!command.radio;
+        info.role = info.radio ? 'menuitemradio' : 'menuitemcheckbox';
+      }
+      info.run = () => registry.execute(command);
+      break;
+    }
+    case 'submenu':
+      info.label = item.label;
+      info.icon = item.icon;
+      info.enabled = item.enabled?.() ?? true;
+      info.submenu = item.items;
+      break;
+    case 'item':
+      info.label = item.label;
+      info.enabled = item.enabled ?? true;
+      info.shortcut = item.hint ?? '';
+      if (item.checked !== undefined) {
+        info.checked = item.checked;
+        info.role = 'menuitemcheckbox';
+      }
+      info.run = () => {
+        item.run();
+        registry.focusEditor();
+      };
+      break;
+  }
+  return info;
+}
 
 const SUBMENU_DELAY_MS = 220;
 
@@ -72,77 +148,21 @@ class MenuPopup {
     this.el = h('div', { class: 'wm-menu', attrs: { role: 'menu', 'aria-label': label } });
     this.el.addEventListener('mousedown', (e) => e.preventDefault());
     this.el.addEventListener('contextmenu', (e) => e.preventDefault());
-    let lastWasSeparator = true;
-    for (const item of items) {
-      if (item.type === 'separator') {
-        if (!lastWasSeparator) this.el.append(h('div', { class: 'wm-sep', attrs: { role: 'separator' } }));
-        lastWasSeparator = true;
-        continue;
-      }
-      // What the format can't express isn't offered at all (see CommandRegistry.isAvailable).
-      if (item.type === 'command' && !bar.registry.isAvailable(bar.registry.get(item.id))) continue;
-      if (item.type === 'submenu' && !hasAvailable(bar.registry, item.items)) continue;
-      if (item.type === 'item' && item.available && !item.available()) continue;
-      lastWasSeparator = false;
-      this.addRow(item);
+    for (const item of visibleItems(bar.registry, items)) {
+      if (item === 'separator') this.el.append(h('div', { class: 'wm-sep', attrs: { role: 'separator' } }));
+      else this.addRow(item);
     }
-    const last = this.el.lastElementChild;
-    if (last?.classList.contains('wm-sep')) last.remove();
   }
 
-  private addRow(item: Exclude<MenuItem, { type: 'separator' }>): void {
-    const registry = this.bar.registry;
-    let label: string;
-    let icon: string | undefined;
-    let shortcut = '';
-    let enabled = true;
-    let checked = false;
-    let radio = false;
-    let role = 'menuitem';
-    let activate: () => void;
-    let submenu: Row['submenu'] = null;
+  private addRow(item: RowItem): void {
+    const { label, icon, shortcut, enabled, checked, radio, role, submenu, run } = describeItem(this.bar.registry, item);
     const index = this.rows.length;
-
-    switch (item.type) {
-      case 'command': {
-        const command = registry.get(item.id);
-        label = command.label;
-        icon = command.icon;
-        shortcut = command.shortcutText;
-        enabled = registry.isEnabled(command);
-        if (command.checked) {
-          checked = registry.isChecked(command);
-          radio = !!command.radio;
-          role = radio ? 'menuitemradio' : 'menuitemcheckbox';
-        }
-        activate = () => {
+    const activate = submenu
+      ? () => this.openChild(index, true)
+      : () => {
           this.bar.close();
-          registry.execute(command);
+          run();
         };
-        break;
-      }
-      case 'submenu':
-        label = item.label;
-        icon = item.icon;
-        enabled = item.enabled?.() ?? true;
-        submenu = item.items;
-        activate = () => this.openChild(index, true);
-        break;
-      case 'item':
-        label = item.label;
-        enabled = item.enabled ?? true;
-        shortcut = item.hint ?? '';
-        if (item.checked !== undefined) {
-          checked = item.checked;
-          role = 'menuitemcheckbox';
-        }
-        activate = () => {
-          this.bar.close();
-          item.run();
-          this.bar.registry.focusEditor();
-        };
-        break;
-    }
 
     const { el: labelEl, key } = mnemonicLabel(label);
     const gutter = h('span', { class: 'wm-gutter' });
@@ -325,10 +345,20 @@ export class MenuBar {
     readonly registry: CommandRegistry,
     private readonly menus: TopMenu[],
     layer: HTMLDivElement,
+    /** What the phone's drawer lists (built when it opens). */
+    mobileMenu: () => DrawerEntry[],
   ) {
     this.layer = layer;
     this.el = h('div', { class: 'wm-menubar', attrs: { role: 'menubar', 'aria-label': t('menus.menuBar') } });
     this.el.addEventListener('mousedown', (e) => e.preventDefault());
+    // On a phone the titles are hidden and this opens all the menus in a drawer (see menuDrawer.ts).
+    const hamburger = h('button', { class: 'wm-hamburger', attrs: { type: 'button', tabindex: '-1', 'aria-haspopup': 'true', 'aria-label': t('menus.menuBar') } });
+    hamburger.innerHTML = ICONS.menu;
+    hamburger.addEventListener('click', () => {
+      this.close(false);
+      showMenuDrawer(this.registry, mobileMenu(), this.layer);
+    });
+    this.el.append(hamburger);
     menus.forEach((menu, i) => {
       const { el: labelEl, key } = mnemonicLabel(menu.label);
       const title = h('button', { class: 'wm-title', attrs: { role: 'menuitem', 'aria-haspopup': 'menu', 'aria-expanded': 'false', tabindex: '-1' } }, labelEl);

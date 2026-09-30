@@ -42,3 +42,7 @@ The user starts any dev server you need (`pnpm dev`, which runs Vite on :5173 an
 Never use `git stash` (including `git stash pop`, `apply` or `drop`) when working in the main checkout. Other agents are likely running there against the same working tree, and stashing sweeps up their uncommitted changes and can break their work. To set changes aside, commit them or copy the affected files instead.
 
 **Exception: worktrees.** A git worktree has its own working tree, so no other agent shares your uncommitted changes there. Stashing is fine, but note that the stash list is shared across all worktrees of the repo: only pop or drop a stash you created yourself.
+
+## Changelog
+
+`CHANGELOG.md` (repository root) is shown in the app under Help ▸ What's New. When you make a user-visible change (a feature, a behavior change or a bug fix), add one line for it under the `## <version> - Unreleased` heading, in an `### Added`, `### Changed` or `### Fixed` group, in the same change. Write for users, not developers; skip refactors, tests and tooling. Never edit released versions. To release, replace `Unreleased` with the date (`## 0.1.0 - 2026-10-01`), set the `version` in every `package.json` to match, and start a new `## <next version> - Unreleased` heading.

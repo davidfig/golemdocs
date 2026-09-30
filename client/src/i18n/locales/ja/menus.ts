@@ -48,6 +48,9 @@ export const menus: Partial<Messages> = {
   'menus.format.group.images': '画像',
 
   'menus.combo.list': '{label} の一覧',
+  'menus.toolbar.more': 'その他のボタン',
+  'menus.drawer.back': '戻る',
+  'menus.drawer.all': 'すべてのメニュー',
   'menus.split.options': '{label} のオプション',
   'menus.palette.more': 'その他の色…',
   'menus.palette.document': 'ドキュメントの色',

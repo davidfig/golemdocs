@@ -139,6 +139,7 @@ export const chrome: Catalog = {
   'chrome.help.feedback': 'От&править отзыв…',
   'chrome.help.privacy': 'Политика кон&фиденциальности',
   'chrome.help.terms': '&Условия использования',
+  'chrome.help.changelog': '&Что нового',
   'chrome.perform.insert': 'Вставка',
   'chrome.menu.file': '&Файл',
   'chrome.menu.edit': 'Пра&вка',
@@ -259,4 +260,7 @@ export const chrome: Catalog = {
   'chrome.feedback.thanks': 'Спасибо за ваш отзыв.',
   'chrome.feedback.title': 'Отзывы',
   'chrome.shortcuts.title': 'Сочетания клавиш',
+  'chrome.changelog.title': 'Что нового',
+  'chrome.changelog.unreleased': 'Не выпущена',
+  'chrome.changelog.empty': 'Пока ничего не записано.',
 };

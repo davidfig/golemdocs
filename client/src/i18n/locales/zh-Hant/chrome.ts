@@ -139,6 +139,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.feedback': '傳送意見反應(&F)…',
   'chrome.help.privacy': '隱私權政策(&P)',
   'chrome.help.terms': '服務條款(&T)',
+  'chrome.help.changelog': '新增功能(&W)',
   'chrome.perform.insert': '插入',
   'chrome.menu.file': '檔案(&F)',
   'chrome.menu.edit': '編輯(&E)',
@@ -259,4 +260,7 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': '感謝您的意見反應。',
   'chrome.feedback.title': '意見反應',
   'chrome.shortcuts.title': '鍵盤快速鍵',
+  'chrome.changelog.title': '新增功能',
+  'chrome.changelog.unreleased': '未發佈',
+  'chrome.changelog.empty': '尚無記錄。',
 };

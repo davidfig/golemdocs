@@ -1,0 +1,35 @@
+/* The app's one tooltip (see tooltip.ts). A popover, so it sits above open dialogs too. */
+
+.wm-tip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: min(320px, calc(100vw - 8px));
+  box-sizing: border-box;
+  padding: 5px 9px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 4px;
+  background: #2b2d31;
+  box-shadow: 0 2px 8px var(--wm-shadow, rgb(0 0 0 / 0.3));
+  font: 12px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: #f4f4f4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+
+.wm-tip.shown {
+  opacity: 1;
+}
+
+.wm-tip[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-tip {
+    transition: none;
+  }
+}

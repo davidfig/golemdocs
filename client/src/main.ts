@@ -71,14 +71,14 @@ import { hasExtension, toUtf8 } from './formats/textFiles.ts';
 import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
 import { encodeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
-import { FORMATS, PICTURE_KINDS, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import { FORMATS, PICTURE_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
-// The static welcome text in index.html is for crawlers and shows until the app starts; the canvas is the page for everyone else.
-document.getElementById('seo')?.classList.add('app-ready');
+// The static welcome text in index.html is for crawlers; the canvas is the page for everyone else.
 document.getElementById('seo')?.setAttribute('aria-hidden', 'true');
 
+initTooltips();
 const localeReady = initLocale();
 // Who is signed in decides whether a saved document joins its room, so ask straight away too.
 const accountLookup = currentUser().catch(() => null);
@@ -1496,7 +1496,7 @@ function applySelection(update: SelectionUpdate): void {
     else if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
     else if (link && parseDocAddress(link.url)) void openDocumentLink(parseDocAddress(link.url)!.title);
   }
-  canvas.style.cursor = painting ? 'copy' : '';
+  updateCursor();
   if (update.search) findDialog.report(update.search);
   if (update.spell?.menu) {
     if (update.spell.issue && spellMenuAt) spellMenu.show(update.spell.issue, spellMenuAt.x, spellMenuAt.y);
@@ -1858,35 +1858,62 @@ canvas.addEventListener('pointerleave', () => {
   sendPointer();
 });
 
-// Over a link, the browser's tooltip says how to follow it (a plain click only puts the caret there).
-type Point = { x: number; y: number };
-let hoverAt: Point | null = null;
+// Over a link, a tooltip says how to follow it (a plain click only puts the caret there).
+interface Hover {
+  /** Canvas coordinates, to find the link; window coordinates, to place the tip. */
+  x: number;
+  y: number;
+  clientX: number;
+  clientY: number;
+}
+let hoverAt: Hover | null = null;
 let hoverBusy = false;
-function hoverLink(x: number, y: number): void {
-  hoverAt = { x, y };
+let hoverInside = false;
+/** The pointer is over a link, and the key that follows links (Cmd on a Mac, else Ctrl) is down: the cursor is a hand. */
+let overLink = false;
+let linkKeyDown = false;
+function updateCursor(): void {
+  const cursor = painting ? 'copy' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
+  if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+}
+function linkKeyChanged(e: { metaKey: boolean; ctrlKey: boolean }): void {
+  linkKeyDown = MAC ? e.metaKey : e.ctrlKey;
+  updateCursor();
+}
+window.addEventListener('keydown', linkKeyChanged, true);
+window.addEventListener('keyup', linkKeyChanged, true);
+window.addEventListener('blur', () => linkKeyChanged({ metaKey: false, ctrlKey: false }));
+function hoverLink(at: Hover): void {
+  hoverAt = at;
   if (hoverBusy) return;
   hoverBusy = true;
   requestAnimationFrame(async () => {
-    const at = hoverAt;
+    const asked = hoverAt;
     hoverAt = null;
-    const hit = at && loaded ? pageAt(at.x, at.y) : null;
+    const hit = asked && loaded ? pageAt(asked.x, asked.y) : null;
     const url = hit ? await worker.linkAt(hit.page.id, hit.x, hit.y) : null;
     hoverBusy = false;
-    const tip = url ? t(MAC ? 'app.linkTip.cmd' : 'app.linkTip.ctrl', { url }) : '';
-    if (canvas.title !== tip) canvas.title = tip;
-    const moved = hoverAt as Point | null; // the pointer may have moved while asking
-    if (moved) hoverLink(moved.x, moved.y);
+    overLink = url !== null && hoverInside;
+    updateCursor();
+    if (asked && hoverInside) pointerTip(url ? t(MAC ? 'app.linkTip.cmd' : 'app.linkTip.ctrl', { url }) : null, asked.clientX, asked.clientY);
+    const moved = hoverAt as Hover | null; // the pointer may have moved while asking
+    if (moved && hoverInside) hoverLink(moved);
   });
 }
 
 canvas.addEventListener('pointerleave', () => {
+  hoverInside = false;
   hoverAt = null;
-  canvas.title = '';
+  overLink = false;
+  updateCursor();
+  pointerTip(null, 0, 0);
 });
 
 canvas.addEventListener('pointermove', (e) => {
   pointerMoved(e.offsetX, e.offsetY);
-  if (!pan && !selecting) hoverLink(e.offsetX, e.offsetY);
+  hoverInside = true;
+  linkKeyChanged(e);
+  if (!pan && !selecting) hoverLink({ x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY });
   if (pan) {
     userMoved = true;
     camera.panBy(pan.x - e.clientX, pan.y - e.clientY);

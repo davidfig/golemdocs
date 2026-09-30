@@ -69,7 +69,9 @@ export type DocumentSource =
   /** What Golem Docs is: shown when there are no documents yet. */
   | { kind: 'welcome' }
   /** The privacy policy or the terms of service, written as documents like the welcome one. */
-  | { kind: 'legal'; page: LegalPage };
+  | { kind: 'legal'; page: LegalPage }
+  /** What's New: the repository's CHANGELOG.md, opened as a document. */
+  | { kind: 'changelog' };
 
 /** The built-in legal documents, at `/privacy` and `/terms`. */
 export type LegalPage = 'privacy' | 'terms';

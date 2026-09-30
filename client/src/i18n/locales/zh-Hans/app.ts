@@ -9,6 +9,7 @@ export const app: Partial<Messages> = {
   'app.linkTip.cmd': '{url}\n按住 Cmd 并单击可访问链接',
   'app.privacyName': '隐私政策',
   'app.termsName': '服务条款',
+  'app.changelogName': '新增功能',
   'app.warAndPeaceName': '战争与和平',
   'app.sampleWelcome': '欢迎使用 Golem Docs(&E)',
   'app.sampleFonts': '字体(&F)',

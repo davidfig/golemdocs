@@ -260,7 +260,4 @@ export const chrome: Catalog = {
   'chrome.feedback.thanks': 'Спасибо за ваш отзыв.',
   'chrome.feedback.title': 'Отзывы',
   'chrome.shortcuts.title': 'Сочетания клавиш',
-  'chrome.changelog.title': 'Что нового',
-  'chrome.changelog.unreleased': 'Не выпущена',
-  'chrome.changelog.empty': 'Пока ничего не записано.',
 };

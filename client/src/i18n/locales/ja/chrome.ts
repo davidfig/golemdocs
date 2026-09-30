@@ -260,7 +260,4 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': 'フィードバックをありがとうございます。',
   'chrome.feedback.title': 'フィードバック',
   'chrome.shortcuts.title': 'キーボード ショートカット',
-  'chrome.changelog.title': '新機能',
-  'chrome.changelog.unreleased': '未リリース',
-  'chrome.changelog.empty': 'まだ記録はありません。',
 };

@@ -421,7 +421,7 @@ export class Chrome {
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
       a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
       a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
-      { id: 'help.changelog', label: t('chrome.help.changelog'), run: () => this.showChangelog() },
+      a('help.changelog', t('chrome.help.changelog'), { kind: 'openSample', id: 'changelog' }),
     );
   }
 
@@ -1061,12 +1061,6 @@ export class Chrome {
       if (sent) this.options.host.notify(t('chrome.feedback.thanks'));
       this.options.host.focusEditor();
     });
-  }
-
-  private showChangelog(): void {
-    this.menuBar.close(false);
-    closePopup();
-    void import('./changelogDialog.ts').then((m) => m.showChangelog(() => this.options.host.focusEditor()));
   }
 
   private showShortcuts(): void {

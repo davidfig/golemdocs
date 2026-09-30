@@ -146,8 +146,8 @@ function lastDoc(): string | null {
     return null;
   }
 }
-/** The built-in documents with an address of their own (the welcome text, privacy policy and terms); the app is at `/` for everything else. */
-const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', privacy: '/privacy', terms: '/terms' };
+/** The built-in documents with an address of their own (the welcome text, privacy policy, terms and changelog); the app is at `/` for everything else. */
+const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', privacy: '/privacy', terms: '/terms', changelog: '/changelog' };
 /** The document the address asks for: `?doc=…`, or a page's path. */
 const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === location.pathname) ?? null;
 /** Sets the address to `params` at the app's root, or at a page's path when it holds only that built-in document. */
@@ -232,7 +232,7 @@ function reportError(text: string): void {
 
 function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean } = {}): void {
   const start = performance.now();
-  let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : t('app.fontsName');
+  let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   cropLayer.cancel();
@@ -243,7 +243,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   current = {
     localId: options.localId ?? null,
     unsavedSince: 0,
-    builtIn: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'fonts',
+    builtIn: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
     room: null,
     roomRequested: false,
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
@@ -278,7 +278,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   documentName = name;
   documentKind = kindOfSource(source);
   annotating = false;
-  sharedDeviceNotice.update({ welcome: source.kind === 'welcome' || source.kind === 'legal' });
+  sharedDeviceNotice.update({ welcome: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' });
   setStatus(t('app.loading', { name }));
 
   const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
@@ -546,6 +546,8 @@ function openSource(source: string, keepRoom = false): void {
     open({ kind: 'welcome' });
   } else if (source === 'privacy' || source === 'terms') {
     open({ kind: 'legal', page: source });
+  } else if (source === 'changelog') {
+    open({ kind: 'changelog' });
   } else {
     open({ kind: 'fonts' });
   }

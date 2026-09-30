@@ -260,7 +260,4 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': 'Obrigado pelos seus comentários.',
   'chrome.feedback.title': 'Comentários',
   'chrome.shortcuts.title': 'Atalhos de Teclado',
-  'chrome.changelog.title': 'Novidades',
-  'chrome.changelog.unreleased': 'Não lançada',
-  'chrome.changelog.empty': 'Nada foi registrado ainda.',
 };

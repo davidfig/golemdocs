@@ -9,6 +9,7 @@ export const app: Partial<Messages> = {
   'app.linkTip.cmd': '{url}\nCmd キーを押しながらクリックしてリンク先を表示',
   'app.privacyName': 'プライバシー ポリシー',
   'app.termsName': '利用規約',
+  'app.changelogName': '新機能',
   'app.warAndPeaceName': '戦争と平和',
   'app.sampleWelcome': 'Golem Docs へようこそ(&E)',
   'app.sampleFonts': 'フォント(&F)',

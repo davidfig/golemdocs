@@ -258,7 +258,4 @@ export const chrome = {
   'chrome.feedback.thanks': 'Thanks for your feedback.',
   'chrome.feedback.title': 'Feedback',
   'chrome.shortcuts.title': 'Keyboard Shortcuts',
-  'chrome.changelog.title': 'What’s New',
-  'chrome.changelog.unreleased': 'Unreleased',
-  'chrome.changelog.empty': 'Nothing has been recorded yet.',
 } as const;

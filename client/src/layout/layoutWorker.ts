@@ -59,6 +59,10 @@ async function legalText(page: LegalPage): Promise<string> {
   const load = LEGAL[`./legal/${page}/${getLocale()}.md`] ?? LEGAL[`./legal/${page}/en.md`];
   return load();
 }
+/** CHANGELOG.md at the repository root (English only), its own chunk since it grows with every change. */
+async function changelogText(): Promise<string> {
+  return (await import('../../../CHANGELOG.md?raw')).default;
+}
 import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
@@ -201,6 +205,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       const { document, extensions } = await importDocument('md', new TextEncoder().encode(await legalText(source.page)));
       await addWelcomeIcon(document);
       return flowing(t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName'), document, 'docx', extensions);
+    }
+    case 'changelog': {
+      const { document, extensions } = await importDocument('md', new TextEncoder().encode(await changelogText()));
+      await addWelcomeIcon(document);
+      return flowing(t('app.changelogName'), document, 'docx', extensions);
     }
   }
 }

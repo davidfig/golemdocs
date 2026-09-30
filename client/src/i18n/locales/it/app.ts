@@ -9,6 +9,7 @@ export const app: Partial<Messages> = {
   'app.linkTip.cmd': '{url}\nCmd+clic per aprire il collegamento',
   'app.privacyName': 'Informativa sulla privacy',
   'app.termsName': 'Termini di servizio',
+  'app.changelogName': 'Novità',
   'app.warAndPeaceName': 'Guerra e pace',
   'app.sampleWelcome': '&Benvenuto in Golem Docs',
   'app.sampleFonts': '&Caratteri',

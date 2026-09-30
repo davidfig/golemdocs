@@ -260,7 +260,4 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': '感谢你的反馈。',
   'chrome.feedback.title': '反馈',
   'chrome.shortcuts.title': '键盘快捷键',
-  'chrome.changelog.title': '新增功能',
-  'chrome.changelog.unreleased': '未发布',
-  'chrome.changelog.empty': '尚无记录。',
 };

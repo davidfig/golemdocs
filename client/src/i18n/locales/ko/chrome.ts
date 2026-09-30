@@ -260,7 +260,4 @@ export const chrome: Partial<Messages> = {
   'chrome.feedback.thanks': '피드백을 보내 주셔서 감사합니다.',
   'chrome.feedback.title': '피드백',
   'chrome.shortcuts.title': '바로 가기 키',
-  'chrome.changelog.title': '새로운 기능',
-  'chrome.changelog.unreleased': '출시 전',
-  'chrome.changelog.empty': '아직 기록된 내용이 없습니다.',
 };

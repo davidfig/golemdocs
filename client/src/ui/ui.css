@@ -1952,33 +1952,3 @@
     height: 36px;
   }
 }
-
-/* --- What's New ------------------------------------------------------------------------------ */
-
-.wm-changelog {
-  padding: 4px 12px 8px;
-  min-width: 320px;
-}
-
-.wm-changelog h3 {
-  margin: 12px 0 2px;
-  font-size: 14px;
-}
-
-.wm-changelog-date {
-  margin-left: 8px;
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--wm-muted);
-}
-
-.wm-changelog h4 {
-  margin: 8px 0 2px;
-  font-size: 12px;
-  color: var(--wm-muted);
-}
-
-.wm-changelog ul {
-  margin: 0;
-  padding-left: 20px;
-}

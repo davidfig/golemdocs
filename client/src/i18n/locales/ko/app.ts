@@ -9,6 +9,7 @@ export const app: Partial<Messages> = {
   'app.linkTip.cmd': '{url}\nCmd+클릭하여 링크 열기',
   'app.privacyName': '개인정보 처리방침',
   'app.termsName': '이용 약관',
+  'app.changelogName': '새로운 기능',
   'app.warAndPeaceName': '전쟁과 평화',
   'app.sampleWelcome': '환영합니다(&E)',
   'app.sampleFonts': '글꼴(&F)',

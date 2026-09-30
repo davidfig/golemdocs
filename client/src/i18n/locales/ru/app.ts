@@ -9,6 +9,7 @@ export const app: Catalog = {
   'app.linkTip.cmd': '{url}\nCmd+щелчок, чтобы перейти по ссылке',
   'app.privacyName': 'Политика конфиденциальности',
   'app.termsName': 'Условия использования',
+  'app.changelogName': 'Что нового',
   'app.warAndPeaceName': 'Война и мир',
   'app.sampleWelcome': '&Добро пожаловать в Golem Docs',
   'app.sampleFonts': '&Шрифты',

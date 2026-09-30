@@ -21,7 +21,7 @@
 //
 // Nothing here throws on odd input: unknown syntax degrades to literal text.
 
-import { StyleResolver, WordDocument } from '@word/docx';
+import { isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
 import type {
   Block,
   Hyperlink,
@@ -74,7 +74,7 @@ function appendText(content: RunContent[], text: string): void {
 // --- Inline parsing ------------------------------------------------------------------------------
 
 interface INode {
-  t: 'text' | 'code' | 'delim' | 'br' | 'image';
+  t: 'text' | 'code' | 'delim' | 'br' | 'image' | 'math';
   s: string;
   /** Destination when the node is inside a link. */
   link?: string;
@@ -116,7 +116,38 @@ const isPunct = (c: string | undefined): boolean => {
 const UNI_WS = /\s/;
 const UNI_PUNCT = /[\p{P}\p{S}]/u;
 
-const SPECIAL = /[\\`*_~[\]!<&\n]/g;
+const SPECIAL = /[\\`*_~[\]!<&$\n]/g;
+
+/**
+ * The equation the `$` at `p` opens, if it does: `$$…$$` (anything between), or `$…$` with no space inside
+ * either end, not followed by a digit (so prices aren't equations), on one line, and that reads as TeX (has a
+ * backslash, ^, _ or a brace). `source` says backslashes escape (Markdown source); off, `text` is literal text.
+ */
+function dollarMath(text: string, p: number, source: boolean): { end: number; latex: string; display: boolean } | null {
+  const display = text.startsWith('$$', p);
+  const from = p + (display ? 2 : 1);
+  let i = from;
+  for (; i < text.length; i++) {
+    const c = text[i];
+    if (source && c === '\\') {
+      i++;
+      continue;
+    }
+    if (!display && c === '\n') return null;
+    if (c === '$' && (!display || text[i + 1] === '$')) break;
+  }
+  if (i >= text.length) return null;
+  const latex = text.slice(from, i);
+  if (!latex.trim()) return null;
+  if (!display && (/\s/.test(latex[0]) || /\s/.test(latex[latex.length - 1]) || /[0-9]/.test(text[i + 1] ?? '') || !/[\\^_{}]/.test(latex))) return null;
+  return { end: i + (display ? 2 : 1), latex, display };
+}
+
+/** Whether any `$` in literal text would read back as an equation (when so, every `$` in it is escaped). */
+function hasDollarMath(plain: string): boolean {
+  for (let p = plain.indexOf('$'); p >= 0; p = plain.indexOf('$', p + 1)) if (dollarMath(plain, p, false)) return true;
+  return false;
+}
 const ENTITY = /&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/y;
 const BR_TAG = /<br\s*\/?>/iy;
 const AUTOLINK = /<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*)>/y;
@@ -364,6 +395,20 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>)
         } else parts.push(' ');
         p++;
         while (text[p] === ' ' || text[p] === '\t') p++;
+        break;
+      }
+      case '$': {
+        const math = dollarMath(text, p, true);
+        if (!math) {
+          parts.push('$');
+          p++;
+          break;
+        }
+        flush();
+        const node = mk('math', math.latex);
+        if (math.display) node.url = 'display';
+        nodes.push(node);
+        p = math.end;
         break;
       }
       case '`': {
@@ -615,6 +660,12 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
     strike += node.k;
     if (node.t === 'br') {
       runFor(false).content.push({ kind: 'break' });
+      continue;
+    }
+    if (node.t === 'math') {
+      setLink(node.link);
+      st.run = null;
+      (st.link ? st.link.children : out).push(mathInline(parseLatex(node.s, node.url === 'display').equation));
       continue;
     }
     if (node.t === 'image' && node.link === undefined) {
@@ -1220,6 +1271,8 @@ const isSpaceTab = (c: string | undefined): boolean => c === ' ' || c === '\t';
 function computeEscapes(plain: string, drop: Uint8Array, inLink: Uint8Array, mode: Mode): Uint8Array {
   const n = plain.length;
   const esc = new Uint8Array(n);
+  // Text that could be read as an equation is kept as text by escaping its dollar signs.
+  if (plain.includes('$') && hasDollarMath(plain)) for (let k = 0; k < n; k++) if (plain[k] === '$') esc[k] = 1;
   let nextClose: Int32Array | null = null;
   const closeAfter = (i: number): number => {
     if (!nextClose) {
@@ -1672,6 +1725,12 @@ class Exporter {
           }
           case 'wrapper':
             walk(inline.children, link);
+            break;
+          case 'raw':
+            if (isMathInline(inline)) {
+              const equation = readMathInline(inline);
+              segs.push({ text: equation.display ? `$$${toLatex(equation)}$$` : `$${toLatex(equation)}$`, ...plainFmt, raw: true });
+            }
             break;
           default:
             break;

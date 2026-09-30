@@ -22,6 +22,10 @@ export interface PdfFont {
   /** Advance width of text in points at the given size. */
   widthOf(text: string, size: number): number;
   hasChar(codePoint: number): boolean;
+  /** Encodes glyph indices directly, for text from a layout engine that already chose glyphs (embedded fonts only). */
+  encodeGlyphs?(gids: number[], texts?: (string | undefined)[]): Uint8Array;
+  /** Advance of a glyph in 1/1000 em (embedded fonts only). */
+  glyphWidth?(gid: number): number;
 }
 
 // --- standard 14 -------------------------------------------------------------------------------

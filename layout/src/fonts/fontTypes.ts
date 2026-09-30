@@ -51,6 +51,11 @@ export interface ManifestFamily {
      */
     coverage: string;
   };
+  /**
+   * Set on the math font, which is never chosen by name (and isn't offered in the font list): it lays
+   * out equations. `data` is a JSON file (path relative to the manifest) holding its MATH table, see MathData.
+   */
+  math?: { data: string };
 }
 
 export interface FontManifest {
@@ -84,7 +89,10 @@ export interface MsdfLayout {
     underlineThickness: number;
   };
   glyphs: {
-    unicode: number;
+    /** Glyph id in the font, for faces whose glyphs were chosen by id (the math font). */
+    index?: number;
+    /** Absent for glyphs no code point maps to: the size variants and assembly pieces of a math font. */
+    unicode?: number;
     /** Horizontal advance in ems. */
     advance: number;
     /** Quad relative to the pen position, in ems (y down). Absent for blank glyphs such as space. */
@@ -93,4 +101,39 @@ export interface MsdfLayout {
     atlasBounds?: Bounds;
   }[];
   kerning?: { unicode1: number; unicode2: number; advance: number }[];
+}
+
+/** A stretchy glyph's larger forms and the pieces to build any size from. Glyphs are positions in the face's layout. */
+export interface MathConstruction {
+  /** Larger versions of the glyph, smallest first: [glyph, size along the stretch direction in ems]. */
+  variants: [number, number][];
+  assembly?: {
+    /** Italic correction of the assembled glyph, in ems. */
+    italics: number;
+    /** [glyph, start connector, end connector, full advance (all ems), 1 if it repeats to fill]. */
+    parts: [number, number, number, number, number][];
+  };
+}
+
+/**
+ * What math layout reads from an OpenType math font's MATH table, in ems, with glyphs given by their
+ * position in the face's layout (see scripts/fonts/generate.ts, writeMathData). Maps are keyed by that
+ * position, as a string.
+ */
+export interface MathData {
+  /** MathConstants by their OpenType names, in ems; scriptPercentScaleDown, scriptScriptPercentScaleDown and radicalDegreeBottomRaisePercent are fractions. */
+  constants: Record<string, number>;
+  minConnectorOverlap: number;
+  /** Italic correction. */
+  italics: Record<string, number>;
+  /** Horizontal position of the point accents attach to. */
+  topAccent: Record<string, number>;
+  /** Glyphs accents don't need to be flattened over (tall or stretchy ones). */
+  extended: number[];
+  vertical: Record<string, MathConstruction>;
+  horizontal: Record<string, MathConstruction>;
+  /** Script-size forms (the `ssty` feature): [first level, second level?]. */
+  script: Record<string, number[]>;
+  /** Code points that share a glyph with a lower one: code point -> position. */
+  alias: Record<string, number>;
 }

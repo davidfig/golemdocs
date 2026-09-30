@@ -3,10 +3,14 @@
 
 import { FaceMetrics } from './faceMetrics.ts';
 import { CJK_SIBLINGS, type CjkLang } from './cjk.ts';
-import type { FontManifest, ManifestFace, ManifestFamily, MsdfLayout } from './fontTypes.ts';
+import type { FontManifest, ManifestFace, ManifestFamily, MathData, MsdfLayout } from './fontTypes.ts';
+import type { layoutMath } from '../math/layout.ts';
 
 /** Loads a JSON file given its path relative to the font manifest. */
 export type FontJsonLoader = (path: string) => Promise<unknown>;
+
+/** Loads a file (a font program, for a PDF) given its path relative to the font manifest. */
+export type FontFileLoader = (path: string) => Promise<Uint8Array>;
 
 /** What a run of text asks for, in Word's terms. */
 export interface FontRequest {
@@ -66,6 +70,16 @@ export class FontSet {
   private readonly coverageOf = new Map<ManifestFamily, Promise<number[]>>();
   private readonly coverageLoaded = new Map<ManifestFamily, number[]>();
 
+  /** The math font, if the manifest has one (see ManifestFamily.math). */
+  readonly mathFamily: ManifestFamily | undefined;
+  private mathLoaded: MathData | undefined;
+  private mathPending: Promise<MathData> | undefined;
+  private mathResolved: ResolvedFont | undefined;
+  /** The math layout engine, fetched (as its own chunk) with the math font: documents with no equation never load it. */
+  mathEngine: typeof layoutMath | undefined;
+  /** Bumps when the math font loads: layouts made before it drew equations as nothing. */
+  mathVersion = 0;
+
   /** The CJK language for text whose run doesn't say (the app's language). */
   defaultCjkLang: CjkLang = 'ja';
   /** Counts CJK pages whose metrics have loaded: styles resolved earlier lack them in their fallbacks. */
@@ -74,8 +88,12 @@ export class FontSet {
   private constructor(
     readonly manifest: FontManifest,
     private readonly loadJson: FontJsonLoader,
+    private readonly loadFile?: FontFileLoader,
   ) {
+    this.mathFamily = manifest.families.find((f) => f.math);
     for (const family of manifest.families) {
+      // The math font is only used to lay out equations.
+      if (family.math) continue;
       // CJK pages are never chosen by name: they only draw what a run's own font lacks.
       if (family.cjk) {
         let pages = this.cjkPagesByLang.get(family.cjk.lang);
@@ -91,8 +109,20 @@ export class FontSet {
     }
   }
 
-  static async load(loadJson: FontJsonLoader): Promise<FontSet> {
-    return new FontSet((await loadJson('manifest.json')) as FontManifest, loadJson);
+  static async load(loadJson: FontJsonLoader, loadFile?: FontFileLoader): Promise<FontSet> {
+    return new FontSet((await loadJson('manifest.json')) as FontManifest, loadJson, loadFile);
+  }
+
+  private readonly files = new Map<string, Promise<Uint8Array | undefined>>();
+
+  /** A font file (as a face's `font` path names it), fetched once; undefined where files can't be loaded or it is missing. */
+  fontFile(path: string): Promise<Uint8Array | undefined> {
+    let file = this.files.get(path);
+    if (!file) {
+      file = this.loadFile ? this.loadFile(path).catch(() => undefined) : Promise.resolve(undefined);
+      this.files.set(path, file);
+    }
+    return file;
   }
 
   get families(): readonly ManifestFamily[] {
@@ -138,6 +168,40 @@ export class FontSet {
     const syntheticBold = weight >= 600 && best.weight < 600;
     const key = `${family.id}/${best.weight}${best.italic ? 'i' : ''}${syntheticItalic ? '+slant' : ''}${syntheticBold ? '+bold' : ''}`;
     return { key, family, face: best, syntheticItalic, syntheticBold };
+  }
+
+  // --- Math ----------------------------------------------------------------------------------
+
+  /** The math font's face, or undefined if the manifest has none. */
+  get mathFace(): ManifestFace | undefined {
+    return this.mathFamily?.faces[0];
+  }
+
+  /** The math font's MATH data, once ensureMath() has loaded it. */
+  get mathData(): MathData | undefined {
+    return this.mathLoaded;
+  }
+
+  /** Loads the math font's metrics and MATH data (once); false if the manifest has no math font. */
+  async ensureMath(): Promise<boolean> {
+    const family = this.mathFamily;
+    if (!family?.math) return false;
+    if (!this.mathLoaded) {
+      this.mathPending ??= this.loadJson(family.math.data) as Promise<MathData>;
+      this.mathPending.catch(() => (this.mathPending = undefined));
+      const [data, , engine] = await Promise.all([this.mathPending, this.ensure([family.faces[0]]), import('../math/layout.ts')]);
+      this.mathEngine = engine.layoutMath;
+      if (!this.mathLoaded) this.mathVersion++;
+      this.mathLoaded = data;
+    }
+    return true;
+  }
+
+  /** The math font as a resolved font (for drawing its glyphs), once ensureMath() has loaded it. */
+  mathFont(): ResolvedFont | undefined {
+    const family = this.mathFamily;
+    if (!family || !this.mathLoaded) return undefined;
+    return (this.mathResolved ??= this.pick(family, undefined, { font: family.wordName }));
   }
 
   // --- CJK pages ---------------------------------------------------------------------------

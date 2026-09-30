@@ -125,6 +125,8 @@ export type Action =
   | { kind: 'insertTable'; rows?: number; columns?: number }
   | { kind: 'insertImage' }
   | { kind: 'insertLink' }
+  /** Asks for an equation (in LaTeX) and inserts it at the caret. */
+  | { kind: 'insertMath' }
   | { kind: 'insertComment' }
   | { kind: 'insertFootnote' }
   | { kind: 'insertBookmark' }

@@ -4,7 +4,7 @@
 // pictures and page setup are kept; comments, tracked changes, footnotes, headers and footers,
 // and text boxes are dropped (their body text stays).
 
-import { StyleResolver } from '@word/docx';
+import { isMathInline, readMathInline, StyleResolver, toLatex } from '@word/docx';
 import type { Block, Inline, NumberingLevel, Paragraph, Run, RunContent, Table, TableCell, WordDocument } from '@word/docx';
 import { HIGHLIGHTS } from './rtfImport.ts';
 
@@ -189,6 +189,11 @@ class RtfWriter {
           if (inline.shell.name !== 'w:del' && inline.shell.name !== 'w:moveFrom') out += this.inlines(inline.children, style, link);
           break;
         case 'raw':
+          // An equation is its LaTeX, as text.
+          if (isMathInline(inline)) {
+            const equation = readMathInline(inline);
+            out += escapeRtf(equation.display ? '$$' + toLatex(equation) + '$$' : '$' + toLatex(equation) + '$');
+          }
           break;
       }
     }

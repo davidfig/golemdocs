@@ -12,6 +12,7 @@
 //   client/public/fonts/<id>/<face>.ttf         the font file, for PDFs to embed (not for the CJK pages)
 //   client/public/fonts/<id>/<face>.json        glyph layout (msdf-atlas-gen JSON)
 //   client/public/fonts/<id>/LICENSE.txt
+//   client/public/fonts/<id>/math.json          the MATH table in ems, for the math font only (see writeMathData)
 //
 // Downloads and the msdf-atlas-gen build are cached in .cache/. msdf-atlas-gen is built
 // from a pinned commit on first run; that needs git, cmake, a C++ compiler, FreeType and
@@ -23,8 +24,9 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ARCHIVES, ATLAS, FAMILIES, MSDF_ATLAS_GEN, type FaceSpec, type FamilySpec, type FileRef } from './sources.ts';
+import { ARCHIVES, ATLAS, FAMILIES, MATH_RANGES, MSDF_ATLAS_GEN, type FaceSpec, type FamilySpec, type FileRef } from './sources.ts';
 import { readFontMetrics, type FontMetrics } from './ttf-metrics.ts';
+import { mathGlyphSet, readMathFont, type GlyphConstruction, type MathFontInfo } from './ttf-math.ts';
 import sharp from 'sharp';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +56,8 @@ interface ManifestFamily {
   aliases: Record<string, number>;
   faces: ManifestFace[];
   cjk?: { lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'; order: number; coverage: string };
+  /** The math font: `data` is the path of its math.json, relative to the manifest. */
+  math?: { data: string };
 }
 
 interface Manifest {
@@ -204,7 +208,71 @@ function writeCoverage(id: string, layoutPath: string): string {
   return `${id}/coverage.json`;
 }
 
-async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fontPath: string): Promise<ManifestFace> {
+const round = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * Writes math.json, the math font's MATH table in ems with glyphs named by their position in the
+ * atlas layout (which is what layout and the renderer index by), and gives the layout's glyphs the
+ * `unicode` they map from, so text lookup works as it does for any face. Glyphs no code point
+ * reaches (size variants, assembly pieces) simply have none.
+ *
+ *   constants                MathConstants in ems; scale and raise percentages as fractions
+ *   italics, topAccent       position -> em: italic correction, and where an accent sits over the glyph
+ *   extended                 positions of stretchy or tall glyphs (accents flatten over them)
+ *   vertical, horizontal     position -> { variants: [[position, size], …], assembly?: { italics, parts: [[position, start, end, full, extender], …] } }
+ *   script                   position -> [first-level script glyph, second-level script glyph?] (the ssty feature)
+ *   alias                    code point -> position, for code points sharing a glyph with a lower one
+ */
+function writeMathData(font: MathFontInfo, layoutPath: string, outPath: string): void {
+  const layout = JSON.parse(readFileSync(layoutPath, 'utf8')) as { glyphs: { index: number; unicode?: number }[] };
+  const position = new Map<number, number>(layout.glyphs.map((g, i) => [g.index, i]));
+  const em = (units: number) => round(units / font.unitsPerEm);
+
+  const alias: Record<number, number> = {};
+  for (const [cp, gid] of [...font.cmap].sort((a, b) => a[0] - b[0])) {
+    const at = position.get(gid);
+    if (at === undefined || !MATH_RANGES.some(([from, to]) => cp >= from && cp <= to)) continue;
+    if (layout.glyphs[at].unicode === undefined) layout.glyphs[at].unicode = cp;
+    else alias[cp] = at;
+  }
+  writeFileSync(layoutPath, JSON.stringify(layout));
+
+  const percent = new Set(['scriptPercentScaleDown', 'scriptScriptPercentScaleDown', 'radicalDegreeBottomRaisePercent']);
+  const constants: Record<string, number> = {};
+  for (const [name, value] of Object.entries(font.constants)) constants[name] = percent.has(name) ? round(value / 100) : em(value);
+
+  const byGlyph = (map: Map<number, number>) => Object.fromEntries([...map].flatMap(([gid, v]) => (position.has(gid) ? [[position.get(gid)!, em(v)]] : [])));
+  const constructions = (map: Map<number, GlyphConstruction>) =>
+    Object.fromEntries(
+      [...map].flatMap(([gid, c]) => {
+        if (!position.has(gid)) return [];
+        const at = (g: number) => {
+          const p = position.get(g);
+          if (p === undefined) throw new Error(`math variant glyph ${g} is not in the atlas`);
+          return p;
+        };
+        return [[position.get(gid)!, {
+          variants: c.variants.map((v) => [at(v.glyph), em(v.advance)]),
+          ...(c.assembly ? { assembly: { italics: em(c.assembly.italicsCorrection), parts: c.assembly.parts.map((p) => [at(p.glyph), em(p.startConnector), em(p.endConnector), em(p.fullAdvance), p.extender ? 1 : 0]) } } : {}),
+        }]];
+      }),
+    );
+
+  const data = {
+    constants,
+    minConnectorOverlap: em(font.minConnectorOverlap),
+    italics: byGlyph(font.italics),
+    topAccent: byGlyph(font.topAccent),
+    extended: [...font.extendedShapes].flatMap((g) => (position.has(g) ? [position.get(g)!] : [])),
+    vertical: constructions(font.vertical),
+    horizontal: constructions(font.horizontal),
+    script: Object.fromEntries([...font.script].flatMap(([gid, alts]) => (position.has(gid) && alts.every((a) => position.has(a)) ? [[position.get(gid)!, alts.map((a) => position.get(a)!)]] : []))),
+    alias,
+  };
+  writeFileSync(outPath, JSON.stringify(data));
+}
+
+async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fontPath: string, embedPath?: string): Promise<ManifestFace> {
   const name = faceName(face);
   const dir = path.join(OUT, family.id);
   const tmp = path.join(CACHE, 'tmp');
@@ -217,14 +285,22 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
     : ['-font', fontPath];
 
   const atlas = family.atlas ?? ATLAS;
+  // A math font's atlas is picked by glyph id: size variants and assembly pieces have no code point.
+  const math = family.math ? readMathFont(readFileSync(fontPath)) : null;
+  let charset: string[];
+  if (math) {
+    const glyphs = path.join(tmp, `${family.id}-glyphs.txt`);
+    writeFileSync(glyphs, mathGlyphSet(math, MATH_RANGES).join(', '));
+    charset = ['-glyphset', glyphs];
+  } else charset = ['-charset', family.charset ? path.join(HERE, 'charsets', family.charset) : CHARSET];
   const output = run(tool, [
     ...input,
-    '-charset', family.charset ? path.join(HERE, 'charsets', family.charset) : CHARSET,
+    ...charset,
     '-fontname', `${family.substitute} ${name}`,
     '-type', atlas.type,
     '-size', String(atlas.size),
     '-pxrange', String(atlas.pxrange),
-    ...(family.atlas ? ['-dimensions', ...family.atlas.dimensions.map(String)] : []),
+    ...(family.atlas?.dimensions ? ['-dimensions', ...family.atlas.dimensions.map(String)] : []),
     '-yorigin', ATLAS.yOrigin,
     '-imageout', png,
     '-json', path.join(dir, `${name}.json`),
@@ -236,13 +312,14 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
 
   await pngToWebp(png, path.join(dir, `${name}.webp`));
   rmSync(png);
+  if (math) writeMathData(math, path.join(dir, `${name}.json`), path.join(dir, 'math.json'));
 
   return {
     weight: face.weight,
     italic: face.italic,
     atlas: `${family.id}/${name}.webp`,
     layout: `${family.id}/${name}.json`,
-    ...copyFontFile(family, face, fontPath),
+    ...copyFontFile(family, face, embedPath ?? fontPath),
     metrics: readFontMetrics(readFileSync(fontPath)),
   };
 }
@@ -274,10 +351,14 @@ async function main(): Promise<void> {
 
   console.log('Fetching font sources…');
   const fonts = new Map<FaceSpec, string>();
+  const embeds = new Map<FaceSpec, string>();
   const licenses = new Map<FamilySpec, string>();
   for (const family of families) {
     licenses.set(family, await resolveFile(family.licenseFile));
-    for (const face of family.faces) fonts.set(face, await resolveFile(face.font));
+    for (const face of family.faces) {
+      fonts.set(face, await resolveFile(face.font));
+      if (face.embed) embeds.set(face, await resolveFile(face.embed));
+    }
   }
   if (downloadOnly) return;
 
@@ -289,7 +370,7 @@ async function main(): Promise<void> {
       if (!entry) continue;
       for (const face of family.faces) {
         const made = manifest.families.find((f) => f.id === family.id)!.faces.find((f) => f.weight === face.weight && f.italic === face.italic);
-        const copied = copyFontFile(family, face, fonts.get(face)!);
+        const copied = copyFontFile(family, face, embeds.get(face) ?? fonts.get(face)!);
         if (made && copied.font) made.font = copied.font;
       }
     }
@@ -309,12 +390,12 @@ async function main(): Promise<void> {
     const faces: ManifestFace[] = [];
     for (const face of family.faces) {
       console.log(`  ${faceName(face)}`);
-      faces.push(await generateFace(tool, family, face, fonts.get(face)!));
+      faces.push(await generateFace(tool, family, face, fonts.get(face)!, embeds.get(face)));
     }
     copyFileSync(licenses.get(family)!, path.join(OUT, family.id, 'LICENSE.txt'));
     // Files are overwritten in place (a running dev server keeps serving the folder); remove
     // anything left over from an earlier configuration.
-    const produced = new Set(['LICENSE.txt', 'coverage.json', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout), ...(f.font ? [path.basename(f.font)] : [])])]);
+    const produced = new Set(['LICENSE.txt', 'coverage.json', 'math.json', ...faces.flatMap((f) => [path.basename(f.atlas), path.basename(f.layout), ...(f.font ? [path.basename(f.font)] : [])])]);
     for (const file of readdirSync(path.join(OUT, family.id))) {
       if (!produced.has(file)) rmSync(path.join(OUT, family.id, file));
     }
@@ -327,6 +408,7 @@ async function main(): Promise<void> {
       aliases: family.aliases ?? {},
       faces,
       ...(family.cjk ? { cjk: { ...family.cjk, coverage: writeCoverage(family.id, faces[0].layout) } } : {}),
+      ...(family.math ? { math: { data: `${family.id}/math.json` } } : {}),
     });
   }
 

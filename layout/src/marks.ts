@@ -53,9 +53,12 @@ export function emitMarks(page: PageLayout, paragraph: ParagraphLayout, line: Li
   // The last style is the one the paragraph mark itself has (an empty paragraph has only that).
   const style = paragraph.styles[paragraph.styles.length - 1];
   if (!style) return;
-  const face = (line.glyph.length ? paragraph.fonts[line.font[0]] : undefined) ?? paragraph.fonts[0] ?? { font: style.font, metrics: style.metrics };
+  // Marks take the face and size of the line's first text glyph, not of an equation's (the math font has no marks).
+  let first = -1;
+  for (let i = 0; i < line.glyph.length && first < 0; i++) if (!paragraph.fonts[line.font[i]].font.family.math) first = i;
+  const face = (first >= 0 ? paragraph.fonts[line.font[first]] : undefined) ?? paragraph.fonts.find((f) => !f.font.family.math) ?? { font: style.font, metrics: style.metrics };
   const { metrics } = face;
-  const size = line.size.length ? line.size[0] : style.size;
+  const size = first >= 0 ? line.size[first] : style.size;
   const baseline = y + line.baseline;
   const list = page.glyphList(face.font, metrics);
 

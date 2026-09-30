@@ -24,7 +24,7 @@ export class EditFonts {
 
   /** Families the app has a font file for (the ones text in a PDF can be set in). */
   get families(): string[] {
-    return this.fonts.families.filter((f) => !f.cjk && f.faces.some((face) => face.font)).map((f) => f.wordName);
+    return this.fonts.families.filter((f) => !f.cjk && !f.math && f.faces.some((face) => face.font)).map((f) => f.wordName);
   }
 
   /** Loads a family's file in a style (nothing, for a family with none). */

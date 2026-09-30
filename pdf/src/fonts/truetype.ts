@@ -280,6 +280,132 @@ export class TrueTypeFont {
     return this.components(data).every((c) => this.hasOutline(c.gid, depth + 1));
   }
 
+  /**
+   * The outline of a glyph as an SVG path in font units (y up), for drawing it where no font is available to the
+   * drawing surface. TrueType outlines only; '' for an empty glyph, a CFF font or a glyph out of range.
+   */
+  glyphPath(gid: number, depth = 0): string {
+    if (this.isCff || !this.locaOffsets || !this.tables.has('glyf') || gid < 0 || gid >= this.numGlyphs || depth > 8) return '';
+    const data = this.glyphData(gid);
+    if (data.length < 10) return '';
+    const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const contours = v.getInt16(0);
+    if (contours < 0) return this.compositePath(data, v, depth);
+    if (contours === 0) return '';
+    const ends: number[] = [];
+    let p = 10;
+    for (let i = 0; i < contours; i++, p += 2) ends.push(v.getUint16(p));
+    const points = ends[ends.length - 1] + 1;
+    p += 2 + v.getUint16(p); // instructions
+    const flags: number[] = [];
+    while (flags.length < points) {
+      const f = data[p++];
+      flags.push(f);
+      if (f & 8) for (let r = data[p++]; r > 0 && flags.length < points; r--) flags.push(f);
+    }
+    const coordinates = (short: number, same: number): number[] => {
+      const out: number[] = [];
+      let value = 0;
+      for (const f of flags) {
+        if (f & short) {
+          const d = data[p++];
+          value += f & same ? d : -d;
+        } else if (!(f & same)) {
+          value += v.getInt16(p);
+          p += 2;
+        }
+        out.push(value);
+      }
+      return out;
+    };
+    const xs = coordinates(2, 16);
+    const ys = coordinates(4, 32);
+    const fmt = (n: number) => String(Math.round(n * 100) / 100);
+    let d = '';
+    let start = 0;
+    for (const end of ends) {
+      const pts = [];
+      for (let i = start; i <= end; i++) pts.push({ x: xs[i], y: ys[i], on: (flags[i] & 1) !== 0 });
+      start = end + 1;
+      if (pts.length < 2) continue;
+      // Begin at an on-curve point (or the midpoint of two off-curve ones).
+      let first = pts.findIndex((q) => q.on);
+      const ring = pts.slice();
+      if (first < 0) {
+        ring.unshift({ x: (pts[0].x + pts[pts.length - 1].x) / 2, y: (pts[0].y + pts[pts.length - 1].y) / 2, on: true });
+        first = 0;
+      }
+      const rotated = ring.slice(first).concat(ring.slice(0, first));
+      d += `M${fmt(rotated[0].x)} ${fmt(rotated[0].y)}`;
+      let i = 1;
+      const n = rotated.length;
+      while (i <= n) {
+        const q = rotated[i % n];
+        if (q.on) {
+          d += `L${fmt(q.x)} ${fmt(q.y)}`;
+          i++;
+        } else {
+          const next = rotated[(i + 1) % n];
+          const end = next.on ? next : { x: (q.x + next.x) / 2, y: (q.y + next.y) / 2 };
+          d += `Q${fmt(q.x)} ${fmt(q.y)} ${fmt(end.x)} ${fmt(end.y)}`;
+          i += next.on ? 2 : 1;
+        }
+      }
+      d += 'Z';
+    }
+    return d;
+  }
+
+  /** A composite glyph's outline: its components, each scaled and moved. */
+  private compositePath(data: Uint8Array, v: DataView, depth: number): string {
+    let d = '';
+    let p = 10;
+    for (;;) {
+      if (p + 4 > data.length) break;
+      const flags = v.getUint16(p);
+      const gid = v.getUint16(p + 2);
+      p += 4;
+      let dx = 0;
+      let dy = 0;
+      if (flags & 1) {
+        if (flags & 2) {
+          dx = v.getInt16(p);
+          dy = v.getInt16(p + 2);
+        }
+        p += 4;
+      } else {
+        if (flags & 2) {
+          dx = v.getInt8(p);
+          dy = v.getInt8(p + 1);
+        }
+        p += 2;
+      }
+      let a = 1;
+      let b = 0;
+      let c = 0;
+      let e = 1;
+      const f2 = (o: number) => v.getInt16(p + o) / 16384;
+      if (flags & 8) {
+        a = e = f2(0);
+        p += 2;
+      } else if (flags & 0x40) {
+        a = f2(0);
+        e = f2(2);
+        p += 4;
+      } else if (flags & 0x80) {
+        a = f2(0);
+        b = f2(2);
+        c = f2(4);
+        e = f2(6);
+        p += 8;
+      }
+      const part = this.glyphPath(gid, depth + 1);
+      if (part) d += transformPath(part, a, b, c, e, dx, dy);
+      if (!(flags & 0x20)) break;
+    }
+    return d;
+  }
+
   /** Glyphs a composite glyph refers to. */
   private components(data: Uint8Array): { gidAt: number; gid: number }[] {
     if (data.length < 10) return [];
@@ -425,4 +551,19 @@ function writeSfnt(tables: [string, Uint8Array][]): Uint8Array {
   });
   if (headAt >= 0) v.setUint32(headAt + 8, (0xb1b0afba - checksum(out)) >>> 0);
   return out;
+}
+
+/** An SVG path of M, L, Q and Z commands with the affine transform [a b c e dx dy] applied to its points. */
+function transformPath(path: string, a: number, b: number, c: number, e: number, dx: number, dy: number): string {
+  return path.replace(/([MLQZ])([^MLQZ]*)/g, (_, cmd: string, args: string) => {
+    if (cmd === 'Z') return 'Z';
+    const nums = args.trim().split(/[\s,]+/).map(Number);
+    const out: string[] = [];
+    for (let i = 0; i < nums.length; i += 2) {
+      const x = nums[i];
+      const y = nums[i + 1];
+      out.push(`${Math.round((a * x + c * y + dx) * 100) / 100} ${Math.round((b * x + e * y + dy) * 100) / 100}`);
+    }
+    return cmd + out.join(' ');
+  });
 }

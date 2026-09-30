@@ -7,6 +7,7 @@ import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
 import { largeText } from './largeText.ts';
 import { link } from './link.ts';
+import { math } from './math.ts';
 import { menus } from './menus.ts';
 import { pageSetup } from './pageSetup.ts';
 import { panels } from './panels.ts';
@@ -18,7 +19,7 @@ import { spelling } from './spelling.ts';
 import { table } from './table.ts';
 import { wordCount } from './wordCount.ts';
 
-export const catalogs = [app, chrome, columns, dialogs, largeText, link, menus, pageSetup, panels, paragraph, pasteSpecial, picture, properties, spelling, table, wordCount] as const;
+export const catalogs = [app, chrome, columns, dialogs, largeText, link, math, menus, pageSetup, panels, paragraph, pasteSpecial, picture, properties, spelling, table, wordCount] as const;
 
 export const en = Object.assign({}, ...catalogs) as UnionToIntersection<(typeof catalogs)[number]>;
 

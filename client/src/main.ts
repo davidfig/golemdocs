@@ -1468,6 +1468,10 @@ let sectionColumns: SelectionUpdate['columns'];
 let sectionPage: SelectionUpdate['page'];
 /** The link the selection is in. */
 let link: SelectionUpdate['link'] = null;
+/** The equation the selection is. */
+let math: SelectionUpdate['math'] = null;
+/** The last click was a double click: change the equation it lands on, once the selection says which. */
+let editMathUntil = 0;
 /** Ctrl/Cmd was down for the last click: open the link it lands on, once the selection says which. */
 let followLinkUntil = 0;
 /** The document's comments, in order (for Go To). */
@@ -1488,6 +1492,11 @@ function applySelection(update: SelectionUpdate): void {
   sectionColumns = update.columns;
   sectionPage = update.page;
   link = update.link ?? null;
+  math = update.math ?? null;
+  if (editMathUntil > performance.now()) {
+    editMathUntil = 0;
+    if (math) chromeHost.perform({ kind: 'insertMath' });
+  }
   if (followLinkUntil > performance.now()) {
     followLinkUntil = 0;
     const page = link && Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === link!.url);
@@ -1821,6 +1830,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (e.metaKey || e.ctrlKey) followLinkUntil = performance.now() + 1000;
   const clicks = clickCount(e);
   const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
+  if (clicks === 2) editMathUntil = performance.now() + 1000;
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
   selecting = unit === 'character';
 });
@@ -2151,6 +2161,16 @@ const chromeHost = createChromeHost({
       focusInput();
     });
   },
+  showMathDialog: () => {
+    // The LaTeX parser is only fetched when an equation is asked for.
+    void import('./ui/mathDialog.ts')
+      .then((m) => m.showMathDialog(math))
+      .then((equation) => {
+        if (!equation) return;
+        send({ kind: 'insertContent', content: [equation] });
+        focusInput();
+      });
+  },
   convert: convertTo,
   imageAction: pictureAction,
   isLargeText: () => largeView.active,
@@ -2208,8 +2228,8 @@ const chromeHost = createChromeHost({
   },
   fonts: () =>
     fetch(`${FONT_BASE}manifest.json`)
-      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown }[] }>)
-      .then((m) => m.families.filter((f) => !f.cjk).map((f) => f.wordName)),
+      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; math?: unknown }[] }>)
+      .then((m) => m.families.filter((f) => !f.cjk && !f.math).map((f) => f.wordName)),
   samples: () => [
     { id: 'welcome', label: t('app.sampleWelcome') },
     { id: 'fonts', label: t('app.sampleFonts') },
@@ -2388,8 +2408,8 @@ const pdfTools = new PdfEditTools(document.getElementById('viewport')!, {
   notify: setStatus,
   families: () =>
     fetch(`${FONT_BASE}manifest.json`)
-      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; faces: { font?: string }[] }[] }>)
-      .then((m) => m.families.filter((f) => !f.cjk && f.faces.some((face) => face.font)).map((f) => f.wordName)),
+      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; math?: unknown; faces: { font?: string }[] }[] }>)
+      .then((m) => m.families.filter((f) => !f.cjk && !f.math && f.faces.some((face) => face.font)).map((f) => f.wordName)),
 });
 formLayer.toolsSlot.append(pdfTools.el);
 

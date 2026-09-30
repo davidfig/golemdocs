@@ -102,6 +102,11 @@ export const ICONS: Record<string, string> = {
       outlined('M9 12h6', MIST, 1.8) +
       `</g>`,
   ),
+  // A sum sign on a card: equations.
+  math: svg(
+    `<rect x="2.5" y="3" width="19" height="18" rx="2.5" fill="${PAPER}"/>` +
+      outlined('M16 7H8.5l4 5-4 5H16', PURPLE, 2.2),
+  ),
   table: svg(
     `<rect x="2.5" y="3.5" width="19" height="17" rx="2.5" fill="${PAPER}"/>` +
       `<path d="M2.5 6A2.5 2.5 0 0 1 5 3.5h14A2.5 2.5 0 0 1 21.5 6v2.5h-19z" fill="${BLUE}"/>` +

@@ -35,6 +35,8 @@ export interface AppHooks {
   download(): Promise<void>;
   /** Ask for a link to make of the selection (Insert ▸ Hyperlink). */
   showLinkDialog(): void;
+  /** Ask for an equation, then insert it. */
+  showMathDialog(): void;
   /** Ask for a table's size, then insert it. */
   showTableDialog(): void;
   /** Ask how many columns and rows to split the cell into, then do it. */
@@ -137,6 +139,7 @@ const SUPPORTED = new Set<ActionKind>([
   'convert',
   'insertComment',
   'insertLink',
+  'insertMath',
 ]);
 
 
@@ -261,6 +264,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.download();
         case 'insertLink':
           return app.showLinkDialog();
+        case 'insertMath':
+          return app.showMathDialog();
         case 'dialog':
           if (action.name === 'spelling') return app.showSpelling();
           if (action.name === 'columns') return app.showColumnsDialog();

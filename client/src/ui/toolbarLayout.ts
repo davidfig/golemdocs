@@ -35,6 +35,7 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
       'insert.link',
       'insert.table',
       'insert.image',
+      'insert.math',
       'format.columns',
       SEPARATOR,
       'view.formattingMarks',

@@ -6,7 +6,7 @@
 // The conventions are Markdown's (see markdown.ts), so a document looks the same whichever of
 // these formats it was opened as.
 
-import { StyleResolver, WordDocument } from '@word/docx';
+import { isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
 import type {
   Block,
   Inline,
@@ -36,6 +36,8 @@ export interface Span {
   sub?: boolean;
   link?: string;
   br?: boolean;
+  /** An equation: `text` is its LaTeX (no `$`), and it has a line of its own if `display`. Never merged with other spans. */
+  math?: 'inline' | 'display';
 }
 
 export interface ListItem {
@@ -62,7 +64,7 @@ export function spansText(spans: readonly Span[]): string {
 
 const MARKS = ['bold', 'italic', 'underline', 'strike', 'code', 'sup', 'sub', 'link'] as const;
 
-const sameMarks = (a: Span, b: Span): boolean => !a.br && !b.br && MARKS.every((k) => a[k] === b[k]);
+const sameMarks = (a: Span, b: Span): boolean => !a.br && !b.br && !a.math && !b.math && MARKS.every((k) => a[k] === b[k]);
 
 /** Merges neighbouring spans with the same marks and drops empty ones. */
 export function tidy(spans: readonly Span[]): Span[] {
@@ -339,6 +341,10 @@ class Extractor {
         } else if (inline.kind === 'hyperlink') {
           walk(inline.children, inline.url ?? (inline.anchor !== undefined ? `#${inline.anchor}` : link));
         } else if (inline.kind === 'wrapper') walk(inline.children, link);
+        else if (isMathInline(inline)) {
+          const equation = readMathInline(inline);
+          spans.push({ text: toLatex(equation), math: equation.display ? 'display' : 'inline' });
+        }
       }
     };
     walk(inlines, undefined);
@@ -502,6 +508,11 @@ class Builder {
       link = null;
     };
     for (const span of tidy(spans)) {
+      if (span.math) {
+        close();
+        out.push(mathInline(parseLatex(span.text, span.math === 'display').equation));
+        continue;
+      }
       const props: RunProperties = {};
       let content: RunContent[];
       if (span.br) content = [{ kind: 'break' }];
@@ -554,6 +565,8 @@ export interface SpanFormat {
   /** `inner` inside one mark; `before` and `after` are the characters next to the result ('' at an edge). */
   mark(kind: MarkKind, inner: string, before: string, after: string): string;
   link(url: string, inner: string): string;
+  /** An equation from its LaTeX; without this, `$latex$` (`$$latex$$` for a display equation). */
+  math?(latex: string, display: boolean): string;
 }
 
 /** Spans as text. Whitespace at the edges of a marked span stays outside its marks, as most markup requires. */
@@ -563,6 +576,7 @@ export function renderSpans(spans: readonly Span[], f: SpanFormat): string {
   const last = () => out.at(-1) ?? '';
   const one = (span: Span, i: number, linkInner: boolean): string => {
     if (span.br) return f.br;
+    if (span.math) return f.math ? f.math(span.text, span.math === 'display') : span.math === 'display' ? `$$${span.text}$$` : `$${span.text}$`;
     const marked = MARK_ORDER.some((k) => span[k]);
     const m = marked ? /^(\s*)([\s\S]*?)(\s*)$/.exec(span.text)! : null;
     const lead = m ? m[1] : '';

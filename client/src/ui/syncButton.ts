@@ -1,18 +1,17 @@
-// The button at the top right. Signed in, it says whether the open document is saved to the
-// user's account; where that is never comes up. Signed out, it offers to sign in. It opens a
-// panel with the details and the account. Sync is free for now; when it's paid, the offer to
-// sign in is where the plan goes.
+// The save indicator at the top right: a dot and a word for whether the open document is saved,
+// to the user's account or, without sync, to this browser. It opens a panel with the details.
+// The account (signing in, the subscription) is the person icon beside it, in accountButton.ts.
 
-import type { Action, ChromeHost, DocumentSync, SubscriptionState, SyncStatus } from './actions.ts';
+import type { Action, ChromeHost, DocumentSync, SyncStatus } from './actions.ts';
 import { h, setAttr } from './dom.ts';
 import { t } from '../i18n/index.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 
 const labels = (): Record<DocumentSync, { text: string; tooltip: string }> => ({
-  guest: { text: t('dialogs.sync.guest.text'), tooltip: t('dialogs.sync.guest.tooltip') },
-  unsubscribed: { text: t('dialogs.sync.unsubscribed.text'), tooltip: t('dialogs.sync.unsubscribed.tooltip') },
-  saved: { text: t('dialogs.sync.saved.text'), tooltip: t('dialogs.sync.saved.tooltip') },
-  saving: { text: t('dialogs.sync.saving.text'), tooltip: t('dialogs.sync.saving.tooltip') },
+  guest: { text: t('dialogs.sync.button.saved'), tooltip: t('dialogs.sync.local.saved') },
+  unsubscribed: { text: t('dialogs.sync.button.saved'), tooltip: t('dialogs.sync.local.saved') },
+  saved: { text: t('dialogs.sync.button.saved'), tooltip: t('dialogs.sync.saved.tooltip') },
+  saving: { text: t('dialogs.sync.button.saving'), tooltip: t('dialogs.sync.saving.tooltip') },
   offline: { text: t('dialogs.sync.offline.text'), tooltip: t('dialogs.sync.offline.tooltip') },
   failed: { text: t('dialogs.sync.failed.text'), tooltip: t('dialogs.sync.failed.tooltip') },
   signedOut: { text: t('dialogs.sync.signedOut.text'), tooltip: t('dialogs.sync.signedOut.tooltip') },
@@ -29,7 +28,6 @@ export class SyncButton {
   readonly el: HTMLButtonElement;
   private readonly label: HTMLSpanElement;
   private status: SyncStatus | null = null;
-  private subscription: SubscriptionState | null = null;
 
   constructor(private readonly host: ChromeHost) {
     this.label = h('span');
@@ -41,17 +39,17 @@ export class SyncButton {
     });
   }
 
-  update(status: SyncStatus, subscription: SubscriptionState | null): void {
+  update(status: SyncStatus): void {
     const changed = JSON.stringify(status) !== JSON.stringify(this.status);
-    const planChanged = subscription !== this.subscription;
     this.status = status;
-    this.subscription = subscription;
-    if (!changed && !planChanged) return;
-    const { text, tooltip } = labels()[status.document];
+    if (!changed) return;
+    let { text, tooltip } = labels()[status.document];
+    if ((status.document === 'guest' || status.document === 'unsubscribed') && !status.localSaved) ({ text, tooltip } = { text: t('dialogs.sync.button.saving'), tooltip: t('dialogs.sync.local.saving') });
     this.label.textContent = text;
     setAttr(this.el, 'data-state', status.document);
+    setAttr(this.el, 'data-local', status.localSaved ? 'saved' : 'unsaved');
     this.el.title = status.document === 'failed' && status.error ? t('dialogs.sync.failedWithReason', { tooltip, error: status.error }) : tooltip;
-    this.el.setAttribute('aria-label', status.document === 'guest' ? text : t('dialogs.sync.ariaLabel', { status: text }));
+    this.el.setAttribute('aria-label', t('dialogs.sync.ariaLabel', { status: text }));
     if (popupOpenFor(this.el)) openPopup(this.el, this.panel(), () => this.host.focusEditor());
   }
 
@@ -70,19 +68,16 @@ export class SyncButton {
 
     switch (status?.document ?? 'guest') {
       case 'guest':
-        say(t('dialogs.sync.guest.title'), t('dialogs.sync.guest.body'));
-        panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true), run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }), h('p', { class: 'wm-sync-note', text: t('dialogs.sync.free') }));
-        return panel;
       case 'unsubscribed':
-        say(t('dialogs.sync.unsubscribed.title'), t('dialogs.sync.unsubscribed.body'));
-        panel.append(run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }, true), h('p', { class: 'wm-sync-note', text: t('dialogs.sync.free') }));
+        say(this.status?.localSaved ? t('dialogs.sync.local.text') : t('dialogs.sync.local.savingText'), this.status?.localSaved ? t('dialogs.sync.local.saved') : t('dialogs.sync.local.saving'));
+        if (status?.savedAt) panel.append(h('p', { class: 'wm-sync-note', text: t('dialogs.sync.lastSaved', { time: formatSavedAt(status.savedAt) }) }));
         break;
       case 'saved':
-        say(t('dialogs.sync.saved.title'), t('dialogs.sync.saved.body'));
+        say(t('dialogs.sync.saved.text'), t('dialogs.sync.saved.body'));
         if (status?.savedAt) panel.append(h('p', { class: 'wm-sync-note', text: t('dialogs.sync.lastSaved', { time: formatSavedAt(status.savedAt) }) }));
         break;
       case 'saving':
-        say(t('dialogs.sync.saving.title'), t('dialogs.sync.saving.body'));
+        say(t('dialogs.sync.saving.text'), t('dialogs.sync.saving.body'));
         break;
       case 'offline':
         say(t('dialogs.sync.offline.title'), t('dialogs.sync.offline.body'));
@@ -96,10 +91,6 @@ export class SyncButton {
         panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true));
         break;
     }
-    // Signed in with sync: manage what they pay (Subscribe is already offered above when they have none).
-    if (this.subscription === 'active') panel.append(run(t('dialogs.sync.manageSubscription'), { kind: 'manageSubscription' }));
-    else if (this.subscription === 'none' && status?.document !== 'unsubscribed') panel.append(run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }));
-    panel.append(h('hr'), h('p', { class: 'wm-sync-note', text: status?.user ? t('dialogs.sync.signedInAs', { user: status.user }) : t('dialogs.sync.signedInAsYou') }), run(t('dialogs.sync.signOut'), { kind: 'signOut' }));
     return panel;
   }
 }

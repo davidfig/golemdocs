@@ -14,3 +14,8 @@ dist-ssr
 # Cloudflare
 .wrangler
 .dev.vars
+
+# end-to-end test output
+e2e/.state
+e2e/.results
+e2e/.report

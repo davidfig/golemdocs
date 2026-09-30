@@ -36,6 +36,10 @@ function docxCorpus(): Plugin {
   };
 }
 
+// The end-to-end tests run their own client and server on other ports (see playwright.config.ts).
+const CLIENT_PORT = Number(process.env.WORD_CLIENT_PORT ?? 5173);
+const API_PORT = Number(process.env.WORD_API_PORT ?? 3001);
+
 export default defineConfig({
   plugins: [docxCorpus(), welcomeContent()],
   // The layout worker is an ES module (it imports the docx and layout packages).
@@ -54,11 +58,14 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: CLIENT_PORT,
     // Forward API calls to the server package during development. The Worker sees its own address
     // (:3001), so it's told the one the browser is on, for origin checks and sign-in redirects.
     proxy: {
-      '/api': { target: 'http://localhost:3001', ws: true, headers: { 'x-dev-origin': 'http://localhost:5173' } },
+      // changeOrigin sends `Host: localhost:<API_PORT>`. Otherwise wrangler dev, which has the production
+      // route configured, rewrites the browser's host wherever it appears in the headers, x-dev-origin
+      // included, and the Worker then builds return addresses (checkout, sign-in) for golemdocs.com.
+      '/api': { target: `http://localhost:${API_PORT}`, changeOrigin: true, ws: true, headers: { 'x-dev-origin': `http://localhost:${CLIENT_PORT}` } },
     },
   },
 });

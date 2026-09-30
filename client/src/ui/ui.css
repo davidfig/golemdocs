@@ -1261,6 +1261,33 @@
   border-color: var(--wm-hot-border);
 }
 
+.wm-account {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  color: var(--wm-text);
+  background: var(--wm-menu-bg);
+  border: 1px solid var(--wm-field-border);
+  border-radius: 50%;
+  cursor: default;
+}
+
+.wm-account:hover,
+.wm-account.open {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-account[data-signed-in='true'] {
+  color: #fff;
+  background: var(--wm-hot-border);
+  border-color: var(--wm-hot-border);
+}
+
 .wm-sync-dot {
   width: 7px;
   height: 7px;
@@ -1268,9 +1295,15 @@
   background: #9a9a9a;
 }
 
-/* Signed out it's an offer to sign in, not a status: no dot. */
-.wm-sync[data-state='guest'] .wm-sync-dot {
-  display: none;
+/* Signed out or without sync the dot says whether the browser copy is saved. */
+.wm-sync[data-local='saved'][data-state='guest'] .wm-sync-dot,
+.wm-sync[data-local='saved'][data-state='unsubscribed'] .wm-sync-dot {
+  background: #2e9d4f;
+}
+
+.wm-sync[data-local='unsaved'][data-state='guest'] .wm-sync-dot,
+.wm-sync[data-local='unsaved'][data-state='unsubscribed'] .wm-sync-dot {
+  background: #d08a00;
 }
 
 .wm-sync[data-state='saved'] .wm-sync-dot {

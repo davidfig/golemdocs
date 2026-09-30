@@ -12,9 +12,11 @@
     "typecheck": "tsc && pnpm --recursive typecheck",
     "fonts": "tsx scripts/fonts/generate.ts",
     "test": "pnpm --no-bail --filter @word/docx --filter @word/layout --filter @word/ops --filter @word/editor --filter @word/server --filter @word/client --filter @word/pdf --filter @word/odt test",
-    "test:coverage": "tsx scripts/coverage.ts"
+    "test:coverage": "tsx scripts/coverage.ts",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.0.0",
     "sharp": "^0.35.0",
     "tsx": "^4.20.0",

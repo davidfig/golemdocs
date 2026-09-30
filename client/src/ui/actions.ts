@@ -245,6 +245,8 @@ export interface SyncStatus {
   error: string | null;
   /** When the open document was last saved to the account (ms since the epoch), if known. */
   savedAt?: number | null;
+  /** Signed out or without sync: whether the open document's latest changes are saved in this browser. */
+  localSaved?: boolean;
 }
 
 export const DEFAULT_STATE: ChromeState = {

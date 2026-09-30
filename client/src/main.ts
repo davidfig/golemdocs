@@ -759,7 +759,11 @@ let signedOutRemotely = false;
 const failures = new Map<string, string>();
 
 function syncStatus(): SyncStatus {
-  if (!account) return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, document: 'unsubscribed', error: null } : { user: null, document: 'guest', error: null };
+  if (!account) {
+    const info = savedDocs.find((d) => d.id === current.localId);
+    const local = { error: null, savedAt: info?.updatedAt ?? null, localSaved: current.unsavedSince === 0 && info !== undefined };
+    return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, document: 'unsubscribed', ...local } : { user: null, document: 'guest', ...local };
+  }
   const user = account.email ?? account.name ?? null;
   const id = current.localId;
   const info = savedDocs.find((d) => d.id === id);

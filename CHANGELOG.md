@@ -3,9 +3,10 @@
 ## 0.2.1 - Unreleased
 
 ### Changed
+- The save indicator (a coloured dot, and when the document was last saved) is now its own button, and signing in, your subscription and signing out moved to a new person icon beside it. Signed out, the indicator explains that documents are saved in this browser on this computer only. The offer of a free first month is gone.
 - Comments in OpenDocument files now stay on the right text when you edit around them, and show in the comments panel where you can edit them.
-- Syncing documents to your account, sharing them and editing together now need a subscription, and your first month is free. Golem Docs works fully without one, saving your documents in this browser, and you can still open documents that a subscriber shares with you. If a subscription ends, your documents stay in this browser.
-- The website and the welcome document now say clearly that syncing, sharing and the AI assistant need a subscription, and list the price and the free month.
+- Syncing documents to your account, sharing them and editing together now need a subscription. Golem Docs works fully without one, saving your documents in this browser, and you can still open documents that a subscriber shares with you. If a subscription ends, your documents stay in this browser.
+- The website and the welcome document now say clearly that syncing, sharing and the AI assistant need a subscription, and list the price.
 - The Terms of Service and Privacy Policy now cover the subscription: what it includes and its limits, that Polar sells and bills it, how the AI assistant handles your text, and what happens when you cancel.
 
 ### Added

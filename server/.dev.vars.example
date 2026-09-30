@@ -16,3 +16,12 @@ GITHUB_CLIENT_SECRET=
 
 # Emails of admins (they see View > Cloudflare Billing). CF_API_TOKEN also needs Billing Read permission.
 ADMIN_EMAILS=
+
+# Payments (Polar sandbox; see wrangler.jsonc). Only needed to try checkout locally.
+POLAR_API_URL=https://sandbox-api.polar.sh
+# Sandbox organization access token with checkouts:write and customer_sessions:write.
+POLAR_ACCESS_TOKEN=
+# The sandbox monthly sync product's id.
+POLAR_PRODUCT_ID=
+# From the sandbox webhook endpoint (needs a tunnel to localhost:5173, e.g. cloudflared).
+POLAR_WEBHOOK_SECRET=

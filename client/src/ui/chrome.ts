@@ -32,6 +32,7 @@ import { SCHEMES, currentAppearance, currentScheme, isDark, setAppearance, setSc
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
 import { CommandPalette } from './commandPalette.ts';
+import { AccountButton } from './accountButton.ts';
 import { SyncButton } from './syncButton.ts';
 import { DEFAULT_LAYOUT, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import './ui.css';
@@ -115,6 +116,7 @@ export class Chrome {
   private converting = false;
   /** Whether the document is saved (or, signed out, an offer to sign in), at the far right. */
   private syncButton!: SyncButton;
+  private accountButton!: AccountButton;
   /** The command palette button, left of the format selector. */
   private palette!: CommandPalette;
 
@@ -183,7 +185,8 @@ export class Chrome {
     this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
     this.menuBar.refresh();
     this.syncFormatBox();
-    this.syncButton.update(this.state.sync, this.state.subscription);
+    this.syncButton.update(this.state.sync);
+    this.accountButton.update(this.state.sync, this.state.subscription);
     const name = this.state.documentName;
     const title = name ? `${name} - ${this.appName}` : this.appName;
     if (document.title !== title) document.title = title;
@@ -952,6 +955,7 @@ export class Chrome {
     );
     this.formatCombo = combo;
     this.syncButton = new SyncButton(this.options.host);
+    this.accountButton = new AccountButton(this.options.host);
     this.palette = new CommandPalette(this.registry, (command) => this.commandInfo(command, command.plainLabel));
     return h(
       'div',
@@ -959,6 +963,7 @@ export class Chrome {
       this.palette.el,
       h('div', { class: 'wm-format-field' }, combo.el),
       this.syncButton.el,
+      this.accountButton.el,
     );
   }
 

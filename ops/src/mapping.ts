@@ -113,8 +113,6 @@ export class Mapping {
   }
 }
 
-const maxOffset = (a: number, b: number) => Math.max(a, b);
-
 /**
  * Moves an operation through maps [from, to): the operation as it would have been written
  * against the document after them. Operations whose target is gone map to nothing; a delete
@@ -134,27 +132,15 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
       const pos = at(op.paragraph, op.offset, 1);
       return [{ ...op, paragraph: pos.paragraph, offset: pos.offset }];
     }
-    case 'delete': {
-      const a = at(op.paragraph, op.from, 1);
-      const b = op.to >= END ? null : at(op.paragraph, op.to, -1);
-      if (!b) return [{ ...op, paragraph: a.paragraph, from: a.offset, to: END }];
-      if (a.paragraph === b.paragraph) return b.offset > a.offset ? [{ ...op, paragraph: a.paragraph, from: a.offset, to: b.offset }] : [];
-      // Split apart by someone else's Enter: delete on both sides of the new break.
-      return [
-        { ...op, paragraph: a.paragraph, from: a.offset, to: END },
-        ...(b.offset > 0 ? [{ ...op, paragraph: b.paragraph, from: 0, to: maxOffset(b.offset, 0) }] : []),
-      ];
-    }
+    case 'delete':
     case 'formatText': {
-      // Text inserted at either end isn't included; split apart, both sides are formatted.
+      // Text inserted at either end isn't included; split apart by someone else's Enter, the
+      // operation applies on both sides of the new break.
       const a = at(op.paragraph, op.from, 1);
       const b = op.to >= END ? null : at(op.paragraph, op.to, -1);
       if (!b) return [{ ...op, paragraph: a.paragraph, from: a.offset, to: END }];
       if (a.paragraph === b.paragraph) return b.offset > a.offset ? [{ ...op, paragraph: a.paragraph, from: a.offset, to: b.offset }] : [];
-      return [
-        { ...op, paragraph: a.paragraph, from: a.offset, to: END },
-        ...(b.offset > 0 ? [{ ...op, paragraph: b.paragraph, from: 0, to: b.offset }] : []),
-      ];
+      return [{ ...op, paragraph: a.paragraph, from: a.offset, to: END }, ...(b.offset > 0 ? [{ ...op, paragraph: b.paragraph, from: 0, to: b.offset }] : [])];
     }
     case 'split': {
       const pos = at(op.paragraph, op.offset, 1);

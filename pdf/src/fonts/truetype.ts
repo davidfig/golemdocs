@@ -32,6 +32,8 @@ export class TrueTypeFont {
   private advances: Uint16Array = new Uint16Array(0);
   private cmap = new Map<number, number>();
   private locaOffsets?: Uint32Array;
+  /** hasOutline's answers by glyph. */
+  private readonly outlines = new Map<number, boolean>();
 
   readonly bytes: Uint8Array;
 
@@ -52,14 +54,14 @@ export class TrueTypeFont {
   }
 
   static parse(bytes: Uint8Array): TrueTypeFont {
-    const f = new TrueTypeFont(bytes);
     try {
+      const f = new TrueTypeFont(bytes);
       f.read();
+      return f;
     } catch (e) {
       if (e instanceof FontFormatError) throw e;
       throw new FontFormatError(`damaged font (${(e as Error).message})`);
     }
-    return f;
   }
 
   private tag(at: number): string {
@@ -275,9 +277,14 @@ export class TrueTypeFont {
    */
   hasOutline(gid: number, depth = 0): boolean {
     if (this.isCff || !this.locaOffsets || !this.tables.has('glyf') || gid <= 0 || gid >= this.numGlyphs || depth > 8) return false;
-    const data = this.glyphData(gid);
-    if (!data.length) return false;
-    return this.components(data).every((c) => this.hasOutline(c.gid, depth + 1));
+    // Cached: composites sharing components would otherwise be re-walked exponentially often.
+    let known = this.outlines.get(gid);
+    if (known === undefined) {
+      const data = this.glyphData(gid);
+      known = data.length > 0 && this.components(data).every((c) => this.hasOutline(c.gid, depth + 1));
+      this.outlines.set(gid, known);
+    }
+    return known;
   }
 
   /**
@@ -292,6 +299,16 @@ export class TrueTypeFont {
     const contours = v.getInt16(0);
     if (contours < 0) return this.compositePath(data, v, depth);
     if (contours === 0) return '';
+    try {
+      return this.simplePath(data, v, contours);
+    } catch (e) {
+      if (e instanceof RangeError) return ''; // a truncated glyph
+      throw e;
+    }
+  }
+
+  /** A simple glyph's outline (glyphPath's work for a glyph with `contours` > 0 contours). */
+  private simplePath(data: Uint8Array, v: DataView, contours: number): string {
     const ends: number[] = [];
     let p = 10;
     for (let i = 0; i < contours; i++, p += 2) ends.push(v.getUint16(p));

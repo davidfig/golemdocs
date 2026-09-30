@@ -522,6 +522,25 @@ test('a column inserted in a table across a merged cell widens that cell', skip,
   assert.deepEqual(gridText(doc)[1], ['c', '', 'd']);
 });
 
+test('deleting columns under merged cells narrows each cell to the columns it keeps', skip, async () => {
+  const { doc, editor, apply } = await setup(['Top']);
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'insertTable', rows: 2, columns: 5 });
+  const [w] = widths(doc);
+  // The first row as two merged cells: grid columns [0, 3) and [3, 5).
+  const row = tablesOf(doc)[0].rows[0] as { cells: { properties: { gridSpan?: number; width?: { w: string; type: string } } }[] };
+  row.cells.splice(1, 2);
+  row.cells.splice(2, 1);
+  row.cells[0].properties = { gridSpan: 3, width: { w: String(3 * w), type: 'dxa' } };
+  row.cells[1].properties = { gridSpan: 2, width: { w: String(2 * w), type: 'dxa' } };
+  // Select the second row's cells in grid columns 2 and 3, and delete those columns.
+  const ps = paragraphsIn(doc.body);
+  editor.selection = { anchor: { paragraph: ps[5], offset: 0 }, focus: { paragraph: ps[6], offset: 0 } };
+  await apply({ kind: 'tableEdit', edit: 'deleteColumns' });
+  assert.equal(widths(doc).length, 3);
+  const cells = row.cells.map((c) => [c.properties.gridSpan ?? 1, Number(c.properties.width?.w)]);
+  assert.deepEqual(cells, [[2, 2 * w], [1, w]]);
+});
+
 test('the table can be deleted, selected, and put above a paragraph', skip, async () => {
   const { doc, editor, apply, texts } = await withTable();
   await apply({ kind: 'tableEdit', edit: 'selectTable' });
@@ -906,6 +925,17 @@ test('pasted styles and lists are defined first; a table goes in as a table, but
   assert.equal(editor.paragraphs()[1], editor.selection.focus.paragraph, 'the caret is in the cell');
   await apply({ kind: 'pasteContent', blocks: [pasted('one'), table] });
   assert.equal(doc.body.filter((b) => b.kind === 'table').length, 1, 'no table inside the table');
+});
+
+test('pasting a paragraph and a table in the middle of text puts the rest right after the table', skip, async () => {
+  const { doc, editor, apply, texts } = await setup(['Hello world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' });
+  const table = { kind: 'table' as const, properties: {}, grid: [4000], rows: [{ kind: 'row' as const, properties: {}, attrs: {}, cells: [{ kind: 'cell' as const, properties: {}, attrs: {}, children: [pasted('cell')] }] }] };
+  await apply({ kind: 'pasteContent', blocks: [pasted('A'), table] });
+  assert.deepEqual(doc.body.map((b) => b.kind), ['paragraph', 'table', 'paragraph'], 'no empty paragraph between the table and the rest');
+  assert.deepEqual(texts(), ['Hello A', 'cell', 'world']);
+  assert.equal(editor.selection.focus.paragraph, paragraphsIn(doc.body)[2]);
+  assert.equal(editor.selection.focus.offset, 0, 'the caret is before the rest');
 });
 
 test('marks: rectangles over ranges of the text on the pages shown', skip, async () => {

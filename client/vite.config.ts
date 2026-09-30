@@ -16,7 +16,14 @@ function docxCorpus(): Plugin {
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use(CORPUS_URL, (req, res) => {
-        const name = decodeURIComponent((req.url ?? '/').split('?')[0].slice(1));
+        let name: string;
+        try {
+          name = decodeURIComponent((req.url ?? '/').split('?')[0].slice(1));
+        } catch {
+          res.statusCode = 400; // a malformed escape would otherwise throw out of the middleware
+          res.end();
+          return;
+        }
         if (!name) {
           const files = existsSync(CORPUS_DIR) ? readdirSync(CORPUS_DIR).filter((f) => /\.docx$/i.test(f)) : [];
           res.setHeader('Content-Type', 'application/json');

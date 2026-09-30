@@ -63,12 +63,18 @@ export function sniffImage(bytes: Uint8Array): ImageData | null {
     }
     return { bytes, type: 'webp', width, height };
   }
-  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+  // "BM", then (after the file header) the size of a known info header: text that starts "BM" is not a bitmap.
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d && bytes.length >= 26) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    return { bytes, type: 'bmp', width: Math.abs(view.getInt32(18, true)), height: Math.abs(view.getInt32(22, true)) };
+    const info = view.getUint32(14, true);
+    // The oldest (OS/2) header has 16-bit sizes; the rest 32-bit, the height negative for a top-down picture.
+    if (info === 12) return { bytes, type: 'bmp', width: view.getUint16(18, true), height: view.getUint16(20, true) };
+    if (BMP_INFO_SIZES.includes(info)) return { bytes, type: 'bmp', width: Math.abs(view.getInt32(18, true)), height: Math.abs(view.getInt32(22, true)) };
   }
   return null;
 }
+
+const BMP_INFO_SIZES = [40, 52, 56, 64, 108, 124];
 
 /** The rotation tag (1-8) in a JPEG's Exif data, which starts at `from` and ends before `end`; 0 when there is none. */
 function exifOrientation(bytes: Uint8Array, from: number, end: number): number {
@@ -97,7 +103,17 @@ export function decodeDataUri(uri: string): Uint8Array | null {
   if (!m) return null;
   try {
     if (m[2]) return Uint8Array.from(atob(m[3].replace(/\s/g, '')), (c) => c.charCodeAt(0));
-    return new TextEncoder().encode(decodeURIComponent(m[3]));
+    // Percent escapes are bytes (not UTF-8 text, which binary data isn't); the rest is text, as UTF-8.
+    const encoder = new TextEncoder();
+    const parts = m[3].split(/(%[0-9a-f]{2})/i);
+    const chunks = parts.map((part, i) => (i % 2 ? Uint8Array.of(parseInt(part.slice(1), 16)) : encoder.encode(part)));
+    const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let at = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, at);
+      at += chunk.length;
+    }
+    return out;
   } catch {
     return null;
   }

@@ -74,6 +74,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.severalLines': '여러 줄',
   'panels.forms.options': '옵션(한 줄에 하나씩)',
   'panels.forms.deleteField': '필드 삭제',
+  'panels.forms.nameTaken': '"{name}"(이)라는 필드가 이미 있습니다',
   'panels.forms.fieldTitle': '{kind}: {name}',
   'panels.forms.kind.text': '텍스트 상자',
   'panels.forms.kind.checkbox': '확인란',

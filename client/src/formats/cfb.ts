@@ -39,6 +39,9 @@ export class Cfb {
     this.miniSectorSize = 1 << v.getUint16(32, true);
     this.miniCutoff = v.getUint32(56, true);
     if (this.sectorSize !== 512 && this.sectorSize !== 4096) throw new CfbError('unsupported sector size');
+    if (this.miniSectorSize !== 64) throw new CfbError('unsupported sector size');
+    // No table can list more sectors than the file has (a looping DIFAT chain would otherwise grow the FAT without end).
+    const sectorCount = Math.ceil(bytes.length / this.sectorSize);
 
     // The FAT: its sectors are listed in the header (109 of them) and in a chain of DIFAT sectors.
     const fatSectors: number[] = [];
@@ -47,7 +50,7 @@ export class Cfb {
       if (s <= MAX_REGULAR) fatSectors.push(s);
     }
     let difat = v.getUint32(68, true);
-    for (let guard = 0; difat <= MAX_REGULAR && guard < 10000; guard++) {
+    for (let guard = 0; difat <= MAX_REGULAR && guard < 10000 && fatSectors.length < sectorCount; guard++) {
       const base = this.offset(difat);
       const per = this.sectorSize / 4 - 1;
       for (let i = 0; i < per; i++) {
@@ -56,6 +59,7 @@ export class Cfb {
       }
       difat = this.u32(base + per * 4);
     }
+    fatSectors.length = Math.min(fatSectors.length, sectorCount);
     const perFat = this.sectorSize / 4;
     this.fat = new Uint32Array(fatSectors.length * perFat);
     fatSectors.forEach((s, k) => {
@@ -67,6 +71,7 @@ export class Cfb {
     const directory = this.chain(v.getUint32(48, true));
     for (let k = 0; k < directory.length; k++) {
       const base = this.offset(directory[k]);
+      if (base + this.sectorSize > bytes.length) throw new CfbError('the file is truncated');
       for (let e = 0; e < this.sectorSize / 128; e++) {
         const at = base + e * 128;
         const nameLength = Math.min(this.view.getUint16(at + 64, true), 64);

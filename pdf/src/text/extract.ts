@@ -64,6 +64,21 @@ interface GraphicsState {
 }
 
 const MAX_FORM_DEPTH = 12;
+/**
+ * Content operations a page may run, form XObjects' included: forms that each draw other forms
+ * several times multiply (a few objects can ask for billions), so the rest is left out.
+ */
+export const MAX_OPERATIONS = 10_000_000;
+
+/** What one extraction shares across the page, its forms and its annotations. */
+interface RunState {
+  items: TextItem[];
+  fonts: Map<PdfObject, TextFont | null>;
+  /** Form XObjects being run (one that draws itself is not run again). */
+  active: Set<PdfStream>;
+  /** Operations left to run (MAX_OPERATIONS). */
+  opsLeft: number;
+}
 
 export interface ExtractOptions {
   /** Also read annotations' appearances: form field values, FreeText notes, stamps (default false). */
@@ -71,10 +86,9 @@ export interface ExtractOptions {
 }
 
 export function extractText(page: PdfPage, options: ExtractOptions = {}): PageText {
-  const items: TextItem[] = [];
   const doc = page.doc;
-  const fonts = new Map<PdfObject, TextFont>();
-  run(doc, parseContent(page.contentData()), page.resources, IDENTITY, items, fonts, 0);
+  const state: RunState = { items: [], fonts: new Map(), active: new Set(), opsLeft: MAX_OPERATIONS };
+  run(doc, parseContent(page.contentData()), page.resources, IDENTITY, state, 0);
   if (options.annotations) {
     for (const annot of page.annotations) {
       const ap = appearance(doc, annot);
@@ -82,10 +96,10 @@ export function extractText(page: PdfPage, options: ExtractOptions = {}): PageTe
       const matrix = appearanceMatrix(doc, annot, ap);
       if (!matrix) continue;
       const res = doc.dict(ap.dict.get('Resources')) ?? page.resources;
-      run(doc, parseContent(doc.streamData(ap)), res, matrix, items, fonts, 1);
+      run(doc, parseContent(doc.streamData(ap)), res, matrix, state, 1);
     }
   }
-  return { items, text: joinItems(items) };
+  return { items: state.items, text: joinItems(state.items) };
 }
 
 /** An annotation's normal appearance stream (§12.5.5), picking the state named by /AS. */
@@ -103,7 +117,7 @@ function appearance(doc: PdfDocument, annot: PdfDict): PdfStream | undefined {
 }
 
 /** The matrix that maps an appearance's form space onto the annotation's rectangle (§12.5.5 algorithm). */
-function appearanceMatrix(doc: PdfDocument, annot: PdfDict, ap: PdfStream): Matrix | undefined {
+export function appearanceMatrix(doc: PdfDocument, annot: PdfDict, ap: PdfStream): Matrix | undefined {
   const nums = (o: PdfObject | undefined) => doc.array(o)?.map((x) => doc.number(x) ?? 0);
   const rect = nums(annot.get('Rect'));
   const bbox = nums(ap.dict.get('BBox'));
@@ -135,10 +149,12 @@ function run(
   ops: Operation[],
   resources: PdfDict | undefined,
   base: Matrix,
-  items: TextItem[],
-  fonts: Map<PdfObject, TextFont>,
+  state: RunState,
   depth: number,
 ): void {
+  const { items, fonts } = state;
+  state.opsLeft -= ops.length;
+  if (state.opsLeft < 0) return;
   let gs: GraphicsState = { ctm: base, charSpace: 0, wordSpace: 0, scale: 1, leading: 0, rise: 0, fontSize: 0, render: 0 };
   const stack: GraphicsState[] = [];
   let tm: Matrix = IDENTITY;
@@ -150,13 +166,17 @@ function run(
     const ref = doc.dict(resources?.get('Font'))?.get(name.name);
     if (ref === undefined) return undefined;
     let f = fonts.get(ref);
-    if (!f) {
+    if (f === undefined) {
       const d = doc.dict(ref);
       if (!d) return undefined;
-      f = new TextFont(doc, d);
+      try {
+        f = new TextFont(doc, d);
+      } catch {
+        f = null; // an unreadable font shows nothing
+      }
       fonts.set(ref, f);
     }
-    return f;
+    return f ?? undefined;
   };
 
   const show = (s: PdfObject | undefined, adjustments?: PdfObject[]) => {
@@ -173,8 +193,10 @@ function run(
       if (typeof part === 'number') {
         const tx = (-part / 1000) * fs * th;
         if (font.vertical) tm = multiply([1, 0, 0, 1, 0, (-part / 1000) * fs], tm);
-        else tm = multiply([1, 0, 0, 1, tx, 0], tm);
-        advance += tx;
+        else {
+          tm = multiply([1, 0, 0, 1, tx, 0], tm);
+          advance += tx;
+        }
         // A large enough backward kern is a word gap.
         if (-part / 1000 > spaceGap && text && !text.endsWith(' ')) text += ' ';
         continue;
@@ -197,7 +219,10 @@ function run(
     const [x, y] = transformPoint(startTrm, 0, 0);
     const len = Math.hypot(startTrm[0], startTrm[1]) || 1;
     const size = Math.hypot(startTrm[2], startTrm[3]);
-    const ctmScale = Math.hypot(gs.ctm[0], gs.ctm[1]) * Math.hypot(tm[0], tm[1]);
+    // Text space to user space along the baseline: the text matrix and the CTM together (a rotated
+    // Tm under a CTM that scales x and y differently is stretched by the CTM's y scale, say).
+    const along = multiply(tm, gs.ctm);
+    const ctmScale = Math.hypot(along[0], along[1]);
     items.push({
       text,
       x,
@@ -277,13 +302,20 @@ function run(
         show(a[2]);
         break;
       case 'Do': {
-        if (depth >= MAX_FORM_DEPTH || !(a[0] instanceof PdfName)) break;
+        if (depth >= MAX_FORM_DEPTH || state.opsLeft <= 0 || !(a[0] instanceof PdfName)) break;
         const xo = doc.resolve(doc.dict(resources?.get('XObject'))?.get(a[0].name));
-        if (!(xo instanceof PdfStream) || xo.dict.name('Subtype') !== 'Form') break;
+        if (!(xo instanceof PdfStream) || xo.dict.name('Subtype') !== 'Form' || state.active.has(xo)) break;
         const m = doc.array(xo.dict.get('Matrix'));
         const matrix = m?.length === 6 ? (m.map((x) => doc.number(x) ?? 0) as Matrix) : IDENTITY;
         const res = doc.dict(xo.dict.get('Resources')) ?? resources;
-        run(doc, parseContent(doc.streamData(xo)), res, multiply(matrix, gs.ctm), items, fonts, depth + 1);
+        state.active.add(xo);
+        try {
+          run(doc, parseContent(doc.streamData(xo)), res, multiply(matrix, gs.ctm), state, depth + 1);
+        } catch {
+          // a damaged form shows nothing; the rest of the page still reads
+        } finally {
+          state.active.delete(xo);
+        }
         break;
       }
     }

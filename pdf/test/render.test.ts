@@ -219,6 +219,28 @@ test('forms, annotations, optional content and hostile content', () => {
   assert.deepEqual([stamp.x, stamp.y, stamp.w, stamp.h], [5, 85, 20, 10]); // scaled 10x10 -> 20x10
 });
 
+test('a form that draws itself is drawn once, not to the depth limit over and over', () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([200, 100]);
+  const resources = new PdfDict();
+  const self = doc.add(new PdfStream(new PdfDict({ Type: N('XObject'), Subtype: N('Form'), BBox: [0, 0, 20, 20], Resources: resources }), ascii(`0 1 0 rg 0 0 20 20 re f ${'/Me Do '.repeat(8)}`)));
+  resources.set('XObject', new PdfDict({ Me: self }));
+  page.resources.set('XObject', new PdfDict({ Me: self }));
+  page.setContent(ascii('/Me Do'));
+  const started = Date.now();
+  const d = interpretPage(page);
+  assert.ok(Date.now() - started < 2000, 'finishes quickly');
+  assert.equal(d.rects.length, 1);
+});
+
+test('closing a subpath moves the current point back to its start: a curve after h starts there', () => {
+  // A closed line along the bottom, then a curve from its start straight up the left edge.
+  const { display } = withContent('1 w 10 10 m 150 10 l h 10 40 10 70 10 90 c S');
+  const curve = display.rects.filter((r) => r.w < 5);
+  assert.ok(curve.length > 0, 'the curve is drawn');
+  for (const r of curve) assert.ok(r.x >= 9 && r.x + r.w <= 11, `curve piece at x ${r.x}..${r.x + r.w}, not along x = 10`);
+});
+
 test('images: JPEG passes through, raw pixels become PNG, placement and mirroring', () => {
   const doc = PdfDocument.create();
   const page = doc.addPage([200, 100]);

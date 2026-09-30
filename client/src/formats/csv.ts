@@ -190,10 +190,11 @@ export async function delimitedToDocument(rows: string[][]): Promise<WordDocumen
     const values = sample.slice(header ? 1 : 0).map((r) => r[c] ?? '').filter((v) => v.trim() !== '');
     numeric.push(values.length > 0 && values.filter(isNumeric).length >= values.length * 0.8);
     // Bold header text, and capitals, run wider than the average character.
+    // Reduced rather than spread: a cell can hold more lines than a call takes arguments (an unclosed quote swallows the file).
     longest.push(
       sample.reduce((m, r, i) => {
         const weight = header && i === 0 ? 1.25 : 1;
-        return Math.max(m, ...(r[c] ?? '').split(/\r\n|\r|\n/).map((l) => l.length * weight));
+        return (r[c] ?? '').split(/\r\n|\r|\n/).reduce((w, l) => Math.max(w, l.length * weight), m);
       }, 1),
     );
   }
@@ -368,8 +369,10 @@ export function writeDelimited(rows: string[][], delimiter: string, ext: CsvExte
   let text = rows
     .map((row) => row.map((f) => quote(f, delimiter)).join(delimiter))
     .join(ending);
-  // A single empty field would vanish from the file; quoting it keeps the row.
-  if (rows.length === 1 && rows[0].length === 1 && rows[0][0] === '') text = '""';
+  // A single empty field would vanish from the file; quoting it keeps the row. That is so for a last row that no
+  // line ending follows too (elsewhere its line ending keeps it).
+  const last = rows.at(-1);
+  if (last?.length === 1 && last[0] === '' && (rows.length === 1 || ext.trailingNewline === false)) text += '""';
   if (rows.length && ext.trailingNewline !== false) text += ending;
   return encodeText(text, ext.encoding ?? 'utf-8', !!ext.bom);
 }

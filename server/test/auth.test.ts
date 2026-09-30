@@ -266,7 +266,7 @@ test('apple: form-post callback, signed client secret, name from the form, cross
 
 test('return paths stay on this site', () => {
   assert.equal(safeReturnPath('/docs?id=1'), '/docs?id=1');
-  for (const bad of ['//evil.example', 'https://evil.example', '/\\evil.example', 'javascript:alert(1)', '', null, undefined, '/a\r\nset-cookie: x=1']) {
+  for (const bad of ['//evil.example', 'https://evil.example', '/\\evil.example', 'javascript:alert(1)', '', null, undefined, '/a\r\nset-cookie: x=1', '/\t/evil.example', '/\n/evil.example', '/\u0000/evil.example', '/a/\\evil']) {
     assert.equal(safeReturnPath(bad), '/', String(bad));
   }
 });
@@ -276,6 +276,9 @@ test('DEV_USER works only when set and no session exists', async () => {
   assert.equal(await authenticate(request, env, new URL(request.url)), null);
   env.DEV_USER = 'me@localhost';
   assert.ok(await authenticate(request, env, new URL(request.url)));
+  env.ENVIRONMENT = 'production';
+  assert.equal(await authenticate(request, env, new URL(request.url)), null, 'never in production');
+  delete env.ENVIRONMENT;
 });
 
 test('DEV_USER: signing out sticks until signing in with the dev provider', async () => {

@@ -13,7 +13,7 @@ import { describeFont } from '../render/fontinfo.ts';
 import { forgetDisplayFonts } from '../render/interpret.ts';
 import { TextFont } from '../text/font.ts';
 import type { EmbeddedFont } from '../write/fonts.ts';
-import { standardUse } from './fallback.ts';
+import { STANDARD as STANDARD_FONTS, standardUse, type Kind } from './fallback.ts';
 import { forgetFonts, type FontUse } from './scan.ts';
 
 /** The bytes of a font file (TrueType) for a family name and style, if there is one to hand. */
@@ -38,13 +38,8 @@ export const isStandardName = (name: string): boolean => /^(Helvetica|Times|Cour
 /** The standard font that passes best for a family, in a style. */
 export function nearestStandard(family: string, bold: boolean, italic: boolean): string {
   const lower = family.toLowerCase();
-  const kind = /courier|mono|consolas|typewriter/.test(lower) ? 'mono' : /times|georgia|cambria|serif|garamond|palatino|minion|caladea|gelasio|roman/.test(lower) && !/sans/.test(lower) ? 'serif' : 'sans';
-  const names = {
-    sans: ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique'],
-    serif: ['Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic'],
-    mono: ['Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique'],
-  }[kind];
-  return names[(bold ? 1 : 0) + (italic ? 2 : 0)];
+  const kind: Kind = /courier|mono|consolas|typewriter/.test(lower) ? 'mono' : /times|georgia|cambria|serif|garamond|palatino|minion|caladea|gelasio|roman/.test(lower) && !/sans/.test(lower) ? 'serif' : 'sans';
+  return STANDARD_FONTS[kind][(bold ? 1 : 0) + (italic ? 2 : 0)];
 }
 
 /** A font for a name and style, in the page's resources. */

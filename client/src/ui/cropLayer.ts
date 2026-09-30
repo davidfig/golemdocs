@@ -7,7 +7,7 @@ import { boxWithAspect, clampBox, dragBox } from '../formats/imagePixels.ts';
 import type { Box, Handle } from '../formats/imagePixels.ts';
 import { t } from '../i18n/index.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
-import { h } from './dom.ts';
+import { h, isFormField } from './dom.ts';
 import './pictureTools.css';
 
 export interface CropHost {
@@ -47,6 +47,8 @@ export class CropLayer {
   private session: Session | null = null;
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.session) return;
+    // Keys typed in a box elsewhere (a dialog, a comment) are that box's.
+    if (isFormField(e.target) && !this.el.contains(e.target as Node)) return;
     if (e.key === 'Escape') this.finish(false);
     else if (e.key === 'Enter') this.finish(true);
     else return;

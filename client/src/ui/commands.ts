@@ -201,7 +201,7 @@ export class CommandRegistry {
       return;
     }
     const result = host.perform(action);
-    if (result instanceof Promise) result.catch((e: unknown) => host.notify(t('menus.command.failed', { label, error: String((e as Error).message ?? e) })));
+    if (result instanceof Promise) result.catch((e: unknown) => host.notify(t('menus.command.failed', { label, error: e instanceof Error ? e.message : String(e) })));
   }
 
   /** Whether a value-carrying action is available, for combo boxes and color buttons. */

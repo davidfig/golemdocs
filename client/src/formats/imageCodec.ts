@@ -55,7 +55,10 @@ export async function transcode(bytes: Uint8Array, to: OutputType, quality = 0.9
   return encodeCanvas(canvas, to, quality);
 }
 
-/** A picture as a PNG the document can hold: GIF and BMP (first frame) and SVG (drawn at its own size, or `svgScale` times it). */
+/** The longest side an SVG is drawn at: a canvas much bigger fails, or takes all the memory there is. */
+const SVG_LARGEST_SIDE = 8192;
+
+/** A picture as a PNG the document can hold: GIF and BMP (first frame) and SVG (drawn at its own size, small ones enlarged up to four times, huge ones reduced to fit a canvas). */
 export async function toPng(name: string, bytes: Uint8Array): Promise<{ name: string; bytes: Uint8Array }> {
   const image = sniffImage(bytes);
   const stem = name.replace(/\.[^.]*$/, '');
@@ -72,7 +75,7 @@ export async function toPng(name: string, bytes: Uint8Array): Promise<{ name: st
     // An SVG without a size draws at 300x150; give one that has a viewBox a workable size.
     const width = img.naturalWidth || 512;
     const height = img.naturalHeight || 512;
-    const scale = Math.max(1, Math.min(4, 1024 / Math.max(width, height)));
+    const scale = Math.min(Math.max(1, Math.min(4, 1024 / Math.max(width, height))), SVG_LARGEST_SIDE / Math.max(width, height));
     const { canvas, context } = makeCanvas(width * scale, height * scale);
     context.drawImage(img, 0, 0, canvas.width, canvas.height);
     return { name: `${stem}.png`, bytes: await encodeCanvas(canvas, 'png') };

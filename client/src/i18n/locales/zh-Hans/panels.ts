@@ -74,6 +74,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.severalLines': '多行',
   'panels.forms.options': '选项，每行一个',
   'panels.forms.deleteField': '删除字段',
+  'panels.forms.nameTaken': '已存在名为“{name}”的字段',
   'panels.forms.fieldTitle': '{kind}：{name}',
   'panels.forms.kind.text': '文本框',
   'panels.forms.kind.checkbox': '复选框',

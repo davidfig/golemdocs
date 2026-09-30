@@ -57,9 +57,11 @@ class SqlStore implements RoomStore {
   }
 
   append(transactions: Transaction[]): void {
+    // The count moves only once every row is in: a failed insert rolls the whole batch back.
     this.ctx.storage.transactionSync(() => {
-      for (const tx of transactions) this.ctx.storage.sql.exec('INSERT INTO log (pos, id, json) VALUES (?, ?, ?)', this.count++, tx.id, JSON.stringify(tx));
+      transactions.forEach((tx, i) => this.ctx.storage.sql.exec('INSERT INTO log (pos, id, json) VALUES (?, ?, ?)', this.count + i, tx.id, JSON.stringify(tx)));
     });
+    this.count += transactions.length;
   }
 
   clear(): void {
@@ -180,6 +182,10 @@ export class Room {
     if (url.pathname === '/state') return Response.json({ maySave: this.core.clientsMaySave });
     if (url.pathname === '/kick') {
       this.core.kick(url.searchParams.get('user') ?? '');
+      return new Response(null, { status: 204 });
+    }
+    if (url.pathname === '/rejoin') {
+      this.core.rejoin(url.searchParams.get('user') ?? '');
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/end') {

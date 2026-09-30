@@ -1,5 +1,6 @@
 // The paid sync subscription, sold through Polar (server/src/subscriptions.ts). The page only asks
 // the server for where to send the user: to Polar's checkout to pay, or to its portal to manage it.
+import { t } from './i18n/index.ts';
 
 export interface Subscription {
   /** Polar's status (`active`, `canceled`, `none`…). */
@@ -27,7 +28,7 @@ export async function fetchSubscription(): Promise<Subscription | null> {
 async function addressFrom(path: string): Promise<string> {
   const response = await fetch(path, { method: 'POST' });
   const body = (await response.json().catch(() => null)) as { url?: string; error?: string } | null;
-  if (!response.ok || !body?.url) throw new SubscriptionError(response.status, body?.error ?? `status ${response.status}`);
+  if (!response.ok || !body?.url) throw new SubscriptionError(response.status, body?.error ?? t('app.requestFailed', { status: response.status }));
   return body.url;
 }
 

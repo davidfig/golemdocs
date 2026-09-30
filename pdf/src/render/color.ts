@@ -277,8 +277,14 @@ function fn(doc: PdfDocument, obj: PdfObject | undefined, depth: number): PdfFun
       }
       const bit = (flat * nOut + j) * bps;
       let v = 0;
-      if (bps >= 8) for (let b = 0; b < bps / 8; b++) v = v * 256 + (data[bit / 8 + b] ?? 0);
-      else v = ((data[bit >> 3] ?? 0) >> (8 - bps - (bit & 7))) & ((1 << bps) - 1);
+      if (bps % 8 === 0) for (let b = 0; b < bps / 8; b++) v = v * 256 + (data[bit / 8 + b] ?? 0);
+      else if (bps < 8) v = ((data[bit >> 3] ?? 0) >> (8 - bps - (bit & 7))) & ((1 << bps) - 1);
+      else
+        // 12 bits (or another width that isn't whole bytes): read bit by bit.
+        for (let b = 0; b < bps; b++) {
+          const at = bit + b;
+          v = v * 2 + (((data[Math.floor(at / 8)] ?? 0) >> (7 - (at % 8))) & 1);
+        }
       return v / maxv;
     };
     return (x) => {
@@ -331,6 +337,9 @@ function fn(doc: PdfDocument, obj: PdfObject | undefined, depth: number): PdfFun
 }
 
 type Ps = number | string | Ps[];
+
+/** The calculator's operand stack holds 100 entries (PDF 32000 §7.10.5); more is a runaway function. */
+const PS_STACK_LIMIT = 100;
 
 function parsePostScript(src: string): Ps[] {
   const tokens = src.replace(/%[^\n\r]*/g, ' ').match(/[{}]|[^\s{}]+/g) ?? [];
@@ -417,7 +426,7 @@ function runPostScript(code: Ps[], s: (number | boolean)[], budget = { n: 10000 
       case 'pop': s.pop(); break;
       case 'dup': s.push(s[s.length - 1] ?? 0); break;
       case 'exch': { const b = s.pop() ?? 0; const a = s.pop() ?? 0; s.push(b, a); break; }
-      case 'copy': { const n = pop(); if (n > 0 && n <= s.length) s.push(...s.slice(-n)); break; }
+      case 'copy': { const n = pop(); if (n > 0 && n <= s.length && s.length + n <= PS_STACK_LIMIT) s.push(...s.slice(-n)); break; }
       case 'index': { const n = pop(); s.push(s[s.length - 1 - n] ?? 0); break; }
       case 'roll': {
         let j = pop();

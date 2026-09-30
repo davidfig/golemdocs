@@ -68,7 +68,7 @@ export class PdfDocument {
     this.source = source;
     this.xref = xref;
     this.trailer = xref.trailer;
-    this.nextNum = Math.max(xref.trailer.number('Size') ?? 0, ...xref.entries.keys()) + 1;
+    this.nextNum = Math.max(xref.trailer.number('Size') ?? 0, maxKey(xref.entries)) + 1;
   }
 
   // --- opening and creating -----------------------------------------------------------------
@@ -91,26 +91,33 @@ export class PdfDocument {
       doc.recovered = true;
       doc.warnings.push(warning);
     }
+    // Decryption first: the catalog may be in an (encrypted) object stream. A trailer rebuilt
+    // while looking for the catalog can bring the /Encrypt entry, so check again after.
+    doc.setupEncryption(options.password ?? '');
     if (!(doc.resolve(doc.trailer.get('Root')) instanceof PdfDict)) doc.recover('trailer has no usable /Root');
+    doc.setupEncryption(options.password ?? '');
     if (!(doc.resolve(doc.trailer.get('Root')) instanceof PdfDict)) doc.findCatalog();
     if (!(doc.resolve(doc.trailer.get('Root')) instanceof PdfDict)) throw new PdfError('no document catalog');
-
-    const encrypt = doc.trailer.get('Encrypt');
-    if (encrypt !== undefined && encrypt !== null) {
-      if (encrypt instanceof PdfRef) doc.encryptNum = encrypt.num;
-      const dict = doc.resolve(encrypt);
-      if (!(dict instanceof PdfDict)) throw new EncryptionError('invalid /Encrypt dictionary');
-      const id = doc.resolve(doc.trailer.get('ID'));
-      const id0 = Array.isArray(id) && id[0] instanceof PdfString ? id[0].bytes : EMPTY;
-      const handler = new StandardSecurityHandler(dict, id0, options.password ?? '', (o) => doc.resolve(o));
-      (doc as { security?: StandardSecurityHandler }).security = handler;
-      if (!handler.authenticated) doc.warn('embedded files are encrypted and stay so without the password');
-      // Anything loaded before the handler existed (the catalog) must be reloaded decrypted.
-      for (const num of [...doc.objects.keys()]) if (num !== doc.encryptNum) doc.objects.delete(num);
-    }
     const catalogVersion = doc.catalog.name('Version');
     if (catalogVersion && /^\d\.\d$/.test(catalogVersion) && catalogVersion > doc.version) doc.version = catalogVersion;
     return doc;
+  }
+
+  /** Installs the security handler if the trailer has /Encrypt and none is installed yet. */
+  private setupEncryption(password: string): void {
+    const encrypt = this.trailer.get('Encrypt');
+    if (this.security || encrypt === undefined || encrypt === null) return;
+    if (encrypt instanceof PdfRef) this.encryptNum = encrypt.num;
+    const dict = this.resolve(encrypt);
+    if (!(dict instanceof PdfDict)) throw new EncryptionError('invalid /Encrypt dictionary');
+    const id = this.resolve(this.trailer.get('ID'));
+    const id0 = Array.isArray(id) && id[0] instanceof PdfString ? id[0].bytes : EMPTY;
+    const handler = new StandardSecurityHandler(dict, id0, password, (o) => this.resolve(o));
+    (this as { security?: StandardSecurityHandler }).security = handler;
+    if (!handler.authenticated) this.warn('embedded files are encrypted and stay so without the password');
+    // Anything loaded before the handler existed must be reloaded decrypted.
+    for (const num of [...this.objects.keys()]) if (num !== this.encryptNum) this.objects.delete(num);
+    this.objectStreams.clear();
   }
 
   /** A new document with an empty page tree. */
@@ -272,7 +279,7 @@ export class PdfDocument {
     for (const [num, o] of this.objects) if (o === null && !this.touched.has(num)) this.objects.delete(num);
     const rootOk = this.resolve(this.trailer.get('Root')) instanceof PdfDict;
     for (const [k, v] of rebuilt.trailer) if (!this.trailer.has(k) || (k === 'Root' && !rootOk)) this.trailer.set(k, v);
-    this.nextNum = Math.max(this.nextNum, ...this.xref.entries.keys()) + 1;
+    this.nextNum = Math.max(this.nextNum, maxKey(this.xref.entries) + 1);
   }
 
   /** Last resort for a missing /Root: the last object that looks like a catalog. */
@@ -329,7 +336,7 @@ export class PdfDocument {
     const out: PdfPage[] = [];
     const root = this.catalog.get('Pages');
     const visited = new Set<number>();
-    const walk = (node: PdfObject | undefined, depth: number) => {
+    const walk = (node: PdfObject | undefined, depth: number, kids?: PdfObject[], at?: number) => {
       if (depth > 64) return;
       if (node instanceof PdfRef) {
         if (visited.has(node.num)) return;
@@ -337,14 +344,16 @@ export class PdfDocument {
       }
       const d = this.dict(node);
       if (!d) return;
-      const kids = this.array(d.get('Kids'));
-      if (d.name('Type') === 'Pages' || (kids && d.name('Type') !== 'Page')) {
-        for (const k of kids ?? []) walk(k, depth + 1);
+      const children = this.array(d.get('Kids'));
+      if (d.name('Type') === 'Pages' || (children && d.name('Type') !== 'Page')) {
+        children?.forEach((k, i) => walk(k, depth + 1, children, i));
       } else if (node instanceof PdfRef) {
         out.push(new PdfPage(this, node, d));
       } else {
-        // A page written directly inside Kids: make it indirect so it can be referenced.
+        // A page written directly inside Kids: make it indirect, and put the reference in its
+        // place, so the page can be referenced (and found in its parent to move or remove it).
         const ref = this.add(d);
+        if (kids && at !== undefined) kids[at] = ref;
         out.push(new PdfPage(this, ref, d));
       }
     };
@@ -767,7 +776,8 @@ function subsections(rows: XrefRows): [number, XrefRow[]][] {
   return out;
 }
 
-function maxKey(rows: XrefRows): number {
+/** The largest key (0 for none); a loop, since spreading a huge map into Math.max overflows the stack. */
+function maxKey(rows: Map<number, unknown>): number {
   let m = 0;
   for (const k of rows.keys()) m = Math.max(m, k);
   return m;

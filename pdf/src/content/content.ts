@@ -2,7 +2,7 @@
 
 import { PdfDict, PdfName, type PdfObject } from '../core/objects.ts';
 import { Keyword, Parser, isRegular, isWhitespace } from '../core/parser.ts';
-import { ByteWriter, writeObject } from '../core/serialize.ts';
+import { ByteWriter, formatName, writeObject } from '../core/serialize.ts';
 
 export interface Operation {
   /** The operator, e.g. 'Tj', 're', 'cm'. Inline images are a single 'BI' operation. */
@@ -54,7 +54,7 @@ function readInlineImage(p: Parser): Operation {
   if (isWhitespace(b[start])) start++;
   const length = dict.get('L') ?? dict.get('Length');
   let end = -1;
-  if (typeof length === 'number' && start + length <= b.length) {
+  if (typeof length === 'number' && Number.isInteger(length) && length >= 0 && start + length <= b.length) {
     let q = start + length;
     while (q < b.length && isWhitespace(b[q])) q++;
     if (b[q] === 0x45 && b[q + 1] === 0x49 && (q + 2 >= b.length || !isRegular(b[q + 2]))) {
@@ -99,7 +99,7 @@ export function serializeContent(ops: Iterable<Operation>): Uint8Array {
       const d = o.operands[0];
       if (d instanceof PdfDict) {
         for (const [k, v] of d) {
-          w.text(` /${k} `);
+          w.text(` ${formatName(k)} `);
           writeObject(w, v);
         }
       }

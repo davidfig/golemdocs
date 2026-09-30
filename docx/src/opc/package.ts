@@ -128,8 +128,9 @@ export class Relationships {
 
   /** Adds a relationship to an internal part (or an external URL) and returns its id. */
   add(type: string, target: string, external = false): string {
+    // isRelType: a Strict document's relationship to the part counts, rather than getting a duplicate.
     const existing = this.list.find(
-      (r) => r.type === type && r.external === external && (external ? r.target === target : this.partName(r) === target),
+      (r) => isRelType(r.type, type) && r.external === external && (external ? r.target === target : this.partName(r) === target),
     );
     if (existing) return existing.id;
     const used = new Set(this.list.map((r) => r.id));
@@ -152,10 +153,11 @@ export class Relationships {
   static parse(source: string, root: XmlElement): Relationships {
     const list: Relationship[] = [];
     for (const rel of elements(root)) {
-      if (rel.name !== 'Relationship') continue;
+      // Without an id or a target nothing can use it (and it would break lookups by id).
+      if (rel.name !== 'Relationship' || !rel.attrs.Id || rel.attrs.Target === undefined) continue;
       list.push({
         id: rel.attrs.Id,
-        type: rel.attrs.Type,
+        type: rel.attrs.Type ?? '',
         target: rel.attrs.Target,
         external: rel.attrs.TargetMode === 'External',
       });
@@ -201,9 +203,18 @@ export class OpcPackage {
     const pkg = new OpcPackage();
     const types = zip.entries.get('[Content_Types].xml');
     if (!types) throw new PackageError('not an Office document: [Content_Types].xml is missing');
-    for (const item of elements(parseXml(await types.text()))) {
-      if (item.name === 'Default') pkg.defaults.set(item.attrs.Extension.toLowerCase(), item.attrs.ContentType);
-      else if (item.name === 'Override') pkg.overrides.set(item.attrs.PartName.replace(/^\//, '').toLowerCase(), item.attrs.ContentType);
+    let typesRoot: XmlElement;
+    try {
+      typesRoot = parseXml(await types.text());
+    } catch (e) {
+      if (e instanceof XmlError) throw new PackageError(`[Content_Types].xml: ${e.message}`);
+      throw e;
+    }
+    for (const item of elements(typesRoot)) {
+      const { Extension: extension, PartName: partName, ContentType: contentType } = item.attrs;
+      if (contentType === undefined) continue;
+      if (item.name === 'Default' && extension !== undefined) pkg.defaults.set(extension.toLowerCase(), contentType);
+      else if (item.name === 'Override' && partName !== undefined) pkg.overrides.set(partName.replace(/^\//, '').toLowerCase(), contentType);
     }
     for (const [name, entry] of zip.entries) {
       if (name === '[Content_Types].xml') continue;

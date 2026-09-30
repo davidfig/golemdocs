@@ -68,3 +68,21 @@ test('a document without threads gets no extended part', async () => {
   const zip = ZipArchive.read(await (await commented()).write());
   assert.equal(zip.entries.has('word/commentsExtended.xml'), false);
 });
+
+test('tabs and line breaks in a changed comment are written as Word tabs and breaks', async () => {
+  const doc = await commented();
+  doc.comments[0].paragraphs = ['a\tb\nc'];
+  const bytes = await doc.write();
+  const xml = await ZipArchive.read(bytes).entries.get('word/comments.xml')!.text();
+  assert.match(xml, /<w:t xml:space="preserve">a<\/w:t><w:tab\/><w:t xml:space="preserve">b<\/w:t><w:br\/><w:t xml:space="preserve">c<\/w:t>/);
+  assert.deepEqual((await WordDocument.read(bytes)).comments[0].paragraphs, ['a\tb\nc']);
+});
+
+test('a reference inside a run anchors where it is in the run', () => {
+  const reference = commentReference('0');
+  reference.content.unshift({ kind: 'text', text: 'ab' });
+  const p: Paragraph = { kind: 'paragraph', properties: {}, children: [text('xy'), reference], attrs: {} };
+  const range = commentRanges([p]).get('0')!;
+  assert.equal(range.start.offset, 4);
+  assert.deepEqual(commentMarkerOffsets(p, '0'), [4]);
+});

@@ -344,7 +344,6 @@ export type FromWorker =
   /** What an assistant tool did or found. */
   | { type: 'agentResult'; request: number; result: string };
 
-/** Font files, relative to the site root (the worker and the page both load from here). */
 /** What Tools ▸ Word Count shows. `selection`: they are for the selected text, not the document. */
 export interface WordStats {
   pages: number;
@@ -373,4 +372,5 @@ export interface SpellIssue {
 /** Where the spelling dictionaries are served from. */
 export const DICTIONARY_BASE = `${(import.meta.env?.BASE_URL ?? "/")}dictionaries/`;
 
+/** Font files, relative to the site root (the worker and the page both load from here). */
 export const FONT_BASE = `${(import.meta.env?.BASE_URL ?? "/")}fonts/`;

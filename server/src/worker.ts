@@ -310,7 +310,11 @@ const handler: ExportedHandler = {
           const target = await userByEmail(env, body.email);
           if (!target) throw new HttpError(404, 'nobody with that email has signed in to Golem Docs yet');
           if (target === userId) throw new HttpError(400, 'you already own this document');
+          const before = await accessFor(env, target, id);
           await shareWith(env, id, target, body.role);
+          // Someone already in the room keeps the role they joined with until they reconnect:
+          // make them, so a viewer made an editor (or the other way round) takes effect now.
+          if (before && before.role !== body.role && env.ROOMS) await roomFor(env, id).fetch(new Request(`https://room/rejoin?user=${encodeURIComponent(target)}`));
           return json({ ...(await person(env, target)), role: body.role });
         }
         if (granteeId !== undefined && request.method === 'DELETE') {

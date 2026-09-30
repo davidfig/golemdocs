@@ -74,6 +74,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.severalLines': 'Più righe',
   'panels.forms.options': 'Opzioni, una per riga',
   'panels.forms.deleteField': 'Elimina campo',
+  'panels.forms.nameTaken': 'Esiste già un campo denominato “{name}”',
   'panels.forms.fieldTitle': '{kind}: {name}',
   'panels.forms.kind.text': 'Casella di testo',
   'panels.forms.kind.checkbox': 'Casella di controllo',

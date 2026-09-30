@@ -69,7 +69,8 @@ export function mathChar(cp: number, style: MathStyle | undefined): number {
   if (greek) {
     if (greekLower) return greek.lower + cp - 0x3b1;
     if (greekUpper) return greek.upper + cp - 0x391;
-    if (GREEK_VARIANTS[cp]) return GREEK_VARIANTS[cp] - (style === 'bold' ? 0x3a : 0);
+    // The bold variants come 0x3a before the italic ones, the bold italic 0x3a after.
+    if (GREEK_VARIANTS[cp]) return GREEK_VARIANTS[cp] + (style === 'bold' ? -0x3a : style === 'boldItalic' ? 0x3a : 0);
   }
   return cp;
 }

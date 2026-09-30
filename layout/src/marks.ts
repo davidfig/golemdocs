@@ -6,7 +6,7 @@
 import type { Inline, Paragraph } from '@word/docx';
 import { OBJECT_CHAR } from '@word/docx';
 import { packColor, type PageLayout } from './display.ts';
-import { toModel } from './offsets.ts';
+import { modelOfChar } from './offsets.ts';
 import type { LineLayout, ParagraphLayout } from './paragraph.ts';
 
 let on = false;
@@ -73,7 +73,7 @@ export function emitMarks(page: PageLayout, paragraph: ParagraphLayout, line: Li
 
   const chars = paragraph.paragraph.children.length ? charsOf(paragraph.paragraph) : '';
   for (let visible = line.start; visible < line.end; visible++) {
-    const char = chars[toModel(paragraph.spans, visible)];
+    const char = chars[modelOfChar(paragraph.spans, visible)];
     const x0 = x + line.stops[visible - line.start];
     const x1 = x + line.stops[visible + 1 - line.start];
     if (char === ' ') draw(SPACE_MARK, x0, x1);

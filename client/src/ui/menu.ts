@@ -7,7 +7,7 @@
 
 import { t } from '../i18n/index.ts';
 import type { CommandRegistry } from './commands.ts';
-import { h, mnemonicLabel, setAttr, stripMnemonic } from './dom.ts';
+import { h, isFormField, mnemonicLabel, setAttr, stripMnemonic } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { showMenuDrawer, type DrawerEntry } from './menuDrawer.ts';
@@ -138,6 +138,8 @@ const SUBMENU_DELAY_MS = 220;
 
 interface Row {
   el: HTMLElement;
+  /** The label without its mnemonic marker (the submenu's accessible name). */
+  label: string;
   enabled: boolean;
   mnemonic: string | null;
   submenu: MenuItem[] | (() => MenuItem[]) | null;
@@ -178,7 +180,7 @@ class MenuPopup {
           run();
         };
 
-    const { el: labelEl, key } = mnemonicLabel(label);
+    const { el: labelEl, key, text } = mnemonicLabel(label);
     const gutter = h('span', { class: 'wm-gutter' });
     if (checked) gutter.innerHTML = radio ? ICONS.radio : ICONS.check;
     else if (icon) gutter.append(iconElement(icon));
@@ -221,7 +223,7 @@ class MenuPopup {
       else activate();
     });
 
-    this.rows.push({ el, enabled, mnemonic: key, submenu, activate });
+    this.rows.push({ el, label: text, enabled, mnemonic: key, submenu, activate });
     this.el.append(el);
   }
 
@@ -287,7 +289,7 @@ class MenuPopup {
     }
     this.closeChild();
     const items = typeof row.submenu === 'function' ? row.submenu() : row.submenu;
-    this.child = new MenuPopup(this.bar, items, this, row.el.textContent ?? '');
+    this.child = new MenuPopup(this.bar, items, this, row.label);
     this.childOf = index;
     row.el.setAttribute('aria-expanded', 'true');
     this.child.show(row.el.getBoundingClientRect(), 'right');
@@ -483,6 +485,8 @@ export class MenuBar {
     if (e.key === 'Alt' && !e.repeat) this.altAlone = !e.ctrlKey && !e.metaKey && !e.shiftKey;
 
     if (this.mode === 'idle') {
+      // A modal dialog has the keyboard: the menus behind it can't be reached.
+      if (document.querySelector('dialog:modal')) return;
       if (e.key === 'F10' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
         this.take(e);
         this.focusBar(0);
@@ -563,7 +567,7 @@ export class MenuBar {
     if (e.key !== 'Alt' || IS_MAC) return;
     const alone = this.altAlone;
     this.altAlone = false;
-    if (!alone || isFormField(e.target)) return;
+    if (!alone || isFormField(e.target) || (this.mode === 'idle' && document.querySelector('dialog:modal'))) return;
     // Tapping Alt toggles keyboard access to the menu bar, as on Windows.
     e.preventDefault();
     if (this.mode === 'idle') this.focusBar(0);
@@ -574,10 +578,4 @@ export class MenuBar {
     e.preventDefault();
     e.stopImmediatePropagation();
   }
-}
-
-/** A text field of the chrome itself (the font box), not the document's hidden textarea. */
-export function isFormField(target: EventTarget | null): boolean {
-  // The box a PDF's text is edited in is one too: it has its own caret, selection and undo.
-  return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable);
 }

@@ -8,6 +8,10 @@ import { StyleResolver } from '../src/model/resolve.ts';
 import type { Block, Paragraph, Run, Table } from '../src/model/types.ts';
 import { CORPUS_DIR as CORPUS, corpusFiles } from './corpus.ts';
 import { roundTrip } from './roundtrip.ts';
+import { readDrawing } from '../src/docx/content.ts';
+import { readStyles } from '../src/docx/styles.ts';
+import { Relationships } from '../src/opc/package.ts';
+import { parseXml } from '../src/xml/xml.ts';
 
 const files = corpusFiles();
 
@@ -191,4 +195,31 @@ test('list labels', async () => {
   assert.equal(formatNumber(1994, 'upperRoman'), 'MCMXCIV');
   assert.equal(formatNumber(28, 'lowerLetter'), 'bb');
   assert.equal(formatNumber(23, 'ordinal'), '23rd');
+});
+
+test('huge list numbers fall back to digits instead of spelling out millions of letters', () => {
+  assert.equal(formatNumber(32767, 'upperRoman').startsWith('MMMMM'), true);
+  assert.equal(formatNumber(2_000_000_000, 'lowerLetter'), '2000000000');
+  assert.equal(formatNumber(2_000_000_000, 'lowerRoman'), '2000000000');
+});
+
+test('a drawing without a numeric size is kept as it is, not modeled with NaN', () => {
+  const ctx = { rels: new Relationships('word/document.xml', []) };
+  const drawing = (extent: string) =>
+    readDrawing(parseXml(`<w:drawing xmlns:w="w" xmlns:wp="wp"><wp:inline>${extent}<wp:docPr id="1" name="x"/></wp:inline></w:drawing>`), ctx);
+  assert.equal(drawing('<wp:extent/>').kind, 'raw');
+  assert.equal(drawing('<wp:extent cx="abc" cy="10"/>').kind, 'raw');
+  const ok = drawing('<wp:extent cx="20" cy="10"/>');
+  assert.equal(ok.kind === 'drawing' && ok.width, 20);
+});
+
+test('a table style condition without a type is preserved rather than written without one', () => {
+  const ctx = { rels: new Relationships('word/styles.xml', []) };
+  const sheet = readStyles(
+    parseXml('<w:styles xmlns:w="w"><w:style w:type="table" w:styleId="T"><w:tblStylePr w:other="1"><w:rPr><w:b/></w:rPr></w:tblStylePr><w:tblStylePr w:type="firstRow"/></w:style></w:styles>'),
+    ctx,
+  );
+  const style = sheet.styles[0];
+  assert.deepEqual(style.tableConditions?.map((c) => c.type), ['firstRow']);
+  assert.equal(style.extra?.length, 1);
 });

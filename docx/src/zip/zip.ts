@@ -33,7 +33,12 @@ export class ZipEntry {
   read(): Promise<Uint8Array> {
     if (!this.data) {
       this.data = (async () => {
-        const out = this.method === STORED ? this.raw : await inflateRaw(this.raw);
+        let out: Uint8Array;
+        try {
+          out = this.method === STORED ? this.raw : await inflateRaw(this.raw, this.size);
+        } catch (e) {
+          throw new ZipError(`${this.name}: corrupt compressed data (${(e as Error).message})`);
+        }
         if (out.length !== this.size) throw new ZipError(`${this.name}: size mismatch (${out.length} != ${this.size})`);
         if (crc32(out) !== this.crc) throw new ZipError(`${this.name}: CRC mismatch (corrupt file)`);
         return out;
@@ -129,6 +134,7 @@ export async function writeZip(inputs: ZipInput[]): Promise<Uint8Array> {
     }),
   );
 
+  if (prepared.length > 0xffff) throw new ZipError('too many entries (ZIP64 is not supported)');
   let total = 22;
   for (const e of prepared) total += 30 + e.name.length + e.raw.length + 46 + e.name.length;
   if (total > 0xffffffff) throw new ZipError('archive too large (ZIP64 is not supported)');

@@ -125,3 +125,12 @@ test('an equation in a paragraph survives a .docx round trip and counts as one p
   assert.ok(isMathInline(children[1]));
   assert.equal(toLatex(readMathInline(children[1] as never)), '\\frac{a}{b}');
 });
+
+test('prescripts apply to the whole group that follows them', () => {
+  const [pre, ...rest] = tree('{}_a^b{\\frac{1}{2}x} + y').content;
+  assert.deepEqual(rest, [{ type: 'text', text: '+y' }]);
+  assert.equal(pre.type === 'script' && pre.pre, true);
+  assert.equal(pre.type === 'script' && pre.base.length, 2);
+  assert.deepEqual(tree(toLatex(tree('{}_a^b{\\frac{1}{2}x}'))), tree('{}_a^b{\\frac{1}{2}x}'));
+  assert.deepEqual(tree('{}_a^b X').content, [{ type: 'script', base: [{ type: 'text', text: 'X' }], sub: [{ type: 'text', text: 'a' }], sup: [{ type: 'text', text: 'b' }], pre: true }]);
+});

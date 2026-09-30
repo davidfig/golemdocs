@@ -72,6 +72,11 @@ export class CommentsPanel {
   ) {
     this.el.hidden = true;
     this.el.append(this.bar, this.list);
+    // Keys typed in a comment box stay there: the document's handlers listen on the window, and
+    // would take Backspace, the arrows and the rest as edits to the document.
+    this.el.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLTextAreaElement) e.stopPropagation();
+    });
     parent.append(this.el);
   }
 
@@ -82,15 +87,25 @@ export class CommentsPanel {
     this.render();
   }
 
+  /** Empties the panel for another document: a half-written comment or edit belongs to the old one. */
+  reset(): void {
+    this.drafting = false;
+    this.editing = null;
+    this.drafts.clear();
+    this.focusBox = null;
+    this.comments = [];
+    this.active = this.documentActive = null;
+    this.render();
+  }
+
   update(comments: readonly CommentInfo[], active: string | null = null): void {
     let changed = false;
     if (active !== this.documentActive) {
       this.documentActive = active;
-      if (active !== this.active) this.active = active;
+      this.active = active;
       changed = true;
     }
-    const key = JSON.stringify([comments.map(({ id, author, initials, date, text, parentId, resolved }) => [id, author, initials, date, text, parentId, resolved]), this.active]);
-    if (key === this.shown && !changed) return;
+    if (renderKey(comments, this.active) === this.shown && !changed) return;
     // A comment the panel was waiting for (written here) opens.
     const known = new Set(this.comments.map((c) => c.id));
     this.comments = comments;
@@ -110,7 +125,7 @@ export class CommentsPanel {
   }
 
   private render(): void {
-    this.shown = JSON.stringify([this.comments.map(({ id, author, initials, date, text, parentId, resolved }) => [id, author, initials, date, text, parentId, resolved]), this.active]);
+    this.shown = renderKey(this.comments, this.active);
     const threads = this.threads();
     this.el.hidden = threads.length === 0 && !this.drafting;
     this.el.ariaLabel = t('panels.comments.label');
@@ -183,7 +198,9 @@ export class CommentsPanel {
     const name = c.author || t('panels.comments.unknown');
     const avatar = h('span', { class: 'wm-comment-avatar', text: initialsOf(c.initials, name), attrs: { 'aria-hidden': 'true' } });
     avatar.style.background = colorOf(name);
-    const head = h('header', {}, avatar, h('strong', { text: name }), c.resolved ? h('span', { class: 'wm-comment-badge', text: t('panels.comments.resolved') }) : null, c.date ? h('time', { text: relativeTime(Date.parse(c.date)), attrs: { datetime: c.date } }) : null);
+    // A date the document got wrong isn't shown (rather than "Invalid Date").
+    const when = c.date ? relativeTime(Date.parse(c.date)) : '';
+    const head = h('header', {}, avatar, h('strong', { text: name }), c.resolved ? h('span', { class: 'wm-comment-badge', text: t('panels.comments.resolved') }) : null, when ? h('time', { text: when, attrs: { datetime: c.date! } }) : null);
     const out = h('div', { class: 'wm-comment-entry' }, head);
     if (this.editing === c.id) {
       const box = this.box(`edit:${c.id}`, c.text);
@@ -345,6 +362,11 @@ export class CommentsPanel {
       item.el.style.visibility = off ? 'hidden' : '';
     }
   }
+}
+
+/** What a redraw depends on: the comments and the open thread. */
+function renderKey(comments: readonly CommentInfo[], active: string | null): string {
+  return JSON.stringify([comments.map(({ id, author, initials, date, text, parentId, resolved }) => [id, author, initials, date, text, parentId, resolved]), active]);
 }
 
 /** Enter sends (Shift+Enter is a new line), Escape gives up. */

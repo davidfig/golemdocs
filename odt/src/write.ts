@@ -181,6 +181,8 @@ class Writer {
   private readonly imageFrames = new Map<string, OdtImageFrame>();
   private readonly blockObjects = new Map<string, OdtObject[]>();
   private readonly lastListByCounter = new Map<string, string>();
+  /** xml:ids written so far, by part (sink prefix): an id may appear only once in a part. */
+  private readonly xmlIds = new Set<string>();
   private listCount = 0;
   private tableCount = 0;
   private imageCount = 0;
@@ -348,14 +350,14 @@ class Writer {
     if (!e) return undefined;
     if (f.styles?.length) renameStyleReferences(e, sink.preserve(f.styles));
     for (const [path, data] of Object.entries(f.media ?? {})) {
-      if (this.files.has(path)) continue;
+      if (this.files.has(path) || !safePath(path)) continue;
       try {
         this.files.set(path, { data: fromBase64(data), type: f.mediaTypes?.[path] ?? guessType(path) });
       } catch {
         // Unreadable data: the object shows without it.
       }
     }
-    for (const [path, type] of Object.entries(f.mediaTypes ?? {})) if (path.endsWith('/')) this.directories.set(path, type);
+    for (const [path, type] of Object.entries(f.mediaTypes ?? {})) if (path.endsWith('/') && safePath(path)) this.directories.set(path, type);
     return e;
   }
 
@@ -389,7 +391,8 @@ class Writer {
     const attrs: Record<string, string> = {};
     for (const [prefix, uri] of Object.entries(ODF_NS)) attrs[`xmlns:${prefix}`] = uri;
     for (const [prefix, uri] of Object.entries(this.ext.namespaces ?? {})) {
-      if (/^[A-Za-z_][\w.-]*$/.test(prefix) && !attrs[`xmlns:${prefix}`]) attrs[`xmlns:${prefix}`] = uri;
+      // Prefixes starting with "xml" are reserved: declaring one makes the part malformed.
+      if (/^[A-Za-z_][\w.-]*$/.test(prefix) && !/^xml/i.test(prefix) && !attrs[`xmlns:${prefix}`]) attrs[`xmlns:${prefix}`] = uri;
     }
     attrs['office:version'] = ODF_VERSION;
     return attrs;
@@ -639,7 +642,10 @@ class Writer {
 
     const attrs2: Record<string, string | undefined> = { 'text:style-name': styleName };
     if (heading) attrs2['text:outline-level'] = String(outline + 1);
-    if (id && /^[0-9A-F]{8}$/.test(id)) attrs2['xml:id'] = `para-${id}`;
+    if (id && /^[0-9A-F]{8}$/.test(id) && !this.xmlIds.has(`${sink.prefix}:${id}`)) {
+      this.xmlIds.add(`${sink.prefix}:${id}`);
+      attrs2['xml:id'] = `para-${id}`;
+    }
     return el(heading ? 'text:h' : 'text:p', attrs2, children);
   }
 
@@ -1120,6 +1126,11 @@ function emuToLength(emu: number): string {
   const mm = Math.max(emu, 0) / 36000;
   const s = mm.toFixed(5);
   return `${s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s}mm`;
+}
+
+/** Whether a package path from the extension stays inside the package (no "..", absolute or drive paths). */
+function safePath(path: string): boolean {
+  return path !== '' && !path.startsWith('/') && !path.includes('\\') && !/^[A-Za-z]:/.test(path) && !path.split('/').some((part) => part === '..' || part === '.');
 }
 
 function guessType(path: string): string {

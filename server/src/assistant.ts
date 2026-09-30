@@ -41,6 +41,7 @@ export function parseMessages(body: unknown): ChatMessage[] {
     if (m.role === 'user') out.push({ role: 'user', content: m.content });
     else if (m.role === 'tool') {
       if (typeof m.tool_call_id !== 'string') throw new HttpError(400, 'bad message');
+      chars += m.tool_call_id.length;
       out.push({ role: 'tool', tool_call_id: m.tool_call_id, content: m.content });
     } else if (m.role === 'assistant') {
       const calls = m.tool_calls;
@@ -49,7 +50,7 @@ export function parseMessages(body: unknown): ChatMessage[] {
         if (!Array.isArray(calls)) throw new HttpError(400, 'bad message');
         const tool_calls = calls.map((c: Record<string, unknown>) => {
           if (!c || typeof c.id !== 'string' || typeof c.name !== 'string' || typeof c.arguments !== 'string' || !TOOL_NAMES.has(c.name)) throw new HttpError(400, 'bad tool call');
-          chars += c.arguments.length;
+          chars += c.id.length + c.arguments.length;
           return { id: c.id, name: c.name, arguments: c.arguments };
         });
         out.push({ role: 'assistant', content: m.content, tool_calls });
@@ -100,7 +101,7 @@ export async function handleAssistant(request: Request, env: Env, userId: string
   const messages = parseMessages(await request.json().catch(() => null));
 
   // Worst case: every character of the conversation and the prompt is input, and the model writes as much as it may.
-  const promptChars = SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + messages.reduce((n, m) => n + m.content.length + ('tool_calls' in m ? JSON.stringify(m.tool_calls).length : 0), 0);
+  const promptChars = SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + messages.reduce((n, m) => n + m.content.length + ('tool_calls' in m ? JSON.stringify(m.tool_calls).length : 0) + ('tool_call_id' in m ? m.tool_call_id.length : 0), 0);
   const hold = costMicro(estimateTokens(promptChars), MAX_OUTPUT_TOKENS);
   const period = periodOf();
   if (!(await reserve(env, userId, period, hold))) return respond({ error: 'out of assistant credits for this month', code: 'credits', creditsLeft: 0 }, 402);

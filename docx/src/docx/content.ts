@@ -337,7 +337,10 @@ function findDescendant(root: XmlElement, name: string): XmlElement | undefined 
 export function readDrawing(e: XmlElement, ctx: ReadContext): Drawing | Raw {
   const container = child(e, 'wp:inline') ?? child(e, 'wp:anchor');
   const extent = container && child(container, 'wp:extent');
-  if (!container || !extent) return raw(e);
+  const width = Number(extent?.attrs.cx);
+  const height = Number(extent?.attrs.cy);
+  // Without a usable size it can't be laid out, and writing it back would put "NaN" in the file.
+  if (!container || !extent || !Number.isFinite(width) || !Number.isFinite(height)) return raw(e);
   const docPr = child(container, 'wp:docPr');
   const blip = findDescendant(container, 'a:blip');
   const textBox = findDescendant(container, 'w:txbxContent');
@@ -345,8 +348,8 @@ export function readDrawing(e: XmlElement, ctx: ReadContext): Drawing | Raw {
   return {
     kind: 'drawing',
     inline: container.name === 'wp:inline',
-    width: Number(extent.attrs.cx),
-    height: Number(extent.attrs.cy),
+    width,
+    height,
     image: rel && !rel.external ? ctx.rels.partName(rel) : undefined,
     name: docPr?.attrs.name,
     description: docPr?.attrs.descr,

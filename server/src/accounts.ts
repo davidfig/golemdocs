@@ -56,7 +56,7 @@ export async function isAdmin(env: Env, userId: string): Promise<boolean> {
   if (!admins.length) return false;
   const { results } = await env.DIRECTORY.prepare('SELECT email FROM identities WHERE user_id = ? AND email_verified = 1').bind(userId).all<{ email: string | null }>();
   if (results.some((r) => r.email && admins.includes(r.email.toLowerCase()))) return true;
-  const dev = env.DEV_USER?.trim();
+  const dev = env.ENVIRONMENT === 'production' ? undefined : env.DEV_USER?.trim();
   return !!dev && admins.includes(dev.toLowerCase()) && (await userIdFor(dev)) === userId;
 }
 

@@ -20,7 +20,7 @@ import { PdfDict, PdfName, PdfRef, PdfStream, PdfString, type PdfObject } from '
 import { parseContent, type Operation } from '../content/content.ts';
 import type { PdfDocument } from '../document.ts';
 import type { PdfPage } from '../page.ts';
-import { IDENTITY, multiply, transformPoint, type Matrix } from '../text/extract.ts';
+import { IDENTITY, MAX_OPERATIONS, appearanceMatrix, multiply, transformPoint, type Matrix } from '../text/extract.ts';
 import { TextFont } from '../text/font.ts';
 import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, parseColorSpace, type ColorSpace } from './color.ts';
 import { describeFont, type FontStyle } from './fontinfo.ts';
@@ -146,6 +146,10 @@ interface Ctx {
   skippedPaths: number;
   /** Rectangles left to spend on slanted strokes, curves and filled shapes (they are drawn as many thin ones). */
   budget: number;
+  /** Content operations left to run, form XObjects' included (MAX_OPERATIONS). */
+  opsLeft: number;
+  /** Form XObjects being run: one that draws itself is not run again. */
+  active: Set<PdfStream>;
 }
 
 const fontCaches = new WeakMap<PdfDocument, Map<unknown, FontEntry | null>>();
@@ -180,6 +184,8 @@ export function interpretPage(page: PdfPage, options: { hideFields?: boolean } =
     skippedRotated: 0,
     skippedPaths: 0,
     budget: VECTOR_BUDGET,
+    opsLeft: MAX_OPERATIONS,
+    active: new Set(),
   };
   try {
     const p0 = page.toDisplay(0, 0);
@@ -309,34 +315,15 @@ function appearance(doc: PdfDocument, annot: PdfDict): PdfStream | undefined {
   return undefined;
 }
 
-function appearanceMatrix(doc: PdfDocument, annot: PdfDict, ap: PdfStream): Matrix | undefined {
-  const nums = (o: PdfObject | undefined) => doc.array(o)?.map((x) => doc.number(x) ?? 0);
-  const rect = nums(annot.get('Rect'));
-  const bbox = nums(ap.dict.get('BBox'));
-  if (rect?.length !== 4 || bbox?.length !== 4) return undefined;
-  const m = nums(ap.dict.get('Matrix'));
-  const matrix: Matrix = m?.length === 6 ? (m as Matrix) : IDENTITY;
-  const corners = [
-    transformPoint(matrix, bbox[0], bbox[1]),
-    transformPoint(matrix, bbox[2], bbox[1]),
-    transformPoint(matrix, bbox[0], bbox[3]),
-    transformPoint(matrix, bbox[2], bbox[3]),
-  ];
-  const xs = corners.map((c) => c[0]);
-  const ys = corners.map((c) => c[1]);
-  const [bx0, by0, bx1, by1] = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-  if (bx1 === bx0 || by1 === by0) return undefined;
-  const rx0 = Math.min(rect[0], rect[2]);
-  const ry0 = Math.min(rect[1], rect[3]);
-  const sx = (Math.max(rect[0], rect[2]) - rx0) / (bx1 - bx0);
-  const sy = (Math.max(rect[1], rect[3]) - ry0) / (by1 - by0);
-  return multiply(matrix, [sx, 0, 0, sy, rx0 - bx0 * sx, ry0 - by0 * sy]);
-}
-
 // --- the interpreter ---------------------------------------------------------------------------
 
 function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: GS, depth: number): void {
   const { doc } = ctx;
+  ctx.opsLeft -= ops.length;
+  if (ctx.opsLeft < 0) {
+    warn(ctx, 'too many drawing operations: the rest of the page skipped');
+    return;
+  }
   let gs: GS = start;
   const stack: GS[] = [];
   let tm: Matrix = IDENTITY;
@@ -483,11 +470,13 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   // --- paths ---
   /** The current point, in user space (a curve starts there). */
   let at: [number, number] = [0, 0];
+  /** Where the current subpath began, in user space (closing it goes back there). */
+  let startAt: [number, number] = [0, 0];
   const begin = (x: number, y: number) => {
     const [dx, dy] = D(x, y);
     cur = { pts: [dx, dy], closed: false, curved: false };
     path.push(cur);
-    at = [x, y];
+    at = startAt = [x, y];
   };
   const lineTo = (x: number, y: number) => {
     if (!cur) return begin(x, y);
@@ -709,12 +698,17 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     if (sub === 'Image') {
       placeImage(xo, raw instanceof PdfRef ? String(raw.key) : `obj:${name.name}`);
     } else if (sub === 'Form') {
-      if (depth >= MAX_FORM_DEPTH) return;
+      if (depth >= MAX_FORM_DEPTH || ctx.opsLeft <= 0 || ctx.active.has(xo)) return;
       const m = doc.array(xo.dict.get('Matrix'));
       const matrix = m?.length === 6 ? (m.map((x) => doc.number(x) ?? 0) as Matrix) : IDENTITY;
       const res = doc.dict(xo.dict.get('Resources')) ?? resources;
-      const inner: GS = { ...gs, ctm: multiply(matrix, gs.ctm), dash: gs.dash };
-      run(ctx, parseContent(doc.streamData(xo)), res, inner, depth + 1);
+      const inner: GS = { ...gs, ctm: multiply(matrix, gs.ctm) };
+      ctx.active.add(xo);
+      try {
+        run(ctx, parseContent(doc.streamData(xo)), res, inner, depth + 1);
+      } finally {
+        ctx.active.delete(xo);
+      }
     }
   };
 
@@ -882,7 +876,10 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
           curveTo(num(a[0]), num(a[1]), num(a[2]), num(a[3]), num(a[2]), num(a[3]));
           break;
         case 'h':
-          if (cur) cur.closed = true;
+          if (cur) {
+            cur.closed = true;
+            at = startAt;
+          }
           break;
         case 're': {
           const [x, y, w, h] = a.map(num);
@@ -896,7 +893,7 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
             sub.pts.push(...D(px, py));
           path.push(sub);
           cur = sub;
-          at = [x, y];
+          at = startAt = [x, y];
           break;
         }
         case 'S':

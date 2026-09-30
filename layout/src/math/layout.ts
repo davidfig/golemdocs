@@ -756,16 +756,16 @@ class Layouter {
       box.width = x;
       return box;
     });
-    if (!aligned) {
-      const width = Math.max(0, ...laid.map((b) => b.width));
-      for (const box of laid) {
-        const shifted = emptyBox();
-        put(shifted, box, (width - box.width) / 2, 0);
-        shifted.width = width;
-        laid[laid.indexOf(box)] = shifted;
-      }
-    }
-    return this.stack(laid, lineStyle);
+    if (aligned) return this.stack(laid, lineStyle);
+    // Unaligned lines are centered on the widest.
+    const width = Math.max(0, ...laid.map((b) => b.width));
+    const centered = laid.map((box) => {
+      const shifted = emptyBox();
+      put(shifted, box, (width - box.width) / 2, 0);
+      shifted.width = width;
+      return shifted;
+    });
+    return this.stack(centered, lineStyle);
   }
 
   /** Splits a line's nodes at `&` characters in its text nodes (alignment points). */

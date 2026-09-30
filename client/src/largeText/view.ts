@@ -168,6 +168,7 @@ export class LargeTextView {
     this.index = new LineIndex(bytes);
     this.abort = new AbortController();
     this.matches = null;
+    this.highlight = null;
     this.filtering = false;
     this.toggles.filter.setAttribute('aria-pressed', 'false');
     this.findInput.value = '';

@@ -64,6 +64,17 @@ export function mnemonicLabel(label: string): { el: HTMLSpanElement; key: string
 
 export const stripMnemonic = (label: string) => label.replace(/&(.)/g, '$1');
 
+/** A text field of the chrome itself (the font box, a comment box), not the document's hidden textarea (#input). */
+export function isFormField(target: EventTarget | null): boolean {
+  // The box a PDF's text is edited in is one too: it has its own caret, selection and undo.
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLTextAreaElement && target.id !== 'input') ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
 /** Keeps focus where it is when a control is pressed with the mouse (the document keeps the caret). */
 export function keepFocus(el: HTMLElement): void {
   el.addEventListener('mousedown', (e) => e.preventDefault());

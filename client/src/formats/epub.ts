@@ -8,12 +8,18 @@ import { t } from '../i18n/index.ts';
 
 const local = (name: string): string => name.slice(name.indexOf(':') + 1);
 const elements = (e: XmlElement): XmlElement[] => e.children.filter((c): c is XmlElement => typeof c !== 'string');
-const named = (e: XmlElement, name: string): XmlElement[] => elements(e).filter((c) => local(c.name) === name);
+const named = (e: XmlElement | undefined, name: string): XmlElement[] => (e ? elements(e).filter((c) => local(c.name) === name) : []);
 
 /** Resolves `href` against the folder of the package file, undoing URL escapes and dropping fragments. */
 function resolve(base: string, href: string): string {
   const parts = base.split('/').slice(0, -1);
-  for (const segment of decodeURIComponent(href.split('#')[0]).split('/')) {
+  let path = href.split('#')[0];
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // A stray "%" that isn't an escape: the address as written.
+  }
+  for (const segment of path.split('/')) {
     if (segment === '..') parts.pop();
     else if (segment && segment !== '.') parts.push(segment);
   }
@@ -29,7 +35,7 @@ export async function epubToHtml(bytes: Uint8Array): Promise<{ html: string; tit
   const text = async (name: string) => (await zip.entries.get(name)?.text()) ?? null;
   const container = await text('META-INF/container.xml');
   if (!container) throw new Error(t('app.notEpub'));
-  const rootfile = named(named(parseXml(container), 'rootfiles')[0] ?? { name: '', attrs: {}, children: [] }, 'rootfile')[0];
+  const rootfile = named(named(parseXml(container), 'rootfiles')[0], 'rootfile')[0];
   const opfPath = rootfile?.attrs['full-path'];
   const opf = opfPath ? await text(opfPath) : null;
   if (!opfPath || !opf) throw new Error(t('app.epubNoPackage'));
@@ -78,7 +84,8 @@ export function xhtmlize(html: string): string {
     .replace(/<!DOCTYPE[^>]*>\s*/i, '')
     .replace(/<html\b([^>]*)>/i, (_, attrs: string) => `<html xmlns="http://www.w3.org/1999/xhtml"${attrs}>`)
     .replace(/<(meta|link|br|hr|img|input|col|wbr)\b([^>]*?)\s*\/?>/gi, '<$1$2/>')
-    .replace(/(<[a-z][^>]*?\s)(data-[\w-]+)(?=[\s>/])/gi, '$1$2=""');
+    // Every valueless data- attribute of a tag gets a value; text inside quoted values is left alone.
+    .replace(/<[a-z](?:[^>"']|"[^"]*"|'[^']*')*>/gi, (tag) => tag.replace(/("[^"]*"|'[^']*')|(\s)(data-[\w-]+)(?=[\s>/])/g, (_m, quoted: string | undefined, space: string, name: string) => quoted ?? `${space}${name}=""`));
 }
 
 /** A picture in the book: its path under OEBPS, type and bytes. */

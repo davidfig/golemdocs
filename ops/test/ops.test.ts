@@ -385,3 +385,26 @@ test('table operations follow their paragraph when others edit around them', asy
   const kept = mapOperation({ type: 'setTableGrid', paragraph: ids().b2, grid: [1, 2] }, mapping);
   assert.equal(kept.length, 1);
 });
+
+test('table rows and cells that start with a nested table undo to the right row and cell', async () => {
+  const { doc, engine, ids, table, newCell } = await tableEngine();
+  const { a1 } = ids();
+  // A cell holding a nested one-row table, then its own paragraph.
+  const nestedCell = () => {
+    const outer = newCell('outer');
+    const inner = { kind: 'table' as const, properties: {}, grid: [2000], rows: [{ kind: 'row' as const, properties: {}, attrs: {}, cells: [newCell('inner')] }] };
+    return { ...outer, children: [inner, ...outer.children] };
+  };
+  const before = JSON.stringify(doc.body);
+  const row = engine.apply([{ type: 'insertRow', paragraph: a1, after: true, row: { kind: 'row', properties: {}, attrs: {}, cells: [nestedCell(), newCell('y')] } }]);
+  assert.equal(table().rows.length, 3);
+  engine.apply(row.inverse);
+  assert.equal(JSON.stringify(doc.body), before, 'the undo removes the inserted row, not the nested table’s');
+  const cell = engine.apply([{ type: 'insertCell', paragraph: a1, after: true, cell: nestedCell() }]);
+  engine.apply(cell.inverse);
+  assert.equal(JSON.stringify(doc.body), before, 'the undo removes the inserted cell');
+  // A cell without a paragraph of its own is refused rather than failing.
+  const bare = { kind: 'cell' as const, properties: {}, attrs: {}, children: [{ kind: 'raw' as const, xml: '<w:sdt/>' }] } as unknown as ReturnType<typeof newCell>;
+  assert.equal(engine.apply([{ type: 'insertCell', paragraph: a1, after: true, cell: bare }]).steps[0].inverse.length, 0);
+  assert.equal(JSON.stringify(doc.body), before);
+});

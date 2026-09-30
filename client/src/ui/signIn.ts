@@ -60,6 +60,8 @@ export function showSignInDialog(returnTo: string, options: { subscribe?: boolea
   body.style.paddingBottom = '14px';
   body.append(note, providers, cancel);
   dialog.append(dialogTitleBar(t('dialogs.signIn.title'), () => dialog.close()), body);
+  // Keys stay in the dialog: the document's handlers listen on the window.
+  dialog.addEventListener('keydown', (e) => e.stopPropagation());
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();

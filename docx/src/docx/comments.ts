@@ -85,6 +85,17 @@ function paraId(comment: Comment, index: number): string {
   return ((h >>> 1) || 1).toString(16).toUpperCase().padStart(8, '0');
 }
 
+/** A paragraph's text as run content: tabs and line breaks as w:tab and w:br (the reverse of paragraphText). */
+function textContentOf(text: string): XmlElement[] {
+  const out: XmlElement[] = [];
+  for (const piece of text.split(/(\t|\n)/)) {
+    if (piece === '\t') out.push(el('w:tab'));
+    else if (piece === '\n') out.push(el('w:br'));
+    else if (piece) out.push(el('w:t', { 'xml:space': 'preserve' }, [piece]));
+  }
+  return out;
+}
+
 export interface WrittenComments {
   comments: XmlElement;
   /** word/commentsExtended.xml, when a comment is a reply or resolved (or the file had one). */
@@ -120,7 +131,7 @@ export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' 
         el('w:p', { 'w14:paraId': paraId(comment, i) }, [
           el('w:pPr', {}, [el('w:pStyle', { 'w:val': 'CommentText' })]),
           ...(i === 0 ? [el('w:r', {}, [el('w:rPr', {}, [el('w:rStyle', { 'w:val': 'CommentReference' })]), el('w:annotationRef')])] : []),
-          ...(text ? [el('w:r', {}, [el('w:t', { 'xml:space': 'preserve' }, [text])])] : []),
+          ...(text ? [el('w:r', {}, textContentOf(text))] : []),
         ]),
       ),
     );

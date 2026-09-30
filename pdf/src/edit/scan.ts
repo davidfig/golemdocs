@@ -265,7 +265,8 @@ export function scanPage(page: PdfPage, ops: Operation[] = page.operations()): P
     let textAdvance = 0;
     let lead = 0;
     // Text space to user space along the baseline (only the position of tm changes within a run).
-    const k = Math.hypot(multiply(tm, gs.ctm)[0], multiply(tm, gs.ctm)[1]);
+    const along = multiply(tm, gs.ctm);
+    const k = Math.hypot(along[0], along[1]);
     for (const part of parts) {
       if (typeof part === 'number') {
         const tx = tf.vertical ? 0 : (-part / 1000) * fs * th;

@@ -261,7 +261,9 @@ function listLevels(bullet: boolean): NumberingLevel[] {
 
 function changeCase(text: string, to: CaseChange): string {
   // Only changes that keep each character one UTF-16 unit are made (positions stay put).
-  const each = (fn: (c: string, i: number) => string) => [...text].map((c, i) => { const d = fn(c, i); return d.length === c.length ? d : c; }).join('');
+  // `chars` are code points (a surrogate pair is one), so `chars[i - 1]` is the one before, even after an emoji.
+  const chars = [...text];
+  const each = (fn: (c: string, i: number) => string) => chars.map((c, i) => { const d = fn(c, i); return d.length === c.length ? d : c; }).join('');
   switch (to) {
     case 'upper':
       return each((c) => c.toUpperCase());
@@ -270,7 +272,7 @@ function changeCase(text: string, to: CaseChange): string {
     case 'toggle':
       return each((c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
     case 'title':
-      return each((c, i) => (i === 0 || /[\s\-–—(["'“]/.test(text[i - 1]) ? c.toUpperCase() : c.toLowerCase()));
+      return each((c, i) => (i === 0 || /[\s\-–—(["'“]/.test(chars[i - 1]) ? c.toUpperCase() : c.toLowerCase()));
     case 'sentence': {
       let start = true;
       return each((c) => {

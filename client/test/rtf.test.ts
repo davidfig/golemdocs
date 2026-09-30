@@ -212,3 +212,49 @@ test('a document built from markdown exports with no comments cleanly', async ()
   const rtf = new TextDecoder().decode(await documentToRtf(doc));
   assert.ok(!rtf.includes('annotation'));
 });
+
+// --- Code pages and hostile input ----------------------------------------------------------------
+
+test('East Asian code pages decode their bytes', async () => {
+  const doc = await rtfToDocument(bytes("{\\rtf1\\ansi\\ansicpg932 \\'82\\'a0\\par}"));
+  assert.equal(text(doc.body[0]), 'あ');
+  const chinese = await rtfToDocument(bytes("{\\rtf1\\ansi\\ansicpg936 \\'c4\\'e3\\par}"));
+  assert.equal(text(chinese.body[0]), '你');
+});
+
+test('a hex escape needs two hex digits; anything else stays text', async () => {
+  const doc = await rtfToDocument(bytes("{\\rtf1 a\\'zzb\\par}"));
+  assert.equal(text(doc.body[0]), 'azzb');
+});
+
+test('groups nested past any real file still give their text', async () => {
+  const depth = 5000;
+  const doc = await rtfToDocument(bytes(`{\\rtf1 ${'{'.repeat(depth)}deep${'}'.repeat(depth)} after\\par}`));
+  assert.equal(text(doc.body[0]), 'deep after');
+});
+
+test('a zero or negative font size keeps the default', async () => {
+  const doc = await rtfToDocument(bytes('{\\rtf1 {\\fs0 zero}{\\fs-4 minus}\\par}'));
+  for (const run of runs(paragraphs(doc)[0])) assert.equal(run.properties.size, undefined);
+});
+
+test('a row of many merged cells is read in linear time', async () => {
+  const n = 20000;
+  const source = `{\\rtf1 \\trowd\\cellx1000${'\\clmrg\\cellx1000'.repeat(n)} a\\cell ${'\\cell '.repeat(n)}\\row }`;
+  const started = performance.now();
+  const doc = await rtfToDocument(bytes(source));
+  assert.ok(performance.now() - started < 3000, 'took too long');
+  const table = doc.body.find((b): b is Table => b.kind === 'table')!;
+  assert.equal(table.rows[0].kind === 'row' && table.rows[0].cells.length, 1);
+});
+
+test('a link address with a quote and a font name with a semicolon survive a round trip', async () => {
+  const doc = await markdownToDocument('[x](http://e.com/?a="b")');
+  const link = paragraphs(doc)[0].children[0] as Hyperlink;
+  const run = link.children[0] as Run;
+  run.properties.fonts = { ascii: 'Odd;Font', hAnsi: 'Odd;Font' };
+  const back = await rtfToDocument(await documentToRtf(doc));
+  const backLink = paragraphs(back)[0].children.find((c): c is Hyperlink => c.kind === 'hyperlink')!;
+  assert.equal(backLink.url, 'http://e.com/?a=%22b%22');
+  assert.equal((backLink.children[0] as Run).properties.fonts?.ascii, 'OddFont');
+});

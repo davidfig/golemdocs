@@ -328,12 +328,16 @@ class OpenDocument {
     }
   }
 
+  /** Bumped by each pumpPdf, so an earlier one still running (a page operation laid everything out again) stops. */
+  private pdfPass = 0;
+
   /** Lays out a PDF's pages one after another, sending them as they come (first pages appear at once). */
   async pumpPdf(): Promise<number> {
     const { view } = this.pdf!;
+    const pass = ++this.pdfPass;
     const start = performance.now();
     let sliceStart = start;
-    for (let i = 0; i < view.pageCount && !this.closed; i++) {
+    for (let i = 0; i < view.pageCount && !this.closed && pass === this.pdfPass; i++) {
       let page: PageLayout;
       try {
         page = view.layoutPage(i, this.nextPdfPageId++);
@@ -945,13 +949,7 @@ class OpenDocument {
   async joinLate(room: Extract<RoomOptions, { kind: 'network' }>): Promise<void> {
     if (this.net || this.room || this.format !== 'docx' || !this.replica || !this.editor) return;
     const start = await this.joinNetwork(room, this.replica.clientId);
-    if (this.closed) {
-      // Another document was opened while joining: nobody is left to use this room.
-      (this.net as RoomClient | null)?.leave();
-      this.net = null;
-      return;
-    }
-    if (!start) return;
+    if (!start || this.closed) return;
     if (start.kind === 'own') this.net!.ready(start);
     else {
       this.net!.leave();
@@ -1020,6 +1018,11 @@ class OpenDocument {
     });
     try {
       const start = await net.join();
+      if (this.closed) {
+        // Another document was opened while joining: nobody is left to use this room.
+        net.leave();
+        return null;
+      }
       this.net = net;
       return start;
     } catch (error) {
@@ -1102,6 +1105,8 @@ class OpenDocument {
         editor,
         readOnly: this.readOnly || this.format === 'pdf',
         run: async (wire) => {
+          // Another document was opened meanwhile: this one's editor is no longer the page's.
+          if (this.closed) throw new Error('the document was closed');
           this.command(wire);
           while (this.waiting) await this.waiting;
         },
@@ -1558,10 +1563,10 @@ async function annotatedPdf(original: Uint8Array, extensions: Extensions): Promi
   return doc.save({ incremental: true });
 }
 
-/** The whole open document as a .wdoc, to be edited as `lens` (default: as now) when next opened. */
 /** The time now as a document property (W3CDTF, to the second, in UTC). */
 const now = (): string => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 
+/** The whole open document as a .wdoc, to be edited as `lens` (default: as now) when next opened. */
 async function save(doc: number, request: number, lens?: Format): Promise<void> {
   try {
     const open = current;
@@ -1705,7 +1710,13 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       void exportAs(message.doc, message.request, message.to);
       break;
     case 'agent':
-      void (current?.doc === message.doc ? current.agent(message.name, message.args) : Promise.resolve('Error: no document is open.')).then((result) => post({ type: 'agentResult', request: message.request, result }));
+      // Always answered, even if the tool fails: the page waits for it.
+      void (current?.doc === message.doc ? current.agent(message.name, message.args) : Promise.resolve('Error: no document is open.'))
+        .catch((e: unknown) => {
+          console.error(e);
+          return 'Error: that did not work.';
+        })
+        .then((result) => post({ type: 'agentResult', request: message.request, result }));
       break;
   }
 };

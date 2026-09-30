@@ -150,7 +150,14 @@ export class Dashboard {
   private setAccount(user: User | null, syncs = user !== null): void {
     const button = (text: string, run: () => Promise<void>) => {
       const b = h('button', { text, attrs: { type: 'button' } });
-      b.addEventListener('click', () => void run().then(() => this.refresh()));
+      b.addEventListener('click', () =>
+        void run().then(
+          () => this.refresh(),
+          (error: unknown) => {
+            this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
+          },
+        ),
+      );
       return b;
     };
     if (user) {
@@ -177,6 +184,8 @@ export class Dashboard {
   private render(): void {
     this.observer?.disconnect();
     this.observer = null;
+    // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
+    if (this.confirming) clearTimeout(this.confirming.timer);
     this.confirming = null;
     const shown = this.entries.filter((e) => matchesSearch(e, this.search.value));
 
@@ -199,7 +208,7 @@ export class Dashboard {
     }
     this.grid.replaceChildren(...children);
 
-    const sharedShown = this.shared.filter((d) => d.name.toLowerCase().includes(this.search.value.trim().toLowerCase()));
+    const sharedShown = this.shared.filter((d) => matchesSearch(d, this.search.value));
     this.sharedTitle.hidden = this.sharedGrid.hidden = sharedShown.length === 0;
     this.sharedGrid.replaceChildren(...sharedShown.map((d) => this.sharedCard(d)));
 
@@ -278,7 +287,7 @@ export class Dashboard {
         run().then(
           () => this.refresh(),
           (error) => {
-            this.notice.textContent = t('panels.dashboard.failed', { reason: (error as Error).message });
+            this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
             void this.refresh();
           },
         );

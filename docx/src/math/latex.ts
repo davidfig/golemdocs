@@ -151,12 +151,26 @@ class Parser {
 
   private sequence(stops: Stops): MathList {
     const out: MathList = [];
-    for (;;) {
+    const more = () => {
       const t = this.peek();
-      if (!t || this.isStop(t, stops)) break;
-      out.push(...this.scripted());
+      return !!t && !this.isStop(t, stops);
+    };
+    while (more()) {
+      const items = this.scripted();
+      const [only] = items;
+      // `{}_a^b X`: scripts on an empty group are prescripts of the atom that follows (all of
+      // it, when that is a group of several nodes).
+      if (items.length === 1 && only.type === 'script' && only.base.length === 0 && !only.pre) {
+        let base: MathList = [];
+        while (!base.length && more()) base = this.scripted();
+        if (base.length) {
+          out.push({ ...only, base, pre: true });
+          continue;
+        }
+      }
+      out.push(...items);
     }
-    return mergeText(attachPrescripts(out));
+    return mergeText(out);
   }
 
   /** An atom with the scripts that follow it. */
@@ -250,7 +264,7 @@ class Parser {
       const single = this.peek();
       if (!single) return '';
       this.i++;
-      return single.kind === 'cmd' ? single.value : single.value;
+      return single.value;
     }
     let depth = 0;
     const from = t.end;
@@ -451,18 +465,12 @@ class Parser {
       case 'middle':
       case 'end':
         return [];
-      case '{':
-      case '}':
       case '%':
       case '#':
       case '$':
       case '&':
       case '_':
         return [{ type: 'text', text: name }];
-      case '|':
-        return [{ type: 'text', text: '‖' }];
-      case '\\':
-        return [{ type: 'text', text: '\n' }];
       default:
         this.error(`unsupported command \\${token.value}`);
         return [{ type: 'text', text: '\\' + token.value, style: 'normal' }];
@@ -551,19 +559,6 @@ class Parser {
     if (rows.length > 1 && last.length === 1 && last[0].length === 0) rows.pop();
     return rows;
   }
-}
-
-/** `{}_a^b X`: scripts on an empty group before a node are that node's prescripts. */
-function attachPrescripts(list: MathList): MathList {
-  const out: MathList = [];
-  for (let k = 0; k < list.length; k++) {
-    const node = list[k];
-    if (node.type === 'script' && node.base.length === 0 && !node.pre && k + 1 < list.length) {
-      out.push({ type: 'script', base: [list[k + 1]], ...(node.sub ? { sub: node.sub } : {}), ...(node.sup ? { sup: node.sup } : {}), pre: true });
-      k++;
-    } else out.push(node);
-  }
-  return out;
 }
 
 /** Sets a style on the text nodes that have none. */

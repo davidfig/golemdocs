@@ -7,7 +7,8 @@ import { paragraphText } from '@word/docx';
 import type { Paragraph, Table } from '@word/docx';
 import { adoc, mediawiki, org, rst, tex, textile } from '../src/formats/handlers/markup.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
-import { documentToOutline } from '../src/formats/outline.ts';
+import { documentToOutline, outlineToDocument } from '../src/formats/outline.ts';
+import type { Node } from '../src/formats/outline.ts';
 
 const fonts = undefined as never;
 const bytes = (s: string) => new TextEncoder().encode(s);
@@ -160,4 +161,61 @@ test('empty and odd input never throws', async () => {
       await handler.write(document, {}, fonts);
     }
   }
+});
+
+/** An outline written by a handler and read back. */
+async function outlineRoundTrip(handler: typeof tex, nodes: Node[]): Promise<{ got: Node[]; wanted: Node[]; file: string }> {
+  const source = await outlineToDocument(nodes);
+  const file = await handler.write(source, {}, fonts);
+  return { got: documentToOutline((await handler.read(file)).document), wanted: documentToOutline(source), file: str(file) };
+}
+
+test('LaTeX: a comment line takes its line end, so it does not split the paragraph', async () => {
+  const outline = documentToOutline((await tex.read(bytes('one\n% a\n% b\ntwo 50\\% three% x\nfour\n'))).document);
+  assert.deepEqual(outline, [{ t: 'para', spans: [{ text: 'one two 50% threefour' }] }]);
+  // A comment before a blank line leaves the paragraph break.
+  assert.equal(documentToOutline((await tex.read(bytes('one%\n\ntwo\n'))).document).length, 2);
+});
+
+test('round trips keep what used to change on the way', async () => {
+  const para = (text: string): Node => ({ t: 'para', spans: [{ text }] });
+  const cases: [string, typeof tex, Node[]][] = [
+    // Hyphens TeX would join into dashes.
+    ['LaTeX', tex, [para('a--b and c---d')]],
+    // A nested numbered list's start is its own counter (enumii), not the outer list's.
+    ['LaTeX', tex, [{ t: 'list', ordered: true, start: 1, items: [{ spans: [{ text: 'o' }], children: [{ t: 'list', ordered: true, start: 5, items: [{ spans: [{ text: 'n' }], children: [] }] }] }] }]],
+    // Lines that Org would read as a drawer, keyword, table or rule.
+    ['Org', org, [para(':note:'), para('#+keyword'), para('|pipe'), para('-----'), para('after')]],
+    // A line break inside a list item.
+    ['Org', org, [{ t: 'list', ordered: false, start: 1, items: [{ spans: [{ text: 'a' }, { text: '', br: true }, { text: 'b' }], children: [] }, { spans: [{ text: 'c' }], children: [] }] }]],
+    ['AsciiDoc', adoc, [{ t: 'list', ordered: false, start: 1, items: [{ spans: [{ text: 'a' }, { text: '', br: true }, { text: 'b' }], children: [] }] }]],
+    ['Textile', textile, [{ t: 'list', ordered: false, start: 1, items: [{ spans: [{ text: 'a' }, { text: '', br: true }, { text: 'b' }], children: [] }] }]],
+    // Numbered lists that start past 1, at the top and nested.
+    ['AsciiDoc', adoc, [{ t: 'list', ordered: true, start: 3, items: [{ spans: [{ text: 'o' }], children: [{ t: 'list', ordered: true, start: 5, items: [{ spans: [{ text: 'n' }], children: [] }] }] }] }]],
+    // A table without a header row, and plus signs that are not passthrough.
+    ['AsciiDoc', adoc, [{ t: 'table', header: false, rows: [[[{ text: 'a' }], [{ text: 'b' }]], [[{ text: '1' }], [{ text: '2' }]]] }, para('1 + 2 + 3 and +x+')]],
+    // Text that looks like Textile marks and cell attributes.
+    ['Textile', textile, [para('(*not bold*) and %not a span% and [*x*]'), { t: 'table', header: false, rows: [[[{ text: 'Mr. Smith' }], [{ text: 'e.g. this' }]]] }]],
+    // Apostrophes in code, which MediaWiki would read as italic.
+    ['MediaWiki', mediawiki, [{ t: 'para', spans: [{ text: "it''s", code: true }] }]],
+  ];
+  for (const [name, handler, nodes] of cases) {
+    const { got, wanted, file } = await outlineRoundTrip(handler, nodes);
+    assert.deepEqual(got, wanted, `${name}\n${file}`);
+  }
+});
+
+test('AsciiDoc: cols lists the columns, and never makes rows wider than the cells', async () => {
+  const outline = documentToOutline((await adoc.read(bytes('[cols="1,2,3"]\n|===\n|a |b |c\n|d |e |f\n|===\n'))).document);
+  assert.deepEqual((outline[0] as { rows: unknown[][] }).rows.map((r) => r.length), [3, 3]);
+  const huge = documentToOutline((await adoc.read(bytes('[cols=1000000000]\n|===\n|a |b\n|===\n'))).document);
+  assert.deepEqual((huge[0] as { rows: unknown[][] }).rows.map((r) => r.length), [2]);
+});
+
+test('document lists that skip a level stay one list', async () => {
+  const source = await outlineToDocument([{ t: 'list', ordered: false, start: 1, items: [{ spans: [{ text: 'a' }], children: [] }, { spans: [{ text: 'b' }], children: [] }] }]);
+  for (const p of source.body as Paragraph[]) if (p.properties.numbering) p.properties.numbering.level = 2;
+  const outline = documentToOutline(source);
+  assert.equal(outline.length, 1);
+  assert.equal((outline[0] as Extract<Node, { t: 'list' }>).items.length, 2);
 });

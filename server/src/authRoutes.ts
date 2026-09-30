@@ -30,9 +30,13 @@ function json(data: unknown, status = 200, headers: Record<string, string> = {})
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 }
 
-/** Only same-site paths: never an absolute or protocol-relative URL (open redirect). */
+/**
+ * Only same-site paths: never an absolute or protocol-relative URL (open redirect). Browsers read
+ * `\` as `/` and drop tabs and newlines from a URL, so `/\t/evil.example` would become
+ * `//evil.example`: control characters and backslashes are refused anywhere in the path.
+ */
 export function safeReturnPath(value: string | null | undefined): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\') || /[\r\n]/.test(value)) return '/';
+  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\u0000-\u001f\u007f]/.test(value)) return '/';
   return value;
 }
 

@@ -6,8 +6,8 @@ import { paragraphsIn, paragraphText } from '@word/docx';
 import type { Drawing, Paragraph } from '@word/docx';
 import { eml } from '../src/formats/handlers/webArchives.ts';
 import ipynb from '../src/formats/handlers/ipynb.ts';
-import { decodeWords, headerParam } from '../src/formats/mime.ts';
-import { documentToOutline } from '../src/formats/outline.ts';
+import { decodeBody, decodeWords, headerParam, param } from '../src/formats/mime.ts';
+import { documentToOutline, outlineToDocument } from '../src/formats/outline.ts';
 import type { Node } from '../src/formats/outline.ts';
 import { pngBytes } from './pictures.ts';
 
@@ -210,4 +210,30 @@ test('files that are not notebooks are refused, and an empty notebook is fine', 
   const written = JSON.parse(str(await ipynb.write(document, extensions, fonts)));
   assert.deepEqual(written.cells, []);
   assert.equal(written.nbformat_minor, 4);
+});
+
+test('a header parameter is found by its whole name, and damaged base64 does not throw', () => {
+  assert.equal(param('application/pdf; filename="a.pdf"; name="b.pdf"', 'name'), 'b.pdf');
+  assert.equal(param('application/pdf; filename="a.pdf"', 'name'), undefined);
+  assert.equal(headerParam("attachment; filename*=utf-8''a.pdf", 'name'), undefined);
+  assert.deepEqual([...decodeBody('aGk=\r\naGk', 'base64')], [104, 105, 104, 105]);
+  assert.deepEqual([...decodeBody('aGkx5', 'base64')], [104, 105, 49]);
+});
+
+test('notebook Markdown keeps text that looks like a rule or a heading underline, and code with fences in it', async () => {
+  const source = await outlineToDocument([
+    { t: 'para', spans: [{ text: 'Title' }, { text: '', br: true }, { text: '===' }] },
+    { t: 'para', spans: [{ text: '---' }] },
+    { t: 'list', ordered: false, start: 1, items: [{ spans: [{ text: 'item' }], children: [{ t: 'code', text: '```\nfenced\n```' }] }] },
+  ]);
+  const back = documentToOutline((await ipynb.read(await ipynb.write(source, {}, undefined as never))).document);
+  assert.deepEqual(back, documentToOutline(source));
+});
+
+test('an attachment name with a quote in it is written so it reads back whole', async () => {
+  const raw = ['From: a@b.c', 'Subject: s', 'MIME-Version: 1.0', 'Content-Type: text/plain', '', 'body', ''].join('\r\n');
+  const first = await eml.read(bytes(raw));
+  const extensions = { ...first.extensions, eml: { ...first.extensions.eml!, attachments: [{ name: 'say "hi".txt', type: 'text/plain', data: b64(bytes('hello')) }] } };
+  const second = await eml.read(await eml.write(first.document, extensions, fonts));
+  assert.equal(second.extensions.eml?.attachments?.[0].name, 'say "hi".txt');
 });

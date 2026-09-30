@@ -331,6 +331,24 @@ test('if the room moved on while we were away, we go offline instead of continui
   assert.ok(t.log.includes('disconnect'));
 });
 
+test('a reconnect that timed out closing late does not spoil the next attempt', async () => {
+  const t = setup({ joinMs: 30, handoffMs: 30, reconnectMs: [5, 5] });
+  t.client.ready(await t.join());
+  t.socket.drop(1006);
+  await tick(20);
+  const stale = t.socket; // never answers
+  await tick(50);
+  assert.equal(t.sockets.length, 3, 'the silent attempt was given up on and another started');
+  // The silent socket's close (and a late message) only arrive now, after its replacement opened.
+  stale.drop(1006);
+  stale.deliver(welcome({ mode: 'shared', epoch: 9 }));
+  t.socket.onopen?.();
+  t.socket.deliver(welcome());
+  await tick(60);
+  assert.equal(t.sockets.length, 3, 'rejoined: no more attempts');
+  assert.equal(t.client.state.mode, 'solo');
+});
+
 test('a refused connection is final, and repeated failures give up', async () => {
   const revoked = setup();
   revoked.client.ready(await revoked.join());

@@ -132,22 +132,29 @@ export class RoomClient {
     return new Promise((resolve, reject) => {
       const socket = this.o.connect();
       this.socket = socket;
-      const timer = setTimeout(() => {
-        reject(new Error('the room did not answer'));
-        socket.close();
-      }, this.timing.joinMs);
-      this.welcome = (m) => {
+      const answered = (m: Extract<MultiplayerServerMessage, { type: 'welcome' }>): void => {
         clearTimeout(timer);
         resolve(m);
       };
+      const timer = setTimeout(() => {
+        if (this.welcome === answered) this.welcome = null;
+        if (this.socket === socket) this.socket = null;
+        reject(new Error('the room did not answer'));
+        socket.close();
+      }, this.timing.joinMs);
+      this.welcome = answered;
       socket.onopen = () => this.send({ type: 'hello', client: this.o.client, name: this.o.name, color: this.o.color });
-      socket.onmessage = (event) => this.onMessage(JSON.parse(String(event.data)) as MultiplayerServerMessage);
+      // A socket given up on (it timed out, or we left) can still deliver or close late, even after
+      // its replacement opened: only the current one speaks for the room.
+      socket.onmessage = (event) => {
+        if (this.socket === socket) this.onMessage(JSON.parse(String(event.data)) as MultiplayerServerMessage);
+      };
       socket.onclose = (event) => {
         clearTimeout(timer);
-        if (this.welcome) {
+        if (this.welcome === answered) {
           this.welcome = null;
           reject(new Error(`could not join the room (${event.code})`));
-        } else this.onClose(event.code);
+        } else if (this.socket === socket) this.onClose(event.code);
       };
     });
   }

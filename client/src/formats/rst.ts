@@ -95,11 +95,12 @@ function list(node: Extract<Node, { t: 'list' }>): string {
 function table(node: Extract<Node, { t: 'table' }>): string {
   const cells = node.rows.map((r) => r.map((c) => inline(c).split('\n')));
   const columns = node.rows[0].length;
-  const widths = Array.from({ length: columns }, (_, c) => Math.max(3, ...cells.map((r) => Math.max(...r[c].map((l) => [...l].length)))));
+  // Reduced rather than spread: a long table would pass Math.max more arguments than a call can take.
+  const widths = Array.from({ length: columns }, (_, c) => cells.reduce((w, r) => r[c].reduce((m, l) => Math.max(m, [...l].length), w), 3));
   const border = (ch: string) => `+${widths.map((w) => ch.repeat(w + 2)).join('+')}+`;
   const out = [border('-')];
   cells.forEach((row, r) => {
-    const height = Math.max(...row.map((c) => c.length));
+    const height = row.reduce((h, c) => Math.max(h, c.length), 0);
     for (let l = 0; l < height; l++) {
       out.push(`|${row.map((c, k) => ` ${c[l] ?? ''}${' '.repeat(widths[k] - [...(c[l] ?? '')].length)} `).join('|')}|`);
     }
@@ -203,7 +204,7 @@ class Parser {
       this.i++;
     }
     while (body.length && !body.at(-1)!.trim()) body.pop();
-    const indent = Math.min(...body.filter((l) => l.trim()).map(indentOf), Infinity);
+    const indent = body.reduce((min, l) => (l.trim() ? Math.min(min, indentOf(l)) : min), Infinity);
     return body.map((l) => (l.trim() ? l.slice(indent) : ''));
   }
 

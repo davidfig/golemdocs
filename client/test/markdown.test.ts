@@ -686,3 +686,45 @@ test('comments: documents without comments export as before', async () => {
   assert.equal(documentToMarkdown(await markdownToDocument('plain {text}')), 'plain {text}\n');
   assert.ok(md);
 });
+
+// --- Hostile input and escaping ------------------------------------------------------------------
+
+test('unclosed comment markup is read in linear time', async () => {
+  for (const source of ['{=='.repeat(30000), '{>>'.repeat(30000), '{>>\\<<}'.repeat(30000), '{==x==}{>>'.repeat(10000), `{>>@${' ('.repeat(40000)}<<}`]) {
+    const started = performance.now();
+    const doc = await markdownToDocument(source);
+    assert.ok(performance.now() - started < 3000, `took too long: ${source.slice(0, 12)}`);
+    assert.ok(paragraphs(doc).length > 0);
+  }
+});
+
+test('comment markup still reads after a failed opening', async () => {
+  const doc = await markdownToDocument('{== stray {==the text==}{>>@Ann: a note<<} and {>>lone<<}');
+  assert.deepEqual(
+    doc.comments.map((c) => [c.author, c.paragraphs.join('\n')]),
+    [
+      ['Ann', 'a note'],
+      ['', 'lone'],
+    ],
+  );
+});
+
+test('an entity named like an Object member stays literal', async () => {
+  const doc = await markdownToDocument('a &constructor; b &toString; c');
+  assert.equal(texts(doc)[0], 'a &constructor; b &toString; c');
+});
+
+test('pipes in a table cell link address, image and autolink are escaped', async () => {
+  const doc = await markdownToDocument('| a | b |\n|---|---|\n| [x](http://e.com/?q=1\\|2) | ![p\\|q](img\\|1.png) |\n');
+  const md = documentToMarkdown(doc);
+  const back = await markdownToDocument(md);
+  const [table] = tables(back);
+  assert.equal(table.rows.length, 2);
+  const cells = (table.rows[1] as { cells: { children: Paragraph[] }[] }).cells;
+  assert.equal(cells.length, 2);
+  const link = cells[0].children[0].children.find((i): i is Hyperlink => i.kind === 'hyperlink');
+  assert.equal(link?.url, 'http://e.com/?q=1|2');
+  const image = cells[1].children[0].children.find((i): i is Hyperlink => i.kind === 'hyperlink');
+  assert.equal(image?.url, 'img|1.png');
+  assert.equal(paragraphText(cells[1].children[0]), '[Image: p|q]');
+});

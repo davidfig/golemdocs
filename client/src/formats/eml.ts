@@ -188,7 +188,9 @@ function toBase64(bytes: Uint8Array): string {
 const wrap = (base64: string): string => (base64.match(/.{1,76}/g) ?? []).join('\r\n');
 const utf8Base64 = (text: string): string => wrap(toBase64(new TextEncoder().encode(text)));
 /** A header value, as an encoded word when it isn't plain ASCII. */
-const encodeWords = (text: string): string => (/^[\x20-\x7e]*$/.test(text) ? text : `=?utf-8?B?${toBase64(new TextEncoder().encode(text))}?=`);
+const encodeWords = (text: string, plain = /^[\x20-\x7e]*$/): string => (plain.test(text) ? text : `=?utf-8?B?${toBase64(new TextEncoder().encode(text))}?=`);
+/** A header parameter's value, quoted: a quote or backslash in it would end or garble the quotes, so such a value is encoded too. */
+const quotedParam = (text: string): string => `"${encodeWords(text, /^[\x20-\x21\x23-\x5b\x5d-\x7e]*$/)}"`;
 
 export async function documentToEml(doc: WordDocument, ext: EmlExtension | undefined): Promise<Uint8Array> {
   // The message's own blocks (the header lines, the attachment list) are made from the headers on the way out, not written into the body.
@@ -227,7 +229,7 @@ export async function documentToEml(doc: WordDocument, ext: EmlExtension | undef
   if (!attachments.length) lines.push(...alternative);
   else {
     lines.push(`Content-Type: multipart/mixed; boundary="${boundary('mixed')}"`, '', `--${boundary('mixed')}`, ...alternative);
-    for (const a of attachments) lines.push('', `--${boundary('mixed')}`, ...part(`${a.type}; name="${encodeWords(a.name)}"`, wrap(a.data), 'base64', [`Content-Disposition: attachment; filename="${encodeWords(a.name)}"`]));
+    for (const a of attachments) lines.push('', `--${boundary('mixed')}`, ...part(`${a.type}; name=${quotedParam(a.name)}`, wrap(a.data), 'base64', [`Content-Disposition: attachment; filename=${quotedParam(a.name)}`]));
     lines.push('', `--${boundary('mixed')}--`);
   }
   return new TextEncoder().encode(`${lines.join('\r\n')}\r\n`);

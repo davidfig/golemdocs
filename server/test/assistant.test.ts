@@ -216,6 +216,10 @@ test('malformed conversations are refused before anything is held or called', as
   ];
   for (const messages of bad) assert.equal((await ask(email, messages)).status, 400, JSON.stringify(messages));
   assert.equal((await ask(email, [{ role: 'user', content: 'x'.repeat(70_000) }])).status, 413);
+  // Tool call ids count toward the limit too, so they can't smuggle an unbounded prompt past it.
+  const longId = 'x'.repeat(70_000);
+  assert.equal((await ask(email, [{ role: 'user', content: 'a' }, { role: 'assistant', content: '', tool_calls: [{ id: longId, name: 'get_selection', arguments: '{}' }] }, { role: 'tool', tool_call_id: 'x', content: 'x' }])).status, 413);
+  assert.equal((await ask(email, [{ role: 'user', content: 'a' }, { role: 'tool', tool_call_id: longId, content: 'x' }])).status, 413);
   assert.equal(calls.length, 0);
   assert.equal(usage(id), undefined);
 });

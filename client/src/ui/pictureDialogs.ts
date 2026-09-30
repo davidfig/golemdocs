@@ -131,7 +131,7 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
     document.body.append(dialog);
     dialog.showModal();
     // The preview is a copy of the picture at a size that stays quick to redraw.
-    void decodeImage(bytes).then((bitmap) => {
+    decodeImage(bytes).then((bitmap) => {
       const scale = Math.min(1, 320 / Math.max(bitmap.width, bitmap.height));
       const { canvas, context } = makeCanvas(bitmap.width * scale, bitmap.height * scale);
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
@@ -140,6 +140,8 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
       preview.height = canvas.height;
       base = context.getImageData(0, 0, canvas.width, canvas.height);
       draw();
+    }, () => {
+      // A picture the browser can't decode: no preview, the sliders still work.
     });
   });
 }

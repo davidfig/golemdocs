@@ -156,7 +156,9 @@ export const STANDARD_FONT_NAMES = Object.keys(STANDARD_FONTS);
  */
 export function standardFont(name: string): StandardFont | undefined {
   const base = name.replace(/^[A-Z]{6}\+/, '');
-  const canonical = STANDARD_FONTS[base] ? base : STANDARD_ALIASES[base] ?? STANDARD_ALIASES[base.replace(/-/g, '')];
+  // Own keys only: a font named "constructor" must not find Object.prototype's.
+  const alias = (n: string) => (Object.hasOwn(STANDARD_ALIASES, n) ? STANDARD_ALIASES[n] : undefined);
+  const canonical = Object.hasOwn(STANDARD_FONTS, base) ? base : (alias(base) ?? alias(base.replace(/-/g, '')));
   if (!canonical) return undefined;
   let f = standardCache.get(canonical);
   if (!f) {

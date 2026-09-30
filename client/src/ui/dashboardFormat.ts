@@ -4,8 +4,9 @@
 import { getLocale, t } from '../i18n/index.ts';
 import type { LibraryEntry, SyncState } from '../sync.ts';
 
-/** "Just now", "5 minutes ago", "3 hours ago", "Yesterday", "4 days ago", else the date; in the current language. */
+/** "Just now", "5 minutes ago", "3 hours ago", "Yesterday", "4 days ago", else the date; in the current language. '' for no date (NaN). */
 export function relativeTime(then: number, now = Date.now()): string {
+  if (!Number.isFinite(then)) return '';
   const seconds = Math.max(0, Math.round((now - then) / 1000));
   const relative = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'always' });
   if (seconds < 45) return t('panels.time.justNow');
@@ -40,7 +41,7 @@ export function opensFromCloud(entry: LibraryEntry): boolean {
   return !entry.local || entry.state === 'cloud-ahead' || entry.state === 'conflict';
 }
 
-export function matchesSearch(entry: LibraryEntry, query: string): boolean {
+export function matchesSearch(entry: { name: string }, query: string): boolean {
   const q = query.trim().toLowerCase();
   return !q || entry.name.toLowerCase().includes(q);
 }

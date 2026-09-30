@@ -160,8 +160,8 @@ export async function readWdoc(bytes: Uint8Array): Promise<Wdoc> {
   };
   const manifestText = await text('manifest.json');
   if (!manifestText) throw new Error(t('app.wdocNoManifest'));
-  const manifest = JSON.parse(manifestText) as WdocManifest;
-  if (typeof manifest.version !== 'number' || manifest.version > WDOC_VERSION) {
+  const manifest = JSON.parse(manifestText) as WdocManifest | null;
+  if (typeof manifest?.version !== 'number' || manifest.version > WDOC_VERSION) {
     throw new Error(t('app.wdocNewer'));
   }
   const extensions: Extensions = {};

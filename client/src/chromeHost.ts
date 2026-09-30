@@ -155,7 +155,6 @@ const SUPPORTED = new Set<ActionKind>([
   'insertMath',
 ]);
 
-
 /** Actions that mark up a PDF shown as its own pages (see layout/pdfAnnotator.ts). */
 const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark']);
 
@@ -165,39 +164,37 @@ const CONVERTIBLE = new Set<DocumentKind>(['docx', 'odt', 'rtf', 'html', 'epub',
 export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: File): void } {
   let untitled = 0;
 
+  /** Takes the loading screen away and says the file can't be opened. */
+  const unsupported = (file: File): void => {
+    const dot = file.name.lastIndexOf('.');
+    app.loading(null);
+    app.notify(t('app.unsupportedOpen', { kind: dot >= 0 ? file.name.slice(dot + 1).toUpperCase() : '?', name: file.name }));
+  };
+
   const openFile = (file: File): void => {
     app.loading(file.name);
-    if (!sourceFromFile(file.name, new ArrayBuffer(0))) {
-      // An extension we don't know: text is text whatever it is called, binary files are not opened.
-      void file.arrayBuffer().then((bytes) => {
-        if (looksLikeText(new Uint8Array(bytes))) return bytes.byteLength >= LARGE_TEXT_BYTES ? app.openLarge(file.name, new Uint8Array(bytes)) : app.open({ kind: 'txt', name: file.name, bytes });
-        const dot = file.name.lastIndexOf('.');
-        app.loading(null);
-        app.notify(t('app.unsupportedOpen', { kind: dot >= 0 ? file.name.slice(dot + 1).toUpperCase() : '?', name: file.name }));
-      });
-      return;
-    }
-    if (sourceFromFile(file.name, new ArrayBuffer(0))) {
-      void file.arrayBuffer().then(async (bytes) => {
+    const known = sourceFromFile(file.name, new ArrayBuffer(0)) !== null;
+    void file
+      .arrayBuffer()
+      .then(async (bytes) => {
+        if (!known) {
+          // An extension we don't know: text is text whatever it is called, binary files are not opened.
+          if (!looksLikeText(new Uint8Array(bytes))) return unsupported(file);
+          return bytes.byteLength >= LARGE_TEXT_BYTES ? app.openLarge(file.name, new Uint8Array(bytes)) : app.open({ kind: 'txt', name: file.name, bytes });
+        }
         const source = sourceFromFile(file.name, bytes)!;
         // Text too big to be a document opens in the viewer instead (a table of 500,000 rows is no better than 500,000 paragraphs).
         if ((source.kind === 'txt' || source.kind === 'csv' || source.kind === 'tsv') && bytes.byteLength >= LARGE_TEXT_BYTES) return app.openLarge(file.name, new Uint8Array(bytes));
         if (source.kind !== 'image') return app.open(source);
         // GIF, BMP and SVG open as PNG (a GIF as its first frame); PNG, JPEG and WebP as they are.
-        try {
-          const picture = await toPng(source.name, new Uint8Array(bytes));
-          app.open({ kind: 'image', name: picture.name, bytes: picture.bytes.slice().buffer });
-        } catch (e) {
-          app.loading(null);
-          app.notify(t('app.unsupportedOpen', { kind: file.name.slice(file.name.lastIndexOf('.') + 1).toUpperCase(), name: file.name }));
-          console.error(e);
-        }
+        const picture = await toPng(source.name, new Uint8Array(bytes));
+        app.open({ kind: 'image', name: picture.name, bytes: picture.bytes.slice().buffer });
+      })
+      .catch((e: unknown) => {
+        // Unreadable (moved or deleted since it was picked), or a picture that can't be decoded.
+        console.error(e);
+        unsupported(file);
       });
-    } else {
-      const dot = file.name.lastIndexOf('.');
-      app.loading(null);
-      app.notify(t('app.unsupportedOpen', { kind: dot >= 0 ? file.name.slice(dot + 1).toUpperCase() : '?', name: file.name }));
-    }
   };
 
   const pickFile = (): void => {
@@ -263,7 +260,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.setFormMode(action.mode);
         case 'new':
           untitled++;
-          app.open({ kind: 'blank', name: `Document${untitled}` });
+          app.open({ kind: 'blank', name: `${t('app.blankDocumentName')}${untitled}` });
           return;
         case 'open':
           return app.dashboard();

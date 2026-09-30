@@ -23,7 +23,9 @@ export interface Control {
 export type ToolbarItem = { type: 'button'; id: string } | { type: 'separator' } | { type: 'control'; create: () => Control };
 
 /** Phones and small windows, where the toolbars are one row and the rest goes behind "…". Matches the CSS. */
-const NARROW = window.matchMedia('(max-width: 720px)');
+let narrowQuery: MediaQueryList | undefined;
+// Made on first use, so importing this module needs no window (the tests run without one).
+const narrow = (): MediaQueryList => (narrowQuery ??= window.matchMedia('(max-width: 720px)'));
 
 export const tsep: ToolbarItem = { type: 'separator' };
 export const btn = (id: string): ToolbarItem => ({ type: 'button', id });
@@ -39,6 +41,8 @@ export class Toolbar {
   /** On a narrow screen, buttons that don't fit go in `overflow`, opened by the "…" button. */
   private readonly more: HTMLButtonElement;
   private readonly overflow: HTMLDivElement;
+  private readonly resizeObserver = new ResizeObserver(() => this.fit());
+  private readonly onNarrowChange = () => this.fit();
 
   constructor(
     readonly name: string,
@@ -64,8 +68,16 @@ export class Toolbar {
     this.overflow = h('div', { class: 'wm-overflow' });
     this.more.addEventListener('click', () => (popupOpenFor(this.more) ? closePopup() : openPopup(this.more, this.overflow)));
     this.el.append(this.more);
-    new ResizeObserver(() => this.fit()).observe(this.el);
-    NARROW.addEventListener('change', () => this.fit());
+    this.resizeObserver.observe(this.el);
+    narrow().addEventListener('change', this.onNarrowChange);
+  }
+
+  /** Stops watching the window for a toolbar that has been replaced (the layout was customized). */
+  dispose(): void {
+    this.resizeObserver.disconnect();
+    narrow().removeEventListener('change', this.onNarrowChange);
+    if (popupOpenFor(this.more)) closePopup();
+    this.el.remove();
   }
 
   /** Moves the buttons that don't fit into the overflow panel (all of them stay in the row when it is wide). */
@@ -73,7 +85,7 @@ export class Toolbar {
     if (this.el.hidden || !this.el.clientWidth || popupOpenFor(this.more)) return;
     for (const { el } of this.entries) this.el.insertBefore(el, this.more);
     this.more.hidden = true;
-    if (!NARROW.matches || this.el.scrollWidth <= this.el.clientWidth) return;
+    if (!narrow().matches || this.el.scrollWidth <= this.el.clientWidth) return;
     this.more.hidden = false;
     let kept = this.entries.length;
     const push = () => this.overflow.prepend(this.entries[--kept].el);

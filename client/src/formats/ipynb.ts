@@ -156,8 +156,8 @@ const markdown: SpanFormat = {
 
 const inline = (spans: Span[]): string => renderSpans(spans, markdown);
 
-/** A line that would begin a heading, list, quote or rule is escaped at its first character. */
-const guard = (text: string): string => text.replace(/^(\s*)([#>+-]|\d+[.)])(?=\s|$)/gm, '$1\\$2');
+/** A line that would begin a heading, list, quote or rule (or underline the line above as a heading) is escaped at its first character. */
+const guard = (text: string): string => text.replace(/^(\s*)([#>+-]|\d+[.)])(?=\s|$)/gm, '$1\\$2').replace(/^(\s*)([-=])(?=[-= \t]*$)/gm, '$1\\$2');
 
 function renderMarkdown(nodes: readonly Node[]): string {
   return nodes.map((n) => markdownBlock(n, 0)).filter(Boolean).join('\n\n');
@@ -172,8 +172,11 @@ function markdownBlock(node: Node, depth: number): string {
       return guard(inline(node.spans));
     case 'rule':
       return '---';
-    case 'code':
-      return `\`\`\`\n${node.text}\n\`\`\``;
+    case 'code': {
+      // A fence longer than any run of backticks in the code, so none of it closes the block.
+      const fence = '`'.repeat(Math.max(3, ...[...node.text.matchAll(/`{3,}/g)].map((m) => m[0].length + 1)));
+      return `${fence}\n${node.text}\n${fence}`;
+    }
     case 'quote':
       return node.paras.map((p) => guard(inline(p)).split('\n').map((l) => `> ${l}`).join('\n')).join('\n>\n');
     case 'list': {
@@ -188,8 +191,7 @@ function markdownBlock(node: Node, depth: number): string {
     case 'table': {
       const cell = (spans: Span[]) => inline(spans).replace(/\n/g, ' ').replace(/\|/g, '\\|');
       const [head, ...rest] = node.rows;
-      const rows = [head, ...rest];
-      return [`| ${head.map(cell).join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows.slice(1).map((r) => `| ${r.map(cell).join(' | ')} |`)].join('\n');
+      return [`| ${head.map(cell).join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rest.map((r) => `| ${r.map(cell).join(' | ')} |`)].join('\n');
     }
   }
 }

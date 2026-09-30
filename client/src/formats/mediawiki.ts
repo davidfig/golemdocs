@@ -27,7 +27,8 @@ const TAGS = { underline: 'u', strike: 's', code: 'code', sup: 'sup', sub: 'sub'
 
 const format: SpanFormat = {
   br: '<br />',
-  text: (s, code) => (code ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;') : escapeText(s)),
+  // Code is not nowiki: '' and [[ inside it would still read as markup.
+  text: (s) => escapeText(s),
   mark(kind, inner) {
     if (kind === 'bold') return `'''${inner}'''`;
     if (kind === 'italic') return `''${inner}''`;
@@ -38,7 +39,7 @@ const format: SpanFormat = {
     const doc = parseDocAddress(url);
     if (doc) {
       const target = `${doc.title}${doc.section ? `#${doc.section}` : ''}`;
-      return inner.replace(/&[^;]+;/g, (e) => e) === target ? `[[${target}]]` : `[[${target}|${inner.replace(/\|/g, '&#124;')}]]`;
+      return decodeEntities(inner) === target ? `[[${target}]]` : `[[${target}|${inner.replace(/\|/g, '&#124;')}]]`;
     }
     const plain = inner === url || inner === url.replace(/^mailto:/, '');
     return plain && /^https?:\/\//.test(url) ? url : `[${url.replace(/ /g, '%20')} ${inner.replace(/\]/g, '&#93;') || url}]`;

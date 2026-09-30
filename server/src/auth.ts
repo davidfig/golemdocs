@@ -6,8 +6,9 @@ export async function authenticate(request: Request, env: Env, url: URL): Promis
   const user = await sessionUser(env, request, url);
   if (user) return user;
   // Local development shortcut: DEV_USER (from .dev.vars) counts as signed in, until they sign out
-  // (then until they sign in again with the "dev" provider). Never set it in production.
-  const dev = env.DEV_USER?.trim();
+  // (then until they sign in again with the "dev" provider). Ignored in production, like the "dev"
+  // provider (authRoutes.ts), so a stray DEV_USER there can't sign everyone in as one user.
+  const dev = env.ENVIRONMENT === 'production' ? undefined : env.DEV_USER?.trim();
   if (!dev || readCookie(request, cookieName(url, DEV_SIGNED_OUT))) return null;
   return userIdFor(dev);
 }

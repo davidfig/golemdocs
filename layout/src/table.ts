@@ -221,6 +221,11 @@ function styleConditions(chain: Style[]): Map<TableStyleConditionType, Condition
 
 const layerCache = new WeakMap<object, Map<string, { layer: FormattingLayer; cellBase: TableCellProperties }>>();
 
+/** Forgets a document's table style layers (after its styles change). */
+export function clearTableStyles(doc: object): void {
+  layerCache.delete(doc);
+}
+
 export function layoutTable(table: Table, ctx: LayoutContext, available: number): TableLayout {
   const chain = ctx.resolver.chain(table.properties.style, 'table');
   const conditions = styleConditions(chain);

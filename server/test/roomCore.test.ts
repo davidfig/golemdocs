@@ -157,6 +157,15 @@ test('someone who has not synced gets nothing live, and an old epoch or a viewer
   assert.equal(t.store.length(), 1);
 });
 
+test('an id repeated within one submission is logged once; a transaction without an id closes the connection', async () => {
+  const t = await shared();
+  await t.core.message(t.a, { type: 'submit', epoch: 0, version: 0, transactions: [t.tx('a:0', t.insert(5, '!')), t.tx('a:0', t.insert(5, '!'))] });
+  assert.equal(t.store.length(), 1);
+  await t.core.message(t.b, { type: 'submit', epoch: 0, version: 1, transactions: [{ ops: [] } as any] });
+  assert.equal(t.b.closed, ROOM_CLOSE.badMessage);
+  assert.equal(t.store.length(), 1);
+});
+
 test('a client whose document is at a version the room does not have is told to start again', async () => {
   const t = await shared();
   const c = await t.join('c');
@@ -246,6 +255,13 @@ test('kicking a user closes their connections', async () => {
   const t = await shared();
   t.core.kick('b');
   assert.equal(t.b.closed, ROOM_CLOSE.revoked);
+  assert.equal(t.a.closed, null);
+});
+
+test('a user whose role changed is sent away to reconnect with it (not told access was withdrawn)', async () => {
+  const t = await shared();
+  t.core.rejoin('b');
+  assert.equal(t.b.closed, ROOM_CLOSE.stale);
   assert.equal(t.a.closed, null);
 });
 

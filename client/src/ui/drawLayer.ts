@@ -7,7 +7,7 @@ import { DRAW_TOOLS, bubbleGeometry, constrainEnd, fontSize, hitShape, lineWidth
 import type { DrawTool, Point, Shape } from '../formats/imageDraw.ts';
 import { t } from '../i18n/index.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
-import { h } from './dom.ts';
+import { h, isFormField } from './dom.ts';
 import './pictureTools.css';
 
 export const isDrawTool = (op: string): op is DrawTool => (DRAW_TOOLS as readonly string[]).includes(op);
@@ -49,6 +49,8 @@ export class DrawLayer {
 
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.session || e.target === this.typing) return;
+    // Keys typed in a box elsewhere (a dialog, a comment) are that box's.
+    if (isFormField(e.target) && !this.el.contains(e.target as Node)) return;
     if (e.key === 'Escape') this.finish(false);
     else if (e.key === 'Enter') this.finish(true);
     else if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) this.undo();

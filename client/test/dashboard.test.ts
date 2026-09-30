@@ -107,6 +107,7 @@ test('relative times', () => {
   assert.equal(ago(3 * 86_400_000), '3 days ago');
   assert.match(ago(30 * 86_400_000), /2026/);
   assert.equal(relativeTime(now + 5000, now), 'Just now', 'a clock a little ahead is not the future');
+  assert.equal(relativeTime(Date.parse('not a date'), now), '', 'a bad date (a comment from a file) is left blank, not "Invalid Date"');
 });
 
 test('sizes, badges, search and where a card opens from', () => {

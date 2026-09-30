@@ -27,7 +27,7 @@ import { cjkLangOf, type FieldValues, type LayoutContext, type RunStyle } from '
 import type { CjkLang } from './fonts/cjk.ts';
 import { REFLOW_SIDE, REFLOW_VERTICAL, reflowWidth } from './reflow.ts';
 import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout } from './paragraph.ts';
-import { cutBox, emitBox, emitRow, emitRowSlice, flattenBlocks, layoutBox, layoutTable, type BoxLayout, type TableLayout } from './table.ts';
+import { clearTableStyles, cutBox, emitBox, emitRow, emitRowSlice, flattenBlocks, layoutBox, layoutTable, type BoxLayout, type TableLayout } from './table.ts';
 
 const twips = (v: number | undefined, fallback: number) => (v ?? fallback) / 20;
 
@@ -621,11 +621,16 @@ export class LayoutSession {
     this.ctx.resolver = resolver;
     this.ctx.lists = new ListCounter(resolver);
     this.measureCtx.resolver = resolver;
-    runStyleCaches.delete(this.doc);
+    invalidateStyles(doc);
     this.ctx.runStyles = new Map();
     runStyleCaches.set(this.doc, this.ctx.runStyles);
     this.paragraphCache = new WeakMap();
     this.ctx.paragraphCache = this.paragraphCache;
+    // The measuring context was copied from ctx: it must not keep the old caches either.
+    this.measureCtx.runStyles = this.ctx.runStyles;
+    this.measureCtx.paragraphCache = this.paragraphCache;
+    // Header and footer heights depend on their styles.
+    this.headerHeights.clear();
     this.invalidate([], { structural: true });
   }
 
@@ -1264,6 +1269,7 @@ const runStyleCaches = new WeakMap<WordDocument, Map<string, RunStyle>>();
 /** Call after editing a document's styles, numbering or theme. */
 export function invalidateStyles(doc: WordDocument): void {
   runStyleCaches.delete(doc);
+  clearTableStyles(doc);
 }
 
 /** Lays out a whole document once (see LayoutSession to keep a layout up to date). */

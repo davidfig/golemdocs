@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { parseLatex } from '@word/docx';
 import { FontSet } from '../src/index.ts';
+import { mathChar } from '../src/math/chars.ts';
 import { layoutMath, type MathLayout } from '../src/math/layout.ts';
 
 // Uses the generated math font in client/public/fonts (run `pnpm fonts --only libertinus-math`).
@@ -218,4 +219,14 @@ test('every construct lays out to finite numbers, and nothing draws above or bel
   }
   // Empty equations are fine.
   assert.equal(lay('').width, 0);
+});
+
+test('Greek symbol variants take the alphabet of their style', () => {
+  // ϵ (U+03F5): italic U+1D716, bold U+1D6DC, bold italic U+1D750.
+  assert.equal(mathChar(0x3f5, undefined), 0x1d716);
+  assert.equal(mathChar(0x3f5, 'italic'), 0x1d716);
+  assert.equal(mathChar(0x3f5, 'bold'), 0x1d6dc);
+  assert.equal(mathChar(0x3f5, 'boldItalic'), 0x1d750);
+  // ϖ (U+03D6), the last of them.
+  assert.equal(mathChar(0x3d6, 'boldItalic'), 0x1d755);
 });

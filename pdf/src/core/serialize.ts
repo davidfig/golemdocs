@@ -47,8 +47,10 @@ export class ByteWriter {
 }
 
 export function formatNumber(n: number): string {
-  if (Number.isInteger(n)) return String(n);
   if (!Number.isFinite(n)) return '0';
+  // PDF has no exponent syntax, which String() and toFixed() switch to from 1e21.
+  if (Math.abs(n) >= 1e21) return BigInt(Math.trunc(n)).toString();
+  if (Number.isInteger(n)) return String(n);
   // Six decimals is below device resolution for coordinates and exact enough for colors.
   let s = n.toFixed(6);
   s = s.replace(/\.?0+$/, '');
@@ -60,11 +62,20 @@ export function formatNumber(n: number): string {
 const NAME_ESCAPE = new Uint8Array(256);
 for (let c = 0; c < 256; c++) NAME_ESCAPE[c] = c < 0x21 || c > 0x7e || '#()<>[]{}/%'.includes(String.fromCharCode(c)) ? 1 : 0;
 
+/**
+ * A name token. Names are binary strings (one char per byte); a name made from text with
+ * characters above U+00FF is written as its UTF-8 bytes rather than truncated.
+ */
 export function formatName(name: string): string {
+  const escape = (b: number) => '#' + b.toString(16).padStart(2, '0');
   let s = '/';
   for (let i = 0; i < name.length; i++) {
     const c = name.charCodeAt(i);
-    s += NAME_ESCAPE[c] ? '#' + c.toString(16).padStart(2, '0') : name[i];
+    if (c > 0xff) {
+      const cp = name.codePointAt(i)!;
+      if (cp > 0xffff) i++;
+      for (const b of new TextEncoder().encode(String.fromCodePoint(cp))) s += escape(b);
+    } else s += NAME_ESCAPE[c] ? escape(c) : name[i];
   }
   return s;
 }

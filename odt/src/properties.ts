@@ -130,7 +130,7 @@ const BORDER_OUT: Record<string, string> = {
 export function writeBorder(border: Border | undefined): string {
   if (!border || !border.val || border.val === 'nil' || border.val === 'none') return 'none';
   const style = BORDER_OUT[border.val] ?? 'solid';
-  const color = border.color && border.color !== 'auto' ? border.color : '000000';
+  const color = border.color && /^[0-9a-fA-F]{6}$/.test(border.color) ? border.color : '000000';
   return `${pointsToLength((border.sz ?? 4) / 8)} ${style} #${color.toLowerCase()}`;
 }
 
@@ -197,9 +197,9 @@ const UNDERLINE_OUT: Record<string, [style: string, type?: string, width?: strin
 
 const fontFamily = (value: string) => value.trim().replace(/^(['"])(.*)\1$/, '$2');
 
-function lang(language: string | undefined, country: string | undefined): string | undefined {
+function lang(language: string | undefined, country: string | undefined, script?: string): string | undefined {
   if (!language || language === 'zxx' || language === 'none') return undefined;
-  return country && country !== 'none' ? `${language}-${country}` : language;
+  return [language, script, country].filter((part) => part && part !== 'none').join('-');
 }
 
 /** style:text-properties -> RunProperties. */
@@ -318,9 +318,9 @@ export function readTextProperties(e: XmlElement | undefined, ctx: TextReadConte
   const display = t.get('text:display');
   if (display !== undefined) run.vanish = display === 'none';
 
-  const latinLang = lang(t.get('fo:language'), t.get('fo:country'));
-  const asianLang = lang(t.get('style:language-asian'), t.get('style:country-asian'));
-  const complexLang = lang(t.get('style:language-complex'), t.get('style:country-complex'));
+  const latinLang = lang(t.get('fo:language'), t.get('fo:country'), t.get('fo:script'));
+  const asianLang = lang(t.get('style:language-asian'), t.get('style:country-asian'), t.get('style:script-asian'));
+  const complexLang = lang(t.get('style:language-complex'), t.get('style:country-complex'), t.get('style:script-complex'));
   if (latinLang || asianLang || complexLang) {
     run.lang = {};
     if (latinLang) run.lang.val = latinLang;
@@ -332,10 +332,13 @@ export function readTextProperties(e: XmlElement | undefined, ctx: TextReadConte
   return { run, rest };
 }
 
-function splitLang(value: string | undefined): [string | undefined, string | undefined] {
-  if (!value) return [undefined, undefined];
-  const [language, country] = value.split('-');
-  return [language, country];
+/** A BCP 47 tag's language, script and region ("sr-Latn-RS"); variants and extensions are dropped. */
+function splitLang(value: string | undefined): [language: string | undefined, country: string | undefined, script: string | undefined] {
+  if (!value) return [undefined, undefined, undefined];
+  const [language, ...rest] = value.split(/[-_]/);
+  const script = rest[0] && /^[A-Za-z]{4}$/.test(rest[0]) ? rest[0] : undefined;
+  const region = rest[script ? 1 : 0];
+  return [language, region && /^([A-Za-z]{2}|[0-9]{3})$/.test(region) ? region : undefined, script];
 }
 
 /**
@@ -371,7 +374,7 @@ export function writeTextProperties(run: RunProperties, font: (run: RunPropertie
       a['style:text-underline-style'] = style;
       if (type) a['style:text-underline-type'] = type;
       a['style:text-underline-width'] = width ?? 'auto';
-      const color = run.underline.color && run.underline.color !== 'auto' ? `#${run.underline.color.toLowerCase()}` : 'font-color';
+      const color = run.underline.color && /^[0-9a-fA-F]{6}$/.test(run.underline.color) ? `#${run.underline.color.toLowerCase()}` : 'font-color';
       a['style:text-underline-color'] = color;
       if (val === 'words') a['style:text-underline-mode'] = 'skip-white-space';
     }
@@ -399,20 +402,23 @@ export function writeTextProperties(run: RunProperties, font: (run: RunPropertie
   if (run.spacing !== undefined) a['fo:letter-spacing'] = run.spacing === 0 ? 'normal' : twipsToLength(run.spacing);
   if (run.scale !== undefined) a['style:text-scale'] = percent(run.scale);
   if (run.vanish !== undefined) a['text:display'] = run.vanish ? 'none' : 'true';
-  const [language, country] = splitLang(run.lang?.val);
+  const [language, country, script] = splitLang(run.lang?.val);
   if (language) {
     a['fo:language'] = language;
     a['fo:country'] = country ?? 'none';
+    if (script) a['fo:script'] = script;
   }
-  const [asianLanguage, asianCountry] = splitLang(run.lang?.eastAsia);
+  const [asianLanguage, asianCountry, asianScript] = splitLang(run.lang?.eastAsia);
   if (asianLanguage) {
     a['style:language-asian'] = asianLanguage;
     a['style:country-asian'] = asianCountry ?? 'none';
+    if (asianScript) a['style:script-asian'] = asianScript;
   }
-  const [complexLanguage, complexCountry] = splitLang(run.lang?.bidi);
+  const [complexLanguage, complexCountry, complexScript] = splitLang(run.lang?.bidi);
   if (complexLanguage) {
     a['style:language-complex'] = complexLanguage;
     a['style:country-complex'] = complexCountry ?? 'none';
+    if (complexScript) a['style:script-complex'] = complexScript;
   }
   return a;
 }

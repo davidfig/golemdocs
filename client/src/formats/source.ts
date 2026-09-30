@@ -61,5 +61,5 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|odt|rtf|html?|mhtml?|epub|csv|tsv|png|jpe?g|webp|gif|bmp|svg|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|svg|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
 }

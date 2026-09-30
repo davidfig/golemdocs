@@ -33,7 +33,11 @@ function ordinalSuffix(n: number): string {
   return ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
 }
 
+/** Word's largest list number (w:start is at most 32767); beyond it letters and roman numerals would only balloon. */
+const MAX_SPELLED = 32767;
+
 export function formatNumber(n: number, format = 'decimal'): string {
+  if (n > MAX_SPELLED && /Letter$|Roman$/.test(format)) return String(n);
   switch (format) {
     case 'none':
       return '';

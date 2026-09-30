@@ -73,3 +73,11 @@ test('non-MHTML input is rejected', async () => {
   await assert.rejects(() => mhtml.read(new TextEncoder().encode('just some words')));
   await assert.rejects(() => epub.read(new TextEncoder().encode('just some words')));
 });
+
+test('comments survive EPUB and MHTML', async () => {
+  const source = await markdownToDocument('Some {==text==}{>>@Ann: line 1\\nline 2 "q"<<} here.');
+  for (const handler of [epub, mhtml]) {
+    const back = (await handler.read(await handler.write(source, {}, undefined as never))).document;
+    assert.deepEqual(back.comments.map(({ initials: _i, ...c }) => c), source.comments.map(({ initials: _i, ...c }) => c));
+  }
+});

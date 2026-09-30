@@ -55,6 +55,7 @@ export const app: Partial<Messages> = {
   'app.adopted': '已將此瀏覽器中的 {count} 份文件加入你的帳號',
   'app.conflictNotice': '「{before}」在其他地方也被修改過，因此這些變更已另存為「{name}」',
   'app.signInToShare': '請登入以分享此文件',
+  'app.subscribeToShare': '訂閱以共用此文件',
   'app.ownerOnlyShare': '只有擁有者可以分享此文件',
   'app.notInAccountYet': '此文件尚未加入你的帳號：請稍候片刻等待上傳完成，然後再試一次',
   'app.notSavedYet': '請先進行一項變更：文件經過編輯後才會儲存到你的帳號',
@@ -78,6 +79,10 @@ export const app: Partial<Messages> = {
   'app.signOutLossExpired': '有 {count} 份文件的變更尚未儲存至你的帳號（你已被登出）。登出會將你的文件從此瀏覽器中移除，這些變更將會遺失。',
   'app.signOutOffline': '離線時無法登出',
   'app.signOutFailed': '無法登出：{message}',
+  'app.subscribeFailed': '無法開始結帳：{message}',
+  'app.portalFailed': '無法開啟你的訂閱：{message}',
+  'app.subscribed': '感謝訂閱！',
+  'app.subscribePending': '謝謝！付款可能需要一分鐘才會顯示在這裡。',
 
   // Clearing local data
   'app.clearTitle': '清除本機資料',
@@ -103,7 +108,6 @@ export const app: Partial<Messages> = {
   'app.unsupportedOpen': '尚不支援開啟 {kind} 檔案（{name}）',
   'app.notAvailable': '{name} 尚未提供',
   'app.notePrompt': '附註',
-  'app.commentPrompt': '註解',
 
   // File errors
   'app.notEpub': '這不是 EPUB 檔案：缺少 META-INF/container.xml。',

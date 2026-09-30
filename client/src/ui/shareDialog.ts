@@ -11,7 +11,7 @@ import { dialogTitleBar } from './popup.ts';
 const roleLabel = (role: ShareRole): string => t(role === 'editor' ? 'dialogs.share.canEdit' : 'dialogs.share.canView');
 
 function roleSelect(value: ShareRole): HTMLSelectElement {
-  const select = h('select', { attrs: { 'aria-label': t('dialogs.share.access') } });
+  const select = h('select', { class: 'wm-select', attrs: { 'aria-label': t('dialogs.share.access') } });
   for (const role of ['editor', 'viewer'] as const) {
     const option = h('option', { text: roleLabel(role) });
     option.value = role;

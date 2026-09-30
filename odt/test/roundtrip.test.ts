@@ -24,7 +24,7 @@ test('an ODT the app wrote round-trips byte for byte', async () => {
   // Paragraph ids and the extension are stable too.
   const ids = (d: WordDocument) => paragraphsIn(d.body).map((p) => p.attrs['w14:paraId']);
   assert.deepEqual(ids(second.document), ids(first.document));
-  assert.deepEqual(second.extension.annotations?.map((a) => [a.paragraphId, a.offset, a.end]), first.extension.annotations?.map((a) => [a.paragraphId, a.offset, a.end]));
+  assert.deepEqual(second.document.comments, first.document.comments);
   assert.deepEqual(third.extension, second.extension);
 });
 
@@ -82,25 +82,21 @@ test('extension content whose anchors are gone is skipped; edited anchors degrad
   assert.equal(find(content, 'text:note').length, 0);
 });
 
-test('a range whose end is gone becomes a point; offsets past the end are skipped', async () => {
+test('offsets past the end are skipped', async () => {
   const { document, extension } = await readOdt(await libreOfficeFixture());
   const p = paragraphsIn(document.body).find((q) => paragraphText(q).startsWith('Small sans'))!;
   const id = p.attrs['w14:paraId'];
   const ext: OdtExtension = JSON.parse(JSON.stringify(extension));
-  ext.annotations![0].end = { paragraphId: 'FFFFFFF0', offset: 0 };
   ext.bookmarks![0].end!.offset = 2; // before its start
   ext.bookmarks!.push({ name: 'Far', paragraphId: id, offset: 10_000 });
   const { content } = await validateOdt(await writeOdt(document, ext));
-  const annotation = find(content, 'office:annotation')[0];
-  assert.equal(annotation.attrs['office:name'], undefined);
-  assert.equal(find(content, 'office:annotation-end').length, 0);
   assert.equal(find(content, 'text:bookmark').length, 1);
   assert.equal(find(content, 'text:bookmark')[0].attrs['text:name'], 'Target');
 });
 
-test('annotations land at their offsets after the text moves (the ids carry them)', async () => {
+test('comments move with their paragraph', async () => {
   const { document, extension } = await readOdt(await libreOfficeFixture());
-  // The paragraph moves to the end of the document: its id still anchors the comment.
+  // The paragraph moves to the end of the document: its markers go with it.
   const p = paragraphsIn(document.body).find((q) => paragraphText(q).startsWith('Small sans'))!;
   document.body.splice(document.body.indexOf(p), 1);
   document.body.push(p);

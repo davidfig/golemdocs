@@ -7,6 +7,7 @@
 // hidden text, caret x positions).
 
 import {
+  type Comment,
   commentEnd,
   commentMarkerOffsets,
   commentRanges,
@@ -99,7 +100,11 @@ export type Command =
   | { kind: 'addComment'; text: string; author: string; date?: string }
   /** Changes a comment's text. */
   | { kind: 'editComment'; id: string; text: string }
-  /** Removes a comment and its markers from the text. */
+  /** Adds a reply to a comment's thread (replying to a reply replies to the thread). */
+  | { kind: 'replyComment'; id: string; text: string; author: string; date?: string }
+  /** Marks a comment's thread resolved, or open again. */
+  | { kind: 'resolveComment'; id: string; resolved: boolean }
+  /** Removes a comment, its replies and their markers from the text. */
   | { kind: 'deleteComment'; id: string }
   /** Selects the text a comment is on. */
   | { kind: 'selectComment'; id: string }
@@ -191,7 +196,11 @@ const SPACE = /\s/u;
 export interface CommentGeometry {
   id: string;
   author: string;
+  initials?: string;
   date?: string;
+  /** The comment this replies to. */
+  parentId?: string;
+  resolved?: boolean;
   text: string;
   /** Highlight over its range (empty when that isn't laid out yet). */
   rects: Rect[];
@@ -395,6 +404,15 @@ export class Editor {
         const comment = this.doc.comments.find((c) => c.id === command.id);
         if (!comment) return NO_CHANGE;
         const ops: Operation[] = [{ type: 'setComment', id: command.id, comment: { ...comment, paragraphs: command.text.split(/\r\n?|\n/) } }];
+        return this.edit([ops, this.selectionIds.focus]);
+      }
+      case 'replyComment':
+        return this.edit(this.replyCommentOps(command));
+      case 'resolveComment': {
+        const root = this.threadRoot(command.id);
+        if (!root || !!root.resolved === command.resolved) return NO_CHANGE;
+        const { resolved: _old, ...rest } = root;
+        const ops: Operation[] = [{ type: 'setComment', id: root.id, comment: command.resolved ? { ...rest, resolved: true } : rest }];
         return this.edit([ops, this.selectionIds.focus]);
       }
       case 'deleteComment':
@@ -1134,8 +1152,9 @@ export class Editor {
       }
       // From the end, so earlier offsets stay valid as the text changes length.
       for (const at of found.reverse()) {
+        // Inserted at the end of the match first, so the replacement looks like the last of the words it replaces.
+        if (replacement) ops.push({ type: 'insertText', paragraph: id, offset: at + text.length, text: replacement });
         ops.push({ type: 'delete', paragraph: id, from: at, to: at + text.length });
-        if (replacement) ops.push({ type: 'insertText', paragraph: id, offset: at, text: replacement });
         count++;
       }
     }
@@ -1260,36 +1279,81 @@ export class Editor {
 
   // --- Comments --------------------------------------------------------------------------
 
-  private addCommentOps(command: Extract<Command, { kind: 'addComment' }>): [Operation[], Pos] {
-    let [start, end] = this.ordered();
-    if (this.collapsed) [start, end] = this.wordAt(start);
-    // Ids are decimal (w:id); random so that two people commenting at once don't collide.
+  /** A comment id no comment or marker in the document has (decimal, as w:id is). */
+  private newCommentId(): string {
+    // Random so that two people commenting at once don't collide.
     const taken = new Set([...this.doc.comments.map((c) => c.id), ...commentRanges(this.paragraphs()).keys()]);
     let id: string;
     do id = String(Math.floor(Math.random() * 0x7fffffff));
     while (taken.has(id));
+    return id;
+  }
+
+  private static now(): string {
+    return new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  }
+
+  /** The comment that starts the thread this one is in. */
+  private threadRoot(id: string): Comment | undefined {
+    let comment = this.doc.comments.find((c) => c.id === id);
+    for (let hops = 0; comment?.parentId && hops < 100; hops++) {
+      const parent = this.doc.comments.find((c) => c.id === comment!.parentId);
+      if (!parent) break;
+      comment = parent;
+    }
+    return comment;
+  }
+
+  /** The operations that put a comment's markers at a range: end first, so the start's offset still holds. */
+  private markerOps(id: string, start: Pos, end: Pos): Operation[] {
+    return [
+      { type: 'insertContent', paragraph: end.paragraph, offset: end.offset, content: [commentEnd(id), commentReference(id)] },
+      { type: 'insertContent', paragraph: start.paragraph, offset: start.offset, content: [commentStart(id)] },
+    ];
+  }
+
+  private addCommentOps(command: Extract<Command, { kind: 'addComment' }>): [Operation[], Pos] {
+    let [start, end] = this.ordered();
+    if (this.collapsed) [start, end] = this.wordAt(start);
+    const id = this.newCommentId();
     const startPos = this.pos(start);
     const endPos = this.pos(end);
     const ops: Operation[] = [
-      { type: 'setComment', id, comment: { id, author: command.author, date: command.date ?? new Date().toISOString().replace(/\.\d+Z$/, 'Z'), paragraphs: command.text.split(/\r\n?|\n/) } },
-      // The end first, so the start's offset still holds when both are in one paragraph.
-      { type: 'insertContent', paragraph: endPos.paragraph, offset: endPos.offset, content: [commentEnd(id), commentReference(id)] },
-      { type: 'insertContent', paragraph: startPos.paragraph, offset: startPos.offset, content: [commentStart(id)] },
+      { type: 'setComment', id, comment: { id, author: command.author, date: command.date ?? Editor.now(), paragraphs: command.text.split(/\r\n?|\n/) } },
+      ...this.markerOps(id, startPos, endPos),
     ];
     const shift = start.paragraph === end.paragraph ? 1 : 0;
     return [ops, { paragraph: endPos.paragraph, offset: endPos.offset + shift + 2 }];
   }
 
+  private replyCommentOps(command: Extract<Command, { kind: 'replyComment' }>): [Operation[], Pos] | null {
+    const root = this.threadRoot(command.id);
+    const range = root && commentRanges(this.paragraphs()).get(root.id);
+    if (!root || !range) return null;
+    const id = this.newCommentId();
+    const startPos = this.pos(range.start);
+    const endPos = this.pos(range.end);
+    const ops: Operation[] = [
+      { type: 'setComment', id, comment: { id, author: command.author, date: command.date ?? Editor.now(), paragraphs: command.text.split(/\r\n?|\n/), parentId: root.id } },
+      ...this.markerOps(id, startPos, endPos),
+    ];
+    const shift = range.start.paragraph === range.end.paragraph ? 1 : 0;
+    return [ops, { paragraph: endPos.paragraph, offset: endPos.offset + shift + 2 }];
+  }
+
   private deleteCommentOps(id: string): [Operation[], Pos] | null {
+    // A thread's first comment takes its replies with it.
+    const ids = [id, ...this.doc.comments.filter((c) => c.parentId === id).map((c) => c.id)];
     const ops: Operation[] = [];
     for (const p of this.paragraphs()) {
-      for (const offset of commentMarkerOffsets(p, id)) ops.push({ type: 'delete', paragraph: this.replica.id(p), from: offset, to: offset + 1 });
+      const offsets = ids.flatMap((i) => commentMarkerOffsets(p, i)).sort((a, b) => b - a);
+      for (const offset of offsets) ops.push({ type: 'delete', paragraph: this.replica.id(p), from: offset, to: offset + 1 });
     }
-    if (this.doc.comments.some((c) => c.id === id)) ops.push({ type: 'setComment', id, comment: null });
+    for (const i of ids) if (this.doc.comments.some((c) => c.id === i)) ops.push({ type: 'setComment', id: i, comment: null });
     if (!ops.length) return null;
     // Keep the caret where it is, moved back over any markers before it.
     const focus = this.selection.focus;
-    const before = commentMarkerOffsets(focus.paragraph, id).filter((o) => o < focus.offset).length;
+    const before = ids.reduce((n, i) => n + commentMarkerOffsets(focus.paragraph, i).filter((o) => o < focus.offset).length, 0);
     return [ops, { paragraph: this.replica.id(focus.paragraph), offset: focus.offset - before }];
   }
 
@@ -1326,11 +1390,30 @@ export class Editor {
       return {
         id: c.id,
         author: c.author,
+        ...(c.initials && { initials: c.initials }),
         ...(c.date && { date: c.date }),
+        ...(c.parentId && { parentId: c.parentId }),
+        ...(c.resolved && { resolved: true }),
         text: c.paragraphs.join('\n'),
         rects: range ? this.rangeRects(range.start, range.end) : [],
       };
     });
+  }
+
+  /** The thread (its first comment's id) whose text the caret is in, if any. */
+  activeComment(): string | null {
+    if (!this.doc.comments.length) return null;
+    const focus = this.selection.focus;
+    let best: { id: string; size: number } | null = null;
+    for (const [id, range] of commentRanges(this.paragraphs())) {
+      const root = this.threadRoot(id);
+      if (!root || root.id !== id) continue;
+      if (this.compare(focus, range.start) < 0 || this.compare(focus, range.end) > 0) continue;
+      // The innermost of nested ranges: the shortest, by the paragraphs and offsets it spans.
+      const size = (this.indexOf(range.end.paragraph) - this.indexOf(range.start.paragraph)) * 1e6 + range.end.offset - range.start.offset;
+      if (!best || size < best.size) best = { id, size };
+    }
+    return best?.id ?? null;
   }
 
   /** Applies planned operations as one local edit and moves the selection. */

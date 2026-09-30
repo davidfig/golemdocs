@@ -316,3 +316,44 @@ test('a line whose first run is raised is set on its main text\'s baseline, and 
   assert.ok(Math.abs(two.y - 703) < 0.01 && Math.abs(rest.y - 700) < 0.01, `${two.y} ${rest.y}`);
   assert.equal(textOf(cellsOf(findBlocks(runs)[0])), '2nd prize');
 });
+
+test('a bullet keeps the gap before its text when the line is edited', async () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([612, 792]);
+  const font = doc.standardFont('Helvetica');
+  const d = page.draw();
+  d.text('-', 72, 700, { font, size: 12 });
+  d.text('First item here', 90, 700, { font, size: 12 });
+  d.finish();
+  const loaded = PdfDocument.load(await doc.save());
+  const block = findBlocks(scanPage(loaded.pages[0]).runs)[0];
+  assert.equal(textOf(cellsOf(block)), '- First item here');
+  applyEdits(loaded, [edit(block.runs.map((r) => r.id), '- First item there')]);
+  const after = findBlocks(scanPage(PdfDocument.load(await loaded.save()).pages[0]).runs);
+  // The text starts where it did: the line is as wide as before, plus the one letter more.
+  const grew = after[0].lines[0].x1 - block.lines[0].x1;
+  assert.ok(grew > 0 && grew < 8, `grew by ${grew}`);
+});
+
+test('a bullet followed by a space and then a further gap keeps the text where it was', async () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([612, 792]);
+  const font = doc.standardFont('Helvetica');
+  const d = page.draw();
+  d.text('- ', 72, 700, { font, size: 12 });
+  d.text('First item here', 90, 700, { font, size: 12 });
+  d.finish();
+  const loaded = PdfDocument.load(await doc.save());
+  const block = findBlocks(scanPage(loaded.pages[0]).runs)[0];
+  applyEdits(loaded, [edit(block.runs.map((r) => r.id), textOf(cellsOf(block)).replace('First', 'Firsst'))]);
+  const after = findBlocks(scanPage(PdfDocument.load(await loaded.save()).pages[0]).runs)[0];
+  let x = NaN;
+  for (const r of after.lines[0].runs) {
+    let at = r.x;
+    for (const g of r.glyphs) {
+      if (g.text === 'F') x = at;
+      at += g.advance;
+    }
+  }
+  assert.ok(Math.abs(x - 90) < 0.5, `text starts at ${x}`);
+});

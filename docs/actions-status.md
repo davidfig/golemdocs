@@ -17,7 +17,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **Edit**
 - Undo, Redo, Cut, Copy, Paste (formatted HTML, or plain text for formats without marks), Paste Special (HTML or text, with preview), Select All
-- Insert Comment (also a note on a PDF)
+- Insert Comment (also a note on a PDF): written and edited in the comments panel (`ui/commentsPanel.ts`), with replies and Resolve. Comments are in the document model (`WordDocument.comments` plus range markers) and carried by DOCX (incl. `commentsExtended`), ODT, RTF, PDF export/import, legacy DOC (read only), Markdown (CriticMarkup) and HTML/EPUB/MHTML; not LaTeX, Org, MediaWiki, AsciiDoc, RST or Textile
 - Find, Replace and Go To: one dialog with a tab for each, as in Word 2003 (`ui/findDialog.ts`)
   - Find/Replace: next/previous, match case, replace one, replace all; the search is in `@word/editor`
   - Go To: Page and Comment, by number or relative (`+3`, `-1`), with Previous and Next

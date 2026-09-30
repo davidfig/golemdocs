@@ -43,6 +43,10 @@
 			]
 		}
 	],
+	// Workers AI, for the assistant (src/assistant.ts). Billed per token to this account.
+	"ai": {
+		"binding": "AI"
+	},
 	// Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
 	// Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
 	"d1_databases": [
@@ -60,7 +64,10 @@
 		// Your Cloudflare account id (per-user databases are created and queried through the REST API).
 		"CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
 		// Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
-		"MICROSOFT_TENANT": "common"
+		"MICROSOFT_TENANT": "common",
+		// "true": cloud documents, sharing and rooms need a subscription (see src/subscriptions.ts). While
+		// "false", they are free for everyone signed in. Turn it on once checkout and the webhook work.
+		"REQUIRE_SUBSCRIPTION": "false"
 	},
 	// Bindings and vars aren't inherited by environments, so each one lists its own. The top level
 	// above is production: only `pnpm --filter @word/server deploy` uses it.
@@ -70,6 +77,9 @@
 		// touching production data. Create them with `pnpm --filter @word/server cf:setup:dev`, then
 		// paste the printed database id here (and your account id below).
 		"dev": {
+			"ai": {
+				"binding": "AI"
+			},
 			"r2_buckets": [
 				{
 					"binding": "FILES",
@@ -152,6 +162,9 @@
 	//   CF_API_TOKEN, a token with "D1 Edit" and "Billing Read" permission
 	//   ADMIN_EMAILS, comma-separated emails of admins (who see the Cloudflare billing panel)
 	//   POLAR_WEBHOOK_SECRET, from the Polar webhook endpoint (https://<host>/api/webhooks/polar)
+	//   POLAR_ACCESS_TOKEN, an organization access token with checkouts:write and customer_sessions:write
+	//   POLAR_PRODUCT_ID, the monthly sync product's id (not secret, but set the same way)
+	//   POLAR_API_URL, only to use Polar's sandbox (https://sandbox-api.polar.sh)
 	//   sign-in providers (each is offered only when all of its secrets are set; see AUTH.md):
 	//   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
 	//   MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET

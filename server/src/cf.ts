@@ -70,9 +70,16 @@ export interface DurableObjectNamespace {
   get(id: unknown): DurableObjectStub;
 }
 
+/** Workers AI. */
+export interface AiBinding {
+  run(model: string, inputs: unknown): Promise<unknown>;
+}
+
 /** Bindings and variables (see wrangler.jsonc and .dev.vars). */
 export interface Env {
   DIRECTORY: D1Database;
+  /** Workers AI, for the assistant (see assistant.ts). Absent locally, where the assistant is off. */
+  AI?: AiBinding;
   FILES: R2Bucket;
   /** One collaboration room per cloud document (see room.ts). */
   ROOMS: DurableObjectNamespace;
@@ -82,8 +89,19 @@ export interface Env {
   ENVIRONMENT?: string;
   /** Comma-separated emails of admins (verified sign-in emails, or DEV_USER locally). Admins see the billing panel. */
   ADMIN_EMAILS?: string;
+  /**
+   * `true` requires a subscription (or being an admin) for cloud documents, sharing and rooms.
+   * Anything else leaves them free for every signed-in user.
+   */
+  REQUIRE_SUBSCRIPTION?: string;
   /** Polar's webhook secret (Polar dashboard > Webhooks). Without it, /api/webhooks/polar answers 503. */
   POLAR_WEBHOOK_SECRET?: string;
+  /** An organization access token with the checkouts:write and customer_sessions:write scopes. */
+  POLAR_ACCESS_TOKEN?: string;
+  /** The id of the monthly sync product in Polar. */
+  POLAR_PRODUCT_ID?: string;
+  /** Polar's API, when not the production one (`https://sandbox-api.polar.sh` for its sandbox). */
+  POLAR_API_URL?: string;
   /** Local development only: treated as the signed-in user. */
   DEV_USER?: string;
 

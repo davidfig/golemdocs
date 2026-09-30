@@ -2,6 +2,7 @@
 // keys are `area.name` and unique across the files (test/i18n.test.ts checks).
 
 import { app } from './app.ts';
+import { assistant } from './assistant.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
@@ -19,7 +20,7 @@ import { spelling } from './spelling.ts';
 import { table } from './table.ts';
 import { wordCount } from './wordCount.ts';
 
-export const catalogs = [app, chrome, columns, dialogs, largeText, link, math, menus, pageSetup, panels, paragraph, pasteSpecial, picture, properties, spelling, table, wordCount] as const;
+export const catalogs = [app, assistant, chrome, columns, dialogs, largeText, link, math, menus, pageSetup, panels, paragraph, pasteSpecial, picture, properties, spelling, table, wordCount] as const;
 
 export const en = Object.assign({}, ...catalogs) as UnionToIntersection<(typeof catalogs)[number]>;
 

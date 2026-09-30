@@ -185,3 +185,18 @@ export function pageIds(doc: number): number[] {
   const layouts = posted.filter((m): m is Extract<FromWorker, { type: 'layout' }> => m.type === 'layout' && m.doc === doc);
   return layouts.length ? [...layouts[layouts.length - 1].order] : [];
 }
+
+/** Runs an assistant tool on the document and answers with what it said. */
+export async function agent(doc: number, name: string, args: object | string = {}): Promise<string> {
+  const request = nextRequest++;
+  const json = typeof args === 'string' ? args : JSON.stringify(args);
+  send({ type: 'agent', doc, request, name, args: json });
+  // Not the shared timeout, which is unref'd: an unanswered tool call would end the run silently.
+  let timer: ReturnType<typeof setTimeout>;
+  const late = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`no answer to ${name} ${json}`)), 15000)));
+  try {
+    return (await Promise.race([waitFor('agentResult', (m) => m.request === request), late])).result;
+  } finally {
+    clearTimeout(timer!);
+  }
+}

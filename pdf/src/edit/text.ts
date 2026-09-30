@@ -21,6 +21,10 @@ export interface Cell {
   style: Style;
   /** The line it was on, for a glyph (or gap) that was in the file. */
   line?: number;
+  /** For a space that stood for a gap in the file (a bullet's indent, a tab): the width the gap had, in user space. */
+  gap?: number;
+  /** For a space glyph the file drew with a further gap after it (a bullet's indent): that extra distance, in user space. */
+  after?: number;
 }
 
 /**
@@ -57,7 +61,10 @@ export function cellsOf(block: TextBlock): Cell[] {
     let end = NaN;
     for (const run of line.runs) {
       const last = cells[cells.length - 1];
-      if (last && last.line === li && !isSpace(last.ch) && run.x - end > run.size * 0.15) cells.push({ ch: ' ', style: last.style, line: li });
+      if (last && last.line === li && run.x - end > run.size * 0.15) {
+        if (!isSpace(last.ch)) cells.push({ ch: ' ', style: last.style, line: li, gap: run.x - end });
+        else if (last.glyph) last.after = run.x - end;
+      }
       for (const glyph of run.glyphs) cells.push({ ch: glyph.text || UNKNOWN, glyph, style: run, line: li });
       end = run.x + runWidth(run);
     }
@@ -163,6 +170,17 @@ export function styledCells(text: string, style: Style): Cell[] {
 
 /** Works out what shows each cell and how far it advances. */
 export function place(cells: readonly Cell[], fallback?: Fallback): Placed[] {
+  const placed = placeCells(cells, fallback);
+  // A space that stood for a wide gap (after a bullet, a tab) keeps the gap's width, not a space's.
+  return placed.map((p) => {
+    const { gap, after, glyph } = p.cell;
+    if (gap !== undefined && !glyph && gap > p.advance) return { ...p, advance: gap };
+    if (after && glyph) return { ...p, advance: p.advance + after };
+    return p;
+  });
+}
+
+function placeCells(cells: readonly Cell[], fallback?: Fallback): Placed[] {
   return cells
     .filter((c) => c.ch !== '\n')
     .map((cell) => {

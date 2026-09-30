@@ -64,6 +64,7 @@ export const app: Catalog = {
   'app.adopted': 'Из этого браузера в вашу учётную запись добавлено {count} документов',
   'app.conflictNotice': 'Документ «{before}» был изменён ещё где-то, поэтому эти изменения сохранены как «{name}»',
   'app.signInToShare': 'Войдите, чтобы поделиться этим документом',
+  'app.subscribeToShare': 'Оформите подписку, чтобы поделиться этим документом',
   'app.ownerOnlyShare': 'Поделиться этим документом может только владелец',
   'app.notInAccountYet': 'Этого документа ещё нет в вашей учётной записи: подождите немного, пока он загрузится, и повторите попытку',
   'app.notSavedYet': 'Сначала внесите изменение: документ сохраняется в вашей учётной записи после редактирования',
@@ -96,6 +97,10 @@ export const app: Catalog = {
   'app.signOutLossExpired': 'В {count} документах есть изменения, которые ещё не сохранены в вашей учётной записи (вы вышли из неё). При выходе документы удаляются из этого браузера, поэтому эти изменения будут потеряны.',
   'app.signOutOffline': 'Нельзя выйти, пока вы не в сети',
   'app.signOutFailed': 'Не удалось выйти: {message}',
+  'app.subscribeFailed': 'Не удалось начать оплату: {message}',
+  'app.portalFailed': 'Не удалось открыть подписку: {message}',
+  'app.subscribed': 'Спасибо за подписку!',
+  'app.subscribePending': 'Спасибо! Платёж может появиться здесь не сразу, это займёт около минуты.',
 
   // Clearing local data
   'app.clearTitle': 'Очистить локальные данные',
@@ -121,7 +126,6 @@ export const app: Catalog = {
   'app.unsupportedOpen': 'Открытие файлов {kind} пока не поддерживается ({name})',
   'app.notAvailable': '«{name}» пока недоступно',
   'app.notePrompt': 'Заметка',
-  'app.commentPrompt': 'Комментарий',
 
   // File errors
   'app.notEpub': 'Это не файл EPUB: отсутствует META-INF/container.xml.',

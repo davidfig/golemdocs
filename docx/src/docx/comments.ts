@@ -1,6 +1,8 @@
 // The comments part (word/comments.xml): reading it into Comment objects and writing them
 // back. Comments that haven't changed are written as they were read (all their formatting);
-// changed and new ones are written as plain paragraphs.
+// changed and new ones are written as plain paragraphs. Replies and the resolved mark live in
+// the extended part (word/commentsExtended.xml), which links comments by the w14:paraId of
+// their last paragraph.
 
 import type { Comment } from '../model/types.ts';
 import { el, elements, textContent, type XmlElement } from '../xml/xml.ts';
@@ -12,9 +14,28 @@ export interface CommentsPart {
   originals: Map<string, { comment: string; xml: XmlElement }>;
 }
 
-export function readComments(root: XmlElement): CommentsPart {
+/** The comment without what the extended part holds, to tell if its own part has to be rewritten. */
+function content(c: Comment): string {
+  const { parentId: _p, resolved: _r, ...rest } = c;
+  return JSON.stringify(rest);
+}
+
+/** An attribute by its local name, whatever prefix the producer bound the namespace to. */
+function local(e: XmlElement, name: string): string | undefined {
+  for (const key in e.attrs) if (key === name || key.endsWith(`:${name}`)) return e.attrs[key];
+  return undefined;
+}
+
+function lastParaId(comment: XmlElement): string | undefined {
+  const paragraphs = [...elements(comment)].filter((p) => p.name === 'w:p');
+  const last = paragraphs[paragraphs.length - 1];
+  return last && local(last, 'paraId');
+}
+
+export function readComments(root: XmlElement, extended?: XmlElement): CommentsPart {
   const comments: Comment[] = [];
   const originals = new Map<string, { comment: string; xml: XmlElement }>();
+  const byParaId = new Map<string, Comment>();
   for (const e of elements(root)) {
     if (e.name !== 'w:comment') continue;
     const id = e.attrs['w:id'];
@@ -27,7 +48,17 @@ export function readComments(root: XmlElement): CommentsPart {
       paragraphs: [...elements(e)].filter((p) => p.name === 'w:p').map(paragraphText),
     };
     comments.push(comment);
-    originals.set(id, { comment: JSON.stringify(comment), xml: e });
+    originals.set(id, { comment: content(comment), xml: e });
+    const paraId = lastParaId(e);
+    if (paraId) byParaId.set(paraId, comment);
+  }
+  for (const ex of extended ? elements(extended) : []) {
+    if (!ex.name.endsWith(':commentEx')) continue;
+    const comment = byParaId.get(local(ex, 'paraId') ?? '');
+    if (!comment) continue;
+    const parent = byParaId.get(local(ex, 'paraIdParent') ?? '');
+    if (parent && parent !== comment) comment.parentId = parent.id;
+    if (local(ex, 'done') === '1' || local(ex, 'done') === 'true') comment.resolved = true;
   }
   return { comments, rootAttrs: { ...root.attrs }, originals };
 }
@@ -47,15 +78,46 @@ function paragraphText(p: XmlElement): string {
   return out;
 }
 
-export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' | 'originals'>): XmlElement {
+/** A paragraph id in Word's range (below 0x80000000), derived from the comment so it is stable. */
+function paraId(comment: Comment, index: number): string {
+  let h = 0x811c9dc5;
+  for (const ch of `${comment.id}:${index}:${comment.paragraphs[index] ?? ''}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return ((h >>> 1) || 1).toString(16).toUpperCase().padStart(8, '0');
+}
+
+export interface WrittenComments {
+  comments: XmlElement;
+  /** word/commentsExtended.xml, when a comment is a reply or resolved (or the file had one). */
+  extended?: XmlElement;
+}
+
+export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' | 'originals'>, hadExtended = false): WrittenComments {
+  const ids = new Map<string, string>();
   const children = part.comments.map((comment) => {
     const original = part.originals.get(comment.id);
-    if (original && original.comment === JSON.stringify(comment)) return original.xml;
+    if (original && original.comment === content(comment)) {
+      let xml = original.xml;
+      let id = lastParaId(xml);
+      if (!id) {
+        // Give the last paragraph an id so the extended part can point at it.
+        id = paraId(comment, comment.paragraphs.length - 1);
+        xml = { ...xml, children: [...xml.children] };
+        const at = xml.children.map((c) => typeof c !== 'string' && c.name === 'w:p').lastIndexOf(true);
+        if (at >= 0) {
+          const p = xml.children[at] as XmlElement;
+          xml.children[at] = { ...p, attrs: { 'w14:paraId': id, ...p.attrs } };
+        }
+      }
+      ids.set(comment.id, id);
+      return xml;
+    }
+    const texts = comment.paragraphs.length ? comment.paragraphs : [''];
+    ids.set(comment.id, paraId(comment, texts.length - 1));
     return el(
       'w:comment',
       { 'w:id': comment.id, 'w:author': comment.author, 'w:date': comment.date, 'w:initials': comment.initials },
-      (comment.paragraphs.length ? comment.paragraphs : ['']).map((text, i) =>
-        el('w:p', {}, [
+      texts.map((text, i) =>
+        el('w:p', { 'w14:paraId': paraId(comment, i) }, [
           el('w:pPr', {}, [el('w:pStyle', { 'w:val': 'CommentText' })]),
           ...(i === 0 ? [el('w:r', {}, [el('w:rPr', {}, [el('w:rStyle', { 'w:val': 'CommentReference' })]), el('w:annotationRef')])] : []),
           ...(text ? [el('w:r', {}, [el('w:t', { 'xml:space': 'preserve' }, [text])])] : []),
@@ -63,5 +125,17 @@ export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' 
       ),
     );
   });
-  return el('w:comments', { ...part.rootAttrs }, children);
+  const comments = el('w:comments', { ...part.rootAttrs }, children);
+  const threaded = part.comments.some((c) => c.parentId || c.resolved);
+  if (!threaded && !hadExtended) return { comments };
+  const extended = el(
+    'w15:commentsEx',
+    {
+      'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+      'xmlns:w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
+      'mc:Ignorable': 'w15',
+    },
+    part.comments.map((c) => el('w15:commentEx', { 'w15:paraId': ids.get(c.id), 'w15:paraIdParent': c.parentId ? ids.get(c.parentId) : undefined, 'w15:done': c.resolved ? 1 : 0 })),
+  );
+  return { comments, extended };
 }

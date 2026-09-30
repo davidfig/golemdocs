@@ -276,6 +276,10 @@ export interface Comment {
   date?: string;
   /** The comment's text, one string per paragraph. */
   paragraphs: string[];
+  /** The comment this one replies to. A reply has no range of its own: it is shown with its parent. */
+  parentId?: string;
+  /** The thread is marked done (Word's w15:done). Set on the thread's first comment. */
+  resolved?: boolean;
 }
 
 // --- Paragraphs --------------------------------------------------------------------------

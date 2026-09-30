@@ -8,13 +8,13 @@ Un éditeur de documents qui vit dans votre navigateur, conçu pour ouvrir tous 
 - **Changer de forme sans rien perdre.** Convertir en, dans le menu Fichier, change ce que le document est modifié comme, et en revenant, vous retrouvez votre mise en forme.
 - **Annoter les PDF.** Surlignez, soulignez, barrez et laissez des notes sur les pages d'un PDF.
 - **Modifier les PDF.** Passez en mode Modifier le PDF pour changer le texte d'une page à sa place, déplacer, ajouter ou supprimer des images et des formes, noircir des informations confidentielles et réorganiser les pages. Le mode Remplir saisit du texte dans les champs d'un formulaire.
-- **Travailler à plusieurs.** Partager, dans le menu Fichier, vous donne un lien. Toutes les personnes qui l'ouvrent modifient le même document, et les changements s'affichent en direct. Vous pouvez aussi partager avec des personnes précises.
+- **Travailler à plusieurs.** Partager, dans le menu Fichier, vous donne un lien. Toutes les personnes qui l'ouvrent modifient le même document, et les changements s'affichent en direct. Vous pouvez aussi partager avec des personnes précises. Le partage fait partie de l'abonnement ; modifier seul est gratuit.
 
 ## À essayer
 
 1. **Changer de forme.** Dans le menu Fichier, choisissez Convertir en, puis Markdown. Cette page devient du texte brut avec des titres `#`, et vous pouvez la reconvertir.
 2. **Ouvrir des données.** Déposez un fichier CSV sur la fenêtre. Il s'ouvre sous forme de tableau modifiable, et se télécharge en tant que le même CSV.
-3. **Modifier à plusieurs.** Dans le menu Fichier, choisissez Partager, puis Obtenir le lien, et ouvrez le lien dans une deuxième fenêtre. Tapez dans l'une et regardez l'autre se mettre à jour.
+3. **Modifier à plusieurs.** Dans le menu Fichier, choisissez Partager, puis Obtenir le lien, et ouvrez le lien dans une deuxième fenêtre. Tapez dans l'une et regardez l'autre se mettre à jour. Cela nécessite un abonnement.
 
 Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document vierge, ou Télécharger quand il vous faut un fichier pour quelqu'un d'autre.
 
@@ -28,7 +28,7 @@ Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document
 
 ## Enregistrement
 
-Il n'y a pas de bouton Enregistrer. Chaque modification est conservée dans ce navigateur un instant après que vous l'avez faite, et vous n'avez pas besoin de compte. Fichier ▸ Ouvrir affiche tous vos documents. Si vous vous connectez, ils sont enregistrés dans votre compte, et vous pouvez les ouvrir sur n'importe quel appareil.
+Il n'y a pas de bouton Enregistrer. Chaque modification est conservée dans ce navigateur un instant après que vous l'avez faite, et vous n'avez pas besoin de compte. Fichier ▸ Ouvrir affiche tous vos documents. Avec un abonnement, ils sont aussi enregistrés dans votre compte, et vous pouvez les ouvrir sur n'importe quel appareil.
 
 ## À propos du nom
 

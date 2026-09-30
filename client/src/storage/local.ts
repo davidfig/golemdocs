@@ -173,6 +173,21 @@ export async function adoptGuestDocuments(owner: string): Promise<string[]> {
   return guests.map((d) => d.id);
 }
 
+/**
+ * Makes an account's copies in this browser its own again, like a guest's (it has no sync any more),
+ * so they stay in view. Their cloud copies are untouched; subscribing again moves them back.
+ */
+export async function releaseToGuest(owner: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(META, 'readwrite');
+  const store = tx.objectStore(META);
+  for (const info of ownedBy((await done(store.getAll())) as SavedInfo[], owner)) {
+    const { owner: _gone, ...rest } = info;
+    store.put(rest);
+  }
+  await finished(tx);
+}
+
 /** Deletes an account's copies from this browser (it signed out). Its cloud documents are untouched. */
 export async function deleteOwnedBy(owner: string): Promise<void> {
   for (const info of ownedBy(await listSaved(), owner)) await deleteSaved(info.id);

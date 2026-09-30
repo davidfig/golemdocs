@@ -48,22 +48,6 @@ export interface OdtAnchor {
   offset: number;
 }
 
-/** An office:annotation (comment). */
-export interface OdtAnnotation extends OdtAnchor {
-  author?: string;
-  /** ISO date-time as written in dc:date. */
-  date?: string;
-  initials?: string;
-  /** The comment's text, one string per paragraph. */
-  text: string[];
-  /** Where a range comment ends (office:annotation-end); absent for a point comment. */
-  end?: OdtAnchor;
-  /** office:name linking the annotation to its end. */
-  name?: string;
-  /** The whole office:annotation element, written back as is. */
-  fragment: OdtFragment;
-}
-
 /**
  * A container of block content the core flattens: text:section, or an index (table of
  * contents, alphabetical index, ...) whose generated body paragraphs are kept in the core.
@@ -150,7 +134,6 @@ export interface OdtExtension {
   /** Body children before the content: variable/sequence declarations, forms. */
   prologue?: OdtFragment[];
   page?: OdtPage;
-  annotations?: OdtAnnotation[];
   sections?: OdtSection[];
   objects?: OdtObject[];
   imageFrames?: OdtImageFrame[];

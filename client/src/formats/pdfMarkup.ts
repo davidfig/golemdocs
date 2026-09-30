@@ -40,14 +40,23 @@ export function markupToDocument(document: WordDocument, pdf: PdfDocument, annot
     return chars;
   };
   let nextComment = Math.max(-1, ...document.comments.map((c) => Number(c.id)).filter(Number.isFinite)) + 1;
-  const comments: { at: Found; text: string; author?: string; modified?: string }[] = [];
+  const comments: PendingComment[] = [];
+  /** Replies and state changes wait until every thread's first comment has found its text. */
+  const replies: Annotation[] = [];
+  const states: Annotation[] = [];
 
   for (const a of [...annotations].sort(readingOrder)) {
     const chars = charactersOf(a.page);
     if (a.kind === 'note') {
+      if (a.replyTo) {
+        // A note with no text that sets a state (Completed...) is a state change; else a reply.
+        if (a.state && !a.contents) states.push(a);
+        else replies.push(a);
+        continue;
+      }
       const words = noteLine(chars, a);
       const at = words && finder.find(words);
-      if (at) comments.push({ at, text: a.contents, author: a.author, modified: a.modified });
+      if (at) comments.push({ key: a.id, at, text: a.contents, author: a.author, modified: a.modified, resolved: resolvedBy(a.state) });
       continue;
     }
     const found: Found[] = [];
@@ -66,25 +75,64 @@ export function markupToDocument(document: WordDocument, pdf: PdfDocument, annot
     if (a.contents && found.length) {
       const first = found[0];
       const last = found[found.length - 1];
-      comments.push({ at: first.paragraph === last.paragraph ? { ...first, to: last.to } : first, text: a.contents, author: a.author, modified: a.modified });
+      comments.push({ key: a.id, at: first.paragraph === last.paragraph ? { ...first, to: last.to } : first, text: a.contents, author: a.author, modified: a.modified, resolved: resolvedBy(a.state) });
     }
+  }
+
+  // Replies share their thread's range (a reply to a reply too, as Word has it); one whose
+  // parent is not a comment here is dropped. Passes repeat so a chain can be in any order.
+  const byKey = new Map(comments.map((c) => [c.key, c]));
+  for (let pending = replies; pending.length; ) {
+    const next: Annotation[] = [];
+    for (const a of pending) {
+      const parent = byKey.get(a.replyTo!);
+      if (!parent) {
+        next.push(a);
+        continue;
+      }
+      const reply: PendingComment = { key: a.id, at: parent.at, parentKey: parent.key, text: a.contents, author: a.author, modified: a.modified, resolved: false };
+      comments.push(reply);
+      byKey.set(a.id, reply);
+    }
+    if (next.length === pending.length) break;
+    pending = next;
+  }
+  for (const a of states) {
+    let target = byKey.get(a.replyTo!);
+    while (target?.parentKey) target = byKey.get(target.parentKey);
+    if (target && resolvedBy(a.state)) target.resolved = true;
   }
 
   // Markers last, each paragraph's from its end, so the offsets found stay good.
   const ordered = comments.map((c) => ({ ...c, id: String(nextComment++) }));
+  const idOfKey = new Map(ordered.map((c) => [c.key, c.id]));
   const byParagraph = new Map<Paragraph, { offset: number; marker: 'start' | 'end'; id: string }[]>();
   for (const c of ordered) {
     const list = byParagraph.get(c.at.paragraph) ?? [];
     list.push({ offset: c.at.to, marker: 'end', id: c.id }, { offset: c.at.from, marker: 'start', id: c.id });
     byParagraph.set(c.at.paragraph, list);
     const date = c.modified ? parseDate(c.modified) : undefined;
-    document.comments.push({ id: c.id, author: c.author ?? '', ...(date && { date: date.toISOString().replace(/\.\d+Z$/, 'Z') }), paragraphs: c.text.split(/\r\n?|\n/) });
+    document.comments.push({ id: c.id, author: c.author ?? '', ...(date && { date: date.toISOString().replace(/\.\d+Z$/, 'Z') }), paragraphs: c.text.split(/\r\n?|\n/), ...(c.parentKey && { parentId: idOfKey.get(c.parentKey) }), ...(c.resolved && { resolved: true }) });
   }
   for (const [paragraph, markers] of byParagraph) {
     markers.sort((x, y) => y.offset - x.offset || (x.marker === 'end' ? -1 : 1));
     for (const m of markers) insertInlines(paragraph, m.offset, m.marker === 'end' ? [commentEnd(m.id), commentReference(m.id)] : [commentStart(m.id)]);
   }
 }
+
+/** A comment on its way in: its annotation's id is its key, and a reply names its parent's. */
+interface PendingComment {
+  key: string;
+  parentKey?: string;
+  at: Found;
+  text: string;
+  author?: string;
+  modified?: string;
+  resolved: boolean;
+}
+
+/** Whether a review state marks a thread done. */
+const resolvedBy = (state: string | undefined): boolean => state === 'Completed' || state === 'Accepted';
 
 const readingOrder = (a: Annotation, b: Annotation) => a.page - b.page || b.rect[3] - a.rect[3] || a.rect[0] - b.rect[0];
 

@@ -15,7 +15,7 @@ The editor draws each page itself, in Word's own fonts or their open-source stan
 - **Page Setup:** margins, orientation, and paper sizes including Letter, Legal, A3, A4, and A5.
 - **Tables:** a grid picker to insert one, add or delete rows and columns, merge and split cells, and move between cells with Tab.
 - **Links:** Ctrl+K (Cmd+K on a Mac) adds a link to the selection.
-- **Comments:** select text and choose Comment from the Insert menu.
+- **Comments:** select text and choose Comment from the Insert menu. Reply to a comment, mark it resolved, or delete it from the panel beside the page. Comments are saved in Word, OpenDocument, RTF and PDF files, and in Markdown and HTML.
 
 ## Equations
 
@@ -30,7 +30,7 @@ Choose Insert ▸ Equation and write math the way LaTeX does, such as `\frac{a}{
 
 ## It saves itself
 
-There is no Save button. Every change is kept in your browser a moment after you make it, works offline, and shows up under File ▸ Open. Sign in and your documents are saved to your account, so they follow you to any device.
+There is no Save button. Every change is kept in your browser a moment after you make it, works offline, and shows up under File ▸ Open. With a subscription, your documents are also saved to your account, so they follow you to any device.
 
 ## Word files in, Word files out
 

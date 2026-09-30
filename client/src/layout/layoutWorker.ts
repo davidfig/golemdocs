@@ -66,6 +66,7 @@ async function changelogText(): Promise<string> {
 import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
+import { runAgentTool } from './agentTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText } from './wordCount.ts';
@@ -444,7 +445,8 @@ class OpenDocument {
     const update: SelectionUpdate = {
       caret: caret(g.caret),
       rects,
-      comments: commented.map((c) => ({ id: c.id, author: c.author, date: c.date, text: c.text, page: c.rects[0]?.page.id ?? null, y: c.rects[0]?.y ?? 0 })),
+      comments: commented.map((c) => ({ id: c.id, author: c.author, initials: c.initials, date: c.date, parentId: c.parentId, resolved: c.resolved, text: c.text, page: c.rects[0]?.page.id ?? null, y: c.rects[0]?.y ?? 0 })),
+      activeComment: editor.activeComment(),
       commentRects,
       spellMarks: this.spellMarks(editor),
       focus: caret(g.focus),
@@ -487,6 +489,7 @@ class OpenDocument {
       caret: null,
       rects: packed,
       comments: [],
+      activeComment: null,
       commentRects: new Float64Array(0),
       remoteRects: [],
       focus: first && this.pdfPages[first.page] ? { page: this.pdfPages[first.page].id, x: first.x, y: first.y, height: first.height } : null,
@@ -1090,6 +1093,25 @@ class OpenDocument {
     if (done) this.later(() => done);
   }
 
+  /** One of the assistant's tools, run on this document (see agentTools.ts). Settles with its answer once its edits have taken effect. */
+  async agent(name: string, args: string): Promise<string> {
+    const editor = this.editor;
+    if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
+    return runAgentTool(
+      {
+        editor,
+        readOnly: this.readOnly || this.format === 'pdf',
+        run: async (wire) => {
+          this.command(wire);
+          while (this.waiting) await this.waiting;
+        },
+        format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
+      },
+      name,
+      args,
+    );
+  }
+
   /** Formatting from the menus and toolbars. One that starts using a font loads its faces first. */
   private applyFormat(action: FormatAction): void | Promise<void> {
     const { editor, session } = this;
@@ -1681,6 +1703,9 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     case 'convert':
       void exportAs(message.doc, message.request, message.to);
+      break;
+    case 'agent':
+      void (current?.doc === message.doc ? current.agent(message.name, message.args) : Promise.resolve('Error: no document is open.')).then((result) => post({ type: 'agentResult', request: message.request, result }));
       break;
   }
 };

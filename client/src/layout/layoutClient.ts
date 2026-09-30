@@ -33,6 +33,7 @@ export class LayoutClient {
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   private readonly linkRequests = new Map<number, (url: string | null) => void>();
+  private readonly agentRequests = new Map<number, (result: string) => void>();
 
   constructor(
     /** New faces, before any page that uses them. Called for every document, stale or not. */
@@ -118,6 +119,15 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'convert', doc: this.doc, request, to })).then((bytes) => new Uint8Array(bytes));
   }
 
+  /** Runs one of the assistant's tools on the open document (see agentTools.ts). Answers with what it did or found. */
+  agent(name: string, args: string): Promise<string> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.agentRequests.set(request, resolve);
+      this.send({ type: 'agent', doc: this.doc, request, name, args });
+    });
+  }
+
   private request(message: (request: number) => ToWorker): Promise<ArrayBuffer> {
     const request = this.nextRequest++;
     return new Promise((resolve, reject) => {
@@ -134,6 +144,11 @@ export class LayoutClient {
     if (message.type === 'linkAt') {
       this.linkRequests.get(message.request)?.(message.url);
       this.linkRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'agentResult') {
+      this.agentRequests.get(message.request)?.(message.result);
+      this.agentRequests.delete(message.request);
       return;
     }
     if (message.type === 'media' || message.type === 'saved') {

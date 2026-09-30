@@ -58,6 +58,7 @@ export const app: Partial<Messages> = {
   'app.adopted': '{count} Dokumente aus diesem Browser wurden Ihrem Konto hinzugefügt',
   'app.conflictNotice': '„{before}“ wurde auch an anderer Stelle geändert, daher wurden diese Änderungen als „{name}“ gespeichert',
   'app.signInToShare': 'Melden Sie sich an, um dieses Dokument zu teilen',
+  'app.subscribeToShare': 'Abonnieren, um dieses Dokument freizugeben',
   'app.ownerOnlyShare': 'Nur der Eigentümer kann dieses Dokument teilen',
   'app.notInAccountYet': 'Dieses Dokument befindet sich noch nicht in Ihrem Konto: Warten Sie einen Moment, bis es hochgeladen ist, und versuchen Sie es dann erneut',
   'app.notSavedYet': 'Nehmen Sie zuerst eine Änderung vor: Das Dokument wird in Ihrem Konto gespeichert, sobald es bearbeitet wurde',
@@ -84,6 +85,10 @@ export const app: Partial<Messages> = {
   'app.signOutLossExpired': '{count} Dokumente enthalten Änderungen, die noch nicht in Ihrem Konto gespeichert wurden (Sie wurden abgemeldet). Beim Abmelden werden Ihre Dokumente aus diesem Browser entfernt, sodass diese Änderungen verloren gingen.',
   'app.signOutOffline': 'Abmelden ist offline nicht möglich',
   'app.signOutFailed': 'Abmelden nicht möglich: {message}',
+  'app.subscribeFailed': 'Die Kasse konnte nicht gestartet werden: {message}',
+  'app.portalFailed': 'Ihr Abo konnte nicht geöffnet werden: {message}',
+  'app.subscribed': 'Danke für Ihr Abo!',
+  'app.subscribePending': 'Danke! Es kann eine Minute dauern, bis Ihre Zahlung hier erscheint.',
 
   // Clearing local data
   'app.clearTitle': 'Lokale Daten löschen',
@@ -109,7 +114,6 @@ export const app: Partial<Messages> = {
   'app.unsupportedOpen': 'Das Öffnen von {kind}-Dateien wird noch nicht unterstützt ({name})',
   'app.notAvailable': '{name} ist noch nicht verfügbar',
   'app.notePrompt': 'Notiz',
-  'app.commentPrompt': 'Kommentar',
 
   // File errors
   'app.notEpub': 'Dies ist keine EPUB-Datei: META-INF/container.xml fehlt.',

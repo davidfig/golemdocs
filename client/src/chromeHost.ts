@@ -81,6 +81,11 @@ export interface AppHooks {
   stepPicture(direction: 'undo' | 'redo'): Promise<void>;
   signIn(): Promise<void>;
   signOut(): Promise<void>;
+  /** Pay for sync (signing in first if needed), or manage the subscription. */
+  subscribe(): Promise<void>;
+  manageSubscription(): Promise<void>;
+  /** Show or hide Clip, the assistant. */
+  toggleClip(): void;
   /** Delete every document and setting kept in this browser, once the user confirms. */
   clearLocalData(): Promise<void>;
   /** Download every saved document as one ZIP. */
@@ -94,6 +99,8 @@ export interface AppHooks {
   setFormMode(mode: FormMode): void;
   /** Who new comments are from. */
   author(): string;
+  /** Opens a new comment beside the selection, to be written in the comments panel. */
+  startComment(): void;
   /** The selected text (for copy and cut). */
   selectedText(): string;
   focusEditor(): void;
@@ -124,6 +131,9 @@ const SUPPORTED = new Set<ActionKind>([
   'printPreview',
   'signIn',
   'signOut',
+  'subscribe',
+  'manageSubscription',
+  'toggleClip',
   'clearLocalData',
   'cut',
   'copy',
@@ -292,6 +302,12 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.signIn();
         case 'signOut':
           return app.signOut();
+        case 'subscribe':
+          return app.subscribe();
+        case 'manageSubscription':
+          return app.manageSubscription();
+        case 'toggleClip':
+          return app.toggleClip();
         case 'downloadAll':
           return app.downloadAll();
         case 'clearLocalData':
@@ -372,10 +388,9 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           // Without a size, ask for one.
           return action.rows && action.columns ? app.send({ kind: 'format', action }) : app.showTableDialog();
         case 'insertComment': {
-          const text = window.prompt(app.annotating() ? t('app.notePrompt') : t('app.commentPrompt'));
-          if (text === null) return;
-          if (app.annotating()) app.send({ kind: 'annotate', annotation: 'note', text });
-          else app.send({ kind: 'addComment', text, author: app.author() });
+          if (!app.annotating()) return app.startComment();
+          const text = window.prompt(t('app.notePrompt'));
+          if (text !== null) app.send({ kind: 'annotate', annotation: 'note', text });
           return;
         }
         default:

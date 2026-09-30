@@ -92,3 +92,123 @@ test('RTF written starts with the signature and escapes non-ASCII', async () => 
   assert.ok(out.includes('\\u233?\\u8364?'));
   assert.ok(/^[\x00-\x7f]*$/.test(out));
 });
+
+// --- Comments (annotations) ---------------------------------------------------------------
+
+/** The text between a comment's markers, across paragraphs (in document order), and where its reference sits. */
+function rangeText(doc: WordDocument, id: string): { text: string; references: number } {
+  let inside = false;
+  let text = '';
+  let references = 0;
+  const visit = (inlines: readonly import('@word/docx').Inline[]) => {
+    for (const inline of inlines) {
+      if (inline.kind === 'raw' && inline.xml.attrs['w:id'] === id) {
+        if (inline.xml.name === 'w:commentRangeStart') inside = true;
+        else if (inline.xml.name === 'w:commentRangeEnd') inside = false;
+      } else if (inline.kind === 'run') {
+        for (const c of inline.content) {
+          if (c.kind === 'text' && inside) text += c.text;
+          if (c.kind === 'raw' && c.xml.name === 'w:commentReference' && c.xml.attrs['w:id'] === id) references++;
+        }
+      } else if (inline.kind === 'hyperlink' || inline.kind === 'wrapper') visit(inline.children);
+    }
+  };
+  for (const p of paragraphs(doc)) visit(p.children);
+  return { text, references };
+}
+
+const DTTM = (y: number, mo: number, d: number, h: number, mi: number) => (mi | (h << 6) | (d << 11) | (mo << 16) | ((y - 1900) << 20)) >>> 0;
+
+const ANNOTATED =
+  '{\\rtf1\\ansi\\deff0 \\pard One {\\*\\atrfstart 5}two three{\\*\\atrfend 5}{\\*\\atnid AB}{\\*\\atnauthor Ann Bee}\\chatn' +
+  `{\\*\\annotation{\\*\\atnref 5}{\\*\\atndate ${DTTM(2024, 3, 7, 14, 30)}}{\\*\\atnicn}\\pard\\plain {\\chatn }First\\par Second \\'e9 \\u8364? \\{x\\}\\par} tail\\par}`;
+
+test('reads annotations as comments with a range', async () => {
+  const doc = await rtfToDocument(bytes(ANNOTATED));
+  assert.match(paragraphText(paragraphs(doc)[0]), /^One .*two three.* tail$/);
+  assert.equal(doc.comments.length, 1);
+  const c = doc.comments[0];
+  assert.equal(c.author, 'Ann Bee');
+  assert.equal(c.initials, 'AB');
+  assert.equal(c.date, '2024-03-07T14:30:00Z');
+  assert.deepEqual(c.paragraphs, ['First', 'Second é € {x}']);
+  assert.equal(c.parentId, undefined);
+  assert.deepEqual(rangeText(doc, c.id), { text: 'two three', references: 1 });
+  // The annotation's own text is not in the body.
+  assert.ok(!paragraphs(doc).some((p) => paragraphText(p).includes('First')));
+});
+
+test('an annotation without a range is an empty one at its reference; replies share the parent range', async () => {
+  const doc = await rtfToDocument(
+    bytes(
+      '{\\rtf1\\ansi Hello {\\*\\atrfstart 1}world{\\*\\atrfend 1}{\\*\\atnauthor A}\\chatn{\\*\\annotation{\\*\\atnref 1}\\pard Parent\\par}' +
+        '{\\*\\atnauthor B}\\chatn{\\*\\annotation{\\*\\atnref 2}{\\*\\atnparent 1}\\pard Reply\\par}\\par' +
+        '\\pard Later{\\*\\atnauthor C}\\chatn{\\*\\annotation{\\*\\atnref 3}\\pard Loose\\par}\\par}',
+    ),
+  );
+  const [parent, reply, loose] = doc.comments;
+  assert.equal(reply.parentId, parent.id);
+  assert.deepEqual(rangeText(doc, parent.id), { text: 'world', references: 1 });
+  assert.deepEqual(rangeText(doc, reply.id), { text: 'world', references: 1 });
+  assert.deepEqual(rangeText(doc, loose.id), { text: '', references: 1 });
+  assert.equal(loose.author, 'C');
+});
+
+test('an unnamed hidden \\comment destination is still skipped', async () => {
+  const doc = await rtfToDocument(bytes('{\\rtf1\\ansi Keep{\\comment hidden note} this\\par}'));
+  assert.equal(paragraphText(paragraphs(doc)[0]), 'Keep this');
+  assert.equal(doc.comments.length, 0);
+});
+
+test('writes comments and reads them back, replies and unicode included', async () => {
+  const doc = await rtfToDocument(bytes(ANNOTATED));
+  const first = doc.comments[0];
+  doc.comments.push({ id: '9', author: 'Zoë 日本', initials: 'Z', date: '2025-12-31T23:59:00Z', paragraphs: ['Reply {a} \\ b', 'ünï'], parentId: first.id });
+  // The reply is over the same range as its parent.
+  const { commentStart, commentEnd, commentReference, insertInlines } = await import('@word/docx');
+  const p = paragraphs(doc)[0];
+  const fp = p.children.findIndex((c) => c.kind === 'raw' && c.xml.name === 'w:commentRangeEnd');
+  assert.ok(fp > 0);
+  const offsets = (await import('@word/docx')).commentMarkerOffsets(p, first.id);
+  insertInlines(p, offsets[1], [commentEnd('9'), commentReference('9')]);
+  insertInlines(p, offsets[2], [commentStart('9')]);
+
+  const rtf = new TextDecoder().decode(await documentToRtf(doc));
+  assert.match(rtf, /\{\\\*\\atrfstart 0\}/);
+  assert.match(rtf, /\{\\\*\\atnparent 0\}/);
+  assert.match(rtf, /\\atndate \d+\}/);
+  const back = await rtfToDocument(bytes(rtf));
+  assert.equal(back.comments.length, 2);
+  const [a, b] = back.comments;
+  assert.deepEqual({ ...a, id: '' }, { ...first, id: '' });
+  assert.equal(b.author, 'Zoë 日本');
+  assert.equal(b.initials, 'Z');
+  assert.equal(b.date, '2025-12-31T23:59:00Z');
+  assert.deepEqual(b.paragraphs, ['Reply {a} \\ b', 'ünï']);
+  assert.equal(b.parentId, a.id);
+  assert.deepEqual(rangeText(back, a.id), { text: 'two three', references: 1 });
+  assert.deepEqual(rangeText(back, b.id), { text: 'two three', references: 1 });
+  // A second trip is stable.
+  const again = await rtfToDocument(bytes(new TextDecoder().decode(await documentToRtf(back))));
+  assert.deepEqual(again.comments.map((c) => ({ ...c, id: '' })), back.comments.map((c) => ({ ...c, id: '' })));
+});
+
+test('a comment across paragraphs keeps both markers; one on the last word ends at the paragraph end', async () => {
+  const doc = await rtfToDocument(
+    bytes(
+      '{\\rtf1\\ansi First {\\*\\atrfstart 1}para\\par Second{\\*\\atrfend 1}{\\*\\atnauthor A}\\chatn{\\*\\annotation{\\*\\atnref 1}Span\\par} para\\par ' +
+        'Last {\\*\\atrfstart 2}word{\\*\\atrfend 2}{\\*\\atnauthor A}\\chatn{\\*\\annotation{\\*\\atnref 2}End\\par}\\par}',
+    ),
+  );
+  const back = await rtfToDocument(await documentToRtf(doc));
+  assert.equal(back.comments.length, 2);
+  assert.equal(rangeText(back, back.comments[0].id).text, 'para' + 'Second');
+  assert.deepEqual(rangeText(back, back.comments[1].id), { text: 'word', references: 1 });
+  assert.match(paragraphText(paragraphs(back).at(-1)!), /^Last .*word.*$/);
+});
+
+test('a document built from markdown exports with no comments cleanly', async () => {
+  const doc = await markdownToDocument('Plain **text**');
+  const rtf = new TextDecoder().decode(await documentToRtf(doc));
+  assert.ok(!rtf.includes('annotation'));
+});

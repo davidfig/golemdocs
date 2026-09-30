@@ -8,13 +8,13 @@ Un editor de documentos que vive en tu navegador, creado para abrir todo tipo de
 - **Cambiar de forma sin perder nada.** Convertir a, en el menú Archivo, cambia lo que es el documento al editarlo, y al volver recuperas tu formato.
 - **Marcar PDF.** Resalta, subraya, tacha y deja notas en las páginas de un PDF.
 - **Editar PDF.** Cambia a Editar PDF para modificar el texto de una página donde está, mover, añadir o eliminar imágenes y formas, tachar datos privados y reorganizar páginas. Rellenar escribe en los campos de un formulario.
-- **Trabajar en equipo.** Compartir, en el menú Archivo, te da un enlace. Quien lo abre edita el mismo documento, y los cambios se ven en directo. También puedes compartir con personas concretas.
+- **Trabajar en equipo.** Compartir, en el menú Archivo, te da un enlace. Quien lo abre edita el mismo documento, y los cambios se ven en directo. También puedes compartir con personas concretas. Compartir forma parte de la suscripción; editar por tu cuenta es gratis.
 
 ## Pruébalo
 
 1. **Cambia de forma.** En el menú Archivo, elige Convertir a y luego Markdown. Esta página se convierte en texto sin formato con encabezados `#`, y puedes volver a convertirla.
 2. **Abre algunos datos.** Suelta un archivo CSV sobre la ventana. Se abre como una tabla que puedes editar y se descarga como el mismo CSV.
-3. **Edita en equipo.** En el menú Archivo, elige Compartir y luego Obtener enlace, y abre el enlace en una segunda ventana. Escribe en una y mira cómo se actualiza la otra.
+3. **Edita en equipo.** En el menú Archivo, elige Compartir y luego Obtener enlace, y abre el enlace en una segunda ventana. Escribe en una y mira cómo se actualiza la otra. Para esto hace falta una suscripción.
 
 Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o Descargar cuando necesites un archivo para otra persona.
 
@@ -28,7 +28,7 @@ Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o D
 
 ## Guardado
 
-No hay botón de guardar. Cada cambio se conserva en este navegador un momento después de hacerlo, y no necesitas una cuenta. Archivo ▸ Abrir muestra todos tus documentos. Si inicias sesión, se guardan en tu cuenta y puedes abrirlos en cualquier dispositivo.
+No hay botón de guardar. Cada cambio se conserva en este navegador un momento después de hacerlo, y no necesitas una cuenta. Archivo ▸ Abrir muestra todos tus documentos. Con una suscripción, también se guardan en tu cuenta y puedes abrirlos en cualquier dispositivo.
 
 ## Sobre el nombre
 

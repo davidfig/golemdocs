@@ -55,6 +55,7 @@ export const app: Partial<Messages> = {
   'app.adopted': '이 브라우저의 문서 {count}개를 계정에 추가했습니다',
   'app.conflictNotice': '“{before}”이(가) 다른 곳에서도 변경되어, 이 변경 사항을 “{name}”(으)로 저장했습니다',
   'app.signInToShare': '이 문서를 공유하려면 로그인하십시오',
+  'app.subscribeToShare': '구독하여 이 문서 공유',
   'app.ownerOnlyShare': '소유자만 이 문서를 공유할 수 있습니다',
   'app.notInAccountYet': '이 문서는 아직 계정에 없습니다. 업로드될 때까지 잠시 기다린 후 다시 시도하십시오',
   'app.notSavedYet': '먼저 변경해 주십시오. 문서는 편집된 후에 계정에 저장됩니다',
@@ -78,6 +79,10 @@ export const app: Partial<Messages> = {
   'app.signOutLossExpired': '{count}개 문서에 아직 계정에 저장되지 않은 변경 사항이 있습니다(로그아웃된 상태). 로그아웃하면 이 브라우저에서 문서가 삭제되므로 해당 변경 사항이 손실됩니다.',
   'app.signOutOffline': '오프라인 상태에서는 로그아웃할 수 없습니다',
   'app.signOutFailed': '로그아웃할 수 없습니다: {message}',
+  'app.subscribeFailed': '결제를 시작하지 못했습니다: {message}',
+  'app.portalFailed': '구독을 열지 못했습니다: {message}',
+  'app.subscribed': '구독해 주셔서 감사합니다!',
+  'app.subscribePending': '감사합니다! 결제가 여기에 표시되기까지 1분 정도 걸릴 수 있습니다.',
 
   // Clearing local data
   'app.clearTitle': '로컬 데이터 지우기',
@@ -103,7 +108,6 @@ export const app: Partial<Messages> = {
   'app.unsupportedOpen': '{kind} 파일 열기는 아직 지원되지 않습니다({name})',
   'app.notAvailable': '{name}은(는) 아직 사용할 수 없습니다',
   'app.notePrompt': '메모',
-  'app.commentPrompt': '메모',
 
   // File errors
   'app.notEpub': 'EPUB 파일이 아닙니다. META-INF/container.xml이 없습니다.',

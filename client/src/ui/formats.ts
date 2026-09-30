@@ -376,6 +376,9 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'share':
     case 'signIn':
     case 'signOut':
+    case 'subscribe':
+    case 'manageSubscription':
+    case 'toggleClip':
     case 'clearLocalData':
     case 'download':
     case 'downloadAll':

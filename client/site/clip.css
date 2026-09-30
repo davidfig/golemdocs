@@ -1,0 +1,49 @@
+/* Holden on the marketing pages. The art and its motion are the app's own (src/assistant/assistant.css, added before this file);
+   this maps the app's colors onto the site's and styles what only the demo has. */
+.wm-clip {
+  --wm-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --wm-text: var(--ink);
+  --wm-muted: var(--muted);
+  --wm-face: var(--surface);
+  --wm-menu-bg: var(--bg);
+  --wm-border: var(--line);
+  --wm-etch-dark: var(--line);
+  --wm-hot: var(--tint);
+  --wm-hot-border: var(--brand);
+  --wm-field-bg: var(--surface);
+  --wm-field-border: var(--line);
+  --wm-button-top: var(--surface);
+  --wm-button-bottom: var(--tint);
+  --wm-button-border: var(--line);
+  --wm-shadow-strong: rgb(0 0 0 / 0.28);
+  --wm-disabled: var(--muted);
+}
+
+.wm-clip-panel { height: min(470px, 72vh); }
+
+/* The reminder that this Holden is a script, always visible at the top of the bubble. */
+.wm-clip-demo {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--tint);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.wm-clip-demo strong { font-weight: 700; }
+
+.wm-clip-chips { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; margin-top: 2px; }
+.wm-clip-chips button {
+  padding: 4px 10px;
+  border: 1px solid var(--brand);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.wm-clip-chips button:hover { background: var(--tint); }
+
+.wm-clip-credits a { color: var(--brand); }

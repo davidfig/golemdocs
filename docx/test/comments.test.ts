@@ -46,3 +46,25 @@ test('unchanged comments keep their original XML; changed ones are rewritten', a
   assert.doesNotMatch(changed, /<w:b\/>/);
   assert.match(changed, /Edited/);
 });
+
+test('replies and the resolved mark are written to the extended part and read back', async () => {
+  const doc = await commented();
+  doc.comments.push({ id: '1', author: 'Bo', date: '2026-01-03T00:00:00Z', paragraphs: ['Yes'], parentId: '0' });
+  doc.comments[0].resolved = true;
+  const bytes = await doc.write();
+  const zip = ZipArchive.read(bytes);
+  assert.ok(zip.entries.has('word/commentsExtended.xml'));
+  assert.match(await zip.entries.get('[Content_Types].xml')!.text(), /commentsExtended\+xml/);
+  const back = await WordDocument.read(bytes);
+  assert.equal(back.comments[1].parentId, '0');
+  assert.equal(back.comments[0].resolved, true);
+  assert.equal(back.comments[1].resolved, undefined);
+  // Untouched, it writes the same again (ids are stable).
+  const again = await WordDocument.read(await back.write());
+  assert.deepEqual(again.comments, back.comments);
+});
+
+test('a document without threads gets no extended part', async () => {
+  const zip = ZipArchive.read(await (await commented()).write());
+  assert.equal(zip.entries.has('word/commentsExtended.xml'), false);
+});

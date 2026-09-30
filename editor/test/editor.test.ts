@@ -194,6 +194,41 @@ test('comments: add on the selection, edit, undo, select and delete', skip, asyn
   assert.deepEqual(back.comments.map((c) => c.paragraphs), [['Too casual?']]);
 });
 
+test('comment threads: replies share the range, resolve, and deleting the first comment deletes the thread', skip, async () => {
+  const { doc, editor, apply } = await setup(['Hello big world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'wordRight', extend: true });
+  await apply({ kind: 'addComment', text: 'Too casual?', author: 'Ada' });
+  const [first] = editor.comments();
+  await apply({ kind: 'replyComment', id: first.id, text: 'Agreed', author: 'Bo' });
+  const [, reply] = editor.comments();
+  assert.equal(reply.parentId, first.id);
+  assert.equal(reply.text, 'Agreed');
+  // A reply to a reply joins the same thread.
+  await apply({ kind: 'replyComment', id: reply.id, text: 'Changing it', author: 'Ada' });
+  assert.deepEqual(editor.comments().map((c) => c.parentId), [undefined, first.id, first.id]);
+  await apply({ kind: 'selectComment', id: editor.comments()[2].id });
+  assert.equal(editor.selectedText(), 'big ', 'a reply has the same range as the first comment');
+  // The caret inside the range makes the thread active.
+  await apply({ kind: 'move', to: 'left' });
+  assert.equal(editor.activeComment(), first.id);
+  await apply({ kind: 'move', to: 'documentEnd' });
+  assert.equal(editor.activeComment(), null);
+  await apply({ kind: 'resolveComment', id: reply.id, resolved: true });
+  assert.equal(doc.comments[0].resolved, true, 'resolving a reply resolves the thread');
+  assert.equal(editor.comments()[0].resolved, true);
+  await apply({ kind: 'resolveComment', id: first.id, resolved: false });
+  assert.equal(doc.comments[0].resolved, undefined);
+  // The thread survives saving.
+  const back = await WordDocument.read(await doc.write());
+  assert.deepEqual(back.comments.map((c) => c.parentId), [undefined, first.id, first.id]);
+  await apply({ kind: 'deleteComment', id: reply.id });
+  assert.equal(doc.comments.length, 2, 'deleting a reply leaves the rest');
+  await apply({ kind: 'deleteComment', id: first.id });
+  assert.equal(doc.comments.length, 0);
+  assert.equal(paragraphText(paragraphsIn(doc.body)[0]), 'Hello big world');
+  assert.equal(doc.body[0].kind === 'paragraph' && doc.body[0].children.every((c) => c.kind === 'run'), true, 'no markers are left');
+});
+
 test('a comment with nothing selected goes on the word at the caret', skip, async () => {
   const { editor, apply } = await setup(['Hello world']);
   await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'move', to: 'left' }, { kind: 'addComment', text: 'Which?', author: 'Ada' });

@@ -134,12 +134,16 @@ export async function loadLocalLibrary(user: User | null): Promise<{ entries: Li
 }
 
 /**
- * The documents to show for `user` (null: signed out). Signed in, copies of documents deleted from
- * the account elsewhere are removed from this browser on the way.
+ * The documents to show for `user` (null: signed out, or signed in without sync). Signed in, copies
+ * of documents deleted from the account elsewhere are removed from this browser on the way.
+ * `identity` is who is signed in: without sync they still see what subscribers shared with them.
  */
-export async function loadLibrary(user: User | null): Promise<Library> {
+export async function loadLibrary(user: User | null, identity: User | null = user): Promise<Library> {
   const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
-  if (!user) return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared: [] };
+  if (!user) {
+    const shared = identity ? await listShared().catch(() => []) : [];
+    return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared };
+  }
 
   let cloud: CloudDocument[];
   try {

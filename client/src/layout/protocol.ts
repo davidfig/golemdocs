@@ -227,7 +227,9 @@ export type ToWorker =
   /** The whole document as a .wdoc; `lens` records a different format to edit it as next time. */
   | { type: 'save'; doc: number; request: number; lens?: Format }
   /** The document exported as a file of a format (the open document is left as it is). */
-  | { type: 'convert'; doc: number; request: number; to: Format };
+  | { type: 'convert'; doc: number; request: number; to: Format }
+  /** The assistant uses a tool on the open document (see agentTools.ts): `args` is the JSON the model wrote. */
+  | { type: 'agent'; doc: number; request: number; name: string; args: string };
 
 export interface LayoutTimings {
   /** Reading and parsing the file. */
@@ -298,7 +300,9 @@ export interface SelectionUpdate {
   /** What other people have selected: rectangles per person, as (page, x, y, width, height) runs. */
   remoteRects: { color: number; rects: number[] }[];
   /** The document's comments, in order, and where each one's text starts (page id and y), if laid out. */
-  comments: { id: string; author: string; date?: string; text: string; page: number | null; y: number }[];
+  comments: { id: string; author: string; initials?: string; date?: string; parentId?: string; resolved?: boolean; text: string; page: number | null; y: number }[];
+  /** The thread (its first comment's id) the caret is in. */
+  activeComment: string | null;
   /** Highlight over commented text: page id, x, y, width, height per rectangle. */
   commentRects: Float64Array;
   /** A PDF shown as its own pages: its form fields on the pages laid out so far. */
@@ -336,7 +340,9 @@ export type FromWorker =
   | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
   | { type: 'linkAt'; request: number; url: string | null }
-  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string };
+  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
+  /** What an assistant tool did or found. */
+  | { type: 'agentResult'; request: number; result: string };
 
 /** Font files, relative to the site root (the worker and the page both load from here). */
 /** What Tools ▸ Word Count shows. `selection`: they are for the selected text, not the document. */

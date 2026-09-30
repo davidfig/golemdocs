@@ -58,6 +58,7 @@ export const app: Partial<Messages> = {
   'app.adopted': '{count} documents de ce navigateur ont été ajoutés à votre compte',
   'app.conflictNotice': '« {before} » a également été modifié ailleurs, ces modifications ont donc été enregistrées sous « {name} »',
   'app.signInToShare': 'Connectez-vous pour partager ce document',
+  'app.subscribeToShare': 'Abonnez-vous pour partager ce document',
   'app.ownerOnlyShare': 'Seul le propriétaire peut partager ce document',
   'app.notInAccountYet': 'Ce document n’est pas encore dans votre compte : laissez-lui un instant pour être téléversé, puis réessayez',
   'app.notSavedYet': 'Faites d’abord une modification : le document est enregistré dans votre compte dès qu’il a été modifié',
@@ -84,6 +85,10 @@ export const app: Partial<Messages> = {
   'app.signOutLossExpired': '{count} documents contiennent des modifications qui n’ont pas encore été enregistrées dans votre compte (vous avez été déconnecté(e)). La déconnexion supprime vos documents de ce navigateur, ces modifications seraient donc perdues.',
   'app.signOutOffline': 'Impossible de se déconnecter hors ligne',
   'app.signOutFailed': 'Impossible de se déconnecter : {message}',
+  'app.subscribeFailed': 'Impossible de démarrer le paiement : {message}',
+  'app.portalFailed': 'Impossible d’ouvrir votre abonnement : {message}',
+  'app.subscribed': 'Merci de votre abonnement !',
+  'app.subscribePending': 'Merci ! Votre paiement peut mettre une minute à apparaître ici.',
 
   // Clearing local data
   'app.clearTitle': 'Effacer les données locales',
@@ -109,7 +114,6 @@ export const app: Partial<Messages> = {
   'app.unsupportedOpen': 'L’ouverture des fichiers {kind} n’est pas encore prise en charge ({name})',
   'app.notAvailable': '{name} n’est pas encore disponible',
   'app.notePrompt': 'Note',
-  'app.commentPrompt': 'Commentaire',
 
   // File errors
   'app.notEpub': 'Ce n’est pas un fichier EPUB : META-INF/container.xml est manquant.',

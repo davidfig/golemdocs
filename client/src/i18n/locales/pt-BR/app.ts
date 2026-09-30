@@ -58,6 +58,7 @@ export const app: Partial<Messages> = {
   'app.adopted': '{count} documentos deste navegador foram adicionados à sua conta',
   'app.conflictNotice': '“{before}” também foi alterado em outro lugar, então estas alterações foram salvas como “{name}”',
   'app.signInToShare': 'Entre para compartilhar este documento',
+  'app.subscribeToShare': 'Assine para compartilhar este documento',
   'app.ownerOnlyShare': 'Somente o proprietário pode compartilhar este documento',
   'app.notInAccountYet': 'Este documento ainda não está na sua conta: aguarde um momento para o envio e tente novamente',
   'app.notSavedYet': 'Faça uma alteração primeiro: o documento é salvo na sua conta depois de ser editado',
@@ -84,6 +85,10 @@ export const app: Partial<Messages> = {
   'app.signOutLossExpired': '{count} documentos têm alterações que ainda não foram salvas na sua conta (você foi desconectado). Ao sair, seus documentos são removidos deste navegador, e essas alterações seriam perdidas.',
   'app.signOutOffline': 'Não é possível sair enquanto você está offline',
   'app.signOutFailed': 'Não foi possível sair: {message}',
+  'app.subscribeFailed': 'Não foi possível iniciar o pagamento: {message}',
+  'app.portalFailed': 'Não foi possível abrir sua assinatura: {message}',
+  'app.subscribed': 'Obrigado por assinar!',
+  'app.subscribePending': 'Obrigado! O pagamento pode levar um minuto para aparecer aqui.',
 
   // Clearing local data
   'app.clearTitle': 'Limpar dados locais',
@@ -109,7 +114,6 @@ export const app: Partial<Messages> = {
   'app.unsupportedOpen': 'Abrir arquivos {kind} ainda não é compatível ({name})',
   'app.notAvailable': '{name} ainda não está disponível',
   'app.notePrompt': 'Nota',
-  'app.commentPrompt': 'Comentário',
 
   // File errors
   'app.notEpub': 'Este não é um arquivo EPUB: META-INF/container.xml está ausente.',

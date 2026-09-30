@@ -1,12 +1,25 @@
 // Document model -> Rich Text Format. Writes each run's effective formatting (styles resolved),
 // so the file looks the same wherever it is opened, plus a stylesheet for headings so word
 // processors still see them as headings. Tables, hyperlinks, lists, page breaks, PNG and JPEG
-// pictures and page setup are kept; comments, tracked changes, footnotes, headers and footers,
-// and text boxes are dropped (their body text stays).
+// pictures, page setup and comments are kept; tracked changes, footnotes, headers and footers,
+// and text boxes are dropped (their body text stays). A comment is written as Word's RTF
+// annotation: {\*\atrfstart N}range{\*\atrfend N}, then its initials, author and
+// {\*\annotation{\*\atnref N}{\*\atndate DTTM}{\*\atnparent P}...text}. A reply names its parent with
+// \atnparent. There is no RTF form of "resolved", so that is not kept.
 
 import { isMathInline, readMathInline, StyleResolver, toLatex } from '@word/docx';
-import type { Block, Inline, NumberingLevel, Paragraph, Run, RunContent, Table, TableCell, WordDocument } from '@word/docx';
+import type { Block, Comment, Inline, NumberingLevel, Paragraph, Run, RunContent, Table, TableCell, WordDocument } from '@word/docx';
 import { HIGHLIGHTS } from './rtfImport.ts';
+
+/** An ISO 8601 date as an RTF DTTM (minute, hour, day, month, year since 1900 and weekday, packed in 32 bits), in UTC. */
+export function isoToDttm(iso: string | undefined): number | undefined {
+  const time = iso ? Date.parse(iso) : NaN;
+  if (Number.isNaN(time)) return undefined;
+  const d = new Date(time);
+  const year = d.getUTCFullYear() - 1900;
+  if (year < 0 || year > 511) return undefined;
+  return (d.getUTCMinutes() | (d.getUTCHours() << 6) | (d.getUTCDate() << 11) | ((d.getUTCMonth() + 1) << 16) | (year << 20) | (d.getUTCDay() << 29)) >>> 0;
+}
 
 const LIST_NFC: Record<string, number> = { decimal: 0, upperRoman: 1, lowerRoman: 2, upperLetter: 3, lowerLetter: 4, decimalZero: 22, bullet: 23, none: 255 };
 const TITLE_STYLE = 7;
@@ -61,6 +74,9 @@ class RtfWriter {
   private readonly fonts: string[] = [];
   private readonly colors: string[] = [];
   private readonly lists = new Set<number>();
+  /** Comments by model id, with the number each is written under. */
+  private readonly comments = new Map<string, { comment: Comment; number: number }>();
+  private readonly written = new Set<string>();
 
   constructor(
     private readonly doc: WordDocument,
@@ -68,6 +84,7 @@ class RtfWriter {
   ) {
     this.resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
     this.fontIndex(this.resolver.font(doc.styles.defaultRunProperties?.fonts) ?? 'Calibri');
+    doc.comments.forEach((comment, number) => this.comments.set(comment.id, { comment, number }));
   }
 
   private fontIndex(name: string): number {
@@ -177,6 +194,7 @@ class RtfWriter {
       switch (inline.kind) {
         case 'run':
           out += this.run(inline, style, link);
+          for (const item of inline.content) if (item.kind === 'raw' && item.xml.name === 'w:commentReference') out += this.annotation(item.xml.attrs['w:id']);
           break;
         case 'hyperlink': {
           const content = this.inlines(inline.children, style, true);
@@ -189,8 +207,11 @@ class RtfWriter {
           if (inline.shell.name !== 'w:del' && inline.shell.name !== 'w:moveFrom') out += this.inlines(inline.children, style, link);
           break;
         case 'raw':
-          // An equation is its LaTeX, as text.
-          if (isMathInline(inline)) {
+          if (inline.xml.name === 'w:commentRangeStart' || inline.xml.name === 'w:commentRangeEnd') {
+            const known = this.comments.get(inline.xml.attrs['w:id'] ?? '');
+            if (known) out += `{\\*\\atrf${inline.xml.name === 'w:commentRangeStart' ? 'start' : 'end'} ${known.number}}`;
+          } else if (isMathInline(inline)) {
+            // An equation is its LaTeX, as text.
             const equation = readMathInline(inline);
             out += escapeRtf(equation.display ? '$$' + toLatex(equation) + '$$' : '$' + toLatex(equation) + '$');
           }
@@ -198,6 +219,30 @@ class RtfWriter {
       }
     }
     return out;
+  }
+
+  /** A comment's annotation, written where its reference is. */
+  private annotation(id: string | undefined): string {
+    const known = id === undefined ? undefined : this.comments.get(id);
+    if (!known || this.written.has(known.comment.id)) return '';
+    this.written.add(known.comment.id);
+    const { comment, number } = known;
+    const parent = comment.parentId === undefined ? undefined : this.comments.get(comment.parentId);
+    // A parent is written before its replies, even if a reply's reference comes first.
+    const first = parent && parent !== known && !this.written.has(parent.comment.id) ? this.annotation(parent.comment.id) : '';
+    const date = isoToDttm(comment.date);
+    const paragraphs = comment.paragraphs.length ? comment.paragraphs : [''];
+    return (
+      first +
+      (comment.initials ? `{\\*\\atnid ${escapeRtf(comment.initials)}}` : '') +
+      `{\\*\\atnauthor ${escapeRtf(comment.author)}}\\chatn` +
+      `{\\*\\annotation{\\*\\atnref ${number}}` +
+      (date !== undefined ? `{\\*\\atndate ${date}}` : '') +
+      (parent ? `{\\*\\atnparent ${parent.number}}` : '') +
+      '{\\*\\atnicn}' +
+      paragraphs.map((text, i) => `\\pard\\plain ${i === 0 ? '{\\chatn }' : ''}${escapeRtf(text)}\\par`).join('') +
+      '}'
+    );
   }
 
   private run(run: Run, style: string | undefined, link: boolean): string {

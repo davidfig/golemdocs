@@ -5,6 +5,7 @@
 // user id there, and it comes back as `customer.external_id`. The customer's email is never used
 // to link, since anyone can type any email at checkout.
 
+import { isAdmin } from './accounts.ts';
 import type { Env } from './cf.ts';
 import { constantTimeEqual } from './crypto.ts';
 import { HttpError } from './http.ts';
@@ -113,3 +114,59 @@ export async function subscriptionFor(env: Env, userId: string, now = Date.now()
   const lapsed = row.current_period_end !== null && row.current_period_end < now - TOLERANCE_MS;
   return { status: row.status, active: PAID.has(row.status) && !lapsed, currentPeriodEnd: row.current_period_end, cancelAtPeriodEnd: !!row.cancel_at_period_end };
 }
+
+async function polar<T>(env: Env, path: string, body: unknown): Promise<T> {
+  if (!env.POLAR_ACCESS_TOKEN) throw new HttpError(503, 'payments are not configured');
+  const response = await fetch(`${env.POLAR_API_URL || 'https://api.polar.sh'}${path}`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const reply = (await response.json().catch(() => null)) as T | null;
+  if (!response.ok || !reply) throw new HttpError(502, `Polar refused the request (status ${response.status})`);
+  return reply;
+}
+
+/**
+ * Where to send the user to pay: a Polar checkout for the monthly sync product, tied to their
+ * account by `external_customer_id`. Someone who already has sync is refused rather than billed twice.
+ */
+export async function startCheckout(env: Env, userId: string, returnTo: string): Promise<{ url: string }> {
+  if (!env.POLAR_PRODUCT_ID) throw new HttpError(503, 'payments are not configured');
+  if ((await subscriptionFor(env, userId))?.active) throw new HttpError(409, 'already subscribed');
+  // Their verified sign-in email saves typing it; it is only a convenience, never how we link them.
+  const known = await env.DIRECTORY.prepare('SELECT email FROM identities WHERE user_id = ? AND email_verified = 1 AND email IS NOT NULL LIMIT 1')
+    .bind(userId)
+    .first<{ email: string }>();
+  const checkout = await polar<{ url?: string }>(env, '/v1/checkouts/', {
+    products: [env.POLAR_PRODUCT_ID],
+    external_customer_id: userId,
+    ...(known ? { customer_email: known.email } : {}),
+    success_url: returnTo,
+  });
+  if (!checkout.url) throw new HttpError(502, 'Polar sent no checkout address');
+  return { url: checkout.url };
+}
+
+/** Where the user manages their subscription (cancel, change card, invoices): Polar's customer portal. */
+export async function startPortal(env: Env, userId: string): Promise<{ url: string }> {
+  if (!(await subscriptionFor(env, userId))) throw new HttpError(404, 'no subscription');
+  const session = await polar<{ customer_portal_url?: string }>(env, '/v1/customer-sessions/', { external_customer_id: userId });
+  if (!session.customer_portal_url) throw new HttpError(502, 'Polar sent no portal address');
+  return { url: session.customer_portal_url };
+}
+
+/**
+ * Whether the account may keep documents in the cloud (upload, share, edit together): a subscriber
+ * (a trial counts) or an admin. Anyone, while `REQUIRE_SUBSCRIPTION` is off (the rollout switch) or
+ * when running locally, where there is no Polar to ask.
+ * Everything else stays free: the app in the browser, and opening what a subscriber shares.
+ */
+export async function hasSync(env: Env, userId: string): Promise<boolean> {
+  if (env.ENVIRONMENT === 'local' || env.REQUIRE_SUBSCRIPTION !== 'true') return true;
+  if ((await subscriptionFor(env, userId))?.active) return true;
+  return isAdmin(env, userId);
+}
+
+/** The refusal for someone who needs a subscription to do this: 402, with a code the page recognises. */
+export const subscriptionRequired = (message = 'sync is for subscribers'): HttpError => new HttpError(402, message, 'subscription');

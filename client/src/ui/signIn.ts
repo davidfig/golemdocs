@@ -36,14 +36,17 @@ export async function mountSignIn(root: HTMLElement, returnTo?: string): Promise
   root.replaceChildren(panel);
 }
 
-/** A modal asking the user to sign in. They come back to `returnTo` afterwards. */
-export function showSignInDialog(returnTo: string): void {
+/**
+ * A modal asking the user to sign in. They come back to `returnTo` afterwards. `subscribe`: they
+ * asked to pay for sync, so it says they go on to checkout after signing in.
+ */
+export function showSignInDialog(returnTo: string, options: { subscribe?: boolean } = {}): void {
   const dialog = document.createElement('dialog');
   dialog.className = 'wm-dialog';
   dialog.style.maxWidth = '380px';
 
   const note = document.createElement('p');
-  note.textContent = t('dialogs.signIn.note');
+  note.textContent = options.subscribe ? t('dialogs.signIn.subscribeNote') : t('dialogs.signIn.note');
   note.style.cssText = 'margin:0 0 12px';
   const providers = document.createElement('div');
   const cancel = document.createElement('button');

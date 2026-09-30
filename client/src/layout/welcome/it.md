@@ -8,13 +8,13 @@ Un editor di documenti che vive nel tuo browser, pensato per aprire ogni tipo di
 - **Cambia forma senza perdere nulla.** Converti in, nel menu File, cambia la forma con cui viene modificato il documento, e tornando indietro ritrovi la tua formattazione.
 - **Annota i PDF.** Evidenzia, sottolinea, barra e lascia note sulle pagine di un PDF.
 - **Modifica i PDF.** Passa a Modifica PDF per cambiare il testo di una pagina dov'è, spostare, aggiungere o eliminare immagini e forme, oscurare dati riservati e riordinare le pagine. Compila scrive nei campi di un modulo.
-- **Lavora insieme agli altri.** Condividi, nel menu File, ti dà un collegamento. Chiunque lo apra modifica lo stesso documento, e le modifiche compaiono in tempo reale. Puoi anche condividere con persone specifiche.
+- **Lavora insieme agli altri.** Condividi, nel menu File, ti dà un collegamento. Chiunque lo apra modifica lo stesso documento, e le modifiche compaiono in tempo reale. Puoi anche condividere con persone specifiche. La condivisione fa parte dell’abbonamento; modificare da soli è gratuito.
 
 ## Provalo
 
 1. **Cambia forma.** Nel menu File, scegli Converti in e poi Markdown. Questa pagina diventa testo normale con titoli `#`, e puoi riconvertirla.
 2. **Apri dei dati.** Trascina un file CSV sulla finestra. Si apre come una tabella che puoi modificare e si scarica come lo stesso CSV.
-3. **Modifica insieme.** Nel menu File, scegli Condividi e poi Ottieni collegamento, e apri il collegamento in una seconda finestra. Scrivi in una e guarda l’altra aggiornarsi.
+3. **Modifica insieme.** Nel menu File, scegli Condividi e poi Ottieni collegamento, e apri il collegamento in una seconda finestra. Scrivi in una e guarda l’altra aggiornarsi. Per questo serve un abbonamento.
 
 Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Scarica quando ti serve un file da dare a qualcun altro.
 
@@ -28,7 +28,7 @@ Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Sca
 
 ## Salvataggio
 
-Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. File ▸ Apri mostra tutti i tuoi documenti. Accedi e verranno salvati nel tuo account, così potrai aprirli su qualsiasi dispositivo.
+Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. File ▸ Apri mostra tutti i tuoi documenti. Con un abbonamento vengono salvati anche nel tuo account, così potrai aprirli su qualsiasi dispositivo.
 
 ## Il significato del nome
 

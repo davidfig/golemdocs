@@ -8,13 +8,13 @@ Um editor de documentos que vive no seu navegador, feito para abrir todo tipo de
 - **Muda de forma sem perder nada.** Converter em, no menu Arquivo, muda o formato em que um documento é editado, e ao voltar você recupera a sua formatação.
 - **Anota PDFs.** Realce, sublinhe, tache e deixe notas nas próprias páginas de um PDF.
 - **Edita PDFs.** Mude para Editar PDF para alterar o texto de uma página onde ele está, mover, adicionar ou excluir imagens e formas, tarjar dados privados e reorganizar páginas. Preencher digita nos campos de um formulário.
-- **Trabalha em conjunto.** Compartilhar, no menu Arquivo, dá a você um link. Todos que o abrirem editam o mesmo documento, e as alterações aparecem ao vivo. Você também pode compartilhar com pessoas específicas.
+- **Trabalha em conjunto.** Compartilhar, no menu Arquivo, dá a você um link. Todos que o abrirem editam o mesmo documento, e as alterações aparecem ao vivo. Você também pode compartilhar com pessoas específicas. Compartilhar faz parte da assinatura; editar sozinho é grátis.
 
 ## Experimente
 
 1. **Mude de forma.** No menu Arquivo, escolha Converter em e depois Markdown. Esta página vira texto simples com títulos `#`, e você pode convertê-la de volta.
 2. **Abra alguns dados.** Solte um arquivo CSV na janela. Ele abre como uma tabela que você pode editar e é baixado como o mesmo CSV.
-3. **Edite em conjunto.** No menu Arquivo, escolha Compartilhar e depois Obter Link, e abra o link em uma segunda janela. Digite em uma e veja a outra se atualizar.
+3. **Edite em conjunto.** No menu Arquivo, escolha Compartilhar e depois Obter Link, e abra o link em uma segunda janela. Digite em uma e veja a outra se atualizar. Isso exige uma assinatura.
 
 Quando estiver pronto, escolha Novo no menu Arquivo para um documento em branco, ou Baixar quando precisar de um arquivo para outra pessoa.
 
@@ -28,7 +28,7 @@ Quando estiver pronto, escolha Novo no menu Arquivo para um documento em branco,
 
 ## Salvamento
 
-Não há botão Salvar. Cada alteração é mantida neste navegador um instante depois de você fazê-la, e você não precisa de uma conta. Arquivo ▸ Abrir mostra todos os seus documentos. Entre e eles serão salvos na sua conta, para que você possa abri-los em qualquer dispositivo.
+Não há botão Salvar. Cada alteração é mantida neste navegador um instante depois de você fazê-la, e você não precisa de uma conta. Arquivo ▸ Abrir mostra todos os seus documentos. Com uma assinatura, eles também são salvos na sua conta, para que você possa abri-los em qualquer dispositivo.
 
 ## Sobre o nome
 

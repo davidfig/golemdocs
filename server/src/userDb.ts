@@ -117,6 +117,15 @@ interface DirectoryRow {
   schema_version: number;
 }
 
+/** The user's database if they have one already; never creates one (people without sync get none). */
+export async function existingUserDb(env: Env, userId: string): Promise<UserDb | null> {
+  if (env.ENVIRONMENT !== 'local') {
+    const row = await env.DIRECTORY.prepare('SELECT 1 AS found FROM users WHERE user_id = ?').bind(userId).first<{ found: number }>();
+    if (!row) return null;
+  }
+  return userDb(env, userId);
+}
+
 /** The user's database, created and migrated on first use. */
 export async function userDb(env: Env, userId: string): Promise<UserDb> {
   if (env.ENVIRONMENT === 'local') {

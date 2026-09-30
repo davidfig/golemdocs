@@ -24,8 +24,12 @@ export interface DashboardHost {
   importFile(): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entry: LibraryEntry): Promise<void>;
-  /** Who is signed in (null: nobody), whose documents are shown. */
+  /** Whose cloud documents are shown: who is signed in, if they have sync (null: nobody, or no sync). */
   account(): User | null;
+  /** Who is signed in, with or without sync. */
+  signedIn(): User | null;
+  /** Pay for sync (signing in first if needed). */
+  subscribe(): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
   /** Opens a document someone else shared with the user. */
@@ -131,8 +135,9 @@ export class Dashboard {
 
   private async refresh(generation = ++this.generation): Promise<void> {
     const user = this.host.account();
-    this.setAccount(user);
-    const library = await loadLibrary(user);
+    const identity = this.host.signedIn();
+    this.setAccount(identity, user !== null);
+    const library = await loadLibrary(user, identity);
     if (generation !== this.generation) return;
     this.entries = library.entries;
     this.shared = library.shared;
@@ -142,7 +147,7 @@ export class Dashboard {
 
   // --- Rendering ---------------------------------------------------------------------------
 
-  private setAccount(user: User | null): void {
+  private setAccount(user: User | null, syncs = user !== null): void {
     const button = (text: string, run: () => Promise<void>) => {
       const b = h('button', { text, attrs: { type: 'button' } });
       b.addEventListener('click', () => void run().then(() => this.refresh()));
@@ -150,7 +155,12 @@ export class Dashboard {
     };
     if (user) {
       const who = user.email ?? user.name ?? t('panels.dashboard.yourAccount');
-      this.account.replaceChildren(h('span', { text: who }), button(t('panels.dashboard.signOut'), () => this.host.signOut()));
+      // Signed in without sync: their documents are in this browser, and Subscribe keeps them in the account.
+      this.account.replaceChildren(
+        h('span', { text: who }),
+        ...(syncs ? [] : [button(t('panels.dashboard.subscribe'), () => this.host.subscribe())]),
+        button(t('panels.dashboard.signOut'), () => this.host.signOut()),
+      );
     } else {
       this.account.replaceChildren(h('span', { text: t('panels.dashboard.savedHere') }), button(t('panels.dashboard.signIn'), () => this.host.signIn()));
     }

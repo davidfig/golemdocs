@@ -615,3 +615,74 @@ test('pathological large inputs finish quickly (linear-ish)', async () => {
   }
   assert.ok(performance.now() - started < 60000 * slowdown);
 });
+
+// --- Comments (CriticMarkup) ----------------------------------------------------------------------
+
+import { commentRanges } from '@word/docx';
+
+/** The text each comment covers, by comment id. */
+function covered(doc: WordDocument): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [id, range] of commentRanges(paragraphs(doc))) out.set(id, paragraphText(range.start.paragraph).slice(range.start.offset, range.end.offset).replace(/\uFFFC/g, ''));
+  return out;
+}
+
+test('comments: CriticMarkup imports as a comment over its range', async () => {
+  const doc = await markdownToDocument('Say {==hello world==}{>>@Ann (2024-05-01T10:00:00Z): Too *formal*<<} now.');
+  assert.equal(doc.comments.length, 1);
+  assert.deepEqual(doc.comments[0], { id: '0', author: 'Ann', initials: 'A', date: '2024-05-01T10:00:00Z', paragraphs: ['Too *formal*'] });
+  assert.equal(covered(doc).get('0'), 'hello world');
+});
+
+test('comments: replies, resolved and multi-paragraph text', async () => {
+  const doc = await markdownToDocument('{==First==}{>>✓ @A B: one\\ntwo \\\\ \\<<<}{>>↳ @C: reply<<} last');
+  assert.equal(doc.comments.length, 2);
+  assert.deepEqual(doc.comments[0].paragraphs, ['one', 'two \\ <']);
+  assert.equal(doc.comments[0].resolved, true);
+  assert.equal(doc.comments[0].initials, 'AB');
+  assert.equal(doc.comments[1].parentId, '0');
+  assert.equal(doc.comments[1].resolved, undefined);
+  assert.equal(covered(doc).get('1'), 'First');
+});
+
+test('comments: export and re-import round trip', async () => {
+  const md = 'A **bold {==and *some* plain==}{>>@Ann (2024-05-01T10:00:00Z): a: (b)\\nline 2 | <<<}{>>↳ @Bob: ok<<} text** end.\n\n{==First==}{>>@X: y<<} middle {==last==}{>>✓ hi<<}';
+  const doc = await markdownToDocument(md);
+  const out = documentToMarkdown(doc);
+  const back = await markdownToDocument(out);
+  assert.deepEqual(back.comments, doc.comments);
+  assert.equal(documentToMarkdown(back), out);
+  assert.match(out, /\{==first==\}|\{==First==\}\{>>@X: y<<\}/);
+  assert.match(out, /\{==last==\}\{>>✓ hi<<\}/);
+  assert.deepEqual([...covered(back).values()], [...covered(doc).values()]);
+});
+
+test('comments: a range across bold splits nothing', async () => {
+  const doc = await markdownToDocument('a {==x **y** z==}{>>@Q: c<<} b');
+  const out = documentToMarkdown(doc);
+  assert.equal(out, 'a {==x **y** z==}{>>@Q: c<<} b\n');
+});
+
+test('comments: not read inside code, and literal markers are escaped when there are comments', async () => {
+  const code = await markdownToDocument('`{==a==}{>>b<<}`\n\n```\n{==a==}{>>b<<}\n```');
+  assert.equal(code.comments.length, 0);
+  assert.equal(documentToMarkdown(code), '`{==a==}{>>b<<}`\n\n```\n{==a==}{>>b<<}\n```\n');
+  const doc = await markdownToDocument('\\{==lit\\==\\}{>>x<<} then {>>lone<<}');
+  assert.equal(doc.comments.length, 2);
+  assert.equal(documentToMarkdown(doc), '\\{==lit==\\}{>>x<<} then {>>lone<<}\n');
+});
+
+test('comments: in a list item, a heading and a table cell', async () => {
+  const md = '# {==Title==}{>>@A: t<<}\n\n- {==item==}{>>@A: i<<}\n\n| h |\n| --- |\n| {==c==}{>>@A: a\\|b<<} |\n';
+  const doc = await markdownToDocument(md);
+  assert.equal(doc.comments.length, 3);
+  assert.equal(doc.comments[2].paragraphs[0], 'a|b');
+  const back = await markdownToDocument(documentToMarkdown(doc));
+  assert.deepEqual(back.comments, doc.comments);
+});
+
+test('comments: documents without comments export as before', async () => {
+  const md = 'a {==b==} c {>>d<<}\n';
+  assert.equal(documentToMarkdown(await markdownToDocument('plain {text}')), 'plain {text}\n');
+  assert.ok(md);
+});

@@ -26,11 +26,20 @@
 // a block), and the position of an unmappable element within a line (it moves to the start or end
 // of its paragraph). Pictures the reader can't get bytes for stay placeholders.
 //
+// Comments are <mark class="comment" data-comment-id="0" data-author="Ann" data-initials="A"
+// data-date="2024-05-01T10:00:00Z" data-parent="0" data-resolved="true" data-comment="the text"
+// title="Ann: the text"> around the commented text, one mark per comment (a reply is a mark of its own
+// nested around the same text, with data-parent naming the comment it answers, and data-resolved goes
+// on a thread's first comment). data-comment holds the comment's text (a new line for each
+// paragraph); title is the same for a reader's tooltip, and is what is read back when there is no
+// data-comment. A comment on no text is an empty mark. Elements around the text, a link or bold
+// text, are inside or outside the mark as they were. Plain <mark> elements are highlights, as before.
+//
 // Export writes a complete HTML5 document. Without an extension (a Word or Markdown document) it adds
 // a generated <style data-word-styles> block for the document's paragraph styles, which the importer
 // reads back into styles, so pages the app wrote round-trip. Nothing here throws on odd input.
 
-import { StyleResolver, WordDocument, fromMathML, isMathInline, mathInline, paragraphText, readMathInline, toMathML, type MathMLElement } from '@word/docx';
+import { commentEnd, commentReference, commentStart, StyleResolver, WordDocument, fromMathML, isMathInline, mathInline, paragraphText, readMathInline, toMathML, type MathMLElement } from '@word/docx';
 import { decodeDataUri, sniffImage, toDataUri } from './images.ts';
 import type { ImageData } from './images.ts';
 import type {
@@ -49,6 +58,8 @@ import type {
   TableCellProperties,
   TableRow,
 } from '@word/docx';
+import type { Comment } from '@word/docx';
+import { commentMarker, RangeTracker } from './commentRanges.ts';
 import { t } from '../i18n/index.ts';
 
 // --- Public types -----------------------------------------------------------------------------------
@@ -686,6 +697,9 @@ const mapped = (name: string): boolean =>
   BLOCKS.has(name) || INLINE.has(name) || CONTENT_VOID.has(name) || TRANSPARENT.has(name) || name === 'wbr' || name.includes(':');
 
 /** Whether an element holds block-level elements (looking through inline elements). */
+/** A <mark> that is a comment (the export's), not a highlight. */
+const isCommentMark = (el: HElement): boolean => el.name === 'mark' && (el.attrs['data-comment-id'] !== undefined || /(^|\s)comment(\s|$)/.test(el.attrs.class ?? ''));
+
 function hasBlock(el: HElement): boolean {
   for (const child of el.children) {
     if (child.type !== 'element') continue;
@@ -1084,6 +1098,8 @@ const PARA_CSS_KEYS = ['spacing', 'indent', 'justification', 'shading', 'pageBre
 function trimEnd(children: Inline[]): boolean {
   for (let i = children.length - 1; i >= 0; i--) {
     const c = children[i];
+    // Comment markers are not content: trailing space is trimmed from the text before them.
+    if (commentMarker(c) || (c.kind === 'run' && c.content.length === 1 && c.content[0].kind === 'raw' && c.content[0].xml.name === 'w:commentReference')) continue;
     if (c.kind === 'run') {
       const last = c.content[c.content.length - 1];
       if (!last) {
@@ -1139,6 +1155,9 @@ class Importer {
   readonly classStyles = new Set<string>();
   private readonly src: string;
   private nextId = 1;
+  /** Comment ids as written in the page, and the ones they have in the document; those read. */
+  private readonly commentIds = new Map<string, string>();
+  private readonly commentDone = new Set<string>();
   private nextAbstract: number;
   private nextInstance: number;
   private readonly keys = new WeakMap<Ctx, string>();
@@ -1630,7 +1649,7 @@ class Importer {
         c.run.vertAlign = 'subscript';
         break;
       case 'mark':
-        c.run.highlight = 'yellow';
+        if (!isCommentMark(el)) c.run.highlight = 'yellow';
         break;
       case 'code':
       case 'kbd':
@@ -1744,6 +1763,10 @@ class Importer {
 
   private inline(el: HElement, flow: Flow, ctx: Ctx): void {
     const { ctx: c } = this.styled(el, ctx, 'inline');
+    if (isCommentMark(el)) {
+      this.commentMark(el, flow, c);
+      return;
+    }
     if (el.name === 'a' && el.attrs.href !== undefined) {
       const href = el.attrs.href.trim();
       c.link = href.length > 1 && href[0] === '#' ? { el, anchor: href.slice(1) } : { el, url: href };
@@ -1751,6 +1774,49 @@ class Importer {
     if (el.name === 'q') this.text(flow, c, '“');
     for (const child of el.children) this.visit(child, flow, c);
     if (el.name === 'q') this.text(flow, c, '”');
+  }
+
+  /** Puts a comment marker in the paragraph, as text would go (the next text starts a new run). */
+  private commentMarkers(flow: Flow, ctx: Ctx, markers: Inline[]): void {
+    const st = this.ensure(flow, ctx);
+    st.p.children.push(...markers);
+    st.run = null;
+    st.hyperlink = null;
+    st.linkEl = null;
+    st.content = true;
+  }
+
+  /** The id a comment written as `original` has in the document, made on first mention. */
+  private commentId(original: string): string {
+    let id = this.commentIds.get(original);
+    if (id === undefined) {
+      id = String(this.commentIds.size);
+      this.commentIds.set(original, id);
+    }
+    return id;
+  }
+
+  /** A <mark class="comment">: the comment it makes, and markers around its content. */
+  private commentMark(el: HElement, flow: Flow, ctx: Ctx): void {
+    const a = el.attrs;
+    const original = a['data-comment-id'] ?? `#${this.commentIds.size}`;
+    // A comment repeated by an id already seen (its range split by a tool) is just its content.
+    if (this.commentDone.has(original)) {
+      for (const child of el.children) this.visit(child, flow, ctx);
+      return;
+    }
+    this.commentDone.add(original);
+    const id = this.commentId(original);
+    const text = a['data-comment'] ?? a.title ?? '';
+    const comment: Comment = { id, author: a['data-author'] ?? '', paragraphs: text.split(/\r\n?|\n/) };
+    if (a['data-initials']) comment.initials = a['data-initials'];
+    if (a['data-date']) comment.date = a['data-date'];
+    if (a['data-parent'] !== undefined && a['data-parent'] !== original) comment.parentId = this.commentId(a['data-parent']);
+    if (a['data-resolved'] !== undefined && a['data-resolved'] !== 'false') comment.resolved = true;
+    this.doc.comments.push(comment);
+    this.commentMarkers(flow, ctx, [commentStart(id)]);
+    for (const child of el.children) this.visit(child, flow, ctx);
+    this.commentMarkers(flow, ctx, [commentEnd(id), commentReference(id)]);
   }
 
   private paragraph(el: HElement, flow: Flow, ctx: Ctx): void {
@@ -2211,6 +2277,8 @@ interface Atom {
   s: string;
   marks: Mark[];
   link: { href: string } | null;
+  /** The comments (ids, outermost first) whose range this is in. */
+  cm?: readonly string[];
 }
 
 interface OpenList {
@@ -2308,6 +2376,7 @@ class Writer {
   private readonly marksCache = new Map<string, Mark[]>();
   private readonly normalId: string | undefined;
   private usedInlineCode = false;
+  private readonly comments: Map<string, Comment>;
 
   constructor(
     readonly doc: WordDocument,
@@ -2315,6 +2384,7 @@ class Writer {
     private readonly options: HtmlWriteOptions = {},
   ) {
     this.resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
+    this.comments = new Map(doc.comments.map((c) => [c.id, c]));
     this.info = ext?.blocks ?? {};
     for (const f of ext?.fragments ?? []) {
       const key = f.anchor ?? '';
@@ -2606,9 +2676,32 @@ class Writer {
   }
 
   /** A paragraph's content as HTML. Outside <pre>, spaces HTML would collapse become &nbsp;. */
+  /** The opening tag of a comment's <mark>. */
+  private commentOpen(c: Comment): string {
+    const text = c.paragraphs.join('\n');
+    const attr = (name: string, value: string | undefined): string => (value ? ` ${name}="${escAttr(value).replace(/\r?\n/g, '&#10;')}"` : '');
+    return (
+      `<mark class="comment" data-comment-id="${escAttr(c.id)}"` +
+      attr('data-author', c.author) +
+      attr('data-initials', c.initials) +
+      attr('data-date', c.date) +
+      attr('data-parent', c.parentId) +
+      (c.resolved ? ' data-resolved="true"' : '') +
+      ` data-comment="${escAttr(text).replace(/\r?\n/g, '&#10;')}"` +
+      attr('title', c.author ? `${c.author}: ${text}` : text) +
+      '>'
+    );
+  }
+
   private inline(p: Paragraph, pre: boolean): { html: string; empty: boolean; endsWithBreak: boolean } {
     const pStyle = p.properties.style;
     const atoms: Atom[] = [];
+    const tracker = new RangeTracker((id) => this.comments.has(id));
+    const commentless = this.comments.size === 0;
+    const add = (atom: Atom): void => {
+      if (tracker.ids.length) atom.cm = tracker.ids;
+      atoms.push(atom);
+    };
     const walk = (list: readonly Inline[], link: { href: string } | null): void => {
       for (const inline of list) {
         if (inline.kind === 'run') {
@@ -2617,30 +2710,30 @@ class Writer {
             switch (item.kind) {
               case 'text':
                 for (const part of item.text.split(/(\t)/)) {
-                  if (part) atoms.push({ t: part === '\t' ? 'tab' : 'text', s: part, marks, link });
+                  if (part) add({ t: part === '\t' ? 'tab' : 'text', s: part, marks, link });
                 }
                 break;
               case 'tab':
-                atoms.push({ t: 'tab', s: '\t', marks, link });
+                add({ t: 'tab', s: '\t', marks, link });
                 break;
               case 'break':
-                if (!item.type || item.type === 'textWrapping') atoms.push({ t: 'br', s: '', marks, link });
+                if (!item.type || item.type === 'textWrapping') add({ t: 'br', s: '', marks, link });
                 break;
               case 'cr':
-                atoms.push({ t: 'br', s: '', marks, link });
+                add({ t: 'br', s: '', marks, link });
                 break;
               case 'noBreakHyphen':
-                atoms.push({ t: 'text', s: '\u2011', marks, link });
+                add({ t: 'text', s: '\u2011', marks, link });
                 break;
               case 'softHyphen':
-                atoms.push({ t: 'text', s: '\u00ad', marks, link });
+                add({ t: 'text', s: '\u00ad', marks, link });
                 break;
               case 'drawing': {
                 const picture = item.image ? this.options.images?.get(item.image) : undefined;
                 // Without the picture's bytes, the name it had in the package is all there is to point at.
                 const name = picture ? (this.options.imageSrc?.(item.image!, picture) ?? toDataUri(picture)) : item.image ? item.image.slice(item.image.lastIndexOf('/') + 1) : '';
                 const size = item.width && item.height ? ` width="${Math.round(item.width / 9525)}" height="${Math.round(item.height / 9525)}"` : '';
-                atoms.push({ t: 'html', s: `<img src="${escAttr(name)}" alt="${escAttr(item.description || item.name || '')}"${size}>`, marks: [], link: null });
+                add({ t: 'html', s: `<img src="${escAttr(name)}" alt="${escAttr(item.description || item.name || '')}"${size}>`, marks: [], link: null });
                 break;
               }
               default:
@@ -2649,13 +2742,16 @@ class Writer {
           }
         } else if (inline.kind === 'hyperlink') {
           const img = this.imagePlaceholder(inline);
-          if (img !== null) atoms.push({ t: 'html', s: img, marks: [], link: null });
+          if (img !== null) add({ t: 'html', s: img, marks: [], link: null });
           else {
             const href = inline.url ?? (inline.anchor !== undefined ? `#${inline.anchor}` : undefined);
             walk(inline.children, href !== undefined ? { href } : link);
           }
         } else if (inline.kind === 'wrapper') walk(inline.children, link);
-        else if (isMathInline(inline)) atoms.push({ t: 'html', s: toMathML(readMathInline(inline)), marks: [], link: null });
+        else if (!commentless && commentMarker(inline)) {
+          const point = tracker.marker(commentMarker(inline)!, atoms.length);
+          if (point !== null) add({ t: 'html', s: `${this.commentOpen(this.comments.get(point)!)}</mark>`, marks: [], link: null });
+        } else if (isMathInline(inline)) add({ t: 'html', s: toMathML(readMathInline(inline)), marks: [], link: null });
       }
     };
     walk(p.children, null);
@@ -2664,10 +2760,28 @@ class Writer {
     let html = '';
     const open: Mark[] = [];
     let link: { href: string } | null = null;
+    const openComments: string[] = [];
     const closeTo = (keep: number): void => {
       while (open.length > keep) html += open.pop()!.close;
     };
     for (const a of atoms) {
+      const cm = a.cm ?? [];
+      if (cm.length !== openComments.length || cm.some((id, i) => id !== openComments[i])) {
+        // A comment's mark is outside the marks and link inside it, so they close and open again around its edges.
+        closeTo(0);
+        if (link) html += '</a>';
+        link = null;
+        let k = 0;
+        while (k < openComments.length && k < cm.length && openComments[k] === cm[k]) k++;
+        while (openComments.length > k) {
+          openComments.pop();
+          html += '</mark>';
+        }
+        for (const id of cm.slice(k)) {
+          html += this.commentOpen(this.comments.get(id)!);
+          openComments.push(id);
+        }
+      }
       if (a.link !== link) {
         closeTo(0);
         if (link) html += '</a>';
@@ -2692,6 +2806,7 @@ class Writer {
     }
     closeTo(0);
     if (link) html += '</a>';
+    html += '</mark>'.repeat(openComments.length);
     const last = atoms[atoms.length - 1];
     return { html, empty: !atoms.length, endsWithBreak: last?.t === 'br' };
   }

@@ -1,7 +1,7 @@
 {
   "name": "@word/server",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "mkdir -p ../client/dist && wrangler dev --env dev --port 3001",

@@ -175,6 +175,13 @@ test('bullets, numbers and lettered lists become list items; wrapped text stays 
     ],
   );
   assert.deepEqual([items[3].format, items[3].start, items[5].format, items[5].start], ['decimal', 1, 'lowerLetter', 1]);
+  // Marker and text positions carry over: text 18pt in from the marker, markers 0 / 18pt in from the column.
+  const near = (a: number | undefined, b: number) => assert.ok(a !== undefined && Math.abs(a - b) < 1.5, `${a} vs ${b}`);
+  const col = items[0].indent!.left - 18;
+  near(items[0].indent!.left - col, 18);
+  near(items[0].indent!.firstLine, -18);
+  near(items[2].indent!.left - col, 36);
+  near(items[2].indent!.firstLine, -18);
   assert.equal(blocks[0].kind, 'paragraph');
   const last = blocks[blocks.length - 1];
   assert.equal(last.kind, 'paragraph');

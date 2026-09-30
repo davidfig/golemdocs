@@ -69,7 +69,13 @@ export type Action =
   | { kind: 'syncNow' }
   | { kind: 'share' }
   | { kind: 'signIn' }
+  /** Show or hide Clip, the assistant. */
+  | { kind: 'toggleClip' }
   | { kind: 'signOut' }
+  /** Pay for sync: sign in first if needed, then go to Polar's checkout. */
+  | { kind: 'subscribe' }
+  /** Go to Polar's customer portal, to change the card, see invoices or cancel. */
+  | { kind: 'manageSubscription' }
   /** Delete every document and setting kept in this browser (asks first). The account's documents stay. */
   | { kind: 'clearLocalData' }
   /** Download a copy of the document, in its own format. */
@@ -216,15 +222,21 @@ export interface ChromeState {
   draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
+  /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
+  subscription: SubscriptionState | null;
+  /** Clip, the assistant, is showing. */
+  clip: boolean;
 }
 
+export type SubscriptionState = 'none' | 'active';
+
 /**
- * Whether the open document is saved. Signed out (`guest`) it is saved in this browser. Signed
- * in: `saved` to the account, `saving` (edits on their way), `offline` (kept here until the
+ * Whether the open document is saved. Signed out (`guest`), or signed in without a subscription
+ * (`unsubscribed`), it is saved in this browser. Signed in with sync: `saved` to the account, `saving` (edits on their way), `offline` (kept here until the
  * account can be reached), `failed` (`error` says why), or `signedOut` (the session ended; the
  * edits wait here for the user to sign in again).
  */
-export type DocumentSync = 'guest' | 'saved' | 'saving' | 'offline' | 'failed' | 'signedOut';
+export type DocumentSync = 'guest' | 'unsubscribed' | 'saved' | 'saving' | 'offline' | 'failed' | 'signedOut';
 
 export interface SyncStatus {
   /** Who is signed in (an email or name); null when signed out. */
@@ -253,6 +265,8 @@ export const DEFAULT_STATE: ChromeState = {
   draw: { tool: null, color: '#e5322d', size: 1, fill: false },
   inTable: false,
   sync: { user: null, document: 'guest', error: null },
+  subscription: null,
+  clip: true,
 };
 
 /** A sample document the File menu can open. */

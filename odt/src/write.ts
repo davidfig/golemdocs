@@ -25,6 +25,7 @@ import {
   toLatex,
   writeZip,
   type Block,
+  type Comment,
   type Border,
   type Drawing,
   type Hyperlink,
@@ -197,6 +198,7 @@ class Writer {
     this.nameStyles();
     this.indexParagraphs();
     this.indexAnchors();
+    this.indexComments();
   }
 
   // --- Setup -------------------------------------------------------------------------------
@@ -231,6 +233,59 @@ class Writer {
     for (const hf of this.doc.headersFooters.values()) visit(hf.children);
   }
 
+  /** Comments by id, and which of them have an end marker in the text. */
+  private readonly commentsById = new Map<string, Comment>();
+  private readonly commentEnds = new Set<string>();
+  /** Comments whose office:annotation has been written, by id. */
+  private readonly writtenComments = new Set<string>();
+
+  private indexComments(): void {
+    for (const c of this.doc.comments) if (!this.commentsById.has(c.id)) this.commentsById.set(c.id, c);
+    const visitInlines = (inlines: Inline[]) => {
+      for (const i of inlines) {
+        if (i.kind === 'raw') {
+          if (i.xml.name === 'w:commentRangeEnd' && i.xml.attrs['w:id'] !== undefined) this.commentEnds.add(i.xml.attrs['w:id']);
+        } else if (i.kind === 'hyperlink' || i.kind === 'wrapper') visitInlines(i.children);
+      }
+    };
+    const visit = (blocks: Block[]) => {
+      for (const b of blocks) {
+        if (b.kind === 'paragraph') visitInlines(b.children);
+        else if (b.kind === 'table') {
+          for (const row of b.rows) if (row.kind === 'row') for (const cell of row.cells) if (cell.kind === 'cell') visit(cell.children);
+        } else if (b.kind === 'wrapper') visit(b.children);
+      }
+    };
+    visit(this.doc.body);
+    for (const hf of this.doc.headersFooters.values()) visit(hf.children);
+  }
+
+  /** The office:annotation for a comment's start marker; undefined if the comment doesn't exist. */
+  commentStartElement(id: string): XmlElement | undefined {
+    const c = this.commentsById.get(id);
+    if (!c || this.writtenComments.has(id)) return undefined;
+    this.writtenComments.add(id);
+    const parent = c.parentId !== undefined && this.writtenComments.has(c.parentId) && c.parentId !== id ? c.parentId : undefined;
+    const attrs: Record<string, string> = { 'office:name': commentName(id) };
+    if (parent !== undefined) attrs['loext:parent-name'] = commentName(parent);
+    if (c.resolved) attrs['loext:resolved'] = 'true';
+    const children: XmlNode[] = [];
+    if (c.author) children.push(el('dc:creator', {}, [c.author]));
+    if (c.date) children.push(el('dc:date', {}, [c.date]));
+    if (c.initials) children.push(el('loext:sender-initials', {}, [c.initials]));
+    for (const line of c.paragraphs.length ? c.paragraphs : ['']) children.push(el('text:p', {}, commentLine(line)));
+    return el('office:annotation', attrs, children);
+  }
+
+  /** The office:annotation-end for a comment's end marker, when its annotation is written and it isn't a reply. */
+  commentEndElement(id: string): XmlElement | undefined {
+    const c = this.commentsById.get(id);
+    if (!c || !this.writtenComments.has(id)) return undefined;
+    // A reply is a point after its parent's start: LibreOffice gives it no range of its own.
+    if (c.parentId !== undefined && this.writtenComments.has(c.parentId)) return undefined;
+    return el('office:annotation-end', { 'office:name': commentName(id) });
+  }
+
   /** Where the extension's anchored content goes, dropping anchors that no longer exist. */
   private indexAnchors(): void {
     const { ext } = this;
@@ -250,16 +305,6 @@ class Writer {
       this.insertions.set(paragraphId, list);
     };
 
-    for (const a of ext.annotations ?? []) {
-      if (!valid(a.paragraphId, a.offset)) continue;
-      const ranged = !!a.end && !!a.name && valid(a.end.paragraphId, a.end.offset) && after(a, a.end);
-      insert(a.paragraphId, a.offset, 1, (sink) => {
-        const e = this.restore(a.fragment, sink);
-        if (e && !ranged) delete e.attrs['office:name'];
-        return e;
-      });
-      if (ranged) insert(a.end!.paragraphId, a.end!.offset, 0, () => el('office:annotation-end', { 'office:name': a.name }));
-    }
     const bookmarkNames = new Set<string>();
     for (const b of ext.bookmarks ?? []) {
       if (!b.name || bookmarkNames.has(b.name) || !valid(b.paragraphId, b.offset)) continue;
@@ -1129,6 +1174,11 @@ class InlineWriter {
           break;
         case 'raw': {
           const skip = this.at(null, link);
+          const commentId = inline.xml.attrs['w:id'];
+          if (commentId !== undefined && (inline.xml.name === 'w:commentRangeStart' || inline.xml.name === 'w:commentRangeEnd')) {
+            const e = inline.xml.name === 'w:commentRangeStart' ? this.w.commentStartElement(commentId) : this.w.commentEndElement(commentId);
+            if (e) this.pieces.push({ link, style: null, node: e });
+          }
           // An equation is its LaTeX, as text.
           if (!skip && isMathInline(inline)) {
             const equation = readMathInline(inline);
@@ -1352,5 +1402,37 @@ export async function loadPictures(doc: WordDocument): Promise<Map<string, Uint8
       // A missing picture is left out.
     }
   }
+  return out;
+}
+
+function commentName(id: string): string {
+  return `__Annotation__${id}`;
+}
+
+/** One line of a comment as ODF paragraph content: runs of spaces, tabs and line breaks as elements. */
+function commentLine(line: string): XmlNode[] {
+  const out: XmlNode[] = [];
+  let text = '';
+  const flush = () => {
+    if (text) out.push(text);
+    text = '';
+  };
+  const chars = [...line.replace(/\r\n?/g, '\n')];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    if (ch === '\t') (flush(), out.push(el('text:tab')));
+    else if (ch === '\n') (flush(), out.push(el('text:line-break')));
+    else if (ch === ' ') {
+      let n = 1;
+      while (chars[i + n] === ' ') n++;
+      i += n - 1;
+      // After text, one space is ordinary and the rest of the run are counted.
+      const lead = text !== '' ? 1 : 0;
+      if (lead) text += ' ';
+      flush();
+      if (n - lead > 0) out.push(el('text:s', { 'text:c': String(n - lead) }));
+    } else if (ch.charCodeAt(0) >= 0x20 && ch.charCodeAt(0) !== 0xfffe && ch.charCodeAt(0) !== 0xffff) text += ch;
+  }
+  flush();
   return out;
 }

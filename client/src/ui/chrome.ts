@@ -183,7 +183,7 @@ export class Chrome {
     this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
     this.menuBar.refresh();
     this.syncFormatBox();
-    this.syncButton.update(this.state.sync);
+    this.syncButton.update(this.state.sync, this.state.subscription);
     const name = this.state.documentName;
     const title = name ? `${name} - ${this.appName}` : this.appName;
     if (document.title !== title) document.title = title;
@@ -225,6 +225,9 @@ export class Chrome {
       a('file.print', t('chrome.file.print'), { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
       dialog('file.properties', t('chrome.file.properties'), 'properties', { icon: 'properties' }),
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
+      // Signed out, Subscribe signs in first. Once subscribed, the same place manages it.
+      a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' }),
+      a('file.manageSubscription', t('chrome.file.manageSubscription'), { kind: 'manageSubscription' }, { tooltip: t('chrome.file.manageSubscription.tip'), visible: (s) => s.subscription === 'active' }),
     );
     for (const kind of new Set([...CONVERT_ORDER, ...PICTURE_CONVERT_ORDER])) {
       const profile = FORMATS[kind];
@@ -429,6 +432,7 @@ export class Chrome {
       a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
       a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
       a('help.changelog', t('chrome.help.changelog'), { kind: 'openSample', id: 'changelog' }),
+      a('help.clip', t('chrome.help.clip'), { kind: 'toggleClip' }, { checked: (s) => s.clip }),
     );
   }
 
@@ -473,6 +477,8 @@ export class Chrome {
       this.convertToItem(),
       cmd('file.download'),
       cmd('file.downloadAll'),
+      cmd('file.subscribe'),
+      cmd('file.manageSubscription'),
       cmd('file.print'),
       heading(t('chrome.menu.edit')),
       cmd('edit.find'),
@@ -543,6 +549,9 @@ export class Chrome {
           cmd('file.print'),
           sep,
           cmd('file.properties'),
+          sep,
+          cmd('file.subscribe'),
+          cmd('file.manageSubscription'),
           sep,
           cmd('file.clearLocalData'),
         ],
@@ -723,7 +732,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.clip'), cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).

@@ -633,3 +633,53 @@ test('documents with no extension and odd content still export', async () => {
   assert.ok(bodyOf(html).includes('<a href="a&quot;b&lt;c">x&lt;y &amp; z</a>'));
   assert.equal((await roundTrip(html)).length > 0, true);
 });
+
+// --- Comments -------------------------------------------------------------------------------------
+
+import { commentRanges } from '@word/docx';
+
+/** The text each comment covers, by comment id. */
+function coveredText(doc: WordDocument): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [id, range] of commentRanges(paragraphsIn(doc.body))) out.set(id, paragraphText(range.start.paragraph).slice(range.start.offset, range.end.offset).replace(/￼/g, ''));
+  return out;
+}
+
+test('comments: <mark class="comment"> imports as a comment, a plain <mark> stays a highlight', async () => {
+  const { document } = await htmlToDocument(
+    '<p>Say <mark class="comment" data-comment-id="7" data-author="Ann" data-initials="A" data-date="2024-05-01T10:00:00Z" data-comment="One&#10;Two &amp; three">hello <b>world</b></mark> and <mark>marked</mark> <!-- ignored -->end</p>',
+  );
+  assert.deepEqual(document.comments, [{ id: '0', author: 'Ann', initials: 'A', date: '2024-05-01T10:00:00Z', paragraphs: ['One', 'Two & three'] }]);
+  assert.equal(coveredText(document).get('0'), 'hello world');
+  const marked = runs(paragraphs(document)[0].children).find((r) => runText(r) === 'marked')!;
+  assert.equal(marked.properties.highlight, 'yellow');
+  assert.equal(paragraphText(paragraphs(document)[0]).replace(/￼/g, ''), 'Say hello world and marked end');
+});
+
+test('comments: replies, resolved, title as text, comment on the first and last word', async () => {
+  const { document } = await htmlToDocument(
+    '<p><mark class="comment" data-comment-id="a" data-resolved="true" title="Bob: first"><mark class="comment" data-comment-id="b" data-parent="a" data-author="Cy" data-comment="reply">First</mark></mark> middle <mark class="comment" data-comment-id="c" data-comment="x">last</mark></p>',
+  );
+  assert.equal(document.comments.length, 3);
+  assert.equal(document.comments[0].resolved, true);
+  assert.deepEqual(document.comments[0].paragraphs, ['Bob: first']);
+  assert.equal(document.comments[1].parentId, '0');
+  assert.equal(coveredText(document).get('1'), 'First');
+  assert.equal(coveredText(document).get('2'), 'last');
+});
+
+test('comments: export shape and round trip', async () => {
+  const source = await markdownToDocument('A **bold {==and plain==}{>>@Ann (2024-05-01T10:00:00Z): a "q" <b>\\nline 2<<}{>>↳ @Bob: ok<<} text** end {==z==}{>>✓ hi<<}');
+  const html = documentToHtml(source);
+  assert.match(html, /<mark class="comment" data-comment-id="0" data-author="Ann" data-initials="A" data-date="2024-05-01T10:00:00Z" data-comment="a &quot;q&quot; &lt;b&gt;&#10;line 2" title="Ann: a &quot;q&quot; &lt;b&gt;&#10;line 2"><mark class="comment" data-comment-id="1" data-author="Bob" data-initials="B" data-parent="0" data-comment="ok" title="Bob: ok"><strong>and plain<\/strong><\/mark><\/mark>/);
+  assert.match(html, /<mark class="comment" data-comment-id="2" data-resolved="true" data-comment="hi" title="hi">z<\/mark>/);
+  const { document } = await htmlToDocument(html);
+  assert.deepEqual(document.comments.map(({ initials: _i, ...c }) => c), source.comments.map(({ initials: _i, ...c }) => c));
+  assert.equal(documentToHtml(document), html);
+  assert.deepEqual([...coveredText(document).values()], [...coveredText(source).values()]);
+});
+
+test('comments: documents without comments are unchanged', async () => {
+  const { document } = await htmlToDocument('<p>a <mark>b</mark> c</p>');
+  assert.ok(!documentToHtml(document).includes('class="comment"'));
+});

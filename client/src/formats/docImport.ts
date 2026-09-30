@@ -9,11 +9,14 @@
 // font, colour, highlight), paragraph formatting (alignment, indents, spacing, keep options, page
 // break before), styles (with their formatting), lists (bullets and numbering with levels), tables
 // (cell widths, header rows), hyperlinks, page breaks, inline PNG/JPEG pictures, and the first
-// section's page size and margins. Not read: headers and footers, footnotes, comments, text boxes
+// section's page size and margins, and comments (text, author, initials, date, and the range they
+// mark; a comment whose range can't be found is a point at its reference mark). Not read: headers
+// and footers, footnotes, replies and resolved state (.doc has none), text boxes
 // and floating shapes, tracked changes, fields other than links (their results are kept).
 // Files from Word 6/95 (a different format) and encrypted files are refused.
 
 import { WordDocument } from '@word/docx';
+import { commentEnd, commentReference, commentStart, insertInlines } from '@word/docx';
 import type {
   Block,
   Inline,
@@ -64,6 +67,9 @@ class Reader {
 
 interface Fib {
   ccpText: number;
+  /** Where the annotation (comment) subdocument starts and how long it is, in characters. */
+  atnStart: number;
+  ccpAtn: number;
   /** File position and length in the table stream, by the index of FibRgFcLcb97. */
   fcLcb(index: number): { fc: number; lcb: number };
 }
@@ -73,6 +79,13 @@ const FC_PLCF_SED = 6;
 const FC_BTE_CHPX = 12;
 const FC_BTE_PAPX = 13;
 const FC_STTBF_FFN = 15;
+const FC_PLCF_AND_REF = 4;
+const FC_PLCF_AND_TXT = 5;
+const FC_GRP_XST_ATN_OWNERS = 36;
+const FC_PLCF_ATN_BKF = 42;
+const FC_PLCF_ATN_BKL = 43;
+// FibRgFcLcb2002's fcAtrdExtra: the ATRDPost10 records (with the comments' dates).
+const FC_ATRD_EXTRA = 112;
 const FC_CLX = 33;
 const FC_PLCF_LST = 73;
 const FC_PLF_LFO = 74;
@@ -88,11 +101,16 @@ function readFib(word: Reader): Fib {
   const cslw = word.u16(cslwAt);
   const lwAt = cslwAt + 2;
   const ccpText = word.u32(lwAt + 3 * 4);
+  // The subdocuments follow the main text in order: footnotes, headers, (reserved), comments.
+  const atnStart = ccpText + word.u32(lwAt + 4 * 4) + word.u32(lwAt + 5 * 4) + word.u32(lwAt + 6 * 4);
+  const ccpAtn = word.u32(lwAt + 7 * 4);
   const cbRgFcLcbAt = lwAt + cslw * 4;
   const cbRgFcLcb = word.u16(cbRgFcLcbAt);
   const blob = cbRgFcLcbAt + 2;
   return {
     ccpText,
+    atnStart,
+    ccpAtn,
     fcLcb: (index) => (index < cbRgFcLcb ? { fc: word.u32(blob + index * 8), lcb: word.u32(blob + index * 8 + 4) } : { fc: 0, lcb: 0 }),
   };
 }
@@ -692,6 +710,8 @@ class DocReader {
   private lists: ReturnType<typeof readLists>;
   private nextAbstract = 1;
   private sectionEnds = new Set<number>();
+  /** Each body paragraph and the characters it was read from, for placing comment markers. */
+  private readonly spans: { paragraph: Paragraph; start: number; mark: number }[] = [];
 
   constructor(
     private readonly doc: WordDocument,
@@ -715,6 +735,7 @@ class DocReader {
     this.readSections();
     this.installStyles(readStyles(this.table, this.fib));
     const body = this.body();
+    this.readComments();
     this.doc.body = body.length && body.at(-1)?.kind !== 'table' ? body : [...body, { kind: 'paragraph', properties: {}, children: [], attrs: {} }];
   }
 
@@ -964,7 +985,89 @@ class DocReader {
     const children = this.inlines(start, mark, state.styleIstd ?? 0);
     // A paragraph that is only a section mark and nothing else is dropped.
     if (!children.length && this.text.charCodeAt(mark) === 0x0c) return null;
-    return { kind: 'paragraph', properties: props, children, attrs: {} };
+    const result: Paragraph = { kind: 'paragraph', properties: props, children, attrs: {} };
+    this.spans.push({ paragraph: result, start, mark });
+    return result;
+  }
+
+  // --- Comments ---
+
+  /** Reads the comments and puts their markers into the paragraphs built from the main text. */
+  private readComments(): void {
+    const { fib, table } = this;
+    const ref = fib.fcLcb(FC_PLCF_AND_REF);
+    const txt = fib.fcLcb(FC_PLCF_AND_TXT);
+    const count = ref.lcb >= 4 ? Math.min(Math.floor((ref.lcb - 4) / 34), 100000) : 0;
+    if (!count || !fib.ccpAtn || txt.lcb < (count + 1) * 4) return;
+    const annotation = readText(this.word, this.pieces, fib.atnStart + fib.ccpAtn).slice(fib.atnStart);
+    const owners = readOwners(table, fib);
+    const extra = fib.fcLcb(FC_ATRD_EXTRA);
+    const extraSize = extra.lcb > (count + 1) * 4 ? Math.floor((extra.lcb - (count + 1) * 4) / count) : 0;
+    const ranges = this.commentRanges();
+    const taken = new Set<number>();
+    const markers = new Map<Paragraph, { offset: number; kind: 'start' | 'end'; id: string }[]>();
+    const mark = (cp: number, kind: 'start' | 'end', id: string) => {
+      const span = this.spans.find((s) => cp >= s.start && cp <= s.mark);
+      if (!span) return false;
+      const list = markers.get(span.paragraph) ?? [];
+      list.push({ offset: this.modelOffset(span.start, cp), kind, id });
+      markers.set(span.paragraph, list);
+      return true;
+    };
+    for (let i = 0; i < count; i++) {
+      const at = table.u32(ref.fc + i * 4);
+      const record = ref.fc + (count + 1) * 4 + i * 30;
+      const cch = Math.min(table.u16(record), 9);
+      const initials = table.utf16(record + 2, cch);
+      const from = table.u32(txt.fc + i * 4);
+      const to = Math.min(table.u32(txt.fc + (i + 1) * 4), annotation.length);
+      const paragraphs = annotation.slice(from, Math.max(to, from)).replace(/^\x05/, '').replace(/\r$/, '').split(/\r/);
+      const id = String(i);
+      // The range: a bookmark ending at the reference mark, else just the mark itself.
+      const found = ranges.find((r, k) => !taken.has(k) && r.end <= at && at - r.end <= 1);
+      const range = found ?? { start: at, end: at };
+      if (found) taken.add(ranges.indexOf(found));
+      if (!mark(range.end, 'end', id)) continue;
+      mark(range.start, 'start', id);
+      const date = extraSize >= 4 ? dttmToIso(table.u32(extra.fc + (count + 1) * 4 + i * extraSize)) : undefined;
+      const comment = { id, author: owners[table.u16(record + 20)] ?? '', ...(initials && { initials }), ...(date && { date }), paragraphs };
+      this.doc.comments.push(comment);
+    }
+    for (const [paragraph, list] of markers) {
+      list.sort((x, y) => y.offset - x.offset || (x.kind === 'end' ? -1 : 1));
+      for (const m of list) insertInlines(paragraph, m.offset, m.kind === 'end' ? [commentEnd(m.id), commentReference(m.id)] : [commentStart(m.id)]);
+    }
+  }
+
+  /** The comment ranges Word stored as bookmarks (PlcfAtnBkf and PlcfAtnBkl): character positions. */
+  private commentRanges(): { start: number; end: number }[] {
+    const { table, fib } = this;
+    const bkf = fib.fcLcb(FC_PLCF_ATN_BKF);
+    const bkl = fib.fcLcb(FC_PLCF_ATN_BKL);
+    const n = bkf.lcb >= 4 ? Math.min(Math.floor((bkf.lcb - 4) / 8), 100000) : 0;
+    const out: { start: number; end: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const start = table.u32(bkf.fc + i * 4);
+      const ibkl = table.u16(bkf.fc + (n + 1) * 4 + i * 4);
+      if ((ibkl + 1) * 4 > bkl.lcb) continue;
+      const end = table.u32(bkl.fc + ibkl * 4);
+      if (start <= end) out.push({ start, end });
+    }
+    return out;
+  }
+
+  /** Where the character at `cp` falls in the paragraph that starts at `start`, in model positions. */
+  private modelOffset(start: number, cp: number): number {
+    let offset = 0;
+    let code = 0;
+    for (let k = start; k < cp; k++) {
+      const c = this.text.charCodeAt(k);
+      if (c === 0x13) code++;
+      else if (c === 0x14 && code) code--;
+      else if (c === 0x15 || code) continue;
+      else if (c >= 0x20 || c === 0x09 || c === 0x0b || c === 0x0c || c === 0x1e || c === 0x1f) offset++;
+    }
+    return offset;
   }
 
   // --- Inline content ---
@@ -1117,6 +1220,30 @@ class DocReader {
       // A picture we can't store is left out.
     }
   }
+}
+
+/** The comment authors: a list of length-prefixed UTF-16 names. */
+function readOwners(table: Reader, fib: Fib): string[] {
+  const { fc, lcb } = fib.fcLcb(FC_GRP_XST_ATN_OWNERS);
+  const out: string[] = [];
+  for (let at = fc; at + 2 <= fc + lcb && out.length < 10000; ) {
+    const cch = table.u16(at);
+    out.push(table.utf16(at + 2, cch));
+    at += 2 + cch * 2;
+  }
+  return out;
+}
+
+/** A DTTM (minutes, hours, day, month, years since 1900) as an ISO date, or undefined when unset. */
+function dttmToIso(dttm: number): string | undefined {
+  const minute = dttm & 63;
+  const hour = (dttm >>> 6) & 31;
+  const day = (dttm >>> 11) & 31;
+  const month = (dttm >>> 16) & 15;
+  const year = 1900 + ((dttm >>> 20) & 511);
+  if (!day || !month || month > 12 || day > 31 || hour > 23 || minute > 59) return undefined;
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${p(year, 4)}-${p(month)}-${p(day)}T${p(hour)}:${p(minute)}:00Z`;
 }
 
 function sameProps(a: RunProperties, b: RunProperties): boolean {

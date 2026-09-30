@@ -97,6 +97,8 @@ function stubServer() {
       cloudVersion++;
       return json({ ...meta, updatedAt: cloudVersion });
     }
+    if (method === 'GET' && url === '/api/shared') return json([{ id: 's1', name: 'Theirs.docx', role: 'viewer', size: 1, createdAt: 1, updatedAt: 1, thumbAt: null, owner: { name: 'O', email: 'o@example.com' } }]);
+    if (method === 'GET' && url === '/api/documents') return json([]);
     if (method === 'GET' && url === '/api/documents/c1') return new Response(cloudBytes.slice());
     if (method === 'PUT' && url === '/api/documents/c1/thumbnail') return json({ ...meta, thumbAt: 7 });
     return json({ error: 'not found' }, 404);
@@ -109,6 +111,7 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
 const { openFromCloud, uploadToCloud } = await import('../src/library.ts');
+const { loadLibrary } = await import('../src/sync.ts');
 
 beforeEach(async () => {
   // The module keeps its database open between tests, so empty it instead of replacing it.
@@ -318,4 +321,32 @@ test('conflicted copies are named beside the original', async () => {
   assert.equal(conflictCopyName('Report.docx'), 'Report (conflicted copy).docx');
   assert.equal(conflictCopyName('notes'), 'notes (conflicted copy)');
   assert.equal(conflictCopyName('.hidden'), '.hidden (conflicted copy)');
+});
+
+test('without sync an account\'s copies here become the browser\'s own again, and subscribing takes them back', async () => {
+  const mine = await local.saveSaved({ name: 'Mine.docx', bytes: bytes(1), owner: 'u1' });
+  const other = await local.saveSaved({ name: 'Theirs.docx', bytes: bytes(2), owner: 'u2' });
+
+  await local.releaseToGuest('u1');
+  assert.deepEqual(local.ownedBy(await local.listSaved(), null).map((d) => d.id), [mine.id], 'in view as a guest\'s');
+  assert.deepEqual(local.ownedBy(await local.listSaved(), 'u2').map((d) => d.id), [other.id], 'another account\'s are left alone');
+  // Saving keeps them the browser's own.
+  await local.saveSaved({ id: mine.id, name: 'Mine.docx', bytes: bytes(3) });
+  assert.equal((await local.getSaved(mine.id))!.info.owner, undefined);
+
+  assert.deepEqual(await local.adoptGuestDocuments('u1'), [mine.id]);
+  assert.deepEqual(local.ownedBy(await local.listSaved(), 'u1').map((d) => d.id), [mine.id]);
+});
+
+test('signed in without sync, the library is the browser\'s own documents plus what others shared', async () => {
+  const guest = await local.saveSaved({ name: 'Mine.docx', bytes: bytes(1) });
+  const user = { id: 'u1', email: 'a@example.com', name: 'A' };
+  const library = await loadLibrary(null, user);
+  assert.deepEqual(library.entries.map((e) => e.local?.id), [guest.id]);
+  assert.deepEqual(library.shared.map((d) => d.id), ['s1']);
+  assert.deepEqual(calls.map((c) => c.url), ['/api/shared'], 'no listing of their own cloud documents');
+
+  calls = [];
+  assert.deepEqual((await loadLibrary(null, null)).shared, [], 'signed out sees nothing shared');
+  assert.equal(calls.length, 0);
 });

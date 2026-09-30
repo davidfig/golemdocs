@@ -55,6 +55,7 @@ export const app: Partial<Messages> = {
   'app.adopted': 'このブラウザーのドキュメント {count} 件をアカウントに追加しました',
   'app.conflictNotice': '「{before}」は別の場所でも変更されたため、これらの変更は「{name}」として保存されました',
   'app.signInToShare': 'このドキュメントを共有するにはサインインしてください',
+  'app.subscribeToShare': '購読してこのドキュメントを共有',
   'app.ownerOnlyShare': 'このドキュメントを共有できるのは所有者のみです',
   'app.notInAccountYet': 'このドキュメントはまだアカウントにありません。アップロードが完了するまでしばらくお待ちいただき、もう一度お試しください',
   'app.notSavedYet': '先に何か変更を加えてください。編集されると、ドキュメントがアカウントに保存されます',
@@ -78,6 +79,10 @@ export const app: Partial<Messages> = {
   'app.signOutLossExpired': '{count} 件のドキュメントに、アカウントにまだ保存されていない変更があります(サインアウトされています)。サインアウトするとこのブラウザーからドキュメントが削除されるため、それらの変更は失われます。',
   'app.signOutOffline': 'オフラインのためサインアウトできません',
   'app.signOutFailed': 'サインアウトできませんでした：{message}',
+  'app.subscribeFailed': 'お支払いを開始できませんでした: {message}',
+  'app.portalFailed': '購読を開けませんでした: {message}',
+  'app.subscribed': 'ご購読ありがとうございます!',
+  'app.subscribePending': 'ありがとうございます。お支払いがここに反映されるまで1分ほどかかることがあります。',
 
   // Clearing local data
   'app.clearTitle': 'ローカルデータを消去',
@@ -103,7 +108,6 @@ export const app: Partial<Messages> = {
   'app.unsupportedOpen': '{kind} ファイルを開くことにはまだ対応していません({name})',
   'app.notAvailable': '{name} はまだ利用できません',
   'app.notePrompt': 'メモ',
-  'app.commentPrompt': 'コメント',
 
   // File errors
   'app.notEpub': 'これは EPUB ファイルではありません。META-INF/container.xml がありません。',

@@ -1,4 +1,5 @@
 import { isAdmin } from './accounts.ts';
+import { assistantStatus, handleAssistant } from './assistant.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
@@ -7,8 +8,8 @@ import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFe
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
-import { handlePolarWebhook, subscriptionFor } from './subscriptions.ts';
-import { CloudflareError, userDb, type UserDb } from './userDb.ts';
+import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
+import { CloudflareError, existingUserDb, userDb, type UserDb } from './userDb.ts';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -75,6 +76,13 @@ function publicUrl(request: Request, env: Env): URL {
   return url;
 }
 
+/** Refuses (402 to the owner, 403 to anyone else) unless the document's owner has sync. */
+async function requireOwnerSync(env: Env, userId: string, ownerId: string): Promise<void> {
+  if (await hasSync(env, ownerId)) return;
+  if (ownerId === userId) throw subscriptionRequired();
+  throw new HttpError(403, 'the owner’s subscription has ended', 'subscription');
+}
+
 /** The room object for a document. */
 const roomFor = (env: Env, docId: string) => env.ROOMS.get(env.ROOMS.idFromName(docId));
 
@@ -92,9 +100,10 @@ const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: stri
  * The user's access to a document. Documents from before sharing existed have no owner record;
  * finding one in the user's own catalogue claims it.
  */
-async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb): Promise<Access | null> {
+async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb | null): Promise<Access | null> {
   const access = await accessFor(env, userId, docId);
   if (access) return access;
+  if (knownDb === null) return null; // no database of their own, so nothing to claim
   if (env.ENVIRONMENT !== 'local' && !env.CF_API_TOKEN) return null;
   const db = knownDb ?? (await userDb(env, userId));
   if (!(await db.first('SELECT 1 FROM documents WHERE id = ?', [docId]))) return null;
@@ -137,13 +146,25 @@ const handler: ExportedHandler = {
         if (!env.ROOMS) throw new HttpError(503, 'multiplayer is not configured');
         const access = await resolveAccess(env, userId, docId);
         if (!access) throw new HttpError(404, 'not found');
+        // The room saves into the owner's storage, so the owner must have sync (whoever is joining).
+        await requireOwnerSync(env, userId, access.ownerId);
         const room = roomFor(env, docId);
         const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId);
         return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
       }
 
       // GET /api/subscription: whether this user has paid for sync.
-      if (path === '/api/subscription' && request.method === 'GET') return json((await subscriptionFor(env, userId)) ?? { status: 'none', active: false, currentPeriodEnd: null, cancelAtPeriodEnd: false });
+      if (path === '/api/subscription' && request.method === 'GET') return json({ ...((await subscriptionFor(env, userId)) ?? { status: 'none', active: false, currentPeriodEnd: null, cancelAtPeriodEnd: false }), sync: await hasSync(env, userId) });
+
+      // POST /api/checkout: the Polar page where this user pays for sync. POST /api/portal: where they manage it.
+      if (path === '/api/checkout' && request.method === 'POST') return json(await startCheckout(env, userId, `${url.origin}/?subscribed=1`));
+      if (path === '/api/portal' && request.method === 'POST') return json(await startPortal(env, userId));
+      // GET /api/assistant: whether the assistant is on, and this user's credits. POST: one model turn (subscribers).
+      if (path === '/api/assistant') {
+        if (request.method === 'GET') return json(await assistantStatus(env, userId));
+        if (request.method === 'POST') return await handleAssistant(request, env, userId, json);
+        throw new HttpError(405, 'method not allowed');
+      }
 
       // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
       if (path === '/api/admin/billing' && request.method === 'GET') {
@@ -195,7 +216,11 @@ const handler: ExportedHandler = {
       if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
         throw new HttpError(503, 'cloud storage is not configured');
       }
-      const ownDb = await userDb(env, userId);
+      // Whether this user may keep documents in the cloud. Without it they get no database of their
+      // own (so nothing is created for people who only open what a subscriber shares), and what
+      // they already have can be read and deleted but not changed.
+      const syncing = await hasSync(env, userId);
+      const ownDb = syncing ? await userDb(env, userId) : await existingUserDb(env, userId);
 
       // GET /api/shared: documents other people shared with this user.
       if (collection === 'shared') {
@@ -207,6 +232,8 @@ const handler: ExportedHandler = {
         }
         const out: unknown[] = [];
         for (const [ownerId, roles] of byOwner) {
+          // A share lasts while its owner has sync.
+          if (!(await hasSync(env, ownerId))) continue;
           const ids = [...roles.keys()];
           const rows = await (await userDb(env, ownerId)).all<DocumentRow>(`SELECT * FROM documents WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
           const owner = await person(env, ownerId);
@@ -217,6 +244,7 @@ const handler: ExportedHandler = {
 
       // GET /api/documents: the user's documents, newest first.
       if (!id && request.method === 'GET') {
+        if (!ownDb) return json([]);
         const rows = await ownDb.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
         // Documents from before sharing existed are claimed here, so rooms and shares can find them.
         await Promise.all(rows.map((row) => registerOwner(env, row.id, userId)));
@@ -225,6 +253,7 @@ const handler: ExportedHandler = {
 
       // POST /api/documents?name=…: a new document from the request body (.docx bytes).
       if (!id && request.method === 'POST') {
+        if (!ownDb || !syncing) throw subscriptionRequired();
         const bytes = await readDocx(request);
         const docId = crypto.randomUUID();
         const name = cleanName(url.searchParams.get('name')) ?? 'Untitled.docx';
@@ -249,7 +278,15 @@ const handler: ExportedHandler = {
       const access = await resolveAccess(env, userId, id, ownDb);
       if (!access) throw new HttpError(404, 'not found');
       const { role, ownerId } = access;
-      const db: UserDb = ownerId === userId ? ownDb : await userDb(env, ownerId);
+      // Someone else's document is theirs to keep only while they have sync; reading your own never lapses.
+      const ownerSyncs = ownerId === userId ? syncing : await hasSync(env, ownerId);
+      const leaving = sub === 'shares' && request.method === 'DELETE'; // anyone may still remove themselves
+      if (!ownerSyncs && ownerId !== userId && !leaving) throw new HttpError(403, 'the owner’s subscription has ended', 'subscription');
+      const requireStorage = () => {
+        if (!ownerSyncs) throw subscriptionRequired();
+      };
+      const db: UserDb | null = ownerId === userId ? ownDb : await userDb(env, ownerId);
+      if (!db) throw new HttpError(404, 'not found');
       const thumbKeyFor = (docId: string) => `${ownerId}/${docId}.thumb`;
 
       const row = await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [id]);
@@ -267,6 +304,7 @@ const handler: ExportedHandler = {
         }
         if (granteeId === undefined && request.method === 'PUT') {
           if (role !== 'owner') throw new HttpError(403, 'only the owner can share this document');
+          requireStorage();
           const body = (await request.json().catch(() => null)) as { email?: unknown; role?: unknown } | null;
           if (typeof body?.email !== 'string' || (body.role !== 'editor' && body.role !== 'viewer')) throw new HttpError(400, 'expected { email, role: "editor" | "viewer" }');
           const target = await userByEmail(env, body.email);
@@ -302,6 +340,7 @@ const handler: ExportedHandler = {
         }
         if (request.method === 'PUT') {
           requireWrite();
+          requireStorage();
           const type = (request.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
           if (!THUMB_TYPES.has(type)) throw new HttpError(415, 'thumbnails are webp, png or jpeg');
           const bytes = await readBody(request, MAX_THUMB_BYTES, 'thumbnail');
@@ -327,6 +366,7 @@ const handler: ExportedHandler = {
       // is refused with 409 instead of overwritten.
       if (request.method === 'PUT') {
         requireWrite();
+        requireStorage();
         // While several people are editing, the room writes the file; an upload would be overwritten.
         // (423, not 409: 409 already means "changed elsewhere", which clients answer with a copy.)
         if (env.ROOMS && !((await (await roomFor(env, id).fetch(new Request('https://room/state'))).json()) as { maySave: boolean }).maySave) {
@@ -356,7 +396,7 @@ const handler: ExportedHandler = {
 
       throw new HttpError(405, 'method not allowed');
     } catch (error) {
-      if (error instanceof HttpError) return json({ error: error.message }, error.status);
+      if (error instanceof HttpError) return json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
       console.error(error instanceof CloudflareError ? `${error.message} ${JSON.stringify(error.errors)}` : error);
       return json({ error: 'internal error' }, 500);
     }

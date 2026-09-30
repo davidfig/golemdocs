@@ -289,7 +289,10 @@ export async function blocksToDocument(
           if (b.level === 0) numbered!.last = b.start;
           id = numbered!.id;
         }
-        push({ style: 'ListParagraph', numbering: { id, level: b.level }, ...spacingOf(b.spacing) }, b.runs, true);
+        const properties: ParagraphProperties = { style: 'ListParagraph', numbering: { id, level: b.level }, ...spacingOf(b.spacing) };
+        // The PDF's own marker and text positions, not the list level's default steps.
+        if (b.indent) properties.indent = indentOf(b.indent);
+        push(properties, b.runs, true);
         break;
       }
     }

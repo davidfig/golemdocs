@@ -28,6 +28,8 @@ export interface CommandSpec {
   run?: () => void;
   /** Extra condition on top of format and host support. */
   enabled?: (state: ChromeState) => boolean;
+  /** When false the command is left out of menus, toolbars and the palette (Subscribe once subscribed). */
+  visible?: (state: ChromeState) => boolean;
   /** Shows a check (checkbox items) / pressed state (toolbar toggles). */
   checked?: (state: ChromeState) => boolean;
   /** Checked items in a group are drawn as radio bullets. */
@@ -158,6 +160,7 @@ export class CommandRegistry {
    * but that don't apply right now (Undo with nothing to undo) are shown disabled.
    */
   isAvailable(command: Command): boolean {
+    if (command.visible && !command.visible(this.context.state())) return false;
     const action = this.actionOf(command);
     return !action || formatAllows(FORMATS[this.context.state().kind], action);
   }

@@ -15,10 +15,14 @@
 // numbered from 1, skipping ids in use.
 
 import {
+  commentEnd,
+  commentReference,
+  commentStart,
   mergeProperties,
   WordDocument,
   type AbstractNumbering,
   type Block,
+  type Comment,
   type Drawing,
   type Hyperlink,
   type Inline,
@@ -37,7 +41,6 @@ import {
   type XmlNode,
 } from '@word/docx';
 import type {
-  OdtAnnotation,
   OdtBookmark,
   OdtExtension,
   OdtFragment,
@@ -185,7 +188,13 @@ class Reader {
   private nextInstance: number;
 
   // Anchors waiting for their end.
-  private readonly openAnnotations = new Map<string, OdtAnnotation>();
+  /** office:name of each comment (and its replies' ids) whose office:annotation-end is still to come. */
+  private readonly openAnnotations = new Map<string, string[]>();
+  /** office:name -> comment id, for replies to find their parent. */
+  private readonly annotationIds = new Map<string, string>();
+  /** office:name of annotations that have an office:annotation-end somewhere. */
+  private annotationEnds = new Set<string>();
+  private nextComment = 0;
   private readonly openBookmarks = new Map<string, OdtBookmark>();
 
   private readonly memoParagraph = new Map<string, ParagraphStyleInfo>();
@@ -213,6 +222,7 @@ class Reader {
 
     const text = firstChild(firstChild(pkg.content, 'office:body'), 'office:text')!;
     this.part = 'content';
+    for (const d of descendants(text)) if (d.name === 'office:annotation-end' && d.attrs['office:name']) this.annotationEnds.add(d.attrs['office:name']);
     const body: Block[] = [];
     this.readBlocks(text.children, body, true);
     if (!body.length) body.push(this.emptyParagraph());
@@ -684,12 +694,12 @@ class Reader {
         ctx.lastSpace = false;
         return;
       case 'office:annotation':
-        this.annotation(e, ctx);
+        this.annotation(e, container, ctx);
         return;
       case 'office:annotation-end': {
         const open = this.openAnnotations.get(e.attrs['office:name'] ?? '');
         if (open) {
-          open.end = { paragraphId: ctx.id, offset: ctx.offset };
+          for (const id of open) this.closeComment(id, container, ctx);
           this.openAnnotations.delete(e.attrs['office:name']);
         }
         return;
@@ -762,25 +772,52 @@ class Reader {
     (this.ext.objects ??= []).push({ placement: 'inline', paragraphId: ctx.id, offset: ctx.offset, fragment: this.fragment(e) });
   }
 
-  private annotation(e: XmlElement, ctx: ParaCtx): void {
-    const record: OdtAnnotation = {
-      paragraphId: ctx.id,
-      offset: ctx.offset,
-      text: childElements(e).filter((c) => c.name === 'text:p' || c.name === 'text:h' || c.name === 'text:list').map((c) => textOf(c)),
-      fragment: this.fragment(e),
+  /**
+   * An office:annotation becomes a comment in the core, its range marked in the text. A comment
+   * with an office:annotation-end covers the text up to it; without one it is an empty range.
+   * A reply (loext:parent-name) gets its own markers over the same range as its parent's.
+   */
+  private annotation(e: XmlElement, container: Inline[], ctx: ParaCtx): void {
+    const id = String(this.nextComment++);
+    const paragraphs: string[] = [];
+    const collect = (nodes: XmlElement[]) => {
+      for (const c of nodes) {
+        if (c.name === 'text:p' || c.name === 'text:h') paragraphs.push(commentText(c));
+        else if (c.name === 'text:list' || c.name === 'text:list-item' || c.name === 'text:list-header') collect(childElements(c));
+      }
     };
-    const author = firstChild(e, 'dc:creator');
-    if (author) record.author = textOf(author);
+    collect(childElements(e));
+    const creator = firstChild(e, 'dc:creator');
+    const comment: Comment = { id, author: creator ? textOf(creator) : '', paragraphs };
     const date = firstChild(e, 'dc:date');
-    if (date) record.date = textOf(date);
+    if (date) comment.date = textOf(date).trim();
     const initials = firstChild(e, 'meta:creator-initials') ?? firstChild(e, 'loext:sender-initials');
-    if (initials) record.initials = textOf(initials);
+    if (initials) comment.initials = textOf(initials);
+    if (e.attrs['loext:resolved'] === 'true') comment.resolved = true;
     const name = e.attrs['office:name'];
-    if (name) {
-      record.name = name;
-      this.openAnnotations.set(name, record);
-    }
-    (this.ext.annotations ??= []).push(record);
+    const parentName = e.attrs['loext:parent-name'];
+    const parent = parentName ? this.annotationIds.get(parentName) : undefined;
+    if (parent) comment.parentId = parent;
+    this.doc.comments.push(comment);
+    if (name) this.annotationIds.set(name, id);
+
+    this.openComment(id, container, ctx);
+    if (parent && parentName && this.openAnnotations.has(parentName)) {
+      // The parent's range is still open: this reply's markers end where it does.
+      this.openAnnotations.get(parentName)!.push(id);
+    } else if (!parent && name && this.annotationEnds.has(name)) {
+      this.openAnnotations.set(name, [id]);
+    } else this.closeComment(id, container, ctx);
+  }
+
+  private openComment(id: string, container: Inline[], ctx: ParaCtx): void {
+    container.push(commentStart(id));
+    ctx.offset++;
+  }
+
+  private closeComment(id: string, container: Inline[], ctx: ParaCtx): void {
+    container.push(commentEnd(id), commentReference(id));
+    ctx.offset += 2;
   }
 
   /** A picture frame becomes an inline drawing; returns false for anything else. */
@@ -1317,4 +1354,17 @@ function clean(ext: OdtExtension): OdtExtension {
     else if (value && typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length) delete ext[key];
   }
   return ext;
+}
+
+/** The text of a comment's paragraph, with ODF's spaces, tabs and line breaks. */
+function commentText(e: XmlElement): string {
+  let out = '';
+  for (const n of e.children) {
+    if (typeof n === 'string') out += n;
+    else if (n.name === 'text:s') out += ' '.repeat(Math.min(Math.max(parseInt(n.attrs['text:c'] ?? '1', 10) || 1, 1), 10000));
+    else if (n.name === 'text:tab') out += '\t';
+    else if (n.name === 'text:line-break') out += '\n';
+    else out += commentText(n);
+  }
+  return out;
 }

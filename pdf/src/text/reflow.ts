@@ -51,6 +51,8 @@ export type Block =
       format?: ListFormat;
       start?: number;
       runs: Run[];
+      /** Where the PDF put the marker (`left` + `firstLine`) and the text (`left`), from the column edge. */
+      indent?: Indent;
       spacing?: Spacing;
     }
   /** `page`: the zero-based PDF page that starts here. */
@@ -937,6 +939,9 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
     if (p.kind === 'list') {
       const m = p.d.list!.marker;
       const first = m.candidates[0];
+      const { x, textX } = p.d.list!;
+      const left = Math.max(0, textX - p.d.lines[0].colLeft);
+      const hang = Math.max(0, Math.min(left, textX - x));
       const block: Block = {
         kind: 'listItem',
         ordered: m.ordered,
@@ -944,6 +949,7 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
         level: 0,
         ...(first ? { format: first.format, start: first.n } : {}),
         runs,
+        indent: { left: round1(left), firstLine: -round1(hang) },
         spacing,
       };
       blocks.push(block);

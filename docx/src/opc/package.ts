@@ -19,6 +19,7 @@ export const REL = {
   image: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
   hyperlink: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
   comments: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments',
+  commentsExtended: 'http://schemas.microsoft.com/office/2011/relationships/commentsExtended',
   coreProperties: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
   extendedProperties: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties',
 } as const;
@@ -33,6 +34,7 @@ export const CONTENT_TYPE = {
   coreProperties: 'application/vnd.openxmlformats-package.core-properties+xml',
   extendedProperties: 'application/vnd.openxmlformats-officedocument.extended-properties+xml',
   comments: 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
+  commentsExtended: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml',
   relationships: 'application/vnd.openxmlformats-package.relationships+xml',
   xml: 'application/xml',
 } as const;

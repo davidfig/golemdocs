@@ -44,6 +44,7 @@ export class WordDocument {
   private sectionAbsent = false;
   private numberingPart?: string;
   private commentsPart?: string;
+  private commentsExtendedPart?: string;
   private commentsRead?: CommentsPart;
   private corePart?: string;
   private appPart?: string;
@@ -100,7 +101,9 @@ export class WordDocument {
     if (settingsPart) doc.settings = readSettings(await pkg.xml(settingsPart));
     doc.commentsPart = partFor(REL.comments);
     if (doc.commentsPart) {
-      doc.commentsRead = readComments(await pkg.xml(doc.commentsPart));
+      const extendedPart = partFor(REL.commentsExtended);
+      doc.commentsExtendedPart = extendedPart;
+      doc.commentsRead = readComments(await pkg.xml(doc.commentsPart), extendedPart ? await pkg.xml(extendedPart) : undefined);
       doc.comments = doc.commentsRead.comments.map((c) => structuredClone(c));
     }
 
@@ -225,13 +228,21 @@ export class WordDocument {
     if (this.commentsPart || this.comments.length) {
       this.commentsPart ??= 'word/comments.xml';
       rels.add(REL.comments, this.commentsPart);
-      const comments = writeComments({
-        comments: this.comments,
-        rootAttrs: this.commentsRead?.rootAttrs ?? {},
-        originals: this.commentsRead?.originals ?? new Map(),
-      });
+      const { comments, extended } = writeComments(
+        {
+          comments: this.comments,
+          rootAttrs: this.commentsRead?.rootAttrs ?? {},
+          originals: this.commentsRead?.originals ?? new Map(),
+        },
+        !!this.commentsExtendedPart,
+      );
       declareNamespaces(comments);
       pkg.set(this.commentsPart, comments, CONTENT_TYPE.comments);
+      if (extended) {
+        this.commentsExtendedPart ??= 'word/commentsExtended.xml';
+        rels.add(REL.commentsExtended, this.commentsExtendedPart);
+        pkg.set(this.commentsExtendedPart, extended, CONTENT_TYPE.commentsExtended);
+      }
     }
 
     // The properties parts, only if the properties were changed.

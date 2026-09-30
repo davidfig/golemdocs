@@ -34,6 +34,14 @@ export interface Annotation {
   author?: string;
   /** Last modified, as a PDF date string (D:YYYYMMDDHHmmSS...). */
   modified?: string;
+  /** A reply: the id of the annotation this one is in reply to (/IRT, §12.5.6.4). */
+  replyTo?: string;
+  /**
+   * The review state this annotation sets on the one it replies to (/State, e.g. "Completed",
+   * "Accepted", "Rejected"), or on itself when it has no `replyTo`. A note with no text and a state
+   * is a state change, not a comment.
+   */
+  state?: string;
 }
 
 const SUBTYPES: Record<string, AnnotationKind> = { Highlight: 'highlight', Underline: 'underline', StrikeOut: 'strikeout', Text: 'note' };
@@ -81,6 +89,10 @@ function read(doc: PdfDocument, dict: PdfDict | undefined, page: number, id: str
   const modified = text('M');
   if (author) annotation.author = author;
   if (modified) annotation.modified = modified;
+  const replyTo = dict.get('IRT');
+  if (replyTo instanceof PdfRef) annotation.replyTo = idOf(replyTo);
+  const state = text('State');
+  if (state) annotation.state = state;
   return annotation;
 }
 
@@ -96,14 +108,17 @@ export function applyAnnotations(doc: PdfDocument, annotations: readonly Annotat
     if (list) list.push(a);
     else byPage.set(a.page, [a]);
   }
+  /** Every listed annotation's object, and the ones written this time (whose reply links are set below). */
+  const refs = new Map<string, PdfRef>();
+  const written = new Set<string>();
   doc.pages.forEach((page, index) => {
     const wanted = byPage.get(index) ?? [];
     const wantedById = new Map(wanted.map((a) => [a.id, a]));
     const kept: PdfObject[] = [];
     const placed = new Set<string>();
     const dropPopups = new Set<string>();
-    const refs = doc.array(page.dict.get('Annots')) ?? [];
-    for (const ref of refs) {
+    const existing = doc.array(page.dict.get('Annots')) ?? [];
+    for (const ref of existing) {
       const dict = doc.dict(ref);
       const kind = dict && SUBTYPES[dict.name('Subtype') ?? ''];
       if (!(ref instanceof PdfRef) || !dict || !kind) {
@@ -118,27 +133,53 @@ export function applyAnnotations(doc: PdfDocument, annotations: readonly Annotat
         if (popup instanceof PdfRef) dropPopups.add(idOf(popup));
         continue;
       }
-      if (!sameAnnotation(read(doc, dict, index, id), want)) write(doc, dict, want);
+      if (!sameAnnotation(read(doc, dict, index, id), want)) {
+        write(doc, dict, want);
+        written.add(id);
+      }
       kept.push(ref);
       placed.add(id);
+      refs.set(id, ref);
     }
     for (const want of wanted) {
       if (placed.has(want.id)) continue;
       const dict = new PdfDict({ Type: N('Annot'), P: page.ref, F: 4 });
       write(doc, dict, want);
-      kept.push(doc.add(dict));
+      const ref = doc.add(dict);
+      kept.push(ref);
+      refs.set(want.id, ref);
+      written.add(want.id);
     }
     const final = kept.filter((ref) => !(ref instanceof PdfRef && dropPopups.has(idOf(ref))));
-    if (final.length === refs.length && final.every((ref, i) => ref === refs[i])) return;
+    if (final.length === existing.length && final.every((ref, i) => ref === existing[i])) return;
     if (final.length) page.dict.set('Annots', final);
     else page.dict.delete('Annots');
   });
+  // Reply links and states last: a reply's target may be on a later page, or new.
+  for (const a of annotations) {
+    if (!written.has(a.id)) continue;
+    const dict = doc.dict(refs.get(a.id));
+    if (!dict) continue;
+    const target = a.replyTo ? refs.get(a.replyTo) : undefined;
+    dict.set('IRT', target);
+    dict.set('RT', target ? N('R') : undefined);
+    dict.set('State', a.state ? PdfString.text(a.state) : undefined);
+    dict.set('StateModel', a.state ? N(MARKED_STATES.has(a.state) ? 'Marked' : 'Review') : undefined);
+    // A state change is a record, not something to see.
+    const invisible = !!a.state && !!target && !a.contents;
+    if (invisible) {
+      dict.set('F', 6);
+      dict.delete('AP');
+    }
+  }
 }
+
+const MARKED_STATES = new Set(['Marked', 'Unmarked']);
 
 function sameAnnotation(a: Annotation | null, b: Annotation): boolean {
   if (!a) return false;
   const close = (x: readonly number[], y: readonly number[]) => x.length === y.length && x.every((v, i) => Math.abs(v - y[i]) < 1e-3);
-  return a.kind === b.kind && a.contents === b.contents && (a.author ?? '') === (b.author ?? '') && close(a.rect, b.rect) && close(a.quads, b.quads) && close(a.color, b.color);
+  return a.kind === b.kind && a.contents === b.contents && (a.author ?? '') === (b.author ?? '') && a.replyTo === b.replyTo && a.state === b.state && close(a.rect, b.rect) && close(a.quads, b.quads) && close(a.color, b.color);
 }
 
 function write(doc: PdfDocument, dict: PdfDict, a: Annotation): void {

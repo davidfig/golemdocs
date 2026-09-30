@@ -19,11 +19,27 @@
 //  - Footnotes ([^1] and definitions), task-list boxes and raw HTML are kept as literal text: the
 //    model has no footnote part to attach them to.
 //
+// Comments use CriticMarkup, the usual convention for comments in Markdown (other editors show or
+// ignore it, and the text stays readable): a commented range is `{==the text==}` followed by one
+// `{>>comment<<}` block per comment. The first block is the thread's comment, later blocks are its
+// replies (each a comment of its own over the same range). A block reads
+//     {>>[↳ ][✓ ][@Author[ (2024-05-01T10:00:00Z)]: ]text<<}
+// `↳ ` marks a reply, `✓ ` a resolved thread, `@Author (date): ` names who wrote it and when (a
+// block from another tool without the `@` prefix is just the text, by nobody). In the text (and the
+// author) a backslash escapes the next character: `\\` is a backslash, `\n` a new paragraph of the
+// comment, `\<` a `<` that would otherwise end the block, `\:` and `\(` in an author, and `\|` in a
+// table cell. A comment on no text is a lone `{>>…<<}`. Bold, links and the like may sit inside the
+// range. Ranges can't overlap (an inner range that outlives its outer one is cut short) or run
+// across paragraphs (the range ends with the paragraph), and comments in code blocks are dropped.
+// Initials are not kept (they are made from the author's name on import). Where the document has
+// comments, a literal `{==` or `{>>` in text is backslash-escaped, so it can't be read as one.
+//
 // Nothing here throws on odd input: unknown syntax degrades to literal text.
 
-import { isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
+import { commentEnd, commentReference, commentStart, isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
 import type {
   Block,
+  Comment,
   Hyperlink,
   Inline,
   NumberingLevel,
@@ -38,6 +54,7 @@ import type {
   TableRow,
 } from '@word/docx';
 
+import { commentMarker, commentThreads, RangeTracker } from './commentRanges.ts';
 import { MONO_FONTS, styleFor } from './markdownStyles.ts';
 
 const MAX_DEPTH = 24;
@@ -74,7 +91,9 @@ function appendText(content: RunContent[], text: string): void {
 // --- Inline parsing ------------------------------------------------------------------------------
 
 interface INode {
-  t: 'text' | 'code' | 'delim' | 'br' | 'image' | 'math';
+  t: 'text' | 'code' | 'delim' | 'br' | 'image' | 'math' | 'cstart' | 'cend';
+  /** Comment ids, for a comment range's start or end. */
+  c?: string[];
   s: string;
   /** Destination when the node is inside a link. */
   link?: string;
@@ -107,6 +126,65 @@ interface Bracket {
   textStart: number;
 }
 
+// --- Comments (CriticMarkup) ---------------------------------------------------------------------
+
+/** One `{>>…<<}` block, read. */
+interface CriticBlock {
+  reply: boolean;
+  resolved: boolean;
+  author: string;
+  date?: string;
+  paragraphs: string[];
+}
+
+const unescapeComment = (s: string): string => s.replace(/\\([\s\S])/g, (_m, c: string) => (c === 'n' ? '\n' : c));
+const BLOCK_HEAD = /^(↳ )?(✓ )?(?:@((?:[^:\\\n]|\\[\s\S])*?)(?: \(([^)\n]*)\))?: )?/;
+
+/** The `{>>…<<}` blocks starting at `q`, and where they end; null if there is none. */
+function readCriticBlocks(text: string, q: number): { blocks: CriticBlock[]; end: number } | null {
+  const blocks: CriticBlock[] = [];
+  while (text.startsWith('{>>', q)) {
+    let i = q + 3;
+    while (i < text.length && !text.startsWith('<<}', i)) i += text[i] === '\\' ? 2 : 1;
+    if (i >= text.length) break;
+    const raw = text.slice(q + 3, i);
+    const head = BLOCK_HEAD.exec(raw)!;
+    blocks.push({
+      reply: head[1] !== undefined,
+      resolved: head[2] !== undefined,
+      author: head[3] === undefined ? '' : unescapeComment(head[3]),
+      ...(head[4] !== undefined && { date: head[4] }),
+      paragraphs: unescapeComment(raw.slice(head[0].length)).split('\n'),
+    });
+    q = i + 3;
+  }
+  return blocks.length ? { blocks, end: q } : null;
+}
+
+/** The comment blocks for a thread: its first comment, then the replies. */
+function writeCriticBlocks(thread: readonly Comment[], mode: Mode): string {
+  let out = '';
+  thread.forEach((c, i) => {
+    const escape = (s: string): string => s.replace(/\\/g, '\\\\');
+    let head = `${i > 0 ? '↳ ' : ''}${c.resolved && i === 0 ? '✓ ' : ''}`;
+    if (c.author || c.date) {
+      const author = escape(c.author.replace(/\s+/g, ' ')).replace(/[:(]/g, (m) => `\\${m}`);
+      head += `@${author}${c.date ? ` (${c.date.replace(/[)\r\n]/g, '')})` : ''}: `;
+    }
+    let text = escape(c.paragraphs.join('\n'))
+      .replace(/\r\n?|\n/g, '\\n')
+      .replace(/<(?=<|$)/g, '\\<');
+    if (!head && /^[@↳✓]/.test(text)) text = `\\${text}`;
+    if (mode === 'cell') text = text.replace(/\|/g, '\\|');
+    out += `{>>${head}${text}<<}`;
+  });
+  return out;
+}
+
+const initialsOf = (author: string): string | undefined => {
+  const letters = author.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0].toUpperCase());
+  return letters.length ? letters.join('') : undefined;
+};
 const mk = (t: INode['t'], s = ''): INode => ({ t, s, b: 0, i: 0, k: 0 });
 const isPunct = (c: string | undefined): boolean => {
   if (!c) return false;
@@ -116,7 +194,7 @@ const isPunct = (c: string | undefined): boolean => {
 const UNI_WS = /\s/;
 const UNI_PUNCT = /[\p{P}\p{S}]/u;
 
-const SPECIAL = /[\\`*_~[\]!<&$\n]/g;
+const SPECIAL = /[\\`*_~[\]!<&$\n{]/g;
 
 /**
  * The equation the `$` at `p` opens, if it does: `$$…$$` (anything between), or `$…$` with no space inside
@@ -252,7 +330,7 @@ function nodeText(n: INode): string {
 }
 
 /** Inline Markdown to model inlines. Linear-ish: delimiter matching uses the CommonMark stack with per-kind bottoms. */
-function parseInline(text: string, refs: Map<string, string>, used: Set<string>): Inline[] {
+function parseInline(text: string, refs: Map<string, string>, used: Set<string>, addComments: (blocks: CriticBlock[]) => string[]): Inline[] {
   const nodes: INode[] = [];
   const brackets: Bracket[] = [];
   const allDelims: Delim[] = [];
@@ -261,6 +339,15 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>)
   let parts: string[] = [];
   let barrier = 0;
   const ticks: { map: Map<number, { pos: number[]; ptr: number }> | null } = { map: null };
+  // The comment range being read: where its text ends, where its comment blocks end, and its ids.
+  let range: { at: number; end: number; ids: string[] } | null = null;
+  const closeRange = (): void => {
+    flush();
+    const node = mk('cend');
+    node.c = range!.ids;
+    nodes.push(node);
+    range = null;
+  };
 
   const flush = (): void => {
     if (parts.length) {
@@ -351,12 +438,18 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>)
   const n = text.length;
   let p = 0;
   while (p < n) {
+    if (range && p > range.at) closeRange();
     SPECIAL.lastIndex = p;
     const m = SPECIAL.exec(text);
-    const q = m ? m.index : n;
+    const q = Math.min(m ? m.index : n, range ? range.at : n);
     if (q > p) parts.push(text.slice(p, q));
     if (q >= n) break;
     p = q;
+    if (range && p === range.at) {
+      p = range.end;
+      closeRange();
+      continue;
+    }
     const c = text[p];
     switch (c) {
       case '\\': {
@@ -395,6 +488,37 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>)
         } else parts.push(' ');
         p++;
         while (text[p] === ' ' || text[p] === '\t') p++;
+        break;
+      }
+      case '{': {
+        if (!range && text.startsWith('{==', p)) {
+          const close = text.indexOf('==}{>>', p + 3);
+          const read = close > 0 ? readCriticBlocks(text, close + 3) : null;
+          if (read) {
+            flush();
+            const node = mk('cstart');
+            node.c = addComments(read.blocks);
+            nodes.push(node);
+            range = { at: close, end: read.end, ids: node.c };
+            p += 3;
+            break;
+          }
+        } else if (text.startsWith('{>>', p)) {
+          const read = readCriticBlocks(text, p);
+          if (read) {
+            flush();
+            const ids = addComments(read.blocks);
+            const start = mk('cstart');
+            start.c = ids;
+            const end = mk('cend');
+            end.c = ids;
+            nodes.push(start, end);
+            p = read.end;
+            break;
+          }
+        }
+        parts.push('{');
+        p++;
         break;
       }
       case '$': {
@@ -602,6 +726,7 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>)
       }
     }
   }
+  if (range) closeRange();
   flush();
   processEmphasis(null);
   // Delimiters that matched (fully or partly) keep only their unused characters as literal text.
@@ -660,6 +785,16 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
     strike += node.k;
     if (node.t === 'br') {
       runFor(false).content.push({ kind: 'break' });
+      continue;
+    }
+    if (node.t === 'cstart' || node.t === 'cend') {
+      setLink(node.link);
+      st.run = null;
+      const target = st.link ? st.link.children : out;
+      for (const id of node.c!) {
+        if (node.t === 'cstart') target.push(commentStart(id));
+        else target.push(commentEnd(id), commentReference(id));
+      }
       continue;
     }
     if (node.t === 'math') {
@@ -909,6 +1044,7 @@ class Builder {
   /** Paragraphs made from ordinary text (candidates for becoming list items). */
   readonly plain = new WeakSet<Paragraph>();
   private nextAbstract: number;
+  private nextComment = 0;
   private nextInstance: number;
 
   constructor(doc: WordDocument) {
@@ -1000,9 +1136,30 @@ class Builder {
     };
   }
 
+  /** Adds the comments read from one range's blocks (the first, then its replies) and returns their ids. */
+  addComments(blocks: readonly CriticBlock[]): string[] {
+    const ids: string[] = [];
+    blocks.forEach((b, i) => {
+      const id = String(this.nextComment++);
+      const initials = initialsOf(b.author);
+      this.doc.comments.push({
+        id,
+        author: b.author,
+        ...(initials && { initials }),
+        ...(b.date && { date: b.date }),
+        paragraphs: b.paragraphs,
+        ...(i > 0 && { parentId: ids[0] }),
+        ...(i === 0 && b.resolved && { resolved: true }),
+      });
+      ids.push(id);
+    });
+    return ids;
+  }
+
   /** Runs the deferred inline parsing (it needs every link definition, so it waits for the block pass). */
   finish(): void {
-    for (const { p, text } of this.pending) p.children = parseInline(text, this.refs, this.used);
+    const add = (blocks: CriticBlock[]): string[] => this.addComments(blocks);
+    for (const { p, text } of this.pending) p.children = parseInline(text, this.refs, this.used, add);
   }
 
   /** Adds the styles the document ended up using. */
@@ -1256,6 +1413,12 @@ interface Seg {
   raw?: boolean;
   /** A line break. */
   br?: boolean;
+  /** The comment threads (by first comment's id, outermost first, comma-separated) this text is in. */
+  cm?: string;
+  /** A comment on no text: the thread whose blocks stand here. */
+  note?: string;
+  /** A comment range's start or end, between segments (gone once applied). */
+  mark?: { id: string; end: boolean };
 }
 
 type Mode = 'block' | 'heading' | 'cell';
@@ -1268,7 +1431,7 @@ const isWordChar = (c: string): boolean => c !== '' && /[\p{L}\p{N}]/u.test(c);
 const isSpaceTab = (c: string | undefined): boolean => c === ' ' || c === '\t';
 
 /** Where in `plain` Markdown syntax would be triggered by literal text, so it must be backslash-escaped. */
-function computeEscapes(plain: string, drop: Uint8Array, inLink: Uint8Array, mode: Mode): Uint8Array {
+function computeEscapes(plain: string, drop: Uint8Array, inLink: Uint8Array, mode: Mode, critic = false): Uint8Array {
   const n = plain.length;
   const esc = new Uint8Array(n);
   // Text that could be read as an equation is kept as text by escaping its dollar signs.
@@ -1308,6 +1471,13 @@ function computeEscapes(plain: string, drop: Uint8Array, inLink: Uint8Array, mod
       case '`':
       case '*':
         esc[i] = 1;
+        break;
+      case '{':
+        // Where the document has comments, text is kept from reading as CriticMarkup.
+        if (critic && (next === '=' || next === '>') && plain[i + 2] === next) esc[i] = 1;
+        break;
+      case '}':
+        if (critic && prev === '=' && plain[i - 2] === '=') esc[i] = 1;
         break;
       case '_':
         if (!(isWordChar(prev) && isWordChar(next))) esc[i] = 1;
@@ -1399,10 +1569,11 @@ const markClose = (key: string): string =>
 const baseKey = (key: string): string => (key.endsWith('_') ? key.slice(0, -1) : key);
 
 /** Segments to a single Markdown string (breaks become "\<newline>", or <br> in table cells). */
-function renderInline(input: Seg[], mode: Mode): string {
+function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, string>, critic = false): string {
   // Merge neighbours with the same formatting, collapse breaks, trim breaks at the ends.
   const segs: Seg[] = [];
-  for (const seg of input) {
+  for (const item of input) {
+    const seg = item.note === undefined ? item : { ...item, text: notes?.get(item.note) ?? '' };
     const last = segs[segs.length - 1];
     if (seg.br) {
       if (mode === 'heading') {
@@ -1421,7 +1592,8 @@ function renderInline(input: Seg[], mode: Mode): string {
       last.italic === seg.italic &&
       last.strike === seg.strike &&
       last.code === seg.code &&
-      last.link === seg.link
+      last.link === seg.link &&
+      last.cm === seg.cm
     ) {
       last.text += text;
     } else segs.push({ ...seg, text });
@@ -1467,7 +1639,7 @@ function renderInline(input: Seg[], mode: Mode): string {
     while (z > a && isSpaceTab(plain[z - 1])) drop[--z] = 1;
     s = e + 1;
   }
-  const esc = computeEscapes(plain, drop, inLink, mode);
+  const esc = computeEscapes(plain, drop, inLink, mode, critic);
 
   const out: string[] = [];
   const open: string[] = [];
@@ -1508,15 +1680,21 @@ function renderInline(input: Seg[], mode: Mode): string {
       trail = core.slice(z);
       core = core.slice(a, z);
     }
-    const needed: string[] = [];
+    const needed: string[] = s.cm ? s.cm.split(',').map((id) => `C${id}`) : [];
     if (s.link) needed.push(`L${s.link}`);
     if (s.strike) needed.push('S');
     if (s.bold) needed.push('B');
     if (s.italic) needed.push('I');
     let keep = 0;
     while (keep < open.length && needed.includes(baseKey(open[keep]))) keep++;
+    // A comment range opens outside the marks it holds, and is never closed and reopened (that would be two comments).
+    if (needed.some((k) => k[0] === 'C' && !open.slice(0, keep).includes(k))) {
+      let k = 0;
+      while (k < keep && open[k][0] === 'C') k++;
+      keep = k;
+    }
     let closers = '';
-    for (const key of open.splice(keep).reverse()) closers += markClose(key);
+    for (const key of open.splice(keep).reverse()) closers += key[0] === 'C' ? `==}${notes?.get(key.slice(1)) ?? ''}` : markClose(key);
     // "*" closers directly followed by "*" openers would fuse into one ambiguous delimiter run.
     const fuse = closers.endsWith('*') && !pend && !lead;
     let openers = '';
@@ -1524,14 +1702,14 @@ function renderInline(input: Seg[], mode: Mode): string {
       if (!open.some((k) => baseKey(k) === base)) {
         const key = fuse && (base === 'B' || base === 'I') ? `${base}_` : base;
         open.push(key);
-        openers += markOpen(key);
+        openers += base[0] === 'C' ? '{==' : markOpen(key);
       }
     }
     out.push(closers, pend, lead, openers, core);
     pend = trail;
   });
   let closers = '';
-  for (const key of open.reverse()) closers += markClose(key);
+  for (const key of open.reverse()) closers += key[0] === 'C' ? `==}${notes?.get(key.slice(1)) ?? ''}` : markClose(key);
   out.push(closers);
   return out.join('');
 }
@@ -1544,10 +1722,38 @@ class Exporter {
   private levels: ({ id: number; ordered: boolean; parity: number; count: number; col: number } | undefined)[] = [];
   private lastCol = 0;
   private readonly kinds = new Map<string | undefined, Kind>();
+  /** Per comment thread (by its first comment's id), its comment blocks (as Markdown) for each kind of place. */
+  private readonly threads: Map<string, Comment[]>;
+  private readonly notes = new Map<Mode, Map<string, string>>();
 
   constructor(doc: WordDocument) {
     this.resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
     this.body = doc.body;
+    this.threads = commentThreads(doc.comments);
+  }
+
+  private notesFor(mode: Mode): Map<string, string> {
+    let notes = this.notes.get(mode);
+    if (!notes) {
+      notes = new Map();
+      for (const [id, thread] of this.threads) notes.set(id, writeCriticBlocks(thread, mode));
+      this.notes.set(mode, notes);
+    }
+    return notes;
+  }
+
+  /** Turns each comment range's markers among the segments into `cm` on the text inside it. */
+  private applyComments(segs: Seg[]): Seg[] {
+    if (!segs.some((s) => s.mark)) return segs;
+    const out: Seg[] = [];
+    const tracker = new RangeTracker((id) => this.threads.has(id));
+    for (const seg of segs) {
+      if (seg.mark) {
+        const point = tracker.marker(seg.mark, out.length);
+        if (point !== null) out.push({ text: '', note: point, bold: false, italic: false, strike: false, code: false, raw: true, ...(tracker.ids.length && { cm: tracker.ids.join(',') }) });
+      } else out.push(tracker.ids.length ? { ...seg, cm: tracker.ids.join(',') } : seg);
+    }
+    return out;
   }
 
   run(): string {
@@ -1727,7 +1933,9 @@ class Exporter {
             walk(inline.children, link);
             break;
           case 'raw':
-            if (isMathInline(inline)) {
+            if (this.threads.size && commentMarker(inline)) {
+              segs.push({ text: '', ...plainFmt, mark: commentMarker(inline)! });
+            } else if (isMathInline(inline)) {
               const equation = readMathInline(inline);
               segs.push({ text: equation.display ? `$$${toLatex(equation)}$$` : `$${toLatex(equation)}$`, ...plainFmt, raw: true });
             }
@@ -1738,7 +1946,7 @@ class Exporter {
       }
     };
     walk(inlines, undefined);
-    return segs;
+    return this.applyComments(segs);
   }
 
   /** `![alt](url)` for a hyperlink made from an image placeholder, else null. */
@@ -1755,7 +1963,7 @@ class Exporter {
   }
 
   private text(p: Paragraph, mode: Mode): string {
-    return renderInline(this.segments(p.children), mode);
+    return renderInline(this.segments(p.children), mode, this.threads.size ? this.notesFor(mode) : undefined, this.threads.size > 0);
   }
 
   /** Visible text with no Markdown escaping (code blocks). */

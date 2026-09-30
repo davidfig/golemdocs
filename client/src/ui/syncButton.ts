@@ -3,13 +3,14 @@
 // panel with the details and the account. Sync is free for now; when it's paid, the offer to
 // sign in is where the plan goes.
 
-import type { Action, ChromeHost, DocumentSync, SyncStatus } from './actions.ts';
+import type { Action, ChromeHost, DocumentSync, SubscriptionState, SyncStatus } from './actions.ts';
 import { h, setAttr } from './dom.ts';
 import { t } from '../i18n/index.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 
 const labels = (): Record<DocumentSync, { text: string; tooltip: string }> => ({
   guest: { text: t('dialogs.sync.guest.text'), tooltip: t('dialogs.sync.guest.tooltip') },
+  unsubscribed: { text: t('dialogs.sync.unsubscribed.text'), tooltip: t('dialogs.sync.unsubscribed.tooltip') },
   saved: { text: t('dialogs.sync.saved.text'), tooltip: t('dialogs.sync.saved.tooltip') },
   saving: { text: t('dialogs.sync.saving.text'), tooltip: t('dialogs.sync.saving.tooltip') },
   offline: { text: t('dialogs.sync.offline.text'), tooltip: t('dialogs.sync.offline.tooltip') },
@@ -28,6 +29,7 @@ export class SyncButton {
   readonly el: HTMLButtonElement;
   private readonly label: HTMLSpanElement;
   private status: SyncStatus | null = null;
+  private subscription: SubscriptionState | null = null;
 
   constructor(private readonly host: ChromeHost) {
     this.label = h('span');
@@ -39,10 +41,12 @@ export class SyncButton {
     });
   }
 
-  update(status: SyncStatus): void {
+  update(status: SyncStatus, subscription: SubscriptionState | null): void {
     const changed = JSON.stringify(status) !== JSON.stringify(this.status);
+    const planChanged = subscription !== this.subscription;
     this.status = status;
-    if (!changed) return;
+    this.subscription = subscription;
+    if (!changed && !planChanged) return;
     const { text, tooltip } = labels()[status.document];
     this.label.textContent = text;
     setAttr(this.el, 'data-state', status.document);
@@ -67,8 +71,12 @@ export class SyncButton {
     switch (status?.document ?? 'guest') {
       case 'guest':
         say(t('dialogs.sync.guest.title'), t('dialogs.sync.guest.body'));
-        panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true), h('p', { class: 'wm-sync-note', text: t('dialogs.sync.free') }));
+        panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true), run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }), h('p', { class: 'wm-sync-note', text: t('dialogs.sync.free') }));
         return panel;
+      case 'unsubscribed':
+        say(t('dialogs.sync.unsubscribed.title'), t('dialogs.sync.unsubscribed.body'));
+        panel.append(run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }, true), h('p', { class: 'wm-sync-note', text: t('dialogs.sync.free') }));
+        break;
       case 'saved':
         say(t('dialogs.sync.saved.title'), t('dialogs.sync.saved.body'));
         if (status?.savedAt) panel.append(h('p', { class: 'wm-sync-note', text: t('dialogs.sync.lastSaved', { time: formatSavedAt(status.savedAt) }) }));
@@ -88,6 +96,9 @@ export class SyncButton {
         panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true));
         break;
     }
+    // Signed in with sync: manage what they pay (Subscribe is already offered above when they have none).
+    if (this.subscription === 'active') panel.append(run(t('dialogs.sync.manageSubscription'), { kind: 'manageSubscription' }));
+    else if (this.subscription === 'none' && status?.document !== 'unsubscribed') panel.append(run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }));
     panel.append(h('hr'), h('p', { class: 'wm-sync-note', text: status?.user ? t('dialogs.sync.signedInAs', { user: status.user }) : t('dialogs.sync.signedInAsYou') }), run(t('dialogs.sync.signOut'), { kind: 'signOut' }));
     return panel;
   }

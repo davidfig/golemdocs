@@ -8,13 +8,13 @@ A document editor that lives in your browser, built to open every kind of docume
 - **Change shape without losing anything.** Convert To, in the File menu, switches what a document is edited as, and going back gives you your formatting again.
 - **Mark up PDFs.** Highlight, underline, strike out and leave notes on a PDF's own pages.
 - **Edit PDFs.** Switch to Edit PDF to change a page's text where it sits, move, add or delete pictures and shapes, black out private details, and rearrange pages. Fill In types into a form's fields.
-- **Work together.** Share, in the File menu, gives you a link. Everyone who opens it edits the same document, and changes show up live. You can also share with specific people.
+- **Work together.** Share, in the File menu, gives you a link. Everyone who opens it edits the same document, and changes show up live. You can also share with specific people. Sharing is part of the subscription; editing on your own is free.
 
 ## Try this
 
 1. **Change shape.** In the File menu, choose Convert To, then Markdown. This page turns into plain text with `#` headings, and you can convert it back.
 2. **Open some data.** Drop a CSV file onto the window. It opens as a table you can edit, and downloads as the same CSV.
-3. **Edit together.** In the File menu, choose Share, then Get Link, and open the link in a second window. Type in one and watch the other update.
+3. **Edit together.** In the File menu, choose Share, then Get Link, and open the link in a second window. Type in one and watch the other update. This one needs a subscription.
 
 When you're ready, choose New from the File menu for a blank document, or Download when you need a file for someone else.
 
@@ -28,7 +28,7 @@ When you're ready, choose New from the File menu for a blank document, or Downlo
 
 ## Saving
 
-There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. File ▸ Open shows all your documents. Sign in and they are saved to your account instead, so you can open them on any device.
+There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. File ▸ Open shows all your documents. With a subscription, they are also saved to your account, so you can open them on any device.
 
 ## About the name
 

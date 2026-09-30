@@ -2,6 +2,7 @@
 
 import type { Catalog } from '../../index.ts';
 import { app } from './app.ts';
+import { assistant } from './assistant.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
@@ -19,4 +20,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...app, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Catalog = { ...app, ...assistant, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

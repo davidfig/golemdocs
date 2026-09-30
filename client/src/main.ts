@@ -9,6 +9,7 @@ import { CloudError, deleteDocument, documentUrl, listDocuments, listShared, sav
 import { openFromCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
+  releaseToGuest,
   clearAllSaved,
   deleteOwnedBy,
   deleteSaved,
@@ -30,10 +31,12 @@ import { PdfTextLayer } from './ui/pdfTextLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
+import { checkoutUrl, fetchSubscription, portalUrl, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
+import { Assistant } from './assistant/index.ts';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
@@ -663,7 +666,15 @@ function saveNow(): Promise<string | null> {
 let pendingNotice: string | null = null;
 
 /** Who is signed in; null signed out. Offline, whoever was last time (see auth.ts). */
+/** Who is signed in. */
+let signedIn: User | null = null;
+/**
+ * The signed-in user whose documents live in the cloud: `signedIn`, when they have sync. Without it
+ * (no subscription) they are saved in this browser, as for someone signed out.
+ */
 let account: User | null = null;
+/** Whose cloud documents the screens last drew: when it changes, the dashboard draws again. */
+let drawnFor: string | null = null;
 /** This browser's copies of the documents in view: the account's, or signed out, the browser's own. */
 let savedDocs: SavedInfo[] = [];
 /** The account's documents, as last listed (empty signed out or offline). */
@@ -680,9 +691,15 @@ let firstConnect: Promise<void> = Promise.resolve();
 let accountKnown: Promise<void> = Promise.resolve();
 
 async function connect(lookup: Promise<User | null> = currentUser()): Promise<void> {
-  const before = account?.id ?? null;
-  account = await lookup;
-  sharedDeviceNotice.update({ signedIn: account !== null });
+  signedIn = await lookup;
+  const plan = signedIn ? await fetchSubscription() : null;
+  applyPlan(plan);
+  // An unknown plan (offline) or a server that doesn't say leaves sync on; the server refuses what isn't allowed.
+  account = signedIn && plan?.sync !== false ? signedIn : null;
+  // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
+  if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
+  sharedDeviceNotice.update({ signedIn: signedIn !== null });
+  assistant.update({ signedIn: signedIn !== null });
   if (account) {
     const adopted = await adoptGuestDocuments(account.id).catch(() => []);
     if (adopted.length) notify(t('app.adopted', { count: adopted.length }));
@@ -692,7 +709,8 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
     for (const info of savedDocs) if (hasUnsentChanges(info)) dirty.add(info.id);
     void flushUploads();
   }
-  if ((account?.id ?? null) !== before) dashboard.refreshIfVisible();
+  if ((account?.id ?? null) !== drawnFor) dashboard.refreshIfVisible();
+  drawnFor = account?.id ?? null;
   showSync();
 }
 
@@ -741,7 +759,7 @@ let signedOutRemotely = false;
 const failures = new Map<string, string>();
 
 function syncStatus(): SyncStatus {
-  if (!account) return { user: null, document: 'guest', error: null };
+  if (!account) return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, document: 'unsubscribed', error: null } : { user: null, document: 'guest', error: null };
   const user = account.email ?? account.name ?? null;
   const id = current.localId;
   const info = savedDocs.find((d) => d.id === id);
@@ -825,6 +843,9 @@ async function upload(id: string): Promise<void> {
       // fetch couldn't reach the server.
       dirty.add(id);
       wentOffline();
+    } else if (e instanceof CloudError && e.status === 402) {
+      // No subscription (it ended, or this page hadn't heard): carry on as someone without sync.
+      void connect(Promise.resolve(signedIn));
     } else if (e instanceof CloudError && e.status === 423) {
       // Several people are editing it and the server is saving it: nothing to send from here.
     } else if (e instanceof CloudError) {
@@ -992,12 +1013,62 @@ async function signIn(options: { dashboard?: boolean } = {}): Promise<void> {
   showSignInDialog(id ? returnTo({ doc: `local:${id}`, ...back }) : returnTo(back));
 }
 
+/** Whether the signed-in user pays for sync (null: signed out, or it couldn't be asked). */
+let subscription: 'none' | 'active' | null = null;
+
+function applyPlan(plan: Subscription | null): void {
+  subscription = plan ? (plan.active ? 'active' : 'none') : null;
+  chrome.update({ subscription });
+}
+
+async function refreshSubscription(): Promise<void> {
+  applyPlan(signedIn ? await fetchSubscription() : null);
+}
+
+/** Takes the user to a Polar page (checkout or portal). Leaving the page, so the document is kept first. */
+async function goToPolar(address: () => Promise<string>, failed: 'app.subscribeFailed' | 'app.portalFailed'): Promise<void> {
+  let url: string;
+  try {
+    url = await address();
+  } catch (e) {
+    if (e instanceof SubscriptionError && e.status === 409) return void (await refreshSubscription()); // already subscribed: the menus now offer to manage it
+    reportError(t(failed, { message: (e as Error).message }));
+    return;
+  }
+  await saveNow();
+  location.assign(url);
+}
+
+/** Subscribe…: to Polar's checkout. Signed out, they sign in first and come back to go on. */
+async function subscribe(): Promise<void> {
+  if (!signedIn) {
+    const id = await saveNow();
+    showSignInDialog(returnTo(id ? { doc: `local:${id}`, subscribe: '1' } : { subscribe: '1' }), { subscribe: true });
+    return;
+  }
+  if (subscription === 'active') return manageSubscription();
+  await goToPolar(checkoutUrl, 'app.subscribeFailed');
+}
+
+/** Manage Subscription…: Polar's customer portal. */
+async function manageSubscription(): Promise<void> {
+  if (!signedIn) return signIn();
+  await goToPolar(portalUrl, 'app.portalFailed');
+}
+
+/** Back from paying: Polar tells the server a moment later, so wait for it to show. */
+async function afterCheckout(): Promise<void> {
+  const paid = await waitForSubscription();
+  await connect(Promise.resolve(signedIn)); // sync starts: their browser's documents move into the account
+  showToast(paid ? t('app.subscribed') : t('app.subscribePending'));
+}
+
 /**
  * Signs out, and removes the account's documents from this browser (they're in the account). If
  * some changes haven't reached the account yet, it says so first, since signing out loses them.
  */
 async function signOut(): Promise<void> {
-  const user = account;
+  const user = signedIn;
   if (!user) return;
   saveIfEdited();
   await saving;
@@ -1133,7 +1204,7 @@ function share(): void {
   const room = documentKind !== 'docx' ? { unavailable: t('app.collabNeedsWord') } : inRoom ? { link: location.href } : { create: enterRoom };
   const info = savedDocs.find((d) => d.id === current.localId);
   const people = !account
-    ? { unavailable: t('app.signInToShare') }
+    ? { unavailable: signedIn ? t('app.subscribeToShare') : t('app.signInToShare') }
     : current.shared
       ? { unavailable: t('app.ownerOnlyShare') }
       : !info
@@ -1513,9 +1584,9 @@ let editSent = 0;
 
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
-  commentsPanel.update(update.comments);
+  commentsPanel.update(update.comments, update.activeComment);
   selectionFormat = update.format;
-  comments = update.comments;
+  comments = update.comments.filter((c) => !c.parentId);
   painting = update.painting ?? false;
   inTable = update.inTable ?? false;
   sectionColumns = update.columns;
@@ -1763,6 +1834,7 @@ function render(): void {
   pdfTextLayer.position();
   pdfTools.position();
   pointerLayer.position();
+  commentsPanel.position();
   cropLayer.position();
   drawLayer.position();
   updateDebug();
@@ -1881,6 +1953,7 @@ function press(e: Press): void {
 const TOUCH_SLOP_PX = 8;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
+let lastMoveAt = 0;
 let pinch: { distance: number; x: number; y: number } | null = null;
 
 function pinchState(): { distance: number; x: number; y: number } {
@@ -1888,7 +1961,35 @@ function pinchState(): { distance: number; x: number; y: number } {
   return { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
+// A one-finger drag keeps gliding after release, slowing exponentially (velocity in CSS px per ms).
+const FLING_MIN_SPEED = 0.05;
+const FLING_DECAY_PER_MS = 0.004;
+let flingVelocity = { x: 0, y: 0 };
+let flingFrame = 0;
+
+function stopFling(): void {
+  cancelAnimationFrame(flingFrame);
+  flingFrame = 0;
+}
+
+function startFling(): void {
+  stopFling();
+  let last = performance.now();
+  const step = (now: number): void => {
+    const dt = Math.min(now - last, 50);
+    last = now;
+    camera.panBy(-flingVelocity.x * dt, -flingVelocity.y * dt);
+    const decay = Math.exp(-FLING_DECAY_PER_MS * dt);
+    flingVelocity = { x: flingVelocity.x * decay, y: flingVelocity.y * decay };
+    requestRender();
+    flingFrame = Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED / 5 ? requestAnimationFrame(step) : 0;
+  };
+  flingFrame = requestAnimationFrame(step);
+}
+
 function touchDown(e: PointerEvent): void {
+  stopFling();
+  flingVelocity = { x: 0, y: 0 };
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (touches.size === 1) {
     touchTap = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false };
@@ -1913,13 +2014,20 @@ function touchMove(e: PointerEvent): void {
     camera.panBy(pinch.x - now.x, pinch.y - now.y);
     camera.zoomAt(now.x - rect.left, now.y - rect.top, now.distance / pinch.distance);
     pinch = now;
-  } else if (touches.size === 1) camera.panBy(-dx, -dy);
+  } else if (touches.size === 1) {
+    camera.panBy(-dx, -dy);
+    // Smoothed, so one jittery sample at release doesn't decide the fling.
+    const dt = Math.max(e.timeStamp - lastMoveAt, 1);
+    flingVelocity = { x: flingVelocity.x * 0.6 + (dx / dt) * 0.4, y: flingVelocity.y * 0.6 + (dy / dt) * 0.4 };
+  }
+  lastMoveAt = e.timeStamp;
   requestRender();
 }
 
 function touchUp(e: PointerEvent): void {
   touches.delete(e.pointerId);
   pinch = touches.size === 2 ? pinchState() : null;
+  if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
   if (touchTap && e.type === 'pointerup') press(touchTap);
   touchTap = null;
 }
@@ -2245,6 +2353,7 @@ const chromeHost = createChromeHost({
   share,
   download,
   downloadAll,
+  toggleClip: () => assistant.setVisible(!assistant.visible),
   print,
   showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
@@ -2328,12 +2437,15 @@ const chromeHost = createChromeHost({
   stepPicture,
   signIn,
   signOut,
+  subscribe,
+  manageSubscription,
   clearLocalData,
   saved: () => mergeLibrary(savedDocs, account ? cloudDocs : null).map((e) => ({ id: sourceOf(e), label: e.name.replace(/&/g, '&&') })),
   send,
   annotating: () => annotating,
   setFormMode,
-  author: () => account?.name ?? account?.email ?? guestName(),
+  author: commentAuthor,
+  startComment: () => commentsPanel.startDraft(),
   selectedText: () => selection.text,
   focusEditor: focusInput,
   notify: reportError,
@@ -2374,7 +2486,7 @@ const chromeHost = createChromeHost({
     ...corpusNames.map((name) => ({ id: `corpus:${name}`, label: name.replace(/&/g, '&&') })),
   ],
 });
-const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => account?.isAdmin === true, showUnimplemented: import.meta.env.DEV });
+const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => signedIn?.isAdmin === true, showUnimplemented: import.meta.env.DEV });
 
 // Edit ▸ Find, Replace and Go To.
 const findDialog = new FindDialog(document.body, {
@@ -2477,6 +2589,8 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
   importFile: () => void chromeHost.perform({ kind: 'import' }),
   delete: deleteEverywhere,
   account: () => account,
+  signedIn: () => signedIn,
+  subscribe,
   share: (id, name) => showShareDialog({ name, people: { id } }),
   openShared: (doc) => {
     sharedDocs.set(doc.id, doc);
@@ -2489,6 +2603,11 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
 
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
+
+// Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).
+const assistant = new Assistant(document.body, { tool: (name, args) => worker.agent(name, args), signIn: () => void signIn(), subscribe: () => void subscribe() });
+assistant.onVisibility = (clip) => chrome.update({ clip });
+chrome.update({ clip: assistant.visible });
 
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
@@ -2550,7 +2669,12 @@ const pdfTools = new PdfEditTools(document.getElementById('viewport')!, {
 });
 formLayer.toolsSlot.append(pdfTools.el);
 
-// Comments down the right of the editor; edits to them are ordinary (undoable) edits.
+/** Who new comments are from. */
+function commentAuthor(): string {
+  return signedIn?.name ?? signedIn?.email ?? guestName();
+}
+
+// Comments down the right of the editor, each beside its text; edits to them are ordinary (undoable) edits.
 const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   select: (id) => {
     send({ kind: 'selectComment', id });
@@ -2558,6 +2682,19 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   },
   edit: (id, text) => send({ kind: 'editComment', id, text }),
   remove: (id) => send({ kind: 'deleteComment', id }),
+  reply: (id, text) => send({ kind: 'replyComment', id, text, author: commentAuthor() }),
+  resolve: (id, resolved) => send({ kind: 'resolveComment', id, resolved }),
+  add: (text) => send({ kind: 'addComment', text, author: commentAuthor() }),
+  place: (pageId, y) => {
+    const page = pagesById.get(pageId);
+    return page ? (page.y + y - camera.y) * camera.zoom * CSS_PX_PER_POINT : null;
+  },
+  placeCaret: () => {
+    const caret = selection.caret;
+    const page = caret && pagesById.get(caret.page);
+    return caret && page ? (page.y + caret.y - camera.y) * camera.zoom * CSS_PX_PER_POINT : null;
+  },
+  focusEditor: focusInput,
 });
 
 window.addEventListener('dragover', (e) => e.preventDefault());
@@ -2588,10 +2725,22 @@ Object.defineProperties(window, {
     void dashboard.show();
   }
   accountKnown = accountLookup.then((user) => {
+    signedIn = user;
     account = user;
+    drawnFor = user?.id ?? null;
     chrome.accountChanged();
   });
   firstConnect = connect(accountLookup);
+  // Back from signing in to subscribe, or from paying at Polar.
+  const subscribing = params.get('subscribe') === '1';
+  const subscribed = params.get('subscribed') === '1';
+  if (subscribing || subscribed) {
+    params.delete('subscribe');
+    params.delete('subscribed');
+    if (doc) params.set('doc', doc);
+    setUrl(params);
+    void firstConnect.then(() => (subscribed ? afterCheckout() : signedIn ? subscribe() : undefined));
+  }
   // Joining a room without a document: the room has it.
   if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? t('app.blankDocumentName') });
   else if (doc) openSource(doc, true);

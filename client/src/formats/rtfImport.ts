@@ -3,11 +3,13 @@
 // (bold, italic, underline, strike, super/subscript, size, font, color, highlight), paragraph
 // formatting (alignment, indents, spacing, headings, lists), tables, hyperlinks, page breaks,
 // pictures (PNG and JPEG) and page setup. Anything else (headers, footers, shapes, text boxes,
-// fields other than links) is skipped, keeping the text of a field's result.
+// fields other than links) is skipped, keeping the text of a field's result. Annotations (Word's
+// comments) become comments in the shared model, with their range markers in the text.
 
-import { WordDocument } from '@word/docx';
+import { WordDocument, commentEnd, commentReference, commentRanges, commentStart, insertInlines, paragraphsIn } from '@word/docx';
 import type {
   Block,
+  Comment,
   Inline,
   Paragraph,
   ParagraphProperties,
@@ -28,6 +30,22 @@ const SKIPPED = new Set([
   'private', 'fchars', 'lchars', 'pgptbl', 'template', 'listtext', 'pntext', 'pntxta', 'pntxtb', 'bkmkstart', 'bkmkend', 'nonshppict', 'stylesheet',
   'operator', 'title', 'author', 'company', 'comment', 'panose', 'falt', 'fname', 'leveltext', 'levelnumbers', 'protusertbl', 'wgrffmtfilter',
 ]);
+
+/** Destinations of an annotation: its range markers, author, id and the annotation itself. */
+const ANNOTATION_WORDS = new Set(['annotation', 'atrfstart', 'atrfend', 'atnid', 'atnauthor', 'atnref', 'atndate', 'atnparent', 'atnicn']);
+
+/** An RTF DTTM (minute:6 hour:5 day:5 month:4 year-1900:9 weekday:3 bits) as an ISO 8601 date, or undefined if it is not a date. */
+export function dttmToIso(value: number): string | undefined {
+  const v = value >>> 0;
+  const minute = v & 63;
+  const hour = (v >>> 6) & 31;
+  const day = (v >>> 11) & 31;
+  const month = (v >>> 16) & 15;
+  const year = 1900 + ((v >>> 20) & 511);
+  if (!month || month > 12 || !day || day > 31 || hour > 23 || minute > 59) return undefined;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${year}-${p(month)}-${p(day)}T${p(hour)}:${p(minute)}:00Z`;
+}
 
 export const HIGHLIGHTS:[string, number, number, number][] = [
   ['black', 0, 0, 0], ['blue', 0, 0, 255], ['cyan', 0, 255, 255], ['green', 0, 255, 0], ['magenta', 255, 0, 255], ['red', 255, 0, 0],
@@ -88,7 +106,7 @@ interface ParaState {
   inTable: boolean;
 }
 
-type Destination = 'body' | 'skip' | 'fonttbl' | 'colortbl' | 'stylesheet' | 'listtable' | 'listoverride' | 'fldinst' | 'fldrslt' | 'pict' | 'pn';
+type Destination = 'body' | 'skip' | 'fonttbl' | 'colortbl' | 'stylesheet' | 'listtable' | 'listoverride' | 'fldinst' | 'fldrslt' | 'pict' | 'pn' | 'annotation' | 'atnfield';
 
 interface Frame {
   dest: Destination;
@@ -184,6 +202,18 @@ class RtfReader {
 
   private used = new Set<string>();
 
+  // Annotations: RTF ids (atnref / atrfstart) to model ids, and the comment being read.
+  private readonly comments: Comment[] = [];
+  private readonly commentIds = new Map<string, string>();
+  private readonly rangeStarted = new Set<string>();
+  private readonly rangeEnded = new Set<string>();
+  private pendingInitials = '';
+  private pendingAuthor = '';
+  private atnField: { name: string; text: string } | null = null;
+  private annotation: { depth: number; paragraphs: string[]; current: string; ref: string; date?: string; parent: string } | null = null;
+  /** Replies that gave no range: they get their parent's, once the body is read. */
+  private readonly repliesToPlace: { comment: Comment; parentKey: string }[] = [];
+
   constructor(
     private readonly doc: WordDocument,
     private readonly src: string,
@@ -241,7 +271,7 @@ class RtfReader {
   }
 
   private knownDestination(word: string): boolean {
-    return word === 'fldinst' || word === 'pn' || word === 'listtable' || word === 'listoverridetable' || word === 'shppict' || word === 'listlevel';
+    return ANNOTATION_WORDS.has(word) || word === 'fldinst' || word === 'pn' || word === 'listtable' || word === 'listoverridetable' || word === 'shppict' || word === 'listlevel';
   }
 
   private control(): void {
@@ -340,7 +370,14 @@ class RtfReader {
 
   private route(text: string): void {
     if (!text) return;
+    if (this.annotation && (this.frame.dest === 'annotation' || this.frame.dest === 'body' || this.frame.dest === 'fldrslt')) {
+      this.annotation.current += text;
+      return;
+    }
     switch (this.frame.dest) {
+      case 'atnfield':
+        if (this.atnField) this.atnField.text += text;
+        return;
       case 'body':
       case 'fldrslt':
         this.paragraphOpen = true;
@@ -379,6 +416,10 @@ class RtfReader {
   }
 
   private emitContent(item: RunContent): void {
+    if (this.annotation && this.frame.dest !== 'atnfield') {
+      this.annotation.current += item.kind === 'tab' ? '\t' : item.kind === 'break' ? '\n' : item.kind === 'noBreakHyphen' ? '-' : '';
+      return;
+    }
     if (this.frame.dest !== 'body' && this.frame.dest !== 'fldrslt') return;
     this.flushText();
     this.paragraphOpen = true;
@@ -491,7 +532,7 @@ class RtfReader {
         // An instruction such as `HYPERLINK "url"`, or `HYPERLINK \l "bookmark"` for a place in the document.
         const link = /^\s*HYPERLINK\s+(\\l\s+)?"([^"]+)"/i.exec(this.fldinst);
         f.dest = 'fldrslt';
-        if (link) f.link = { ...(link[1] ? { anchor: link[2] } : { url: link[2] }), runs: [] };
+        if (link && !this.annotation) f.link = { ...(link[1] ? { anchor: link[2] } : { url: link[2] }), runs: [] };
         this.fldinst = '';
         return;
       }
@@ -503,6 +544,28 @@ class RtfReader {
         f.dest = 'pn';
         return;
       case 'shppict':
+        return;
+      case 'atrfstart':
+      case 'atrfend':
+      case 'atnid':
+      case 'atnauthor':
+      case 'atnref':
+      case 'atndate':
+      case 'atnparent':
+      case 'atnicn':
+        if (f.dest === 'body' || f.dest === 'fldrslt' || f.dest === 'annotation') {
+          if (f.dest !== 'annotation') this.flushText();
+          f.dest = 'atnfield';
+          this.atnField = { name: word, text: param !== null ? String(param) : '' };
+        }
+        return;
+      case 'annotation':
+        if ((f.dest === 'body' || f.dest === 'fldrslt') && !this.annotation) {
+          this.flushText();
+          f.dest = 'annotation';
+          f.link = undefined;
+          this.annotation = { depth: this.stack.length, paragraphs: [], current: '', ref: '', parent: '' };
+        }
         return;
     }
     if (f.dest === 'fonttbl') {
@@ -681,6 +744,13 @@ class RtfReader {
       // Content
       case 'par':
       case 'sect':
+        if (this.annotation) {
+          if (f.dest === 'annotation' || f.dest === 'body' || f.dest === 'fldrslt') {
+            this.annotation.paragraphs.push(this.annotation.current);
+            this.annotation.current = '';
+          }
+          return;
+        }
         this.endParagraph(false);
         return;
       case 'line':
@@ -883,6 +953,8 @@ class RtfReader {
     this.flushBytes();
     const closing = this.frame;
     if (closing.dest === 'pict') this.finishPicture();
+    if (closing.dest === 'atnfield') this.finishAtnField();
+    if (this.annotation && this.stack.length === this.annotation.depth) this.finishAnnotation();
     if (closing.dest === 'fldrslt' && closing.link) {
       this.flushText();
       const { url, anchor, runs } = closing.link;
@@ -898,6 +970,122 @@ class RtfReader {
     if (!previous) return;
     this.frame = previous;
     this.skipChars = 0;
+  }
+
+  // --- Annotations --------------------------------------------------------------------------
+
+  /** The model id for an RTF annotation id, allocated on first sight. */
+  private commentId(rtfId: string): string {
+    let id = this.commentIds.get(rtfId);
+    if (id === undefined) this.commentIds.set(rtfId, (id = String(this.commentIds.size)));
+    return id;
+  }
+
+  private pushInline(inline: Inline): void {
+    this.paragraphOpen = true;
+    const link = this.frame.link ?? this.frame.inLink;
+    if (link) link.runs.push(inline);
+    else this.inlines.push(inline);
+  }
+
+  private finishAtnField(): void {
+    const field = this.atnField;
+    this.atnField = null;
+    if (!field) return;
+    const text = field.text.trim();
+    switch (field.name) {
+      case 'atnid':
+        this.pendingInitials = text;
+        return;
+      case 'atnauthor':
+        this.pendingAuthor = text;
+        return;
+      case 'atrfstart':
+        if (!this.rangeStarted.has(text)) {
+          this.rangeStarted.add(text);
+          this.pushInline(commentStart(this.commentId(text)));
+        }
+        return;
+      case 'atrfend':
+        if (!this.rangeEnded.has(text)) {
+          this.rangeEnded.add(text);
+          const id = this.commentId(text);
+          this.pushInline(commentEnd(id));
+          this.pushInline(commentReference(id));
+        }
+        return;
+    }
+    const annotation = this.annotation;
+    if (!annotation) return;
+    if (field.name === 'atnref') annotation.ref = text;
+    else if (field.name === 'atnparent') annotation.parent = text;
+    else if (field.name === 'atndate') annotation.date = dttmToIso(Number(text));
+  }
+
+  private finishAnnotation(): void {
+    const a = this.annotation!;
+    this.annotation = null;
+    if (a.current || !a.paragraphs.length) a.paragraphs.push(a.current);
+    // An annotation with no \atnref cannot be matched to a range: it gets its own key.
+    const key = a.ref || `annotation${this.comments.length}`;
+    const id = this.commentId(key);
+    if (this.comments.some((c) => c.id === id)) return;
+    const comment: Comment = { id, author: this.pendingAuthor, paragraphs: a.paragraphs };
+    if (this.pendingInitials) comment.initials = this.pendingInitials;
+    if (a.date) comment.date = a.date;
+    const reply = !!a.parent && a.parent !== key;
+    this.pendingAuthor = this.pendingInitials = '';
+    this.comments.push(comment);
+    const started = this.rangeStarted.has(key);
+    const ended = this.rangeEnded.has(key);
+    if (reply) this.repliesToPlace.push({ comment, parentKey: a.parent });
+    if (ended) return;
+    this.rangeEnded.add(key);
+    if (reply && !started) return;
+    // A range that never ended stops here; a comment with no range is an empty one at its reference.
+    if (!started) this.pushInline(commentStart(id));
+    this.pushInline(commentEnd(id));
+    this.pushInline(commentReference(id));
+  }
+
+  /** Comment markers for replies that have no range go over their parent's; markers of comments that never appeared are dropped. */
+  private placeComments(): void {
+    // A reply's parent is found by its RTF id, so it may be written after the reply.
+    const byId = new Set(this.comments.map((c) => c.id));
+    for (const { comment, parentKey } of this.repliesToPlace) {
+      const parentId = this.commentIds.get(parentKey);
+      if (parentId !== undefined && parentId !== comment.id && byId.has(parentId)) comment.parentId = parentId;
+    }
+    const valid = byId;
+    const strip = (inlines: Inline[]): Inline[] => {
+      const out: Inline[] = [];
+      for (const inline of inlines) {
+        if (inline.kind === 'raw') {
+          const id = inline.xml.attrs['w:id'];
+          if (id !== undefined && /^w:commentRange(Start|End)$/.test(inline.xml.name) && !valid.has(id)) continue;
+        } else if (inline.kind === 'run') {
+          if (inline.content.some((c) => c.kind === 'raw' && c.xml.name === 'w:commentReference' && !valid.has(c.xml.attrs['w:id'] ?? ''))) continue;
+        } else if (inline.kind === 'hyperlink' || inline.kind === 'wrapper') inline.children = strip(inline.children);
+        out.push(inline);
+      }
+      return out;
+    };
+    const all = paragraphsIn(this.body);
+    for (const p of all) p.children = strip(p.children);
+    if (!this.repliesToPlace.length) return;
+    const ranges = commentRanges(all);
+    for (const { comment } of this.repliesToPlace) {
+      const { id, parentId } = comment;
+      // Only replies that gave no range of their own (they have no markers yet).
+      if (parentId === undefined || ranges.has(id)) continue;
+      const range = ranges.get(parentId);
+      if (!range) continue;
+      // End first: when both are in one paragraph the start sits before it, so its offset holds.
+      insertInlines(range.end.paragraph, range.end.offset, [commentEnd(id), commentReference(id)]);
+      insertInlines(range.start.paragraph, range.start.offset - 1, [commentStart(id)]);
+      // Markers inserted before a later reply's anchors shift them: read the ranges again.
+      for (const [k, v] of commentRanges(all)) ranges.set(k, v);
+    }
   }
 
   // --- Paragraphs, cells, rows --------------------------------------------------------------
@@ -1021,6 +1209,8 @@ class RtfReader {
       this.body.push({ kind: 'paragraph', properties: {}, children: [], attrs: {} });
     }
     this.doc.body = this.body;
+    this.placeComments();
+    this.doc.comments = this.comments;
     const have = new Set(this.doc.styles.styles.map((s) => s.id));
     for (const id of this.used) {
       if (have.has(id)) continue;

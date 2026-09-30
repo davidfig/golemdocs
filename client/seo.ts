@@ -1,6 +1,7 @@
 import type { Plugin } from 'vite';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { CLIP_SVG } from './src/assistant/clipArt.ts';
 
 const WELCOME = path.resolve(import.meta.dirname, 'src/layout/welcome/en.md');
 const HOME = path.resolve(import.meta.dirname, 'public/home/index.html');
@@ -19,7 +20,7 @@ const FEATURE_PAGES = [
   { name: 'pdf', label: 'Edit PDFs', blurb: 'Fill in forms, mark up, edit text, redact, and rearrange pages.', description: 'Edit PDFs in your browser: change text where it sits, fill in forms, highlight and comment, redact private details, and rearrange pages. Free, with nothing uploaded.' },
   { name: 'images', label: 'Edit pictures', blurb: 'Crop, correct, annotate, and redact PNG, JPEG, and WebP.', description: 'Edit pictures in your browser: crop, resize, adjust colors, draw arrows and text, and pixelate private details in PNG, JPEG, and WebP images.' },
   { name: 'documents', label: 'Word documents', blurb: 'A real word processor for .docx, with tables, columns, and equations.', description: 'Write and edit Word documents in your browser: true page layout, tables, columns, comments, LaTeX equations, and spelling and grammar checking.' },
-  { name: 'collaborate', label: 'Work together', blurb: 'Share a link and edit together, live.', description: 'Share a document and edit it together in real time, with names and cursors. Sign in to share; editing and downloading never need an account.' },
+  { name: 'collaborate', label: 'Work together', blurb: 'Share a link and edit together, live.', description: 'Share a document and edit it together in real time, with names and cursors. Sharing is part of the subscription; editing and downloading are free and never need an account.' },
   { name: 'customize', label: 'Make it yours', blurb: 'Word 2003 menus, five color schemes, dark mode, and 11 languages.', description: 'A Word 2003-style editor you can make your own: color schemes, dark mode, customizable toolbars, and 11 languages.' },
   { name: 'large-files', label: 'Huge text files', blurb: 'Open, search, and filter 50 MB log files without freezing.', description: 'Open text and log files of 50 MB and more in your browser, then scroll, search, filter, and copy without freezing.' },
 ];
@@ -129,12 +130,49 @@ function sitePage({ name, description, md, feature }: SitePage): string {
     .replace(/(<link rel="canonical" href=")[^"]*"/, (_, head: string) => `${head}${url}"`)
     .replace(/(<meta property="og:url" content=")[^"]*"/, (_, head: string) => `${head}${url}"`)
     .replace(/(<nav[^>]*>[\s\S]*?<\/nav>)/, (nav: string) => nav.replace(/href="#/g, 'href="/home#'))
-    .replace(/<main>[\s\S]*?<\/main>/, () => `<main class="doc${feature ? ' feature' : ''}">\n<article>\n<a class="back" href="/home">&larr; Golem Docs</a>\n${markdownToHtml(md)}${extras}\n</article>\n</main>`)
-    .replace('</style>', () => `${PROSE_CSS}\n    </style>`);
+    .replace(/<main>[\s\S]*?<\/main>/, () => `<main class="doc${feature ? ' feature' : ''}">\n<article>\n<a class="back" href="/home">&larr; Golem Docs</a>\n${withFigure(markdownToHtml(md), name)}${extras}\n</article>\n</main>`)
+    .replace('</style>', () => `${PROSE_CSS}\n${feature ? readFileSync(path.join(SITE, 'figures.css'), 'utf8') : ''}    </style>`);
   page = meta('name', 'description', description)(page);
   page = meta('property', 'og:description', description)(page);
   page = meta('property', 'og:title', title)(page);
-  return page;
+  return withClip(page);
+}
+
+/**
+ * Holden (the app's assistant, whose files are still named Clip), as a scripted sample on every marketing page: the app's own art and animation (`src/assistant/`),
+ * a bubble that says up front it is not AI (`site/clip.css`, `site/clip.js`), and canned replies chosen by keyword. It stays
+ * hidden until the script runs, so a crawler or a browser with scripts off never sees a button that does nothing.
+ */
+function withClip(html: string): string {
+  const css = `${readFileSync(path.resolve(import.meta.dirname, 'src/assistant/assistant.css'), 'utf8')}\n${readFileSync(path.join(SITE, 'clip.css'), 'utf8')}`;
+  const markup = `<div class="wm-clip" id="clip" data-state="idle" hidden>
+  <div class="wm-clip-panel" role="dialog" aria-label="Holden, a scripted demo" hidden>
+    <div class="wm-clip-head"><span>Holden <small>(website demo)</small></span><button class="wm-clip-close" type="button" aria-label="Close">×</button></div>
+    <p class="wm-clip-demo"><strong>This is a scripted demo, not AI.</strong> The real Holden lives in the app, where it uses AI to read and edit your document (for subscribers). Nothing you type here leaves this page.</p>
+    <div class="wm-clip-log" role="log" aria-live="polite"></div>
+    <div class="wm-clip-foot">
+      <form class="wm-clip-form"><textarea class="wm-clip-input" rows="1" placeholder="Say something to Holden" aria-label="Message to Holden"></textarea><button class="wm-clip-button" type="submit">Send</button></form>
+      <p class="wm-clip-credits">Want the real one? <a href="/">Open Golem Docs</a> and look for Holden in the corner.</p>
+    </div>
+  </div>
+  <button class="wm-clip-body" type="button" aria-expanded="false" aria-haspopup="dialog" aria-label="Chat with Holden, a scripted demo">${CLIP_SVG}</button>
+  <button class="wm-clip-hide" type="button" aria-label="Hide Holden">×</button>
+</div>
+<script>${readFileSync(path.join(SITE, 'clip.js'), 'utf8')}</script>
+`;
+  return html.replace('</style>', () => `${css}\n    </style>`).replace('</body>', () => `${markup}  </body>`);
+}
+
+/** The home page (`public/home/index.html`), with Holden. */
+const homePage = (): string => withClip(readFileSync(HOME, 'utf8'));
+
+/**
+ * A feature page's illustration (`site/<name>.figure.html`, drawn in HTML and CSS, styled by `site/figures.css`) goes after the
+ * page's first paragraph, its introduction.
+ */
+function withFigure(html: string, name: string): string {
+  const file = path.join(SITE, `${name}.figure.html`);
+  return existsSync(file) ? html.replace('</p>', () => `</p>\n${readFileSync(file, 'utf8')}`) : html;
 }
 
 /** The source of a feature page. */
@@ -184,7 +222,7 @@ export function welcomeContent(): Plugin {
         try {
           if (url === '/home' || url === '/home/' || url === '/home/index.html') {
             res.setHeader('content-type', 'text/html');
-            return void res.end(readFileSync(path.resolve(import.meta.dirname, 'public/home/index.html'), 'utf8'));
+            return void res.end(homePage());
           }
           const page = sitePages().find(({ name }) => url === `/home/${name}` || url === `/home/${name}.html` || url === `/home/${name}/`);
           if (!page) return next();
@@ -198,6 +236,7 @@ export function welcomeContent(): Plugin {
     closeBundle() {
       if (!existsSync(path.join(outDir, 'index.html'))) return; // not a full build
       mkdirSync(path.join(outDir, 'home'), { recursive: true });
+      writeFileSync(path.join(outDir, 'home', 'index.html'), homePage());
       for (const page of sitePages()) writeFileSync(path.join(outDir, 'home', `${page.name}.html`), sitePage(page));
     },
   };

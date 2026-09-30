@@ -1,0 +1,108 @@
+      /* Illustrations on the feature pages: drawn in HTML and CSS, in the style of the home page's hero sheet. */
+      .fig { margin: 32px 0; padding: 32px 28px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(135deg, var(--tint), var(--surface)); overflow: hidden; }
+      .fig figcaption { margin-top: 18px; text-align: center; color: var(--muted); font-size: 0.9rem; }
+      .fig .paper { position: relative; background: #fff; color: #111; border-radius: 3px; box-shadow: var(--shadow); padding: 22px 26px; font: 13px/1.35 Carlito, Calibri, 'Segoe UI', sans-serif; text-align: left; }
+      .fig .paper h4 { margin: 0 0 8px; font-size: 22px; font-weight: 400; color: #2f5496; line-height: 1.15; }
+      .fig .paper h5 { margin: 12px 0 5px; font-size: 14px; font-weight: 400; color: #2f5496; }
+      .fig .paper p { margin: 0 0 8px; }
+      .fig .paper .muted { color: #666; }
+      .fig .paper i.s, .fig .paper > i, .fig .mini > i { display: block; height: 7px; margin: 0 0 7px; border-radius: 4px; background: #d5d9e0; }
+      .fig .tag { position: absolute; top: -10px; left: 12px; padding: 1px 9px; border-radius: 999px; background: var(--brand); color: var(--brand-ink); font: 700 11px system-ui, sans-serif; }
+      .fig .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
+      .fig .pills span { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 0.82rem; font-weight: 600; }
+      .fig .pills span.on { border-color: var(--brand); background: var(--brand); color: var(--brand-ink); }
+
+      /* Convert */
+      .fig .conv { display: flex; align-items: center; justify-content: center; gap: 14px; }
+      .fig .conv .mini { flex: 1 1 0; max-width: 190px; min-height: 150px; padding-top: 24px; }
+      .fig .conv .mini h4 { font-size: 16px; }
+      .fig .conv .mono pre { margin: 0; font: 11px/1.45 ui-monospace, 'SF Mono', Menlo, monospace; color: #333; white-space: pre-wrap; }
+      .fig .arrow { color: var(--brand); font-size: 1.6rem; font-weight: 700; }
+
+      /* PDF */
+      .fig .page { max-width: 30rem; margin: 0 auto; }
+      .fig .edit { position: relative; margin: 0 -4px 10px; padding: 2px 4px; outline: 1.5px dashed #3b78e7; }
+      .fig .edit .badge { position: absolute; right: -2px; top: -20px; padding: 1px 8px; border-radius: 3px; background: #3b78e7; color: #fff; font: 600 11px system-ui, sans-serif; font-style: normal; }
+      .fig mark { background: #ffe14d; color: inherit; padding: 0 1px; }
+      .fig .redact { display: inline-block; width: 170px; height: 15px; margin-left: 4px; background: #000; vertical-align: -3px; }
+      .fig .form { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+      .fig .field { display: inline-block; min-width: 120px; padding: 2px 8px; border: 1px solid #888; background: #f6f8fc; }
+      .fig .check { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px solid #888; color: #2f5496; font-weight: 700; }
+
+      /* Pictures */
+      .fig .pic { position: relative; height: 230px; max-width: 34rem; margin: 0 auto; border-radius: 6px; overflow: hidden; background: linear-gradient(#7db9ee, #dcefff 70%); box-shadow: var(--shadow); }
+      .fig .pic .sun { position: absolute; left: 62%; top: 22px; width: 54px; height: 54px; border-radius: 50%; background: #ffd95a; box-shadow: 0 0 0 10px rgba(255, 217, 90, 0.3); }
+      .fig .pic .hill { position: absolute; bottom: -40px; border-radius: 50%; }
+      .fig .pic .h1 { left: -12%; width: 70%; height: 150px; background: #5fa86a; }
+      .fig .pic .h2 { right: -16%; width: 74%; height: 120px; background: #3d8a52; }
+      .fig .pic .box { position: absolute; left: 58%; top: 12px; width: 84px; height: 76px; border: 3px solid #e53935; border-radius: 3px; }
+      .fig .pic .marker { position: absolute; left: calc(58% + 74px); top: 4px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #e53935; color: #fff; font: 700 14px system-ui, sans-serif; }
+      .fig .pic .arrow-svg { position: absolute; left: 14%; top: 70px; width: 130px; }
+      .fig .pic .pixel { position: absolute; left: 16%; top: 20px; width: 90px; height: 34px; background: conic-gradient(#9aa 25%, #ccd 0 50%, #99a 0 75%, #bbc 0) 0 0 / 22px 17px; }
+      .fig .pic .crop { position: absolute; width: 16px; height: 16px; border: 0 solid #fff; filter: drop-shadow(0 0 1px #000); }
+      .fig .pic .tl { left: 8px; top: 8px; border-width: 3px 0 0 3px; }
+      .fig .pic .tr { right: 8px; top: 8px; border-width: 3px 3px 0 0; }
+      .fig .pic .bl { left: 8px; bottom: 8px; border-width: 0 0 3px 3px; }
+      .fig .pic .br { right: 8px; bottom: 8px; border-width: 0 3px 3px 0; }
+
+      /* Documents */
+      .fig .app { max-width: 36rem; margin: 0 auto; border: 1px solid #9dbde9; border-radius: 4px; overflow: hidden; box-shadow: var(--shadow); background: #fff; }
+      .fig .menus { display: flex; gap: 14px; padding: 4px 10px; background: linear-gradient(#f3f8ff, #c6d8f2); color: #111; font: 12px system-ui, sans-serif; }
+      .fig .tools { display: flex; align-items: center; gap: 10px; padding: 4px 10px; background: linear-gradient(#f3f8ff, #9dbde9); color: #111; font: 700 13px Georgia, serif; }
+      .fig .tools i { width: 14px; height: 14px; border-radius: 2px; background: #7a9bd0; }
+      .fig .tools em { font-weight: 400; } .fig .tools u { font-weight: 400; }
+      .fig .desk { padding: 18px; background: #b8cbe6; }
+      .fig .desk .page { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+      .fig table { width: 100%; margin: 10px 0; border-collapse: collapse; font-size: 12.5px; }
+      .fig th, .fig td { padding: 4px 8px; border: 1px solid #b5bdca; text-align: left; }
+      .fig th { background: #e9eef8; font-weight: 700; }
+      .fig .eq { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 12px 0 4px; font: 17px Cambria, 'Times New Roman', serif; }
+      .fig .frac { display: inline-flex; flex-direction: column; align-items: center; }
+      .fig .frac > span:first-child { padding: 0 4px 2px; border-bottom: 1px solid #111; }
+      .fig .ov { border-top: 1px solid #111; }
+      .fig .note { position: absolute; right: -10px; top: 78px; padding: 4px 9px; border-radius: 4px; background: #fff3a8; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); font: 600 11px system-ui, sans-serif; transform: rotate(2deg); }
+
+      /* Collaborate */
+      .fig .collab { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: center; }
+      .fig .sel { position: relative; padding: 0 1px; }
+      .fig .sel.a { background: rgba(208, 84, 47, 0.25); box-shadow: 2px 0 0 #d0542f; }
+      .fig .sel.b { background: rgba(59, 120, 231, 0.22); box-shadow: 2px 0 0 #3b78e7; }
+      .fig .who { position: absolute; margin: -20px 0 0 -12px; padding: 1px 7px; border-radius: 3px 3px 3px 0; color: #fff; font: 600 10.5px system-ui, sans-serif; font-style: normal; }
+      .fig .who.a { background: #d0542f; }
+      .fig .who.b { background: #3b78e7; }
+      .fig .share { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-size: 0.85rem; }
+      .fig .share b { display: block; margin-bottom: 10px; }
+      .fig .share .get { display: inline-block; margin-bottom: 12px; padding: 4px 12px; border-radius: 6px; background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+      .fig .share .row { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--line); }
+      .fig .share .row em { color: var(--muted); font-style: normal; }
+
+      /* Themes */
+      .fig .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px 18px; max-width: 34rem; margin: 0 auto; }
+      .fig .tile { text-align: center; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+      .fig .win { overflow: hidden; margin-bottom: 8px; border: 1px solid rgba(0, 0, 0, 0.25); border-radius: 4px; box-shadow: var(--shadow); }
+      .fig .win .mb { height: 12px; background: linear-gradient(var(--t), var(--b)); }
+      .fig .win .tb { height: 16px; background: linear-gradient(var(--t), var(--b)); border-top: 1px solid rgba(0, 0, 0, 0.12); }
+      .fig .win .dk { padding: 10px 22%; height: 62px; background: var(--d); }
+      .fig .win .pg { height: 100%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+
+      /* Large files */
+      .fig .log { max-width: 36rem; margin: 0 auto; overflow: hidden; border: 1px solid #c8c8c8; border-radius: 6px; background: #fff; color: #111; box-shadow: var(--shadow); }
+      .fig .log .bar { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; background: #f1f1f1; border-bottom: 1px solid #ddd; font: 600 12px system-ui, sans-serif; }
+      .fig .log .find { padding: 1px 8px; border: 1px solid #aaa; border-radius: 4px; background: #fff; font-weight: 400; }
+      .fig .log .find em { color: #777; font-style: normal; }
+      .fig .log pre { margin: 0; padding: 8px 0; overflow-x: auto; font: 11px/1.7 ui-monospace, 'SF Mono', Menlo, monospace; }
+      .fig .log pre b { display: inline-block; width: 26px; margin-right: 6px; padding-right: 6px; border-right: 1px solid #ddd; color: #888; font-weight: 400; text-align: right; }
+      .fig .log .e, .fig .log b.e { color: #c62828; }
+      .fig .log .w, .fig .log b.w { color: #b26a00; }
+      .fig .log .status { padding: 4px 12px; border-top: 1px solid #ddd; background: #f1f1f1; color: #555; font: 11px system-ui, sans-serif; }
+
+      @media (max-width: 40rem) {
+        .fig { padding: 24px 14px; }
+        .fig .conv { flex-direction: column; }
+        .fig .conv .mini { max-width: none; width: 100%; min-height: 0; }
+        .fig .arrow { transform: rotate(90deg); }
+        .fig .collab { grid-template-columns: 1fr; }
+        .fig .tiles { grid-template-columns: repeat(2, 1fr); }
+        .fig .note { display: none; }
+        .fig .redact { width: 90px; }
+      }

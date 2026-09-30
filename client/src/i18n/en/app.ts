@@ -58,6 +58,7 @@ export const app = {
   'app.adopted': 'Added {count} documents from this browser to your account',
   'app.conflictNotice': '“{before}” was also changed somewhere else, so these changes were saved as “{name}”',
   'app.signInToShare': 'Sign in to share this document',
+  'app.subscribeToShare': 'Subscribe to share this document',
   'app.ownerOnlyShare': 'Only the owner can share this document',
   'app.notInAccountYet': 'This document isn’t in your account yet: give it a moment to upload, then try again',
   'app.notSavedYet': 'Make a change first: the document is saved to your account once it has been edited',
@@ -84,6 +85,10 @@ export const app = {
   'app.signOutLossExpired': '{count} documents have changes that haven’t been saved to your account yet (you were signed out). Signing out removes your documents from this browser, so those changes would be lost.',
   'app.signOutOffline': 'Can’t sign out while offline',
   'app.signOutFailed': 'Couldn’t sign out: {message}',
+  'app.subscribeFailed': 'Couldn’t start checkout: {message}',
+  'app.portalFailed': 'Couldn’t open your subscription: {message}',
+  'app.subscribed': 'Thanks for subscribing!',
+  'app.subscribePending': 'Thanks! Your payment can take a minute to show up here.',
 
   // Clearing local data
   'app.clearTitle': 'Clear Local Data',
@@ -109,7 +114,6 @@ export const app = {
   'app.unsupportedOpen': 'Opening {kind} files isn’t supported yet ({name})',
   'app.notAvailable': '{name} isn’t available yet',
   'app.notePrompt': 'Note',
-  'app.commentPrompt': 'Comment',
 
   // File errors
   'app.notEpub': 'This isn’t an EPUB file: META-INF/container.xml is missing.',

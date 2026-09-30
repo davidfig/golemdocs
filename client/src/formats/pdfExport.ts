@@ -12,8 +12,9 @@
 
 import type { WordDocument } from '@word/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@word/layout';
+import { commentAnnotations } from './pdfExportComments.ts';
 import { standardFamily } from './standardFonts.ts';
-import { PdfDocument, type EmbeddedFont, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@word/pdf';
+import { PdfDocument, applyAnnotations, type EmbeddedFont, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@word/pdf';
 
 /** Characters WinAnsi lacks, with a close ASCII stand-in. */
 const ASCII_FALLBACKS: Record<number, string> = {
@@ -315,6 +316,8 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     drawRects(d, laid.foreground);
     d.finish();
   }
+  const notes = commentAnnotations(doc, layout.pages);
+  if (notes.length) applyAnnotations(pdf, notes);
   if (lostCount) {
     console.warn(`PDF export: ${lostCount} character(s) the PDF standard fonts can't show (e.g. Japanese or Chinese text) were written as '?'.`);
     lostCount = 0;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, StyleResolver, type Hyperlink, type Paragraph, type Run, type Table, type TableCell, type TableRow } from '@word/docx';
+import { commentRanges, paragraphsIn, paragraphText, StyleResolver, type Hyperlink, type Paragraph, type Run, type Table, type TableCell, type TableRow } from '@word/docx';
 import { readOdt } from '../src/index.ts';
 import { libreOfficeFixture, minimalContent, odtPackage } from './fixtures.ts';
 
@@ -92,7 +92,7 @@ test('headings, paragraph formatting and automatic text styles', async () => {
 
   // A paragraph's automatic text properties format all its runs.
   const small = byText(paragraphs, 'Small sans');
-  assert.ok(runs(small).every((r) => r.properties.size === 20 && r.properties.fonts?.ascii === 'Liberation Sans'));
+  assert.ok(runs(small).filter((r) => r.properties.style !== 'CommentReference').every((r) => r.properties.size === 20 && r.properties.fonts?.ascii === 'Liberation Sans'));
   assert.ok(document.body.length > 10);
 });
 
@@ -202,23 +202,26 @@ test('page layout, margins and footer with page fields', async () => {
 });
 
 test('the extension keeps what the core cannot hold', async () => {
-  const { extension, paragraphs } = await fixture();
+  const { extension, paragraphs, document } = await fixture();
   const id = (text: string) => byText(paragraphs, text).attrs['w14:paraId'];
   assert.match(extension.meta!, /<dc:title>Fixture<\/dc:title>/);
   assert.match(extension.settings!, /TabsRelativeToIndent/);
 
-  const [annotation] = extension.annotations!;
-  assert.equal(annotation.author, 'Ada Lovelace');
-  assert.equal(annotation.date, '2024-05-01T10:00:00');
-  assert.equal(annotation.initials, 'AL');
-  assert.deepEqual(annotation.text, ['A comment', 'Second line']);
-  assert.equal(annotation.paragraphId, id('Small sans'));
-  assert.equal(annotation.offset, 'Small sans text'.length);
-  assert.deepEqual(annotation.end, { paragraphId: id('Small sans'), offset: 'Small sans text with a comment'.length });
+  const [comment] = document.comments;
+  assert.equal(comment.author, 'Ada Lovelace');
+  assert.equal(comment.date, '2024-05-01T10:00:00');
+  assert.equal(comment.initials, 'AL');
+  assert.deepEqual(comment.paragraphs, ['A comment', 'Second line']);
+  assert.equal(comment.parentId, undefined);
+  assert.equal(comment.resolved, undefined);
+  const range = commentRanges(paragraphs).get(comment.id)!;
+  assert.equal(range.start.paragraph.attrs['w14:paraId'], id('Small sans'));
+  assert.equal(range.start.offset, 'Small sans text'.length + 1);
+  assert.equal(range.end.offset, 'Small sans text with a comment'.length + 1);
 
   const [bookmark] = extension.bookmarks!;
   assert.equal(bookmark.name, 'Target');
-  assert.equal(bookmark.offset, 'Small sans text with a comment range and '.length);
+  assert.equal(bookmark.offset, 'Small sans text with a comment range and '.length + 3, 'markers count as positions');
   assert.equal(bookmark.end!.offset, bookmark.offset + 'a bookmark'.length);
 
   const fields = extension.fields!;

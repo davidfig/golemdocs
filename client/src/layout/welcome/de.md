@@ -8,13 +8,13 @@ Ein Dokumenteditor, der in Ihrem Browser läuft und jede Art von Dokument öffne
 - **Die Form wechseln, ohne etwas zu verlieren.** Mit Konvertieren in, im Menü Datei, ändern Sie, als was ein Dokument bearbeitet wird. Beim Zurückwechseln ist Ihre Formatierung wieder da.
 - **PDFs kommentieren.** Markieren, unterstreichen, durchstreichen und Notizen hinterlassen, direkt auf den Seiten eines PDFs.
 - **PDFs bearbeiten.** Mit „PDF bearbeiten“ ändern Sie den Text einer Seite an Ort und Stelle, verschieben, ergänzen oder löschen Bilder und Formen, schwärzen vertrauliche Angaben und ordnen Seiten neu an. „Ausfüllen“ trägt Text in die Felder eines Formulars ein.
-- **Zusammenarbeiten.** Freigeben, im Menü Datei, gibt Ihnen einen Link. Alle, die ihn öffnen, bearbeiten dasselbe Dokument, und Änderungen erscheinen live. Sie können auch für bestimmte Personen freigeben.
+- **Zusammenarbeiten.** Freigeben, im Menü Datei, gibt Ihnen einen Link. Alle, die ihn öffnen, bearbeiten dasselbe Dokument, und Änderungen erscheinen live. Sie können auch für bestimmte Personen freigeben. Das Freigeben gehört zum Abonnement; allein zu bearbeiten ist kostenlos.
 
 ## Ausprobieren
 
 1. **Die Form wechseln.** Wählen Sie im Menü Datei Konvertieren in, dann Markdown. Diese Seite wird zu reinem Text mit `#`-Überschriften, und Sie können sie zurückkonvertieren.
 2. **Daten öffnen.** Ziehen Sie eine CSV-Datei auf das Fenster. Sie öffnet sich als Tabelle, die Sie bearbeiten können, und wird als dieselbe CSV heruntergeladen.
-3. **Gemeinsam bearbeiten.** Wählen Sie im Menü Datei Freigeben, dann Link abrufen, und öffnen Sie den Link in einem zweiten Fenster. Tippen Sie in einem und sehen Sie zu, wie sich das andere aktualisiert.
+3. **Gemeinsam bearbeiten.** Wählen Sie im Menü Datei Freigeben, dann Link abrufen, und öffnen Sie den Link in einem zweiten Fenster. Tippen Sie in einem und sehen Sie zu, wie sich das andere aktualisiert. Dafür ist ein Abonnement nötig.
 
 Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, oder Herunterladen, wenn Sie eine Datei für jemand anderen brauchen.
 
@@ -28,7 +28,7 @@ Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, 
 
 ## Speichern
 
-Es gibt keine Schaltfläche zum Speichern. Jede Änderung wird kurz nach dem Vornehmen in diesem Browser gesichert, und Sie brauchen kein Konto. Datei ▸ Öffnen zeigt alle Ihre Dokumente. Wenn Sie sich anmelden, werden sie stattdessen in Ihrem Konto gespeichert, sodass Sie sie auf jedem Gerät öffnen können.
+Es gibt keine Schaltfläche zum Speichern. Jede Änderung wird kurz nach dem Vornehmen in diesem Browser gesichert, und Sie brauchen kein Konto. Datei ▸ Öffnen zeigt alle Ihre Dokumente. Mit einem Abonnement werden sie zusätzlich in Ihrem Konto gespeichert, sodass Sie sie auf jedem Gerät öffnen können.
 
 ## Zum Namen
 

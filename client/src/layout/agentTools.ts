@@ -218,7 +218,8 @@ async function replaceText(env: AgentEnv, args: Record<string, unknown>): Promis
 async function setStyle(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
   editable(env);
   const { index } = paragraphAt(env, args);
-  const style = text(args, 'style');
+  const style = text(args, 'style').trim();
+  if (!style) throw new ToolError('`style` must not be empty');
   await select(env, index, 0, 0);
   await env.run({ kind: 'format', action: { kind: 'setStyle', style } });
   const now = env.format().style;
@@ -287,7 +288,8 @@ const TOOLS: Record<string, (env: AgentEnv, args: Record<string, unknown>) => st
 
 /** Runs one tool for the model. `argumentsJson` is what the model wrote. Never throws: problems are the answer. */
 export async function runAgentTool(env: AgentEnv, name: string, argumentsJson: string): Promise<string> {
-  const tool = TOOLS[name];
+  // Own tools only: a name like "constructor" or "toString" mustn't reach Object.prototype.
+  const tool = Object.hasOwn(TOOLS, name) ? TOOLS[name] : undefined;
   if (!tool) return `Error: there is no tool called ${name}.`;
   try {
     const args = object(argumentsJson.trim() ? JSON.parse(argumentsJson) : {}, 'the arguments');

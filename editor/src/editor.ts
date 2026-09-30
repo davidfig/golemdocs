@@ -484,14 +484,7 @@ export class Editor {
     // Tables go in the body (a table in a table cell is a step further).
     if (!container || container !== this.doc.body) return null;
     // Cell paragraphs need ids of their own, all different.
-    const taken = new Set<string>();
-    const fresh = (): string => {
-      let id: string;
-      do id = this.replica.newId();
-      while (taken.has(id));
-      taken.add(id);
-      return id;
-    };
+    const fresh = this.idMaker();
     const ops: Operation[] = [...define];
     const anchor = this.replica.id(paragraph);
     let needsTrailer = false;
@@ -555,8 +548,8 @@ export class Editor {
     const head = list[0].kind === 'paragraph' ? list[0] : null;
     let tail = remainder && list[list.length - 1].kind === 'paragraph' && list.length > 1 ? (list[list.length - 1] as Paragraph) : null;
     const middle = list.slice(head ? 1 : 0, tail ? list.length - 1 : list.length);
-    // Ending on a table needs a paragraph after it.
-    if (!tail && middle.length && middle[middle.length - 1].kind === 'table') middle.push({ kind: 'paragraph', properties: {}, children: [], attrs: { 'w14:paraId': fresh() } });
+    // Ending on a table needs a paragraph after it (with text after the caret, that is the split-off rest).
+    if (!remainder && middle.length && middle[middle.length - 1].kind === 'table') middle.push({ kind: 'paragraph', properties: {}, children: [], attrs: { 'w14:paraId': fresh() } });
     let splitId: string | undefined;
     if (remainder) {
       const [splitting] = this.splitOps(at);
@@ -573,7 +566,7 @@ export class Editor {
 
     let after: Pos = { paragraph: id, offset: at.offset + (head ? inlinesLength(head.children) : 0) };
     const lastMiddle = middle.length ? paragraphsIn([middle[middle.length - 1]]).at(-1) : undefined;
-    if (tail && splitId) after = { paragraph: splitId, offset: inlinesLength(tail.children) };
+    if (splitId && (tail || middle.at(-1)?.kind === 'table')) after = { paragraph: splitId, offset: tail ? inlinesLength(tail.children) : 0 };
     else if (lastMiddle) after = { paragraph: lastMiddle.attrs['w14:paraId'], offset: paragraphLength(lastMiddle) };
     return combine(removed, this.edit([ops, after], group));
   }
@@ -869,9 +862,10 @@ export class Editor {
           ops.push({ type: 'removeCell', paragraph: id });
           continue;
         }
-        // Left of the deleted columns it stays; right of them it moves left; across them it narrows.
-        const from = c.from >= sel.to ? c.from - removed : c.from;
-        const to = c.to <= sel.from ? c.to : Math.max(c.to - removed, from + 1);
+        // Each edge moves left by the deleted columns before it: left of them a cell stays, right of them it moves, across them it narrows.
+        const shift = (x: number) => x - Math.min(Math.max(x - sel.from, 0), removed);
+        const from = shift(c.from);
+        const to = shift(c.to);
         const next = this.setWidth(c.cell.properties, this.span(widths, from, to), overlap > 0 ? c.to - c.from - overlap : undefined);
         if (next) ops.push({ type: 'setCellProperties', paragraph: id, properties: next });
         if (!caret && c === cells.find((x) => x.from >= sel.to)) caret = { paragraph: id, offset: 0 };

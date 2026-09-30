@@ -208,6 +208,7 @@ class TextFinder {
     const needle = query.replace(/-\s*$/, '').replace(/\s+/g, '');
     if (needle.length < 2) return null;
     const n = this.texts.length;
+    if (!n) return null;
     for (let k = 0; k <= n; k++) {
       const index = (this.at.index + k) % n;
       const entry = this.texts[index];

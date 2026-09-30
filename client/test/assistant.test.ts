@@ -144,6 +144,21 @@ test('the newest message is always kept, even if it alone is too long', () => {
   assert.equal(trimmed.length, 1);
 });
 
+test('mid-turn, the request and its tool traffic are kept even when they alone are too long', () => {
+  const big = 'x'.repeat(MAX_HISTORY_CHARS / 2);
+  const messages: Message[] = [
+    { role: 'user', content: 'old' },
+    { role: 'assistant', content: 'older' },
+    { role: 'user', content: 'fix it' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'a', name: 'read_document', arguments: '{}' }, { id: 'b', name: 'find_text', arguments: '{}' }] },
+    { role: 'tool', tool_call_id: 'a', content: big },
+    { role: 'tool', tool_call_id: 'b', content: big },
+  ];
+  const trimmed = trimHistory(messages);
+  // Never a lone tool result without the call that asked for it (the server would refuse that).
+  assert.deepEqual(trimmed, messages.slice(2));
+});
+
 // --- talking to the server --------------------------------------------------------------------
 
 const realFetch = globalThis.fetch;

@@ -196,6 +196,18 @@ test('sampled functions (type 0) interpolate between samples', () => {
   near(nibbles([1]), [1]);
 });
 
+test('sampled functions with 12 bits per sample read samples that straddle bytes', () => {
+  // Samples 0x800 and 0x000 in three bytes: 1000 0000 | 0000 0000 | 0000 0000.
+  const f = parseFunction(doc, fnStream({ FunctionType: 0, Domain: [0, 1], Range: [0, 1], Size: [2], BitsPerSample: 12 }, bytes(0x80, 0x00, 0x00)))!;
+  near(f([0]), [0x800 / 0xfff]);
+  near(f([1]), [0]);
+  // Samples 0x000 and 0xfff: the second starts half way through the second byte.
+  const g = parseFunction(doc, fnStream({ FunctionType: 0, Domain: [0, 1], Range: [0, 1], Size: [2], BitsPerSample: 12 }, bytes(0x00, 0x0f, 0xff)))!;
+  near(g([0]), [0]);
+  near(g([1]), [1]);
+  near(g([0.5]), [0.5]);
+});
+
 test('sampled functions with two inputs interpolate bilinearly', () => {
   // Size 2x2, one output; the first input varies fastest: samples (0,0)=0 (1,0)=255 (0,1)=0 (1,1)=255 -> depends on x only.
   const f = parseFunction(doc, fnStream({ FunctionType: 0, Domain: [0, 1, 0, 1], Range: [0, 1], Size: [2, 2], BitsPerSample: 8 }, bytes(0, 255, 0, 255)))!;
@@ -265,6 +277,11 @@ test('PostScript functions cannot run away or underflow', () => {
   const huge = ps(`{ ${'1 add '.repeat(20000)} }`);
   const out = huge([0]);
   assert.ok(out[0]! <= 10000, `execution budget stops a long program (got ${out[0]})`);
+  // copy can't grow the stack past the calculator's 100 entries (doubling it again and again would take gigabytes).
+  const doubling = ps(`{ 1 copy 2 copy 4 copy 8 copy 16 copy 32 copy 64 copy ${'64 copy '.repeat(5000)} }`);
+  const grown = doubling([0.5]);
+  assert.ok(grown.length <= 100, `stack held to the limit (got ${grown.length})`);
+  assert.equal(grown.length, 64);
   // Truncated program (missing closing brace) still parses.
   near(ps('{ 1 add')([0.5]), [1.5]);
 });

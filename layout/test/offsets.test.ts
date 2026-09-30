@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { toModel, toVisible, visibleLength, type SourceSpan } from '../src/offsets.ts';
+import { modelOfChar, toModel, toVisible, visibleLength, type SourceSpan } from '../src/offsets.ts';
 
 const text = (visible: number, model: number, length: number): SourceSpan => ({ visible, model, length, modelLength: length, text: true });
 
@@ -82,4 +82,13 @@ test('lookups across many spans find the right one (binary search)', () => {
     assert.equal(toVisible(spans, i * 5 + 4), i * 3 + 3, 'hidden gap moves forward');
   }
   assert.equal(visibleLength(spans), 300);
+});
+
+test('modelOfChar: the character drawn at a visible offset, after hidden content, not before it', () => {
+  // "c" is at visible 2: its model offset is 4, past the hidden characters (toModel gives 2).
+  assert.deepEqual([0, 1, 2, 3].map((v) => modelOfChar(hidden, v)), [0, 1, 4, 5]);
+  assert.equal(modelOfChar(hidden, 4), -1, 'past the end');
+  // Every character of a field result stands for the field's first position.
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map((v) => modelOfChar(field, v)), [0, 1, 2, 2, 2, 22, 23]);
+  assert.equal(modelOfChar([], 0), -1);
 });

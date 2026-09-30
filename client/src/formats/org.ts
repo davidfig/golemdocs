@@ -33,6 +33,12 @@ export function renderOrg(nodes: readonly Node[]): string {
   return blocks.length ? `${blocks.join('\n\n')}\n` : '';
 }
 
+/** A line that starts like a heading, list, table, rule, keyword, comment, drawer, planning line or footnote, which Org would read as that. */
+const STRUCTURAL = /^(\s*)(?=\*+(?:\s|$)|[-+](?:\s|$)|\d+[.)](?:\s|$)|\||#|-{5,}\s*$|:\w+:\s*$|(?:CLOSED|SCHEDULED|DEADLINE):|\[fn:)/gm;
+
+/** Text lines that would read as structure are set off by a zero-width space. */
+const guard = (text: string): string => text.replace(STRUCTURAL, `$1${ZWSP}`);
+
 /** Lines that Org would read as structure get a comma in front inside a block. */
 const protect = (text: string): string => text.replace(/^(\*|#\+)/gm, ',$1');
 
@@ -43,8 +49,7 @@ function block(node: Node, indent: number): string {
     case 'heading':
       return `${'*'.repeat(Math.min(node.level, 6))} ${inline(node.spans).replace(/\\\\\n/g, ' ')}`;
     case 'para':
-      // A line that starts like a list, heading or table is set off by a zero-width space.
-      return indented(inline(node.spans).replace(/^(\s*)(\*+|[+|#-]|\d+[.)])(?=\s|$)/gm, `$1${ZWSP}$2`));
+      return indented(guard(inline(node.spans)));
     case 'rule':
       return indented('-----');
     case 'code':
@@ -68,7 +73,8 @@ function list(node: Extract<Node, { t: 'list' }>, indent: number): string {
   node.items.forEach((item, k) => {
     const marker = node.ordered ? `${node.start + k}.` : '-';
     const content = indent + marker.length + 1;
-    out.push(`${' '.repeat(indent)}${marker} ${inline(item.spans)}`);
+    // Lines after a line break sit under the item's text, so they stay part of it.
+    out.push(`${' '.repeat(indent)}${marker} ${guard(inline(item.spans)).replace(/\n/g, `\n${' '.repeat(content)}`)}`);
     for (const child of item.children) out.push(child.t === 'list' ? list(child, content) : `\n${block(child, content)}`);
   });
   return out.join('\n');
@@ -162,7 +168,7 @@ class Parser {
   }
 
   private paragraph(): Node {
-    const spans: Span[] = [];
+    const lines: string[] = [];
     let first = true;
     while (this.i < this.lines.length) {
       const line = this.lines[this.i];
@@ -170,14 +176,10 @@ class Parser {
       if (!first && (ITEM.test(line) || BULLET_STAR.test(line))) break;
       this.i++;
       if (/^\s*#(\s|$)/.test(line)) continue;
-      const hard = /\\\\\s*$/.test(line);
-      const text = line.replace(/\\\\\s*$/, '').trim();
-      if (!first && !spans.at(-1)?.br) spans.push({ text: ' ' });
-      spans.push(...parseInline(text));
-      if (hard) spans.push({ text: '', br: true });
+      lines.push(line);
       first = false;
     }
-    return { t: 'para', spans: tidy(spans) };
+    return { t: 'para', spans: lineSpans(lines) };
   }
 
   private list(): Node {
@@ -202,7 +204,7 @@ class Parser {
           this.i++;
         }
         const label = /^(.*?)\s+::\s+(.*)$/.exec(text.join(' '));
-        const spans = label ? [...parseInline(label[1], { bold: true }), { text: ' – ' }, ...parseInline(label[2])] : parseInline(text.join(' '));
+        const spans = label ? [...parseInline(label[1], { bold: true }), { text: ' – ' }, ...parseInline(label[2])] : lineSpans(text);
         const item: ListItem = { spans: tidy(spans), children: [] };
         entries.push({ indent, ordered, number: ordered ? Number.parseInt(m[2], 10) : 1, item });
         continue;
@@ -254,6 +256,18 @@ class Parser {
   }
 }
 
+/** Lines of text as spans: joined by spaces, except after a hard line break ("\\\\" at the end of a line). */
+function lineSpans(lines: readonly string[]): Span[] {
+  const spans: Span[] = [];
+  lines.forEach((line, k) => {
+    const hard = /\\\\\s*$/.test(line);
+    if (k > 0 && !spans.at(-1)?.br) spans.push({ text: ' ' });
+    spans.push(...parseInline(line.replace(/\\\\\s*$/, '').trim()));
+    if (hard) spans.push({ text: '', br: true });
+  });
+  return tidy(spans);
+}
+
 function nest(entries: { indent: number; ordered: boolean; number: number; item: ListItem }[]): Extract<Node, { t: 'list' }> {
   const root: Extract<Node, { t: 'list' }> = { t: 'list', ordered: entries[0].ordered, start: entries[0].number, items: [] };
   const stack: { indent: number; list: Extract<Node, { t: 'list' }> }[] = [{ indent: entries[0].indent, list: root }];
@@ -296,7 +310,7 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
     }
     if (c === '[' && (m = /^\[\[([^\]]+)\](?:\[((?:[^\]\\]|\\.)*)\])?\]/.exec(rest))) {
       flush();
-      const url = m[1].replace(/^(file|http):(?=\/\/)/, '$1:');
+      const url = m[1];
       out.push(...parseInline(m[2] ?? url, { ...marks, link: url }));
       i += m[0].length;
       continue;

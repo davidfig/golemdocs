@@ -7,7 +7,7 @@
 import { t } from '../i18n/index.ts';
 import type { WireBox, WireCommand, WirePickedObject, WirePickedText } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
-import { h } from './dom.ts';
+import { h, isFormField } from './dom.ts';
 import './pdfEditTools.css';
 
 export interface ToolPage {
@@ -45,11 +45,6 @@ const MARK_SIZE = 14;
 const DEFAULT_SHAPE: [number, number] = [120, 70];
 /** Widest a picture is when it is added, points. */
 const PICTURE_WIDTH = 300;
-
-const isTextInput = (target: EventTarget | null): boolean => {
-  const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) && el.id !== 'input';
-};
 
 const toolLabel = (tool: Tool | 'picture'): string => t(`chrome.pdfEdit.tool.${tool}` as const);
 
@@ -266,8 +261,9 @@ export class PdfEditTools {
 
   /** Adds a picture from a file, centered on the page in the middle of the view. */
   private async addPicture(file: File): Promise<void> {
+    let bitmap: ImageBitmap | null = null;
     try {
-      const bitmap = await createImageBitmap(file);
+      bitmap = await createImageBitmap(file);
       const bytes = new Uint8Array(await file.arrayBuffer());
       const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
       const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
@@ -285,12 +281,13 @@ export class PdfEditTools {
       const width = Math.min(natural, PICTURE_WIDTH, at.page.width * 0.8);
       const height = width * (bitmap.height / bitmap.width);
       const box: WireBox = { x: Math.max(0, at.x - width / 2), y: Math.max(0, at.y - height / 2), width, height };
-      bitmap.close();
       let binary = '';
       for (let i = 0; i < data.length; i += 0x8000) binary += String.fromCharCode(...data.subarray(i, i + 0x8000));
       this.host.send({ kind: 'pdfAddImage', page: at.page.id, box, data: btoa(binary) });
     } catch (e) {
-      this.host.notify(t('chrome.pdfEdit.pictureFailed', { message: (e as Error).message }));
+      this.host.notify(t('chrome.pdfEdit.pictureFailed', { message: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      bitmap?.close();
     }
   }
 
@@ -356,7 +353,8 @@ export class PdfEditTools {
   }
 
   private key(e: KeyboardEvent): void {
-    if (isTextInput(e.target)) return;
+    // Keys typed in a box, or pressed in a dialog, are theirs.
+    if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
     if (e.key === 'Escape' && (this.tool || this.object)) {
       if (this.tool) this.choose(null);
       else this.host.send({ kind: 'pdfPutDown' });

@@ -39,6 +39,10 @@ export type Punct = '[' | ']' | '<<' | '>>' | '{' | '}';
 export type Token = PdfObject | Keyword | { punct: Punct } | undefined;
 
 const EOF_TOKEN = undefined;
+const SKIP = Symbol('skip');
+
+/** Deepest nesting of arrays and dictionaries parsed; hostile files nest far deeper to exhaust the stack. */
+const MAX_DEPTH = 256;
 
 export interface ParserOptions {
   /** Resolves an indirect /Length (the object may not be parsed yet). */
@@ -48,6 +52,8 @@ export interface ParserOptions {
 }
 
 export class Parser {
+  private depth = 0;
+
   constructor(
     readonly bytes: Uint8Array,
     public pos = 0,
@@ -88,6 +94,15 @@ export class Parser {
 
   /** Reads the next token: an object other than array/dict, a keyword, or punctuation. */
   readToken(): Token {
+    // A loop rather than recursion: a run of stray bytes can be as long as the file.
+    for (;;) {
+      const t = this.readTokenOnce();
+      if (t !== SKIP) return t;
+    }
+  }
+
+  /** One token, or SKIP after consuming a stray byte. */
+  private readTokenOnce(): Token | typeof SKIP {
     this.skipSpace();
     const b = this.bytes;
     if (this.pos >= b.length) return EOF_TOKEN;
@@ -109,7 +124,7 @@ export class Parser {
           return { punct: '>>' };
         }
         this.pos++;
-        return this.readToken(); // stray '>'
+        return SKIP; // stray '>'
       case 0x5b:
         this.pos++;
         return { punct: '[' };
@@ -124,7 +139,7 @@ export class Parser {
         return { punct: '}' };
       case 0x29 /* ) */:
         this.pos++;
-        return this.readToken(); // stray ')'
+        return SKIP; // stray ')'
     }
     if ((c >= 0x30 && c <= 0x39) || c === 0x2d || c === 0x2e || c === 0x2b) {
       const n = this.readPlainNumber();
@@ -134,7 +149,7 @@ export class Parser {
     const word = this.readRegular();
     if (!word) {
       this.pos++;
-      return this.readToken();
+      return SKIP;
     }
     const n = parseNumber(word);
     if (n !== undefined) return n;
@@ -268,8 +283,15 @@ export class Parser {
     if (t instanceof Keyword) this.error(`unexpected keyword '${t.value}'`, this.pos - t.value.length);
     if (typeof t === 'number') return Number.isInteger(t) && t >= 0 && !this.options.noRefs ? this.maybeRef(t) : t;
     if (t !== null && typeof t === 'object' && 'punct' in t) {
-      if (t.punct === '[') return this.parseArray();
-      if (t.punct === '<<') return this.parseDict();
+      if (t.punct === '[' || t.punct === '<<') {
+        if (this.depth >= MAX_DEPTH) this.error('arrays and dictionaries nested too deeply');
+        this.depth++;
+        try {
+          return t.punct === '[' ? this.parseArray() : this.parseDict();
+        } finally {
+          this.depth--;
+        }
+      }
       this.error(`unexpected '${t.punct}'`, this.pos - 1);
     }
     return t;
@@ -395,8 +417,8 @@ export class Parser {
       const found = indexOf(b, ENDSTREAM, start);
       if (found < 0) this.error('stream without endstream', start);
       end = found;
-      if (b[end - 1] === 10) end--;
-      if (b[end - 1] === 13) end--;
+      if (end > start && b[end - 1] === 10) end--;
+      if (end > start && b[end - 1] === 13) end--;
     }
     this.pos = end;
     this.skipSpace();

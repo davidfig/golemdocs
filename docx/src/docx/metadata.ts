@@ -71,10 +71,29 @@ function write(existing: XmlElement | undefined, fresh: () => XmlElement, map: [
     const found = findElement(root, name);
     if (value) {
       if (found) found.children = [value];
-      else root.children.push(el(name, name.endsWith('created') || name.endsWith('modified') ? { 'xsi:type': 'dcterms:W3CDTF' } : {}, [value]));
+      else {
+        const date = name.endsWith('created') || name.endsWith('modified');
+        root.children.push(el(qualify(root, name), date ? { 'xsi:type': 'dcterms:W3CDTF' } : {}, [value]));
+        // An existing part may not declare the prefixes a new element uses (dc:, xsi:...).
+        for (const prefix of date ? [prefixOf(name), 'xsi', 'dcterms'] : [prefixOf(name)]) declare(root, prefix);
+      }
     } else if (found) root.children.splice(root.children.indexOf(found), 1);
   }
   return root;
+}
+
+const prefixOf = (name: string): string => (name.includes(':') ? name.slice(0, name.indexOf(':')) : '');
+
+/** A name for a new child of `root`: an unprefixed one (app.xml) takes the root's prefix, if it has one. */
+function qualify(root: XmlElement, name: string): string {
+  const prefix = prefixOf(root.name);
+  return name.includes(':') || !prefix || root.attrs.xmlns === APP_NAMESPACE.xmlns ? name : `${prefix}:${name}`;
+}
+
+function declare(root: XmlElement, prefix: string): void {
+  const key = `xmlns:${prefix}`;
+  const uri = (CORE_NAMESPACES as Record<string, string>)[key];
+  if (prefix && uri && root.attrs[key] === undefined) root.attrs[key] = uri;
 }
 
 /** The core part with these properties in it (the existing one, changed, or a new one). */

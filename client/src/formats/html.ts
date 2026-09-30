@@ -60,6 +60,7 @@ import type {
 } from '@word/docx';
 import type { Comment } from '@word/docx';
 import { commentMarker, RangeTracker } from './commentRanges.ts';
+import { MONO_FONTS, styleFor } from './markdownStyles.ts';
 import { t } from '../i18n/index.ts';
 
 // --- Public types -----------------------------------------------------------------------------------
@@ -137,8 +138,6 @@ export interface HtmlExtension {
 // --- Model helpers ----------------------------------------------------------------------------------
 
 const ID = 'w14:paraId';
-const MONO = 'Courier New';
-const MONO_FONTS = { ascii: MONO, hAnsi: MONO, eastAsia: MONO, cs: MONO };
 const PAGE_TEXT_WIDTH = 9360;
 const HEADER_FILL = 'F2F2F2';
 const STYLE_MARK = 'data-word-styles';
@@ -147,6 +146,9 @@ const RULE_BORDER = { val: 'single', sz: 6, space: 1, color: 'A6A6A6' };
 const formatId = (n: number): string => n.toString(16).toUpperCase().padStart(8, '0');
 const idOf = (p: Paragraph): string => p.attrs[ID] ?? '';
 const hasKeys = (o: object | undefined): boolean => !!o && Object.keys(o).length > 0;
+/** A lookup table's own entry for a key (never an Object.prototype member such as "constructor"). */
+const own = <T>(table: Record<string, T>, key: string): T | undefined => (Object.hasOwn(table, key) ? table[key] : undefined);
+const MONO = MONO_FONTS.ascii;
 
 const newParagraph = (properties: ParagraphProperties, children: Inline[] = []): Paragraph => ({
   kind: 'paragraph',
@@ -156,108 +158,6 @@ const newParagraph = (properties: ParagraphProperties, children: Inline[] = []):
 });
 
 const newRun = (properties: RunProperties, content: RunContent[]): Run => ({ kind: 'run', properties, content, attrs: {} });
-
-function styleFor(id: string): Style | undefined {
-  const heading = /^Heading([1-6])$/.exec(id);
-  if (heading) {
-    const level = Number(heading[1]);
-    const size = [32, 26, 24, 22, 22, 22][level - 1];
-    return {
-      type: 'paragraph',
-      id,
-      name: `heading ${level}`,
-      basedOn: 'Normal',
-      next: 'Normal',
-      paragraphProperties: { keepNext: true, keepLines: true, spacing: { before: level === 1 ? 240 : 40, after: 0 }, outlineLevel: level - 1 },
-      runProperties: {
-        fonts: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', eastAsia: 'Calibri Light', cs: 'Times New Roman' },
-        color: { val: level === 3 || level === 6 ? '1F3763' : '2F5496' },
-        ...(level === 4 ? { italic: true } : {}),
-        size,
-        sizeCs: size,
-      },
-      attrs: {},
-    };
-  }
-  switch (id) {
-    case 'Quote':
-      return {
-        type: 'paragraph',
-        id,
-        name: 'Quote',
-        basedOn: 'Normal',
-        next: 'Normal',
-        paragraphProperties: {
-          spacing: { before: 120, after: 120 },
-          indent: { left: 720 },
-          borders: { left: { val: 'single', sz: 18, space: 8, color: 'BFBFBF' } },
-        },
-        runProperties: { italic: true, color: { val: '595959' } },
-        attrs: {},
-      };
-    case 'Code':
-      return {
-        type: 'paragraph',
-        id,
-        name: 'Code',
-        basedOn: 'Normal',
-        paragraphProperties: { spacing: { before: 0, after: 0, line: 240, lineRule: 'auto' }, shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' } },
-        runProperties: { fonts: MONO_FONTS, size: 20, sizeCs: 20 },
-        attrs: {},
-      };
-    case 'InlineCode':
-      return {
-        type: 'character',
-        id,
-        name: 'Inline Code',
-        basedOn: 'DefaultParagraphFont',
-        runProperties: { fonts: MONO_FONTS, shading: { val: 'clear', color: 'auto', fill: 'F2F2F2' } },
-        attrs: {},
-      };
-    case 'ImagePlaceholder':
-      return {
-        type: 'character',
-        id,
-        name: 'Image Placeholder',
-        basedOn: 'DefaultParagraphFont',
-        runProperties: { italic: true, color: { val: '7F7F7F' } },
-        attrs: {},
-      };
-    case 'ListParagraph':
-      return {
-        type: 'paragraph',
-        id,
-        name: 'List Paragraph',
-        basedOn: 'Normal',
-        paragraphProperties: { indent: { left: 720 }, contextualSpacing: true },
-        attrs: {},
-      };
-    case 'Hyperlink':
-      return {
-        type: 'character',
-        id,
-        name: 'Hyperlink',
-        basedOn: 'DefaultParagraphFont',
-        runProperties: { color: { val: '0563C1', themeColor: 'hyperlink' }, underline: { val: 'single' } },
-        attrs: {},
-      };
-    case 'TableGrid':
-      return {
-        type: 'table',
-        id,
-        name: 'Table Grid',
-        basedOn: 'TableNormal',
-        paragraphProperties: { spacing: { after: 0, line: 240, lineRule: 'auto' } },
-        tableProperties: {
-          borders: Object.fromEntries(
-            ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((side) => [side, { val: 'single', sz: 4, space: 0, color: 'auto' }]),
-          ),
-        },
-        attrs: {},
-      };
-  }
-  return undefined;
-}
 
 /** The first paragraph in blocks, looking into tables and content controls. */
 function firstParagraph(blocks: readonly Block[]): Paragraph | undefined {
@@ -671,6 +571,11 @@ function parseHtml(input: string): HtmlTree {
         }
         continue;
       }
+      // The tag runs into the end of the file (no '>', or a quote that never closes): browsers
+      // drop it; the rest is kept as text. Stopping here also keeps a file of many unfinished tags
+      // from being rescanned to its end once per '<'.
+      addText(decode(src.slice(lt), false));
+      break;
     }
     addText('<');
     i = lt + 1;
@@ -696,10 +601,10 @@ const TRANSPARENT = set('html body head');
 const mapped = (name: string): boolean =>
   BLOCKS.has(name) || INLINE.has(name) || CONTENT_VOID.has(name) || TRANSPARENT.has(name) || name === 'wbr' || name.includes(':');
 
-/** Whether an element holds block-level elements (looking through inline elements). */
 /** A <mark> that is a comment (the export's), not a highlight. */
 const isCommentMark = (el: HElement): boolean => el.name === 'mark' && (el.attrs['data-comment-id'] !== undefined || /(^|\s)comment(\s|$)/.test(el.attrs.class ?? ''));
 
+/** Whether an element holds block-level elements (looking through inline elements). */
 function hasBlock(el: HElement): boolean {
   for (const child of el.children) {
     if (child.type !== 'element') continue;
@@ -785,7 +690,8 @@ const NAMED_COLORS: Record<string, string> = {
 function parseColor(value: string): string | null | undefined {
   const v = value.trim().toLowerCase();
   if (v === 'transparent') return null;
-  if (NAMED_COLORS[v]) return NAMED_COLORS[v];
+  const named = own(NAMED_COLORS, v);
+  if (named) return named;
   let m = /^#([0-9a-f]{3,8})$/.exec(v);
   if (m) {
     const h = m[1];
@@ -821,7 +727,8 @@ function toPoints(value: string, basePt: number): number | undefined {
   const x = parseFloat(m[1]);
   const unit = m[2].toLowerCase();
   if (!unit) return x === 0 ? 0 : undefined;
-  if (UNIT_POINTS[unit] !== undefined) return x * UNIT_POINTS[unit];
+  const perUnit = own(UNIT_POINTS, unit);
+  if (perUnit !== undefined) return x * perUnit;
   if (unit === 'em') return x * basePt;
   if (unit === 'rem') return x * 12;
   if (unit === '%') return (x * basePt) / 100;
@@ -846,7 +753,8 @@ function fontFamily(value: string): string | undefined {
   const first = value.split(',')[0]?.trim().replace(/^["']|["']$/g, '').trim();
   if (!first) return undefined;
   const lower = first.toLowerCase();
-  if (GENERIC_FONTS[lower]) return GENERIC_FONTS[lower];
+  const generic = own(GENERIC_FONTS, lower);
+  if (generic) return generic;
   if (/^(inherit|initial|unset|revert|system-ui|cursive|fantasy|emoji|math|fangsong|ui-.*)$/.test(lower) || first.startsWith('var(')) return undefined;
   return first;
 }
@@ -871,7 +779,7 @@ function runCss(run: RunProperties, prop: string, value: string, basePt: number)
       return true;
     }
     case 'font-size': {
-      let size = FONT_SIZE_KEYWORDS[v];
+      let size = own(FONT_SIZE_KEYWORDS, v);
       if (v === 'smaller') size = basePt / 1.2;
       else if (v === 'larger') size = basePt * 1.2;
       else if (size === undefined) size = toPoints(v, basePt) as number;
@@ -1611,7 +1519,7 @@ class Importer {
         if (color) cell.shading = shadingOf(color);
         if (color !== undefined) delete attrs.bgcolor;
       }
-      const valign = VALIGN[(attrs.valign ?? '').toLowerCase()];
+      const valign = own(VALIGN, (attrs.valign ?? '').toLowerCase());
       if (valign) {
         cell.vAlign = valign;
         delete attrs.valign;
@@ -1708,8 +1616,9 @@ class Importer {
           else return false;
           return true;
         }
-        if (role === 'cell' && VALIGN[v]) {
-          cell.vAlign = VALIGN[v];
+        const valign = own(VALIGN, v);
+        if (role === 'cell' && valign) {
+          cell.vAlign = valign;
           return true;
         }
         return false;
@@ -1954,8 +1863,9 @@ class Importer {
     let start = 1;
     if (ordered) {
       const type = attrs.type?.trim();
-      if (type !== undefined && TYPE_FORMATS[type]) {
-        format = TYPE_FORMATS[type];
+      const typeFormat = type === undefined ? undefined : own(TYPE_FORMATS, type);
+      if (typeFormat) {
+        format = typeFormat;
         delete attrs.type;
       }
       if (attrs.start !== undefined && /^\s*-?\d+\s*$/.test(attrs.start)) {
@@ -2237,13 +2147,13 @@ function textContentRaw(el: HElement): string {
   return el.children.map((c) => (c.type === 'text' ? c.text : '')).join('');
 }
 
+/** Supplies the bytes of a picture by the address in its <img>; null when they aren't available. */
+export type ImageSource = (src: string) => Uint8Array | null;
+
 /**
  * Parses HTML into a new document plus what only HTML can express (see the header comment).
  * Every paragraph gets a w14:paraId. Never throws: whatever can't be mapped is kept verbatim.
  */
-/** Supplies the bytes of a picture by the address in its <img>; null when they aren't available. */
-export type ImageSource = (src: string) => Uint8Array | null;
-
 export async function htmlToDocument(source: string, images?: ImageSource): Promise<{ document: WordDocument; extension: HtmlExtension }> {
   try {
     const document = await WordDocument.create();
@@ -2333,7 +2243,8 @@ function attrString(attrs: HtmlAttributes | undefined): string {
 const hex = (color: string | undefined): string | undefined => (color && /^[0-9A-Fa-f]{6}$/.test(color) ? `#${color.toUpperCase()}` : undefined);
 
 function cssFont(name: string): string {
-  const quoted = /^[A-Za-z][A-Za-z-]*$/.test(name) ? name : `"${name.replace(/["\\]/g, '')}"`;
+  // Quotes, backslashes and angle brackets can't be in the name: in the <style> block, "</style>" would end it.
+  const quoted = /^[A-Za-z][A-Za-z-]*$/.test(name) ? name : `"${name.replace(/["\\<>\r\n]/g, '')}"`;
   const generic = MONO_RE.test(name) ? 'monospace' : /sans/i.test(name) ? 'sans-serif' : SERIF_RE.test(name) ? 'serif' : 'sans-serif';
   return `${quoted}, ${generic}`;
 }
@@ -2629,7 +2540,7 @@ class Writer {
     if (eff.size && eff.size !== base.size) decls.push(`font-size: ${eff.size / 2}pt`);
     const color = hex(eff.color?.val);
     if (color && color !== hex(base.color?.val)) decls.push(`color: ${color}`);
-    const highlight = eff.highlight && eff.highlight !== 'none' && eff.highlight !== 'yellow' ? HIGHLIGHTS[eff.highlight] : undefined;
+    const highlight = eff.highlight && eff.highlight !== 'none' && eff.highlight !== 'yellow' ? own(HIGHLIGHTS, eff.highlight) : undefined;
     const fill = hex(eff.shading?.fill);
     if (highlight && eff.highlight !== base.highlight) decls.push(`background-color: #${highlight}`);
     else if (!highlight && fill && fill !== hex(base.shading?.fill)) decls.push(`background-color: ${fill}`);
@@ -2675,7 +2586,6 @@ class Writer {
     return `<img src="${escAttr(h.url)}" alt="${escAttr(m[1] ?? '')}">`;
   }
 
-  /** A paragraph's content as HTML. Outside <pre>, spaces HTML would collapse become &nbsp;. */
   /** The opening tag of a comment's <mark>. */
   private commentOpen(c: Comment): string {
     const text = c.paragraphs.join('\n');
@@ -2693,6 +2603,7 @@ class Writer {
     );
   }
 
+  /** A paragraph's content as HTML. Outside <pre>, spaces HTML would collapse become &nbsp;. */
   private inline(p: Paragraph, pre: boolean): { html: string; empty: boolean; endsWithBreak: boolean } {
     const pStyle = p.properties.style;
     const atoms: Atom[] = [];
@@ -3015,7 +2926,7 @@ class Writer {
       const tag = ordered ? 'ol' : 'ul';
       const attrs: HtmlAttributes = {};
       if (ordered) {
-        const type = TYPE_ATTRS[def.format ?? ''];
+        const type = own(TYPE_ATTRS, def.format ?? '');
         if (type) attrs.type = type;
         if (number !== 1) attrs.start = String(number);
       }
@@ -3168,6 +3079,13 @@ function fixSpaces(atoms: Atom[]): void {
   endLine();
 }
 
+export interface HtmlWriteOptions {
+  /** The document's pictures by package part (see collectImages); without them, pictures are not written. */
+  images?: Map<string, ImageData>;
+  /** The address to write for a picture; by default the picture is embedded as a data: URI. */
+  imageSrc?: (part: string, image: ImageData) => string;
+}
+
 /**
  * Writes the document as a complete HTML5 page: headings, paragraphs, lists (nested ul/ol from
  * the numbering), block quotes, preformatted blocks, tables, links, images and inline formatting
@@ -3175,12 +3093,6 @@ function fixSpaces(atoms: Atom[]): void {
  * With the HTML extension from `htmlToDocument`, the head, html/body attributes, block tags and
  * attributes, wrapper containers and verbatim fragments come back for the paragraphs still there.
  */
-export interface HtmlWriteOptions {
-  /** The document's pictures by package part (see collectImages); without them, pictures are not written. */
-  images?: Map<string, ImageData>;
-  /** The address to write for a picture; by default the picture is embedded as a data: URI. */
-  imageSrc?: (part: string, image: ImageData) => string;
-}
 
 export function documentToHtml(document: WordDocument, extension?: HtmlExtension, options: HtmlWriteOptions = {}): string {
   return new Writer(document, extension, options).write();

@@ -12,9 +12,15 @@ function compile(gl: WebGL2RenderingContext, type: GLenum, source: string): WebG
 }
 
 export function createProgram(gl: WebGL2RenderingContext, vertex: string, fragment: string): WebGLProgram {
-  const program = gl.createProgram();
   const vs = compile(gl, gl.VERTEX_SHADER, vertex);
-  const fs = compile(gl, gl.FRAGMENT_SHADER, fragment);
+  let fs: WebGLShader;
+  try {
+    fs = compile(gl, gl.FRAGMENT_SHADER, fragment);
+  } catch (e) {
+    gl.deleteShader(vs);
+    throw e;
+  }
+  const program = gl.createProgram();
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
   gl.linkProgram(program);

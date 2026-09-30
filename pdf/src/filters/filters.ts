@@ -3,7 +3,7 @@
 // Compression Streams API for Flate, and is only needed when saving.
 
 import { PdfDict, PdfName, PdfStream, type PdfObject } from '../core/objects.ts';
-import { inflate } from './inflate.ts';
+import { MAX_OUTPUT, inflate } from './inflate.ts';
 
 export class FilterError extends Error {}
 
@@ -39,7 +39,8 @@ export function filterChain(dict: PdfDict, resolve: Resolve = identity): FilterS
   names.forEach((n, i) => {
     if (!(n instanceof PdfName)) return;
     const parm = parms[i];
-    steps.push({ name: ABBREVIATIONS[n.name] ?? n.name, parms: parm instanceof PdfDict ? parm : undefined });
+    const name = Object.hasOwn(ABBREVIATIONS, n.name) ? ABBREVIATIONS[n.name] : n.name;
+    steps.push({ name, parms: parm instanceof PdfDict ? parm : undefined });
   });
   return steps;
 }
@@ -107,11 +108,15 @@ export function decodeData(input: Uint8Array, chain: FilterStep[], resolve: Reso
 
 export function applyPredictor(data: Uint8Array, predictor: number, colors: number, bpc: number, columns: number): Uint8Array {
   if (predictor <= 1) return data;
+  // Nonsense parameters (zero columns, fractional or huge counts) leave the data as it is.
+  const count = (n: number, max: number) => Number.isInteger(n) && n >= 1 && n <= max;
+  if (!count(colors, 32) || ![1, 2, 4, 8, 16].includes(bpc) || !count(columns, 1 << 24)) return data;
   const bpp = Math.max(1, Math.ceil((colors * bpc) / 8));
   const rowBytes = Math.ceil((colors * bpc * columns) / 8);
   if (predictor === 2) return tiffPredictor(data, colors, bpc, rowBytes);
   // PNG predictors: every row starts with its own filter type byte.
   const rows = Math.floor(data.length / (rowBytes + 1));
+  if (!rows) return new Uint8Array(0);
   const out = new Uint8Array(rows * rowBytes);
   let prev = new Uint8Array(rowBytes);
   for (let r = 0; r < rows; r++) {
@@ -200,7 +205,10 @@ export function asciiHexDecode(data: Uint8Array): Uint8Array {
 }
 
 export function ascii85Decode(data: Uint8Array): Uint8Array {
-  const out = new Uint8Array(Math.ceil((data.length * 4) / 5) + 4);
+  // Five characters make four bytes, but a 'z' alone makes four.
+  let zeros = 0;
+  for (const c of data) if (c === 0x7a) zeros++;
+  const out = new Uint8Array(Math.ceil((data.length * 4) / 5) + 4 + zeros * 4);
   let n = 0;
   const group = [0, 0, 0, 0, 0];
   let g = 0;
@@ -253,16 +261,15 @@ export function runLengthDecode(data: Uint8Array): Uint8Array {
 }
 
 export function lzwDecode(data: Uint8Array, earlyChange = 1): Uint8Array {
-  const out: number[] = [];
-  // Dictionary entries as (prefix code, last byte, length); first byte cached for speed.
+  let out = new Uint8Array(Math.min(MAX_OUTPUT, Math.max(1024, data.length * 4)));
+  let n = 0;
+  // Dictionary entries as (prefix code, last byte); first byte cached for speed.
   const prefix = new Int32Array(4096);
   const suffix = new Uint8Array(4096);
   const first = new Uint8Array(4096);
-  const length = new Uint16Array(4096);
   for (let i = 0; i < 256; i++) {
     prefix[i] = -1;
     suffix[i] = first[i] = i;
-    length[i] = 1;
   }
   let next = 258;
   let codeLen = 9;
@@ -286,26 +293,30 @@ export function lzwDecode(data: Uint8Array, earlyChange = 1): Uint8Array {
       continue;
     }
     if (code === 257) break;
-    let entry = code;
     let firstByte: number;
     if (code < next) firstByte = first[code];
     else if (code === next && prev >= 0) firstByte = first[prev];
     else break; // corrupt
     if (prev >= 0 && next < 4096) {
       prefix[next] = prev;
-      suffix[next] = code < next ? first[code] : firstByte;
+      suffix[next] = firstByte;
       first[next] = first[prev];
-      length[next] = length[prev] + 1;
       next++;
     }
     // Emit entry's bytes (reversed through the stack).
     let sp = 0;
-    for (let e = entry; e >= 0; e = prefix[e]) stack[sp++] = suffix[e];
-    while (sp) out.push(stack[--sp]);
+    for (let e = code; e >= 0; e = prefix[e]) stack[sp++] = suffix[e];
+    if (n + sp > out.length) {
+      if (n + sp > MAX_OUTPUT) break; // a decompression bomb: keep what decoded so far
+      const grown = new Uint8Array(Math.min(MAX_OUTPUT, Math.max(out.length * 2, n + sp)));
+      grown.set(out.subarray(0, n));
+      out = grown;
+    }
+    while (sp) out[n++] = stack[--sp];
     prev = code;
     if (next + earlyChange >= 1 << codeLen && codeLen < 12) codeLen++;
   }
-  return Uint8Array.from(out);
+  return out.slice(0, n);
 }
 
 // --- encoding --------------------------------------------------------------------------------

@@ -203,7 +203,11 @@ export class Assistant {
 
   /** Asks the server what this account may do, then shows the matching view. */
   private async refresh(): Promise<void> {
-    if (this.signedIn) this.status = await fetchStatus();
+    if (this.signedIn) {
+      this.status = await fetchStatus();
+      // A fresh answer replaces what the last failed request concluded (it was unavailable a moment, say).
+      if (this.status) this.failure = null;
+    }
     this.render();
     if (!this.foot.hidden && this.gate() === null) this.input.focus({ preventScroll: true });
   }

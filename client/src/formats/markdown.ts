@@ -138,15 +138,43 @@ interface CriticBlock {
 }
 
 const unescapeComment = (s: string): string => s.replace(/\\([\s\S])/g, (_m, c: string) => (c === 'n' ? '\n' : c));
-const BLOCK_HEAD = /^(↳ )?(✓ )?(?:@((?:[^:\\\n]|\\[\s\S])*?)(?: \(([^)\n]*)\))?: )?/;
+// The date is length-capped: unbounded, every " (" in a long block without ": " would rescan the rest of it.
+const BLOCK_HEAD = /^(↳ )?(✓ )?(?:@((?:[^:\\\n]|\\[\s\S])*?)(?: \(([^)\n]{0,100})\))?: )?/;
 
-/** The `{>>…<<}` blocks starting at `q`, and where they end; null if there is none. */
-function readCriticBlocks(text: string, q: number): { blocks: CriticBlock[]; end: number } | null {
+/**
+ * Where `{>>…<<}` blocks can end in `text`: each `<<}` not escaped by a backslash, in order. A block's
+ * content always starts after "{>>", in step with this scan, so its end is the first of these after it.
+ */
+function criticEnds(text: string): number[] {
+  const ends: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\\') i++;
+    else if (text[i] === '<' && text.startsWith('<<}', i)) ends.push(i);
+  }
+  return ends;
+}
+
+/** The first of the sorted `positions` at or after `from`, or -1. */
+function firstFrom(positions: readonly number[], from: number): number {
+  let lo = 0;
+  let hi = positions.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (positions[mid] < from) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo < positions.length ? positions[lo] : -1;
+}
+
+/**
+ * The `{>>…<<}` blocks starting at `q`, and where they end; null if there is none. `ends` is
+ * criticEnds(text) (looked up rather than scanned for, so many unclosed blocks stay linear).
+ */
+function readCriticBlocks(text: string, q: number, ends: readonly number[]): { blocks: CriticBlock[]; end: number } | null {
   const blocks: CriticBlock[] = [];
   while (text.startsWith('{>>', q)) {
-    let i = q + 3;
-    while (i < text.length && !text.startsWith('<<}', i)) i += text[i] === '\\' ? 2 : 1;
-    if (i >= text.length) break;
+    const i = firstFrom(ends, q + 3);
+    if (i < 0) break;
     const raw = text.slice(q + 3, i);
     const head = BLOCK_HEAD.exec(raw)!;
     blocks.push({
@@ -245,7 +273,7 @@ function decodeEntity(body: string): string | null {
     if (code === 0 || (code >= 0xd800 && code <= 0xdfff)) return '�';
     return String.fromCodePoint(code);
   }
-  return NAMED_ENTITIES[body] ?? null;
+  return Object.hasOwn(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : null;
 }
 
 /** Backslash escapes and entities in a link destination. */
@@ -341,6 +369,9 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
   const ticks: { map: Map<number, { pos: number[]; ptr: number }> | null } = { map: null };
   // The comment range being read: where its text ends, where its comment blocks end, and its ids.
   let range: { at: number; end: number; ids: string[] } | null = null;
+  // Where comment blocks can end (made on first use), and the next "==}{>>" after the last `{==` (-1: none left).
+  let critic: number[] | null = null;
+  let rangeClose = -2;
   const closeRange = (): void => {
     flush();
     const node = mk('cend');
@@ -492,8 +523,9 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
       }
       case '{': {
         if (!range && text.startsWith('{==', p)) {
-          const close = text.indexOf('==}{>>', p + 3);
-          const read = close > 0 ? readCriticBlocks(text, close + 3) : null;
+          if (rangeClose !== -1 && rangeClose < p + 3) rangeClose = text.indexOf('==}{>>', p + 3);
+          const close = rangeClose;
+          const read = close > 0 ? readCriticBlocks(text, close + 3, (critic ??= criticEnds(text))) : null;
           if (read) {
             flush();
             const node = mk('cstart');
@@ -504,7 +536,7 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
             break;
           }
         } else if (text.startsWith('{>>', p)) {
-          const read = readCriticBlocks(text, p);
+          const read = readCriticBlocks(text, p, (critic ??= criticEnds(text)));
           if (read) {
             flush();
             const ids = addComments(read.blocks);
@@ -1641,6 +1673,9 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
   }
   const esc = computeEscapes(plain, drop, inLink, mode, critic);
 
+  // In a table cell every "|" is escaped, raw Markdown and link addresses too (the cell is split before its content is read).
+  const cellPipes = (t: string): string => (mode === 'cell' ? t.replace(/\|/g, '\\|') : t);
+  const close = (key: string): string => (key[0] === 'C' ? `==}${notes?.get(key.slice(1)) ?? ''}` : key[0] === 'L' ? cellPipes(markClose(key)) : markClose(key));
   const out: string[] = [];
   const open: string[] = [];
   let pend = '';
@@ -1654,7 +1689,8 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
       return;
     }
     let core: string;
-    if (s.raw) core = s.text;
+    // Comment blocks (notes) were written for the cell already.
+    if (s.raw) core = s.note === undefined ? cellPipes(s.text) : s.text;
     else if (s.code) core = codeSpan(s.text, mode);
     else {
       const chars: string[] = [];
@@ -1694,7 +1730,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
       keep = k;
     }
     let closers = '';
-    for (const key of open.splice(keep).reverse()) closers += key[0] === 'C' ? `==}${notes?.get(key.slice(1)) ?? ''}` : markClose(key);
+    for (const key of open.splice(keep).reverse()) closers += close(key);
     // "*" closers directly followed by "*" openers would fuse into one ambiguous delimiter run.
     const fuse = closers.endsWith('*') && !pend && !lead;
     let openers = '';
@@ -1709,7 +1745,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
     pend = trail;
   });
   let closers = '';
-  for (const key of open.reverse()) closers += key[0] === 'C' ? `==}${notes?.get(key.slice(1)) ?? ''}` : markClose(key);
+  for (const key of open.reverse()) closers += close(key);
   out.push(closers);
   return out.join('');
 }

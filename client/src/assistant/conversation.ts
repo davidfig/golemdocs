@@ -63,14 +63,17 @@ const size = (m: Message): number => m.content.length + ('tool_calls' in m && m.
 /**
  * The most recent part of a conversation that fits, starting at one of the person's messages (a
  * tool result must follow the call that asked for it, so the history can't start in the middle of one).
+ * The latest request and everything after it (this turn's tool traffic) are always kept.
  */
 export function trimHistory(messages: Message[], limit = MAX_HISTORY_CHARS): Message[] {
   let total = messages.reduce((n, m) => n + size(m), 0);
+  let lastUser = messages.length - 1;
+  while (lastUser > 0 && messages[lastUser]!.role !== 'user') lastUser--;
   let start = 0;
-  while (total > limit && start < messages.length - 1) {
+  while (total > limit && start < lastUser) {
     total -= size(messages[start]!);
     start++;
-    while (start < messages.length - 1 && messages[start]!.role !== 'user') {
+    while (start < lastUser && messages[start]!.role !== 'user') {
       total -= size(messages[start]!);
       start++;
     }

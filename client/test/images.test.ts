@@ -195,3 +195,20 @@ test('a picture part without an extension (a PDF’s) is recognised by its bytes
   assert.equal(sniffType(Uint8Array.of(0xff, 0xd8, 0xff, 0xe0)), 'image/jpeg');
   assert.equal(sniffType(Uint8Array.of(0x25, 0x50, 0x44, 0x46)), '');
 });
+
+test('text that starts "BM" is not a bitmap, and a short bitmap header does not throw', () => {
+  assert.equal(sniffImage(new TextEncoder().encode('BMW is a car maker, founded 1916.')), null);
+  assert.equal(sniffImage(new Uint8Array([0x42, 0x4d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 40, 0])), null);
+  const bmp = new Uint8Array(54);
+  const view = new DataView(bmp.buffer);
+  bmp.set([0x42, 0x4d]);
+  view.setUint32(14, 40, true);
+  view.setInt32(18, 7, true);
+  view.setInt32(22, -5, true);
+  assert.deepEqual([sniffImage(bmp)?.type, sniffImage(bmp)?.width, sniffImage(bmp)?.height], ['bmp', 7, 5]);
+});
+
+test('a data: URI without base64 keeps percent-escaped bytes as bytes', () => {
+  assert.deepEqual([...decodeDataUri('data:image/png,%89PNG%0D%0A')!], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+  assert.deepEqual([...decodeDataUri('data:,caf%C3%A9 é')!], [...new TextEncoder().encode('café é')]);
+});

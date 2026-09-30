@@ -14,6 +14,12 @@ const CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2
 
 const FAST_BITS = 10;
 
+/**
+ * Most bytes one stream may inflate to. DEFLATE expands up to ~1000:1, so without a limit a
+ * small hostile stream could exhaust memory; past this the stream is treated as damaged.
+ */
+export const MAX_OUTPUT = 1 << 29;
+
 class Huffman {
   /** For codes up to FAST_BITS: (symbol << 4) | length, indexed by bit-reversed code; 0 = slow path. */
   readonly fast = new Uint32Array(1 << FAST_BITS);
@@ -70,7 +76,7 @@ class Inflater {
     readonly input: Uint8Array,
     sizeHint: number,
   ) {
-    this.out = new Uint8Array(Math.max(1024, sizeHint));
+    this.out = new Uint8Array(Math.min(MAX_OUTPUT, Math.max(1024, sizeHint)));
   }
 
   private need(n: number): void {
@@ -129,9 +135,10 @@ class Inflater {
 
   private grow(extra: number): void {
     if (this.outLen + extra <= this.out.length) return;
+    if (this.outLen + extra > MAX_OUTPUT) throw new InflateError('output too large');
     let size = this.out.length * 2;
     while (size < this.outLen + extra) size *= 2;
-    const next = new Uint8Array(size);
+    const next = new Uint8Array(Math.min(size, MAX_OUTPUT));
     next.set(this.out.subarray(0, this.outLen));
     this.out = next;
   }

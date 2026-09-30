@@ -143,7 +143,10 @@ function readTable(p: Parser, entries: Map<number, XrefEntry>): PdfDict {
 function readStream(stream: PdfStream, entries: Map<number, XrefEntry>): void {
   const d = stream.dict;
   const w = d.get('W');
-  if (!Array.isArray(w) || w.length < 3 || !w.every((x) => typeof x === 'number')) throw new XrefError('bad /W in xref stream');
+  // Field widths must be whole bytes (at most 8, beyond any file offset) and at least one
+  // nonzero: an all-zero row would never consume data, and /Size could be in the billions.
+  const valid = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x <= 8;
+  if (!Array.isArray(w) || w.length < 3 || !w.every(valid) || !(w[0] + w[1] + w[2])) throw new XrefError('bad /W in xref stream');
   const [w0, w1, w2] = w as number[];
   const size = d.number('Size') ?? 0;
   const index = d.get('Index');
@@ -240,11 +243,16 @@ export function objectStreamIndex(stream: PdfStream, data = decodeStream(stream)
   const n = stream.dict.number('N') ?? 0;
   const p = new Parser(data, 0);
   const out: [number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    const num = p.parseObject();
-    const off = p.parseObject();
-    if (typeof num !== 'number' || typeof off !== 'number') break;
-    out.push([num, off]);
+  // A truncated or damaged header yields the pairs read before the damage.
+  try {
+    for (let i = 0; i < n && !p.atEnd; i++) {
+      const num = p.parseObject();
+      const off = p.parseObject();
+      if (typeof num !== 'number' || typeof off !== 'number') break;
+      out.push([num, off]);
+    }
+  } catch (e) {
+    if (!(e instanceof PdfSyntaxError)) throw e;
   }
   return out;
 }

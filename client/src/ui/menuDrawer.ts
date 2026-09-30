@@ -25,7 +25,7 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
   const back = h('button', { class: 'wm-drawer-back', attrs: { type: 'button', 'aria-label': t('menus.drawer.back') } });
   back.innerHTML = ICONS.back;
   const title = h('div', { class: 'wm-drawer-title' });
-  const closeButton = h('button', { class: 'wm-drawer-close', attrs: { type: 'button', 'aria-label': t('menus.customize.close') } });
+  const closeButton = h('button', { class: 'wm-drawer-close', attrs: { type: 'button', 'aria-label': t('menus.dialog.close') } });
   closeButton.innerHTML = ICONS.close;
   const list = h('div', { class: 'wm-drawer-list', attrs: { role: 'menu' } });
   const drawer = h('div', { class: 'wm-drawer', attrs: { role: 'dialog', 'aria-label': t('menus.menuBar') } }, h('div', { class: 'wm-drawer-head' }, back, title, closeButton), list);

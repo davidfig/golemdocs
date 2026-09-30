@@ -15,6 +15,7 @@ const TOLERANCE_MS = 5 * 60 * 1000;
 
 /** Statuses that entitle the user to sync. A canceled subscription stays `active` until its period ends. */
 const PAID = new Set(['active', 'trialing']);
+const PAID_SQL = [...PAID].map((status) => `'${status}'`).join(', ');
 
 /** The subscription object inside Polar's `subscription.*` events (only what we read). */
 interface PolarSubscription {
@@ -76,13 +77,16 @@ export async function recordPolarEvent(env: Env, event: { type?: string; data?: 
   if (!userId) return;
   const modifiedAt = ms(sub.modified_at) ?? ms(sub.created_at) ?? now;
   // Events can arrive out of order (and Polar retries): only a newer state replaces the stored one.
+  // Someone can have more than one subscription (a new one bought while an old one was past due):
+  // news about a different subscription that isn't paid never replaces one that is.
   await env.DIRECTORY.prepare(
     `INSERT INTO subscriptions (user_id, polar_id, status, current_period_end, cancel_at_period_end, modified_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET polar_id = excluded.polar_id, status = excluded.status,
        current_period_end = excluded.current_period_end, cancel_at_period_end = excluded.cancel_at_period_end,
        modified_at = excluded.modified_at, updated_at = excluded.updated_at
-     WHERE excluded.modified_at >= subscriptions.modified_at`,
+     WHERE excluded.modified_at >= subscriptions.modified_at
+       AND (excluded.polar_id = subscriptions.polar_id OR excluded.status IN (${PAID_SQL}) OR subscriptions.status NOT IN (${PAID_SQL}))`,
   )
     .bind(userId, sub.id, sub.status, ms(sub.current_period_end), sub.cancel_at_period_end ? 1 : 0, modifiedAt, now)
     .run();

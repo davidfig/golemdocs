@@ -66,9 +66,10 @@ export function standardUse(doc: PdfDocument, page: PdfPage, name: string): { us
   };
 }
 
-type Kind = 'sans' | 'serif' | 'mono';
+export type Kind = 'sans' | 'serif' | 'mono';
 
-const STANDARD: Record<Kind, [string, string, string, string]> = {
+/** The standard fonts of each kind: regular, bold, italic, bold italic. */
+export const STANDARD: Record<Kind, [string, string, string, string]> = {
   sans: ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique'],
   serif: ['Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic'],
   mono: ['Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique'],

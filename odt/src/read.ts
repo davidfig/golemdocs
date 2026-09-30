@@ -75,6 +75,13 @@ const XML_ID = /^para-([0-9A-F]{8})$/;
 const MAX_DEPTH = 48;
 /** Repeat counts (rows, columns) are capped: a spreadsheet-style "1048576" would explode. */
 const MAX_REPEAT = 256;
+/**
+ * Elements that repeat counts may add in all (each copy costs the elements it holds), so nested
+ * and many repeats can't multiply a small file into millions of cells.
+ */
+const MAX_REPEATED = 100_000;
+/** Column spans stop growing a table past this many grid columns. */
+const MAX_COLUMNS = 1024;
 
 /** Text fields: their displayed text goes in the core, the element in the extension. */
 const FIELDS = new Set(
@@ -201,6 +208,9 @@ class Reader {
   private readonly memoSpan = new Map<string, RunProperties>();
   private readonly memoSize = new Map<string, number>();
   private readonly runKeys = new WeakMap<Run, string>();
+  /** What repeat counts may still add (see MAX_REPEATED). */
+  private repeatBudget = MAX_REPEATED;
+  private readonly weights = new WeakMap<XmlElement, number>();
 
   constructor(
     private readonly pkg: OdfPackage,
@@ -997,6 +1007,21 @@ class Reader {
 
   // --- Tables ------------------------------------------------------------------------------
 
+  /** How many times to read an element with a repeat count: capped, and only while the budget for copies lasts. */
+  private repeats(e: XmlElement, attr: string): number {
+    const requested = Math.min(Math.max(parseInt(e.attrs[attr] ?? '1', 10) || 1, 1), MAX_REPEAT);
+    if (requested === 1) return 1;
+    let weight = this.weights.get(e);
+    if (weight === undefined) {
+      weight = 0;
+      for (const _ of descendants(e)) weight++;
+      this.weights.set(e, weight);
+    }
+    const extra = Math.min(requested - 1, Math.floor(this.repeatBudget / weight));
+    this.repeatBudget -= extra * weight;
+    return 1 + extra;
+  }
+
   private readTable(e: XmlElement, depth: number): Table {
     const tableStyle = this.auto('table', e.attrs['table:style-name'] ?? '') ?? this.common.get(`table:${e.attrs['table:style-name']}`);
     const tableProps = firstChild(tableStyle, 'style:table-properties');
@@ -1021,11 +1046,11 @@ class Reader {
           const style = this.auto('table-column', c.attrs['table:style-name'] ?? '') ?? this.common.get(`table-column:${c.attrs['table:style-name']}`);
           const props = firstChild(style, 'style:table-column-properties');
           const col = { width: lengthToTwips(props?.attrs['style:column-width']), rel: parseFloat(props?.attrs['style:rel-column-width'] ?? '') || undefined };
-          const repeat = Math.min(Math.max(parseInt(c.attrs['table:number-columns-repeated'] ?? '1', 10) || 1, 1), MAX_REPEAT);
+          const repeat = this.repeats(c, 'table:number-columns-repeated');
           for (let i = 0; i < repeat; i++) columns.push(col);
         } else if (c.name === 'table:table-columns' || c.name === 'table:table-column-group' || c.name === 'table:table-header-columns') collect(c, header);
         else if (c.name === 'table:table-row') {
-          const repeat = Math.min(Math.max(parseInt(c.attrs['table:number-rows-repeated'] ?? '1', 10) || 1, 1), MAX_REPEAT);
+          const repeat = this.repeats(c, 'table:number-rows-repeated');
           for (let i = 0; i < repeat; i++) rows.push({ e: c, header });
         } else if (c.name === 'table:table-header-rows') collect(c, true);
         else if (c.name === 'table:table-rows' || c.name === 'table:table-row-group') collect(c, header);
@@ -1054,7 +1079,7 @@ class Reader {
       const cells: XmlElement[] = [];
       for (const c of childElements(rowEl)) {
         if (c.name !== 'table:table-cell' && c.name !== 'table:covered-table-cell') continue;
-        const repeat = Math.min(Math.max(parseInt(c.attrs['table:number-columns-repeated'] ?? '1', 10) || 1, 1), MAX_REPEAT);
+        const repeat = this.repeats(c, 'table:number-columns-repeated');
         for (let i = 0; i < repeat; i++) cells.push(c);
       }
       for (const c of cells) {
@@ -1080,7 +1105,7 @@ class Reader {
           }
           continue;
         }
-        const span = Math.min(Math.max(parseInt(c.attrs['table:number-columns-spanned'] ?? '1', 10) || 1, 1), MAX_REPEAT);
+        const span = Math.min(Math.max(parseInt(c.attrs['table:number-columns-spanned'] ?? '1', 10) || 1, 1), MAX_REPEAT, Math.max(MAX_COLUMNS - col, 1));
         const rowSpan = Math.min(Math.max(parseInt(c.attrs['table:number-rows-spanned'] ?? '1', 10) || 1, 1), MAX_REPEAT);
         const cellStyle = this.auto('table-cell', c.attrs['table:style-name'] ?? '') ?? this.common.get(`table-cell:${c.attrs['table:style-name']}`);
         const props = readCellProperties(firstChild(cellStyle, 'style:table-cell-properties'));
@@ -1359,12 +1384,15 @@ function clean(ext: OdtExtension): OdtExtension {
 /** The text of a comment's paragraph, with ODF's spaces, tabs and line breaks. */
 function commentText(e: XmlElement): string {
   let out = '';
-  for (const n of e.children) {
+  // Iterative, in document order, so deeply nested garbage can't overflow the stack.
+  const stack: XmlNode[] = e.children.slice().reverse();
+  while (stack.length) {
+    const n = stack.pop()!;
     if (typeof n === 'string') out += n;
     else if (n.name === 'text:s') out += ' '.repeat(Math.min(Math.max(parseInt(n.attrs['text:c'] ?? '1', 10) || 1, 1), 10000));
     else if (n.name === 'text:tab') out += '\t';
     else if (n.name === 'text:line-break') out += '\n';
-    else out += commentText(n);
+    else for (let i = n.children.length - 1; i >= 0; i--) stack.push(n.children[i]);
   }
   return out;
 }

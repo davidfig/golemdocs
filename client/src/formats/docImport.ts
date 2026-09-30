@@ -33,6 +33,7 @@ import type {
 } from '@word/docx';
 import { t } from '../i18n/index.ts';
 import { Cfb, CfbError, isCfb } from './cfb.ts';
+import { dttmToIso } from './commentRanges.ts';
 
 // --- Reading binary data ---------------------------------------------------------------------------
 
@@ -115,6 +116,17 @@ function readFib(word: Reader): Fib {
   };
 }
 
+/** The FIB with every table-stream entry cut to what the stream holds (a damaged length could claim gigabytes). */
+function withinTable(fib: Fib, tableLength: number): Fib {
+  return {
+    ...fib,
+    fcLcb(index) {
+      const { fc, lcb } = fib.fcLcb(index);
+      return { fc, lcb: Math.min(lcb, Math.max(tableLength - fc, 0)) };
+    },
+  };
+}
+
 // --- Text: the piece table ------------------------------------------------------------------------------
 
 interface Piece {
@@ -188,8 +200,12 @@ function readFkps(word: Reader, table: Reader, fib: Fib, which: number, paragrap
   const { fc, lcb } = fib.fcLcb(which);
   const n = Math.floor((lcb - 4) / 8);
   const runs: FormatRun[] = [];
+  // Each page is read once: a damaged table listing one page over and over would multiply its runs.
+  const seen = new Set<number>();
   for (let i = 0; i < n; i++) {
     const page = table.u32(fc + (n + 1) * 4 + i * 4) * 512;
+    if (seen.has(page)) continue;
+    seen.add(page);
     const count = word.u8(page + 511);
     for (let k = 0; k < count; k++) {
       const from = word.u32(page + k * 4);
@@ -610,7 +626,8 @@ function readLists(table: Reader, fib: Fib): { lists: Map<number, ListLevel[]>; 
   }
   const lfo = fib.fcLcb(FC_PLF_LFO);
   if (lfo.lcb) {
-    const count = table.u32(lfo.fc);
+    // Each override is 16 bytes: a count beyond that is damage.
+    const count = Math.min(table.u32(lfo.fc), Math.floor((lfo.lcb - 4) / 16));
     for (let i = 0; i < count; i++) overrides.push(table.u32(lfo.fc + 4 + i * 16));
   }
   return { lists, overrides };
@@ -672,21 +689,25 @@ function readPicture(data: Reader, at: number): { bytes: Uint8Array; ext: string
 
 export async function docToDocument(bytes: Uint8Array): Promise<WordDocument> {
   if (!isCfb(bytes)) throw new Error(t('app.notDoc'));
-  let cfb: Cfb;
-  try {
-    cfb = new Cfb(bytes);
-  } catch (e) {
-    if (e instanceof CfbError) throw new Error(t('app.docDamaged'));
-    throw e;
-  }
-  const wordBytes = cfb.stream('WordDocument');
+  // A container too damaged to read (a truncated or inconsistent sector table) is a damaged document.
+  const container = <T>(read: () => T): T => {
+    try {
+      return read();
+    } catch (e) {
+      if (e instanceof CfbError || e instanceof RangeError) throw new Error(t('app.docDamaged'));
+      throw e;
+    }
+  };
+  const cfb = container(() => new Cfb(bytes));
+  const wordBytes = container(() => cfb.stream('WordDocument'));
   if (!wordBytes) throw new Error(t('app.notDoc'));
   const word = new Reader(wordBytes);
-  const fib = readFib(word);
-  const tableBytes = cfb.stream(word.u16(10) & 0x0200 ? '1Table' : '0Table');
+  const fibRead = readFib(word);
+  const tableBytes = container(() => cfb.stream(word.u16(10) & 0x0200 ? '1Table' : '0Table'));
   if (!tableBytes) throw new Error(t('app.docDamaged'));
   const table = new Reader(tableBytes);
-  const dataBytes = cfb.stream('Data');
+  const fib = withinTable(fibRead, tableBytes.length);
+  const dataBytes = container(() => cfb.stream('Data'));
   const doc = await WordDocument.create();
   try {
     await new DocReader(doc, word, table, dataBytes ? new Reader(dataBytes) : null, fib).read();
@@ -1232,18 +1253,6 @@ function readOwners(table: Reader, fib: Fib): string[] {
     at += 2 + cch * 2;
   }
   return out;
-}
-
-/** A DTTM (minutes, hours, day, month, years since 1900) as an ISO date, or undefined when unset. */
-function dttmToIso(dttm: number): string | undefined {
-  const minute = dttm & 63;
-  const hour = (dttm >>> 6) & 31;
-  const day = (dttm >>> 11) & 31;
-  const month = (dttm >>> 16) & 15;
-  const year = 1900 + ((dttm >>> 20) & 511);
-  if (!day || !month || month > 12 || day > 31 || hour > 23 || minute > 59) return undefined;
-  const p = (n: number, w = 2) => String(n).padStart(w, '0');
-  return `${p(year, 4)}-${p(month)}-${p(day)}T${p(hour)}:${p(minute)}:00Z`;
 }
 
 function sameProps(a: RunProperties, b: RunProperties): boolean {

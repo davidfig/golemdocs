@@ -50,7 +50,10 @@ export async function searchLines(
     const text = decoder.decode(index.bytes.subarray(index.range(first).from, index.range(last).to));
     const pieces = text.split(index.separator === 10 ? '\n' : '\r');
     for (let k = 0; k <= last - first; k++) {
-      if (!regex.test(pieces[k] ?? '')) continue;
+      // A \r before the \n is part of the line ending, not the line (as the view shows it), so `$` matches before it.
+      let piece = pieces[k] ?? '';
+      if (index.separator === 10 && piece.endsWith('\r')) piece = piece.slice(0, -1);
+      if (!regex.test(piece)) continue;
       if (count === limit) return { lines: found.slice(0, count), truncated: true };
       if (count === found.length) {
         const bigger = new Uint32Array(found.length * 2);

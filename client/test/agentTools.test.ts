@@ -163,6 +163,13 @@ test('bad arguments and unknown tools come back as errors for the model to corre
   assert.equal(await md(doc), 'One');
 });
 
+test('a tool name from Object.prototype is not a tool, and an empty style is refused', async () => {
+  const doc = await openMarkdown('One\n');
+  for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) assert.match(await agent(doc, name, {}), new RegExp(`^Error: there is no tool called ${name}`));
+  assert.match(await agent(doc, 'set_style', { paragraph: 0, style: '  ' }), /^Error: `style` must not be empty/);
+  assert.equal(await md(doc), 'One');
+});
+
 test('no document open is an error, not a hang', async () => {
   assert.match(await agent(9999, 'read_document'), /^Error: no document is open/);
 });

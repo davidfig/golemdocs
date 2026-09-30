@@ -108,7 +108,8 @@ class RtfWriter {
       `\\paperw${size?.w ?? 12240}\\paperh${size?.h ?? 15840}` +
       `\\margl${margins?.left ?? 1440}\\margr${margins?.right ?? 1440}\\margt${margins?.top ?? 1440}\\margb${margins?.bottom ?? 1440}` +
       (size?.orient === 'landscape' ? '\\landscape' : '');
-    const fonts = this.fonts.map((name, i) => `{\\f${i}\\fnil ${escapeRtf(name)};}`).join('');
+    // A ";" ends a font table entry, so it can't be part of a name.
+    const fonts = this.fonts.map((name, i) => `{\\f${i}\\fnil ${escapeRtf(name.replace(/;/g, ''))};}`).join('');
     const colors = this.colors
       .map((c) => `\\red${parseInt(c.slice(0, 2), 16)}\\green${parseInt(c.slice(2, 4), 16)}\\blue${parseInt(c.slice(4, 6), 16)};`)
       .join('');
@@ -199,7 +200,8 @@ class RtfWriter {
         case 'hyperlink': {
           const content = this.inlines(inline.children, style, true);
           // The instruction is RTF text: its own backslashes ("\l" for a bookmark) are written escaped.
-          const target = inline.url ? `HYPERLINK "${escapeRtf(inline.url)}"` : inline.anchor ? `HYPERLINK \\\\l "${escapeRtf(inline.anchor)}"` : null;
+          // A quote would end the address early: it is written percent-encoded, as in a URL.
+          const target = inline.url ? `HYPERLINK "${escapeRtf(inline.url.replace(/"/g, '%22'))}"` : inline.anchor ? `HYPERLINK \\\\l "${escapeRtf(inline.anchor)}"` : null;
           out += target ? `{\\field{\\*\\fldinst ${target}}{\\fldrslt ${content}}}` : content;
           break;
         }
@@ -398,7 +400,7 @@ class RtfWriter {
     }
     const indent = level?.paragraphProperties?.indent;
     return (
-      `{\\listlevel\\levelnfc${LIST_NFC[format] ?? 0}\\leveljc0\\levelfollow0\\levelstartat${level?.start ?? 1}` +
+      `{\\listlevel\\levelnfc${Object.hasOwn(LIST_NFC, format) ? LIST_NFC[format] : 0}\\leveljc0\\levelfollow0\\levelstartat${level?.start ?? 1}` +
       `{\\leveltext\\'${hex(length)}${label};}{\\levelnumbers${numbers.map((n) => `\\'${hex(n)}`).join('')};}` +
       `\\fi-${indent?.hanging ?? 360}\\li${indent?.left ?? 720 * (index + 1)}}\n`
     );

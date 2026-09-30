@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PasswordError, PdfDocument, PdfString, parseDate, formatDate } from '../src/index.ts';
+import { N, PasswordError, PdfDict, PdfDocument, PdfStream, PdfString, TextFont, parseDate, formatDate } from '../src/index.ts';
 import { ascii, checkXrefTables, docText, fixture, latin1, LINE1, LINE2, load } from './helpers.ts';
 
 const BOTH = `${LINE1} ${LINE2}`;
@@ -36,6 +36,43 @@ test('text items carry positions and sizes', () => {
   assert.equal(first.text, LINE1);
   assert.deepEqual([first.x, first.y, first.fontSize, first.fontName], [72, 720, 12, 'Helvetica']);
   assert.ok(Math.abs(first.width - 240.768) < 1e-9); // Helvetica AFM widths (reportlab agrees)
+});
+
+test('text item widths follow the text matrix through the CTM (rotated text under unequal scaling)', () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([200, 200]);
+  const f = page.addResource('Font', doc.standardFont('Helvetica').ref, 'F');
+  // The CTM doubles y; the text runs up the page, so a unit of advance is 2 points long.
+  page.setContent(ascii(`1 0 0 2 0 0 cm BT /${f} 10 Tf 0 1 -1 0 50 20 Tm (AB) Tj ET`));
+  const [item] = page.extractText().items;
+  assert.equal(item.text, 'AB');
+  assert.ok(Math.abs(item.width - 2 * 13.34) < 1e-9, `width ${item.width}`); // A and B are 667/1000 em each
+  assert.deepEqual(item.dir, [0, 1]);
+});
+
+test('text extraction: a form that draws itself is read once, and many forms drawing forms stop at a budget', () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([200, 200]);
+  const f = page.addResource('Font', doc.standardFont('Helvetica').ref, 'F');
+  const resources = new PdfDict({ Font: new PdfDict({ [f]: doc.standardFont('Helvetica').ref }) });
+  const self = doc.add(new PdfStream(new PdfDict({ Type: N('XObject'), Subtype: N('Form'), BBox: [0, 0, 100, 100], Resources: resources }), ascii(`BT /${f} 10 Tf 10 10 Td (loop) Tj ET ${'/Me Do '.repeat(8)}`)));
+  resources.set('XObject', new PdfDict({ Me: self }));
+  page.resources.set('XObject', new PdfDict({ Me: self }));
+  page.setContent(ascii('/Me Do'));
+  const started = Date.now();
+  const items = page.extractText().items;
+  assert.ok(Date.now() - started < 2000, 'finishes quickly');
+  assert.deepEqual(items.map((i) => i.text), ['loop']);
+});
+
+test('CID widths: ranges are held to the CIDs a font can have', () => {
+  const doc = PdfDocument.create();
+  const cidFont = new PdfDict({ Type: N('Font'), Subtype: N('CIDFontType2'), BaseFont: N('X'), DW: 1000, W: [65530, 70000, 500, -5, 3, 250, ...Array.from({ length: 200 }, () => [0, 65535, 400]).flat()] });
+  const font = new TextFont(doc, new PdfDict({ Type: N('Font'), Subtype: N('Type0'), BaseFont: N('X'), Encoding: N('Identity-H'), DescendantFonts: [cidFont] }));
+  assert.equal(font.hasWidth(65535), true);
+  assert.equal(font.hasWidth(65536), false);
+  assert.equal(font.hasWidth(0), true);
+  assert.equal(font.decode(Uint8Array.of(0, 2))[0].width, 0.4);
 });
 
 test('encrypted with every standard handler revision', () => {

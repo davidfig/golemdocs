@@ -89,6 +89,19 @@ test('an older event arriving late does not undo a newer one', async () => {
   assert.equal(s.active, false);
 });
 
+test('an old subscription ending does not end a newer one that is paid', async () => {
+  const alice = await unsubscribed('alice@example.com');
+  await post(event(alice, { id: 'sub_old', status: 'past_due', modified_at: '2026-09-01T00:00:00Z' }, 'subscription.updated'));
+  await post(event(alice, { id: 'sub_new', status: 'active', modified_at: '2026-09-10T00:00:00Z' }));
+  await post(event(alice, { id: 'sub_old', status: 'canceled', modified_at: '2026-09-20T00:00:00Z' }, 'subscription.canceled'));
+  let s = (await (await w.call('alice@example.com', 'GET', '/api/subscription')).json()) as any;
+  assert.equal(s.active, true);
+  // The paid one's own news still applies.
+  await post(event(alice, { id: 'sub_new', status: 'canceled', modified_at: '2026-09-25T00:00:00Z' }, 'subscription.canceled'));
+  s = (await (await w.call('alice@example.com', 'GET', '/api/subscription')).json()) as any;
+  assert.equal(s.active, false);
+});
+
 test('a canceled subscription is paid until the period ends, and says so', async () => {
   const alice = await unsubscribed('alice@example.com');
   await post(event(alice, { cancel_at_period_end: true }, 'subscription.canceled'));

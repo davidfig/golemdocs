@@ -111,9 +111,17 @@ export function showShareDialog(target: ShareTarget): void {
     const access = roleSelect(share.role);
     access.addEventListener('change', () => {
       if (!share.email) return;
-      addShare(personId, share.email, access.value as ShareRole).then(
-        () => say(''),
-        (error: Error) => say(error.message, true),
+      const next = access.value as ShareRole;
+      addShare(personId, share.email, next).then(
+        () => {
+          share.role = next;
+          say('');
+        },
+        (error: Error) => {
+          // It didn't change: show the access they still have.
+          access.value = share.role;
+          say(error.message, true);
+        },
       );
     });
     const remove = h('button', { text: t('dialogs.share.remove'), attrs: { type: 'button' } });
@@ -170,6 +178,8 @@ export function showShareDialog(target: ShareTarget): void {
   const body = h('div', { class: 'wm-dialog-body' }, target.room ? roomSection(target.room) : null, peopleSection, done);
   body.style.paddingBottom = '14px';
   dialog.append(dialogTitleBar(t('dialogs.share.title', { name: doc.name }), () => dialog.close()), body);
+  // Keys stay in the dialog: the document's handlers listen on the window.
+  dialog.addEventListener('keydown', (e) => e.stopPropagation());
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();

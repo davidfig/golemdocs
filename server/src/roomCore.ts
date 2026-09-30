@@ -229,10 +229,13 @@ export class RoomCore {
     if (!this.canEdit(peer)) return peer.close(ROOM_CLOSE.badMessage, 'read-only');
     if (meta.mode !== 'shared' || message.epoch !== meta.epoch || !peer.state.synced) return;
     if (!Array.isArray(message.transactions) || message.transactions.length > MAX_SUBMIT_TRANSACTIONS) return peer.close(ROOM_CLOSE.badMessage, 'too many transactions');
+    if (!message.transactions.every((tx) => typeof tx?.id === 'string' && Array.isArray(tx.ops))) return peer.close(ROOM_CLOSE.badMessage, 'bad transaction');
     // Made against an old version: the client will get the newer transactions and try again.
     if (message.version !== this.store.length()) return;
-    // A resubmission of something already logged (after a reconnect) isn't applied twice.
-    const fresh = message.transactions.filter((tx) => !this.store.has(tx.id));
+    // A resubmission of something already logged (after a reconnect) isn't applied twice, and
+    // neither is an id repeated within one submission (the log's ids are unique).
+    const seen = new Set<string>();
+    const fresh = message.transactions.filter((tx) => !seen.has(tx.id) && !this.store.has(tx.id) && !!seen.add(tx.id));
     if (fresh.length === 0) return;
     const version = this.store.length();
     this.store.append(fresh);
@@ -365,6 +368,11 @@ export class RoomCore {
   /** Disconnects a user's connections (their access was withdrawn). */
   kick(userId: string): void {
     for (const peer of [...this.peers]) if (peer.state.userId === userId) peer.close(ROOM_CLOSE.revoked, 'access withdrawn');
+  }
+
+  /** A user's role changed: close their connections so they come back with the new one. */
+  rejoin(userId: string): void {
+    for (const peer of [...this.peers]) if (peer.state.userId === userId) peer.close(ROOM_CLOSE.stale, 'role changed');
   }
 
   /** The document was deleted: everyone out, and forget the log. */

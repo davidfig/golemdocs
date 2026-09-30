@@ -36,14 +36,18 @@ export function splitPart(text: string): Part {
   return { headers, body };
 }
 
+/** A parameter of a header by its whole name ("name" is not the end of "filename"). */
 export const param = (header: string | undefined, name: string): string | undefined =>
-  new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|([^;\\s]+))`, 'i').exec(header ?? '')?.slice(1, 3).find((v) => v !== undefined);
+  new RegExp(`(?:^|[;\\s])${name}\\s*=\\s*(?:"([^"]*)"|([^;\\s]+))`, 'i').exec(header ?? '')?.slice(1, 3).find((v) => v !== undefined);
 
 /** Decodes a part's body to bytes according to its Content-Transfer-Encoding. */
 export function decodeBody(body: string, encoding: string | undefined): Uint8Array {
   switch (encoding?.toLowerCase()) {
     case 'base64': {
-      const binary = atob(body.replace(/[^A-Za-z0-9+/=]/g, ''));
+      // Each run up to padding is decoded on its own (encoders may join padded pieces), a stray last character
+      // dropped: atob throws on either, and a damaged message should still open.
+      let binary = '';
+      for (const piece of body.replace(/[^A-Za-z0-9+/=]/g, '').split(/=+/)) binary += atob(piece.length % 4 === 1 ? piece.slice(0, -1) : piece);
       return Uint8Array.from(binary, (c) => c.charCodeAt(0));
     }
     case 'quoted-printable': {
@@ -94,7 +98,7 @@ export function decodeWords(value: string): string {
     .replace(/(\?=)\s+(=\?)/g, '$1$2')
     .replace(/=\?([^?]+)\?([bqBQ])\?([^?]*)\?=/g, (whole, charset: string, encoding: string, text: string) => {
       try {
-        const body = encoding.toLowerCase() === 'b' ? text : text.replace(/_/g, ' ').replace(/=([0-9a-f]{2})/gi, '=$1');
+        const body = encoding.toLowerCase() === 'b' ? text : text.replace(/_/g, ' ');
         return decoderFor(charset).decode(decodeBody(body, encoding.toLowerCase() === 'b' ? 'base64' : 'quoted-printable'));
       } catch {
         return whole;
@@ -105,7 +109,7 @@ export function decodeWords(value: string): string {
 /** A parameter of a header, such as a file name, with RFC 2231 continuations and encoding (filename*=utf-8''…) read. */
 export function headerParam(header: string | undefined, name: string): string | undefined {
   if (!header) return undefined;
-  const star = new RegExp(`${name}\\*=([^']*)'[^']*'([^;\\s]+)`, 'i').exec(header);
+  const star = new RegExp(`(?:^|[;\\s])${name}\\*=([^']*)'[^']*'([^;\\s]+)`, 'i').exec(header);
   if (star) {
     try {
       // Percent escapes are bytes, in the named character set.

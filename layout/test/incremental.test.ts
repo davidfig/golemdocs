@@ -21,7 +21,7 @@ import {
   type Paragraph,
   type Run,
 } from '@word/docx';
-import { FontSet, LayoutSession, layoutDocument, type PageLayout } from '../src/index.ts';
+import { FontSet, LayoutSession, layoutDocument, packColor, type PageLayout } from '../src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');
 const CORPUS = path.resolve(import.meta.dirname, '../../.cache/docx-corpus');
@@ -236,4 +236,23 @@ test('a newer edit supersedes a running layout, and the next run is still exact'
   const reference = await layoutDocument(doc, fonts!, { mergeOverlays: false });
   assert.equal(session.pages.length, reference.pages.length);
   session.pages.forEach((p, i) => assert.equal(describe(p), describe(reference.pages[i]), `page ${i}`));
+});
+
+test('after a table style changes, its tables are laid out with the new style', skip, async () => {
+  const doc = await WordDocument.create();
+  const shaded = (fill: string) => ({ type: 'table' as const, id: 'Shaded', attrs: {}, cellProperties: { shading: { fill } } });
+  doc.styles = { ...doc.styles, styles: [...doc.styles.styles, shaded('FF0000')] };
+  const cell = { kind: 'cell' as const, properties: {}, attrs: {}, children: [{ kind: 'paragraph' as const, properties: {}, children: [run('cell')], attrs: {} }] };
+  doc.body = [
+    { kind: 'table', properties: { style: 'Shaded' }, grid: [4000], rows: [{ kind: 'row', properties: {}, attrs: {}, cells: [cell] }] },
+    { kind: 'paragraph', properties: {}, children: [], attrs: {} },
+  ];
+  const fills = (page: PageLayout) => Array.from({ length: page.background.count }, (_, i) => page.background.color(i));
+  const session = await LayoutSession.create(doc, fonts!);
+  await session.run({ mergeOverlays: false });
+  assert.ok(fills(session.pages[0]).includes(packColor(0xff0000)));
+  doc.styles = { ...doc.styles, styles: [...doc.styles.styles.filter((s) => s.id !== 'Shaded'), shaded('0000FF')] };
+  session.invalidateStyles();
+  await session.run({ mergeOverlays: false });
+  assert.deepEqual(fills(session.pages[0]), [packColor(0x0000ff)]);
 });

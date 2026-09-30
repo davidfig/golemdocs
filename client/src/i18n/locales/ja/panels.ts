@@ -74,6 +74,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.severalLines': '複数行',
   'panels.forms.options': 'オプション (1 行に 1 つ)',
   'panels.forms.deleteField': 'フィールドを削除',
+  'panels.forms.nameTaken': '「{name}」という名前のフィールドは既に存在します',
   'panels.forms.fieldTitle': '{kind}: {name}',
   'panels.forms.kind.text': 'テキスト ボックス',
   'panels.forms.kind.checkbox': 'チェック ボックス',

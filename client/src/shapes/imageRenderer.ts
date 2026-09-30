@@ -68,6 +68,8 @@ export class ImageRenderer {
   private readonly program: WebGLProgram;
   private readonly u: Record<'u_rect' | 'u_viewport' | 'u_image' | 'u_fallback' | 'u_useFallback', WebGLUniformLocation>;
   private readonly textures = new Map<string, TextureState>();
+  /** Bumped by clear(), so a load that was under way then doesn't put its texture back in. */
+  private generation = 0;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -91,6 +93,7 @@ export class ImageRenderer {
 
   private async load(part: string): Promise<void> {
     const gl = this.gl;
+    const generation = this.generation;
     try {
       const dot = part.lastIndexOf('.');
       const ext = dot >= 0 ? part.slice(dot + 1).toLowerCase() : '';
@@ -101,6 +104,10 @@ export class ImageRenderer {
       if (!type) type = sniffType(bytes);
       if (!type) throw new Error(`unrecognised image ${part}`);
       const bitmap = await createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }), { premultiplyAlpha: 'premultiply' });
+      if (generation !== this.generation) {
+        bitmap.close();
+        return;
+      }
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -115,6 +122,7 @@ export class ImageRenderer {
       bitmap.close();
       this.textures.set(part, { status: 'ready', texture });
     } catch {
+      if (generation !== this.generation) return;
       this.textures.set(part, { status: 'failed' });
     }
     this.onLoad();
@@ -154,5 +162,6 @@ export class ImageRenderer {
   clear(): void {
     for (const state of this.textures.values()) if (state.status === 'ready') this.gl.deleteTexture(state.texture);
     this.textures.clear();
+    this.generation++;
   }
 }

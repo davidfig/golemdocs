@@ -15,7 +15,12 @@ const MARKERS = { bold: '*', italic: '_', underline: '+', strike: '-', code: '@'
 
 /** Text with the marks that would open formatting escaped as entities. */
 function escapeText(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\[\[/g, '&#91;[').replace(/(^|\s)([*_+@^~-])(?=\S)/g, (_m, before: string, mark: string) => `${before}&#${mark.charCodeAt(0)};`).replace(/"(?=:)/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/\[(?=\[|[*_+@^~%-])/g, '&#91;')
+    .replace(/(^|[\s([{"'\u200b])([*_+@^~%-])(?=\S)/g, (_m, before: string, mark: string) => `${before}&#${mark.charCodeAt(0)};`)
+    .replace(/"(?=:)/g, '&quot;');
 }
 
 const format: SpanFormat = {
@@ -85,7 +90,7 @@ function list(node: Extract<Node, { t: 'list' }>, prefix: string): string {
   const after: string[] = [];
   for (const item of node.items) {
     const extra = item.children.filter((c) => c.t === 'para').map((c) => inline((c as Extract<Node, { t: 'para' }>).spans).replace(/\n/g, ' '));
-    lines.push(`${marker} ${[inline(item.spans).replace(/\n/g, ' '), ...extra].join('<br />')}`);
+    lines.push(`${marker} ${[inline(item.spans).replace(/\n/g, '<br />'), ...extra].join('<br />')}`);
     for (const child of item.children) {
       if (child.t === 'list') lines.push(list(child, marker));
       else if (child.t !== 'para') after.push(block(child));
@@ -220,8 +225,8 @@ class Parser {
       const line = this.lines[this.i++].trim().replace(/^\|/, '').replace(/\|\s*$/, '');
       let header = true;
       const cells = line.split(/(?<!\\)\|/).map((raw) => {
-        // "_. text" is a header cell; other alignment and span attributes before the dot are dropped.
-        const m = /^(_?)[<>=^~\\/\d{}()[\]#a-z:;.-]*\.\s+(.*)$/i.exec(raw.trimStart());
+        // "_. text" is a header cell; other alignment, span, class and style attributes before the dot are dropped.
+        const m = /^(_?)(?:[<>=^~-]|[\\/]\d+|\([^)]*\)|\{[^}]*\}|\[[^\]]*\])*\.\s+(.*)$/.exec(raw.trimStart());
         const cellHeader = !!m && m[1] === '_';
         if (!cellHeader) header = false;
         return parseInline((m ? m[2] : raw).trim().replace(/<br\s*\/?>/gi, '\n'));

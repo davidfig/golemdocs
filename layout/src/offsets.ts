@@ -62,6 +62,20 @@ export function toVisible(spans: readonly SourceSpan[], model: number): number {
   return s.text ? s.visible + into : s.visible + s.length;
 }
 
+/**
+ * Model offset of the character at a visible offset (for an atomic item, the item's), or -1
+ * past the end. Unlike toModel, a boundary between spans belongs to the later span: this is
+ * the character drawn there, not where typing would go.
+ */
+export function modelOfChar(spans: readonly SourceSpan[], visible: number): number {
+  const i = lastAtOrBefore(spans, visible, 'visible');
+  if (i < 0) return -1;
+  const s = spans[i];
+  const into = visible - s.visible;
+  if (into >= s.length) return -1;
+  return s.text ? s.model + into : s.model;
+}
+
 /** Visible length of a paragraph's text. */
 export function visibleLength(spans: readonly SourceSpan[]): number {
   const last = spans.at(-1);

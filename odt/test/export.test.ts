@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { paragraphsIn, paragraphText, WordDocument, type Block, type Paragraph, type Run } from '@word/docx';
 import { readOdt, writeOdt } from '../src/index.ts';
+import { readTextProperties, writeBorder, writeTextProperties } from '../src/properties.ts';
 import { libreOfficeFixture, PNG_1X1 } from './fixtures.ts';
 import { find, textOf, validateOdt } from './validate.ts';
 
@@ -220,4 +221,58 @@ test('LibreOffice-style input exports to a valid package', async () => {
   const continued = find(content, 'text:list').find((l) => l.attrs['text:continue-list']);
   assert.ok(continued);
   assert.ok(find(content, 'text:list').some((l) => l.attrs['xml:id'] === continued.attrs['text:continue-list']));
+});
+
+test('language tags with a script keep script and region apart', () => {
+  const written = writeTextProperties({ lang: { val: 'sr-Latn-RS', eastAsia: 'zh-Hans', bidi: 'ar-EG' } }, () => undefined);
+  assert.equal(written['fo:language'], 'sr');
+  assert.equal(written['fo:script'], 'Latn');
+  assert.equal(written['fo:country'], 'RS');
+  assert.equal(written['style:script-asian'], 'Hans');
+  assert.equal(written['style:country-asian'], 'none', 'a script is not a country');
+  assert.equal(written['style:country-complex'], 'EG');
+  const e = { name: 'style:text-properties', attrs: written, children: [] };
+  assert.deepEqual(readTextProperties(e, { fonts: new Map(), baseSize: 24 }).run.lang, { val: 'sr-Latn-RS', eastAsia: 'zh-Hans', bidi: 'ar-EG' });
+});
+
+test('colors that are not hex are written as valid ODF colors', () => {
+  assert.equal(writeBorder({ val: 'single', sz: 8, color: 'auto' }), '1pt solid #000000');
+  assert.equal(writeBorder({ val: 'single', sz: 8, color: 'red" x="1' }), '1pt solid #000000');
+  assert.equal(writeTextProperties({ underline: { val: 'single', color: 'auto' } }, () => undefined)['style:text-underline-color'], 'font-color');
+});
+
+test('extension content cannot declare reserved prefixes or write files outside the package', async () => {
+  const doc = await WordDocument.create();
+  doc.body = [{ kind: 'paragraph', properties: {}, children: [run('x')], attrs: { 'w14:paraId': '00000001' } }];
+  const png = btoa(String.fromCharCode(...PNG_1X1));
+  const bytes = await writeOdt(doc, {
+    version: 1,
+    namespaces: { xmlfoo: 'urn:bad', good: 'urn:good' },
+    objects: [
+      {
+        placement: 'inline',
+        paragraphId: '00000001',
+        offset: 0,
+        fragment: { xml: '<draw:frame><draw:image xlink:href="Pictures/ok.png"/></draw:frame>', media: { '../evil.png': png, '/abs.png': png, 'Pictures/ok.png': png } },
+      },
+    ],
+  });
+  const { content, files } = await validateOdt(bytes);
+  assert.equal(content.attrs['xmlns:xmlfoo'], undefined);
+  assert.equal(content.attrs['xmlns:good'], 'urn:good');
+  assert.ok(files.has('Pictures/ok.png'));
+  assert.ok(![...files.keys()].some((f) => f.includes('..') || f.startsWith('/')), [...files.keys()].join(', '));
+});
+
+test('paragraphs sharing an id do not repeat an xml:id', async () => {
+  const doc = await WordDocument.create();
+  doc.body = [
+    { kind: 'paragraph', properties: {}, children: [run('one')], attrs: { 'w14:paraId': '0000000A' } },
+    { kind: 'paragraph', properties: {}, children: [run('two')], attrs: { 'w14:paraId': '0000000A' } },
+  ];
+  const bytes = await writeOdt(doc);
+  const { content } = await validateOdt(bytes);
+  assert.deepEqual(find(content, 'text:p').map((p) => p.attrs['xml:id']), ['para-0000000A', undefined]);
+  const again = paragraphsIn((await readOdt(bytes)).document.body).map((p) => p.attrs['w14:paraId']);
+  assert.equal(new Set(again).size, 2);
 });

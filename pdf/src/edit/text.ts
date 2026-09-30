@@ -143,6 +143,9 @@ export function editCells(old: readonly Cell[], text: string, base?: Style): Cel
 
   const newToOld: number[] = new Array(b.length).fill(-1);
   for (const [i, j] of keep) newToOld[j] = i;
+  // For each new position, the first kept old cell at or after it (-1: none), found once rather than per character.
+  const nextOld: number[] = new Array(b.length + 1).fill(-1);
+  for (let j = b.length - 1; j >= 0; j--) nextOld[j] = newToOld[j] >= 0 ? newToOld[j] : nextOld[j + 1];
   const kept = new Set(keep.keys());
   const out: Cell[] = [];
   let prevOld = -1;
@@ -155,8 +158,8 @@ export function editCells(old: readonly Cell[], text: string, base?: Style): Cel
     }
     // A replacement takes the style of the first character it replaces; an insertion, of the one before it, else the one after.
     const replaced = prevOld + 1 < old.length && !kept.has(prevOld + 1) ? old[prevOld + 1] : undefined;
-    const after = newToOld.slice(j).find((x) => x >= 0);
-    const style = replaced?.style ?? out[out.length - 1]?.style ?? (after !== undefined ? old[after].style : undefined) ?? old[0]?.style ?? base;
+    const after = nextOld[j];
+    const style = replaced?.style ?? out[out.length - 1]?.style ?? (after >= 0 ? old[after].style : undefined) ?? old[0]?.style ?? base;
     if (!style) throw new Error('nothing to take the style of new text from');
     out.push({ ch: b[j], style });
   }

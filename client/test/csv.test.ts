@@ -116,3 +116,15 @@ test('a large file reads and writes quickly', async () => {
   assert.equal(out.length, input.length);
   assert.ok(performance.now() - start < 5000);
 });
+
+test('a last row with one empty field survives when the file has no final newline', async () => {
+  const input = bytes('a\n""');
+  assert.deepEqual(parseDelimited('a\n""', ',').rows, [['a'], ['']]);
+  assert.equal(str(await roundTrip(csv, input)), 'a\n""');
+});
+
+test('an unclosed quote that swallows the file into one cell still opens', async () => {
+  const text = `"${'x\n'.repeat(200_000)}`;
+  const { document } = await csv.read(bytes(text));
+  assert.equal(tableOf(document).rows.length, 1);
+});

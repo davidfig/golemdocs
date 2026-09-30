@@ -84,6 +84,12 @@ test('searching finds the lines, across batches, and stops at the limit', async 
   assert.deepEqual([...tail.lines], [2]);
 });
 
+test('in a \\r\\n file a pattern anchored at the end of a line matches, as the line is shown', async () => {
+  const index = await indexOf('one end\r\ntwo\r\nthree end\r\n');
+  const found = await searchLines(index, { text: 'end$', caseSensitive: true, wholeWord: false, regex: true });
+  assert.deepEqual([...found.lines], [0, 2]);
+});
+
 test('the next match after a line, and the one before it', () => {
   const lines = Uint32Array.from([5, 10, 20]);
   assert.equal(nextMatch(lines, 0), 5);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PdfDocument, applyEdits, cellsOf, findBlocks, scanPage, textOf, type TextEdit } from '../src/index.ts';
+import { editCells } from '../src/edit/text.ts';
 import { LINE1, LINE2, docText, load } from './helpers.ts';
 
 const edit = (runs: string[], text: string, id = 'e1'): TextEdit => ({ id, page: 0, kind: 'text', runs, text });
@@ -25,6 +26,20 @@ for (const name of ['chromium.pdf', 'libreoffice.pdf']) {
     assert.ok(text.includes(LINE2.split(' ')[0]), 'the second line is still there');
   });
 }
+
+test('pasting a long text into a block styles it without going over it once per character', () => {
+  const block = blockStarting(load('chromium.pdf'), LINE1);
+  const old = cellsOf(block);
+  const pasted = 'x'.repeat(150_000);
+  // Replacing everything but the last character: each new cell looks ahead for the next kept one.
+  const text = pasted + textOf(old).slice(-1);
+  const started = Date.now();
+  const cells = editCells(old, text);
+  assert.ok(Date.now() - started < 3000, `took ${Date.now() - started} ms`);
+  assert.equal(cells.length, text.length);
+  assert.equal(cells[0].style, old[0].style, 'a replacement takes the style of what it replaces');
+  assert.equal(cells[cells.length - 1], old[old.length - 1], 'the kept character keeps its cell');
+});
 
 test('applying no edits puts the original page back', async () => {
   const doc = load('chromium.pdf');

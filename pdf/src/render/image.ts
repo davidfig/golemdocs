@@ -79,7 +79,7 @@ function convert(doc: PdfDocument, stream: PdfStream, opts: ImageOptions): Image
   const at = (ox: number, oy: number) => (flipY ? oh - 1 - oy : oy) * ow + (flipX ? ow - 1 - ox : ox);
 
   if (stencil) {
-    const bits = readBits(doc, r.data, w, h, 1, 1);
+    const bits = readBits(r.data, w, 1, 1);
     const dec = decodeArray(doc, dict) ?? [0, 1];
     const paintWhen = dec[0] === 1 ? 1 : 0; // sample value that paints
     const rgb = opts.maskColor ?? 0;
@@ -100,7 +100,7 @@ function convert(doc: PdfDocument, stream: PdfStream, opts: ImageOptions): Image
   const n = Math.max(1, cs.n);
   let bpc = num(doc, dict.get('BitsPerComponent') ?? dict.get('BPC'), 8);
   if (![1, 2, 4, 8, 16].includes(bpc)) bpc = 8;
-  const sample = readBits(doc, r.data, w, h, n, bpc);
+  const sample = readBits(r.data, w, n, bpc);
   const maxv = Math.pow(2, bpc) - 1;
   const dec = decodeArray(doc, dict);
   const dflt = cs.decode(bpc);
@@ -190,9 +190,8 @@ function convert(doc: PdfDocument, stream: PdfStream, opts: ImageOptions): Image
 type SampleReader = (row: number, col: number, comp: number) => number;
 
 /** Random access to raw samples of an image with `n` components of `bpc` bits, rows byte-aligned. */
-function readBits(_doc: PdfDocument, data: Uint8Array, w: number, h: number, n: number, bpc: number): SampleReader {
+function readBits(data: Uint8Array, w: number, n: number, bpc: number): SampleReader {
   const rowBytes = Math.ceil((w * n * bpc) / 8);
-  void h;
   if (bpc === 8) return (row, col, comp) => data[row * rowBytes + col * n + comp] ?? 0;
   if (bpc === 16) return (row, col, comp) => {
     const i = row * rowBytes + (col * n + comp) * 2;
@@ -217,7 +216,7 @@ function softMask(doc: PdfDocument, mask: PdfStream): ((u: number, v: number) =>
   if (w < 1 || h < 1) return undefined;
   let bpc = num(doc, mask.dict.get('BitsPerComponent'), 8);
   if (![1, 2, 4, 8, 16].includes(bpc)) bpc = 8;
-  const sample = readBits(doc, r.data, w, h, 1, bpc);
+  const sample = readBits(r.data, w, 1, bpc);
   const maxv = Math.pow(2, bpc) - 1;
   const dec = decodeArray(doc, mask.dict) ?? [0, 1];
   return (u, v) => {
@@ -233,7 +232,7 @@ function stencilMask(doc: PdfDocument, mask: PdfStream): ((u: number, v: number)
   const w = num(doc, mask.dict.get('Width'), 0);
   const h = num(doc, mask.dict.get('Height'), 0);
   if (w < 1 || h < 1) return undefined;
-  const sample = readBits(doc, r.data, w, h, 1, 1);
+  const sample = readBits(r.data, w, 1, 1);
   const paintWhen = (decodeArray(doc, mask.dict) ?? [0, 1])[0] === 1 ? 1 : 0;
   return (u, v) => (sample(Math.min(h - 1, Math.floor(v * h)), Math.min(w - 1, Math.floor(u * w)), 0) === paintWhen ? 255 : 0);
 }

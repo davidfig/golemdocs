@@ -57,7 +57,15 @@ export async function currentUser(): Promise<User | null> {
     return remembered();
   }
   if (response.status >= 500) return remembered();
-  const user = response.ok ? ((await response.json()) as { user: User | null }).user : null;
+  let user: User | null = null;
+  if (response.ok) {
+    try {
+      user = ((await response.json()) as { user: User | null }).user ?? null;
+    } catch {
+      // Not the server's answer (a captive portal's page, say): as good as offline.
+      return remembered();
+    }
+  }
   remember(user);
   return user;
 }

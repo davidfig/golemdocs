@@ -27,6 +27,9 @@ export interface Encodable {
   width: number;
 }
 
+/** The largest CID a CIDFont can have (PDF 32000 Annex C). */
+const MAX_CID = 0xffff;
+
 export class TextFont {
   readonly name: string;
   readonly subtype: string;
@@ -106,7 +109,9 @@ export class TextFont {
     this.defaultWidth = doc.number(cidFont.get('DW')) ?? 1000;
     const w = doc.array(cidFont.get('W'));
     if (!w) return;
-    for (let i = 0; i < w.length; ) {
+    // CIDs run 0..65535; ranges past that, or repeated over and over, are damage (or an attack), not widths.
+    let budget = 1 << 20;
+    for (let i = 0; i < w.length && budget > 0; ) {
       const first = doc.number(w[i]);
       const next = doc.resolve(w[i + 1]);
       if (first === undefined) break;
@@ -120,7 +125,7 @@ export class TextFont {
         const last = doc.number(next);
         const v = doc.number(w[i + 2]);
         if (last === undefined || v === undefined) break;
-        for (let c = first; c <= last && c - first < 0x10000; c++) this.widths.set(c, v);
+        for (let c = Math.max(0, first), end = Math.min(last, MAX_CID); c <= end && budget > 0; c++, budget--) this.widths.set(c, v);
         i += 3;
       }
     }

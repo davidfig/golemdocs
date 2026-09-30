@@ -30,6 +30,19 @@ export function commentThreads(comments: readonly Comment[]): Map<string, Commen
   return threads;
 }
 
+/** A DTTM, the date of a comment in RTF and .doc (minute:6 hour:5 day:5 month:4 year-1900:9 weekday:3 bits), as an ISO 8601 date; undefined when it is not a date. */
+export function dttmToIso(value: number): string | undefined {
+  const v = value >>> 0;
+  const minute = v & 63;
+  const hour = (v >>> 6) & 31;
+  const day = (v >>> 11) & 31;
+  const month = (v >>> 16) & 15;
+  const year = 1900 + ((v >>> 20) & 511);
+  if (!month || month > 12 || !day || day > 31 || hour > 23 || minute > 59) return undefined;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${year}-${p(month)}-${p(day)}T${p(hour)}:${p(minute)}:00Z`;
+}
+
 /** The comment a range marker (w:commentRangeStart / w:commentRangeEnd) belongs to, or null if this isn't one. */
 export function commentMarker(inline: Inline): { id: string; end: boolean } | null {
   if (inline.kind !== 'raw') return null;

@@ -76,6 +76,7 @@ export const panels: Catalog = {
   'panels.forms.severalLines': 'Несколько строк',
   'panels.forms.options': 'Параметры, по одному в строке',
   'panels.forms.deleteField': 'Удалить поле',
+  'panels.forms.nameTaken': 'Поле с именем «{name}» уже существует',
   'panels.forms.fieldTitle': '{kind}: {name}',
   'panels.forms.kind.text': 'Текстовое поле',
   'panels.forms.kind.checkbox': 'Флажок',

@@ -94,3 +94,19 @@ test('damaged files never hang or throw anything but an Error', async () => {
     }
   }
 });
+
+test('a compound file whose DIFAT chain loops is refused quickly, without a huge sector table', async () => {
+  const bytes = new Uint8Array(1024);
+  const view = new DataView(bytes.buffer);
+  [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].forEach((b, i) => (bytes[i] = b));
+  view.setUint16(30, 9, true);
+  view.setUint16(32, 6, true);
+  view.setUint32(48, 0xfffffffe, true);
+  view.setUint32(60, 0xfffffffe, true);
+  // The DIFAT starts at sector 0, which lists sector 0 as a FAT sector and then points back at itself.
+  view.setUint32(68, 0, true);
+  for (let i = 0; i < 109; i++) view.setUint32(76 + i * 4, 0xffffffff, true);
+  const started = performance.now();
+  await assert.rejects(docToDocument(bytes));
+  assert.ok(performance.now() - started < 2000, 'took too long');
+});

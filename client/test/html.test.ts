@@ -683,3 +683,37 @@ test('comments: documents without comments are unchanged', async () => {
   const { document } = await htmlToDocument('<p>a <mark>b</mark> c</p>');
   assert.ok(!documentToHtml(document).includes('class="comment"'));
 });
+
+// --- Hostile input -------------------------------------------------------------------------------
+
+test('a file of unfinished tags is read in linear time, its text kept', async () => {
+  const source = '<a b '.repeat(20000);
+  const started = performance.now();
+  const { document } = await load(source);
+  assert.ok(performance.now() - started < 3000, 'took too long');
+  assert.ok(texts(document)[0].startsWith('<a b <a b'));
+});
+
+test('CSS and attribute values naming Object members are not taken as table entries', async () => {
+  const { document } = await load('<p style="color: constructor; font-family: constructor; margin-top: 1constructor; font-size: toString">x</p><ol type="constructor"><li>item</li></ol>');
+  const [p, item] = paragraphs(document);
+  const run = runOf(p, 'x');
+  assert.equal(run.properties.color, undefined);
+  // A family that isn't a generic one is a font name, taken as written.
+  assert.equal(run.properties.fonts?.ascii, 'constructor');
+  assert.equal(p.properties.spacing, undefined);
+  const numId = item.properties.numbering!.id;
+  const abstractId = document.numbering.instances.find((i) => i.id === numId)!.abstractId;
+  assert.equal(document.numbering.abstracts.find((a) => a.id === abstractId)!.levels[0].format, 'decimal');
+});
+
+test('a font name cannot end the generated style block', async () => {
+  const document = await WordDocument.create();
+  const evil = 'Evil</style><script>alert(1)</script>';
+  document.styles.defaultRunProperties = { fonts: { ascii: evil, hAnsi: evil } };
+  document.styles.hasRunDefaults = true;
+  document.body = [{ kind: 'paragraph', properties: {}, children: [{ kind: 'run', properties: {}, content: [{ kind: 'text', text: 'hi' }], attrs: {} }], attrs: {} }];
+  const html = documentToHtml(document);
+  assert.ok(!html.includes('<script>'), html);
+  assert.equal(html.split('</style>').length, 2);
+});

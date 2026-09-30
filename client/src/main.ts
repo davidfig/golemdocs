@@ -259,7 +259,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pagesById.clear();
   pages = [];
   selection.clear();
-  commentsPanel.update([]);
+  commentsPanel.reset();
   comments = [];
   formLayer.update(null);
   pdfTextLayer.update(null);
@@ -270,8 +270,9 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pdfTools.setMode(formMode);
   selectionFormat = {};
   canUndo = canRedo = false;
+  // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
-  renderer.images = new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, requestRender);
+  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, requestRender);
   grid = options.grid ?? false;
   loaded = false;
   cameraPlaced = false;
@@ -666,7 +667,6 @@ function saveNow(): Promise<string | null> {
 let pendingNotice: string | null = null;
 
 /** Who is signed in; null signed out. Offline, whoever was last time (see auth.ts). */
-/** Who is signed in. */
 let signedIn: User | null = null;
 /**
  * The signed-in user whose documents live in the cloud: `signedIn`, when they have sync. Without it
@@ -680,16 +680,16 @@ let savedDocs: SavedInfo[] = [];
 /** The account's documents, as last listed (empty signed out or offline). */
 let cloudDocs: CloudDocument[] = [];
 
-/**
- * Finds out who is signed in and gets going: signed in, any documents made here while signed out
- * join the account, and whatever the account doesn't have yet is sent. Run on load and whenever
- * the connection comes back.
- */
 /** The first `connect()`, on load: opening a document in the account waits for it, to know who is signed in. */
 let firstConnect: Promise<void> = Promise.resolve();
 /** Who is signed in is known: enough to decide whether a document joins its room. */
 let accountKnown: Promise<void> = Promise.resolve();
 
+/**
+ * Finds out who is signed in and gets going: signed in, any documents made here while signed out
+ * join the account, and whatever the account doesn't have yet is sent. Run on load and whenever
+ * the connection comes back.
+ */
 async function connect(lookup: Promise<User | null> = currentUser()): Promise<void> {
   signedIn = await lookup;
   const plan = signedIn ? await fetchSubscription() : null;
@@ -904,7 +904,6 @@ function rememberInUrl(doc: string): void {
   }
 }
 
-/** The document's file name, with the extension of its current format. */
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
 const fileName = () => (documentKind === 'txt' && hasExtension(documentName) ? documentName : stem(documentName) + FORMATS[documentKind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
@@ -1101,6 +1100,15 @@ async function signOut(): Promise<void> {
 
 /** Deletes a document (from the dashboard): from the account, and this browser's copy. */
 async function deleteEverywhere(entry: LibraryEntry): Promise<void> {
+  if (entry.local && entry.local.id === current.localId) {
+    // The open document: its next autosave (or one under way) would write it back, and upload it
+    // again as a new cloud document. It stays open, and is only saved again if it is changed.
+    clearTimeout(autosaveTimer);
+    await saving;
+    current.localId = null;
+    current.unsavedSince = 0;
+    current.builtIn = true;
+  }
   const cloudId = entry.cloud?.id ?? entry.local?.cloudId;
   if (cloudId && account) {
     try {
@@ -1756,17 +1764,17 @@ function updateDebug(): void {
     }
   }
   if (flags.load && loadTimes) {
-    const t = loadTimes;
+    const times = loadTimes;
     panels.splice(
       flags.status ? 1 : 0,
       0,
       debugPanel('Load', [
-        ['first page', ms(t.firstPage)],
-        ['all', ms(t.total)],
-        ['read', ms(t.read)],
-        ['fonts', ms(t.fonts)],
-        ['body', ms(t.body)],
-        ['headers', ms(t.headers)],
+        ['first page', ms(times.firstPage)],
+        ['all', ms(times.total)],
+        ['read', ms(times.read)],
+        ['fonts', ms(times.fonts)],
+        ['body', ms(times.body)],
+        ['headers', ms(times.headers)],
       ]),
     );
   }
@@ -2271,7 +2279,9 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (dashboard.visible) return; // the dashboard has the keyboard; the document is behind it
+  // Other text boxes (comments, Clip, dialogs) keep their keys; `#input` is the document's own.
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
+  if (e.target instanceof HTMLTextAreaElement && e.target.id !== 'input') return;
   if (e.isComposing) return;
   const inEditableBox = e.target instanceof HTMLElement && e.target.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
@@ -2335,6 +2345,13 @@ input.addEventListener('paste', (e) => {
 });
 
 // --- Navigation ------------------------------------------------------------------------
+
+/** The font families offered in font boxes (not the CJK or math ones); `withFile`: only those with a font file to embed. */
+function fontFamilies(withFile = false): Promise<string[]> {
+  return fetch(`${FONT_BASE}manifest.json`)
+    .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; math?: unknown; faces: { font?: string }[] }[] }>)
+    .then((m) => m.families.filter((f) => !f.cjk && !f.math && (!withFile || f.faces.some((face) => face.font))).map((f) => f.wordName));
+}
 
 // Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
 const chromeHost = createChromeHost({
@@ -2475,10 +2492,7 @@ const chromeHost = createChromeHost({
     userMoved = true;
     requestRender();
   },
-  fonts: () =>
-    fetch(`${FONT_BASE}manifest.json`)
-      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; math?: unknown }[] }>)
-      .then((m) => m.families.filter((f) => !f.cjk && !f.math).map((f) => f.wordName)),
+  fonts: () => fontFamilies(),
   samples: () => [
     { id: 'welcome', label: t('app.sampleWelcome') },
     { id: 'fonts', label: t('app.sampleFonts') },
@@ -2540,30 +2554,25 @@ const userWords = (): string[] => {
     return [];
   }
 };
+const addUserWord = (word: string): void => {
+  try {
+    localStorage.setItem(USER_WORDS_KEY, JSON.stringify([...new Set([...userWords(), word])]));
+  } catch {
+    // Storage unavailable: the word is accepted for this session only.
+  }
+};
 const spellDialog = new SpellDialog(document.body, {
   send,
   selectedText: () => selection.text,
   userWords,
-  addUserWord: (word) => {
-    try {
-      localStorage.setItem(USER_WORDS_KEY, JSON.stringify([...new Set([...userWords(), word])]));
-    } catch {
-      // Storage unavailable: the word is accepted for this session only.
-    }
-  },
+  addUserWord,
   focusEditor: focusInput,
 });
 
 // Right click on an underlined word: change it, or ignore it.
 const spellMenu = new SpellMenu({
   send,
-  addUserWord: (word) => {
-    try {
-      localStorage.setItem(USER_WORDS_KEY, JSON.stringify([...new Set([...userWords(), word])]));
-    } catch {
-      // Storage unavailable: the word is accepted for this session only.
-    }
-  },
+  addUserWord,
   focusEditor: focusInput,
 });
 /** Where the last right click was, for the menu it may open. */
@@ -2662,10 +2671,8 @@ const pdfTools = new PdfEditTools(document.getElementById('viewport')!, {
   },
   send,
   notify: setStatus,
-  families: () =>
-    fetch(`${FONT_BASE}manifest.json`)
-      .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; math?: unknown; faces: { font?: string }[] }[] }>)
-      .then((m) => m.families.filter((f) => !f.cjk && !f.math && f.faces.some((face) => face.font)).map((f) => f.wordName)),
+  // Only families with a font file: the PDF's text is drawn with it.
+  families: () => fontFamilies(true),
 });
 formLayer.toolsSlot.append(pdfTools.el);
 

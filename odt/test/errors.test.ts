@@ -60,3 +60,22 @@ test('odd but readable input does not crash', async () => {
   assert.ok(extension.objects?.length);
   assert.equal(extension.namespaces?.foo, 'urn:x');
 });
+
+test('repeat counts cannot multiply a small file into millions of cells', async () => {
+  const row = '<table:table-row table:number-rows-repeated="256"><table:table-cell table:number-columns-repeated="256"/></table:table-row>';
+  const wide = '<table:table-cell table:number-columns-spanned="256"/>'.repeat(40);
+  const body = `<table:table>${row.repeat(40)}</table:table><table:table><table:table-row>${wide}</table:table-row></table:table>`;
+  const { document } = await readOdt(await odtPackage({ content: minimalContent(body) }));
+  const tables = document.body.filter((b) => b.kind === 'table');
+  const cells = tables[0].rows.reduce((n, r) => n + (r.kind === 'row' ? r.cells.length : 0), 0);
+  assert.ok(cells <= 200_000, `${cells} cells`);
+  assert.equal(tables[0].rows[0].kind === 'row' && tables[0].rows[0].cells.length, 256, 'ordinary repeats still repeat');
+  assert.ok(tables[1].grid.length <= 1024 + 40, `${tables[1].grid.length} grid columns`);
+});
+
+test('a deeply nested comment does not overflow the stack', async () => {
+  const deep = '<text:span>'.repeat(20000) + 'note' + '</text:span>'.repeat(20000);
+  const body = `<text:p>x<office:annotation><dc:creator>A</dc:creator><text:p>${deep}</text:p></office:annotation></text:p>`;
+  const { document } = await readOdt(await odtPackage({ content: minimalContent(body) }));
+  assert.deepEqual(document.comments[0].paragraphs, ['note']);
+});

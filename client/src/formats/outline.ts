@@ -222,14 +222,15 @@ class Extractor {
     let entry = this.stack[level];
     if (!entry || entry.id !== numId || entry.ordered !== ordered) {
       const list: Extract<Node, { t: 'list' }> = { t: 'list', ordered, start: def.start ?? 1, items: [] };
-      // A nested list goes inside the item above it; without one, it is a list of its own.
-      const parent = level > 0 ? this.stack[level - 1]?.list.items.at(-1) : undefined;
+      // A nested list goes inside the nearest item above it (levels may be skipped); without one, it is a list of its own.
+      let parent: ListItem | undefined;
+      for (let l = level - 1; l >= 0 && !parent; l--) parent = this.stack[l]?.list.items.at(-1);
       if (parent) parent.children.push(list);
       else {
         this.stack.length = 0;
         this.out.push(list);
-        level = 0;
       }
+      // Kept at its own level, so the items after it at that level join it.
       entry = { id: numId, ordered, list };
       this.stack[level] = entry;
     }
@@ -578,10 +579,11 @@ export function renderSpans(spans: readonly Span[], f: SpanFormat): string {
     if (span.br) return f.br;
     if (span.math) return f.math ? f.math(span.text, span.math === 'display') : span.math === 'display' ? `$$${span.text}$$` : `$${span.text}$`;
     const marked = MARK_ORDER.some((k) => span[k]);
-    const m = marked ? /^(\s*)([\s\S]*?)(\s*)$/.exec(span.text)! : null;
-    const lead = m ? m[1] : '';
-    const trail = m ? m[3] : '';
-    const core = m ? m[2] : span.text;
+    // Split by trimming rather than a regular expression, which backtracks quadratically over inner whitespace.
+    const start = marked ? span.text.length - span.text.trimStart().length : 0;
+    const core = marked ? span.text.trim() : span.text;
+    const lead = span.text.slice(0, start);
+    const trail = marked ? span.text.slice(start + core.length) : '';
     if (!core) return f.text(span.text, false);
     let piece = f.text(core, !!span.code);
     const nextText = list[i + 1] && !list[i + 1].br ? list[i + 1].text : '';

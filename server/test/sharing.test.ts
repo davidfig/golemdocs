@@ -66,6 +66,13 @@ test('changing a role replaces it; removing access (by the owner, or by the gran
   const list = (await (await w.call(OWNER, 'GET', `/api/documents/${id}/shares`)).json()) as any[];
   assert.equal(list.length, 1);
   assert.equal(list[0].role, 'editor');
+  // Their open room connections are sent to reconnect with the new role, once.
+  assert.deepEqual(
+    w.roomCalls.filter((c) => c.path === '/rejoin').map((c) => c.doc),
+    [id],
+  );
+  await share(id, ALICE, 'editor');
+  assert.equal(w.roomCalls.filter((c) => c.path === '/rejoin').length, 1, 'not when the role is unchanged');
 
   assert.equal((await w.call(BOB, 'DELETE', `/api/documents/${id}/shares/${list[0].userId}`)).status, 404);
   assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${id}/shares/${list[0].userId}`)).status, 204);

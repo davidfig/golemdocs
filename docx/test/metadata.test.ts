@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { OpcPackage, REL, WordDocument } from '../src/index.ts';
+import { OpcPackage, REL, WordDocument, parseXml, serializeXml, writeAppProperties, writeCoreProperties } from '../src/index.ts';
 
 const PROPERTIES = {
   title: 'Annual report',
@@ -68,4 +68,16 @@ test('a document whose properties did not change is written without touching the
   const empty = await WordDocument.create();
   empty.properties = { title: '   ' };
   assert.equal((await OpcPackage.read(await empty.write())).has('docProps/app.xml'), false);
+});
+
+test('a property added to a part that does not declare its namespace gets the declaration', () => {
+  // A minimal core part from another producer: only cp is declared.
+  const core = writeCoreProperties(parseXml('<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"/>'), { title: 'T', created: '2026-01-01T00:00:00Z' });
+  const xml = serializeXml(core);
+  assert.match(xml, /xmlns:dc="http:\/\/purl.org\/dc\/elements\/1.1\/"/);
+  assert.match(xml, /xmlns:dcterms=/);
+  assert.match(xml, /xmlns:xsi=/);
+  // An app part whose root is prefixed: the new element takes the same prefix.
+  const app = writeAppProperties(parseXml('<ep:Properties xmlns:ep="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"/>'), { company: 'C' });
+  assert.match(serializeXml(app), /<ep:Company>C<\/ep:Company>/);
 });

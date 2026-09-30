@@ -2,6 +2,7 @@
 // the Insert Equation dialog previews with, and what an HTML export writes for an equation.
 
 import { classOf } from './classes.ts';
+import { INTEGRALS } from './symbols.ts';
 import type { MathEquation, MathList, MathNode, MathStyle } from './tree.ts';
 
 const VARIANT: Partial<Record<MathStyle, string>> = {
@@ -81,7 +82,7 @@ function node(n: MathNode): string[] {
       return [n.degree?.length ? `<mroot>${row(n.body)}${row(n.degree)}</mroot>` : `<msqrt>${row(n.body)}</msqrt>`];
     case 'nary': {
       const op = operator(n.op, ' largeop="true" movablelimits="true"');
-      const integral = '∫∬∭∮∯∰'.includes(n.op);
+      const integral = INTEGRALS.has(n.op);
       const above = (n.limits ?? (integral ? 'scripts' : 'aboveBelow')) === 'aboveBelow';
       let head = op;
       if (n.sub && n.sup) head = above ? `<munderover>${op}${row(n.sub)}${row(n.sup)}</munderover>` : `<msubsup>${op}${row(n.sub)}${row(n.sup)}</msubsup>`;

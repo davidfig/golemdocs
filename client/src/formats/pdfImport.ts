@@ -167,8 +167,8 @@ const median = (values: number[]) => [...values].sort((a, b) => a - b)[values.le
 function setupPage(doc: WordDocument, sizes: { width: number; height: number; margins: ReflowMargins }[]): void {
   if (!sizes.length) return;
   const first = sizes[0];
-  // At least half an inch, unless the PDF's text really runs closer to the edge (a footer near the bottom).
-  const clamp = (n: number, max: number) => Math.min(Math.max(n, Math.min(36, n)), max);
+  // Where the PDF's text runs (however near the edge, as a footer can be), but never more than 30% of the page.
+  const clamp = (n: number, max: number) => Math.min(n, max);
   const margins = {
     left: clamp(median(sizes.map((s) => s.margins.left)), first.width * 0.3),
     right: clamp(median(sizes.map((s) => s.margins.right)), first.width * 0.3),

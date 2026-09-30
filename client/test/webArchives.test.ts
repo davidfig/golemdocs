@@ -81,3 +81,27 @@ test('comments survive EPUB and MHTML', async () => {
     assert.deepEqual(back.comments.map(({ initials: _i, ...c }) => c), source.comments.map(({ initials: _i, ...c }) => c));
   }
 });
+
+test('a book with a stray % in an address or no spine is read or refused, not crashed on', async () => {
+  const { writeZip } = await import('@word/docx');
+  const enc = new TextEncoder();
+  const f = (name: string, s: string) => ({ name, data: enc.encode(s) });
+  const container = f('META-INF/container.xml', '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="pack.opf"/></rootfiles></container>');
+  const book = await writeZip([
+    f('mimetype', 'application/epub+zip'),
+    container,
+    f('pack.opf', '<package><manifest><item id="a" href="100%.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/></spine></package>'),
+    f('100%.xhtml', '<html><body><p>Full</p></body></html>'),
+  ]);
+  assert.deepEqual(texts((await epub.read(book)).document), ['Full']);
+  const noSpine = await writeZip([f('mimetype', 'application/epub+zip'), container, f('pack.opf', '<package><metadata/></package>')]);
+  await assert.rejects(epub.read(noSpine), /no readable chapters/);
+});
+
+test('XHTML for a book gives each valueless data- attribute a value, and leaves quoted text alone', async () => {
+  const { xhtmlize } = await import('../src/formats/epub.ts');
+  assert.equal(
+    xhtmlize('<mark data-comment="see data-x here" data-a data-b>t</mark><style data-word-styles>'),
+    '<mark data-comment="see data-x here" data-a="" data-b="">t</mark><style data-word-styles="">',
+  );
+});

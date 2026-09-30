@@ -72,6 +72,7 @@ export const panels = {
   'panels.forms.severalLines': 'Several lines',
   'panels.forms.options': 'Options, one per line',
   'panels.forms.deleteField': 'Delete field',
+  'panels.forms.nameTaken': 'There’s already a field named “{name}”',
   'panels.forms.fieldTitle': '{kind}: {name}',
   'panels.forms.kind.text': 'Text box',
   'panels.forms.kind.checkbox': 'Check box',

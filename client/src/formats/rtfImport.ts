@@ -21,6 +21,7 @@ import type {
   TableRow,
 } from '@word/docx';
 import { styleFor } from './markdownStyles.ts';
+import { dttmToIso } from './commentRanges.ts';
 import { t } from '../i18n/index.ts';
 
 /** Destinations whose content is never body text. */
@@ -33,19 +34,6 @@ const SKIPPED = new Set([
 
 /** Destinations of an annotation: its range markers, author, id and the annotation itself. */
 const ANNOTATION_WORDS = new Set(['annotation', 'atrfstart', 'atrfend', 'atnid', 'atnauthor', 'atnref', 'atndate', 'atnparent', 'atnicn']);
-
-/** An RTF DTTM (minute:6 hour:5 day:5 month:4 year-1900:9 weekday:3 bits) as an ISO 8601 date, or undefined if it is not a date. */
-export function dttmToIso(value: number): string | undefined {
-  const v = value >>> 0;
-  const minute = v & 63;
-  const hour = (v >>> 6) & 31;
-  const day = (v >>> 11) & 31;
-  const month = (v >>> 16) & 15;
-  const year = 1900 + ((v >>> 20) & 511);
-  if (!month || month > 12 || !day || day > 31 || hour > 23 || minute > 59) return undefined;
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${year}-${p(month)}-${p(day)}T${p(hour)}:${p(minute)}:00Z`;
-}
 
 export const HIGHLIGHTS:[string, number, number, number][] = [
   ['black', 0, 0, 0], ['blue', 0, 0, 255], ['cyan', 0, 255, 255], ['green', 0, 255, 0], ['magenta', 255, 0, 255], ['red', 255, 0, 0],
@@ -62,10 +50,13 @@ const CHARACTER_WORDS = new Set([
 const LIST_FORMATS: Record<number, string> = { 0: 'decimal', 1: 'upperRoman', 2: 'lowerRoman', 3: 'upperLetter', 4: 'lowerLetter', 22: 'decimalZero', 23: 'bullet', 255: 'none' };
 const PN_FORMATS: Record<string, string> = { pndec: 'decimal', pnucrm: 'upperRoman', pnlcrm: 'lowerRoman', pnucltr: 'upperLetter', pnlcltr: 'lowerLetter', pnlvlblt: 'bullet' };
 
+/** Code pages whose TextDecoder label isn't "windows-" and the number. */
+const CODE_PAGE_LABELS: Record<number, string> = { 65001: 'utf-8', 10000: 'macintosh', 932: 'shift_jis', 936: 'gbk', 950: 'big5', 949: 'euc-kr', 54936: 'gb18030', 866: 'ibm866' };
+
 /** Windows code pages by number, as TextDecoder labels. */
 function decoderFor(codePage: number): TextDecoder {
   try {
-    return new TextDecoder(codePage === 65001 ? 'utf-8' : codePage === 10000 ? 'macintosh' : `windows-${codePage}`);
+    return new TextDecoder(CODE_PAGE_LABELS[codePage] ?? `windows-${codePage}`);
   } catch {
     return new TextDecoder('windows-1252');
   }
@@ -151,10 +142,15 @@ function latin1(bytes: Uint8Array): string {
 
 const newRun = (properties: RunProperties, content: RunContent[]): Run => ({ kind: 'run', properties, content, attrs: {} });
 
+/** Groups nested deeper than this share their parent's state (real files nest a few dozen deep at most). */
+const MAX_GROUP_DEPTH = 1000;
+
 class RtfReader {
   private pos = 0;
   private stack: Frame[] = [];
   private frame!: Frame;
+  /** Groups opened past MAX_GROUP_DEPTH, not yet closed. */
+  private tooDeep = 0;
   private decoder = decoderFor(1252);
   private pendingBytes: number[] = [];
   private skipChars = 0;
@@ -194,6 +190,8 @@ class RtfReader {
   private text = '';
   private paragraphOpen = false;
   private rowCells: (TableCell | null)[] = [];
+  /** The row's last cell that isn't a merged continuation (what a \clmrg cell widens). */
+  private rowLastCell: TableCell | null = null;
   private cellBlocks: Block[] = [];
   private rowDefs: CellDef[] = [];
   private pendingDef: CellDef = { right: 0, merge: null, fill: null };
@@ -238,6 +236,10 @@ class RtfReader {
       if (c === '{') {
         this.pos++;
         depth++;
+        if (this.stack.length >= MAX_GROUP_DEPTH) {
+          this.tooDeep++;
+          continue;
+        }
         this.stack.push(this.frame);
         this.frame = { ...this.frame, char: { ...this.frame.char }, para: { ...this.frame.para }, link: undefined, inLink: this.frame.link ?? this.frame.inLink };
         // A group opened with \* is a destination we don't know unless a handler claims it.
@@ -249,7 +251,8 @@ class RtfReader {
       } else if (c === '}') {
         this.pos++;
         depth--;
-        this.close();
+        if (this.tooDeep > 0) this.tooDeep--;
+        else this.close();
       } else if (c === '\\') {
         this.control();
       } else if (c === '\r' || c === '\n') {
@@ -309,10 +312,11 @@ class RtfReader {
         this.character(c.charCodeAt(0));
         return;
       case '\'': {
+        // Exactly two hex digits; anything else isn't a byte and stays text.
         const hex = this.src.slice(this.pos, this.pos + 2);
+        if (!/^[0-9a-f]{2}$/i.test(hex)) return;
         this.pos += 2;
         const value = parseInt(hex, 16);
-        if (Number.isNaN(value)) return;
         if (this.skipChars > 0) {
           this.skipChars--;
           return;
@@ -593,7 +597,7 @@ class RtfReader {
       return;
     }
     if (f.dest === 'pn') {
-      const format = PN_FORMATS[word];
+      const format = Object.hasOwn(PN_FORMATS, word) ? PN_FORMATS[word] : undefined;
       if (format) this.pnKind = format;
       return;
     }
@@ -664,7 +668,7 @@ class RtfReader {
         c.hidden = on;
         return;
       case 'fs':
-        c.size = param ?? this.defaultSize;
+        c.size = param !== null && param > 0 ? param : this.defaultSize;
         return;
       case 'f':
         c.font = param ?? 0;
@@ -1160,9 +1164,10 @@ class RtfReader {
     const fill = def?.fill && def.fill > 0 ? this.colors[def.fill] : null;
     if (fill) cell.properties.shading = { val: 'clear', color: 'auto', fill };
     this.rowCells.push(def?.merge === 'continue' ? null : cell);
-    if (def?.merge === 'continue') {
+    if (def?.merge !== 'continue') this.rowLastCell = cell;
+    else {
       // Fold the continuation into the cell it extends.
-      const first = [...this.rowCells].reverse().find((c) => c);
+      const first = this.rowLastCell;
       if (first) {
         first.properties.gridSpan = (first.properties.gridSpan ?? 1) + 1;
         first.properties.width = { w: String(Number(first.properties.width?.w ?? 0) + width), type: 'dxa' };
@@ -1175,6 +1180,7 @@ class RtfReader {
     if (this.inlines.length || this.cellBlocks.length) this.endCell();
     const cells = this.rowCells.filter((c): c is TableCell => c !== null);
     this.rowCells = [];
+    this.rowLastCell = null;
     if (!cells.length) return;
     const grid = cells.flatMap((c) => {
       const span = c.properties.gridSpan ?? 1;

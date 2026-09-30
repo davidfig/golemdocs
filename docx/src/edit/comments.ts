@@ -4,7 +4,7 @@
 
 import type { Inline, Paragraph, Raw, Run } from '../model/types.ts';
 import { el } from '../xml/xml.ts';
-import { inlineLength } from './text.ts';
+import { inlineLength, itemLength } from './text.ts';
 
 export interface CommentAnchor {
   paragraph: Paragraph;
@@ -52,8 +52,10 @@ export function commentRanges(paragraphs: readonly Paragraph[]): Map<string, Com
           if (id !== undefined && inline.xml.name === START) starts.set(id, { paragraph, offset: offset + 1 });
           else if (id !== undefined && inline.xml.name === END) ends.set(id, { paragraph, offset });
         } else if (inline.kind === 'run') {
+          let at = offset;
           for (const item of inline.content) {
-            if (item.kind === 'raw' && item.xml.name === REFERENCE && item.xml.attrs['w:id'] !== undefined) references.set(item.xml.attrs['w:id'], { paragraph, offset });
+            if (item.kind === 'raw' && item.xml.name === REFERENCE && item.xml.attrs['w:id'] !== undefined) references.set(item.xml.attrs['w:id'], { paragraph, offset: at });
+            at += itemLength(item);
           }
         } else {
           visit(inline.children);
@@ -85,7 +87,7 @@ export function commentMarkerOffsets(paragraph: Paragraph, id: string): number[]
         let at = offset;
         for (const item of inline.content) {
           if (item.kind === 'raw' && item.xml.name === REFERENCE && item.xml.attrs['w:id'] === id) out.push(at);
-          at += item.kind === 'text' || item.kind === 'delText' || item.kind === 'instrText' ? item.text.length : 1;
+          at += itemLength(item);
         }
       } else {
         visit(inline.children);

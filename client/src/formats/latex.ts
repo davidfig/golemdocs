@@ -26,14 +26,15 @@ const SPECIAL: Record<string, string> = {
   '~': '\\textasciitilde{}',
 };
 
-export const escapeLatex = (s: string): string => s.replace(/[\\{}$&#^_%~]/g, (c) => SPECIAL[c]).replace(/\u00a0/g, '~');
+// Runs of hyphens are split with {} so TeX does not join them into dashes.
+export const escapeLatex = (s: string): string => s.replace(/[\\{}$&#^_%~]/g, (c) => SPECIAL[c]).replace(/\u00a0/g, '~').replace(/-(?=-)/g, '-{}');
 
 const format: SpanFormat = {
   br: '\\\\\n',
   // Text that reads as TeX math ("$x^2$", "$\alpha$") is kept as math, as it was read.
   text: (s) =>
     s
-      .split(/(\$(?![\s$])[^$\n]*?[\\^_{][^$\n]*?(?<![\s\\])\$)/)
+      .split(/(\$(?![\s$])(?=[^$\n]*[\\^_{])[^$\n]*(?<![\s\\])\$)/)
       .map((part, i) => (i % 2 ? part : escapeLatex(part)))
       .join('')
       .replace(/\t/g, '\\hspace*{2em}'),
@@ -71,7 +72,8 @@ export function renderLatex(nodes: readonly Node[]): string {
   );
 }
 
-function block(node: Node, depth: number): string {
+/** `enumDepth`: how many ordered lists the node is inside (LaTeX numbers each nesting with its own counter). */
+function block(node: Node, enumDepth: number): string {
   switch (node.t) {
     case 'heading': {
       const command = SECTIONS[Math.min(node.level, 5) - 1];
@@ -86,7 +88,7 @@ function block(node: Node, depth: number): string {
     case 'quote':
       return `\\begin{quote}\n${node.paras.map((p) => inline(p)).join('\n\n')}\n\\end{quote}`;
     case 'list':
-      return list(node);
+      return list(node, enumDepth);
     case 'table': {
       const columns = node.rows[0].length;
       const rows = node.rows.map((r) => `${r.map((c) => inline(c).replace(/\\\\\n/g, ' ')).join(' & ')} \\\\`);
@@ -95,17 +97,20 @@ function block(node: Node, depth: number): string {
       return `\\begin{tabular}{|${'l|'.repeat(columns)}}\n\\hline\n${rows.join('\n\\hline\n').replace(/\\hline\n\\hline\\hline\n\\hline/, '\\hline\\hline')}\n\\hline\n\\end{tabular}`;
     }
   }
-  void depth;
 }
 
-function list(node: Extract<Node, { t: 'list' }>): string {
+const ENUM_COUNTERS = ['enumi', 'enumii', 'enumiii', 'enumiv'];
+
+function list(node: Extract<Node, { t: 'list' }>, enumDepth: number): string {
   const env = node.ordered ? 'enumerate' : 'itemize';
+  const inner = enumDepth + (node.ordered ? 1 : 0);
   const items = node.items.map((item) => {
     const parts = [`\\item ${inline(item.spans)}`];
-    for (const child of item.children) parts.push(block(child, 1));
+    for (const child of item.children) parts.push(block(child, inner));
     return parts.join('\n\n');
   });
-  const start = node.ordered && node.start !== 1 ? `\\setcounter{enumi}{${node.start - 1}}\n` : '';
+  const counter = ENUM_COUNTERS[Math.min(enumDepth, ENUM_COUNTERS.length - 1)];
+  const start = node.ordered && node.start !== 1 ? `\\setcounter{${counter}}{${node.start - 1}}\n` : '';
   return `\\begin{${env}}\n${start}${items.join('\n')}\n\\end{${env}}`;
 }
 
@@ -210,15 +215,15 @@ export function parseLatex(source: string): Node[] {
   return parser.document();
 }
 
-/** Removes % comments (but not \%), and whole-line comments' newlines. */
+/** Removes % comments (but not \%). As in TeX, a comment also takes its line's end and the next line's leading spaces, unless that line is blank (a paragraph break). */
 function stripComments(s: string): string {
   // Verbatim code keeps its % signs: only the text between such environments is stripped.
-  const parts = s.split(/(\\begin\{(verbatim\*?|lstlisting|minted)\}[\s\S]*?\\end\{\2\})/);
+  const parts = s.split(/(\\begin\{(verbatim\*?|Verbatim\*?|lstlisting|minted)\}[\s\S]*?\\end\{\2\})/);
   return parts.map((part, i) => (i % 3 === 0 ? stripPlainComments(part) : i % 3 === 1 ? part : '')).join('');
 }
 
 function stripPlainComments(s: string): string {
-  return s.replace(/(^|[^\\])((?:\\\\)*)%[^\n]*(\n[ \t]*)?/g, (_m, before: string, slashes: string, nl: string | undefined) => `${before}${slashes}${nl ? '\n' : ''}`);
+  return s.replace(/(?<!\\)((?:\\\\)*)%[^\n]*(?:\n(?![ \t]*\n)[ \t]*)?/g, '$1');
 }
 
 class Parser {
@@ -425,17 +430,20 @@ class Parser {
     const items: string[] = [];
     let depth = 0;
     let start = -1;
+    let first = inner.length;
     for (let i = 0; i < inner.length; i++) {
       if (inner.startsWith('\\begin{', i)) depth++;
       else if (inner.startsWith('\\end{', i)) depth--;
       else if (depth === 0 && /^\\item\b/.test(inner.slice(i))) {
         if (start >= 0) items.push(inner.slice(start, i));
+        else first = i;
         start = i;
         i += 4;
       }
     }
     if (start >= 0) items.push(inner.slice(start));
-    const startAt = /\\setcounter\{enumi\}\{(\d+)\}/.exec(inner);
+    // The list's own counter is set before its first item; a nested list's comes later.
+    const startAt = /\\setcounter\{enum(?:i{1,3}|iv)\}\{(\d+)\}/.exec(inner.slice(0, first));
     const result: ListItem[] = items.map((raw) => {
       let body = raw.replace(/^\\item\s*/, '');
       let label: Span[] = [];

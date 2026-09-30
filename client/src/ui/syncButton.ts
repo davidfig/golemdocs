@@ -62,7 +62,7 @@ export class SyncButton {
       const button = h('button', { class: primary ? 'wm-sync-action wm-sync-primary' : 'wm-sync-action', text: label, attrs: { type: 'button' } });
       button.addEventListener('click', () => {
         closePopup();
-        void Promise.resolve(this.host.perform(action)).catch((e: unknown) => this.host.notify((e as Error).message ?? String(e)));
+        void Promise.resolve(this.host.perform(action)).catch((e: unknown) => this.host.notify(e instanceof Error ? e.message : String(e)));
       });
       return button;
     };

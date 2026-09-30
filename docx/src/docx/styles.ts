@@ -62,7 +62,7 @@ const STYLE = new Schema(
 function readStyle(e: XmlElement, ctx: ReadContext): Style {
   const conditions: TableStyleCondition[] = [];
   const style = readProps<Style>(STYLE, e, ctx, (c) => {
-    if (c.name !== 'w:tblStylePr' || Object.keys(c.attrs).length !== 1) return false;
+    if (c.name !== 'w:tblStylePr' || Object.keys(c.attrs).length !== 1 || c.attrs['w:type'] === undefined) return false;
     conditions.push({ ...readProps<Omit<TableStyleCondition, 'type'>>(CONDITION, c, ctx), type: c.attrs['w:type'] as never });
     return true;
   });

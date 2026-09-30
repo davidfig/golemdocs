@@ -52,6 +52,12 @@ const NOTE_SIZE = 20;
 
 const idOf = (ref: PdfRef) => `${ref.num} ${ref.gen}`;
 
+/** The markup kind of an annotation dictionary (own keys only: /Subtype /constructor is not one). */
+const kindOf = (dict: PdfDict | undefined): AnnotationKind | undefined => {
+  const subtype = dict?.name('Subtype');
+  return subtype !== undefined && Object.hasOwn(SUBTYPES, subtype) ? SUBTYPES[subtype] : undefined;
+};
+
 /** The markup annotations on every page, in page order. */
 export function readAnnotations(doc: PdfDocument): Annotation[] {
   const out: Annotation[] = [];
@@ -66,7 +72,7 @@ export function readAnnotations(doc: PdfDocument): Annotation[] {
 }
 
 function read(doc: PdfDocument, dict: PdfDict | undefined, page: number, id: string): Annotation | null {
-  const kind = dict && SUBTYPES[dict.name('Subtype') ?? ''];
+  const kind = kindOf(dict);
   if (!dict || !kind) return null;
   const numbers = (o: PdfObject | undefined) => (doc.array(o) ?? []).map((x) => doc.number(x) ?? 0);
   const rect = numbers(dict.get('Rect'));
@@ -120,7 +126,7 @@ export function applyAnnotations(doc: PdfDocument, annotations: readonly Annotat
     const existing = doc.array(page.dict.get('Annots')) ?? [];
     for (const ref of existing) {
       const dict = doc.dict(ref);
-      const kind = dict && SUBTYPES[dict.name('Subtype') ?? ''];
+      const kind = kindOf(dict);
       if (!(ref instanceof PdfRef) || !dict || !kind) {
         kept.push(ref);
         continue;

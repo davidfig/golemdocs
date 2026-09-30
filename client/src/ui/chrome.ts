@@ -16,13 +16,13 @@ import {
   type ZoomTarget,
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
-import { h } from './dom.ts';
+import { h, isFormField } from './dom.ts';
 import { format, getLocale, setLocale, t } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
-import { MenuBar, cmd, isFormField, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
+import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, setPopupLayer, showDialog } from './popup.ts';
 import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
@@ -938,7 +938,7 @@ export class Chrome {
           this.converting = true;
           this.formatCombo.refresh(this.state);
           Promise.resolve(host.perform(action))
-            .catch((e: unknown) => host.notify(t('chrome.formatBox.failed', { error: (e as Error).message ?? String(e) })))
+            .catch((e: unknown) => host.notify(t('chrome.formatBox.failed', { error: e instanceof Error ? e.message : String(e) })))
             .finally(() => {
               this.converting = false;
               this.formatCombo.refresh(this.state);
@@ -983,6 +983,7 @@ export class Chrome {
       if (id === 'insert.table') return control(() => ({ ...tableGridButton(r, id), available: () => r.isAvailable(r.get(id)) }));
       return btn(id);
     };
+    for (const toolbar of this.toolbars) toolbar.dispose();
     this.toolbars.length = 0;
     this.toolbarsEl.replaceChildren();
     for (const t of this.layout) {

@@ -26,8 +26,21 @@ function decode(text: string): string {
   return text.replace(ENTITY, (_, ref: string) => {
     if (ref.charCodeAt(0) !== 35) return NAMED[ref];
     const code = ref.charCodeAt(1) === 120 ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
-    return String.fromCodePoint(code);
+    // A reference to a character XML doesn't allow (&#0;, a surrogate, past U+10FFFF) is malformed.
+    return isXmlChar(code) ? String.fromCodePoint(code) : '\uFFFD';
   });
+}
+
+/** Whether a code point may appear in an XML 1.0 document. */
+function isXmlChar(code: number): boolean {
+  return (
+    code === 9 ||
+    code === 10 ||
+    code === 13 ||
+    (code >= 0x20 && code <= 0xd7ff) ||
+    (code >= 0xe000 && code <= 0xfffd) ||
+    (code >= 0x10000 && code <= 0x10ffff)
+  );
 }
 
 function isNameEnd(c: number): boolean {
@@ -121,8 +134,9 @@ export function parseXml(source: string): XmlElement {
         break;
       }
       if (ch === 47) {
+        if (xml.charCodeAt(j + 1) !== 62) throw new XmlError(`malformed start tag <${rawName}>`);
         selfClosing = true;
-        j = xml.indexOf('>', j) + 1;
+        j += 2;
         break;
       }
       if (j >= n) throw new XmlError(`unterminated start tag <${rawName}>`);
@@ -182,8 +196,11 @@ export function parseXml(source: string): XmlElement {
 
 // ---------------------------------------------------------------------------------------
 
-const TEXT_ESCAPE = /[&<>]/g;
-const ATTR_ESCAPE = /[&<"\t\n\r]/g;
+// Characters XML 1.0 can't hold at all (C0 controls other than tab, newline and carriage
+// return; U+FFFE and U+FFFF) are dropped, so pasted control characters can't make a part that
+// Word refuses to open.
+const TEXT_ESCAPE = /[&<>\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/g;
+const ATTR_ESCAPE = /[&<"\t\n\r\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/g;
 const ESCAPES: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -193,8 +210,8 @@ const ESCAPES: Record<string, string> = {
   '\n': '&#10;',
   '\r': '&#13;',
 };
-const escapeText = (s: string) => (/[&<>]/.test(s) ? s.replace(TEXT_ESCAPE, (c) => ESCAPES[c]) : s);
-const escapeAttr = (s: string) => (/[&<"\t\n\r]/.test(s) ? s.replace(ATTR_ESCAPE, (c) => ESCAPES[c]) : s);
+const escapeText = (s: string) => s.replace(TEXT_ESCAPE, (c) => ESCAPES[c] ?? '');
+const escapeAttr = (s: string) => s.replace(ATTR_ESCAPE, (c) => ESCAPES[c] ?? '');
 
 export const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 

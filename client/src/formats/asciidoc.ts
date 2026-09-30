@@ -14,7 +14,7 @@ const MARKS = { bold: '*', italic: '_', code: '`', sup: '^', sub: '~' } as const
 
 const format: SpanFormat = {
   br: ' +\n',
-  text: (s, code) => (code ? s : s.replace(/\\/g, '\\\\').replace(/([*_`^~#])(?=[\p{L}\p{N}])/gu, '\\$1')),
+  text: (s, code) => (code ? s : s.replace(/\\/g, '\\\\').replace(/([*_`^~#+])(?=[\p{L}\p{N}])/gu, '\\$1')),
   mark(kind, inner, before, after) {
     if (kind === 'strike') return `[.line-through]#${inner}#`;
     if (kind === 'underline') return `[.underline]#${inner}#`;
@@ -65,7 +65,8 @@ function block(node: Node, depth: number): string {
     case 'table': {
       const cell = (spans: Span[]) => inline(spans).replace(/\|/g, '\\|').replace(/ \+\n/g, ' ');
       const rows = node.rows.map((r) => r.map((c) => `|${cell(c)}`).join(' '));
-      return `${node.header ? '[%header]\n' : ''}|===\n${rows.join('\n\n')}\n|===`;
+      // Each row is a line and rows are apart, so a one-row header would also be read as implicit: say which it is.
+      return `${node.header ? '[%header]' : '[%noheader]'}\n|===\n${rows.join('\n\n')}\n|===`;
     }
   }
 }
@@ -215,7 +216,7 @@ class Parser {
   private literal(): Node {
     const body: string[] = [];
     while (this.i < this.lines.length && /^\s+\S/.test(this.lines[this.i])) body.push(this.lines[this.i++]);
-    const indent = Math.min(...body.map((l) => /^\s*/.exec(l)![0].length));
+    const indent = body.reduce((min, l) => Math.min(min, /^\s*/.exec(l)![0].length), Infinity);
     return { t: 'code', text: body.map((l) => l.slice(indent)).join('\n') };
   }
 
@@ -233,27 +234,28 @@ class Parser {
       parts.push(line);
       this.i++;
     }
-    // A trailing " +" is a hard break; other line ends are soft.
-    const spans: Span[] = [];
-    parts.forEach((part, k) => {
-      const hard = / \+$/.test(part);
-      const text = part.replace(/ \+$/, '').trim();
-      if (k > 0 && !spans.at(-1)?.br) spans.push({ text: ' ' });
-      spans.push(...parseInline(text));
-      if (hard) spans.push({ text: '', br: true });
-    });
-    const tidied = tidy(spans);
+    const tidied = lineSpans(parts);
     if (/quote/.test(attrs)) return { t: 'quote', paras: [tidied] };
     return { t: 'para', spans: tidied };
   }
 
   private list(): Node {
-    this.attrs = [];
-    const entries: { depth: number; ordered: boolean; item: ListItem }[] = [];
     const startAttr = /start=(\d+)/.exec(this.attrs.join(','));
+    this.attrs = [];
+    const entries: Entry[] = [];
     let start = startAttr ? Number(startAttr[1]) : 1;
+    /** A [start=N] line between items, for the nested list that follows it. */
+    let nestedStart: number | undefined;
     for (;;) {
       const line = this.lines[this.i];
+      const attr = line === undefined || !entries.length ? null : /^\[([^\]]*)\]\s*$/.exec(line);
+      const nested = attr && LIST_ITEM.exec(this.lines[this.i + 1] ?? '');
+      if (nested && nested[1].length > 1) {
+        const n = /start=(\d+)/.exec(attr[1]);
+        nestedStart = n ? Number(n[1]) : undefined;
+        this.i++;
+        continue;
+      }
       const m = line === undefined ? null : LIST_ITEM.exec(line);
       if (m) {
         const marker = m[1];
@@ -267,8 +269,9 @@ class Parser {
         while (this.i < this.lines.length && this.lines[this.i].trim() && !LIST_ITEM.test(this.lines[this.i]) && !/^\+\s*$/.test(this.lines[this.i]) && !DELIMITER.test(this.lines[this.i]) && !/^\[/.test(this.lines[this.i])) {
           text.push(this.lines[this.i++].trim());
         }
-        const item: ListItem = { spans: parseInline(text.join(' ')), children: [] };
-        entries.push({ depth: marker[0] === '-' || /^\d/.test(marker) ? 0 : marker.length - 1, ordered, item });
+        const item: ListItem = { spans: lineSpans(text), children: [] };
+        entries.push({ depth: marker[0] === '-' || /^\d/.test(marker) ? 0 : marker.length - 1, ordered, item, ...(nestedStart !== undefined && { start: nestedStart }) });
+        nestedStart = undefined;
         // Continuations: "+" attaches the following block.
         while (this.i < this.lines.length && /^\+\s*$/.test(this.lines[this.i])) {
           this.i++;
@@ -300,8 +303,9 @@ class Parser {
     const body: string[] = [];
     while (this.i < this.lines.length && !/^\|={3,}\s*$/.test(this.lines[this.i])) body.push(this.lines[this.i++]);
     this.i++;
-    const cols = /cols="?(\d+)/.exec(attrs)?.[1] ?? /cols="?([^",\]]+)/.exec(attrs)?.[1];
-    const colCount = cols ? (/^\d+$/.test(cols) ? Number(cols) : cols.split(',').length) : 0;
+    // cols="3" is a count; cols="1,2,3" or "2*,1" lists the columns (a "2*" standing for two).
+    const cols = (/cols="([^"]*)"/.exec(attrs)?.[1] ?? /cols=([^,]*)/.exec(attrs)?.[1])?.trim();
+    const colCount = cols ? (/^\d+$/.test(cols) ? Number(cols) : cols.split(/[,;]/).reduce((n, spec) => n + (Number(/^\s*(\d+)\*/.exec(spec)?.[1]) || 1), 0)) : 0;
     const cells: string[] = [];
     let firstLineCells = 0;
     let firstLineDone = false;
@@ -320,13 +324,14 @@ class Parser {
       if (!firstLineDone) firstLineCells += parts.length;
       cells.push(...parts);
     });
-    const width = colCount || firstLineCells || 1;
     if (!cells.length) return null;
+    // No wider than there are cells, whatever the attributes say.
+    const width = Math.min(colCount || firstLineCells || 1, cells.length);
     const rows: Span[][][] = [];
     for (let k = 0; k < cells.length; k += width) rows.push(Array.from({ length: width }, (_, c) => parseInline(cells[k + c] ?? '')));
     // The first row is a header when asked for, or when it is one line followed by a blank line.
     const implicit = !/noheader/.test(attrs) && firstLineDone && firstLineCells === width && rows.length > 1 && !/options/.test(attrs);
-    const header = /%header|header/.test(attrs) || implicit;
+    const header = !/noheader/.test(attrs) && (/header/.test(attrs) || implicit);
     return { t: 'table', rows, header };
   }
 }
@@ -340,15 +345,35 @@ function splitCells(line: string): string[] | null {
   return rest.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
 }
 
-function nest(entries: { depth: number; ordered: boolean; item: ListItem }[], start: number): Extract<Node, { t: 'list' }> {
+interface Entry {
+  depth: number;
+  ordered: boolean;
+  item: ListItem;
+  /** The number a nested list that starts with this item counts from. */
+  start?: number;
+}
+
+/** Lines of text as spans: a trailing " +" is a hard break; other line ends are soft. */
+function lineSpans(lines: readonly string[]): Span[] {
+  const spans: Span[] = [];
+  lines.forEach((line, k) => {
+    const hard = / \+$/.test(line);
+    if (k > 0 && !spans.at(-1)?.br) spans.push({ text: ' ' });
+    spans.push(...parseInline(line.replace(/ \+$/, '').trim()));
+    if (hard) spans.push({ text: '', br: true });
+  });
+  return tidy(spans);
+}
+
+function nest(entries: Entry[], start: number): Extract<Node, { t: 'list' }> {
   const root: Extract<Node, { t: 'list' }> = { t: 'list', ordered: entries[0].ordered, start, items: [] };
   const stack: Extract<Node, { t: 'list' }>[] = [root];
-  for (const { depth, ordered, item } of entries) {
+  for (const { depth, ordered, item, start: nestedStart } of entries) {
     const d = Math.min(depth, stack.length);
     stack.length = Math.min(stack.length, d + 1);
     if (d >= stack.length || (stack[d] === undefined)) {
       const parent = stack[d - 1]?.items.at(-1) ?? root.items.at(-1);
-      const list: Extract<Node, { t: 'list' }> = { t: 'list', ordered, start: 1, items: [] };
+      const list: Extract<Node, { t: 'list' }> = { t: 'list', ordered, start: nestedStart ?? 1, items: [] };
       if (parent) parent.children.push(list);
       else root.items.push({ spans: [], children: [list] });
       stack[d] = list;
@@ -447,8 +472,9 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
       i += m[0].length;
       continue;
     }
-    if (c === '+' && (m = /^\+\+?([^+]+)\+\+?/.exec(rest)) && boundaryBefore(s, i)) {
-      text += m[1];
+    // Passthrough, +text+ (constrained: no space inside its edges) or ++text++.
+    if (c === '+' && boundaryBefore(s, i) && (m = /^\+\+([^+]+)\+\+|^\+([^\s+](?:[^+]*[^\s+])?)\+/.exec(rest))) {
+      text += m[1] ?? m[2];
       i += m[0].length;
       continue;
     }

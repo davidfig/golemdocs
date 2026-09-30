@@ -13,7 +13,7 @@ import { t } from '../i18n/index.ts';
 import type { WireField } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import type { FormMode } from './actions.ts';
-import { h } from './dom.ts';
+import { h, isFormField } from './dom.ts';
 import './formLayer.css';
 
 export interface FormPage {
@@ -85,6 +85,11 @@ export class FormLayer {
       if (this.mode === 'edit' && this.selected) this.select(null);
     });
     window.addEventListener('keydown', (e) => this.key(e), true);
+    // Keys pressed in a field being filled in (a text box of several lines, a check box) are the
+    // field's: the document's handlers listen on the window and would take them as edits.
+    this.el.addEventListener('keydown', (e) => {
+      if (e.target !== this.el) e.stopPropagation();
+    });
   }
 
   /** Shows these fields (null: none, the document isn't a PDF's pages). */
@@ -397,7 +402,7 @@ export class FormLayer {
         return;
       }
       if (this.fields!.some((o) => o.name === next && o.name !== f.name)) {
-        this.host.notify(`There's already a field named “${next}”`);
+        this.host.notify(t('panels.forms.nameTaken', { name: next }));
         name.value = f.name;
         return;
       }
@@ -479,8 +484,8 @@ export class FormLayer {
 
   private key(e: KeyboardEvent): void {
     if (!this.fields || this.mode !== 'edit') return;
-    const target = e.target as HTMLElement | null;
-    if (target && target !== document.body && target.id !== 'input' && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    // Keys typed in a box (a field's name, the text of a PDF being edited) or a dialog are theirs.
+    if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
     if (e.key === 'Escape' && (this.placing || this.selected)) {
       this.placing = null;
       this.selected = null;

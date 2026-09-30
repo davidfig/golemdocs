@@ -154,6 +154,13 @@ test('changeCase rewrites the selected text', async () => {
   assert.equal(await text(doc), 'Quiet Words');
 });
 
+test('title case after an emoji capitalizes the words that follow it (code points, not UTF-16 units)', async () => {
+  const doc = await openMarkdown('😀 quiet words\n');
+  await run(doc, { kind: 'selectAll' });
+  await run(doc, { kind: 'format', action: { kind: 'changeCase', to: 'title' } });
+  assert.equal(await text(doc), '😀 Quiet Words');
+});
+
 test('lists: a bullet list is toggled on and off, and numbering is reported', async () => {
   const doc = await openMarkdown('item\n');
   const on = await run(doc, { kind: 'format', action: { kind: 'toggleList', list: 'number' } });

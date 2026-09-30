@@ -137,3 +137,17 @@ test('HTML imports with its extension and comes back through a Word switch', asy
   assert.match(out, /<section id="intro">/);
   assert.match(out, /<b>bold<\/b>|<strong>bold<\/strong>/);
 });
+
+test('every extension a file is opened by is taken off its name', () => {
+  assert.equal(stem('Page.xhtml'), 'Page');
+  assert.equal(stem('Letter.dot'), 'Letter');
+  assert.equal(stem('data.tab'), 'data');
+});
+
+test('a .wdoc whose manifest is not an object is refused with a message', async () => {
+  const zip = await writeZip([
+    { name: 'mimetype', data: encode('application/x-golem-document'), compress: false },
+    { name: 'manifest.json', data: encode('null') },
+  ]);
+  await assert.rejects(readWdoc(zip), /newer version/);
+});

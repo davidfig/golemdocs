@@ -14,7 +14,7 @@ const withIcon = (html: string): string => html.replace('<h1>', '<h1><img class=
 
 /**
  * The app's Calibri (Carlito) for the plain legal pages, so they match the canvas. A page that declares these fetches
- * a face only when its text uses it. The home page does not: its plain copy is for crawlers, which can do without.
+ * a face only when its text uses it.
  */
 const FONT_CSS = `<style>${[
   ['regular', 'normal', 400],
@@ -109,15 +109,13 @@ interface PlainPage {
   title: string;
   description: string;
   url: string;
-  /** Whether to declare the app's Calibri (see FONT_CSS). */
-  fonts: boolean;
 }
 
 /**
  * The built index.html turned into a page of plain HTML: the text of `md` as a sheet, and none of the editor (no
  * scripts, styles, toolbars or canvas), so nothing is drawn twice and nothing loads that the text doesn't need.
  */
-export function plainPage(index: string, { md, title, description, url, fonts }: PlainPage): string {
+export function plainPage(index: string, { md, title, description, url }: PlainPage): string {
   const meta = (attr: string, name: string, value: string): ((s: string) => string) => (s) =>
     s.replace(new RegExp(`(<meta ${attr}="${name}" content=")[^"]*"`), (_, head: string) => `${head}${escapeHtml(value)}"`);
   let page = index
@@ -126,6 +124,8 @@ export function plainPage(index: string, { md, title, description, url, fonts }:
     .replace(/<header id="chrome"><\/header>\s*/, '')
     .replace(/<main id="viewport">[\s\S]*?<\/main>\s*/, '')
     .replace(/<div id="debug">[\s\S]*?<\/div>\s*(?=<\/body>)/, '')
+    .replace(/<div id="intro"[\s\S]*?<\/div>\s*<\/div>\s*/, '')
+    .replace(/<script>\s*\(function \(\) \{\s*var intro[\s\S]*?<\/script>\s*/, '')
     .replace(/<noscript>[\s\S]*?<\/noscript>\s*/, '')
     .replace(/<title>.*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`)
     .replace(/(<link rel="canonical" href=")[^"]*"/, (_, head: string) => `${head}${url}"`)
@@ -135,14 +135,14 @@ export function plainPage(index: string, { md, title, description, url, fonts }:
   page = meta('name', 'description', description)(page);
   page = meta('property', 'og:description', description)(page);
   page = meta('property', 'og:title', title)(page);
-  return fonts ? withFonts(page) : page;
+  return withFonts(page);
 }
 
 /**
  * Replaces `<!--welcome-->` in index.html with the welcome document as plain HTML. The editor draws
  * to a canvas, so without this a crawler (or a browser with scripts off) finds no text to read.
- * After the build, plain pages without the editor are written next to it: `privacy.html` and `terms.html`
- * (served at `/privacy` and `/terms`), and `home-plain.html`, which the Worker serves at `/` to crawlers.
+ * After the build, plain pages without the editor are written next to it: `privacy.html` and `terms.html`,
+ * served at `/privacy` and `/terms`.
  */
 export function welcomeContent(): Plugin {
   let outDir = '';
@@ -165,12 +165,8 @@ export function welcomeContent(): Plugin {
       const titleOf = (md: string, fallback: string): string => /^#\s+(.*)$/m.exec(md)?.[1] ?? fallback;
       for (const { name, description } of LEGAL_PAGES) {
         const md = readFileSync(path.resolve(import.meta.dirname, `src/layout/legal/${name}/en.md`), 'utf8');
-        writeFileSync(path.join(outDir, `${name}.html`), plainPage(index, { md, title: titleOf(md, name), description, url: `https://golemdocs.com/${name}`, fonts: true }));
+        writeFileSync(path.join(outDir, `${name}.html`), plainPage(index, { md, title: titleOf(md, name), description, url: `https://golemdocs.com/${name}` }));
       }
-      const welcome = readFileSync(WELCOME, 'utf8');
-      const home = /<title>(.*?)<\/title>/.exec(index)?.[1] ?? 'Golem Docs';
-      const description = /<meta name="description" content="([^"]*)"/.exec(index)?.[1] ?? '';
-      writeFileSync(path.join(outDir, 'home-plain.html'), plainPage(index, { md: welcome, title: home, description, url: 'https://golemdocs.com/', fonts: false }));
     },
   };
 }

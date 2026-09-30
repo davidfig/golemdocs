@@ -3,7 +3,6 @@ import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
-import { isCrawler } from './crawler.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
@@ -111,15 +110,6 @@ const handler: ExportedHandler = {
       if (env.ENVIRONMENT === 'production' && url.protocol === 'http:') {
         url.protocol = 'https:';
         return new Response(null, { status: 308, headers: { location: url.href } });
-      }
-
-      // The home page: crawlers get its text as plain HTML, everyone else the editor.
-      if (path === '/' && request.method === 'GET' && env.ASSETS) {
-        const crawler = isCrawler(request.headers.get('user-agent'));
-        const response = await env.ASSETS.fetch(crawler ? new Request(new URL('/home-plain', url), request) : request);
-        const varied = new Response(response.body, response);
-        varied.headers.append('vary', 'User-Agent');
-        return varied;
       }
 
       if (request.method === 'GET' && path === '/api/health') return json({ ok: true });

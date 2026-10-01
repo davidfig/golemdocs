@@ -3,7 +3,7 @@
 // unique ids. Returns the parsed parts for further assertions.
 
 import assert from 'node:assert/strict';
-import { parseXml, ZipArchive, type XmlElement } from '@word/docx';
+import { parseXml, ZipArchive, type XmlElement } from '@golemdocs/docx';
 
 export interface Parts {
   files: Map<string, Uint8Array>;

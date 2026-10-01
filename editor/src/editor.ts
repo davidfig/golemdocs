@@ -1,7 +1,7 @@
 // Editing: a selection in model positions, commands that edit the model (and tell layout
 // what changed), and caret/selection geometry from the laid-out lines.
 //
-// Everything is addressed in model offsets (see @word/docx edit/text.ts), not in laid-out
+// Everything is addressed in model offsets (see @golemdocs/docx edit/text.ts), not in laid-out
 // text, so commands can be replayed on another client or a server and positions stay put
 // when layout changes. Visible offsets only appear when talking to layout (stepping over
 // hidden text, caret x positions).
@@ -40,11 +40,11 @@ import {
   type TableRow,
   type RunProperties,
   type WordDocument,
-} from '@word/docx';
-import { blockKey, END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type RunFormat, type Selection as OpSelection, type ServerMessage } from '@word/ops';
+} from '@golemdocs/docx';
+import { blockKey, END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type RunFormat, type Selection as OpSelection, type ServerMessage } from '@golemdocs/ops';
 import { mergeCells, splitCell } from './tableModel.ts';
 import { cjkWords, graphemeAt, isWordBoundary, segmentAt } from './segment.ts';
-import { toModel, toVisible, visibleLength, type LayoutSession, type LineRecord, type PageLayout, type SourceSpan } from '@word/layout';
+import { toModel, toVisible, visibleLength, type LayoutSession, type LineRecord, type PageLayout, type SourceSpan } from '@golemdocs/layout';
 
 /** A position between two model positions of a paragraph. */
 export interface Position {

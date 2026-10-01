@@ -5,9 +5,9 @@
 // "Review" model). A comment with no place in the laid-out text (say, one on a header) goes to
 // the top of the first page, so none is dropped.
 
-import { commentRanges, paragraphsIn, type Comment, type WordDocument } from '@word/docx';
-import { toVisible, type PageLayout } from '@word/layout';
-import { formatDate, noteRect, type Annotation } from '@word/pdf';
+import { commentRanges, paragraphsIn, type Comment, type WordDocument } from '@golemdocs/docx';
+import { toVisible, type PageLayout } from '@golemdocs/layout';
+import { formatDate, noteRect, type Annotation } from '@golemdocs/pdf';
 
 /** Sticky-note yellow. */
 const NOTE_COLOR: [number, number, number] = [1, 0.85, 0.2];

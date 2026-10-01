@@ -2,8 +2,8 @@
 // family's font written into the file, which needs its font file. Files are fetched only when an edit asks for one, and kept;
 // applying edits is synchronous, so what they need is loaded before (`ensure`) and looked up by `fontFile`.
 
-import type { FontSet } from '@word/layout';
-import { isStandardName, type ApplyOptions, type PdfEdit } from '@word/pdf';
+import type { FontSet } from '@golemdocs/layout';
+import { isStandardName, type ApplyOptions, type PdfEdit } from '@golemdocs/pdf';
 
 export class EditFonts {
   private readonly bytes = new Map<string, Uint8Array>();

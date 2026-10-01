@@ -1,5 +1,5 @@
 // Format ▸ Columns: how many columns of text, how far apart, a line between them, and where it
-// applies. A modal dialog like the others; the editor sets them (see @word/editor setColumns).
+// applies. A modal dialog like the others; the editor sets them (see @golemdocs/editor setColumns).
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';

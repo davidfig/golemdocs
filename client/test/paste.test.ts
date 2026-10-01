@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphText, paragraphsIn, WordDocument, type Hyperlink, type Paragraph } from '@word/docx';
+import { paragraphText, paragraphsIn, WordDocument, type Hyperlink, type Paragraph } from '@golemdocs/docx';
 import { htmlToPaste } from '../src/formats/paste.ts';
 
 const texts = (blocks: { kind: string }[]) => paragraphsIn(blocks as Paragraph[]).map(paragraphText);

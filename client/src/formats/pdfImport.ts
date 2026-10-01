@@ -1,4 +1,4 @@
-// PDF -> editable document: the page-structure recovery of @word/pdf (reflow), expressed in the
+// PDF -> editable document: the page-structure recovery of @golemdocs/pdf (reflow), expressed in the
 // DOCX model so the result is an ordinary document (styles, real lists, page setup).
 
 import {
@@ -13,9 +13,9 @@ import {
   type Run,
   type RunProperties,
   type Style,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { placedFrom, type Placed } from './pdfPlaced.ts';
-import { PdfDocument, analyzeDocument, type PdfEdit, type ReflowBlock, type ReflowIndent, type ReflowSpacing, type ReflowListFormat, type ReflowMargins, type ReflowRun } from '@word/pdf';
+import { PdfDocument, analyzeDocument, type PdfEdit, type ReflowBlock, type ReflowIndent, type ReflowSpacing, type ReflowListFormat, type ReflowMargins, type ReflowRun } from '@golemdocs/pdf';
 
 export interface PdfImportOptions {
   /** User or owner password for encrypted PDFs. */

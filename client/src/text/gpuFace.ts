@@ -1,4 +1,4 @@
-import type { FaceDescriptor } from '@word/layout';
+import type { FaceDescriptor } from '@golemdocs/layout';
 import { GLYPH_TABLE_WIDTH, glyphTableHeight, padGlyphTable } from './glyphTable.ts';
 
 let nextId = 0;

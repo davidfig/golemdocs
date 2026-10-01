@@ -1,5 +1,5 @@
 // File ▸ Page Setup: the margins, paper and orientation of the pages, and where the change applies.
-// A modal dialog with two tabs like the others' style; the editor sets them (see @word/editor setPage).
+// A modal dialog with two tabs like the others' style; the editor sets them (see @golemdocs/editor setPage).
 // Sizes are shown in inches, or in centimetres in every language but English.
 
 import { getLocale, t } from '../i18n/index.ts';

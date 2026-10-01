@@ -1,5 +1,5 @@
 // Insert ▸ Table: how many columns and rows. A modal dialog like the others; the editor makes the
-// table (see @word/editor).
+// table (see @golemdocs/editor).
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';

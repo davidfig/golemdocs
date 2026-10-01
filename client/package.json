@@ -1,5 +1,5 @@
 {
-  "name": "@word/client",
+  "name": "@golemdocs/client",
   "private": true,
   "version": "0.3.1",
   "type": "module",
@@ -12,12 +12,12 @@
     "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/setup.ts --test --test-force-exit --test-timeout=60000 test/*.test.ts"
   },
   "dependencies": {
-    "@word/docx": "workspace:*",
-    "@word/editor": "workspace:*",
-    "@word/layout": "workspace:*",
-    "@word/odt": "workspace:*",
-    "@word/ops": "workspace:*",
-    "@word/pdf": "workspace:*"
+    "@golemdocs/docx": "workspace:*",
+    "@golemdocs/editor": "workspace:*",
+    "@golemdocs/layout": "workspace:*",
+    "@golemdocs/odt": "workspace:*",
+    "@golemdocs/ops": "workspace:*",
+    "@golemdocs/pdf": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

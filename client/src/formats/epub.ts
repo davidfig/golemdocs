@@ -2,8 +2,8 @@
 // the chapters, in reading order, into one document (images stay placeholders, as for HTML).
 // Writing makes a single-chapter EPUB 3 of the document's HTML.
 
-import { ZipArchive, parseXml, writeZip } from '@word/docx';
-import type { XmlElement } from '@word/docx';
+import { ZipArchive, parseXml, writeZip } from '@golemdocs/docx';
+import type { XmlElement } from '@golemdocs/docx';
 import { t } from '../i18n/index.ts';
 
 const local = (name: string): string => name.slice(name.indexOf(':') + 1);

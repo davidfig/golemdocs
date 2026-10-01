@@ -4,7 +4,7 @@
 //   2. applies the server's D1 migrations (safe to repeat) to the database it will use
 //   3. runs the client (Vite, :5173) and the server (wrangler dev, :3001) with prefixed output
 //
-// The server uses the *dev* Cloudflare resources (env.dev in server/wrangler.jsonc) once they are
+// The server uses the *dev* Cloudflare resources (env.dev in server/wrangler.jsonc, with your ids from server/wrangler.local.json) once they are
 // set up, and never production's. Until then, or with `pnpm dev --local`, it runs entirely on this
 // machine (wrangler's simulated D1, R2 and Durable Objects): cloud documents, sharing and
 // multiplayer all work offline.
@@ -15,6 +15,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeWranglerConfig } from './wrangler-config.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -25,11 +26,11 @@ if (!existsSync(vars)) {
   console.log('[dev] created server/.dev.vars (add provider keys there to try real sign-in)');
 }
 
-/** Whether env.dev in wrangler.jsonc has real resource ids instead of the REPLACE_… placeholders. */
+/** Whether env.dev has real resource ids (from server/wrangler.local.json) instead of the REPLACE_… placeholders. */
 function devCloudConfigured(): boolean {
   try {
     // JSONC with whole-line comments only (which is how the file is written).
-    const text = readFileSync(path.join(root, 'server/wrangler.jsonc'), 'utf8')
+    const text = readFileSync(writeWranglerConfig(), 'utf8')
       .split('\n')
       .filter((line) => !line.trim().startsWith('//'))
       .join('\n');
@@ -43,7 +44,7 @@ function devCloudConfigured(): boolean {
 const forceLocal = process.argv.includes('--local');
 const cloud = !forceLocal && devCloudConfigured();
 if (cloud) {
-  console.log('[dev] using the dev Cloudflare resources (word-directory-dev, word-files-dev); production is never touched');
+  console.log('[dev] using the dev Cloudflare resources (golemdocs-directory-dev, golemdocs-files-dev); production is never touched');
   if (!/^CF_API_TOKEN=.+/m.test(readFileSync(vars, 'utf8'))) {
     console.log('[dev] note: CF_API_TOKEN is empty in server/.dev.vars, so cloud documents will say "not configured"');
   }
@@ -52,13 +53,13 @@ if (cloud) {
 } else {
   console.log(
     '[dev] the dev Cloudflare resources aren\'t set up yet, so this run is fully local (simulated on this machine). To use the real dev resources instead:\n' +
-      '[dev]   1. pnpm --filter @word/server cf:setup:dev\n' +
-      '[dev]   2. paste the database id and your account id into env.dev in server/wrangler.jsonc\n' +
+      '[dev]   1. pnpm --filter @golemdocs/server cf:setup:dev\n' +
+      '[dev]   2. put the database id and your account id in server/wrangler.local.json (copy wrangler.local.example.json)\n' +
       '[dev]   3. wrangler login, and set CF_API_TOKEN in server/.dev.vars (see the README)',
   );
 }
 
-const migrate = spawnSync(pnpm, ['--filter', '@word/server', cloud ? 'cf:migrate:dev' : 'cf:migrate:local'], { cwd: root, encoding: 'utf8' });
+const migrate = spawnSync(pnpm, ['--filter', '@golemdocs/server', cloud ? 'cf:migrate:dev' : 'cf:migrate:local'], { cwd: root, encoding: 'utf8' });
 if (migrate.status !== 0) {
   process.stderr.write(`${migrate.stdout}${migrate.stderr}`);
   console.error(`[dev] applying ${cloud ? 'dev' : 'local'} database migrations failed${cloud ? ' (not logged in to Cloudflare or offline? try `wrangler login`, or `pnpm dev --local`)' : ''}`);
@@ -121,5 +122,5 @@ process.on('SIGINT', () => stop(0));
 process.on('SIGTERM', () => stop(0));
 
 console.log('[dev] client http://localhost:5173  ·  server http://localhost:3001 (reached through the client at /api)  ·  Ctrl-C stops both');
-run('server', ['--filter', '@word/server', cloud ? 'dev' : 'dev:local']);
-run('client', ['--filter', '@word/client', 'dev']);
+run('server', ['--filter', '@golemdocs/server', cloud ? 'dev' : 'dev:local']);
+run('client', ['--filter', '@golemdocs/client', 'dev']);

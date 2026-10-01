@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import type { Table } from '@word/docx';
+import type { Table } from '@golemdocs/docx';
 import { docToDocument } from '../src/formats/docImport.ts';
 import { documentToOutline } from '../src/formats/outline.ts';
 import type { Node } from '../src/formats/outline.ts';

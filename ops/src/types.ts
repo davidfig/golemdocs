@@ -1,12 +1,12 @@
 // Operations: the edits a document goes through, as plain JSON.
 //
 // Paragraphs are addressed by id (w14:paraId, kept in the file) and positions by model offset
-// (see @word/docx edit/text.ts), never by object references or layout, so an operation means
+// (see @golemdocs/docx edit/text.ts), never by object references or layout, so an operation means
 // the same thing on every client, on a server, and after a save and reload. Every operation
 // applied yields its inverse (for undo and for rebasing) and a position map (to move
 // selections, pending operations and undo history through it).
 
-import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, DocumentProperties, ParagraphProperties, RunContent, RunProperties, SectionProperties, Style, TableCell, TableCellProperties, TableRow } from '@word/docx';
+import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, DocumentProperties, ParagraphProperties, RunContent, RunProperties, SectionProperties, Style, TableCell, TableCellProperties, TableRow } from '@golemdocs/docx';
 
 /** Changes to run formatting, per property: a value to set, or null to remove it. */
 export type RunFormat = { [K in keyof RunProperties]?: RunProperties[K] | null };
@@ -18,7 +18,7 @@ export interface Pos {
 }
 
 export type Operation =
-  /** Text formatted like the text before it (see @word/docx insertText). */
+  /** Text formatted like the text before it (see @golemdocs/docx insertText). */
   | { type: 'insertText'; paragraph: string; offset: number; text: string }
   /** One non-text run item (tab, line break), formatted like text there. */
   | { type: 'insertItem'; paragraph: string; offset: number; item: RunContent }

@@ -1,4 +1,4 @@
-import { GLYPH_INSTANCE_BYTES as INSTANCE_BYTES } from '@word/layout';
+import { GLYPH_INSTANCE_BYTES as INSTANCE_BYTES } from '@golemdocs/layout';
 import type { GpuFace } from './gpuFace.ts';
 
 // Glyph instances in layout's GLYPH_INSTANCE_BYTES format (20 bytes): x, y, size float32;

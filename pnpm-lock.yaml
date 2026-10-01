@@ -26,22 +26,22 @@ importers:
 
   client:
     dependencies:
-      '@word/docx':
+      '@golemdocs/docx':
         specifier: workspace:*
         version: link:../docx
-      '@word/editor':
+      '@golemdocs/editor':
         specifier: workspace:*
         version: link:../editor
-      '@word/layout':
+      '@golemdocs/layout':
         specifier: workspace:*
         version: link:../layout
-      '@word/odt':
+      '@golemdocs/odt':
         specifier: workspace:*
         version: link:../odt
-      '@word/ops':
+      '@golemdocs/ops':
         specifier: workspace:*
         version: link:../ops
-      '@word/pdf':
+      '@golemdocs/pdf':
         specifier: workspace:*
         version: link:../pdf
     devDependencies:
@@ -66,13 +66,13 @@ importers:
 
   editor:
     dependencies:
-      '@word/docx':
+      '@golemdocs/docx':
         specifier: workspace:*
         version: link:../docx
-      '@word/layout':
+      '@golemdocs/layout':
         specifier: workspace:*
         version: link:../layout
-      '@word/ops':
+      '@golemdocs/ops':
         specifier: workspace:*
         version: link:../ops
     devDependencies:
@@ -88,7 +88,7 @@ importers:
 
   layout:
     dependencies:
-      '@word/docx':
+      '@golemdocs/docx':
         specifier: workspace:*
         version: link:../docx
     devDependencies:
@@ -104,7 +104,7 @@ importers:
 
   odt:
     dependencies:
-      '@word/docx':
+      '@golemdocs/docx':
         specifier: workspace:*
         version: link:../docx
     devDependencies:
@@ -120,7 +120,7 @@ importers:
 
   ops:
     dependencies:
-      '@word/docx':
+      '@golemdocs/docx':
         specifier: workspace:*
         version: link:../docx
 
@@ -138,10 +138,10 @@ importers:
 
   server:
     dependencies:
-      '@word/docx':
+      '@golemdocs/docx':
         specifier: workspace:*
         version: link:../docx
-      '@word/ops':
+      '@golemdocs/ops':
         specifier: workspace:*
         version: link:../ops
     devDependencies:

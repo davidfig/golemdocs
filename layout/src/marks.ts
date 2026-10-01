@@ -3,8 +3,8 @@
 // font at layout time, as glyphs on the page (the renderer doesn't know they are there), and
 // change nothing about how the text is laid out. Turning them on or off lays the pages out again.
 
-import type { Inline, Paragraph } from '@word/docx';
-import { OBJECT_CHAR } from '@word/docx';
+import type { Inline, Paragraph } from '@golemdocs/docx';
+import { OBJECT_CHAR } from '@golemdocs/docx';
 import { packColor, type PageLayout } from './display.ts';
 import { modelOfChar } from './offsets.ts';
 import type { LineLayout, ParagraphLayout } from './paragraph.ts';

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ZipArchive } from '@word/docx';
+import { ZipArchive } from '@golemdocs/docx';
 import { archiveNames, zipDocuments } from '../src/storage/archive.ts';
 
 test('colliding names get a counter before the extension', () => {

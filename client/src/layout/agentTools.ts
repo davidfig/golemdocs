@@ -6,7 +6,7 @@
 // Each tool answers with text for the model: what it found or did, or why it couldn't. Paragraphs
 // are numbered from 0 in document order, as `Editor.paragraphs()` has them.
 
-import { OBJECT_CHAR, paragraphLength, paragraphText, type Paragraph } from '@word/docx';
+import { OBJECT_CHAR, paragraphLength, paragraphText, type Paragraph } from '@golemdocs/docx';
 import type { FormatState, Mark } from '../ui/actions.ts';
 import type { WireCommand } from './protocol.ts';
 

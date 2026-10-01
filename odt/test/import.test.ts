@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commentRanges, paragraphsIn, paragraphText, StyleResolver, type Hyperlink, type Paragraph, type Run, type Table, type TableCell, type TableRow } from '@word/docx';
+import { commentRanges, paragraphsIn, paragraphText, StyleResolver, type Hyperlink, type Paragraph, type Run, type Table, type TableCell, type TableRow } from '@golemdocs/docx';
 import { readOdt } from '../src/index.ts';
 import { libreOfficeFixture, minimalContent, odtPackage } from './fixtures.ts';
 

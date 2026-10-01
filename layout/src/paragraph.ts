@@ -1,7 +1,7 @@
 // Paragraph layout: turns one paragraph into lines of positioned glyphs for a given width.
 // Pure and independent of pagination, so edits can re-lay out just the changed paragraph.
 
-import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@word/docx';
+import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@golemdocs/docx';
 import { parseHexColor } from './display.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import type { ResolvedFont } from './fonts/fontSet.ts';
@@ -12,7 +12,7 @@ import { layerKey } from './context.ts';
 import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
 import { emitMarks, formattingMarksOn } from './marks.ts';
 import type { MathLayout } from './math/layout.ts';
-import type { MathEquation } from '@word/docx';
+import type { MathEquation } from '@golemdocs/docx';
 
 const SPACE = 0x20;
 const twips = (v: number | undefined) => (v ?? 0) / 20;
@@ -226,7 +226,7 @@ function layoutParagraphUncached(
   ctx: LayoutContext,
   width: number,
   props: ParagraphProperties,
-  label: import('@word/docx').ListLabel | undefined,
+  label: import('@golemdocs/docx').ListLabel | undefined,
 ): ParagraphLayout {
   const resolver = ctx.resolver;
   const collector = new TextCollector(ctx, props.style);

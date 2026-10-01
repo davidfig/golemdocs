@@ -39,7 +39,7 @@
 // a generated <style data-word-styles> block for the document's paragraph styles, which the importer
 // reads back into styles, so pages the app wrote round-trip. Nothing here throws on odd input.
 
-import { commentEnd, commentReference, commentStart, StyleResolver, WordDocument, fromMathML, isMathInline, mathInline, paragraphText, readMathInline, toMathML, type MathMLElement } from '@word/docx';
+import { commentEnd, commentReference, commentStart, StyleResolver, WordDocument, fromMathML, isMathInline, mathInline, paragraphText, readMathInline, toMathML, type MathMLElement } from '@golemdocs/docx';
 import { decodeDataUri, sniffImage, toDataUri } from './images.ts';
 import type { ImageData } from './images.ts';
 import type {
@@ -57,8 +57,8 @@ import type {
   TableCell,
   TableCellProperties,
   TableRow,
-} from '@word/docx';
-import type { Comment } from '@word/docx';
+} from '@golemdocs/docx';
+import type { Comment } from '@golemdocs/docx';
 import { commentMarker, RangeTracker } from './commentRanges.ts';
 import { MONO_FONTS, styleFor } from './markdownStyles.ts';
 import { t } from '../i18n/index.ts';

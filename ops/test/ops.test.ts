@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { findContainer, paragraphLength, paragraphsIn, WordDocument, type Paragraph } from '@word/docx';
+import { findContainer, paragraphLength, paragraphsIn, WordDocument, type Paragraph } from '@golemdocs/docx';
 import { CollabServer, Engine, Mapping, Replica, END, mapOperation, type ClientMessage, type Operation, type ServerMessage } from '../src/index.ts';
 
 const CORPUS = path.resolve(import.meta.dirname, '../../.cache/docx-corpus');

@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { WordDocument } from '@word/docx';
+import { WordDocument } from '@golemdocs/docx';
 import { FontSet, layoutDocument } from '../src/index.ts';
 
 const fontDir = path.resolve(import.meta.dirname, '../../client/public/fonts');

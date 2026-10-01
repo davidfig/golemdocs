@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commentRanges, insertText, paragraphsIn, paragraphText, WordDocument } from '@word/docx';
+import { commentRanges, insertText, paragraphsIn, paragraphText, WordDocument } from '@golemdocs/docx';
 import { readOdt, writeOdt } from '../src/index.ts';
 import { minimalContent, odtPackage } from './fixtures.ts';
 import { find, textOf, validateOdt } from './validate.ts';

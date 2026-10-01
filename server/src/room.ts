@@ -5,7 +5,7 @@
 // The Worker authenticates the request and works out the user's role before forwarding it here, so
 // the object trusts the x-* headers (it can only be reached through the Worker's binding).
 
-import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Transaction } from '@word/ops';
+import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Transaction } from '@golemdocs/ops';
 import type { DurableObjectState, Env, WebSocketHandle } from './cf.ts';
 import { DEFAULT_TIMINGS, INITIAL_META, RoomCore, type Peer, type PeerState, type RoomFiles, type RoomMeta, type RoomStore } from './roomCore.ts';
 import { userDb } from './userDb.ts';

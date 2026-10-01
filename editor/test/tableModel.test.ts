@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, type Paragraph, type Table, type TableCell, type TableRow } from '@word/docx';
+import { paragraphsIn, paragraphText, type Paragraph, type Table, type TableCell, type TableRow } from '@golemdocs/docx';
 import { mergeCells, splitCell } from '../src/tableModel.ts';
 
 let counter = 0x100;

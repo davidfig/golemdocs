@@ -2,7 +2,7 @@
 // whatever prefixes a producer chose to the usual ones), lengths, style-name encoding, small
 // tree helpers and base64 for binary data kept in the JSON extension.
 
-import { serializeXml, type XmlElement, type XmlNode } from '@word/docx';
+import { serializeXml, type XmlElement, type XmlNode } from '@golemdocs/docx';
 
 export const MIME_TEXT = 'application/vnd.oasis.opendocument.text';
 export const MIME_TEXT_TEMPLATE = 'application/vnd.oasis.opendocument.text-template';

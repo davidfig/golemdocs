@@ -15,7 +15,7 @@ import { parseXml } from '../src/xml/xml.ts';
 
 const files = corpusFiles();
 
-test('every readable corpus document round-trips without changes', files ? {} : { skip: 'run `pnpm --filter @word/docx corpus` first' }, async () => {
+test('every readable corpus document round-trips without changes', files ? {} : { skip: 'run `pnpm --filter @golemdocs/docx corpus` first' }, async () => {
   const failures: string[] = [];
   let readable = 0;
   for (const file of files ?? []) {

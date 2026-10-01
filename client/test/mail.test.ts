@@ -2,8 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText } from '@word/docx';
-import type { Drawing, Paragraph } from '@word/docx';
+import { paragraphsIn, paragraphText } from '@golemdocs/docx';
+import type { Drawing, Paragraph } from '@golemdocs/docx';
 import { eml } from '../src/formats/handlers/webArchives.ts';
 import ipynb from '../src/formats/handlers/ipynb.ts';
 import { decodeBody, decodeWords, headerParam, param } from '../src/formats/mime.ts';

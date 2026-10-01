@@ -2,7 +2,7 @@
 // A WebGL renderer draws these; a PDF exporter could write them; a PDF importer could
 // produce them. Coordinates are in points, page-relative, y down.
 
-import type { Paragraph } from '@word/docx';
+import type { Paragraph } from '@golemdocs/docx';
 import type { PageStart } from './document.ts';
 import type { SourceSpan } from './offsets.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';

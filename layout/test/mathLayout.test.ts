@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { parseLatex } from '@word/docx';
+import { parseLatex } from '@golemdocs/docx';
 import { FontSet } from '../src/index.ts';
 import { mathChar } from '../src/math/chars.ts';
 import { layoutMath, type MathLayout } from '../src/math/layout.ts';

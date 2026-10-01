@@ -47,7 +47,7 @@ export default defineConfig({
       stdout: 'ignore',
     },
     {
-      command: `pnpm --filter @word/client exec vite --port ${CLIENT_PORT} --strictPort`,
+      command: `pnpm --filter @golemdocs/client exec vite --port ${CLIENT_PORT} --strictPort`,
       url: `http://localhost:${CLIENT_PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

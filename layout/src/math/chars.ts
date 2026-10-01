@@ -2,9 +2,9 @@
 // Alphanumeric Symbols block holds italic, bold, script and the other alphabets as separate code
 // points), and which TeX atom class a character belongs to, which decides the space around it.
 
-import type { MathStyle } from '@word/docx';
+import type { MathStyle } from '@golemdocs/docx';
 
-export { classOf, type AtomClass } from '@word/docx';
+export { classOf, type AtomClass } from '@golemdocs/docx';
 interface Alphabet {
   upper: number;
   lower: number;

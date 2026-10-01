@@ -1,4 +1,4 @@
-import type { FormattingLayer, ListCounter, RunProperties, StyleResolver, WordDocument } from '@word/docx';
+import type { FormattingLayer, ListCounter, RunProperties, StyleResolver, WordDocument } from '@golemdocs/docx';
 import { packColor, parseHexColor } from './display.ts';
 import { langOfFontName, langOfTag, type CjkLang } from './fonts/cjk.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
@@ -28,7 +28,7 @@ export interface LayoutContext {
   /** Fill behind the text (cell shading), for resolving "auto" text color. */
   background?: number;
   /** Last layout per paragraph (see layoutParagraph); owned by a LayoutSession. */
-  paragraphCache?: WeakMap<import('@word/docx').Paragraph, import('./paragraph.ts').CachedParagraph>;
+  paragraphCache?: WeakMap<import('@golemdocs/docx').Paragraph, import('./paragraph.ts').CachedParagraph>;
 }
 
 const layerIds = new WeakMap<object, number>();

@@ -3,8 +3,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphText } from '@word/docx';
-import type { Paragraph, Table } from '@word/docx';
+import { paragraphText } from '@golemdocs/docx';
+import type { Paragraph, Table } from '@golemdocs/docx';
 import { adoc, mediawiki, org, rst, tex, textile } from '../src/formats/handlers/markup.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
 import { documentToOutline, outlineToDocument } from '../src/formats/outline.ts';

@@ -39,7 +39,7 @@ import {
   type TableRow,
   type XmlElement,
   type XmlNode,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import type {
   OdtBookmark,
   OdtExtension,

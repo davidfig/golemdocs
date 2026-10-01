@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commentRanges, paragraphsIn, plainText, type Paragraph, type Run } from '@word/docx';
+import { commentRanges, paragraphsIn, plainText, type Paragraph, type Run } from '@golemdocs/docx';
 import { PageDrawing, PdfDocument, noteRect, quadsFor, type Annotation } from '../../pdf/src/index.ts';
 import { markupToDocument } from '../src/formats/pdfMarkup.ts';
 import { pdfToDocument } from '../src/formats/pdfImport.ts';

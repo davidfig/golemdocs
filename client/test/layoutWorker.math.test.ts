@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { isMathInline, mathInline, parseLatex, readMathInline, WordDocument, type Paragraph } from '@word/docx';
+import { isMathInline, mathInline, parseLatex, readMathInline, WordDocument, type Paragraph } from '@golemdocs/docx';
 import { command, convert, openBlank, posted, run, startWorker, stopWorker, waitFor } from './workerHarness.ts';
 import type { FromWorker } from '../src/layout/protocol.ts';
 

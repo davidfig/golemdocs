@@ -7,8 +7,8 @@
 // {\*\annotation{\*\atnref N}{\*\atndate DTTM}{\*\atnparent P}...text}. A reply names its parent with
 // \atnparent. There is no RTF form of "resolved", so that is not kept.
 
-import { isMathInline, readMathInline, StyleResolver, toLatex } from '@word/docx';
-import type { Block, Comment, Inline, NumberingLevel, Paragraph, Run, RunContent, Table, TableCell, WordDocument } from '@word/docx';
+import { isMathInline, readMathInline, StyleResolver, toLatex } from '@golemdocs/docx';
+import type { Block, Comment, Inline, NumberingLevel, Paragraph, Run, RunContent, Table, TableCell, WordDocument } from '@golemdocs/docx';
 import { HIGHLIGHTS } from './rtfImport.ts';
 
 /** An ISO 8601 date as an RTF DTTM (minute, hour, day, month, year since 1900 and weekday, packed in 32 bits), in UTC. */

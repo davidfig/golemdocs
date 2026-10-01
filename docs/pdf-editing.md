@@ -9,7 +9,7 @@ Nothing is written into the file until it is exported. What has been done is a l
 
 ## How an edit is applied
 
-`@word/pdf` (`pdf/src/edit/`) turns the list into pages:
+`@golemdocs/pdf` (`pdf/src/edit/`) turns the list into pages:
 
 | File | What it does |
 |---|---|
@@ -53,7 +53,7 @@ The app draws with glyph atlases (images), which a PDF can't use. So next to eac
 ## Testing
 
 ```sh
-pnpm --filter @word/pdf test                                     # includes edit.test.ts and edit-corpus.test.ts
-pnpm --filter @word/client test                                  # includes pdfAnnotator.test.ts
-EDIT_CORPUS=.cache/pdfjs/test/pdfs pnpm --filter @word/pdf test  # the same edits on every file of a corpus (see fetch-corpus)
+pnpm --filter @golemdocs/pdf test                                     # includes edit.test.ts and edit-corpus.test.ts
+pnpm --filter @golemdocs/client test                                  # includes pdfAnnotator.test.ts
+EDIT_CORPUS=.cache/pdfjs/test/pdfs pnpm --filter @golemdocs/pdf test  # the same edits on every file of a corpus (see fetch-corpus)
 ```

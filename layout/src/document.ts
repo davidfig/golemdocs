@@ -19,7 +19,7 @@ import {
   type SectionProperties,
   type Table,
   type WordDocument,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { packColor, PageLayout, type LineRecord } from './display.ts';
 import { FALLBACK_FAMILY, type FontSet } from './fonts/fontSet.ts';
 import type { ManifestFace } from './fonts/fontTypes.ts';

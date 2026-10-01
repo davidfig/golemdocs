@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, WordDocument } from '@word/docx';
-import { Engine } from '@word/ops';
+import { paragraphsIn, WordDocument } from '@golemdocs/docx';
+import { Engine } from '@golemdocs/ops';
 import { applyLog } from '../src/snapshot.ts';
 
 test('applying a log to a document gives the same text as the clients would see', async () => {

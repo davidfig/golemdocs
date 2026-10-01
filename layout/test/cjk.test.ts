@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { WordDocument, type Paragraph, type Run } from '@word/docx';
+import { WordDocument, type Paragraph, type Run } from '@golemdocs/docx';
 import { FontSet, isCjk, langOfFontName, langOfTag, layoutDocument, LayoutSession, noLineEnd, noLineStart, type PageLayout } from '../src/index.ts';
 
 // A synthetic manifest: a Latin family and CJK pages with a few glyphs each, so nothing here needs the real atlases.

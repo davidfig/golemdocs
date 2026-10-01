@@ -36,7 +36,7 @@
 //
 // Nothing here throws on odd input: unknown syntax degrades to literal text.
 
-import { commentEnd, commentReference, commentStart, isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
+import { commentEnd, commentReference, commentStart, isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@golemdocs/docx';
 import type {
   Block,
   Comment,
@@ -52,7 +52,7 @@ import type {
   Table,
   TableCell,
   TableRow,
-} from '@word/docx';
+} from '@golemdocs/docx';
 
 import { commentMarker, commentThreads, RangeTracker } from './commentRanges.ts';
 import { MONO_FONTS, styleFor } from './markdownStyles.ts';

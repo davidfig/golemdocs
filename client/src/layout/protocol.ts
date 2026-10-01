@@ -3,11 +3,11 @@
 // back encoded pages and selection geometry. Remote edits (multiplayer) will arrive in the
 // worker the same way local ones do.
 
-import type { DocumentProperties, MathEquation } from '@word/docx';
-import type { Command } from '@word/editor';
-import type { Pointer, RoomRole } from '@word/ops';
-import type { AnnotationKind, FormField } from '@word/pdf';
-import type { EncodedPage, FaceDescriptor } from '@word/layout';
+import type { DocumentProperties, MathEquation } from '@golemdocs/docx';
+import type { Command } from '@golemdocs/editor';
+import type { Pointer, RoomRole } from '@golemdocs/ops';
+import type { AnnotationKind, FormField } from '@golemdocs/pdf';
+import type { EncodedPage, FaceDescriptor } from '@golemdocs/layout';
 import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';

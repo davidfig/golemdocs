@@ -1,7 +1,7 @@
 // Hand-written ODT fixtures shaped like LibreOffice Writer output (there are no .odt files in
 // the repo), zipped with the docx package's writer.
 
-import { writeZip } from '@word/docx';
+import { writeZip } from '@golemdocs/docx';
 
 const NS = [
   'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"',

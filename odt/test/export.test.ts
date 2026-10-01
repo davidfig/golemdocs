@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, WordDocument, type Block, type Paragraph, type Run } from '@word/docx';
+import { paragraphsIn, paragraphText, WordDocument, type Block, type Paragraph, type Run } from '@golemdocs/docx';
 import { readOdt, writeOdt } from '../src/index.ts';
 import { readTextProperties, writeBorder, writeTextProperties } from '../src/properties.ts';
 import { libreOfficeFixture, PNG_1X1 } from './fixtures.ts';

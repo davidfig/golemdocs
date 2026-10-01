@@ -6,7 +6,7 @@
 // fields other than links) is skipped, keeping the text of a field's result. Annotations (Word's
 // comments) become comments in the shared model, with their range markers in the text.
 
-import { WordDocument, commentEnd, commentReference, commentRanges, commentStart, insertInlines, paragraphsIn } from '@word/docx';
+import { WordDocument, commentEnd, commentReference, commentRanges, commentStart, insertInlines, paragraphsIn } from '@golemdocs/docx';
 import type {
   Block,
   Comment,
@@ -19,7 +19,7 @@ import type {
   Table,
   TableCell,
   TableRow,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { styleFor } from './markdownStyles.ts';
 import { dttmToIso } from './commentRanges.ts';
 import { t } from '../i18n/index.ts';

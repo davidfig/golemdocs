@@ -1,9 +1,9 @@
 // Property tests: randomized edit sequences over documents, replayable by seed
-// (`SEED=n pnpm --filter @word/ops test`; FUZZ_SEEDS=n for n times as many seeds).
+// (`SEED=n pnpm --filter @golemdocs/ops test`; FUZZ_SEEDS=n for n times as many seeds).
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { findContainer, normalizeInlines, paragraphLength, paragraphsIn, WordDocument, type Block, type Paragraph, type TableCell, type TableRow } from '@word/docx';
+import { findContainer, normalizeInlines, paragraphLength, paragraphsIn, WordDocument, type Block, type Paragraph, type TableCell, type TableRow } from '@golemdocs/docx';
 import { CollabServer, Engine, Mapping, Replica, mapOperation, type ClientMessage, type Operation, type Pos, type ServerMessage } from '../src/index.ts';
 import { forSeeds, randomText, rng, type Rand } from './fuzz.ts';
 

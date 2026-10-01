@@ -43,7 +43,7 @@ import {
   type WordDocument,
   type XmlElement,
   type XmlNode,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import type { OdtExtension, OdtFragment, OdtImageFrame, OdtObject, OdtProperties } from './extension.ts';
 import { odfStyleName } from './names.ts';
 import {
@@ -1144,7 +1144,7 @@ function guessType(path: string): string {
 type Piece = { link: Hyperlink | null; style: string | null; node: XmlNode; spaces?: number };
 
 /**
- * Writes one paragraph's inline content, keeping model offsets (see @word/docx edit/text.ts)
+ * Writes one paragraph's inline content, keeping model offsets (see @golemdocs/docx edit/text.ts)
  * so extension content lands at the right place, and ODF's white-space rules: a space after
  * a space (or at the start) is written as text:s so it isn't collapsed on reading.
  */

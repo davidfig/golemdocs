@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { FontSet } from '@word/layout';
+import { FontSet } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument, applyAnnotations, quadBoxes, readAnnotations } from '../../pdf/src/index.ts';
 import { openPdfView } from '../src/formats/pdfPages.ts';
 import { PdfAnnotator } from '../src/layout/pdfAnnotator.ts';

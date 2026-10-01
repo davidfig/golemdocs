@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { mathInline, parseLatex, WordDocument, type Paragraph } from '@word/docx';
+import { mathInline, parseLatex, WordDocument, type Paragraph } from '@golemdocs/docx';
 import { FontSet, layoutDocument, toModel, type PageLayout } from '../src/index.ts';
 
 // Uses the generated fonts in client/public/fonts (run `pnpm fonts` first).

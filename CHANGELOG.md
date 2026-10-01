@@ -10,6 +10,9 @@
 - A folder's icon now shows small thumbnails of the first documents inside it.
 - The form and PDF editing tools panel can be dragged by its top edge to move it out of the way.
 
+### Fixed
+- Hovering over a toolbar button no longer makes its outline flicker.
+
 ## 0.4.0 - 2026-10-01
 
 ### Added

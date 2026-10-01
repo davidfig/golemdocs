@@ -1,4 +1,4 @@
-# What’s New
+# What’s New in Golem Docs
 
 ## 0.4.1 - Unreleased
 

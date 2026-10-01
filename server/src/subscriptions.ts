@@ -37,8 +37,8 @@ export interface Subscription {
   cancelAtPeriodEnd: boolean;
 }
 
-async function hmacBase64(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+async function hmacBase64(keyBytes: Uint8Array, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message)));
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -46,9 +46,23 @@ async function hmacBase64(secret: string, message: string): Promise<string> {
 }
 
 /**
+ * The keys a Polar signing secret (`polar_whs_<base64>`) can mean. Polar signs with the base64-decoded
+ * part after the prefix, as the Standard Webhooks scheme does, which a real webhook confirmed; the
+ * secret's own UTF-8 bytes are also tried. Both come from the one secret, so trying either is no weaker.
+ */
+function signingKeys(secret: string): Uint8Array[] {
+  const keys = [new TextEncoder().encode(secret)];
+  try {
+    keys.unshift(Uint8Array.from(atob(secret.replace(/^[a-z]+_[a-z]+_|^whsec_/, '')), (c) => c.charCodeAt(0)));
+  } catch {
+    // Not base64: only the plain bytes apply.
+  }
+  return keys;
+}
+
+/**
  * Whether the request really came from Polar. It signs `<id>.<timestamp>.<body>` with HMAC-SHA256
  * and sends `v1,<base64>` (possibly several, space-separated, while a secret is being rotated).
- * Polar's docs and SDK use the secret string's own UTF-8 bytes as the key, not a decoded form.
  */
 export async function verifyPolarSignature(secret: string, headers: Headers, body: string, now = Date.now()): Promise<boolean> {
   const id = headers.get('webhook-id');
@@ -57,11 +71,16 @@ export async function verifyPolarSignature(secret: string, headers: Headers, bod
   if (!id || !timestamp || !signatures) return false;
   const seconds = Number(timestamp);
   if (!Number.isFinite(seconds) || Math.abs(now - seconds * 1000) > TOLERANCE_MS) return false;
-  const expected = await hmacBase64(secret, `${id}.${timestamp}.${body}`);
-  return signatures.split(' ').some((entry) => {
+  const message = `${id}.${timestamp}.${body}`;
+  const sent = signatures.split(' ').flatMap((entry) => {
     const [version, signature] = entry.split(',');
-    return version === 'v1' && !!signature && constantTimeEqual(signature, expected);
+    return version === 'v1' && signature ? [signature] : [];
   });
+  for (const key of signingKeys(secret)) {
+    const expected = await hmacBase64(key, message);
+    if (sent.some((signature) => constantTimeEqual(signature, expected))) return true;
+  }
+  return false;
 }
 
 const ms = (iso: string | null | undefined) => {
@@ -96,7 +115,12 @@ export async function recordPolarEvent(env: Env, event: { type?: string; data?: 
 export async function handlePolarWebhook(request: Request, env: Env): Promise<Response> {
   if (!env.POLAR_WEBHOOK_SECRET) throw new HttpError(503, 'payments are not configured');
   const body = await request.text();
-  if (!(await verifyPolarSignature(env.POLAR_WEBHOOK_SECRET, request.headers, body))) throw new HttpError(401, 'bad signature');
+  if (!(await verifyPolarSignature(env.POLAR_WEBHOOK_SECRET, request.headers, body))) {
+    // Never the secret or the signatures themselves: only what tells a stale timestamp from a wrong secret.
+    const seconds = Number(request.headers.get('webhook-timestamp'));
+    console.error('polar webhook refused', { ageSeconds: Number.isFinite(seconds) ? Math.round(Date.now() / 1000 - seconds) : null, bodyLength: body.length });
+    throw new HttpError(401, 'bad signature');
+  }
   let event: { type?: string; data?: PolarSubscription };
   try {
     event = JSON.parse(body);

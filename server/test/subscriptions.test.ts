@@ -5,7 +5,9 @@ import { afterEach, beforeEach, test } from 'node:test';
 import { verifyPolarSignature } from '../src/subscriptions.ts';
 import { world, type World } from './harness.ts';
 
-const SECRET = 'polar_whs_test';
+// Polar's secrets are `polar_whs_` plus base64, and it signs with the decoded bytes.
+const SECRET = `polar_whs_${btoa('0123456789abcdef0123456789abcdef')}`;
+const keyOf = (secret: string) => (secret === SECRET ? Uint8Array.from(atob(secret.slice(10)), (c) => c.charCodeAt(0)) : new TextEncoder().encode(secret));
 let w: World;
 // These tests are about how a subscription starts and ends, so nobody has one until a webhook says so.
 const unsubscribed = (email: string) => w.signUp(email);
@@ -16,7 +18,7 @@ beforeEach(() => {
 afterEach(() => w.restore());
 
 async function sign(body: string, id = 'msg_1', seconds = Math.floor(Date.now() / 1000), secret = SECRET) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const key = await crypto.subtle.importKey('raw', keyOf(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${seconds}.${body}`)));
   return { 'webhook-id': id, 'webhook-timestamp': String(seconds), 'webhook-signature': `v1,${btoa(String.fromCharCode(...mac))}` };
 }
@@ -78,6 +80,13 @@ test('a rotated secret sends two signatures, and either one passes', async () =>
   const good = (await sign(body))['webhook-signature'];
   const headers = new Headers({ ...(await sign(body)), 'webhook-signature': `v1,AAAA ${good}` });
   assert.equal(await verifyPolarSignature(SECRET, headers, body), true);
+});
+
+test('a secret that is not base64 signs with its own bytes', async () => {
+  const body = '{}';
+  const headers = new Headers(await sign(body, 'msg_1', undefined, 'plain-secret'));
+  assert.equal(await verifyPolarSignature('plain-secret', headers, body), true);
+  assert.equal(await verifyPolarSignature(SECRET, headers, body), false);
 });
 
 test('an older event arriving late does not undo a newer one', async () => {

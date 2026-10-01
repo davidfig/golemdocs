@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.4.1 - Unreleased
+## 0.5.0 - 2026-10-01
 
 ### Added
 - View › Status Bar (off until you turn it on) shows a strip under the document with facts about it, which depend on the kind of document: the page and word count of a text document (and how many words are selected), the rows and columns of a CSV or TSV file, the page of a PDF, the size in pixels of a picture, and the zoom. The AI assistant can turn it on and off too.

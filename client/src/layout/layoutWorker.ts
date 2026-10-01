@@ -1179,6 +1179,17 @@ class OpenDocument {
     this.apply(command);
   }
 
+  /** Enter on an empty list item ends the list: the paragraph loses its bullet or number instead of splitting. */
+  private endEmptyListItem(editor: Editor): boolean {
+    if (!editor.collapsed || !this.formats) return false;
+    const [at] = editor.ordered();
+    if (paragraphLength(at.paragraph) > 0) return false;
+    const { list } = this.formats.read(...editor.ordered(), editor.paragraphs(), editor.pending);
+    if (!list) return false;
+    this.applyFormat({ kind: 'toggleList', list });
+    return true;
+  }
+
   /** The formatting at the selection: its text's, and its paragraphs' when it covers a whole paragraph. */
   private pickUpFormat(editor: Editor): NonNullable<OpenDocument['painter']> {
     const [start, end] = editor.ordered();
@@ -1403,11 +1414,12 @@ class OpenDocument {
       const text = commandText(wire);
       if (text && /[^\u0000-\u009f]/.test(text)) return session.ensurePages(text).then(() => this.runCommand(wire, true, mathReady));
     }
+    // Shown as PDF: selecting and moving only.
+    if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
+    if (wire.kind === 'insertParagraph' && this.endEmptyListItem(editor)) return;
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
     let edited: boolean;
-    // Shown as PDF: selecting and moving only.
-    if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
     if (wire.kind === 'undo') edited = editor.undo().edited;
     else if (wire.kind === 'redo') edited = editor.redo().edited;
     else {

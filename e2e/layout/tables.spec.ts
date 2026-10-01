@@ -138,7 +138,7 @@ test.describe('editing table structure', () => {
     expect((await firstTable(app))[0]).toEqual(['a1', '', 'b1', '', 'c1']);
   });
 
-  test('every insert is one undo step', async ({ app }) => {
+  test('every insert is one undo step', { tag: '@heavy' }, async ({ app }) => {
     await inCell(app, 5);
     await app.menu('Table', 'Insert', 'Rows Below');
     await expect.poll(async () => (await firstTable(app)).length).toBe(3);

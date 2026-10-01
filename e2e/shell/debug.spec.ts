@@ -71,11 +71,13 @@ test.describe('debug overlays', () => {
     await expect(debugRow(renderInfo(page), 'cpu')).toHaveCount(0);
   });
 
-  test('clicking the Render panel resets the frame times', async ({ app, page }) => {
+  test('clicking the Render panel resets the frame times', { tag: '@heavy' }, async ({ app, page }) => {
     await seedStorage(page, { 'golem.debug': flags({ frameTimes: true }) });
     await app.goto('?doc=welcome');
     await page.mouse.move(640, 400);
     await page.mouse.wheel(0, 200);
+    // Let the scroll animation finish: frames drawn after the reset, still part of it, can count as dropped.
+    await page.waitForTimeout(1500);
     await renderInfo(page).click();
     await expect(renderInfo(page).locator('.debug-stats')).toContainText('dropped');
     await expect(renderInfo(page).locator('.debug-stats')).toContainText(/dropped\s*0/);

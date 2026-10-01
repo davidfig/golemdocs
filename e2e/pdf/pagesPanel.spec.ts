@@ -20,24 +20,31 @@ async function pageTexts(app: App): Promise<string[]> {
   const out: string[] = [];
   for (let i = 0; i < boxes.length; i++) {
     await showPage(app.page, i);
-    out.push((await selectBetween(app.page, i, [boxes[i].width - 2, boxes[i].height - 2], [15, 15])).trim());
+    out.push((await selectBetween(app.page, i, [boxes[i].width - 2 - i * 8, boxes[i].height - 2 - i * 8], [15, 15])).trim());
   }
   await editMode(app.page);
   return out;
 }
 
 test.describe('Page Sidebar', () => {
-  test('it is open by default when the window has room, and closed on a narrow one, until chosen', async ({ app, page }) => {
-    await page.setViewportSize({ width: 600, height: 800 });
-    await app.blank();
-    await expect(panel(app)).toBeHidden();
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await expect(panel(app)).toBeVisible();
-    await app.menu('View', 'Page Sidebar');
-    await expect(panel(app)).toBeHidden();
-    await page.reload();
-    await app.ready();
-    await expect(panel(app)).toBeHidden();
+  test.describe('by default', () => {
+    test.use({ sidebarDefault: true });
+    test('it is closed by default on a narrow window', async ({ app, page }) => {
+      // The menu bar is a drawer on a narrow window, so just open a document.
+      await page.setViewportSize({ width: 600, height: 800 });
+      await app.goto('?doc=welcome');
+      await expect(panel(app)).toBeHidden();
+    });
+
+    test('it is open by default when the window has room, until chosen otherwise', async ({ app, page }) => {
+      await app.blank();
+      await expect(panel(app)).toBeVisible();
+      await app.menu('View', 'Page Sidebar');
+      await expect(panel(app)).toBeHidden();
+      await page.reload();
+      await app.ready();
+      await expect(panel(app)).toBeHidden();
+    });
   });
 
   test('View ▸ Page Sidebar pulls the panel out beside the document, with a thumbnail per page', async ({ app }) => {
@@ -125,19 +132,22 @@ test.describe('Page Sidebar', () => {
     expect(await pageCount(app.page)).toBe(1);
   });
 
-  test('a Word document gets thumbnails and navigation, and can still be edited with the panel open', async ({ app }) => {
-    await app.blank();
-    await app.type('one');
-    await app.press(`${MOD}+Enter`);
-    await app.type('two');
-    await expect(panel(app)).toBeVisible();
-    await expect(app.page.locator('.wm-pages-item')).toHaveCount(2);
-    await expect(app.page.locator('.wm-pages-delete').first()).toBeHidden();
-    await expect(item(app, 0)).toHaveAttribute('draggable', 'false');
-    await app.focus();
-    await app.page.keyboard.type(' more');
-    expect(await app.text()).toContain('two more');
-    await item(app, 0).click();
-    await expect(item(app, 0)).toHaveClass(/wm-pages-current/);
+  test.describe('with the default', () => {
+    test.use({ sidebarDefault: true });
+    test('a Word document gets thumbnails and navigation, and can still be edited with the panel open', async ({ app }) => {
+      await app.blank();
+      await app.type('one');
+      await app.press(`${MOD}+Enter`);
+      await app.type('two');
+      await expect(panel(app)).toBeVisible();
+      await expect(app.page.locator('.wm-pages-item')).toHaveCount(2);
+      await expect(app.page.locator('.wm-pages-delete').first()).toBeHidden();
+      await expect(item(app, 0)).toHaveAttribute('draggable', 'false');
+      await app.focus();
+      await app.page.keyboard.type(' more');
+      expect(await app.text()).toContain('two more');
+      await item(app, 0).click();
+      await expect(item(app, 0)).toHaveClass(/wm-pages-current/);
+    });
   });
 });

@@ -44,14 +44,15 @@ async function blobBytes(page: Page, url: string): Promise<Buffer> {
 
 /**
  * The app prints from a hidden frame holding the PDF, once the frame has loaded. Headless Chromium
- * has no PDF viewer, so the frame never reports loading: wait for the frame, then report it ourselves.
+ * may have no PDF viewer, so the frame never reports loading: wait for the frame, then report it ourselves.
  * Resolves with the frame's blob: URL, after print() was called on it.
  */
 async function finishLoading(page: Page): Promise<string> {
   const frame = page.locator('iframe[src^="blob:"]');
   await frame.waitFor({ state: 'attached' });
   await frame.dispatchEvent('load');
-  await expect.poll(() => page.evaluate(() => window.__printed.length)).toBe(1);
+  // Where the browser does have a PDF viewer the frame also loads for real, so print() may run twice.
+  await expect.poll(() => page.evaluate(() => window.__printed.length)).toBeGreaterThanOrEqual(1);
   return (await page.evaluate(() => window.__printed))[0]!;
 }
 

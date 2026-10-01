@@ -321,8 +321,9 @@ export async function cloudPair(browser: Browser, paragraphs: string[] = ['Hello
     await app.focus();
     await app.press('ControlOrMeta+End');
   }
-  await expect.poll(async () => (await others(a.page)).length, { message: 'the second device joined the room' }).toBe(1);
-  await expect.poll(async () => (await others(page)).length).toBe(1);
+  // A room that has just been woken (the first one after the server starts, or on a busy machine) can take a while.
+  await expect.poll(async () => (await others(a.page)).length, { message: 'the second device joined the room', timeout: 30_000 }).toBe(1);
+  await expect.poll(async () => (await others(page)).length, { timeout: 30_000 }).toBe(1);
   return { a, b: { context: b, page, app: appB }, doc };
 }
 

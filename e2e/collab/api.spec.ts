@@ -238,7 +238,9 @@ test.describe('documents', () => {
     expect((await api.get('/api/documents/00000000-0000-4000-8000-000000000000')).status()).toBe(404);
     expect((await api.patch('/api/documents', { data: 'x', headers: ORIGIN })).status()).toBe(405);
     const doc = await upload(api);
-    expect((await api.patch(`/api/documents/${doc.id}`, { data: 'x', headers: ORIGIN })).status()).toBe(405);
+    expect((await api.post(`/api/documents/${doc.id}`, { data: 'x', headers: ORIGIN })).status()).toBe(405);
+    // PATCH moves a document to a folder, so a body that is not { folderId } is a bad request, not an unsupported method.
+    expect((await api.patch(`/api/documents/${doc.id}`, { data: 'x', headers: ORIGIN })).status()).toBe(400);
     // A document without a name gets a default one.
     const unnamed = await api.post('/api/documents', { data: Buffer.from('x'), headers: ORIGIN });
     expect((await unnamed.json()).name).toBe('Untitled.docx');

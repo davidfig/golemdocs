@@ -202,7 +202,7 @@ test.describe('editing an existing equation', () => {
     await expect.poll(() => app.text()).toContain('E = ');
   });
 
-  test('editing can turn an inline equation into a display one', async ({ app }) => {
+  test('editing can turn an inline equation into a display one', { tag: '@heavy' }, async ({ app }) => {
     await selectEquation(app);
     const dlg = await openEquation(app, 'Edit Equation');
     await expect(dlg.getByRole('checkbox', { name: /Show on its own line/ })).not.toBeChecked();

@@ -245,7 +245,7 @@ test('Download gives the file back exactly as it was, under its own name', async
   expect(file.bytes.equals(BIG)).toBe(true);
 });
 
-test('opening another document takes the viewer away', async ({ app, page }) => {
+test('opening another document takes the viewer away', { tag: '@heavy' }, async ({ app, page }) => {
   await openBig(app);
   await app.menu('File', 'New');
   await waitForOpen(app, 'Document1');

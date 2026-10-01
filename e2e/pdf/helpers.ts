@@ -384,7 +384,16 @@ export function annotations(bytes: Buffer, subtype: string): string[] {
 export async function selectBetween(page: Page, index: number, from: [number, number], to: [number, number]): Promise<string> {
   await dragOnPage(page, index, from, to);
   await settle(page);
-  return page.evaluate(() => (window as unknown as { selectionState: { text: string } }).selectionState.text);
+  // The selection arrives from the layout worker, which can lag the mouse: read until it stops changing.
+  const read = () => page.evaluate(() => (window as unknown as { selectionState: { text: string } }).selectionState.text);
+  let text = await read();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(60);
+    const next = await read();
+    if (next === text) break;
+    text = next;
+  }
+  return text;
 }
 
 /** A one-page PDF that is only a picture (like a scan): a gray image drawn over the page, and no text. */

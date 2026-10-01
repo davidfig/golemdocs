@@ -91,7 +91,7 @@ test.describe('zoom from the View menu', () => {
   });
 });
 
-test.describe('zoom box', () => {
+test.describe('zoom box', { tag: '@heavy' }, () => {
   test('typing a percentage and pressing Enter zooms, and the document keeps the keyboard', async ({ app, page }) => {
     await blankReady(app);
     await zoomBox(page).fill('150');

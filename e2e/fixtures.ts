@@ -113,7 +113,22 @@ function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export const test = base.extend<{ app: App }>({
+export const test = base.extend<{ app: App; sidebarDefault: boolean }>({
+  // The page sidebar is open by default in a wide window, where it would cover the PDF tool palette and shift the
+  // page. Tests start with it closed (unless the browser already holds a choice); the ones about the default opt in.
+  sidebarDefault: [false, { option: true }],
+  page: async ({ page, sidebarDefault }, use) => {
+    if (!sidebarDefault) {
+      await page.addInitScript(() => {
+        try {
+          if (localStorage.getItem('word.pagesPanel') === null) localStorage.setItem('word.pagesPanel', 'off');
+        } catch {
+          // No storage: the app falls back to its default.
+        }
+      });
+    }
+    await use(page);
+  },
   app: async ({ page }, use) => {
     await use(new App(page));
   },

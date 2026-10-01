@@ -14,6 +14,7 @@ body {
 
 /* The pages panel (see ui/pagesPanel.ts) beside the document. */
 #workspace {
+  position: relative; /* the dashboard covers all of it, the pages panel too */
   display: flex;
   flex: 1;
   min-height: 0;

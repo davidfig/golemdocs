@@ -16,6 +16,7 @@ import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { iconElement } from './icons.ts';
 import './dashboard.css';
 
 /** What the dashboard asks of the application. */
@@ -61,6 +62,13 @@ export class Dashboard {
   private observer: IntersectionObserver | null = null;
   private objectUrls: string[] = [];
   private entries: LibraryEntry[] = [];
+  private readonly newFolderButton: HTMLButtonElement;
+  /** Documents (`doc:<key>`) and folders (`folder:<id>`) ticked for a bulk Move or Delete. */
+  private readonly selected = new Set<string>();
+  /** Where a Shift-click range starts: the card ticked last. */
+  private anchor: string | null = null;
+  private readonly selectionBar: HTMLElement;
+  private readonly selectionCount: HTMLElement;
   private folders: Folder[] = [];
   /** The folder being looked at (null: the top level). */
   private folderId: string | null = null;
@@ -73,7 +81,7 @@ export class Dashboard {
   /** Bumped on every show and refresh, so a slow answer never replaces a newer one. */
   private generation = 0;
   /** Cards showing a "click again to confirm" button, and the timer that resets them. */
-  private confirming: { button: HTMLButtonElement; label: string; timer: number } | null = null;
+  private confirming: { button: HTMLButtonElement; label: string; icon?: string; timer: number } | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -89,20 +97,57 @@ export class Dashboard {
     this.sharedTitle = h('h2', { class: 'wm-dash-section', text: t('panels.dashboard.sharedWithMe') });
     this.sharedGrid = h('div', { class: 'wm-dash-grid' });
     this.scroller = h('div', { class: 'wm-dash-scroll' }, this.notice, this.crumbs, this.grid, this.sharedTitle, this.sharedGrid);
+    const action = (icon: string, label: string, aria: string, onClick: () => void): HTMLButtonElement => {
+      const button = h('button', { class: 'wm-dash-action', attrs: { type: 'button', 'aria-label': aria } });
+      this.setLabel(button, label, icon);
+      button.addEventListener('click', onClick);
+      return button;
+    };
+    const blank = action('new', t('panels.dashboard.newBlank'), t('panels.dashboard.newBlankLabel'), () => {
+      const folderId = this.folderId;
+      this.hide();
+      this.host.newDocument(folderId);
+    });
+    // Stays up behind the file picker: hiding it would show the last open document.
+    const importButton = action('import', t('panels.dashboard.import'), t('panels.dashboard.importLabel'), () => this.host.importFile(this.folderId));
+    this.newFolderButton = action('newFolder', t('panels.dashboard.newFolder'), t('panels.dashboard.newFolderLabel'), () => {
+      // Not listed again afterwards: that would rebuild the name being typed.
+      void this.run(async () => {
+        const folder = await createFolder(this.host.account() !== null, t('panels.dashboard.newFolderName'), this.folderId);
+        this.folders = [...this.folders, folder];
+        this.renaming = folder.id;
+      }, false);
+    });
+    const moveSelected = action('moveToFolder', t('panels.dashboard.move'), t('panels.dashboard.moveSelected'), () => this.moveSelection());
+    const deleteSelected = this.confirmButton(t('panels.dashboard.delete'), () => this.deleteSelection(), 'trash');
+    const clearSelection = action('close', t('panels.dashboard.clearSelection'), t('panels.dashboard.clearSelection'), () => this.setSelection([]));
+    this.selectionCount = h('span', { class: 'wm-dash-selected', attrs: { role: 'status' } });
+    this.selectionBar = h('div', { class: 'wm-dash-selection' }, this.selectionCount, moveSelected, deleteSelected, clearSelection);
+    this.selectionBar.hidden = true;
+    const actions = h('div', { class: 'wm-dash-actions' }, blank, importButton, this.newFolderButton, this.selectionBar);
     this.root = h(
       'section',
       { class: 'wm-dashboard', attrs: { 'aria-label': t('panels.dashboard.title') } },
       h('header', { class: 'wm-dash-head' }, h('h1', { text: t('panels.dashboard.title') }), this.search, this.account, close),
+      actions,
       this.scroller,
     );
     this.root.hidden = true;
     parent.append(this.root);
 
     this.search.addEventListener('input', () => this.render());
-    this.root.addEventListener('keydown', (e) => {
+    // On the document, so Escape closes it whatever has the focus; the folder name field and the
+    // "move to" list handle (and stop) their own Escape first.
+    document.addEventListener('keydown', (e) => {
+      if (!this.visible || e.defaultPrevented) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
-        this.dismiss();
+        // The first Esc drops a selection; the next closes.
+        if (this.selected.size) this.setSelection([]);
+        else this.dismiss();
+      } else if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey) && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        this.setSelection([...this.grid.querySelectorAll<HTMLElement>('[data-select]')].map((el) => el.dataset.select!));
       }
     });
   }
@@ -122,6 +167,7 @@ export class Dashboard {
     this.search.value = '';
     this.folderId = null;
     this.renaming = null;
+    this.selected.clear();
     const generation = ++this.generation;
     const start = await loadLocalLibrary(this.host.account());
     if (generation !== this.generation) return;
@@ -206,8 +252,7 @@ export class Dashboard {
     this.observer?.disconnect();
     this.observer = null;
     // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
-    if (this.confirming) clearTimeout(this.confirming.timer);
-    this.confirming = null;
+    this.resetConfirm();
     // Searching looks in every folder at once; otherwise this folder's own folders and documents.
     const searching = this.search.value.trim() !== '';
     if (this.folderId !== null && !this.folders.some((f) => f.id === this.folderId)) this.folderId = null;
@@ -215,37 +260,17 @@ export class Dashboard {
     const shownFolders = searching ? this.folders.filter((f) => matchesSearch(f, this.search.value)) : childFolders(this.folders, this.folderId);
     this.renderCrumbs(searching);
 
-    const blank = h('button', { class: 'wm-card wm-card-new', attrs: { type: 'button', 'aria-label': t('panels.dashboard.newBlankLabel') } }, h('span', { class: 'wm-plus', text: '+' }), h('span', { text: t('panels.dashboard.newBlank') }));
-    blank.addEventListener('click', () => {
-      const folderId = this.folderId;
-      this.hide();
-      this.host.newDocument(folderId);
-    });
-
-    const importTile = h('button', { class: 'wm-card wm-card-new', attrs: { type: 'button', 'aria-label': t('panels.dashboard.importLabel') } }, h('span', { class: 'wm-plus', text: '↑' }), h('span', { text: t('panels.dashboard.import') }));
-    importTile.addEventListener('click', () => {
-      // Stays up behind the file picker: hiding it would show the last open document.
-      this.host.importFile(this.folderId);
-    });
-
-    const newFolder = h('button', { class: 'wm-card wm-card-new', attrs: { type: 'button', 'aria-label': t('panels.dashboard.newFolderLabel') } }, h('span', { class: 'wm-plus', text: '+' }), h('span', { text: t('panels.dashboard.newFolder') }));
-    newFolder.addEventListener('click', () => {
-      // Not listed again afterwards: that would rebuild the name being typed.
-      void this.run(async () => {
-        const folder = await createFolder(this.host.account() !== null, t('panels.dashboard.newFolderName'), this.folderId);
-        this.folders = [...this.folders, folder];
-        this.renaming = folder.id;
-      }, false);
-    });
+    this.newFolderButton.hidden = searching;
 
     const cards = shown.map((entry) => this.card(entry));
-    const children: (HTMLElement | string)[] = [blank, importTile, ...(searching ? [] : [newFolder]), ...shownFolders.map((f) => this.folderCard(f)), ...cards];
+    const children: (HTMLElement | string)[] = [...shownFolders.map((f) => this.folderCard(f)), ...cards];
     if (!shown.length && !shownFolders.length) {
       children.push(h('p', { class: 'wm-dash-empty', text: this.search.value.trim() ? t('panels.dashboard.noMatches') : t('panels.dashboard.empty') }));
     }
     this.rebuilding = true;
     this.grid.replaceChildren(...children);
     this.rebuilding = false;
+    this.syncSelection();
     const renameField = this.grid.querySelector<HTMLInputElement>('.wm-folder-name-input');
     if (renameField) {
       renameField.focus({ preventScroll: false });
@@ -322,12 +347,22 @@ export class Dashboard {
     actions.prepend(move);
     const card = h('article', { class: 'wm-card' }, open, badges, actions);
     this.makeDraggable(card, { kind: 'doc', entry });
+    this.makeSelectable(card, `doc:${entry.key}`, entry.name);
     return card;
   }
 
   /** A folder: open it, rename it, move it, or delete it (what is in it moves up). */
   private folderCard(folder: Folder): HTMLElement {
-    const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }));
+    // The folder's first few documents show through it as small pages.
+    const minis = itemsIn(this.entries, this.folders, folder.id)
+      .slice(0, 4)
+      .map((entry) => {
+        const mini = h('div', { class: 'wm-thumb wm-folder-mini' }, h('div', { class: 'wm-thumb-empty' }));
+        this.entryFor.set(mini, entry);
+        this.reuseThumbnail(mini, `mini:${entry.key}`, this.thumbSignature(entry));
+        return mini;
+      });
+    const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }, ...minis));
     let open: HTMLElement;
     if (this.renaming === folder.id) {
       const input = h('input', { class: 'wm-folder-name-input', attrs: { type: 'text', value: folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
@@ -357,6 +392,7 @@ export class Dashboard {
       open.addEventListener('click', () => {
         this.search.value = '';
         this.folderId = folder.id;
+        this.selected.clear();
         this.render();
         this.scroller.scrollTop = 0;
       });
@@ -375,7 +411,126 @@ export class Dashboard {
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
+    this.makeSelectable(card, `folder:${folder.id}`, folder.name);
     return card;
+  }
+
+  // --- Selection ---------------------------------------------------------------------------
+
+  /** A tick box on the card (and Ctrl/Cmd-click on it) to add it to the selection. */
+  private makeSelectable(card: HTMLElement, key: string, name: string): void {
+    card.dataset.select = key;
+    const box = h('input', { class: 'wm-select', attrs: { type: 'checkbox', 'aria-label': t('panels.dashboard.select', { name }) } });
+    box.checked = this.selected.has(key);
+    card.classList.toggle('wm-selected', box.checked);
+    box.addEventListener('change', () => this.toggleSelected(key, box.checked));
+    card.append(box);
+    // Ctrl/Cmd-click anywhere on the card ticks it instead of opening it; Shift-click ticks everything from the last one ticked.
+    card.addEventListener(
+      'click',
+      (e) => {
+        if (!(e.ctrlKey || e.metaKey || e.shiftKey) || e.target === box) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey && this.anchor !== null) this.selectRange(this.anchor, key);
+        else this.toggleSelected(key, !this.selected.has(key));
+      },
+      true,
+    );
+  }
+
+  /** Ticks every card from `from` to `to`, in the order shown (keeping what is ticked already). */
+  private selectRange(from: string, to: string): void {
+    const keys = [...this.grid.querySelectorAll<HTMLElement>('[data-select]')].map((el) => el.dataset.select!);
+    const a = keys.indexOf(from);
+    const b = keys.indexOf(to);
+    if (a < 0 || b < 0) return this.toggleSelected(to, true);
+    for (const key of keys.slice(Math.min(a, b), Math.max(a, b) + 1)) this.selected.add(key);
+    this.anchor = to;
+    this.syncSelection();
+  }
+
+  private toggleSelected(key: string, on: boolean): void {
+    this.anchor = key;
+    if (on) this.selected.add(key);
+    else this.selected.delete(key);
+    this.syncSelection();
+  }
+
+  private setSelection(keys: string[]): void {
+    this.anchor = null;
+    this.selected.clear();
+    for (const key of keys) this.selected.add(key);
+    this.syncSelection();
+  }
+
+  /** Drops what is no longer listed, then shows the ticks and the Move / Delete buttons to match. */
+  private syncSelection(): void {
+    const present = new Set<string>();
+    for (const card of this.grid.querySelectorAll<HTMLElement>('[data-select]')) {
+      const key = card.dataset.select!;
+      present.add(key);
+      const on = this.selected.has(key);
+      card.classList.toggle('wm-selected', on);
+      const box = card.querySelector<HTMLInputElement>('.wm-select');
+      if (box) box.checked = on;
+    }
+    for (const key of [...this.selected]) if (!present.has(key)) this.selected.delete(key);
+    this.grid.classList.toggle('wm-selecting', this.selected.size > 0);
+    this.selectionBar.hidden = this.selected.size === 0;
+    this.selectionCount.textContent = t('panels.dashboard.selected', { count: this.selected.size });
+    this.resetConfirm();
+    for (const b of this.selectionBar.querySelectorAll('button')) b.disabled = false;
+  }
+
+  private selectedItems(): { docs: LibraryEntry[]; folders: Folder[] } {
+    return {
+      docs: this.entries.filter((e) => this.selected.has(`doc:${e.key}`)),
+      folders: this.folders.filter((f) => this.selected.has(`folder:${f.id}`)),
+    };
+  }
+
+  private moveSelection(): void {
+    const { docs, folders } = this.selectedItems();
+    const count = docs.length + folders.length;
+    if (!count) return;
+    // A folder can't go into itself or anything inside it.
+    const excluded = (id: string) => folders.some((f) => isInside(this.folders, id, f.id));
+    this.pickFolder(t('panels.dashboard.moveSelectedTitle', { count }), excluded, undefined, (to) =>
+      this.run(async () => {
+        for (const entry of docs) {
+          if (folderOf(entry, this.folders) === to) continue;
+          await this.relocateEntry(entry, to);
+        }
+        for (const folder of folders) {
+          if (folder.parentId === to) continue;
+          await this.changeFolder(folder, { parentId: to });
+        }
+        this.selected.clear();
+      }),
+    );
+  }
+
+  private async deleteSelection(): Promise<void> {
+    const { docs, folders } = this.selectedItems();
+    this.selected.clear();
+    const failed: string[] = [];
+    // Documents first: a folder's own documents are unaffected by deleting it (they move up).
+    for (const entry of docs) {
+      try {
+        await this.host.delete(entry);
+      } catch (error) {
+        failed.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    for (const folder of folders) {
+      try {
+        await removeFolder(this.host.account() !== null, folder);
+      } catch (error) {
+        failed.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (failed.length) throw new Error(failed[0]);
   }
 
   /** "Documents › A › B": where this is, and a way back up (a place to drop things, too). */
@@ -392,6 +547,7 @@ export class Dashboard {
       crumb.disabled = last;
       crumb.addEventListener('click', () => {
         this.folderId = stop.id;
+        this.selected.clear();
         this.render();
       });
       if (!last) this.makeDropTarget(crumb, stop.id);
@@ -415,19 +571,18 @@ export class Dashboard {
 
   private relocate(item: Dragged, to: string | null): Promise<void> {
     return this.run(
-      item.kind === 'doc'
-        ? async () => {
-            await moveEntry(item.entry, to);
-            // Shown in its new place at once, before the lists are fetched again.
-            const { entry } = item;
-            if (entry.cloud) entry.cloud.folderId = to;
-            if (entry.local) {
-              if (to === null) delete entry.local.folderId;
-              else entry.local.folderId = to;
-            }
-          }
-        : () => this.changeFolder(item.folder, { parentId: to }),
+      item.kind === 'doc' ? () => this.relocateEntry(item.entry, to) : () => this.changeFolder(item.folder, { parentId: to }),
     );
+  }
+
+  private async relocateEntry(entry: LibraryEntry, to: string | null): Promise<void> {
+    await moveEntry(entry, to);
+    // Shown in its new place at once, before the lists are fetched again.
+    if (entry.cloud) entry.cloud.folderId = to;
+    if (entry.local) {
+      if (to === null) delete entry.local.folderId;
+      else entry.local.folderId = to;
+    }
   }
 
   /** Renames and/or moves a folder, and shows it so at once. */
@@ -481,7 +636,7 @@ export class Dashboard {
    * Asks which folder to move something to: a list of every folder (and the top level), except
    * those `excluded` and the one it is in already.
    */
-  private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null, pick: (id: string | null) => void): void {
+  private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
     const choices = [{ id: null as string | null, name: t('panels.dashboard.title'), depth: 0 }, ...folderTree(this.folders).filter((n) => !excluded(n.folder.id)).map((n) => ({ id: n.folder.id as string | null, name: n.folder.name, depth: n.depth + 1 }))];
     const close = () => backdrop.remove();
     const buttons = choices.map((choice) => {
@@ -511,8 +666,9 @@ export class Dashboard {
   }
 
   /** A button that needs a second click, within a few seconds, to do something that can't be undone. */
-  private confirmButton(label: string, run: () => Promise<void>): HTMLButtonElement {
-    const button = h('button', { class: 'wm-danger', text: label, attrs: { type: 'button' } });
+  private confirmButton(label: string, run: () => Promise<void>, icon?: string): HTMLButtonElement {
+    const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
+    this.setLabel(button, label, icon);
     button.addEventListener('click', () => {
       if (this.confirming?.button === button) {
         clearTimeout(this.confirming.timer);
@@ -528,16 +684,21 @@ export class Dashboard {
         return;
       }
       this.resetConfirm();
-      button.textContent = t('panels.dashboard.confirm');
-      this.confirming = { button, label, timer: window.setTimeout(() => this.resetConfirm(), 4000) };
+      this.setLabel(button, t('panels.dashboard.confirm'), icon);
+      this.confirming = { button, label, icon, timer: window.setTimeout(() => this.resetConfirm(), 4000) };
     });
     return button;
+  }
+
+  /** A button's text, with its icon in front when it has one. */
+  private setLabel(button: HTMLButtonElement, label: string, icon?: string): void {
+    button.replaceChildren(...(icon ? [iconElement(icon)] : []), h('span', { text: label }));
   }
 
   private resetConfirm(): void {
     if (!this.confirming) return;
     clearTimeout(this.confirming.timer);
-    this.confirming.button.textContent = this.confirming.label;
+    this.setLabel(this.confirming.button, this.confirming.label, this.confirming.icon);
     this.confirming = null;
   }
 

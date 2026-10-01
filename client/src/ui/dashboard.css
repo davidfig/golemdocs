@@ -45,6 +45,15 @@
   background: #fff;
 }
 
+.wm-dash-actions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--wm-border, #b9b9b9);
+}
+
 .wm-dash-account {
   margin-left: auto;
   display: flex;
@@ -204,22 +213,6 @@
   }
 }
 
-.wm-dashboard .wm-card-new {
-  aspect-ratio: 8.5 / 11;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px dashed var(--wm-border, #b9b9b9);
-  background: transparent;
-}
-
-.wm-plus {
-  font-size: 40px;
-  line-height: 1;
-}
-
 .wm-dash-empty {
   grid-column: 1 / -1;
   margin: 8px 0;
@@ -230,6 +223,10 @@
   .wm-dash-head {
     flex-wrap: wrap;
     padding: 10px 12px;
+  }
+
+  .wm-dash-actions {
+    padding: 8px 12px;
   }
 
   .wm-dash-scroll {
@@ -245,20 +242,6 @@
 
 .wm-dash-close {
   flex: none;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.wm-dash-close:hover {
-  background: var(--wm-hover, rgba(0, 0, 0, 0.08));
 }
 
 /* Folders: breadcrumbs, folder cards, the drop highlight and the "move to" list. */
@@ -302,6 +285,27 @@
   border-radius: 3px 8px 6px 6px;
   background: #e8c872;
   border: 1px solid #b89a45;
+}
+
+.wm-folder-shape {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 6% 10%;
+  padding: 7% 16%;
+  box-sizing: border-box;
+}
+
+.wm-folder-mini {
+  height: 100%;
+  min-height: 0;
+  justify-self: center;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+.wm-card-open:hover .wm-folder-mini,
+.wm-card-open:focus-visible .wm-folder-mini {
+  border-color: var(--wm-border, #b9b9b9);
 }
 
 .wm-folder-shape::before {
@@ -396,4 +400,51 @@
 .wm-move-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+/* Selecting: a tick box on each card, and Move / Delete for the ticked ones beside the new buttons. */
+.wm-dash-selection {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-dash-selection[hidden] {
+  display: none;
+}
+
+.wm-dash-selected {
+  font-size: 13px;
+}
+
+.wm-select {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.wm-card:hover .wm-select,
+.wm-select:focus-visible,
+.wm-select:checked,
+.wm-selecting .wm-select {
+  opacity: 1;
+}
+
+.wm-card.wm-selected .wm-thumb {
+  outline: 3px solid var(--wm-accent, #316ac5);
+  outline-offset: 1px;
+}
+
+.wm-dash-action,
+.wm-dash-selection .wm-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }

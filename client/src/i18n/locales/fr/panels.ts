@@ -42,8 +42,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.signIn': 'Se connecter',
   'panels.dashboard.signOut': 'Se déconnecter',
   'panels.dashboard.savedHere': 'Enregistré dans ce navigateur',
-  'panels.dashboard.newBlankLabel': 'Nouveau document vierge',
-  'panels.dashboard.newBlank': 'Document vierge',
+  'panels.dashboard.newBlankLabel': 'Nouveau document',
+  'panels.dashboard.newBlank': 'Nouveau document',
   'panels.dashboard.importLabel': 'Importer un fichier depuis cet ordinateur',
   'panels.dashboard.import': 'Importer un fichier',
   'panels.dashboard.noMatches': 'Aucun document ne correspond à votre recherche.',
@@ -71,6 +71,12 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.moveTitle': 'Déplacer « {name} » vers…',
   'panels.dashboard.cancel': 'Annuler',
   'panels.dashboard.deleteFolder': 'Supprimer le dossier',
+  'panels.dashboard.selected.one': '{count} sélectionné',
+  'panels.dashboard.selected': '{count} sélectionnés',
+  'panels.dashboard.select': 'Sélectionner {name}',
+  'panels.dashboard.clearSelection': 'Désélectionner tout',
+  'panels.dashboard.moveSelected': 'Déplacer les éléments sélectionnés',
+  'panels.dashboard.moveSelectedTitle': 'Déplacer {count} éléments vers…',
 
   // Dates and sizes
   'panels.time.justNow': 'À l’instant',

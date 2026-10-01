@@ -42,8 +42,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.signIn': '登录',
   'panels.dashboard.signOut': '退出登录',
   'panels.dashboard.savedHere': '已保存在此浏览器',
-  'panels.dashboard.newBlankLabel': '添加空白文档',
-  'panels.dashboard.newBlank': '空白文档',
+  'panels.dashboard.newBlankLabel': '新建文档',
+  'panels.dashboard.newBlank': '新建文档',
   'panels.dashboard.importLabel': '从此电脑导入文件',
   'panels.dashboard.import': '导入文件',
   'panels.dashboard.noMatches': '没有与搜索条件匹配的文档。',
@@ -71,6 +71,12 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.moveTitle': '将“{name}”移动到…',
   'panels.dashboard.cancel': '取消',
   'panels.dashboard.deleteFolder': '删除文件夹',
+  'panels.dashboard.selected.one': '已选择 {count} 项',
+  'panels.dashboard.selected': '已选择 {count} 项',
+  'panels.dashboard.select': '选择“{name}”',
+  'panels.dashboard.clearSelection': '取消选择',
+  'panels.dashboard.moveSelected': '移动所选项目',
+  'panels.dashboard.moveSelectedTitle': '将 {count} 项移动到…',
 
   // Dates and sizes
   'panels.time.justNow': '刚刚',

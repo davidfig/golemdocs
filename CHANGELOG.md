@@ -3,7 +3,10 @@
 ## 0.4.1 - Unreleased
 
 ### Added
+- The Documents screen's New document, Import and New folder are now buttons in its header, and Esc closes it from anywhere.
+- Select several documents and folders on the Documents screen (tick boxes, Ctrl/Cmd-click, Shift-click for a range, or Ctrl/Cmd+A) to move or delete them all at once.
 - Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
+- A folder's icon now shows small thumbnails of the first documents inside it.
 - The form and PDF editing tools panel can be dragged by its top edge to move it out of the way.
 
 ## 0.4.0 - 2026-10-01

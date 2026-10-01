@@ -42,8 +42,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.signIn': 'サインイン',
   'panels.dashboard.signOut': 'サインアウト',
   'panels.dashboard.savedHere': 'このブラウザーに保存済み',
-  'panels.dashboard.newBlankLabel': '新しい白紙のドキュメント',
-  'panels.dashboard.newBlank': '白紙のドキュメント',
+  'panels.dashboard.newBlankLabel': '新規ドキュメント',
+  'panels.dashboard.newBlank': '新規ドキュメント',
   'panels.dashboard.importLabel': 'このコンピューターからファイルを読み込む',
   'panels.dashboard.import': 'ファイルを読み込む',
   'panels.dashboard.noMatches': '検索に一致するドキュメントはありません。',
@@ -71,6 +71,12 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.moveTitle': '「{name}」の移動先…',
   'panels.dashboard.cancel': 'キャンセル',
   'panels.dashboard.deleteFolder': 'フォルダーを削除',
+  'panels.dashboard.selected.one': '{count} 件選択中',
+  'panels.dashboard.selected': '{count} 件選択中',
+  'panels.dashboard.select': '{name} を選択',
+  'panels.dashboard.clearSelection': '選択を解除',
+  'panels.dashboard.moveSelected': '選択した項目を移動',
+  'panels.dashboard.moveSelectedTitle': '{count} 項目の移動先…',
 
   // Dates and sizes
   'panels.time.justNow': 'たった今',

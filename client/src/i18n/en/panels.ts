@@ -47,8 +47,8 @@ export const panels = {
   'panels.dashboard.signIn': 'Sign in',
   'panels.dashboard.signOut': 'Sign out',
   'panels.dashboard.savedHere': 'Saved in this browser',
-  'panels.dashboard.newBlankLabel': 'New blank document',
-  'panels.dashboard.newBlank': 'Blank document',
+  'panels.dashboard.newBlankLabel': 'New document',
+  'panels.dashboard.newBlank': 'New document',
   'panels.dashboard.importLabel': 'Import a file from this computer',
   'panels.dashboard.import': 'Import file',
   'panels.dashboard.noMatches': 'No documents match your search.',
@@ -76,6 +76,12 @@ export const panels = {
   'panels.dashboard.moveTitle': 'Move “{name}” to…',
   'panels.dashboard.cancel': 'Cancel',
   'panels.dashboard.deleteFolder': 'Delete folder',
+  'panels.dashboard.selected.one': '{count} selected',
+  'panels.dashboard.selected': '{count} selected',
+  'panels.dashboard.select': 'Select {name}',
+  'panels.dashboard.clearSelection': 'Clear selection',
+  'panels.dashboard.moveSelected': 'Move the selected items',
+  'panels.dashboard.moveSelectedTitle': 'Move {count} items to…',
 
   // Dates and sizes
   'panels.time.justNow': 'Just now',

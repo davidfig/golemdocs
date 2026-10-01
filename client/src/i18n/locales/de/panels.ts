@@ -42,8 +42,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.signIn': 'Anmelden',
   'panels.dashboard.signOut': 'Abmelden',
   'panels.dashboard.savedHere': 'In diesem Browser gespeichert',
-  'panels.dashboard.newBlankLabel': 'Neues leeres Dokument',
-  'panels.dashboard.newBlank': 'Leeres Dokument',
+  'panels.dashboard.newBlankLabel': 'Neues Dokument',
+  'panels.dashboard.newBlank': 'Neues Dokument',
   'panels.dashboard.importLabel': 'Datei vom Computer importieren',
   'panels.dashboard.import': 'Datei importieren',
   'panels.dashboard.noMatches': 'Keine Dokumente entsprechen Ihrer Suche.',
@@ -71,6 +71,12 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.moveTitle': '„{name}“ verschieben nach…',
   'panels.dashboard.cancel': 'Abbrechen',
   'panels.dashboard.deleteFolder': 'Ordner löschen',
+  'panels.dashboard.selected.one': '{count} ausgewählt',
+  'panels.dashboard.selected': '{count} ausgewählt',
+  'panels.dashboard.select': '{name} auswählen',
+  'panels.dashboard.clearSelection': 'Auswahl aufheben',
+  'panels.dashboard.moveSelected': 'Ausgewählte Elemente verschieben',
+  'panels.dashboard.moveSelectedTitle': '{count} Elemente verschieben nach…',
 
   // Dates and sizes
   'panels.time.justNow': 'Gerade eben',

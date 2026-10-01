@@ -185,6 +185,24 @@ export const ICONS: Record<string, string> = {
       `<rect x="9.2" y="9.5" width="5.6" height="5" fill="${BLUE}" stroke="none"/><rect x="3.5" y="14.5" width="5.7" height="5" fill="${LINE}" stroke="none"/><rect x="14.8" y="4.5" width="5.7" height="5" fill="${LINE}" stroke="none"/>`,
   ),
   eraser: svg(`<path d="M14.5 4l6 6-8.5 8.5H7.5L3.5 14.5z" fill="${PINK}"/><path d="M9 9l6 6M8 20.5h12.5" stroke-width="2"/>`),
+  import: svg(
+    `<path d="M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4" fill="${SKY}"/>` +
+      outlined('M12 15V4', GREEN) +
+      outlined('M7.5 8.5L12 4l4.5 4.5', GREEN),
+  ),
+  newFolder: svg(
+    `<path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h4.6l2 2.4H20A1.5 1.5 0 0 1 21.5 9v9.5A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5z" fill="${ORANGE}"/>` +
+      `<circle cx="17.5" cy="16.5" r="5" fill="${GREEN}"/><path d="M17.5 14v5M15 16.5h5" stroke="${PAPER}" stroke-width="1.8"/>`,
+  ),
+  moveToFolder: svg(
+    `<path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h4.6l2 2.4H20A1.5 1.5 0 0 1 21.5 9v9.5A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5z" fill="${ORANGE}"/>` +
+      `<path d="M7 13h8M12 9.5l3.5 3.5-3.5 3.5" stroke="${PAPER}" stroke-width="2"/>`,
+  ),
+  trash: svg(
+    `<path d="M5 7h14l-1.2 12.4a1.5 1.5 0 0 1-1.5 1.35H7.7a1.5 1.5 0 0 1-1.5-1.35z" fill="${SKY}"/>` +
+      `<path d="M3.5 7h17" stroke-width="2"/><path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7" fill="${PAPER}"/>` +
+      `<path d="M10 11v6M14 11v6" stroke="${RED}" stroke-width="1.8"/>`,
+  ),
   move: svg(`<path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5" stroke-width="2"/>`),
   fill: svg(`<rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="${BLUE}" stroke-width="2.2"/>`),
   drawColor: svg(`<path d="M4 17l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 16z" fill="${YELLOW}"/><path d="M4 17l4-1-3-3z" fill="${MIST}"/>` + SWATCH),

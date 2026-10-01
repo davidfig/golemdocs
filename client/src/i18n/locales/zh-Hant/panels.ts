@@ -42,8 +42,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.signIn': '登入',
   'panels.dashboard.signOut': '登出',
   'panels.dashboard.savedHere': '已儲存在此瀏覽器',
-  'panels.dashboard.newBlankLabel': '新增空白文件',
-  'panels.dashboard.newBlank': '空白文件',
+  'panels.dashboard.newBlankLabel': '新增文件',
+  'panels.dashboard.newBlank': '新增文件',
   'panels.dashboard.importLabel': '從此電腦匯入檔案',
   'panels.dashboard.import': '匯入檔案',
   'panels.dashboard.noMatches': '沒有符合搜尋條件的文件。',
@@ -71,6 +71,12 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.moveTitle': '將「{name}」移至…',
   'panels.dashboard.cancel': '取消',
   'panels.dashboard.deleteFolder': '刪除資料夾',
+  'panels.dashboard.selected.one': '已選取 {count} 個項目',
+  'panels.dashboard.selected': '已選取 {count} 個項目',
+  'panels.dashboard.select': '選取「{name}」',
+  'panels.dashboard.clearSelection': '取消選取',
+  'panels.dashboard.moveSelected': '移動所選項目',
+  'panels.dashboard.moveSelectedTitle': '將 {count} 個項目移至…',
 
   // Dates and sizes
   'panels.time.justNow': '剛剛',

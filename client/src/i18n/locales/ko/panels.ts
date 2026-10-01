@@ -42,8 +42,8 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.signIn': '로그인',
   'panels.dashboard.signOut': '로그아웃',
   'panels.dashboard.savedHere': '이 브라우저에 저장됨',
-  'panels.dashboard.newBlankLabel': '새 빈 문서',
-  'panels.dashboard.newBlank': '빈 문서',
+  'panels.dashboard.newBlankLabel': '새 문서',
+  'panels.dashboard.newBlank': '새 문서',
   'panels.dashboard.importLabel': '이 컴퓨터에서 파일 가져오기',
   'panels.dashboard.import': '파일 가져오기',
   'panels.dashboard.noMatches': '검색과 일치하는 문서가 없습니다.',
@@ -71,6 +71,12 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.moveTitle': '“{name}” 이동 위치…',
   'panels.dashboard.cancel': '취소',
   'panels.dashboard.deleteFolder': '폴더 삭제',
+  'panels.dashboard.selected.one': '{count}개 선택됨',
+  'panels.dashboard.selected': '{count}개 선택됨',
+  'panels.dashboard.select': '{name} 선택',
+  'panels.dashboard.clearSelection': '선택 해제',
+  'panels.dashboard.moveSelected': '선택한 항목 이동',
+  'panels.dashboard.moveSelectedTitle': '{count}개 항목 이동 위치…',
 
   // Dates and sizes
   'panels.time.justNow': '방금',

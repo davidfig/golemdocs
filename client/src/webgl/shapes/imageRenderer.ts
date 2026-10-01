@@ -1,5 +1,5 @@
-import { createProgram, uniforms } from '../gl/program.ts';
-import type { Camera } from '../view/camera.ts';
+import { createProgram, uniforms } from '../program.ts';
+import type { Camera } from '../../view/camera.ts';
 
 // Textured quads for document images. Textures are created on first sight and shared by
 // every page that shows the same image part.

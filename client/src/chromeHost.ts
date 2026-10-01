@@ -10,7 +10,7 @@ import { sourceFromFile } from './formats/source.ts';
 import { toPng } from './formats/imageCodec.ts';
 import { LARGE_TEXT_BYTES, looksLikeText } from './formats/textFiles.ts';
 import { nearestPage, type Bounds } from './document/arrange.ts';
-import type { GpuPage } from './view/gpuPage.ts';
+import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { acceptList, type ImageOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';

@@ -9,7 +9,7 @@ import { epub, mhtml } from '../src/formats/handlers/webArchives.ts';
 import html from '../src/formats/handlers/html.ts';
 import rtf from '../src/formats/handlers/rtf.ts';
 import { collectImages, decodeDataUri, sniffImage } from '../src/formats/images.ts';
-import { sniffType } from '../src/shapes/imageRenderer.ts';
+import { sniffType } from '../src/webgl/shapes/imageRenderer.ts';
 
 const fonts = undefined as never;
 

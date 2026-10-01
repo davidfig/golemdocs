@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GLYPH_COLUMNS, GLYPH_TABLE_WIDTH, glyphTableHeight, glyphTexel, padGlyphTable } from '../src/text/glyphTable.ts';
+import { GLYPH_COLUMNS, GLYPH_TABLE_WIDTH, glyphTableHeight, glyphTexel, padGlyphTable } from '../src/webgl/text/glyphTable.ts';
 import { inWinAnsi, pdfChar } from '../src/formats/pdfExport.ts';
 
 test('glyph texel addressing folds into a grid', () => {

@@ -1,7 +1,7 @@
 import type { EncodedPage, ImageItem } from '@golemdocs/layout';
-import { RectBatch } from '../shapes/rectBatch.ts';
-import type { AtlasLibrary } from '../text/gpuFace.ts';
-import { TextBatch } from '../text/textBatch.ts';
+import { RectBatch } from './shapes/rectBatch.ts';
+import type { AtlasLibrary } from './text/gpuFace.ts';
+import { TextBatch } from './text/textBatch.ts';
 
 /** Synthetic italic slant (~11°) and bold stroke growth (ems), as Word applies them. */
 const SYNTHETIC_SKEW = 0.2;

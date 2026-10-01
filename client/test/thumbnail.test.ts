@@ -4,8 +4,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { pictureLayout, PAGE_GAP_POINTS, readPage, THUMB_MAX_HEIGHT, THUMB_WIDTH, thumbnailSize, toTopDownOpaque } from '../src/thumbnail.ts';
-import type { GpuPage } from '../src/view/gpuPage.ts';
-import type { PageRenderer } from '../src/view/pageRenderer.ts';
+import type { GpuPage } from '../src/webgl/gpuPage.ts';
+import type { PageRenderer } from '../src/webgl/pageRenderer.ts';
 
 test('thumbnailSize fits the page in the limits and keeps its shape', () => {
   assert.deepEqual(thumbnailSize(612, 792), { width: 320, height: 414 }, 'Letter is limited by width');

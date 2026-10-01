@@ -84,19 +84,25 @@ export function keepFocus(el: HTMLElement): void {
  * Lets a dialog be moved by dragging its title bar (for the dialogs that stay open over the
  * document: Find, Spelling). It starts where the stylesheet puts it and moves from there.
  */
-export function makeDraggable(dialog: HTMLElement): void {
-  const title = dialog.querySelector<HTMLElement>('.wm-dialog-title');
+export function makeDraggable(dialog: HTMLElement, handle = '.wm-dialog-title'): void {
+  const title = dialog.querySelector<HTMLElement>(handle);
   if (!title) return;
   title.style.cursor = 'move';
   title.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
     const box = dialog.getBoundingClientRect();
+    // A dialog is positioned against the window; a panel inside the view, against its container.
+    const parent = getComputedStyle(dialog).position === 'fixed' ? null : dialog.offsetParent?.getBoundingClientRect();
+    const originX = parent?.left ?? 0;
+    const originY = parent?.top ?? 0;
+    const width = parent?.width ?? window.innerWidth;
+    const height = parent?.height ?? window.innerHeight;
     const dx = e.clientX - box.left;
     const dy = e.clientY - box.top;
     const move = (m: PointerEvent) => {
       // Kept where the title bar can still be grabbed.
-      const left = Math.min(Math.max(m.clientX - dx, 40 - box.width), window.innerWidth - 40);
-      const top = Math.min(Math.max(m.clientY - dy, 0), window.innerHeight - 30);
+      const left = Math.min(Math.max(m.clientX - dx - originX, 40 - box.width), width - 40);
+      const top = Math.min(Math.max(m.clientY - dy - originY, 0), height - 30);
       dialog.style.inset = `${top}px auto auto ${left}px`;
     };
     const stop = () => {

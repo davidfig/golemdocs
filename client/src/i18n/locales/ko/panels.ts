@@ -83,6 +83,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.editForm': 'PDF 편집',
   'panels.forms.fields': '양식 필드',
   'panels.forms.dragHint': '필드를 끌어 이동하거나 모서리를 끌어 크기를 조정하십시오.',
+  'panels.forms.move': '끌어서 패널 이동',
   'panels.forms.selectHint': '이름을 바꾸거나 삭제할 필드를 선택하십시오.',
   'panels.forms.noFields': '이 PDF에는 아직 필드가 없습니다.',
   'panels.forms.fieldName': '필드 이름',

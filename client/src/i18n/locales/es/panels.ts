@@ -83,6 +83,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.editForm': 'Editar PDF',
   'panels.forms.fields': 'Campos de formulario',
   'panels.forms.dragHint': 'Arrastre un campo para moverlo, o su esquina para cambiar su tamaño.',
+  'panels.forms.move': 'Arrastra para mover este panel',
   'panels.forms.selectHint': 'Seleccione un campo para cambiarle el nombre o eliminarlo.',
   'panels.forms.noFields': 'Este PDF aún no tiene campos.',
   'panels.forms.fieldName': 'Nombre del campo',

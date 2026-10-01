@@ -161,6 +161,27 @@ select.wm-field {
   overflow-y: auto;
 }
 
+.wm-forms-grip {
+  height: 18px;
+  margin: -8px -8px 2px;
+  cursor: move;
+  touch-action: none;
+  opacity: 0.55;
+}
+
+.wm-forms-grip::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 12px;
+  margin: 6px 0 0 6px;
+  background: radial-gradient(circle, var(--wm-text) 1px, transparent 1.5px) 0 0 / 4px 4px;
+}
+
+.wm-forms-grip:hover {
+  opacity: 0.85;
+}
+
 .wm-forms-modes {
   display: flex;
   margin: 0 0 8px;

@@ -88,6 +88,7 @@ export const panels = {
   'panels.forms.editForm': 'Edit PDF',
   'panels.forms.fields': 'Form fields',
   'panels.forms.dragHint': 'Drag a field to move it, or its corner to resize it.',
+  'panels.forms.move': 'Drag to move this panel',
   'panels.forms.selectHint': 'Select a field to rename or delete it.',
   'panels.forms.noFields': 'This PDF has no fields yet.',
   'panels.forms.fieldName': 'Field name',

@@ -83,6 +83,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.editForm': '编辑 PDF',
   'panels.forms.fields': '表单字段',
   'panels.forms.dragHint': '拖动字段可移动，拖动其角落可调整大小。',
+  'panels.forms.move': '拖动以移动此面板',
   'panels.forms.selectHint': '选择字段即可重命名或删除。',
   'panels.forms.noFields': '此 PDF 尚无任何字段。',
   'panels.forms.fieldName': '字段名称',

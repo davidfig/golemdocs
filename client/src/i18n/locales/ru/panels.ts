@@ -87,6 +87,7 @@ export const panels: Catalog = {
   'panels.forms.editForm': 'Редактировать PDF',
   'panels.forms.fields': 'Поля формы',
   'panels.forms.dragHint': 'Перетащите поле, чтобы переместить его, или его угол, чтобы изменить размер.',
+  'panels.forms.move': 'Перетащите, чтобы переместить панель',
   'panels.forms.selectHint': 'Выберите поле, чтобы переименовать или удалить его.',
   'panels.forms.noFields': 'В этом PDF-файле пока нет полей.',
   'panels.forms.fieldName': 'Имя поля',

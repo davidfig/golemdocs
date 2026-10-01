@@ -13,7 +13,7 @@ import { t } from '../i18n/index.ts';
 import type { WireField } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import type { FormMode } from './actions.ts';
-import { h, isFormField } from './dom.ts';
+import { h, isFormField, makeDraggable } from './dom.ts';
 import './formLayer.css';
 
 export interface FormPage {
@@ -362,9 +362,10 @@ export class FormLayer {
       this.modeBox.append(button);
     }
     const hint = h('p', { class: 'wm-forms-hint wm-forms-edit-only', text: t('panels.forms.dragHint') });
-    return h(
+    const palette = h(
       'aside',
       { class: 'wm-forms-palette', attrs: { 'aria-label': t('panels.forms.editForm') } },
+      h('div', { class: 'wm-forms-grip', title: t('panels.forms.move') }),
       this.modeBox,
       this.toolsSlot,
       h('h3', { class: 'wm-forms-edit-only', text: t('panels.forms.fields') }),
@@ -372,6 +373,8 @@ export class FormLayer {
       hint,
       this.properties,
     );
+    makeDraggable(palette, '.wm-forms-grip');
+    return palette;
   }
 
 

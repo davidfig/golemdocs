@@ -4,6 +4,7 @@
 
 ### Added
 - Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
+- The form and PDF editing tools panel can be dragged by its top edge to move it out of the way.
 
 ## 0.4.0 - 2026-10-01
 

@@ -83,6 +83,7 @@ export const panels: Partial<Messages> = {
   'panels.forms.editForm': 'PDF を編集',
   'panels.forms.fields': 'フォームフィールド',
   'panels.forms.dragHint': 'フィールドをドラッグして移動するか、角をドラッグしてサイズを変更します。',
+  'panels.forms.move': 'ドラッグしてパネルを移動',
   'panels.forms.selectHint': 'フィールドを選択して、名前の変更や削除を行います。',
   'panels.forms.noFields': 'この PDF にはまだフィールドがありません。',
   'panels.forms.fieldName': 'フィールド名',

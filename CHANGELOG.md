@@ -1,5 +1,10 @@
 # What’s New
 
+## 0.4.1 - Unreleased
+
+### Added
+- Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
+
 ## 0.4.0 - 2026-10-01
 
 ### Added
@@ -18,9 +23,6 @@
 
 ### Fixed
 - Characters that Calibri, Cambria, Arial, Times New Roman, Courier New and Georgia have but the app did not draw (more Latin, Greek and Cyrillic letters, symbols and arrows) now show. They download only for documents that use them.
-
-### Added
-- Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
 
 ## 0.3.1 - 2026-10-01
 

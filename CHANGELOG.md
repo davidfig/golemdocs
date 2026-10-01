@@ -2,6 +2,9 @@
 
 ## 0.3.2 - Unreleased
 
+### Added
+- The Golem Docs home page is now available in all 11 languages (for example golemdocs.com/home/de). It opens in your language automatically, and there are language links in its footer.
+
 ## 0.3.1 - 2026-10-01
 
 ### Changed

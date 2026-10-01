@@ -124,3 +124,19 @@ not every language has that category.)
 - Technical error text from the format libraries (`docx`, `pdf`, `odt`, `server`) is shown after a
   translated sentence, e.g. "Couldn't open: {message}". Server error text is shown as the server sent it.
 - The `<title>` in `client/index.html` and the dev-only debug panels.
+
+## The marketing site
+
+The home page is built in every app language, at `/home` (English) and `/home/<tag>`. Its text is not in the
+app catalogs: `client/home/template.html` holds the page with `{{key}}` slots, `client/home/locales/<tag>.json`
+the text for each language (`en.json` is the source), and `pnpm home` writes the pages into `client/public/home/`.
+Commit the generated files; the `home` test fails if they are stale or a language lacks a key.
+
+- English `/home` sends visitors to their language (the app's saved `wm.locale`, else the browser's); the
+  language links in the footer set `wm.locale`, so the choice carries into the app.
+- Strings may hold their own `<a>`/`<em>` markup; keep the tags and `href`s as in English.
+- Use the same terms as the app for menu names (File ▸ Download All, Convert To, Share ▸ Get Link).
+- **Adding a language:** after the steps above, copy `en.json` to `client/home/locales/<tag>.json` and translate it,
+  run `pnpm home`, add `https://golemdocs.com/home/<tag>` to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in
+  `client/home/build.ts`.
+- The pages under `/home/` that this page links to (Convert, PDF, Privacy…) are not translated yet.

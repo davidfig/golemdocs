@@ -10,6 +10,7 @@
     "kill": "tsx scripts/kill.ts",
     "build": "pnpm --recursive build",
     "typecheck": "tsc && pnpm --recursive typecheck",
+    "home": "pnpm --filter @word/client home",
     "fonts": "tsx scripts/fonts/generate.ts",
     "test": "pnpm --no-bail --filter @word/docx --filter @word/layout --filter @word/ops --filter @word/editor --filter @word/server --filter @word/client --filter @word/pdf --filter @word/odt test",
     "test:coverage": "tsx scripts/coverage.ts",

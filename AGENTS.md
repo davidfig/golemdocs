@@ -33,6 +33,8 @@ Add tests where reasonable. New logic, a bug fix or a changed behavior that can 
 
 Every user-visible string goes through `t('area.key')` (`client/src/i18n`), never an inline literal. Add the English to `client/src/i18n/en/` and call `t()` inside functions, not at module top level. Adding an English key makes the translation-completeness test fail until every language in `client/src/i18n/locales/` has it. See `docs/localization.md` for the conventions and how to add a language.
 
+**The marketing site is translated too.** The home page (`client/public/home/`) is generated in every language the app supports from `client/home/template.html` and `client/home/locales/<tag>.json` (`pnpm home`). When you add a language to the app, also add `client/home/locales/<tag>.json`, run `pnpm home`, and add the new page to `client/public/sitemap.xml`; the `home` test fails until you do. When you change English marketing copy, update every language's file too.
+
 ## Dev servers
 
 The user starts any dev server you need (`pnpm dev`, which runs Vite on :5173 and the server on :3001). Don't start, restart or stop one yourself in the main checkout: duplicate processes pile up and fight over the ports. If you need one running, or it looks down (for example `/api` calls returning 500 from the Vite proxy), ask the user.

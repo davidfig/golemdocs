@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "home": "node --experimental-transform-types --disable-warning=ExperimentalWarning home/build.ts",
     "typecheck": "tsc",
     "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/setup.ts --test --test-force-exit --test-timeout=60000 test/*.test.ts"
   },

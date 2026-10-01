@@ -12,6 +12,8 @@ export interface Profile {
   email: string | null;
   emailVerified: boolean;
   name: string | null;
+  /** An https URL for their profile picture, if the provider has one. */
+  picture: string | null;
 }
 
 export class AuthError extends Error {}
@@ -78,6 +80,18 @@ function verifyIdToken(
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
+/** A picture URL worth keeping: https only, since it is loaded into other people's pages. */
+function pictureUrl(value: unknown): string | null {
+  const raw = text(value);
+  if (!raw || raw.length > 500) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function oidcAuthorize(base: string, clientId: string, scope: string, p: AuthorizeParams, extra: Record<string, string> = {}): URL {
   const url = new URL(base);
   const query: Record<string, string> = {
@@ -120,7 +134,7 @@ const google: Provider = {
       audience: env.GOOGLE_CLIENT_ID!,
       nonce: p.nonce,
     });
-    return { subject: claims.sub as string, email: text(claims.email), emailVerified: claims.email_verified === true, name: text(claims.name) };
+    return { subject: claims.sub as string, email: text(claims.email), emailVerified: claims.email_verified === true, name: text(claims.name), picture: pictureUrl(claims.picture) };
   },
 };
 
@@ -153,7 +167,7 @@ const microsoft: Provider = {
       nonce: p.nonce,
     });
     // Microsoft doesn't vouch that the email is verified, so it never links accounts.
-    return { subject: claims.sub as string, email: text(claims.email) ?? text(claims.preferred_username), emailVerified: false, name: text(claims.name) };
+    return { subject: claims.sub as string, email: text(claims.email) ?? text(claims.preferred_username), emailVerified: false, name: text(claims.name), picture: null };
   },
 };
 
@@ -187,12 +201,12 @@ const github: Provider = {
     const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'user-agent': 'word-auth' };
     const userResponse = await fetch('https://api.github.com/user', { headers });
     if (!userResponse.ok) throw new AuthError(`github /user failed (${userResponse.status})`);
-    const user = (await userResponse.json()) as { id?: number; login?: string; name?: string | null };
+    const user = (await userResponse.json()) as { id?: number; login?: string; name?: string | null; avatar_url?: string };
     if (typeof user.id !== 'number') throw new AuthError('no github user id');
     const emailsResponse = await fetch('https://api.github.com/user/emails', { headers });
     const emails = emailsResponse.ok ? ((await emailsResponse.json()) as { email: string; primary: boolean; verified: boolean }[]) : [];
     const primary = emails.find((e) => e.primary && e.verified);
-    return { subject: String(user.id), email: primary?.email ?? null, emailVerified: !!primary, name: text(user.name) ?? text(user.login) };
+    return { subject: String(user.id), email: primary?.email ?? null, emailVerified: !!primary, name: text(user.name) ?? text(user.login), picture: pictureUrl(user.avatar_url) };
   },
 };
 
@@ -238,6 +252,7 @@ const apple: Provider = {
       email: text(claims.email),
       emailVerified: claims.email_verified === true || claims.email_verified === 'true',
       name,
+      picture: null,
     };
   },
 };

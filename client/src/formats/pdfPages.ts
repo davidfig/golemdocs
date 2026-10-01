@@ -192,10 +192,30 @@ export async function openPdfView(
   await fonts.ensure(wanted.keys());
   const fallback = choose(fallbackStyle);
 
-  /** The loaded CJK face that has a character, for a run of this font. */
-  const cjkFace = (run: GlyphRun, cp: number): { resolved: ResolvedFont; metrics: FaceMetrics; glyph: number } | undefined => {
-    const lang = cjkLangs.get(run.name) ?? cjkLangOf(fonts, run.name, [cp]);
-    for (const resolved of fonts.cjkFonts(lang, false, false)) {
+  // Characters the faces' core atlases lack are drawn from their extra pages: loaded now too.
+  const styleOf = new Map<string, FontStyle>();
+  try {
+    for (const style of collectFonts(doc)) styleOf.set(style.name, style);
+    await Promise.all(
+      collectCharacters(doc).flatMap(({ name, codePoints }) => {
+        const style = styleOf.get(name) ?? fallbackStyle;
+        const choice = choose(style);
+        const missing = [...codePoints].filter((cp) => cp >= 0xa0 && !isCjk(cp) && !choice.metrics?.has(cp) && !fallback.metrics?.has(cp));
+        if (!missing.length) return [];
+        const styles = [{ bold: style.bold, italic: style.italic }];
+        return [...new Set([choice.resolved.family.id, fallback.resolved.family.id])].map((id) => fonts.ensurePages(id, missing, styles));
+      }),
+    );
+  } catch (e) {
+    warn(`could not load extra fonts (${(e as Error).message})`);
+  }
+
+  /** The loaded page that has a character the run's face lacks: its family's extra page, the fallback family's, then a CJK page for East Asian text. */
+  const pageFace = (run: GlyphRun, cp: number): { resolved: ResolvedFont; metrics: FaceMetrics; glyph: number } | undefined => {
+    const style = styleOf.get(run.name) ?? fallbackStyle;
+    const pages = [...new Set([choose(style).resolved.family.id, fallback.resolved.family.id])].flatMap((id) => fonts.pageFonts(id, style.bold, style.italic));
+    if (isCjk(cp)) pages.push(...fonts.cjkFonts(cjkLangs.get(run.name) ?? cjkLangOf(fonts, run.name, [cp]), false, false));
+    for (const resolved of pages) {
       const metrics = fonts.metrics(resolved.face);
       const glyph = metrics ? metrics.glyph(cp) : -1;
       if (metrics && glyph >= 0) return { resolved, metrics, glyph };
@@ -220,9 +240,9 @@ export async function openPdfView(
         const glyph = metrics.glyph(cps[0]);
         if (glyph >= 0) {
           if (metrics.visible[glyph]) list.push(g.x, g.y, run.size, glyph, color);
-        } else if (isCjk(cps[0])) {
-          const cjk = cjkFace(run, cps[0]);
-          if (cjk?.metrics.visible[cjk.glyph]) page.glyphList(cjk.resolved, cjk.metrics).push(g.x, g.y, run.size, cjk.glyph, color);
+        } else {
+          const drawn = pageFace(run, cps[0]);
+          if (drawn?.metrics.visible[drawn.glyph]) page.glyphList(drawn.resolved, drawn.metrics).push(g.x, g.y, run.size, drawn.glyph, color);
         }
         continue;
       }

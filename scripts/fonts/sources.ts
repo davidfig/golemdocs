@@ -62,13 +62,16 @@ export interface FamilySpec {
   faces: FaceSpec[];
   /** Overrides ATLAS for this family. */
   atlas?: AtlasOverride;
-  /** A file in charsets/ (msdf-atlas-gen syntax) instead of the default charset.txt. */
+  /** A file in charsets/ (msdf-atlas-gen syntax) instead of the default charset.txt, or `rest`: every character charset.txt leaves out. */
   charset?: string;
   /**
-   * A page of a CJK font: never chosen by name, only used to draw characters the document's own font
-   * lacks (see ManifestFamily.cjk in layout/src/fonts/fontTypes.ts). Not offered in the font list.
+   * An atlas page: never chosen by name, only used to draw characters the document's own font lacks (see
+   * ManifestFamily.page in layout/src/fonts/fontTypes.ts). Not offered in the font list. `group` is a CJK
+   * language, or the id of the family whose extra characters the page holds.
    */
-  cjk?: { lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'; order: number };
+  page?: { group: string; order: number };
+  /** For the extra page of a family: that family's id, whose font files (for PDFs) the page's faces share. */
+  fontsOf?: string;
   /**
    * An OpenType math font: never chosen by name, used to lay out equations. Its atlas holds the glyphs
    * math needs (see MATH_RANGES and mathGlyphSet), including size variants and assembly pieces that
@@ -135,12 +138,32 @@ function cjkPages(lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko', substitute: string,
     faces: [{ weight: 400, italic: false, font: gf(`${dir}/${file}`, sha256), variations: { wght: 400 } }],
     atlas: { type: 'msdf' as const, size: 32, pxrange: 4, dimensions: [2048, 2048] as [number, number] },
     charset: `${lang}-${i + 1}.txt`,
-    cjk: { lang, order: i },
+    page: { group: lang, order: i },
   }));
 }
 
+/**
+ * A family and its extra page: the rest of the characters its font has (Latin extensions, symbols, scripts
+ * the core charset leaves out), in a second atlas loaded only for a document that uses one of them.
+ * The core atlas stays the size every document pays for.
+ */
+function withExtras(family: FamilySpec): FamilySpec[] {
+  return [
+    family,
+    {
+      ...family,
+      id: `${family.id}-extra`,
+      wordName: `${family.wordName} (extra)`,
+      aliases: undefined,
+      charset: 'rest',
+      page: { group: family.id, order: 0 },
+      fontsOf: family.id,
+    },
+  ];
+}
+
 export const FAMILIES: FamilySpec[] = [
-  {
+  ...withExtras({
     id: 'calibri',
     wordName: 'Calibri',
     substitute: 'Carlito',
@@ -152,8 +175,8 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 400, italic: true, font: gf('carlito/Carlito-Italic.ttf', '0b019225e58d702bfedcbd35c21696769f8ee115cb6343f84c2f240312450d1c') },
       { weight: 700, italic: true, font: gf('carlito/Carlito-BoldItalic.ttf', 'b32928186c119599e03ca6a1ffc680fdcb7fac95772f4b95d989cf6cd3861517') },
     ],
-  },
-  {
+  }),
+  ...withExtras({
     id: 'cambria',
     wordName: 'Cambria',
     substitute: 'Caladea',
@@ -165,8 +188,8 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 400, italic: true, font: gf('caladea/Caladea-Italic.ttf', '4359a8e24f748b6447b1ff6d7a174febe70961d29f8bb8634b56dacd740a3deb') },
       { weight: 700, italic: true, font: gf('caladea/Caladea-BoldItalic.ttf', 'ccabaa7b7e2fdf253d2b1a5fa699dd8a3df8d835a9eb285ad82631a677eb76c0') },
     ],
-  },
-  {
+  }),
+  ...withExtras({
     id: 'arial',
     wordName: 'Arial',
     substitute: 'Liberation Sans',
@@ -178,8 +201,8 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 400, italic: true, font: lib('LiberationSans-Italic.ttf') },
       { weight: 700, italic: true, font: lib('LiberationSans-BoldItalic.ttf') },
     ],
-  },
-  {
+  }),
+  ...withExtras({
     id: 'times-new-roman',
     wordName: 'Times New Roman',
     substitute: 'Liberation Serif',
@@ -191,8 +214,8 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 400, italic: true, font: lib('LiberationSerif-Italic.ttf') },
       { weight: 700, italic: true, font: lib('LiberationSerif-BoldItalic.ttf') },
     ],
-  },
-  {
+  }),
+  ...withExtras({
     id: 'courier-new',
     wordName: 'Courier New',
     substitute: 'Liberation Mono',
@@ -204,8 +227,8 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 400, italic: true, font: lib('LiberationMono-Italic.ttf') },
       { weight: 700, italic: true, font: lib('LiberationMono-BoldItalic.ttf') },
     ],
-  },
-  {
+  }),
+  ...withExtras({
     id: 'georgia',
     wordName: 'Georgia',
     substitute: 'Gelasio',
@@ -221,7 +244,7 @@ export const FAMILIES: FamilySpec[] = [
         { weight: 700, italic: true, font: italic, variations: { wght: 700 } },
       ];
     })(),
-  },
+  }),
   {
     // Selawik has no italics; Word-style synthetic oblique will be needed for Segoe UI italic.
     id: 'segoe-ui',

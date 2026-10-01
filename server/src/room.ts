@@ -163,6 +163,7 @@ export class Room {
         role: h.get('x-role') as PeerState['role'],
         client: null,
         name: '',
+        picture: h.get('x-picture') || null,
         color: 0,
         selection: null,
         synced: false,

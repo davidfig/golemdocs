@@ -31,5 +31,7 @@ export const assistant = {
   'assistant.tool.setStyle': 'Changing a style…',
   'assistant.tool.formatText': 'Formatting text…',
   'assistant.tool.addComment': 'Adding a comment…',
+  'assistant.tool.convert': 'Converting the document…',
   'assistant.tool.other': 'Working…',
+  'assistant.tool.rename': 'Renaming the document…',
 };

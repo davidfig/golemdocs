@@ -27,6 +27,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.fillForm': '&Compila modulo',
   'chrome.view.editForm': '&Modifica PDF',
   'chrome.view.grid': 'Griglia &pagina',
+  'chrome.view.pagesPanel': 'Barra laterale pa&gine',
   'chrome.view.ruler': '&Righello',
   'chrome.view.formattingMarks': 'Segni di &formattazione',
   'chrome.view.zoomIn': '&Ingrandisci',
@@ -280,4 +281,10 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.needModifier': 'Includi Ctrl, Alt o ⌘ (oppure usa un tasto funzione).',
   'chrome.shortcuts.moved': '{label} non usa più questi tasti.',
   'chrome.shortcuts.change': 'Cambia la scorciatoia di {label}',
+  'chrome.file.rename': '&Rinomina…',
+  'chrome.file.rename.tip': 'Cambia il nome di questo documento',
+  'chrome.title.label': 'Nome del documento',
+  'chrome.title.tip': 'Fai clic per rinominare',
+  'chrome.rename.title': 'Rinomina documento',
+  'chrome.rename.action': 'Rinomina',
 };

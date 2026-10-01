@@ -388,6 +388,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'zoom':
     case 'zoomBy':
     case 'toggleGrid':
+    case 'togglePagesPanel':
     case 'toggleRuler':
     case 'toggleFormattingMarks':
       return true;

@@ -1,7 +1,7 @@
 import type { Catalog } from '../../index.ts';
 
 export const spelling: Catalog = {
-  'spelling.title': 'Правописание: английский (США)',
+  'spelling.title': 'Правописание',
   'spelling.close': 'Закрыть',
   'spelling.notInDictionary': 'Нет в словаре:',
   'spelling.grammarLabel': 'Грамматика: {message}',

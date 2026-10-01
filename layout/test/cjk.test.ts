@@ -52,7 +52,7 @@ const PAGES: PageSpec[] = [
 function makeFonts() {
   const files: Record<string, unknown> = {};
   const loaded: string[] = [];
-  const family = (id: string, wordName: string, glyphs: ReturnType<typeof glyph>[], m: ReturnType<typeof metrics>, cjk?: object) => {
+  const family = (id: string, wordName: string, glyphs: ReturnType<typeof glyph>[], m: ReturnType<typeof metrics>, page?: object) => {
     files[`${id}/layout.json`] = layoutJson(glyphs);
     return {
       id,
@@ -62,7 +62,7 @@ function makeFonts() {
       licenseFile: '',
       aliases: {},
       faces: [{ weight: 400, italic: false, atlas: `${id}/atlas.png`, layout: `${id}/layout.json`, metrics: m }],
-      ...(cjk && { cjk }),
+      ...(page && { page }),
     };
   };
   const families = [
@@ -70,7 +70,7 @@ function makeFonts() {
     ...PAGES.map((page) => {
       files[`${page.id}/coverage.json`] = chars(page.text).sort((a, b) => a - b).flatMap((c) => [c, c]);
       return family(page.id, page.id, chars(page.text).map((c) => glyph(c, page.advance)), metrics(1160, 288), {
-        lang: page.lang,
+        group: page.lang,
         order: page.order,
         coverage: `${page.id}/coverage.json`,
       });
@@ -203,12 +203,12 @@ test('only pages whose coverage intersects the text are loaded', async () => {
   assert.ok(loaded.includes('noto-sans-jp-1') && loaded.includes('noto-sans-jp-2'));
   assert.ok(!loaded.includes('noto-sans-jp-3'), 'no character on page 3');
   assert.ok(!loaded.some((id) => id.includes('-tc-')), 'the other language stays unloaded');
-  // Text typed later loads its page first (see LayoutSession.ensureCjk).
+  // Text typed later loads its page first (see LayoutSession.ensurePages).
   const doc = await WordDocument.create();
   const session = await LayoutSession.create(doc, fonts);
-  await session.ensureCjk('猫');
+  await session.ensurePages('猫');
   assert.ok(loaded.includes('noto-sans-jp-3'));
-  await session.ensureCjk('abc');
+  await session.ensurePages('abc');
   assert.equal(loaded.filter((id) => id === 'noto-sans-jp-3').length, 1);
 });
 

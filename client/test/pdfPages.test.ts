@@ -121,8 +121,8 @@ test('East Asian text is drawn from the CJK pages of the font’s language', ski
   const laid = view.layoutPage(0);
   assert.equal(laid.glyphCount, text.length);
   const lists = [...laid.glyphs.values()].filter((l) => l.count);
-  assert.ok(lists.every((l) => fonts!.cjkPages('zh-Hant').includes(l.font.family) || fonts!.cjkPages('zh-Hans').includes(l.font.family)), lists.map((l) => l.font.family.id).join());
-  assert.ok(lists.some((l) => fonts!.cjkPages('zh-Hant').includes(l.font.family)));
+  assert.ok(lists.every((l) => fonts!.pages('zh-Hant').includes(l.font.family) || fonts!.pages('zh-Hans').includes(l.font.family)), lists.map((l) => l.font.family.id).join());
+  assert.ok(lists.some((l) => fonts!.pages('zh-Hant').includes(l.font.family)));
 });
 
 test('the CJK language of a PDF font: by its name as PDFs write it, else by its characters', () => {

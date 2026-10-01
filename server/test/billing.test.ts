@@ -63,6 +63,12 @@ test('charges are totaled by service, biggest first, from the start of this mont
   assert.equal(new Date(summary.from).getUTCDate(), 1);
   assert.match(calls[0].url, /\/accounts\/acct\/billable-usage\?/);
   assert.equal(calls[0].auth, 'Bearer token');
+  assert.equal(calls.length, 6, 'this month and the five before it');
+  assert.equal(summary.history.length, 5);
+  const first = summary.history[0];
+  assert.equal(first.to, summary.from, 'each earlier month ends where the next begins');
+  assert.equal(new Date(first.from).getUTCDate(), 1);
+  assert.equal(first.total, 6.25);
 });
 
 test('a second request within minutes is answered from the cache', async () => {

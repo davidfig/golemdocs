@@ -8,6 +8,9 @@ export const panels: Partial<Messages> = {
   'panels.billing.soFar': '{month} 현재까지: {total}',
   'panels.billing.none': '이번 달에는 아직 청구된 요금이 없습니다.',
   'panels.billing.asOf': '{time} 기준. Cloudflare에서 사용량을 보고하는 데 시간이 걸릴 수 있습니다.',
+  'panels.billing.noneIn': '{month}에는 요금이 없습니다.',
+  'panels.billing.earlier': '이전 달',
+  'panels.billing.month': '{month}: {total}',
 
   // Comments
   'panels.comments.label': '메모',
@@ -107,4 +110,9 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': '의견 삭제',
   'panels.feedback.deleteAsk': '이 의견을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.',
   'panels.feedback.resolved': '해결됨',
+  'panels.pages.label': '페이지',
+  'panels.pages.page': '{number}페이지',
+  'panels.pages.delete': '{number}페이지 삭제',
+  'panels.pages.close': '닫기',
+  'panels.pages.hint': '페이지를 재정렬하거나 삭제하려면 {mode}(으)로 전환하세요.',
 };

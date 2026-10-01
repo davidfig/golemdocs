@@ -27,6 +27,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.fillForm': '填寫表單(&F)',
   'chrome.view.editForm': '編輯 PDF(&E)',
   'chrome.view.grid': '頁面格線(&G)',
+  'chrome.view.pagesPanel': '頁面側邊欄(&B)',
   'chrome.view.ruler': '尺規(&R)',
   'chrome.view.formattingMarks': '格式標記(&M)',
   'chrome.view.zoomIn': '放大(&I)',
@@ -280,4 +281,10 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.needModifier': '請包含 Ctrl、Alt 或 ⌘(或使用功能鍵)。',
   'chrome.shortcuts.moved': '{label} 不再使用這些按鍵。',
   'chrome.shortcuts.change': '變更 {label} 的快速鍵',
+  'chrome.file.rename': '重新命名(&R)…',
+  'chrome.file.rename.tip': '變更此文件的名稱',
+  'chrome.title.label': '文件名稱',
+  'chrome.title.tip': '按一下以重新命名',
+  'chrome.rename.title': '重新命名文件',
+  'chrome.rename.action': '重新命名',
 };

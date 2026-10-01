@@ -67,11 +67,14 @@ import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type Document
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { runAgentTool } from './agentTools.ts';
+import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
-import { Dictionary } from '../spelling/dictionary.ts';
+import { APP_WORDS } from '../spelling/appWords.ts';
+import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../spelling/dictionary.ts';
+import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLanguage, type Unchecked } from '../spelling/languages.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
 const SLICE_MS = 12;
@@ -223,6 +226,7 @@ const sentFaces = new Set<string>();
 
 interface Person {
   name: string;
+  picture: string | null;
   color: number;
   selection: OpSelection | null;
   pointer: Pointer | null;
@@ -279,7 +283,8 @@ class OpenDocument {
   /** What the last Spelling and Grammar step found, sent with the next selection. */
   private spell: SelectionUpdate['spell'] | null = null;
   /** Check-as-you-type is waiting for the dictionary to load. */
-  private loadingMarks = false;
+  /** The languages whose dictionaries the squiggles are waiting for. */
+  private loadingMarks = new Set<SpellLanguage>();
   /** The last Word Count's answer, sent with the next selection (null: none to give). */
   private stats: SelectionUpdate['stats'] = undefined;
   /** The document's properties, asked for by File ▸ Properties, sent with the next selection. */
@@ -785,6 +790,10 @@ class OpenDocument {
           if (index >= doc.pageCount - 1) return;
           doc.movePage(index, index + 1);
           break;
+        case 'move':
+          if (!Number.isInteger(wire.to) || wire.to < 0 || wire.to >= doc.pageCount || wire.to === index) return;
+          doc.movePage(index, wire.to);
+          break;
         case 'duplicate':
           doc.copyPages(doc, [index], index + 1);
           break;
@@ -900,7 +909,7 @@ class OpenDocument {
         break;
       }
       case 'presence':
-        if (message.selection) this.people.set(message.client, { name: message.name, color: message.color, selection: message.selection, pointer: null });
+        if (message.selection) this.people.set(message.client, { name: message.name, picture: null, color: message.color, selection: message.selection, pointer: null });
         else this.people.delete(message.client);
         this.sendSelection();
         break;
@@ -968,7 +977,7 @@ class OpenDocument {
 
   private postPointers(): void {
     const pointers = [];
-    for (const person of this.people.values()) if (person.pointer) pointers.push({ ...person.pointer, color: person.color, name: person.name });
+    for (const person of this.people.values()) if (person.pointer) pointers.push({ ...person.pointer, color: person.color, name: person.name, picture: person.picture });
     post({ type: 'pointers', doc: this.doc, pointers });
   }
 
@@ -981,7 +990,7 @@ class OpenDocument {
     const net = this.net;
     if (!net) return;
     const { mode, role, people } = net.state;
-    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ name, color }) => ({ name, color })), unconfirmed: this.replica?.sync?.unconfirmed ?? 0 });
+    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? 0 });
   }
 
   /**
@@ -1059,7 +1068,7 @@ class OpenDocument {
       },
       people: (list) => {
         this.people.clear();
-        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, color: p.color, selection: p.selection, pointer: p.pointer });
+        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, picture: p.picture, color: p.color, selection: p.selection, pointer: p.pointer });
         this.postPointers();
         this.sendSelection();
       },
@@ -1098,6 +1107,7 @@ class OpenDocument {
 
   /** One of the assistant's tools, run on this document (see agentTools.ts). Settles with its answer once its edits have taken effect. */
   async agent(name: string, args: string): Promise<string> {
+    if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
     const editor = this.editor;
     if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
     return runAgentTool(
@@ -1111,6 +1121,33 @@ class OpenDocument {
           while (this.waiting) await this.waiting;
         },
         format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
+      },
+      name,
+      args,
+    );
+  }
+
+  /** One of the assistant's tools on a PDF shown as its own pages (see agentPdfTools.ts). */
+  private agentPdf(annotator: PdfAnnotator, name: string, args: string): Promise<string> {
+    const ids = () => this.pdfPages;
+    const pageCount = () => this.pdf?.view.pageCount ?? 0;
+    return runPdfTool(
+      {
+        annotator,
+        get pageCount() {
+          return pageCount();
+        },
+        characters: (index) => this.pdf?.view.characters(index) ?? [],
+        pageId: (index) => ids()[index]?.id,
+        pageSize: (index) => ids()[index] && { width: ids()[index]!.width, height: ids()[index]!.height },
+        fields: () => annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
+        run: async (wire) => {
+          if (this.closed) throw new Error('the document was closed');
+          this.command(wire);
+          while (this.waiting) await this.waiting;
+        },
+        pageOp: (index, op) => this.pdfPageOp(annotator, { kind: 'pdfPageOp', page: ids()[index]!.id, op }),
+        pick: (index, x, y) => this.pickText(annotator, index, x, y),
       },
       name,
       args,
@@ -1224,21 +1261,19 @@ class OpenDocument {
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
     if (!live.spelling && !live.grammar) return new Float64Array(0);
-    const dictionary = loadedDictionary;
-    if (!dictionary) {
-      if (!this.loadingMarks) {
-        this.loadingMarks = true;
-        loadDictionary()
-          .then(() => this.sendSelection())
-          .catch(() => undefined)
-          .finally(() => (this.loadingMarks = false));
-      }
-      return new Float64Array(0);
-    }
     const [start, end] = editor.ordered();
     const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
+    const documentLang = documentLanguageOf(editor);
     const marks = editor.marks((paragraph) =>
-      issuesOf(paragraph, dictionary)
+      issuesOf(paragraph, documentLang, (language) => {
+        // A dictionary is fetched the first time a paragraph in its language is checked.
+        if (this.loadingMarks.has(language)) return;
+        this.loadingMarks.add(language);
+        loadDictionary(language)
+          .then(() => this.sendSelection())
+          .catch(() => undefined)
+          .finally(() => this.loadingMarks.delete(language));
+      })
         // The word being typed isn't marked until the caret leaves it.
         .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && typing.offset <= i.end))
         .map((i) => ({ start: i.start, end: i.end, kind: i.kind === 'spelling' ? 0 : 1 })),
@@ -1259,12 +1294,14 @@ class OpenDocument {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session || this.closed || this.annotator) return;
-    const dictionary = await loadDictionary();
     const page = session.displayPages.find((p) => p.id === pageId);
     const hit = page && editor.hitTest(page, x, y);
+    const documentLang = documentLanguageOf(editor);
+    const language = hit && paragraphLanguageOf(hit.paragraph, documentLang);
+    const dictionary = language && language !== 'none' ? await loadDictionary(language) : null;
     this.spell = { issue: null, menu: true };
-    if (hit) {
-      const issue = issuesOf(hit.paragraph, dictionary).find((i) => i.start <= hit.offset && hit.offset <= i.end);
+    if (hit && dictionary) {
+      const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && hit.offset <= i.end);
       if (issue) {
         this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
         editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
@@ -1278,14 +1315,22 @@ class OpenDocument {
   private async spellNext(from: 'documentStart' | 'selectionStart' | 'selectionEnd', grammar: boolean): Promise<void> {
     const editor = this.editor;
     if (!editor || this.closed || this.annotator) return;
-    const dictionary = await loadDictionary();
     const list = editor.paragraphs();
+    const documentLang = documentLanguageOf(editor);
     const [start, end] = editor.ordered();
     const origin = from === 'documentStart' ? { paragraph: 0, offset: 0 } : { paragraph: Math.max(list.indexOf(from === 'selectionStart' ? start.paragraph : end.paragraph), 0), offset: (from === 'selectionStart' ? start : end).offset };
+    // The dictionaries of the languages in the rest of the document, before the search starts.
+    const languages = list.slice(origin.paragraph).map((paragraph) => paragraphLanguageOf(paragraph, documentLang));
+    const dictionaries = new Map<SpellLanguage, Dictionary>();
+    for (const language of new Set(languages)) if (language !== 'none') dictionaries.set(language, await loadDictionary(language));
+    if (this.closed) return;
     this.spell = { issue: null };
     for (let k = origin.paragraph; k < list.length; k++) {
+      const language = languages[k - origin.paragraph];
+      const dictionary = language === 'none' ? undefined : dictionaries.get(language);
+      if (!dictionary) continue;
       const text = paragraphText(list[k]);
-      const issue = findIssues(text, { dictionary, grammar, ignoredRules: spelling.rules }).find((i) => k > origin.paragraph || i.start >= origin.offset);
+      const issue = findIssues(text, { dictionary, grammar: grammar && language === 'en', ignoredRules: spelling.rules }).find((i) => k > origin.paragraph || i.start >= origin.offset);
       if (!issue) continue;
       this.spell = { issue: describeIssue(text, issue, dictionary) };
       editor.apply({ kind: 'select', paragraph: k, from: issue.start, to: issue.end });
@@ -1340,10 +1385,10 @@ class OpenDocument {
     if (!editor || !session) return;
     // An equation needs the math font before it is laid out.
     if (!mathReady && commandHasMath(wire)) return session.ensureMath().then(() => this.runCommand(wire, cjkReady, true));
-    // Typed, pasted or replaced Japanese and Chinese text needs its font pages before it is laid out.
+    // Typed, pasted or replaced text with characters the core font atlases lack (accents aside, symbols, East Asian text) needs its font pages before it is laid out.
     if (!cjkReady && !this.annotator) {
       const text = commandText(wire);
-      if (text && /[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7ff\uf900-\ufaff\uff00-\uffef]/.test(text)) return session.ensureCjk(text).then(() => this.runCommand(wire, true, mathReady));
+      if (text && /[^\u0000-\u009f]/.test(text)) return session.ensurePages(text).then(() => this.runCommand(wire, true, mathReady));
     }
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
@@ -1376,19 +1421,53 @@ class OpenDocument {
 const spelling = { words: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
 const live = { spelling: true, grammar: true };
-let dictionaryLoad: Promise<Dictionary> | null = null;
-let loadedDictionary: Dictionary | null = null;
+const dictionaries = new Map<SpellLanguage, Promise<Dictionary>>();
+const loadedDictionaries = new Map<SpellLanguage, Dictionary>();
 /** Changes when what counts as a mistake does, so checked paragraphs are checked again. */
 let spellVersion = 0;
-const checked = new WeakMap<object, { text: string; version: number; issues: TextIssue[] }>();
+const checked = new WeakMap<object, { text: string; version: number; documentLang: SpellLanguage | Unchecked; issues: TextIssue[] }>();
 
-/** What is wrong in a paragraph: kept until its text (or what counts as wrong) changes. */
-function issuesOf(paragraph: Parameters<typeof paragraphText>[0], dictionary: Dictionary): TextIssue[] {
+/** The language a document is in, for text that doesn't say: kept while its beginning is unchanged. */
+const documentLanguages = new WeakMap<Editor, { declared: string | undefined; sample: string; locale: string; language: SpellLanguage | Unchecked }>();
+
+function documentLanguageOf(editor: Editor): SpellLanguage | Unchecked {
+  const declared = editor.doc.styles.defaultRunProperties?.lang?.val;
+  let sample = '';
+  for (const paragraph of editor.paragraphs()) {
+    sample += `${paragraphText(paragraph)}\n`;
+    if (sample.length >= 4000) break;
+  }
+  const locale = getLocale();
+  const known = documentLanguages.get(editor);
+  if (known && known.declared === declared && known.sample === sample && known.locale === locale) return known.language;
+  const language = documentLanguage(declared, () => sample, locale);
+  documentLanguages.set(editor, { declared, sample, locale, language });
+  return language;
+}
+
+/** The language of a paragraph (see spelling/languages.ts). */
+function paragraphLanguageOf(paragraph: Parameters<typeof paragraphText>[0], documentLang: SpellLanguage | Unchecked, text = paragraphText(paragraph)): SpellLanguage | Unchecked {
+  return paragraphLanguage(runPropertiesAt(paragraph, 0)?.lang?.val, text, documentLang);
+}
+
+/**
+ * What is wrong in a paragraph: kept until its text (or what counts as wrong) changes. A paragraph
+ * in a language whose dictionary isn't loaded yet has nothing wrong for now, and `needs` says so.
+ */
+function issuesOf(paragraph: Parameters<typeof paragraphText>[0], documentLang: SpellLanguage | Unchecked, needs: (language: SpellLanguage) => void): TextIssue[] {
   const text = paragraphText(paragraph);
   const known = checked.get(paragraph);
-  if (known && known.text === text && known.version === spellVersion) return known.issues;
-  const issues = findIssues(text, { dictionary, grammar: live.grammar, ignoredRules: spelling.rules }).filter((i) => live.spelling || i.kind !== 'spelling');
-  checked.set(paragraph, { text, version: spellVersion, issues });
+  if (known && known.text === text && known.version === spellVersion && known.documentLang === documentLang) return known.issues;
+  const language = paragraphLanguageOf(paragraph, documentLang, text);
+  if (language === 'none') return [];
+  const dictionary = loadedDictionaries.get(language);
+  if (!dictionary) {
+    needs(language);
+    return [];
+  }
+  // The grammar rules are English.
+  const issues = findIssues(text, { dictionary, grammar: live.grammar && language === 'en', ignoredRules: spelling.rules }).filter((i) => live.spelling || i.kind !== 'spelling');
+  checked.set(paragraph, { text, version: spellVersion, documentLang, issues });
   return issues;
 }
 
@@ -1402,22 +1481,31 @@ function describeIssue(text: string, issue: TextIssue, dictionary: Dictionary): 
   return { kind: issue.kind, before, text: issue.text, after, message: issue.message, suggestions: issue.kind === 'spelling' ? dictionary.suggest(issue.text) : issue.suggestions, rule: issue.rule };
 }
 
-/** The English dictionary, read the first time something is checked. */
-function loadDictionary(): Promise<Dictionary> {
-  dictionaryLoad ??= Promise.all([fetch(`${DICTIONARY_BASE}en_US.aff`), fetch(`${DICTIONARY_BASE}en_US.dic`)])
-    .then(async ([aff, dic]) => {
-      if (!aff.ok || !dic.ok) throw new Error('the dictionary could not be loaded');
-      const dictionary = Dictionary.parse(await aff.text(), await dic.text());
-      dictionary.accept(...spelling.words);
-      loadedDictionary = dictionary;
-      return dictionary;
-    })
-    .catch((error: unknown) => {
+/** A language's dictionary, read the first time something in it is checked. */
+function loadDictionary(language: SpellLanguage): Promise<Dictionary> {
+  let load = dictionaries.get(language);
+  if (!load) {
+    load = readDictionary(language).catch((error: unknown) => {
       // Try again next time.
-      dictionaryLoad = null;
+      dictionaries.delete(language);
       throw error;
     });
-  return dictionaryLoad;
+    dictionaries.set(language, load);
+  }
+  return load;
+}
+
+async function readDictionary(language: SpellLanguage): Promise<Dictionary> {
+  const file = DICTIONARY_FILES[language];
+  const [aff, dic] = await Promise.all([fetch(`${DICTIONARY_BASE}${file}.aff`), fetch(`${DICTIONARY_BASE}${file}.dic`)]);
+  if (!aff.ok || !dic.ok) throw new Error('the dictionary could not be loaded');
+  const affix = new Uint8Array(await aff.arrayBuffer());
+  // Some dictionaries are not UTF-8 (German is ISO 8859-1): the .aff says which.
+  const decoder = new TextDecoder(affixEncoding(affix));
+  const dictionary = Dictionary.parse(decoder.decode(affix), decoder.decode(await dic.arrayBuffer()), { smallWords: language === 'en' ? ENGLISH_SMALL_WORDS : undefined });
+  dictionary.accept(...APP_WORDS[language], ...spelling.words);
+  loadedDictionaries.set(language, dictionary);
+  return dictionary;
 }
 
 /** Words to treat as spelled correctly and grammar rules to leave out, from now on. */
@@ -1425,7 +1513,8 @@ async function acceptSpelling(words: string[], rules: string[]): Promise<void> {
   for (const word of words) spelling.words.add(word);
   for (const rule of rules) spelling.rules.add(rule);
   spellVersion++;
-  if (dictionaryLoad) (await dictionaryLoad).accept(...words);
+  for (const dictionary of loadedDictionaries.values()) dictionary.accept(...words);
+  // A dictionary still being read takes them when it is done (it reads `spelling.words`).
 }
 
 let current: OpenDocument | null = null;

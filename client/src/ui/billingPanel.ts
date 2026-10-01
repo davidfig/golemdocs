@@ -1,15 +1,19 @@
-// The body of View > Cloudflare Billing (admins only): this month's Cloudflare charges by service,
+// The body of View > Cloudflare Billing (admins only): this month's Cloudflare charges by service, and the months before it,
 // from the server's /api/admin/billing.
 
 import { getLocale, t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 
-interface Billing {
-  currency: string;
+interface Month {
   from: string;
   to: string;
   total: number;
   services: { name: string; cost: number }[];
+}
+
+interface Billing extends Month {
+  currency: string;
+  history: Month[];
 }
 
 export function billingPanel(): HTMLElement {
@@ -33,11 +37,16 @@ async function load(body: HTMLElement): Promise<void> {
 
 function render(body: HTMLElement, billing: Billing): void {
   const money = new Intl.NumberFormat(getLocale(), { style: 'currency', currency: billing.currency, minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  const month = new Date(billing.from).toLocaleDateString(getLocale(), { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const rows = billing.services.map((s) => h('tr', {}, h('td', { text: s.name }), h('td', { class: 'wm-billing-cost', text: money.format(s.cost) })));
+  const monthName = (m: Month) => new Date(m.from).toLocaleDateString(getLocale(), { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const table = (m: Month) =>
+    m.services.length
+      ? h('table', {}, h('tbody', {}, ...m.services.map((s) => h('tr', {}, h('td', { text: s.name }), h('td', { class: 'wm-billing-cost', text: money.format(s.cost) })))))
+      : h('p', { text: t('panels.billing.noneIn', { month: monthName(m) }) });
   body.replaceChildren(
-    h('p', {}, h('strong', { text: t('panels.billing.soFar', { month, total: money.format(billing.total) }) })),
-    rows.length ? h('table', {}, h('tbody', {}, ...rows)) : h('p', { text: t('panels.billing.none') }),
+    h('p', {}, h('strong', { text: t('panels.billing.soFar', { month: monthName(billing), total: money.format(billing.total) }) })),
+    billing.services.length ? table(billing) : h('p', { text: t('panels.billing.none') }),
     h('small', { text: t('panels.billing.asOf', { time: new Date(billing.to).toLocaleString(getLocale()) }) }),
+    ...(billing.history.length ? [h('h4', { text: t('panels.billing.earlier') })] : []),
+    ...billing.history.map((m) => h('details', {}, h('summary', { text: t('panels.billing.month', { month: monthName(m), total: money.format(m.total) }) }), table(m))),
   );
 }

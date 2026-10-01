@@ -4,7 +4,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { MONTHLY_BUDGET_MICRO, periodOf } from '../src/assistant.ts';
-import { costMicro, parseCompletion } from '../src/model.ts';
+import { SYSTEM_PROMPT, TOOLS } from '../src/assistantTools.ts';
+import { costMicro, estimateTokens, MAX_OUTPUT_TOKENS, parseCompletion } from '../src/model.ts';
 import { world, type World } from './harness.ts';
 
 let w: World;
@@ -184,8 +185,9 @@ test('a failing model costs nothing and releases its hold', async () => {
 
 test('requests running at once cannot overspend: the second is refused while the first holds its worst case', async () => {
   const { id, email } = await subscriber();
-  // Room for one request's worst case, not two.
-  w.directory.prepare('INSERT INTO assistant_usage (user_id, period, spent_micro) VALUES (?, ?, ?)').run(id, periodOf(), MONTHLY_BUDGET_MICRO - 2500);
+  // Room for one request's worst case, not two (a request's worst case grows with the tools it carries).
+  const worstCase = costMicro(estimateTokens(SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + 100), MAX_OUTPUT_TOKENS);
+  w.directory.prepare('INSERT INTO assistant_usage (user_id, period, spent_micro) VALUES (?, ?, ?)').run(id, periodOf(), MONTHLY_BUDGET_MICRO - Math.round(worstCase * 1.5));
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   answer = async () => {

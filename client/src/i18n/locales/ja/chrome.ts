@@ -27,6 +27,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.fillForm': 'フォームに入力(&F)',
   'chrome.view.editForm': 'PDF を編集(&E)',
   'chrome.view.grid': 'ページ グリッド(&G)',
+  'chrome.view.pagesPanel': 'ページ サイドバー(&B)',
   'chrome.view.ruler': 'ルーラー(&R)',
   'chrome.view.formattingMarks': '編集記号(&M)',
   'chrome.view.zoomIn': '拡大(&I)',
@@ -280,4 +281,10 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.needModifier': 'Ctrl、Alt、⌘ のいずれか(またはファンクション キー)を含めてください。',
   'chrome.shortcuts.moved': '{label} はこのキーを使わなくなりました。',
   'chrome.shortcuts.change': '{label} のショートカットを変更',
+  'chrome.file.rename': '名前の変更(&R)…',
+  'chrome.file.rename.tip': 'このドキュメントの名前を変更します',
+  'chrome.title.label': 'ドキュメント名',
+  'chrome.title.tip': 'クリックして名前を変更',
+  'chrome.rename.title': 'ドキュメントの名前の変更',
+  'chrome.rename.action': '名前を変更',
 };

@@ -55,7 +55,7 @@ interface ManifestFamily {
   licenseFile: string;
   aliases: Record<string, number>;
   faces: ManifestFace[];
-  cjk?: { lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'; order: number; coverage: string };
+  page?: { group: string; order: number; coverage: string };
   /** The math font: `data` is the path of its math.json, relative to the manifest. */
   math?: { data: string };
 }
@@ -69,7 +69,7 @@ interface Manifest {
 
 /** Runs a command. With `quiet`, output is captured and returned (and printed only on failure). */
 function run(cmd: string, args: string[], opts: { cwd?: string; quiet?: boolean } = {}): string {
-  const result = spawnSync(cmd, args, { cwd: opts.cwd, stdio: opts.quiet ? 'pipe' : 'inherit', encoding: 'utf8' });
+  const result = spawnSync(cmd, args, { cwd: opts.cwd, stdio: opts.quiet ? 'pipe' : 'inherit', encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (result.error) throw result.error;
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (result.status !== 0) {
@@ -192,12 +192,16 @@ async function pngToWebp(png: string, webp: string): Promise<void> {
 /**
  * Writes `<family>/coverage.json`, the code points a generated layout has glyphs for as a flat list of
  * inclusive ranges `[from, to, from, to, …]`, and returns its path relative to the manifest. It is a
- * separate small file, fetched only for documents with CJK text, so the manifest every user loads
- * stays small.
+ * separate small file, fetched only for documents with text the family's core page lacks, so the manifest
+ * every user loads stays small. A page's faces can differ, so it holds the union.
  */
-function writeCoverage(id: string, layoutPath: string): string {
-  const layout = JSON.parse(readFileSync(path.join(OUT, layoutPath), 'utf8')) as { glyphs: { unicode?: number }[] };
-  const cps = layout.glyphs.flatMap((g) => (g.unicode === undefined ? [] : [g.unicode])).sort((a, b) => a - b);
+function writeCoverage(id: string, layoutPaths: string[]): string {
+  const all = new Set<number>();
+  for (const layoutPath of layoutPaths) {
+    const layout = JSON.parse(readFileSync(path.join(OUT, layoutPath), 'utf8')) as { glyphs: { unicode?: number }[] };
+    for (const g of layout.glyphs) if (g.unicode !== undefined) all.add(g.unicode);
+  }
+  const cps = [...all].sort((a, b) => a - b);
   const ranges: [number, number][] = [];
   for (const cp of cps) {
     const last = ranges[ranges.length - 1];
@@ -272,6 +276,29 @@ function writeMathData(font: MathFontInfo, layoutPath: string, outPath: string):
   writeFileSync(outPath, JSON.stringify(data));
 }
 
+/** Writes the charset of every character charset.txt leaves out (surrogates aside), for an extra page; its path. */
+function writeRestCharset(dir: string): string {
+  const taken: [number, number][] = [];
+  for (const m of readFileSync(CHARSET, 'utf8').matchAll(/\[\s*(0x[0-9a-f]+)\s*,\s*(0x[0-9a-f]+)\s*\]|(0x[0-9a-f]+)/gi)) {
+    taken.push(m[3] ? [parseInt(m[3], 16), parseInt(m[3], 16)] : [parseInt(m[1], 16), parseInt(m[2], 16)]);
+  }
+  taken.push([0xd800, 0xdfff]); // surrogates are not characters
+  taken.sort((a, b) => a[0] - b[0]);
+  const rest: string[] = [];
+  let from = 0x20;
+  const free = (to: number) => {
+    if (to >= from) rest.push(`[0x${from.toString(16)}, 0x${to.toString(16)}]`);
+  };
+  for (const [a, b] of taken) {
+    free(a - 1);
+    from = Math.max(from, b + 1);
+  }
+  free(0x10ffff);
+  const file = path.join(dir, 'rest-charset.txt');
+  writeFileSync(file, rest.join(',\n') + '\n');
+  return file;
+}
+
 async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fontPath: string, embedPath?: string): Promise<ManifestFace> {
   const name = faceName(face);
   const dir = path.join(OUT, family.id);
@@ -292,7 +319,8 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
     const glyphs = path.join(tmp, `${family.id}-glyphs.txt`);
     writeFileSync(glyphs, mathGlyphSet(math, MATH_RANGES).join(', '));
     charset = ['-glyphset', glyphs];
-  } else charset = ['-charset', family.charset ? path.join(HERE, 'charsets', family.charset) : CHARSET];
+  } else if (family.charset === 'rest') charset = ['-charset', writeRestCharset(tmp)];
+  else charset = ['-charset', family.charset ? path.join(HERE, 'charsets', family.charset) : CHARSET];
   const output = run(tool, [
     ...input,
     ...charset,
@@ -306,9 +334,9 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
     '-json', path.join(dir, `${name}.json`),
   ], { quiet: true });
 
-  // Characters in charset.txt that the font doesn't have; the renderer needs a fallback for these.
+  // Characters in charset.txt that the font doesn't have (charset.txt is every code point, so the atlas holds every glyph the font has); the renderer needs a fallback for these.
   const missing = output.match(/^Missing \d+ codepoints?: .*$/m);
-  if (missing) console.log(`    ${missing[0]}`);
+  if (missing) console.log(`    ${missing[0].slice(0, 120)}`);
 
   await pngToWebp(png, path.join(dir, `${name}.webp`));
   rmSync(png);
@@ -319,14 +347,14 @@ async function generateFace(tool: string, family: FamilySpec, face: FaceSpec, fo
     italic: face.italic,
     atlas: `${family.id}/${name}.webp`,
     layout: `${family.id}/${name}.json`,
-    ...copyFontFile(family, face, embedPath ?? fontPath),
+    ...(family.fontsOf ? { font: `${family.fontsOf}/${faceName(face)}.ttf` } : copyFontFile(family, face, embedPath ?? fontPath)),
     metrics: readFontMetrics(readFileSync(fontPath)),
   };
 }
 
 /** Copies a face's font file next to its atlas (not the CJK pages': variable fonts of many megabytes); its manifest entry. */
 function copyFontFile(family: FamilySpec, face: FaceSpec, fontPath: string): { font?: string } {
-  if (family.cjk || face.variations) return {};
+  if (family.page || face.variations) return {};
   const name = `${faceName(face)}.ttf`;
   mkdirSync(path.join(OUT, family.id), { recursive: true });
   copyFileSync(fontPath, path.join(OUT, family.id, name));
@@ -341,8 +369,8 @@ async function main(): Promise<void> {
   const only = onlyIndex >= 0 ? new Set(args[onlyIndex + 1]?.split(',') ?? []) : null;
   const downloadOnly = args.includes('--download-only');
 
-  // The CJK pages have no font file to copy, so --ttf-only doesn't fetch their (large) sources.
-  const wanted = args.includes('--ttf-only') ? FAMILIES.filter((f) => !f.cjk) : FAMILIES;
+  // Pages have no font file to copy (an extra page shares its family's), so --ttf-only doesn't fetch their sources.
+  const wanted = args.includes('--ttf-only') ? FAMILIES.filter((f) => !f.page) : FAMILIES;
   const families = only ? wanted.filter((f) => only.has(f.id)) : wanted;
   if (only) {
     const unknown = [...only].filter((id) => !FAMILIES.some((f) => f.id === id));
@@ -407,7 +435,7 @@ async function main(): Promise<void> {
       licenseFile: `${family.id}/LICENSE.txt`,
       aliases: family.aliases ?? {},
       faces,
-      ...(family.cjk ? { cjk: { ...family.cjk, coverage: writeCoverage(family.id, faces[0].layout) } } : {}),
+      ...(family.page ? { page: { ...family.page, coverage: writeCoverage(family.id, faces.map((f) => f.layout)) } } : {}),
       ...(family.math ? { math: { data: `${family.id}/math.json` } } : {}),
     });
   }

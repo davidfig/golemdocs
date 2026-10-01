@@ -23,8 +23,10 @@ import {
   type SavedInfo,
 } from './storage/local.ts';
 import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
-import { capturePageThumbnail, drawPages, pictureLayout } from './thumbnail.ts';
+import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
+import { mnemonicLabel } from './ui/dom.ts';
+import { PagesPanel } from './ui/pagesPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
 import { PdfEditTools } from './ui/pdfEditTools.ts';
 import { PdfTextLayer } from './ui/pdfTextLayer.ts';
@@ -55,6 +57,7 @@ import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
 import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/pasteSpecialDialog.ts';
+import { cleanDocumentName, displayDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
@@ -64,10 +67,10 @@ import { askDropChoice } from './ui/dropChoice.ts';
 import { LargeTextView } from './largeText/view.ts';
 import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
-import type { ImageOp } from './ui/actions.ts';
+import type { ChromeState, ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
-import { isFormat, type Format } from './formats/convert.ts';
+import { FORMAT_LIST, isFormat, type Format } from './formats/convert.ts';
 import { sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, toUtf8 } from './formats/textFiles.ts';
@@ -111,7 +114,7 @@ if (!gl) {
 
 const camera = new Camera();
 const renderer = new PageRenderer(gl);
-const atlases = new AtlasLibrary(gl, FONT_BASE, requestRender);
+const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 const selection = new SelectionLayer(gl);
 // The document, layout and editing live in a worker; it streams pages here as GPU-ready
 // buffers and answers input with page updates and selection geometry. This thread draws.
@@ -130,6 +133,19 @@ try {
   // Storage unavailable: marks start off.
 }
 if (formattingMarks) worker.setMarks(true);
+
+// The pages panel (View > Page Sidebar): remembered in this browser.
+const PAGES_KEY = 'word.pagesPanel';
+/** What the user chose (null: never chosen, so it is open when the window is wide enough for it and the page, closed on a phone). */
+let pagesChoice: boolean | null = null;
+try {
+  const saved = localStorage.getItem(PAGES_KEY);
+  pagesChoice = saved === 'on' ? true : saved === 'off' ? false : null;
+} catch {
+  // Storage unavailable: the panel follows the default.
+}
+const roomForPages = matchMedia('(min-width: 900px)');
+const pagesOpen = (): boolean => pagesChoice ?? roomForPages.matches;
 
 // View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
 const VIEW_KEY = 'word.viewMode';
@@ -258,6 +274,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   for (const page of pagesById.values()) page.dispose(gl!);
   pagesById.clear();
   pages = [];
+  pagesPanel.setPages(pages);
   selection.clear();
   commentsPanel.reset();
   comments = [];
@@ -272,7 +289,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   canUndo = canRedo = false;
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
-  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, requestRender);
+  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded);
   grid = options.grid ?? false;
   loaded = false;
   cameraPlaced = false;
@@ -453,6 +470,7 @@ function applyLayout(update: LayoutUpdate): void {
     const page = pagesById.get(id);
     if (page) pages.push(page);
   }
+  pagesPanel.setPages(pages);
   arrange();
 }
 
@@ -762,7 +780,7 @@ function syncStatus(): SyncStatus {
   if (!account) {
     const info = savedDocs.find((d) => d.id === current.localId);
     const local = { error: null, savedAt: info?.updatedAt ?? null, localSaved: current.unsavedSince === 0 && info !== undefined };
-    return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, document: 'unsubscribed', ...local } : { user: null, document: 'guest', ...local };
+    return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, picture: signedIn.picture, document: 'unsubscribed', ...local } : { user: null, document: 'guest', ...local };
   }
   const user = account.email ?? account.name ?? null;
   const id = current.localId;
@@ -776,7 +794,7 @@ function syncStatus(): SyncStatus {
     else if (current.room?.mode === 'shared') state = 'saving';
     else if (shared.error) state = 'failed';
     else state = shared.uploading || shared.dirty ? 'saving' : 'saved';
-    return { user, document: state, error: state === 'failed' ? shared.error : null };
+    return { user, picture: account.picture, document: state, error: state === 'failed' ? shared.error : null };
   }
   if (id && failures.has(id)) document = 'failed';
   else if (current.room?.mode === 'shared') document = current.room.unconfirmed ? 'saving' : 'saved';
@@ -906,6 +924,21 @@ function rememberInUrl(doc: string): void {
       localStorage.setItem(LAST_DOC_KEY, doc);
     } catch {}
   }
+}
+
+/** Whether the open document can be renamed: not one of the built-in pages, nor one shared by someone else. */
+const NO_PEOPLE: ChromeState['people'] = [];
+const renamable = () => !current.builtIn && !current.shared;
+
+/** Gives the open document a new name (cleaned for a file name) and saves it under that name. Returns the name kept, or null. */
+function renameDocument(input: string): string | null {
+  const name = cleanDocumentName(input);
+  if (!name || !renamable()) return null;
+  if (name === documentName) return name;
+  documentName = name;
+  chrome.update({ documentName });
+  documentEdited(); // saved under the new name, which goes on to the account too
+  return documentName;
 }
 
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
@@ -1828,10 +1861,13 @@ function render(): void {
   }
   chrome.update({
     documentName,
+    people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
+    renamable: renamable(),
     kind: largeView.active ? 'largetext' : documentKind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
     grid,
+    pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
     format: selectionFormat,
     canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
     canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
@@ -1847,6 +1883,7 @@ function render(): void {
   pdfTools.position();
   pointerLayer.position();
   commentsPanel.position();
+  syncPagesPanel();
   cropLayer.position();
   drawLayer.position();
   updateDebug();
@@ -2248,6 +2285,27 @@ function editingCommand(e: KeyboardEvent): WireCommand[] | null {
   return null;
 }
 
+/** Scrolls to a page: its top at the top of the view, and the page centered across it. */
+function goToPage(index: number): void {
+  const page = pages[index];
+  if (!page) return;
+  const pointsPerCss = 1 / (camera.zoom * CSS_PX_PER_POINT);
+  camera.x = page.x + page.width / 2 - (canvas.clientWidth / 2) * pointsPerCss;
+  camera.y = page.y - 16 * pointsPerCss;
+  userMoved = true;
+  requestRender();
+}
+
+function togglePagesPanel(): void {
+  pagesChoice = !pagesOpen();
+  try {
+    localStorage.setItem(PAGES_KEY, pagesChoice ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  requestRender();
+}
+
 function toggleGrid(): void {
   grid = !grid;
   cameraPlaced = false;
@@ -2269,6 +2327,9 @@ function viewKey(e: KeyboardEvent): boolean {
   else if (e.altKey && e.code === 'KeyF') camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
   else if (e.altKey && e.code === 'KeyG') {
     toggleGrid();
+    return true;
+  } else if (e.altKey && e.code === 'KeyP') {
+    togglePagesPanel();
     return true;
   } else return false;
   userMoved = true;
@@ -2350,11 +2411,11 @@ input.addEventListener('paste', (e) => {
 
 // --- Navigation ------------------------------------------------------------------------
 
-/** The font families offered in font boxes (not the CJK or math ones); `withFile`: only those with a font file to embed. */
+/** The font families offered in font boxes (not the pages or the math one); `withFile`: only those with a font file to embed. */
 function fontFamilies(withFile = false): Promise<string[]> {
   return fetch(`${FONT_BASE}manifest.json`)
-    .then((r) => r.json() as Promise<{ families: { wordName: string; cjk?: unknown; math?: unknown; faces: { font?: string }[] }[] }>)
-    .then((m) => m.families.filter((f) => !f.cjk && !f.math && (!withFile || f.faces.some((face) => face.font))).map((f) => f.wordName));
+    .then((r) => r.json() as Promise<{ families: { wordName: string; page?: unknown; math?: unknown; faces: { font?: string }[] }[] }>)
+    .then((m) => m.families.filter((f) => !f.page && !f.math && (!withFile || f.faces.some((face) => face.font))).map((f) => f.wordName));
 }
 
 // Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
@@ -2388,6 +2449,7 @@ const chromeHost = createChromeHost({
       .then((clip) => showPasteSpecialDialog(clip).then((form) => (form && clip ? pasteClipboard(clip, form) : undefined)))
       .then(focusInput);
   },
+  renameDocument,
   showProperties: () => propertiesDialog.open(),
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
@@ -2471,6 +2533,7 @@ const chromeHost = createChromeHost({
   focusEditor: focusInput,
   notify: reportError,
   toggleGrid,
+  togglePagesPanel,
   setViewMode: (mode) => {
     viewMode = mode;
     try {
@@ -2524,16 +2587,7 @@ const findDialog = new FindDialog(document.body, {
     const page = nearestPage(pages, center.x, center.y);
     return page ? pages.indexOf(page) : 0;
   },
-  goToPage: (index) => {
-    const page = pages[index];
-    if (!page) return;
-    // The page's top at the top of the view, and the page centered across it.
-    const pointsPerCss = 1 / (camera.zoom * CSS_PX_PER_POINT);
-    camera.x = page.x + page.width / 2 - (canvas.clientWidth / 2) * pointsPerCss;
-    camera.y = page.y - 16 * pointsPerCss;
-    userMoved = true;
-    requestRender();
-  },
+  goToPage,
   commentCount: () => comments.length,
   goToComment: (index) => {
     const comment = comments[index];
@@ -2617,8 +2671,152 @@ const dashboard = new Dashboard(document.getElementById('viewport')!, {
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
 
+/**
+ * The assistant's tools that act on the app rather than the document's text: what the document is
+ * and switching its format (the same switch as File ▸ Convert To). The rest run in the layout worker.
+ */
+async function assistantTool(name: string, argumentsJson: string): Promise<string> {
+  const handler = Object.hasOwn(APP_TOOLS, name) ? APP_TOOLS[name] : undefined;
+  if (!handler) return worker.agent(name, argumentsJson);
+  let args: Record<string, unknown>;
+  try {
+    const parsed: unknown = argumentsJson.trim() ? JSON.parse(argumentsJson) : {};
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return 'Error: the arguments must be an object.';
+    args = parsed as Record<string, unknown>;
+  } catch {
+    return 'Error: the arguments were not valid JSON.';
+  }
+  try {
+    return await handler(args);
+  } catch (e) {
+    return `Error: ${(e as Error).message}`;
+  }
+}
+
+const formatLabel = (kind: string): string => (isFormat(kind) ? `${FORMATS[kind].label} (${FORMATS[kind].extensions[0]})` : kind);
+const optionalFlag = (args: Record<string, unknown>, key: string): boolean | undefined => {
+  const v = args[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'boolean') throw new Error(`\`${key}\` must be true or false.`);
+  return v;
+};
+const wholeNumber = (args: Record<string, unknown>, key: string, min: number, max: number): number => {
+  const v = args[key];
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) throw new Error(`\`${key}\` must be a whole number from ${min} to ${max}.`);
+  return v;
+};
+
+const IMAGE_OPS: Record<string, ImageOp> = {
+  rotate_left: 'rotateLeft',
+  rotate_right: 'rotateRight',
+  rotate_180: 'rotate180',
+  flip_horizontal: 'flipHorizontal',
+  flip_vertical: 'flipVertical',
+  grayscale: 'grayscale',
+  sepia: 'sepia',
+  invert: 'invert',
+  blur: 'blur',
+  sharpen: 'sharpen',
+  auto_levels: 'autoLevels',
+};
+const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
+
+/** The assistant's tools that act on the app rather than the document's text. The rest run in the layout worker. */
+const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<string> | string> = {
+  get_document_info: () => `The document is "${documentName}", edited as ${formatLabel(documentKind)}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`,
+  rename_document(args) {
+    if (typeof args.name !== 'string') return 'Error: `name` must be text.';
+    if (!renamable()) return 'Error: this document cannot be renamed.';
+    const kept = renameDocument(args.name);
+    return kept === null ? 'Error: that is not a usable name.' : `The document is now named "${displayDocumentName(kept, documentKind)}".`;
+  },
+  async convert_document(args) {
+    const to = args.to;
+    const from = documentKind;
+    if (typeof to !== 'string' || !isFormat(to)) return `Error: \`to\` must be one of ${FORMAT_LIST.join(', ')}.`;
+    if (to === from) return `The document is already ${formatLabel(from)}.`;
+    if (new URLSearchParams(location.search).get('room')) return 'Error: a document being edited together with other people cannot be converted.';
+    await convertTo(to);
+    return documentKind === to
+      ? `Converted: the document is now edited as ${formatLabel(to)}. It is the same document, so switching back restores anything ${formatLabel(to)} could not hold. Paragraph numbers may differ now; read the document again before editing.`
+      : 'Error: the document could not be converted.';
+  },
+  download_document() {
+    void chromeHost.perform({ kind: 'download' });
+    return `Started the download of a copy as ${formatLabel(documentKind)}.`;
+  },
+  print_document(args) {
+    const preview = optionalFlag(args, 'preview') ?? false;
+    void chromeHost.perform({ kind: preview ? 'printPreview' : 'print' });
+    return preview ? 'Opened the print preview.' : 'Opened printing.';
+  },
+  set_view(args) {
+    const done: string[] = [];
+    const mode = args.view_mode;
+    if (mode !== undefined) {
+      if (mode !== 'print' && mode !== 'normal') throw new Error('`view_mode` must be print or normal.');
+      void chromeHost.perform({ kind: 'viewMode', mode });
+      done.push(`view ${mode}`);
+    }
+    const zoom = args.zoom;
+    if (zoom !== undefined) {
+      if (zoom === 'page_width' || zoom === 'whole_page' || zoom === 'all_pages') void chromeHost.perform({ kind: 'zoom', to: zoom === 'page_width' ? 'pageWidth' : zoom === 'whole_page' ? 'wholePage' : 'allPages' });
+      else if (typeof zoom === 'number' && zoom >= 10 && zoom <= 500) void chromeHost.perform({ kind: 'zoom', to: zoom / 100 });
+      else throw new Error('`zoom` must be a percentage from 10 to 500, or page_width, whole_page or all_pages.');
+      done.push(`zoom ${String(zoom)}`);
+    }
+    const showGrid = optionalFlag(args, 'grid');
+    if (showGrid !== undefined && showGrid !== grid) {
+      void chromeHost.perform({ kind: 'toggleGrid' });
+      done.push(`grid ${showGrid ? 'on' : 'off'}`);
+    }
+    const marks = optionalFlag(args, 'formatting_marks');
+    if (marks !== undefined && marks !== formattingMarks) {
+      void chromeHost.perform({ kind: 'toggleFormattingMarks' });
+      done.push(`formatting marks ${marks ? 'on' : 'off'}`);
+    }
+    if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid or formatting_marks.');
+    return `Changed the view: ${done.join(', ')}.`;
+  },
+  async edit_picture(args) {
+    if (!isPicture()) return 'Error: the open document is not a picture. Convert it to png, jpeg or webp to edit it as one.';
+    const op = args.op;
+    if (typeof op !== 'string') throw new Error('`op` must be text.');
+    const size = sniffImage(await pictureBytes());
+    if (!size) throw new Error('the picture could not be read');
+    let edit: ImageEdit;
+    if (Object.hasOwn(IMAGE_OPS, op)) {
+      const name = IMAGE_OPS[op]!;
+      edit = name === 'rotateLeft' ? { op: 'rotate', turns: 3 } : name === 'rotateRight' ? { op: 'rotate', turns: 1 } : name === 'rotate180' ? { op: 'rotate', turns: 2 } : name === 'flipHorizontal' ? { op: 'flip', axis: 'horizontal' } : name === 'flipVertical' ? { op: 'flip', axis: 'vertical' } : { op: 'effect', effect: name as 'grayscale' };
+    } else if (op === 'crop') {
+      const x = wholeNumber(args, 'x', 0, size.width - 1);
+      const y = wholeNumber(args, 'y', 0, size.height - 1);
+      edit = { op: 'crop', x, y, width: wholeNumber(args, 'width', 1, size.width - x), height: wholeNumber(args, 'height', 1, size.height - y) };
+    } else if (op === 'resize') {
+      edit = { op: 'resize', width: wholeNumber(args, 'width', 1, MAX_SIDE), height: wholeNumber(args, 'height', 1, MAX_SIDE) };
+    } else if (op === 'adjust') {
+      const part = (key: string) => (args[key] === undefined ? 0 : wholeNumber(args, key, -100, 100));
+      edit = { op: 'adjust', brightness: part('brightness'), contrast: part('contrast'), saturation: part('saturation') };
+    } else if (op === 'draw') {
+      const tool = args.tool;
+      if (typeof tool !== 'string' || !(DRAWN as readonly string[]).includes(tool)) throw new Error(`\`tool\` must be one of ${DRAWN.join(', ')}.`);
+      const color = typeof args.color === 'string' && /^#[0-9a-f]{6}$/i.test(args.color) ? args.color : args.color === undefined ? '#e53935' : null;
+      if (!color) throw new Error('`color` must be like #e53935.');
+      const at = (px: string, py: string) => ({ x: wholeNumber(args, px, 0, size.width), y: wholeNumber(args, py, 0, size.height) });
+      const points = tool === 'text' ? [at('x', 'y')] : [at('x', 'y'), at('to_x', 'to_y')];
+      if (tool === 'text' && (typeof args.text !== 'string' || !args.text)) throw new Error('`text` is what to write.');
+      const width = args.width === undefined ? Math.max(2, Math.round(Math.max(size.width, size.height) / 150)) : wholeNumber(args, 'width', 1, 200);
+      edit = { op: 'draw', shapes: [{ tool: tool as 'line', color, width, points, ...(optionalFlag(args, 'fill') && { fill: true }), ...(tool === 'text' && { text: args.text as string }) }] };
+    } else {
+      throw new Error(`\`op\` must be one of ${[...Object.keys(IMAGE_OPS), 'crop', 'resize', 'adjust', 'draw'].join(', ')}.`);
+    }
+    await changePicture(edit);
+    return `Done: ${op.replaceAll('_', ' ')} (the picture is ${size.width} x ${size.height} before the change; undo steps back).`;
+  },
+};
+
 // Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).
-const assistant = new Assistant(document.body, { tool: (name, args) => worker.agent(name, args), signIn: () => void signIn(), subscribe: () => void subscribe() });
+const assistant = new Assistant(document.body, { tool: assistantTool, signIn: () => void signIn(), subscribe: () => void subscribe() });
 assistant.onVisibility = (clip) => chrome.update({ clip });
 chrome.update({ clip: assistant.visible });
 
@@ -2630,6 +2828,48 @@ const cropLayer = new CropLayer(document.getElementById('viewport')!, { camera, 
 const largeView = new LargeTextView(document.getElementById('viewport')!);
 // Drawing on a picture (see ui/drawLayer.ts).
 const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });
+
+// The thumbnails of the pages beside the document; for a PDF's pages, drag them into order or delete them (see ui/pagesPanel.ts).
+const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
+  go: goToPage,
+  draw: (page, width, height) => (gl ? readPage(gl, renderer, page as GpuPage, width, height) : null),
+  move: (index, to) => changePages(index, { op: 'move', to }),
+  remove: (index) => changePages(index, { op: 'delete' }),
+  close: togglePagesPanel,
+  focusEditor: focusInput,
+});
+document.getElementById('workspace')!.prepend(pagesPanel.el);
+
+/** A font or picture has loaded: the document redraws, and so do the thumbnails drawn without it. */
+function assetLoaded(): void {
+  requestRender();
+  pagesPanel.refresh();
+}
+
+/** A PDF's page `index` is deleted or moved (the editing in progress is put down first). */
+function changePages(index: number, op: { op: 'delete' } | { op: 'move'; to: number }): void {
+  const page = pages[index];
+  if (!page || !annotating || formMode !== 'edit') return;
+  send({ kind: 'pdfPutDown' });
+  send({ kind: 'pdfPageOp', page: page.id, ...op });
+}
+
+let panelCamera = '';
+
+/** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
+function syncPagesPanel(): void {
+  const shown = pagesOpen() && !largeView.active && !reflowing() && pages.length > 0;
+  pagesPanel.setVisible(shown);
+  if (!shown) return;
+  const editing = annotating && formMode === 'edit';
+  pagesPanel.setEditable(editing, annotating && !editing ? t('panels.pages.hint', { mode: mnemonicLabel(t('chrome.view.editForm')).text }) : null);
+  const view = `${camera.x}/${camera.y}/${camera.zoom}/${pages.length}`;
+  if (view === panelCamera) return;
+  panelCamera = view;
+  const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  const page = nearestPage(pages, center.x, center.y);
+  pagesPanel.setCurrent(page ? pages.indexOf(page) : -1);
+}
 
 // A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
 function setFormMode(mode: FormMode): void {

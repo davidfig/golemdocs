@@ -6,7 +6,7 @@
 // which list to continue. This works that out against the open document and the formatting
 // at the selection, and hands the editor commands it can apply as one undoable step.
 
-import { StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@golemdocs/docx';
+import { paragraphLength, StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@golemdocs/docx';
 import type { Command, Editor, ParagraphFormat, TableEdit } from '@golemdocs/editor';
 import type { Operation, RunFormat } from '@golemdocs/ops';
 import { styleFor } from '../formats/markdownStyles.ts';
@@ -27,6 +27,8 @@ export type FormatAction = Extract<
       | 'changeCase'
       | 'clearFormatting'
       | 'insertTable'
+      | 'insertHorizontalRule'
+      | 'insertCodeBlock'
       | 'table'
       | 'formatPainter'
       | 'setStyle'
@@ -49,6 +51,8 @@ export const FORMAT_ACTIONS = new Set<FormatAction['kind']>([
   'changeCase',
   'clearFormatting',
   'insertTable',
+  'insertHorizontalRule',
+  'insertCodeBlock',
   'table',
   'formatPainter',
   'setStyle',
@@ -364,6 +368,23 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
       };
     case 'insertTable':
       return action.rows && action.columns ? { kind: 'insertTable', rows: action.rows, columns: action.columns, define: defineStyle(doc, 'TableGrid') } : null;
+    case 'insertHorizontalRule': {
+      // A rule is an empty paragraph with a bottom border (what Markdown, HTML and the other formats read and write as one).
+      const rule: Paragraph = { kind: 'paragraph', properties: { borders: { bottom: { val: 'single', sz: 6, space: 1, color: 'A6A6A6' } } }, children: [], attrs: {} };
+      const plain = (): Paragraph => ({ kind: 'paragraph', properties: {}, children: [], attrs: {} });
+      const border = { bottom: { val: 'single' as const, sz: 6, space: 1, color: 'A6A6A6' } };
+      const [, caret] = editor.ordered();
+      const list = editor.paragraphs();
+      const last = list[list.length - 1] === caret.paragraph;
+      const length = paragraphLength(caret.paragraph);
+      // An empty paragraph becomes the rule (with a new one after it if it was the last); otherwise the rule goes after the text before the caret, and the text after it follows.
+      if (length === 0 && !last) return { kind: 'formatParagraphs', change: () => ({ borders: border }) };
+      if (length === 0) return { kind: 'pasteContent', blocks: [rule, plain()] };
+      return { kind: 'pasteContent', blocks: caret.offset < length || last ? [plain(), rule, plain()] : [plain(), rule] };
+    }
+    case 'insertCodeBlock':
+      // The selected paragraphs become code (or, if they all are, plain text again).
+      return formatCommand({ kind: 'setStyle', style: format.style === 'Code' ? 'Normal' : 'Code' }, editor, format, fonts);
     case 'table':
       // Table Properties isn't there yet.
       if (action.op === 'splitCells') return action.columns && action.rows ? { kind: 'splitCells', columns: action.columns, rows: action.rows } : null;

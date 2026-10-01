@@ -2,6 +2,7 @@
 // signed in, their sync subscription, and signing in or out.
 
 import type { Action, ChromeHost, SubscriptionState, SyncStatus } from './actions.ts';
+import { avatar } from './avatar.ts';
 import { h, setAttr } from './dom.ts';
 import { t } from '../i18n/index.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
@@ -34,6 +35,7 @@ export class AccountButton {
   readonly el: HTMLButtonElement;
   private status: SyncStatus | null = null;
   private subscription: SubscriptionState | null = null;
+  private shownPicture: string | null = null;
 
   constructor(private readonly host: ChromeHost) {
     this.el = h('button', { class: 'wm-account', title: t('dialogs.account.label'), attrs: { type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-label': t('dialogs.account.label') } }, personIcon());
@@ -49,6 +51,12 @@ export class AccountButton {
     this.status = status;
     this.subscription = subscription;
     setAttr(this.el, 'data-signed-in', this.signedIn() ? 'true' : 'false');
+    const picture = this.signedIn() ? (status.picture ?? null) : null;
+    if (picture !== this.shownPicture) {
+      this.shownPicture = picture;
+      this.el.replaceChildren(picture ? avatar(picture, status.user, 19) : personIcon());
+      setAttr(this.el, 'data-picture', picture ? 'true' : 'false');
+    }
     if (changed && popupOpenFor(this.el)) openPopup(this.el, this.panel(), () => this.host.focusEditor());
   }
 

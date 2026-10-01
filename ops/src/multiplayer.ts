@@ -34,6 +34,8 @@ export interface Person {
   /** Identifies this connection (one user can have several tabs). */
   client: string;
   name: string;
+  /** Their profile picture (an https URL), set by the server from their account; null for guests. */
+  picture: string | null;
   color: number;
   selection: Selection | null;
   /** Not kept by the room across reconnects: it is only ever the latest position. */

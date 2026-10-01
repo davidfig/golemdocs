@@ -25,6 +25,7 @@ export const chrome = {
   'chrome.view.fillForm': '&Fill In Form',
   'chrome.view.editForm': '&Edit PDF',
   'chrome.view.grid': 'Page &Grid',
+  'chrome.view.pagesPanel': 'Page Side&bar',
   'chrome.view.ruler': '&Ruler',
   'chrome.view.formattingMarks': 'Formatting &Marks',
   'chrome.view.zoomIn': 'Zoom &In',
@@ -278,4 +279,10 @@ export const chrome = {
   'chrome.shortcuts.needModifier': 'Include Ctrl, Alt or ⌘ (or use a function key).',
   'chrome.shortcuts.moved': '{label} no longer has those keys.',
   'chrome.shortcuts.change': 'Change shortcut for {label}',
+  'chrome.file.rename': '&Rename…',
+  'chrome.file.rename.tip': 'Change this document\'s name',
+  'chrome.title.label': 'Document name',
+  'chrome.title.tip': 'Click to rename',
+  'chrome.rename.title': 'Rename Document',
+  'chrome.rename.action': 'Rename',
 } as const;

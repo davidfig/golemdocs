@@ -588,6 +588,15 @@ test('merging the selected cells and splitting them again are one undo step each
   assert.deepEqual(gridText(doc), [['a|b|c|d'], ['']]);
 });
 
+test('select with `until` runs from one paragraph to the start of another, so two cells can be merged without the mouse', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  // Paragraphs: Top, a, b, c, d. From a to d is all four cells.
+  await apply({ kind: 'select', paragraph: 1, from: 0, to: 0, until: 4 });
+  assert.equal(editor.collapsed, false);
+  await apply({ kind: 'tableEdit', edit: 'mergeCells' });
+  assert.deepEqual(gridText(doc), [['a|b|c|d'], ['']]);
+});
+
 test('splitting a plain cell adds a column, and merging needs more than one cell', skip, async () => {
   const { doc, editor, apply } = await withTable();
   // Merge with the caret in one cell does nothing.

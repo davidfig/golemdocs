@@ -57,6 +57,8 @@ export interface PeerState {
   /** Set by `hello`; a connection without it isn't in the room yet. */
   client: string | null;
   name: string;
+  /** From the user's account, never from the client. */
+  picture: string | null;
   color: number;
   selection: Person['selection'];
   /** Latest mouse position; transient, so not persisted with the connection. */
@@ -115,7 +117,7 @@ export class RoomCore {
   }
 
   private people(): Person[] {
-    return this.members.map((p) => ({ client: p.state.client!, name: p.state.name, color: p.state.color, selection: p.state.selection, pointer: p.state.pointer ?? null }));
+    return this.members.map((p) => ({ client: p.state.client!, name: p.state.name, picture: p.state.picture, color: p.state.color, selection: p.state.selection, pointer: p.state.pointer ?? null }));
   }
 
   private broadcast(message: MultiplayerServerMessage, except?: Peer, only: (p: Peer) => boolean = () => true): void {

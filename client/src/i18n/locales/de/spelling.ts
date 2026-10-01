@@ -1,7 +1,7 @@
 import type { Messages } from '../../index.ts';
 
 export const spelling: Partial<Messages> = {
-  'spelling.title': 'Rechtschreibung und Grammatik: Englisch (USA)',
+  'spelling.title': 'Rechtschreibung und Grammatik',
   'spelling.close': 'Schließen',
   'spelling.notInDictionary': 'Nicht im Wörterbuch:',
   'spelling.grammarLabel': 'Grammatik: {message}',

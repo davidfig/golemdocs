@@ -8,7 +8,8 @@ export type Standard = 'Times' | 'Helvetica' | 'Courier';
 
 /** Which standard family stands in for a manifest family. */
 export function standardFamily(font: ResolvedFont): Standard {
-  const id = font.family.id;
+  // An extra page stands in as its family does.
+  const id = font.family.page?.group ?? font.family.id;
   if (id === 'courier-new') return 'Courier';
   if (id === 'times-new-roman' || id === 'cambria' || id === 'georgia') return 'Times';
   const name = `${font.family.substitute} ${font.family.wordName}`.toLowerCase();

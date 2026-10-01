@@ -8,6 +8,9 @@ export const panels: Catalog = {
   'panels.billing.soFar': '{month} на данный момент: {total}',
   'panels.billing.none': 'В этом месяце начислений пока нет.',
   'panels.billing.asOf': 'По состоянию на {time}. Cloudflare может передавать данные об использовании с задержкой.',
+  'panels.billing.noneIn': 'За {month} начислений нет.',
+  'panels.billing.earlier': 'Предыдущие месяцы',
+  'panels.billing.month': '{month}: {total}',
 
   // Comments
   'panels.comments.label': 'Примечания',
@@ -109,4 +112,9 @@ export const panels: Catalog = {
   'panels.feedback.deleteTitle': 'Удалить отзыв',
   'panels.feedback.deleteAsk': 'Удалить этот отзыв? Это действие нельзя отменить.',
   'panels.feedback.resolved': 'Решено',
+  'panels.pages.label': 'Страницы',
+  'panels.pages.page': 'Страница {number}',
+  'panels.pages.delete': 'Удалить страницу {number}',
+  'panels.pages.close': 'Закрыть',
+  'panels.pages.hint': 'Чтобы переставлять или удалять страницы, перейдите в режим «{mode}».',
 };

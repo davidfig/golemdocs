@@ -4,16 +4,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { findIssues, findMisspellings } from '../src/spelling/check.ts';
-import { Dictionary } from '../src/spelling/dictionary.ts';
+import { APP_WORDS } from '../src/spelling/appWords.ts';
+import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../src/spelling/dictionary.ts';
+import { DICTIONARY_FILES, detectLanguage, documentLanguage, languageOfTag, paragraphLanguage, type SpellLanguage } from '../src/spelling/languages.ts';
 import { checkGrammar } from '../src/spelling/grammar.ts';
 
 const dir = new URL('../public/dictionaries/', import.meta.url);
-const dictionary = Dictionary.parse(readFileSync(new URL('en_US.aff', dir), 'utf8'), readFileSync(new URL('en_US.dic', dir), 'utf8'));
+const dictionary = Dictionary.parse(readFileSync(new URL('en_US.aff', dir), 'utf8'), readFileSync(new URL('en_US.dic', dir), 'utf8'), { smallWords: ENGLISH_SMALL_WORDS });
 const spelled = (text: string) => findMisspellings(text, dictionary).map((i) => i.text);
 const grammar = (text: string) => checkGrammar(text).map((i) => `${i.rule}:${text.slice(i.start, i.end)}→${i.suggestions[0]}`);
 
 test('the dictionary expands affixes and is case-aware', () => {
-  assert.ok(dictionary.size > 90_000);
+  assert.ok(dictionary.size > 40_000);
   for (const word of ['hello', 'Hello', 'HELLO', 'running', 'unhappiness', "don't", 'don’t', "dog's", 'reconsidered', 'Paris']) assert.ok(dictionary.check(word), word);
   assert.ok(!dictionary.check('paris'), 'a name needs its capital');
   assert.ok(!dictionary.check('helo'));
@@ -87,4 +89,95 @@ test('issues come in order, a grammar issue on a misspelled word is dropped, ign
   assert.deepEqual(findIssues('a apple teh', { dictionary, grammar: false }).map((i) => i.text), ['teh']);
   // An address is one word to the grammar check, not a run of spaces, and not something to spell.
   assert.deepEqual(findIssues('See https://example.com/wibble for details, or an https://a.example/x page.', { dictionary, grammar: true }), []);
+});
+
+/** A language's dictionary, read as the layout worker reads it (the .aff names the encoding). */
+function load(language: SpellLanguage): Dictionary {
+  const affix = readFileSync(new URL(`${DICTIONARY_FILES[language]}.aff`, dir));
+  const decoder = new TextDecoder(affixEncoding(affix));
+  const dictionary = Dictionary.parse(decoder.decode(affix), decoder.decode(readFileSync(new URL(`${DICTIONARY_FILES[language]}.dic`, dir))), { smallWords: language === 'en' ? ENGLISH_SMALL_WORDS : undefined });
+  dictionary.accept(...APP_WORDS[language]);
+  return dictionary;
+}
+
+// Each welcome document (a language with no dictionary has none to check against).
+const WELCOMES: Record<SpellLanguage, string> = { en: 'en', de: 'de', es: 'es', fr: 'fr', it: 'it', pt: 'pt-BR', ru: 'ru' };
+for (const [language, file] of Object.entries(WELCOMES) as [SpellLanguage, string][]) {
+  test(`the ${language} welcome document has no spelling errors`, () => {
+    const markdown = readFileSync(new URL(`../src/layout/welcome/${file}.md`, import.meta.url), 'utf8').replace(/`[^`]*`/g, ' ').replace(/\]\([^)]*\)/g, ']');
+    const dict = load(language);
+    const wrong = markdown.split('\n').flatMap((line) => findMisspellings(line, dict).map((i) => i.text));
+    assert.deepEqual(wrong, [], 'spell check the welcome document, then add properly spelled words to spelling/appWords.ts');
+  });
+}
+
+test('the dictionaries understand their languages: elisions, compounds, long flags and legacy encodings', () => {
+  const de = load('de');
+  for (const word of ['Haustür', 'Hausschlüssel', 'Arbeitszimmer', 'Straße', 'Größe', 'Dokument', 'Dokumente']) assert.ok(de.check(word), word);
+  for (const word of ['Hasu', 'Tüer', 'Dokumnet']) assert.ok(!de.check(word), word);
+  assert.equal(de.suggest('Hasu')[0], 'Haus');
+  const fr = load('fr');
+  for (const word of ["l'homme", "d'autres", "qu'il", 'être', 'ouvrent', 'élève']) assert.ok(fr.check(word), word);
+  assert.ok(!fr.check('ouvren'));
+  const es = load('es');
+  for (const word of ['español', 'pingüino', 'dámelo', 'Madrid']) assert.ok(es.check(word), word);
+  assert.ok(!es.check('espanol1x'));
+  const it = load('it');
+  for (const word of ["l'uomo", "dell'anno", 'perché', 'città', 'parlando']) assert.ok(it.check(word), word);
+  assert.ok(!it.check('perchè'.replace('è', 'xx')));
+  const pt = load('pt');
+  for (const word of ['coração', 'você', 'não', 'falaram']) assert.ok(pt.check(word), word);
+  const ru = load('ru');
+  for (const word of ['привет', 'документ', 'документы', 'Москва']) assert.ok(ru.check(word), word);
+  assert.ok(!ru.check('привте'));
+  assert.equal(ru.suggest('привте')[0], 'привет');
+});
+
+test('a dictionary keeps only stems and still takes a moment to read', () => {
+  const started = performance.now();
+  const pt = load('pt');
+  assert.ok(performance.now() - started < 3000, 'the Portuguese dictionary (the biggest) reads in about a second');
+  assert.ok(pt.size > 200_000 && pt.size < 400_000, `${pt.size} stems`);
+});
+
+test('a language is named by its tag', () => {
+  assert.equal(languageOfTag('en-US'), 'en');
+  assert.equal(languageOfTag('pt_BR'), 'pt');
+  assert.equal(languageOfTag('DE'), 'de');
+  assert.equal(languageOfTag('ja-JP'), 'none', 'no dictionary: not checked');
+  assert.equal(languageOfTag('nl-NL'), 'none');
+  assert.equal(languageOfTag('zxx'), 'none');
+  assert.equal(languageOfTag(''), null);
+  assert.equal(languageOfTag('x-none'), null);
+  assert.equal(languageOfTag(undefined), null);
+});
+
+test('a language is guessed from its words', () => {
+  assert.equal(detectLanguage('This is a document that you can edit with the app.'), 'en');
+  assert.equal(detectLanguage('Das ist ein Dokument, das Sie mit der App bearbeiten können.'), 'de');
+  assert.equal(detectLanguage('Este es un documento que puedes editar con la aplicación.'), 'es');
+  assert.equal(detectLanguage("Ceci est un document que vous pouvez modifier avec l'application."), 'fr');
+  assert.equal(detectLanguage('Questo è un documento che puoi modificare con una applicazione, non con un altro.'), 'it');
+  assert.equal(detectLanguage('Este é um documento que você pode editar com o aplicativo, não com outro.'), 'pt');
+  assert.equal(detectLanguage('Это документ, который можно редактировать в приложении.'), 'ru');
+  assert.equal(detectLanguage('これはアプリで編集できる文書です。'), 'none');
+  assert.equal(detectLanguage('안녕하세요 여러분'), 'none');
+  assert.equal(detectLanguage('Hi'), null, 'too little to go on');
+  assert.equal(detectLanguage('xyzzy plugh qwerty'), null, 'no language stands out');
+});
+
+test("the languages of the welcome documents are found from the documents' own text", () => {
+  for (const [language, file] of Object.entries(WELCOMES)) {
+    assert.equal(detectLanguage(readFileSync(new URL(`../src/layout/welcome/${file}.md`, import.meta.url), 'utf8')), language, file);
+  }
+  for (const file of ['ja', 'ko', 'zh-Hans', 'zh-Hant']) assert.equal(detectLanguage(readFileSync(new URL(`../src/layout/welcome/${file}.md`, import.meta.url), 'utf8')), 'none', file);
+});
+
+test('a paragraph is in the language it declares, else the one its words say, else its document', () => {
+  assert.equal(documentLanguage('fr-FR', () => 'This is the text of the document.', 'en'), 'fr', 'a declared language wins');
+  assert.equal(documentLanguage(undefined, () => 'Das ist ein Dokument, das Sie bearbeiten können.', 'en'), 'de');
+  assert.equal(documentLanguage(undefined, () => '', 'ja'), 'none', 'the language of the app');
+  assert.equal(paragraphLanguage('es', 'This is the text of the paragraph.', 'en'), 'es');
+  assert.equal(paragraphLanguage(undefined, 'Das ist ein Dokument, das Sie bearbeiten können.', 'en'), 'de');
+  assert.equal(paragraphLanguage(undefined, 'Hi', 'fr'), 'fr', 'too short to tell');
 });

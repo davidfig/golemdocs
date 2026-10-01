@@ -57,7 +57,7 @@ async function setup(options: { graceMs?: number } = {}) {
       name,
       inbox: [],
       closed: null,
-      state: { userId: name, role, client: null, name: '', color: 0, selection: null, synced: false },
+      state: { userId: name, role, client: null, name: '', picture: name === 'a' ? 'https://example.com/a.png' : null, color: 0, selection: null, synced: false },
       send(m) {
         this.inbox.push(m);
       },
@@ -95,6 +95,14 @@ test('one person is solo: they are welcomed and nothing else happens', async () 
   assert.deepEqual(t.types(a), ['welcome']);
   assert.equal((a.inbox[0] as any).mode, 'solo');
   assert.equal(t.core.clientsMaySave, true);
+});
+
+test('people are told each others pictures, which come from the server', async () => {
+  const t = await setup();
+  const a = await t.join('a');
+  const b = await t.join('b');
+  assert.deepEqual((b.inbox[0] as any).people.map((p: any) => [p.name, p.picture]), [['a', 'https://example.com/a.png'], ['b', null]]);
+  assert.deepEqual((a.inbox.find((m) => m.type === 'people') as any).people.map((p: any) => p.picture), ['https://example.com/a.png', null]);
 });
 
 test('a second person makes the first upload their document, then everyone is told it is shared', async () => {

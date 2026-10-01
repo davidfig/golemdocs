@@ -10,6 +10,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 **File**
 - Open (the documents dashboard), New, Import (file picker), Open Sample, Open Recent
 - Download (in the document's own format)
+- Rename (File ▸ Rename, or click the name centred in the menu bar; also an AI tool, `rename_document`). Not for built-in pages or documents shared by someone else
 - Convert To (Word, ODT, HTML, PDF, Markdown, text)
 - Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab)
 - Share: a link to a live room (no account needed) and, for cloud documents, sharing with people by email; Sync Now
@@ -25,6 +26,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 **View**
 - Zoom (box, In, Out, Actual Size, Page Width, Whole Page, All Pages)
 - Page Grid
+- Page Sidebar (Alt+P; open by default in a window at least 900px wide until the user chooses): thumbnails of every page left of the document, drawn lazily with the editor's own renderer, the page in view marked. A click goes to the page. For a PDF's pages in Edit PDF mode they can also be dragged into order and deleted (the same page operations as the Edit PDF palette, as `pdfPageOp`, with `move` to an index). Reflowed documents (Word and the rest) are view-and-navigate only: a page there is only where the layout breaks, so there is nothing sound to delete or reorder. Hidden in Normal view and for large text files
 - Formatting Marks (¶ button, Cmd/Ctrl+Shift+8): a ¶ at each paragraph end (also in table cells and headers/footers), a dot for each space, an arrow for each tab and a ¬ for each line break, drawn in the text's font in a blue-gray. Nothing moves; the choice is kept in this browser. Turning it on or off lays the pages out again
 - Normal and Print Layout views (Word's Web Layout and Print Layout): Normal lays the text out to the window's width (and zoom) with slim margins, no headers or footers, one column, and no page edges, and reflows as the window or zoom changes; not for a PDF's own pages or a picture. The choice is kept in this browser. There is no Outline or separate Web view
 - Fill In Form / Edit Form (PDF)
@@ -53,7 +55,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Page Setup (File menu): margins (top, bottom, left, right, gutter), header and footer distances, orientation, paper size (Letter, Legal, Executive, A3, A4, A5 or custom), and Apply to (this section, the whole document, or this point forward, which starts a new page). Sizes are in inches in English and centimetres in other languages
 - Word Count: Pages, Words, Characters (with and without spaces), Paragraphs and Lines, of the selected text if there is a selection (with a note saying so), else of the whole document
 - Spelling and Grammar (F7 / the toolbar button): a dialog like Word 2003's that steps through problems from the caret on. Ignore Once / All (Rule, for grammar), Add to Dictionary (kept in this browser), Change, Change All, Check Again, and a Check grammar switch. Drag it by its title bar
-  - Spelling: the SCOWL en_US dictionary (`client/public/dictionaries`, with its licence), expanded in the layout worker on first use. Ignores numbers, ALL-CAPS words and addresses
+  - Spelling: Hunspell dictionaries for English (SCOWL en_US), German, Spanish, French, Italian, Portuguese (Brazil) and Russian (`client/public/dictionaries`, with their licences), read in the layout worker the first time a paragraph in that language is checked. Each paragraph is checked in its own language: the one it declares, else guessed from its words (`client/src/spelling/languages.ts`). Chinese, Japanese and Korean are not checked. Ignores numbers, ALL-CAPS words and addresses
   - Grammar: hand-coded, conservative rules (`client/src/spelling/grammar.ts`): repeated words, a/an, sentence and pronoun "I" capitals, extra spaces, and common mix-ups (should of, your/you're, its/it's, their/there, then/than, subject–verb)
 
 ## Still needs work
@@ -109,7 +111,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **Spelling and Grammar**
 - Check-as-you-type: red squiggles under misspelled words and green under grammar mistakes on the pages shown (the word being typed is marked once the caret leaves it). Right click a mark for suggestions, Ignore All / Ignore Rule and Add to Dictionary. "Check spelling as you type" and "Check grammar" in the dialog turn it off (kept in this browser). Not there: a status-bar spelling indicator, and marks in a PDF shown as pages
-- English (U.S.) only: no other dictionaries, no language per paragraph, no UK/CA/AU variants (the release has them)
+- No UK/CA/AU English variants, and no way to set a document's or selection's language by hand (the release has both); Korean has a dictionary but it is too heavily inflected to read here. Grammar is English only
 - Grammar covers a short list of mistakes; it doesn't understand sentence structure (agreement beyond pronouns, tense, commas, passive voice)
 - Options (Ignore ALL CAPS words, Ignore addresses, custom dictionary editing) and AutoCorrect aren't there; Word's Undo button isn't either
 - Only the body is checked (including tables), not headers, footers or footnotes

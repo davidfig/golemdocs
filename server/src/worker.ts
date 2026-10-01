@@ -1,4 +1,4 @@
-import { isAdmin } from './accounts.ts';
+import { isAdmin, pictureOf } from './accounts.ts';
 import { assistantStatus, handleAssistant } from './assistant.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
@@ -86,13 +86,15 @@ async function requireOwnerSync(env: Env, userId: string, ownerId: string): Prom
 /** The room object for a document. */
 const roomFor = (env: Env, docId: string) => env.ROOMS.get(env.ROOMS.idFromName(docId));
 
-const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: string, docId: string): Headers => {
+const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: string, docId: string, picture: string | null): Headers => {
   const out = new Headers(headers);
   // Set here and nowhere else: whatever the client sent is replaced.
   out.set('x-user', userId);
   out.set('x-role', role);
   out.set('x-owner', ownerId);
   out.set('x-doc', docId);
+  out.delete('x-picture');
+  if (picture) out.set('x-picture', picture);
   return out;
 };
 
@@ -149,7 +151,7 @@ const handler: ExportedHandler = {
         // The room saves into the owner's storage, so the owner must have sync (whoever is joining).
         await requireOwnerSync(env, userId, access.ownerId);
         const room = roomFor(env, docId);
-        const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId);
+        const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId, roomMatch[2] ? null : await pictureOf(env, userId));
         return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
       }
 

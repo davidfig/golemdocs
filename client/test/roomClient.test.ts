@@ -30,7 +30,7 @@ class FakeSocket implements SocketLike {
   }
 }
 
-const person = (client: string, name = client): Person => ({ client, name, color: 1, selection: null, pointer: null });
+const person = (client: string, name = client): Person => ({ client, name, picture: client === 'ann' ? 'https://example.com/ann.png' : null, color: 1, selection: null, pointer: null });
 const welcome = (over: Partial<Extract<MultiplayerServerMessage, { type: 'welcome' }>> = {}): MultiplayerServerMessage => ({
   type: 'welcome',
   role: 'editor',
@@ -119,7 +119,7 @@ test('joining says hello with who we are; alone, we open our own copy', async ()
   assert.deepEqual(t.socket.sent[0], { type: 'hello', client: 'me', name: 'Me', color: 7 });
   assert.equal(t.client.state.mode, 'solo');
   assert.equal(t.client.state.role, 'editor');
-  assert.deepEqual(t.client.state.people, [{ client: 'me', name: 'me', color: 1 }]);
+  assert.deepEqual(t.client.state.people, [{ client: 'me', name: 'me', picture: null, color: 1 }]);
 });
 
 test('joining a room that is already shared opens its document and starts syncing from it', async () => {
@@ -273,6 +273,7 @@ test('other people’s carets and pointers update who is here', async () => {
   t.socket.deliver({ type: 'presence', client: 'nobody', selection });
   assert.deepEqual(t.log, ['people', 'people', 'pointers', 'people']);
   assert.deepEqual(t.client.state.people.map((p) => p.client), ['me', 'ann']);
+  assert.deepEqual(t.client.state.people.map((p) => p.picture), [null, 'https://example.com/ann.png']);
 });
 
 test('our own caret and pointer are sent while solo or shared, but not while offline', async () => {

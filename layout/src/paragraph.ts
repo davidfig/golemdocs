@@ -213,7 +213,7 @@ export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width:
   // Reuse the last layout if nothing it depends on changed. Edits drop a paragraph's entry;
   // page-dependent layouts (headers and footers with page fields) aren't cached.
   const cache = ctx.fields ? undefined : ctx.paragraphCache;
-  const key = cache ? `${ctx.fonts.cjkVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
+  const key = cache ? `${ctx.fonts.pageVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
   const cached = cache?.get(paragraph);
   if (cached && cached.key === key) return cached.layout;
   const layout = layoutParagraphUncached(paragraph, ctx, width, props, label);
@@ -440,10 +440,10 @@ function layoutParagraphUncached(
       const size = sizes[j];
       ascent = Math.max(ascent, style.metrics.ascent * size + Math.max(style.rise, 0));
       descent = Math.max(descent, style.metrics.descent * size - Math.min(style.rise, 0));
-      // A CJK face is taller than the Latin one (win ascent + descent about 1.45em against 1.22em).
+      // A CJK page is taller than the Latin one (win ascent + descent about 1.45em against 1.22em).
       if (glyphs[j] >= 0) {
         const face = fonts[faceOf[j]];
-        if (face.font.family.cjk) {
+        if (face.font.family.page) {
           ascent = Math.max(ascent, face.metrics.ascent * size + Math.max(style.rise, 0));
           descent = Math.max(descent, face.metrics.descent * size - Math.min(style.rise, 0));
         }

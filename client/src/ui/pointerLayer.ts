@@ -3,6 +3,7 @@
 // come from the room (see ops multiplayer.ts) as a page's position in display order and a point on it.
 
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
+import { avatar } from './avatar.ts';
 import { h } from './dom.ts';
 import './pointerLayer.css';
 
@@ -23,6 +24,8 @@ export interface RemotePointer {
   y: number;
   color: number;
   name: string;
+  /** Their profile picture, shown beside the name (null: just the name). */
+  picture: string | null;
 }
 
 const css = (color: number) => `#${(color & 0xffffff).toString(16).padStart(6, '0')}`;
@@ -54,7 +57,13 @@ export class PointerLayer {
       el.hidden = !p;
       if (!p) return;
       el.style.setProperty('--wm-pointer', css(p.color));
-      el.lastElementChild!.textContent = p.name;
+      const label = el.lastElementChild as HTMLElement;
+      // Rebuilt only when the person changes, so the picture isn't fetched again on every mouse move.
+      const who = `${p.name}\n${p.picture ?? ''}`;
+      if (label.dataset.who !== who) {
+        label.dataset.who = who;
+        label.replaceChildren(...(p.picture ? [avatar(p.picture, p.name, 14)] : []), h('span', { text: p.name }));
+      }
     });
     this.position();
   }

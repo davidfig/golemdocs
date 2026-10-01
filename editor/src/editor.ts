@@ -112,8 +112,8 @@ export type Command =
   | { kind: 'find'; text: string; matchCase?: boolean; backward?: boolean; wholeWord?: boolean }
   /** Replaces every match of `text` in the document. */
   | { kind: 'replaceAll'; text: string; with: string; matchCase?: boolean; wholeWord?: boolean }
-  /** Selects positions [from, to) of the paragraph at `paragraph` (its index among the document's paragraphs). */
-  | { kind: 'select'; paragraph: number; from: number; to: number }
+  /** Selects positions [from, to) of the paragraph at `paragraph` (its index among the document's paragraphs); with `until`, from `from` there to the start of paragraph `until`. */
+  | { kind: 'select'; paragraph: number; from: number; to: number; until?: number }
   /**
    * Makes the selected text a link to `url` (keeping its formatting when `text` is what it says),
    * or inserts a link showing `text` at the caret. Inside a link, changes that link instead.
@@ -427,10 +427,15 @@ export class Editor {
       case 'replaceAll':
         return this.replaceAll(command.text, command.with, command.matchCase ?? false, command.wholeWord ?? false);
       case 'select': {
-        const paragraph = this.paragraphs()[command.paragraph];
+        const list = this.paragraphs();
+        const paragraph = list[command.paragraph];
         if (paragraph) {
           const length = paragraphLength(paragraph);
-          this.selection = { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph, offset: Math.min(command.to, length) } };
+          // Ending in another paragraph (`until`, at its start): the selection runs from here to there, across table cells too.
+          const end = command.until === undefined ? undefined : list[command.until];
+          this.selection = end
+            ? { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph: end, offset: 0 } }
+            : { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph, offset: Math.min(command.to, length) } };
         }
         return NO_CHANGE;
       }

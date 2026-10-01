@@ -21,7 +21,7 @@ export interface DocumentListener {
   /** Another person's edit changed the document. */
   remoteEdit(): void;
   /** Other people's mouse pointers moved. */
-  pointers(pointers: { page: number; x: number; y: number; color: number; name: string }[]): void;
+  pointers(pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[]): void;
   error(message: string): void;
 }
 

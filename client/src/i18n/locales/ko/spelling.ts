@@ -1,7 +1,7 @@
 import type { Messages } from '../../index.ts';
 
 export const spelling: Partial<Messages> = {
-  'spelling.title': '맞춤법 및 문법: 영어(미국)',
+  'spelling.title': '맞춤법 및 문법',
   'spelling.close': '닫기',
   'spelling.notInDictionary': '사전에 없는 단어:',
   'spelling.grammarLabel': '문법: {message}',

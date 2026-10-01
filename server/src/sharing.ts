@@ -1,6 +1,7 @@
 // Who may open a document. The owner always may; anyone else needs a row in `shares`. This is the
 // one place that decides, for both the document API and the collaboration rooms.
 
+import { pictureOf } from './accounts.ts';
 import type { Env } from './cf.ts';
 
 export type Role = 'owner' | 'editor' | 'viewer';
@@ -41,14 +42,15 @@ export interface Person {
   userId: string;
   name: string | null;
   email: string | null;
+  picture: string | null;
 }
 
-/** A user's display name and email, from their most recent sign-in. */
+/** A user's display name, email and picture, from their most recent sign-in. */
 export async function person(env: Env, userId: string): Promise<Person> {
   const row = await env.DIRECTORY.prepare('SELECT name, email FROM identities WHERE user_id = ? ORDER BY last_login_at DESC LIMIT 1')
     .bind(userId)
     .first<{ name: string | null; email: string | null }>();
-  return { userId, name: row?.name ?? null, email: row?.email ?? null };
+  return { userId, name: row?.name ?? null, email: row?.email ?? null, picture: await pictureOf(env, userId) };
 }
 
 /** The user who signed in with this verified email, if there is one. */

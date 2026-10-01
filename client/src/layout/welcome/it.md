@@ -1,6 +1,6 @@
 # Benvenuto in Golem Docs
 
-Un editor di documenti che vive nel tuo browser, pensato per aprire ogni tipo di documento: Word, PDF, Markdown, pagine web, perfino un file CSV, e altri in arrivo. Ti permette di continuare a lavorare nella forma che ti serve. Questa pagina è un documento come un altro: fai clic ovunque e inizia a scrivere.
+Un editor di documenti che vive nel tuo browser, pensato per aprire ogni tipo di documento: Word, PDF, Markdown, pagine web, perfino un file CSV, e altri ancora. Ti permette di continuare a lavorare nella forma che ti serve. Questa pagina è un documento come un altro: fai clic ovunque e inizia a scrivere.
 
 ## Cosa fa
 
@@ -9,29 +9,46 @@ Un editor di documenti che vive nel tuo browser, pensato per aprire ogni tipo di
 - **Annota i PDF.** Evidenzia, sottolinea, barra e lascia note sulle pagine di un PDF.
 - **Modifica i PDF.** Passa a Modifica PDF per cambiare il testo di una pagina dov'è, spostare, aggiungere o eliminare immagini e forme, oscurare dati riservati e riordinare le pagine. Compila scrive nei campi di un modulo.
 - **Lavora insieme agli altri.** Condividi, nel menu File, ti dà un collegamento. Chiunque lo apra modifica lo stesso documento, e le modifiche compaiono in tempo reale. Puoi anche condividere con persone specifiche. La condivisione fa parte dell’abbonamento; modificare da soli è gratuito.
+- **Chiedi all’assistente IA.** L’assistente IA nell’angolo può leggere il tuo documento, riscrivere o aggiungere paragrafi, formattare il testo, lasciare commenti, compilare moduli e convertire in un altro formato, e Annulla ripristina le sue modifiche. Fa parte dell’abbonamento. Visualizza › Assistente IA lo mostra o lo nasconde.
 
 ## Provalo
 
 1. **Cambia forma.** Nel menu File, scegli Converti in e poi Markdown. Questa pagina diventa testo normale con titoli `#`, e puoi riconvertirla.
 2. **Apri dei dati.** Trascina un file CSV sulla finestra. Si apre come una tabella che puoi modificare e si scarica come lo stesso CSV.
-3. **Modifica insieme.** Nel menu File, scegli Condividi e poi Ottieni collegamento, e apri il collegamento in una seconda finestra. Scrivi in una e guarda l’altra aggiornarsi. Per questo serve un abbonamento.
+3. **Chiedi all’assistente IA.** Apri l’assistente IA e chiedigli di riassumere questa pagina o di far risaltare un titolo, poi premi Annulla se vuoi tornare indietro. Per questo serve un abbonamento.
+4. **Modifica insieme.** Nel menu File, scegli Condividi e poi Ottieni collegamento, e apri il collegamento in una seconda finestra. Scrivi in una e guarda l’altra aggiornarsi. Anche per questo serve un abbonamento.
 
 Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Scarica quando ti serve un file da dare a qualcun altro.
 
 ## E altro ancora
 
 - **Word, OpenDocument, Rich Text, PDF, HTML, EPUB, Markdown, LaTeX, AsciiDoc, reStructuredText, Org, CSV e testo normale** si aprono tutti come documenti modificabili.
+- **Riquadro comandi:** premi Ctrl+Maiusc+P (Cmd+Maiusc+P su Mac) per cercare ed eseguire qualsiasi comando.
+- **Miniature delle pagine:** Visualizza › Barra laterale pagine (Alt+P) mostra una colonna di pagine tra cui spostarsi. In un PDF in modalità Modifica PDF puoi trascinarle per riordinarle.
+- **Rinomina:** fai clic sul nome del documento al centro della barra dei menu per digitarne uno nuovo.
 - **Collegamenti e tabelle:** Ctrl+K (Cmd+K su Mac) trasforma la selezione in un collegamento, e il pulsante Tabella della barra degli strumenti inserisce una griglia.
 - **Controllo ortografico e grammaticale:** premi F7. Trova e sostituisci si trova nel menu Modifica.
-- **Commenti:** seleziona del testo e scegli Commento dal menu Inserisci.
+- **Commenti:** seleziona del testo e scegli Commento dal menu Inserisci. Gli altri possono rispondere, e puoi risolvere un commento quando è stato gestito.
 - **Temi, Modalità scura e barre degli strumenti** si trovano nel menu Visualizza, e il menu Strumenti cambia la lingua.
 
-## Salvataggio
+## Salvataggio e abbonamento
 
-Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. File ▸ Apri mostra tutti i tuoi documenti. Con un abbonamento vengono salvati anche nel tuo account, così potrai aprirli su qualsiasi dispositivo.
+Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. File › Apri mostra tutti i tuoi documenti, e Scarica ti dà un file quando vuoi. Salvare nel browser e scaricare è gratuito, senza bisogno di abbonamento.
+
+Un abbonamento aggiunge sincronizzazione, condivisione e l’assistente IA integrato:
+
+- **Sincronizza** salva i tuoi documenti nel tuo account, così puoi aprirli su qualsiasi dispositivo.
+- **Condividi e modifica insieme** con un collegamento o con persone specifiche.
+- **L’IA** è integrata, senza nulla da configurare.
+
+Abbonarsi è anche il modo per sostenere lo sviluppo di Golem Docs. Se un abbonamento termina, i tuoi documenti restano in questo browser e puoi comunque aprire i documenti che un abbonato condivide con te. Vedi i [prezzi](https://golemdocs.com/home/#pricing) per il costo, oppure scegli File › Abbonati… per iniziare.
 
 ## Il significato del nome
 
 Nella tradizione ebraica, un golem è una figura modellata nell’argilla e resa viva da una parola. Nel racconto più noto, il rabbino Löw di Praga ne modella uno con il fango della Moldava e scrive sulla sua fronte *emet*, la parola ebraica per «verità». Cancella la prima lettera e la parola diventa *met*, «morto», e il golem torna argilla.
 
 Un documento è più o meno lo stesso: una cosa informe che le parole portano in vita. Golem Docs permette al tuo di assumere la forma che ti serve, Word o Markdown o PDF o una pagina web, mentre ciò che hai scritto resta vero al di sotto.
+
+## Privacy, termini e altro
+
+Leggi l’[Informativa sulla privacy](/privacy) e i [Termini di servizio](/terms), entrambi nel menu Guida. Per saperne di più su Golem Docs, visita il [sito web di Golem Docs](https://golemdocs.com/home/).

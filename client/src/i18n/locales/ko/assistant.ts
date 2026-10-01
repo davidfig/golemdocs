@@ -32,5 +32,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.setStyle': '스타일을 변경하는 중…',
   'assistant.tool.formatText': '텍스트 서식을 지정하는 중…',
   'assistant.tool.addComment': '메모를 추가하는 중…',
+  'assistant.tool.convert': '문서를 변환하는 중…',
   'assistant.tool.other': '작업하는 중…',
+  'assistant.tool.rename': '문서 이름을 바꾸는 중…',
 };

@@ -20,7 +20,7 @@ export interface ManifestFace {
   /** Paths relative to the manifest. */
   atlas: string;
   layout: string;
-  /** The font file (TrueType), for embedding in a PDF; absent for the CJK pages and where the source can't be embedded. */
+  /** The font file (TrueType), for embedding in a PDF; absent for the CJK pages and where the source can't be embedded. An extra page names its family's file. */
   font?: string;
   metrics: FontMetrics;
 }
@@ -37,17 +37,19 @@ export interface ManifestFamily {
   aliases: Record<string, number>;
   faces: ManifestFace[];
   /**
-   * Set on the pages of a CJK font. Such a family is never chosen by name (and isn't offered in the
-   * font list): its pages, in `order`, draw the characters of `lang` that the run's own font lacks.
+   * Set on an atlas page: a family never chosen by name (and not offered in the font list) whose faces draw
+   * the characters a run's own font lacks. A CJK language's pages are its `group`; the extra page of a
+   * Latin family is grouped under that family's id and holds the characters its core atlas leaves out.
    */
-  cjk?: {
-    lang: 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko';
+  page?: {
+    /** A CJK language (`ja`, `ko`, `zh-Hans`, `zh-Hant`), or the id of the family the page extends. */
+    group: string;
     /** 0 for the page with the most used characters. */
     order: number;
     /**
      * A JSON file (path relative to the manifest) holding the code points this page has glyphs for as a
      * flat list of inclusive ranges, `[from, to, from, to, …]`, so layout can tell which pages a text
-     * needs without loading their metrics. Loaded only for documents that contain CJK text.
+     * needs without loading their metrics. Loaded only for documents that use a character the core lacks.
      */
     coverage: string;
   };

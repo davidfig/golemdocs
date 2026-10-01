@@ -5,6 +5,7 @@
 
 import { addShare, listShares, removeShare, type Share, type ShareRole } from '../cloud.ts';
 import { t } from '../i18n/index.ts';
+import { avatar } from './avatar.ts';
 import { h } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
 
@@ -135,7 +136,7 @@ export function showShareDialog(target: ShareTarget): void {
         },
       );
     });
-    const el = h('div', { attrs: { role: 'listitem' } }, label, access, remove);
+    const el = h('div', { attrs: { role: 'listitem' } }, avatar(share.picture, share.name ?? share.email, 24), label, access, remove);
     el.style.cssText = 'display:flex;gap:6px;align-items:center';
     return el;
   };

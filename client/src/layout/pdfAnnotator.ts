@@ -237,6 +237,12 @@ export class PdfAnnotator {
     this.text = { page, anchor: start, focus: end, collapsed: false };
   }
 
+  /** Selects characters `anchor` to `focus` of a page (by index), as dragging over them does. */
+  selectChars(page: number, anchor: number, focus: number): void {
+    this.selectedId = null;
+    this.text = { page, anchor, focus, collapsed: false };
+  }
+
   selectPage(): void {
     const page = this.text?.page ?? (this.selectedId ? this.annotations.find((a) => a.id === this.selectedId)?.page : undefined) ?? 0;
     const count = this.view.characters(page).length;

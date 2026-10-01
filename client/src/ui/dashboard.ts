@@ -159,7 +159,8 @@ export class Dashboard {
     const library = await loadLibrary(user, identity);
     if (generation !== this.generation) return;
     this.entries = library.entries;
-    this.folders = library.folders;
+    // Unless they couldn't be listed: what is on screen is better than none.
+    if (library.folders) this.folders = library.folders;
     this.shared = library.shared;
     this.notice.textContent = library.cloudProblem ?? '';
     this.render();

@@ -2256,7 +2256,8 @@ canvas.addEventListener('pointercancel', (e) => (e.pointerType === 'touch' ? tou
 
 // Trackpad pinch arrives as ctrl+wheel; cmd/ctrl+wheel zooms with a mouse; plain wheel scrolls.
 // Browsers don't flag macOS momentum events, so while a scroll is still coasting, cmd only takes
-// over once the deltas grow again (fresh wheel/trackpad input); a decaying tail keeps scrolling.
+// over once the deltas jump up sharply (fresh wheel/trackpad input); a decaying tail keeps scrolling,
+// including its jitter once the view is clamped at a bound.
 const WHEEL_GESTURE_GAP_MS = 200;
 let wheelZooming = false;
 let lastWheelTime = -Infinity;
@@ -2269,7 +2270,7 @@ canvas.addEventListener(
     userMoved = true;
     const zoomKey = e.ctrlKey || e.metaKey;
     const magnitude = Math.hypot(e.deltaX, e.deltaY) * unit;
-    const coasting = e.timeStamp - lastWheelTime <= WHEEL_GESTURE_GAP_MS && magnitude <= lastWheelMagnitude * 1.1 + 1;
+    const coasting = e.timeStamp - lastWheelTime <= WHEEL_GESTURE_GAP_MS && magnitude <= lastWheelMagnitude * 2 + 8;
     if (!zoomKey) wheelZooming = false;
     else if (wheelZooming || !coasting) wheelZooming = true;
     lastWheelTime = e.timeStamp;

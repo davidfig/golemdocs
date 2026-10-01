@@ -12,6 +12,7 @@
 - Open, edit and save five more formats: Typst (.typ), DocBook (.dbk), JATS journal articles (.nxml), FictionBook e-books (.fb2) and OPML outlines (.opml). DocBook and JATS files saved as plain .xml are recognized too. FictionBook has no lists or code blocks, so on the way out those become paragraphs, and an OPML file opens as a nested list. The AI assistant can convert to them as well.
 
 ### Fixed
+- Holding Cmd while a flick-scroll coasts into the edge of the document no longer starts zooming.
 - Hovering over a toolbar button no longer makes its outline flicker.
 
 ## 0.4.0 - 2026-10-01

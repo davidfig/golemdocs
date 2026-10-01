@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.5.1 - 2026-10-01
+
+### Fixed
+- A document name that fits in the menu bar is no longer cut short with “…”.
+
 ## 0.5.0 - 2026-10-01
 
 ### Added

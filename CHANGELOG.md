@@ -1,6 +1,15 @@
 # What’s New
 
-## 0.3.1 - Unreleased
+## 0.3.2 - Unreleased
+
+## 0.3.1 - 2026-10-01
+
+### Changed
+- The assistant no longer has a name: it is now just “AI” everywhere, including Help ▸ AI Assistant.
+
+### Fixed
+- Subscribing now unlocks syncing, sharing and the AI assistant. Payment notices from Polar were being refused, so a new subscription was never recorded.
+- The AI assistant's picture is now even: the left side of the clip no longer sits farther from the ring than the right.
 
 ## 0.3.0 - 2026-10-01
 
@@ -22,7 +31,7 @@
 - Capitalizing each word with Change Case now works on the words after an emoji.
 - In large text files with Windows line endings, a regular-expression search ending in `$` now finds the lines it should.
 - A large text file opened after searching another no longer shows the old search's highlights.
-- Holden no longer fails partway through a request that reads a lot of a long document, and after saying it is unavailable, it offers the chat box again once it is back.
+- The AI assistant no longer fails partway through a request that reads a lot of a long document, and after saying it is unavailable, it offers the chat box again once it is back.
 - Editing together recovers from a patchy connection instead of going offline for good, and on a Wi-Fi network that asks you to log in first you stay signed in.
 - Opening a file that can't be read now says so instead of leaving the loading screen up, and new documents are named in your language.
 - LaTeX, AsciiDoc, Org, Textile and MediaWiki files keep more of their text when opened and saved: LaTeX comment lines no longer split paragraphs and double hyphens stay hyphens; line breaks in list items and numbered lists that start past 1 are kept; tables without a header row stay without one; and text that only looks like markup (plus signs, "Mr." in a table cell, a line like ":note:") is no longer changed or lost.

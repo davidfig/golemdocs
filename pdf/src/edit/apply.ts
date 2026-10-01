@@ -102,6 +102,7 @@ export interface ImageEdit extends EditBase {
  * Blacks out a rectangle and takes out what is under it: text (the glyphs there, so the rest of a
  * line stays as it was), and any picture, shape or drawing that lies wholly inside it. A picture
  * only partly under it stays whole (its pixels can't be erased without decoding it), under the box.
+ * Text in a font that can't be read goes whole, as its glyphs' places are unknown.
  */
 export interface RedactEdit extends EditBase {
   kind: 'redact';
@@ -323,7 +324,7 @@ function invert(m: Matrix): Matrix | null {
 }
 
 /** What replaces a run's operator so that text after it stays where it was. */
-function removal(run: TextRun, op: Operation): Operation[] {
+function removal(run: Pick<TextRun, 'textAdvance' | 'fontSize' | 'scale'>, op: Operation): Operation[] {
   const back = run.fontSize && run.scale ? (-run.textAdvance * 1000) / (run.fontSize * run.scale) : 0;
   const skip: Operation = { op: 'TJ', operands: [[Math.round(back * 1000) / 1000]] };
   if (op.op === "'") return [{ op: 'T*', operands: [] }, skip];
@@ -355,6 +356,10 @@ function redact(scan: ReturnType<typeof scanPage>, ops: Operation[], box: Box): 
       return overlaps(at, box);
     });
     if (gone.some(Boolean)) patches.set(run.op, redactRun(run, op, gone));
+  }
+  // Text in a font that can't be read goes whole: which of its glyphs are under the box can't be told.
+  for (const text of scan.unread) {
+    if (overlaps(text.box, box)) patches.set(text.op, removal(text, ops[text.op]));
   }
   for (const o of scan.objects) {
     if (!overlaps(o.box, box)) continue;

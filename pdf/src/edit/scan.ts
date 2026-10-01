@@ -116,10 +116,25 @@ export interface FormObject extends ObjectBase {
 
 export type PageObject = ImageObject | PathObject | FormObject;
 
+/**
+ * Text shown in a font that can't be read (damaged, or missing from the resources), so its glyphs and
+ * widths are unknown. Its box is a generous guess, so that a redaction over it still takes it out.
+ */
+export interface UnreadText {
+  op: number;
+  /** Where the text can be, at most: [x0 y0 x1 y1] in user space. */
+  box: Box;
+  /** A guess at how far showing it moves the text position, in text space. */
+  textAdvance: number;
+  fontSize: number;
+  scale: number;
+}
+
 export interface PageScan {
   ops: Operation[];
   runs: TextRun[];
   objects: PageObject[];
+  unread: UnreadText[];
 }
 
 const fontCaches = new WeakMap<PdfDocument, Map<unknown, FontUse['textFont'] | null>>();
@@ -156,6 +171,7 @@ export function scanPage(page: PdfPage, ops: Operation[] = page.operations()): P
   const resources = doc.dict(page.inherited('Resources'));
   const runs: TextRun[] = [];
   const objects: PageObject[] = [];
+  const unread: UnreadText[] = [];
   let fonts = fontCaches.get(doc);
   if (!fonts) fontCaches.set(doc, (fonts = new Map()));
   let styles = styleCaches.get(doc);
@@ -253,11 +269,51 @@ export function scanPage(page: PdfPage, ops: Operation[] = page.operations()): P
     });
   };
 
+  /**
+   * Records text whose glyphs can't be known, starting at text matrix `from`. Every byte is taken as
+   * a glyph a full em wide (wider than nearly any glyph is), so the box covers wherever it can be
+   * drawn. Returns the guessed advance (half an em a byte), in text space.
+   */
+  const showUnread = (i: number, parts: readonly PdfObject[], from: Matrix): number => {
+    const fs = gs.fontSize;
+    const th = gs.scale;
+    const spacing = Math.abs(gs.charSpace) + Math.abs(gs.wordSpace);
+    let far = 0;
+    let lo = 0;
+    let hi = 0;
+    let advance = 0;
+    for (const part of parts) {
+      if (typeof part === 'number') {
+        far -= (part / 1000) * fs * th;
+        advance -= (part / 1000) * fs * th;
+      } else if (part instanceof PdfString) {
+        far += part.bytes.length * (Math.abs(fs) + spacing) * Math.abs(th);
+        advance += part.bytes.length * (fs / 2 + gs.charSpace) * th;
+      } else continue;
+      lo = Math.min(lo, far);
+      hi = Math.max(hi, far);
+    }
+    const size = Math.abs(fs);
+    const m = multiply(from, gs.ctm);
+    const corners = [[lo, gs.rise - 0.5 * size], [hi, gs.rise - 0.5 * size], [hi, gs.rise + 1.2 * size], [lo, gs.rise + 1.2 * size]].map(([x, y]) => transformPoint(m, x, y));
+    const xs = corners.map((p) => p[0]);
+    const ys = corners.map((p) => p[1]);
+    // A little more all round, so that even text shown at no size at all has somewhere to be.
+    const box: Box = [Math.min(...xs) - 0.5, Math.min(...ys) - 0.5, Math.max(...xs) + 0.5, Math.max(...ys) + 0.5];
+    unread.push({ op: i, box, textAdvance: advance, fontSize: fs, scale: th });
+    return advance;
+  };
+
   const show = (i: number, operator: string, s: PdfObject | undefined, adjustments?: PdfObject[]) => {
     const font = gs.font;
-    if (!font) return;
-    const tf = font.textFont;
     const parts = adjustments ?? [s ?? null];
+    const start = tm;
+    if (!font) {
+      // The rest of the line is placed after it as well as can be guessed.
+      tm = multiply([1, 0, 0, 1, showUnread(i, parts, start), 0], tm);
+      return;
+    }
+    const tf = font.textFont;
     const fs = gs.fontSize;
     const th = gs.scale;
     const glyphs: Glyph[] = [];
@@ -297,11 +353,19 @@ export function scanPage(page: PdfPage, ops: Operation[] = page.operations()): P
         glyphs.push({ bytes, text: g.text, advance: tx * k, natural: tx * k, width: g.width });
       }
     }
-    if (!startTrm || !glyphs.length) return;
+    // Bytes the font made nothing of, or text squashed to nothing, are still in the file.
+    const shown = () => parts.some((p) => p instanceof PdfString && p.bytes.length);
+    if (!startTrm || !glyphs.length) {
+      if (shown()) showUnread(i, parts, start);
+      return;
+    }
     const [x, y] = transformPoint(startTrm, 0, 0);
     const bl = Math.hypot(startTrm[0], startTrm[1]);
     const ul = Math.hypot(startTrm[2], startTrm[3]);
-    if (bl < 1e-6 || ul < 1e-6) return;
+    if (bl < 1e-6 || ul < 1e-6) {
+      showUnread(i, parts, start);
+      return;
+    }
     const upright = startTrm[0] > 0 && Math.abs(startTrm[1]) <= 0.02 * bl && startTrm[3] > 0 && Math.abs(startTrm[2]) <= 0.02 * ul;
     let reason: TextRun['reason'];
     if (tf.vertical) reason = 'vertical';
@@ -530,7 +594,7 @@ export function scanPage(page: PdfPage, ops: Operation[] = page.operations()): P
         break;
     }
   }
-  return { ops, runs, objects };
+  return { ops, runs, objects, unread };
 }
 
 /** [ascent, descent] as fractions of the font size (descent positive), from the font descriptor if there is one. */

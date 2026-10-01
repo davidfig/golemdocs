@@ -269,6 +269,40 @@ test('redaction of a word at the start of a run keeps the text after it in place
   assert.equal(at(after, 'alpha'), -1);
 });
 
+/** Two lines of text whose font is `broken` afterwards (taken out of the resources, or made unreadable). */
+async function unreadable(broken: 'missing' | 'damaged'): Promise<PdfDocument> {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([612, 792]);
+  const font = doc.standardFont('Helvetica');
+  const d = page.draw();
+  d.text('Secret agent name', 72, 700, { font, size: 12 });
+  d.text('Public notice', 72, 600, { font, size: 12 });
+  d.finish();
+  const back = PdfDocument.load(await doc.save());
+  const fonts = back.dict(back.dict(back.pages[0].inherited('Resources'))?.get('Font'));
+  assert.ok(fonts);
+  for (const name of [...fonts.keys()]) {
+    if (broken === 'missing') fonts.delete(name);
+    else fonts.set(name, 42);
+  }
+  return back;
+}
+
+const contentHas = (doc: PdfDocument, text: string) => doc.pages[0].contentStreams.some((s) => Buffer.from(doc.streamData(s)).includes(text));
+
+for (const broken of ['missing', 'damaged'] as const) {
+  test(`redaction takes out text whose font is ${broken}, not just covers it`, async () => {
+    const doc = await unreadable(broken);
+    assert.equal(scanPage(doc.pages[0]).runs.length, 0, 'the font really is unreadable');
+    assert.ok(contentHas(doc, 'Secret'));
+    // Only over the first word: which glyphs are under the box can't be told, so the whole line goes.
+    applyEdits(doc, [{ id: 'r', page: 0, kind: 'redact', box: [70, 695, 110, 712] }]);
+    const back = PdfDocument.load(await doc.save());
+    assert.ok(!contentHas(back, 'Secret') && !contentHas(back, 'agent'));
+    assert.ok(contentHas(back, 'Public notice'), 'text away from the box stays');
+  });
+}
+
 test('a picture only partly under a redaction stays, and is reported', async () => {
   const doc = await withObjects();
   const result = applyEdits(doc, [{ id: 'r', page: 0, kind: 'redact', box: [100, 300, 160, 390] }]);

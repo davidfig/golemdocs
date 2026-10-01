@@ -19,17 +19,17 @@ test('?doc=terms opens the terms of service', async ({ app, page }) => {
 
 test('?doc=changelog opens What’s New, at its own address', async ({ app, page }) => {
   await app.goto('?doc=changelog');
-  await expect(page).toHaveTitle('What’s New - Golem Docs');
+  await expect(page).toHaveTitle('What’s New in Golem Docs - Golem Docs');
   await expect.poll(() => new URL(page.url()).pathname).toBe('/changelog');
   const body = await app.text();
-  expect(body).toMatch(/^\s*What’s New\n/);
+  expect(body).toMatch(/^\s*What’s New in Golem Docs\n/);
   expect(body).toMatch(/\d+\.\d+\.\d+ - /);
 });
 
 test('the /changelog and /welcome paths open those documents directly', async ({ app, page }) => {
   await page.goto('/changelog');
   await app.ready();
-  await expect(page).toHaveTitle('What’s New - Golem Docs');
+  await expect(page).toHaveTitle('What’s New in Golem Docs - Golem Docs');
   await page.goto('/welcome');
   await app.ready();
   await expect(page).toHaveTitle('Welcome to Golem Docs - Golem Docs');
@@ -63,8 +63,8 @@ test('?doc=war-and-peace opens the long sample book as plain text', async ({ pag
 test('Help ▸ What’s New, About, Privacy Policy and Terms of Service open their documents', async ({ app, page }) => {
   await app.goto('?doc=fonts');
   await app.menu('Help', 'What’s New');
-  await waitForOpen(app, 'What’s New');
-  await expect(page).toHaveTitle('What’s New - Golem Docs');
+  await waitForOpen(app, 'What’s New in Golem Docs');
+  await expect(page).toHaveTitle('What’s New in Golem Docs - Golem Docs');
   await app.menu('Help', 'About Golem Docs');
   await waitForOpen(app, 'Welcome to Golem Docs');
   await app.menu('Help', 'Privacy Policy');
@@ -78,7 +78,7 @@ test('Help ▸ What’s New, About, Privacy Policy and Terms of Service open the
 test('the built-in documents are not saved until they are edited', async ({ app, page }) => {
   await app.goto('?doc=privacy');
   await app.menu('Help', 'What’s New');
-  await waitForOpen(app, 'What’s New');
+  await waitForOpen(app, 'What’s New in Golem Docs');
   await app.menu('File', 'Open…');
   await expect(page.locator('.wm-dashboard article.wm-card')).toHaveCount(0);
   await expect(page.getByText('Documents you save will show up here.')).toBeVisible();

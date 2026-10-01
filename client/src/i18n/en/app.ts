@@ -9,7 +9,7 @@ export const app = {
   'app.fontsName': 'Fonts',
   'app.privacyName': 'Privacy Policy',
   'app.termsName': 'Terms of Service',
-  'app.changelogName': 'What’s New',
+  'app.changelogName': 'What’s New in Golem Docs',
   'app.warAndPeaceName': 'War and Peace',
   'app.sampleWelcome': 'W&elcome to Golem Docs',
   'app.sampleFonts': '&Fonts',

@@ -112,3 +112,7 @@ export function graphemeAt(text: string, offset: number): [number, number] | nul
   const s = graphemeSegmenter.segment(text).containing(offset);
   return s ? [s.index, s.index + s.segment.length] : null;
 }
+
+/** A character inside a word. */
+export const WORD = /[\p{L}\p{N}_'’]/u;
+export const SPACE = /\s/u;

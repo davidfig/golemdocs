@@ -136,7 +136,7 @@ test('a document made from inside a folder is filed there', async ({ app, page }
   await twoDocuments(app);
   await makeFolder(page, 'Reports');
   await folder(page, 'Reports').getByRole('button', { name: 'Open folder Reports' }).click();
-  await dashboard(page).getByRole('button', { name: 'New blank document' }).click();
+  await dashboard(page).getByRole('button', { name: 'New document' }).click();
   await app.page.keyboard.type('hello');
   await waitForSaved(page, 'Document1.docx');
   await openDashboard(app);

@@ -36,7 +36,7 @@ test('with nothing saved, the dashboard says so and offers a blank document and 
   await expect(dashboard(page).getByRole('heading', { name: 'Documents' })).toBeVisible();
   await expect(dashboard(page).getByText('Documents you save will show up here.')).toBeVisible();
   await expect(dashboard(page).getByText('Saved in this browser')).toBeVisible();
-  await expect(dashboard(page).getByRole('button', { name: 'New blank document' })).toBeVisible();
+  await expect(dashboard(page).getByRole('button', { name: 'New document' })).toBeVisible();
   await expect(dashboard(page).getByRole('button', { name: 'Import a file from this computer' })).toBeVisible();
   await expect(dashboard(page).getByRole('button', { name: 'Sign in' })).toBeVisible();
   await expect(cards(page)).toHaveCount(0);
@@ -124,7 +124,7 @@ test('the delete confirmation moves on if another card is clicked', async ({ app
 test('the blank document tile starts a new document', async ({ app, page }) => {
   await saveThree(app);
   await app.menu('File', 'Open…');
-  await dashboard(page).getByRole('button', { name: 'New blank document' }).click();
+  await dashboard(page).getByRole('button', { name: 'New document' }).click();
   await expect(dashboard(page)).toBeHidden();
   await waitForOpen(app, 'Document1');
   expect(await formatLabel(page)).toBe('Word Document');

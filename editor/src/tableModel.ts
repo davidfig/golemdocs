@@ -7,7 +7,7 @@
 // The editor swaps the new table in for the old (see Editor.replaceTable), so the change is one
 // undo step. Paragraphs keep their ids, so the caret and comments stay where they were.
 
-import { paragraphLength, type Block, type Paragraph, type Table, type TableCell, type TableRow } from '@word/docx';
+import { paragraphLength, type Block, type Paragraph, type Table, type TableCell, type TableRow } from '@golemdocs/docx';
 
 /** One cell as the reader sees it: a rectangle of the grid, rows [r0, r1] and columns [c0, c1). */
 interface Logical {

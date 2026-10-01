@@ -19,12 +19,13 @@ import {
   type SectionProperties,
   type Table,
   type WordDocument,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { packColor, PageLayout, type LineRecord } from './display.ts';
 import { FALLBACK_FAMILY, type FontSet } from './fonts/fontSet.ts';
 import type { ManifestFace } from './fonts/fontTypes.ts';
 import { cjkLangOf, type FieldValues, type LayoutContext, type RunStyle } from './context.ts';
-import type { CjkLang } from './fonts/cjk.ts';
+import { isCjk, type CjkLang } from './fonts/cjk.ts';
+import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import { REFLOW_SIDE, REFLOW_VERTICAL, reflowWidth } from './reflow.ts';
 import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout } from './paragraph.ts';
 import { clearTableStyles, cutBox, emitBox, emitRow, emitRowSlice, flattenBlocks, layoutBox, layoutTable, type BoxLayout, type TableLayout } from './table.ts';
@@ -270,27 +271,78 @@ function addCjk(text: string, into: Set<number>): void {
   }
 }
 
+/** A run's bold and italic, as a key and as the style it asks the fonts for. */
+interface FaceStyle {
+  bold: boolean;
+  italic: boolean;
+}
+const styleKey = (style: FaceStyle) => `${style.bold ? 1 : 0}${style.italic ? 1 : 0}`;
+
+/** Characters beyond ASCII that a string holds and a family's core atlas lacks (CJK ones go to the CJK pages instead), added to a set. */
+function addMissing(text: string, core: FaceMetrics, into: Set<number>): void {
+  for (const char of text) {
+    const cp = char.codePointAt(0)!;
+    if (cp >= 0xa0 && !isCjk(cp) && !core.has(cp)) into.add(cp);
+  }
+}
+
+/** What the pages a document needs hold: its CJK characters, its characters the core atlases lack, and the styles its runs use. */
+interface PagedText {
+  /** CJK characters by language. */
+  cjk: Map<CjkLang, Set<number>>;
+  /** Characters a run's font and the fallback font lack, by the id of each family whose extra page may hold them, then by style. */
+  extra: Map<string, Map<string, { style: FaceStyle; chars: Set<number> }>>;
+  /** The styles each family is used in. */
+  styles: Map<string, Map<string, FaceStyle>>;
+}
+
 /**
- * The CJK characters in the document's text (body, headers and footers), by the language of the
- * run they are in, so the pages that draw them can be loaded before layout.
+ * What the pages a document needs hold (body, headers and footers), by the language or family
+ * and style of the run each character is in, so the pages that draw them can be loaded before layout.
+ * The core atlases of every face must be loaded.
  */
-function cjkTextOf(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): Map<CjkLang, Set<number>> {
-  const found = new Map<CjkLang, Set<number>>();
+function pagedTextOf(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): PagedText {
+  const found: PagedText = { cjk: new Map(), extra: new Map(), styles: new Map() };
   const ctx = { resolver, fonts };
+  const fallback = fonts.resolve({ font: FALLBACK_FAMILY }).family;
   const visit = (node: { kind: string; [key: string]: any }, paragraphStyle: string | undefined): void => {
     switch (node.kind) {
       case 'run': {
-        let chars: Set<number> | undefined;
+        const props = resolver.run(paragraphStyle, node.properties);
+        const style: FaceStyle = { bold: props.bold ?? false, italic: props.italic ?? false };
+        const font = fonts.resolve({ font: resolver.font(props.fonts) ?? FALLBACK_FAMILY, ...style });
+        let used = found.styles.get(font.family.id);
+        if (!used) found.styles.set(font.family.id, (used = new Map()));
+        used.set(styleKey(style), style);
+        const core = fonts.metrics(font.face);
+        const fallbackCore = fonts.metrics(fonts.resolve({ font: FALLBACK_FAMILY, ...style }).face);
+        let cjk: Set<number> | undefined;
+        let missing: Set<number> | undefined;
         for (const item of node.content as { kind: string; text?: string }[]) {
-          if (item.kind !== 'text' || !item.text || !CJK_TEXT.test(item.text)) continue;
-          chars ??= new Set();
-          addCjk(item.text, chars);
+          if (item.kind !== 'text' || !item.text) continue;
+          if (CJK_TEXT.test(item.text)) addCjk(item.text, (cjk ??= new Set()));
+          // Only what neither the run's font nor the fallback font has goes to the extra pages.
+          if (core && fallbackCore) addMissing(item.text, core, (missing ??= new Set()));
         }
-        if (!chars) break;
-        const lang = cjkLangOf(ctx, resolver.run(paragraphStyle, node.properties));
-        const into = found.get(lang);
-        if (into) for (const c of chars) into.add(c);
-        else found.set(lang, chars);
+        if (cjk) {
+          const lang = cjkLangOf(ctx, props);
+          const into = found.cjk.get(lang);
+          if (into) for (const c of cjk) into.add(c);
+          else found.cjk.set(lang, cjk);
+        }
+        if (missing && fallbackCore) {
+          for (const cp of missing) if (fallbackCore.has(cp)) missing.delete(cp);
+          if (missing.size) {
+            for (const family of new Set([font.family, fallback])) {
+              let styles = found.extra.get(family.id);
+              if (!styles) found.extra.set(family.id, (styles = new Map()));
+              const key = styleKey(style);
+              const entry = styles.get(key) ?? { style, chars: new Set<number>() };
+              for (const cp of missing) entry.chars.add(cp);
+              styles.set(key, entry);
+            }
+          }
+        }
         break;
       }
       case 'paragraph':
@@ -500,11 +552,15 @@ export class LayoutSession {
     const t0 = performance.now();
     const resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
     await fonts.ensure(facesFor(doc, resolver, fonts));
-    const cjk = cjkTextOf(doc, resolver, fonts);
-    await Promise.all([...cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)));
+    const paged = pagedTextOf(doc, resolver, fonts);
+    await Promise.all([
+      ...[...paged.cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)),
+      ...[...paged.extra].flatMap(([group, styles]) => [...styles.values()].map(({ style, chars }) => fonts.ensurePages(group, chars, [style]))),
+    ]);
     if (hasMath(doc)) await fonts.ensureMath();
     const session = new LayoutSession(doc, fonts, resolver);
-    for (const lang of cjk.keys()) session.cjkLangs.add(lang);
+    for (const lang of paged.cjk.keys()) session.cjkLangs.add(lang);
+    for (const [family, styles] of paged.styles) session.familyStyles.set(family, [...styles.values()]);
     session.timings.fonts = performance.now() - t0;
     return session;
   }
@@ -584,19 +640,37 @@ export class LayoutSession {
     this.restartAt = Math.min(this.restartAt, restart);
   }
 
-  /** The CJK languages the document's text is in, and the app's (see ensureCjk). */
+  /** The CJK languages the document's text is in, and the app's (see ensurePages). */
   readonly cjkLangs = new Set<CjkLang>();
+  /** The styles the document's runs use, by the id of the family they are in (see ensurePages). */
+  readonly familyStyles = new Map<string, FaceStyle[]>();
 
   /**
-   * Loads the CJK pages that draw the given text (typed, pasted or replaced in), before the edit is
-   * applied, for the languages of the document and the app's.
+   * Loads the pages that draw the given text (typed, pasted or replaced in), before the edit is applied:
+   * the CJK pages of the languages of the document and the app's, and the extra pages of the families the
+   * document uses, for characters their core atlases lack.
    */
-  async ensureCjk(text: string): Promise<void> {
-    const chars = new Set<number>();
-    addCjk(text, chars);
-    if (chars.size === 0) return;
-    const langs = new Set<CjkLang>([...this.cjkLangs, this.fonts.defaultCjkLang]);
-    await Promise.all([...langs].map((lang) => this.fonts.ensureCjk(lang, chars)));
+  async ensurePages(text: string): Promise<void> {
+    const loads: Promise<unknown>[] = [];
+    const cjk = new Set<number>();
+    addCjk(text, cjk);
+    if (cjk.size) for (const lang of new Set<CjkLang>([...this.cjkLangs, this.fonts.defaultCjkLang])) loads.push(this.fonts.ensureCjk(lang, cjk));
+    const fallback = this.fonts.resolve({ font: FALLBACK_FAMILY }).family;
+    const fallbackCore = this.fonts.metrics(fallback.faces[0]);
+    const families = new Map(this.familyStyles);
+    if (!families.has(fallback.id)) families.set(fallback.id, [{ bold: false, italic: false }]);
+    for (const [id, styles] of families) {
+      const family = this.fonts.families.find((f) => f.id === id);
+      const core = family && this.fonts.metrics(this.fonts.resolve({ font: family.wordName }).face);
+      if (!family || !core) continue;
+      const missing = new Set<number>();
+      addMissing(text, core, missing);
+      if (fallbackCore) for (const cp of missing) if (fallbackCore.has(cp)) missing.delete(cp);
+      if (!missing.size) continue;
+      loads.push(this.fonts.ensurePages(id, missing, styles));
+      if (id !== fallback.id) loads.push(this.fonts.ensurePages(fallback.id, missing, styles));
+    }
+    await Promise.all(loads);
   }
 
   /** Loads the math font, before an equation is added (typed, pasted or inserted). */

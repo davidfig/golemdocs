@@ -1,9 +1,9 @@
 // A collaboration server for development, in a SharedWorker: every tab of this origin that
-// joins a room talks to the same one. It runs the reference CollabServer from @word/ops, so it
+// joins a room talks to the same one. It runs the reference CollabServer from @golemdocs/ops, so it
 // exercises exactly the protocol a networked server will speak (see ./messages.ts); only the
 // transport (MessagePorts instead of sockets) and persistence (none) differ.
 
-import { CollabServer } from '@word/ops';
+import { CollabServer } from '@golemdocs/ops';
 import type { RoomClientMessage, RoomServerMessage } from './messages.ts';
 
 interface Room {

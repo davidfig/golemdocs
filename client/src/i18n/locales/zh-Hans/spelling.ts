@@ -1,7 +1,7 @@
 import type { Messages } from '../../index.ts';
 
 export const spelling: Partial<Messages> = {
-  'spelling.title': '拼写和语法检查：英语（美国）',
+  'spelling.title': '拼写和语法检查',
   'spelling.close': '关闭',
   'spelling.notInDictionary': '不在词典中：',
   'spelling.grammarLabel': '语法：{message}',

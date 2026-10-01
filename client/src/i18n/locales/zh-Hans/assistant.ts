@@ -32,5 +32,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.setStyle': '正在更改样式…',
   'assistant.tool.formatText': '正在设置文本格式…',
   'assistant.tool.addComment': '正在添加批注…',
+  'assistant.tool.convert': '正在转换文档…',
   'assistant.tool.other': '正在处理…',
+  'assistant.tool.rename': '正在重命名文档…',
 };

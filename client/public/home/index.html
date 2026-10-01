@@ -6,8 +6,21 @@
     <title>Golem Docs: edit Word, PDF, Markdown, and more in your browser</title>
     <meta name="description" content="Golem Docs is a document editor that lives in your browser. Open, edit and convert Word, OpenDocument, PDF, Markdown, HTML, and plain text, free and with no account. A subscription adds sync across devices, sharing and live editing together, and an AI assistant." />
     <link rel="canonical" href="https://golemdocs.com/home" />
+    <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
+    <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
+    <link rel="alternate" hreflang="ru" href="https://golemdocs.com/home/ru" />
+    <link rel="alternate" hreflang="de" href="https://golemdocs.com/home/de" />
+    <link rel="alternate" hreflang="fr" href="https://golemdocs.com/home/fr" />
+    <link rel="alternate" hreflang="ja" href="https://golemdocs.com/home/ja" />
+    <link rel="alternate" hreflang="pt-BR" href="https://golemdocs.com/home/pt-BR" />
+    <link rel="alternate" hreflang="zh-Hant" href="https://golemdocs.com/home/zh-Hant" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://golemdocs.com/home/zh-Hans" />
+    <link rel="alternate" hreflang="it" href="https://golemdocs.com/home/it" />
+    <link rel="alternate" hreflang="ko" href="https://golemdocs.com/home/ko" />
+    <link rel="alternate" hreflang="x-default" href="https://golemdocs.com/home" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Golem Docs" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="Golem Docs: edit Word, PDF, Markdown, and more in your browser" />
     <meta property="og:description" content="One editor for every kind of document. Open, edit and convert Word, PDF, Markdown, and more, free in your browser with no account. Subscribe to sync, share and edit together, and use the AI assistant." />
     <meta property="og:url" content="https://golemdocs.com/home" />
@@ -16,6 +29,22 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script>
+      // Send a visitor to the page in their language: the one they picked in the app or here, else the browser's.
+      try {
+        var pages = {"es":"es","ru":"ru","de":"de","fr":"fr","ja":"ja","pt-br":"pt-BR","pt":"pt-BR","pt-pt":"pt-BR","zh-hant":"zh-Hant","zh-tw":"zh-Hant","zh-hk":"zh-Hant","zh-mo":"zh-Hant","zh-hans":"zh-Hans","zh":"zh-Hans","zh-cn":"zh-Hans","zh-sg":"zh-Hans","it":"it","ko":"ko"};
+        var saved = localStorage.getItem('wm.locale');
+        var id = saved && saved !== 'en' ? pages[saved.toLowerCase()] : null;
+        for (var i = 0, langs = saved ? [] : navigator.languages || [navigator.language]; i < langs.length && !id; i++) {
+          var tag = String(langs[i]).toLowerCase();
+          if (tag === 'en' || tag.indexOf('en-') === 0) break;
+          // zh-Hant-TW, then zh-Hant, then zh.
+          for (; tag && !id; tag = tag.indexOf('-') < 0 ? '' : tag.slice(0, tag.lastIndexOf('-'))) id = pages[tag];
+        }
+        if (id) location.replace('/home/' + id + location.hash);
+      } catch (e) {}
+    </script>
+
     <script>
       try {
         var appearance = localStorage.getItem('golem.appearance');
@@ -125,6 +154,8 @@
 
       footer { padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.92rem; }
       footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+      footer .langs { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
+      footer .langs [aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
       footer .links { display: flex; gap: 22px; margin-left: auto; }
       footer a { color: var(--muted); }
       footer a:hover { color: var(--ink); }
@@ -356,6 +387,19 @@
           <a href="/home/terms">Terms of Service</a>
           <a href="/">Open the app</a>
         </span>
+        <ul class="langs" aria-label="Language">
+          <li><a href="/home" lang="en" hreflang="en" aria-current="page" onclick="try{localStorage.setItem('wm.locale','en')}catch(e){}">English</a></li>
+          <li><a href="/home/es" lang="es" hreflang="es" onclick="try{localStorage.setItem('wm.locale','es')}catch(e){}">Español</a></li>
+          <li><a href="/home/ru" lang="ru" hreflang="ru" onclick="try{localStorage.setItem('wm.locale','ru')}catch(e){}">Русский</a></li>
+          <li><a href="/home/de" lang="de" hreflang="de" onclick="try{localStorage.setItem('wm.locale','de')}catch(e){}">Deutsch</a></li>
+          <li><a href="/home/fr" lang="fr" hreflang="fr" onclick="try{localStorage.setItem('wm.locale','fr')}catch(e){}">Français</a></li>
+          <li><a href="/home/ja" lang="ja" hreflang="ja" onclick="try{localStorage.setItem('wm.locale','ja')}catch(e){}">日本語</a></li>
+          <li><a href="/home/pt-BR" lang="pt-BR" hreflang="pt-BR" onclick="try{localStorage.setItem('wm.locale','pt-BR')}catch(e){}">Português (Brasil)</a></li>
+          <li><a href="/home/zh-Hant" lang="zh-Hant" hreflang="zh-Hant" onclick="try{localStorage.setItem('wm.locale','zh-Hant')}catch(e){}">繁體中文</a></li>
+          <li><a href="/home/zh-Hans" lang="zh-Hans" hreflang="zh-Hans" onclick="try{localStorage.setItem('wm.locale','zh-Hans')}catch(e){}">简体中文</a></li>
+          <li><a href="/home/it" lang="it" hreflang="it" onclick="try{localStorage.setItem('wm.locale','it')}catch(e){}">Italiano</a></li>
+          <li><a href="/home/ko" lang="ko" hreflang="ko" onclick="try{localStorage.setItem('wm.locale','ko')}catch(e){}">한국어</a></li>
+        </ul>
       </div>
     </footer>
   </body>

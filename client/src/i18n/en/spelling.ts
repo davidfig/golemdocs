@@ -1,5 +1,5 @@
 export const spelling = {
-  'spelling.title': 'Spelling and Grammar: English (U.S.)',
+  'spelling.title': 'Spelling and Grammar',
   'spelling.close': 'Close',
   'spelling.notInDictionary': 'Not in Dictionary:',
   'spelling.grammarLabel': 'Grammar: {message}',

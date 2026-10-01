@@ -1,9 +1,9 @@
 // Comments in the text formats: the parts every writer shares. A comment's range in a paragraph is
-// marked by inline Raw markers (see edit/comments.ts in @word/docx); a writer walks a paragraph's
+// marked by inline Raw markers (see edit/comments.ts in @golemdocs/docx); a writer walks a paragraph's
 // inlines, hands each marker to a RangeTracker, and asks it which comments the text it is writing
 // is inside of.
 
-import type { Comment, Inline } from '@word/docx';
+import type { Comment, Inline } from '@golemdocs/docx';
 
 /** Comments by the id of the first comment of their thread: [the first comment, ...its replies]. */
 export function commentThreads(comments: readonly Comment[]): Map<string, Comment[]> {

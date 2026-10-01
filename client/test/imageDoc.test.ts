@@ -2,8 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { WordDocument } from '@word/docx';
-import type { Drawing, Paragraph } from '@word/docx';
+import { WordDocument } from '@golemdocs/docx';
+import type { Drawing, Paragraph } from '@golemdocs/docx';
 import { png as pngHandler } from '../src/formats/handlers/image.ts';
 import { exportDocument, importDocument, conversionIsLossy } from '../src/formats/convert.ts';
 import { firstPicture, imageToDocument, pageSizeFor } from '../src/formats/imageDoc.ts';

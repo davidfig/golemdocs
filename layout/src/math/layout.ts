@@ -7,7 +7,7 @@
 // as the rest of layout expects. Scripts are drawn by glyph instances of a smaller `size`; the
 // only things that aren't glyphs are rules (fraction bars, radical and over/under bars).
 
-import type { MathList, MathNode, MathStyle } from '@word/docx';
+import type { MathList, MathNode, MathStyle } from '@golemdocs/docx';
 import type { FaceMetrics } from '../fonts/faceMetrics.ts';
 import type { MathConstruction, MathData } from '../fonts/fontTypes.ts';
 import { classOf, mathChar, SPACE_WIDTH, type AtomClass } from './chars.ts';

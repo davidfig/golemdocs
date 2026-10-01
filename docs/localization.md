@@ -65,9 +65,10 @@ Russian (`ru`).
 
    `name` is the language's own name (shown in the picker). Add `aliases` for tags the id doesn't
    cover, and `dir: 'rtl'` for right-to-left languages.
-4. Add a `pickLocale` case to `client/test/i18n.test.ts`.
-5. Run `pnpm --filter @word/client test`. It fails on unknown keys, placeholders that differ from
-   English, and keys the translation is missing. Then `pnpm --filter @word/client build` and check the
+4. Give it a spelling dictionary, or record that it has none (see *Spelling dictionaries* below).
+5. Add a `pickLocale` case to `client/test/i18n.test.ts`.
+6. Run `pnpm --filter @golemdocs/client test`. It fails on unknown keys, placeholders that differ from
+   English, and keys the translation is missing. Then `pnpm --filter @golemdocs/client build` and check the
    new chunk is roughly 30 kB and the main `index-*.js` and `layoutWorker-*.js` didn't grow.
 6. Open the app in the language and look through the menus and dialogs. Long words (German) and
    mnemonics are where translations most often go wrong.
@@ -77,11 +78,36 @@ Conventions used so far:
   know), and one register throughout (formal *vous*/*Sie*, neutral *tú*).
 - Follow the language's typography: French puts a no-break space (U+00A0) before `: ; ? !` and inside
   « »; German uses „…“; use `’` for apostrophes as the English catalog does.
-- The spell checker is English-only, so `spelling.title` names the English dictionary in the target
-  language, and the quoted example words in grammar messages stay in English.
+- The quoted example words in grammar messages stay in English: the grammar rules are English-only.
 - Machine-written translations should be read by a native speaker before they ship.
 
+## Spelling dictionaries
+
+Each language that can be spell checked has a Hunspell dictionary, an `.aff` and `.dic` pair with its
+license, in `client/public/dictionaries/` (fetched only when a paragraph in that language is first
+checked). To add one:
+
+1. Take the pair from the LibreOffice dictionaries (github.com/LibreOffice/dictionaries) and put it
+   there as `<xx_XX>.aff`, `<xx_XX>.dic` and a `<xx_XX>.README.txt` (or `LICENSE`) naming its license.
+2. Register it in `client/src/spelling/languages.ts`: add the code to `SpellLanguage` and
+   `DICTIONARY_FILES`, and its most common words to `WORDS`, so a paragraph in it can be recognised
+   (a script that is not Latin needs a branch in `detectLanguage` instead).
+3. Check it reads: `client/test/spelling.test.ts` has a test per language (the welcome document must
+   have no errors, so add properly spelled names and terms to `client/src/spelling/appWords.ts`) and one
+   that exercises what is special about the language (elisions, compounds, a non-UTF-8 `SET`).
+   The reader (`client/src/spelling/dictionary.ts`) understands the common Hunspell features; if the
+   `.aff` uses one it doesn't, add it there.
+4. The grammar rules (`client/src/spelling/grammar.ts`) are English only. Another language's
+   paragraphs get spelling but no grammar until it has rules of its own; the layout worker turns
+   grammar off for them.
+
+A language with no usable dictionary (Chinese, Japanese, Korean) is simply not checked: it gets no
+squiggles. Which language a paragraph is in comes from the language it declares (Word's `w:lang`),
+else its own words, else the document's, else the app's language.
+
 ## Languages that need extra fonts (CJK)
+
+These are pages in the same sense as the extra pages of the Latin families (see `AGENTS.md`, "Bundle size and lazy loading"): `ManifestFamily.page` with `group` set to the language, loaded through `FontSet.ensurePages`.
 
 The page renders text from pre-built MSDF atlases (`client/public/fonts`), and the Latin fonts have no
 Japanese or Chinese glyphs, so those languages also need font atlases or their text draws blank:
@@ -124,3 +150,19 @@ not every language has that category.)
 - Technical error text from the format libraries (`docx`, `pdf`, `odt`, `server`) is shown after a
   translated sentence, e.g. "Couldn't open: {message}". Server error text is shown as the server sent it.
 - The `<title>` in `client/index.html` and the dev-only debug panels.
+
+## The marketing site
+
+The home page is built in every app language, at `/home` (English) and `/home/<tag>`. Its text is not in the
+app catalogs: `client/home/template.html` holds the page with `{{key}}` slots, `client/home/locales/<tag>.json`
+the text for each language (`en.json` is the source), and `pnpm home` writes the pages into `client/public/home/`.
+Commit the generated files; the `home` test fails if they are stale or a language lacks a key.
+
+- English `/home` sends visitors to their language (the app's saved `wm.locale`, else the browser's); the
+  language links in the footer set `wm.locale`, so the choice carries into the app.
+- Strings may hold their own `<a>`/`<em>` markup; keep the tags and `href`s as in English.
+- Use the same terms as the app for menu names (File ▸ Download All, Convert To, Share ▸ Get Link).
+- **Adding a language:** after the steps above, copy `en.json` to `client/home/locales/<tag>.json` and translate it,
+  run `pnpm home`, add `https://golemdocs.com/home/<tag>` to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in
+  `client/home/build.ts`.
+- The pages under `/home/` that this page links to (Convert, PDF, Privacy…) are not translated yet.

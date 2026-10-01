@@ -1,4 +1,4 @@
-import type { EncodedPage, ImageItem } from '@word/layout';
+import type { EncodedPage, ImageItem } from '@golemdocs/layout';
 import { RectBatch } from '../shapes/rectBatch.ts';
 import type { AtlasLibrary } from '../text/gpuFace.ts';
 import { TextBatch } from '../text/textBatch.ts';

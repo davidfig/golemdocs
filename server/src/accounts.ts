@@ -21,9 +21,9 @@ export async function userForProfile(env: Env, provider: ProviderId, profile: Pr
   const existing = await find();
   if (existing) {
     await env.DIRECTORY.prepare(
-      'UPDATE identities SET last_login_at = ?, name = COALESCE(?, name), email = COALESCE(?, email), email_verified = CASE WHEN ? IS NULL THEN email_verified ELSE ? END WHERE provider = ? AND subject = ?',
+      'UPDATE identities SET last_login_at = ?, name = COALESCE(?, name), picture = COALESCE(?, picture), email = COALESCE(?, email), email_verified = CASE WHEN ? IS NULL THEN email_verified ELSE ? END WHERE provider = ? AND subject = ?',
     )
-      .bind(now, profile.name, email, email, profile.emailVerified ? 1 : 0, provider, profile.subject)
+      .bind(now, profile.name, profile.picture, email, email, profile.emailVerified ? 1 : 0, provider, profile.subject)
       .run();
     return existing.user_id;
   }
@@ -33,9 +33,9 @@ export async function userForProfile(env: Env, provider: ProviderId, profile: Pr
       ? await env.DIRECTORY.prepare('SELECT user_id FROM identities WHERE email = ? AND email_verified = 1 LIMIT 1').bind(email).first<{ user_id: string }>()
       : null;
   await env.DIRECTORY.prepare(
-    'INSERT INTO identities (provider, subject, user_id, email, email_verified, name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, subject) DO NOTHING',
+    'INSERT INTO identities (provider, subject, user_id, email, email_verified, name, picture, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, subject) DO NOTHING',
   )
-    .bind(provider, profile.subject, linked?.user_id ?? randomToken(16), email, profile.emailVerified ? 1 : 0, profile.name, now, now)
+    .bind(provider, profile.subject, linked?.user_id ?? randomToken(16), email, profile.emailVerified ? 1 : 0, profile.name, profile.picture, now, now)
     .run();
   // If a concurrent first sign-in won the insert, use its user.
   const row = await find();
@@ -47,6 +47,8 @@ export interface Me {
   id: string;
   email: string | null;
   name: string | null;
+  /** Their profile picture (an https URL), if a provider gave one. */
+  picture: string | null;
   isAdmin: boolean;
 }
 
@@ -60,9 +62,17 @@ export async function isAdmin(env: Env, userId: string): Promise<boolean> {
   return !!dev && admins.includes(dev.toLowerCase()) && (await userIdFor(dev)) === userId;
 }
 
+/** The most recent profile picture any of the user's sign-ins gave. */
+export async function pictureOf(env: Env, userId: string): Promise<string | null> {
+  const row = await env.DIRECTORY.prepare('SELECT picture FROM identities WHERE user_id = ? AND picture IS NOT NULL ORDER BY last_login_at DESC LIMIT 1')
+    .bind(userId)
+    .first<{ picture: string }>();
+  return row?.picture ?? null;
+}
+
 export async function describeUser(env: Env, userId: string): Promise<Me> {
   const row = await env.DIRECTORY.prepare('SELECT email, name FROM identities WHERE user_id = ? ORDER BY last_login_at DESC LIMIT 1')
     .bind(userId)
     .first<{ email: string | null; name: string | null }>();
-  return { id: userId, email: row?.email ?? null, name: row?.name ?? null, isAdmin: await isAdmin(env, userId) };
+  return { id: userId, email: row?.email ?? null, name: row?.name ?? null, picture: await pictureOf(env, userId), isAdmin: await isAdmin(env, userId) };
 }

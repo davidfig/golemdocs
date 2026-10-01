@@ -52,7 +52,7 @@
     <noscript>
       <style>
         #seo { position: static; width: auto; height: auto; margin: 2rem auto; max-width: 40rem; overflow: visible; clip-path: none; white-space: normal; font-family: system-ui, sans-serif; line-height: 1.5; }
-        #viewport { display: none; }
+        #workspace { display: none; }
       </style>
     </noscript>
   </head>
@@ -62,10 +62,12 @@
       <!--welcome-->
       <p>Golem Docs needs JavaScript turned on to edit documents.</p>
     </article>
-    <main id="viewport">
-      <canvas id="canvas"></canvas>
-      <textarea id="input" aria-label="Document" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
-    </main>
+    <div id="workspace">
+      <main id="viewport">
+        <canvas id="canvas"></canvas>
+        <textarea id="input" aria-label="Document" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+      </main>
+    </div>
     <div id="debug">
       <section id="renderInfo" class="debug-panel" title="Click to reset the frame times" hidden>
         <h2>Render<span id="renderLight" title="Lit while the canvas draws" hidden></span></h2>

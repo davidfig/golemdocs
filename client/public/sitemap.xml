@@ -2,6 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://golemdocs.com/</loc></url>
   <url><loc>https://golemdocs.com/home</loc></url>
+  <url><loc>https://golemdocs.com/home/es</loc></url>
+  <url><loc>https://golemdocs.com/home/ru</loc></url>
+  <url><loc>https://golemdocs.com/home/de</loc></url>
+  <url><loc>https://golemdocs.com/home/fr</loc></url>
+  <url><loc>https://golemdocs.com/home/ja</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans</loc></url>
+  <url><loc>https://golemdocs.com/home/it</loc></url>
+  <url><loc>https://golemdocs.com/home/ko</loc></url>
   <url><loc>https://golemdocs.com/home/convert</loc></url>
   <url><loc>https://golemdocs.com/home/pdf</loc></url>
   <url><loc>https://golemdocs.com/home/images</loc></url>

@@ -2,9 +2,9 @@
 //   load → every page's text → full save → reload → same pages and text
 //                            → incremental save → reload → same pages
 //
-//   pnpm --filter @word/pdf corpus [dir] [--only name] [--verbose]
+//   pnpm --filter @golemdocs/pdf corpus [dir] [--only name] [--verbose]
 //
-// The default directory is pdf.js's test corpus, fetched by `pnpm --filter @word/pdf fetch-corpus`.
+// The default directory is pdf.js's test corpus, fetched by `pnpm --filter @golemdocs/pdf fetch-corpus`.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';

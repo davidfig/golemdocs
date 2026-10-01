@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, WordDocument, type Inline, type Paragraph } from '@word/docx';
-import { FontSet, LayoutSession, layoutDocument } from '@word/layout';
-import { Replica } from '@word/ops';
+import { paragraphsIn, paragraphText, WordDocument, type Inline, type Paragraph } from '@golemdocs/docx';
+import { FontSet, LayoutSession, layoutDocument } from '@golemdocs/layout';
+import { Replica } from '@golemdocs/ops';
 import { Editor, type Command } from '../src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');
@@ -585,6 +585,15 @@ test('merging the selected cells and splitting them again are one undo step each
   await apply({ kind: 'splitCells', columns: 2, rows: 2 });
   assert.deepEqual(gridText(doc), [['a|b|c|d', ''], ['', '']]);
   editor.undo();
+  assert.deepEqual(gridText(doc), [['a|b|c|d'], ['']]);
+});
+
+test('select with `until` runs from one paragraph to the start of another, so two cells can be merged without the mouse', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  // Paragraphs: Top, a, b, c, d. From a to d is all four cells.
+  await apply({ kind: 'select', paragraph: 1, from: 0, to: 0, until: 4 });
+  assert.equal(editor.collapsed, false);
+  await apply({ kind: 'tableEdit', edit: 'mergeCells' });
   assert.deepEqual(gridText(doc), [['a|b|c|d'], ['']]);
 });
 

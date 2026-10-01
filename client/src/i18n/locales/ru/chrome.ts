@@ -27,6 +27,7 @@ export const chrome: Catalog = {
   'chrome.view.fillForm': 'Запо&лнить форму',
   'chrome.view.editForm': '&Редактировать PDF',
   'chrome.view.grid': 'Сет&ка страницы',
+  'chrome.view.pagesPanel': 'Панель стр&аниц',
   'chrome.view.ruler': 'Ли&нейка',
   'chrome.view.formattingMarks': 'Непечатаемые &знаки',
   'chrome.view.zoomIn': 'У&величить',
@@ -280,4 +281,10 @@ export const chrome: Catalog = {
   'chrome.shortcuts.needModifier': 'Добавьте Ctrl, Alt или ⌘ (или используйте функциональную клавишу).',
   'chrome.shortcuts.moved': '{label} больше не использует эти клавиши.',
   'chrome.shortcuts.change': 'Изменить сочетание для «{label}»',
+  'chrome.file.rename': '&Переименовать…',
+  'chrome.file.rename.tip': 'Изменить имя этого документа',
+  'chrome.title.label': 'Имя документа',
+  'chrome.title.tip': 'Нажмите, чтобы переименовать',
+  'chrome.rename.title': 'Переименование документа',
+  'chrome.rename.action': 'Переименовать',
 };

@@ -102,6 +102,7 @@ export type Action =
   | { kind: 'zoom'; to: ZoomTarget }
   | { kind: 'zoomBy'; factor: number }
   | { kind: 'toggleGrid' }
+  | { kind: 'togglePagesPanel' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
@@ -200,6 +201,10 @@ export interface FormatState {
 /** Everything the chrome shows that comes from the application. */
 export interface ChromeState {
   documentName: string;
+  /** The other people editing this document together (not this user); empty when on one's own. Shown beside the name. */
+  people: { name: string; picture: string | null; color: number }[];
+  /** The name may be changed (not a built-in or shared document). */
+  renamable: boolean;
   kind: DocumentKind;
   hasSelection: boolean;
   canUndo: boolean;
@@ -208,6 +213,8 @@ export interface ChromeState {
   zoom: number;
   viewMode: ViewMode;
   grid: boolean;
+  /** The pages panel is pulled out beside the document. */
+  pagesPanel: boolean;
   rulerVisible: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
@@ -241,6 +248,8 @@ export type DocumentSync = 'guest' | 'unsubscribed' | 'saved' | 'saving' | 'offl
 export interface SyncStatus {
   /** Who is signed in (an email or name); null when signed out. */
   user: string | null;
+  /** The signed-in person's profile picture, if they have one. */
+  picture?: string | null;
   document: DocumentSync;
   error: string | null;
   /** When the open document was last saved to the account (ms since the epoch), if known. */
@@ -251,6 +260,8 @@ export interface SyncStatus {
 
 export const DEFAULT_STATE: ChromeState = {
   documentName: '',
+  people: [],
+  renamable: false,
   kind: 'docx',
   hasSelection: false,
   canUndo: false,
@@ -258,6 +269,7 @@ export const DEFAULT_STATE: ChromeState = {
   zoom: 1,
   viewMode: 'print',
   grid: false,
+  pagesPanel: false,
   rulerVisible: false,
   formattingMarks: false,
   trackChanges: false,
@@ -286,6 +298,8 @@ export interface ChromeHost {
   focusEditor(): void;
   /** A short message for the user (errors, "not available yet"). */
   notify(message: string): void;
+  /** Gives the document a new name (cleaned for a file name); returns the name kept, or null if it can't be renamed. */
+  renameDocument(name: string): string | null;
   /** Samples for File ▸ Open Sample, read each time the menu opens. */
   samples?(): Sample[];
   /** The user's documents, for File ▸ Open Recent. */

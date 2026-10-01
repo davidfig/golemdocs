@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
-import { ROOM_CLOSE, type MultiplayerServerMessage } from '@word/ops';
+import { ROOM_CLOSE, type MultiplayerServerMessage } from '@golemdocs/ops';
 import type { DurableObjectState, WebSocketHandle } from '../src/cf.ts';
 import { CloudFiles, Room } from '../src/room.ts';
 import { DOCX, world, type World } from './harness.ts';

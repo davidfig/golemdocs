@@ -1,7 +1,7 @@
 // Paragraph layout: turns one paragraph into lines of positioned glyphs for a given width.
 // Pure and independent of pagination, so edits can re-lay out just the changed paragraph.
 
-import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@word/docx';
+import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@golemdocs/docx';
 import { parseHexColor } from './display.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import type { ResolvedFont } from './fonts/fontSet.ts';
@@ -12,7 +12,7 @@ import { layerKey } from './context.ts';
 import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
 import { emitMarks, formattingMarksOn } from './marks.ts';
 import type { MathLayout } from './math/layout.ts';
-import type { MathEquation } from '@word/docx';
+import type { MathEquation } from '@golemdocs/docx';
 
 const SPACE = 0x20;
 const twips = (v: number | undefined) => (v ?? 0) / 20;
@@ -213,7 +213,7 @@ export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width:
   // Reuse the last layout if nothing it depends on changed. Edits drop a paragraph's entry;
   // page-dependent layouts (headers and footers with page fields) aren't cached.
   const cache = ctx.fields ? undefined : ctx.paragraphCache;
-  const key = cache ? `${ctx.fonts.cjkVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
+  const key = cache ? `${ctx.fonts.pageVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
   const cached = cache?.get(paragraph);
   if (cached && cached.key === key) return cached.layout;
   const layout = layoutParagraphUncached(paragraph, ctx, width, props, label);
@@ -226,7 +226,7 @@ function layoutParagraphUncached(
   ctx: LayoutContext,
   width: number,
   props: ParagraphProperties,
-  label: import('@word/docx').ListLabel | undefined,
+  label: import('@golemdocs/docx').ListLabel | undefined,
 ): ParagraphLayout {
   const resolver = ctx.resolver;
   const collector = new TextCollector(ctx, props.style);
@@ -440,10 +440,10 @@ function layoutParagraphUncached(
       const size = sizes[j];
       ascent = Math.max(ascent, style.metrics.ascent * size + Math.max(style.rise, 0));
       descent = Math.max(descent, style.metrics.descent * size - Math.min(style.rise, 0));
-      // A CJK face is taller than the Latin one (win ascent + descent about 1.45em against 1.22em).
+      // A CJK page is taller than the Latin one (win ascent + descent about 1.45em against 1.22em).
       if (glyphs[j] >= 0) {
         const face = fonts[faceOf[j]];
-        if (face.font.family.cjk) {
+        if (face.font.family.page) {
           ascent = Math.max(ascent, face.metrics.ascent * size + Math.max(style.rise, 0));
           descent = Math.max(descent, face.metrics.descent * size - Math.min(style.rise, 0));
         }

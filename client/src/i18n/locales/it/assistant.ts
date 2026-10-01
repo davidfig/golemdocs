@@ -32,5 +32,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.setStyle': 'Modifica di uno stile…',
   'assistant.tool.formatText': 'Formattazione del testo…',
   'assistant.tool.addComment': 'Aggiunta di un commento…',
+  'assistant.tool.convert': 'Conversione del documento…',
   'assistant.tool.other': 'Al lavoro…',
+  'assistant.tool.rename': 'Rinomina del documento…',
 };

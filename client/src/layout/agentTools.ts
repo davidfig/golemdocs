@@ -6,8 +6,8 @@
 // Each tool answers with text for the model: what it found or did, or why it couldn't. Paragraphs
 // are numbered from 0 in document order, as `Editor.paragraphs()` has them.
 
-import { OBJECT_CHAR, paragraphLength, paragraphText, type Paragraph } from '@word/docx';
-import type { FormatState, Mark } from '../ui/actions.ts';
+import { mathInline, OBJECT_CHAR, paragraphLength, paragraphText, parseLatex, type DocumentProperties, type Paragraph } from '@golemdocs/docx';
+import type { FormatState, Mark, TableOp } from '../ui/actions.ts';
 import type { WireCommand } from './protocol.ts';
 
 /** The part of the editor the tools read. */
@@ -15,6 +15,26 @@ export interface AgentEditor {
   paragraphs(): Paragraph[];
   ordered(): [{ paragraph: Paragraph; offset: number }, { paragraph: Paragraph; offset: number }];
   selectedText(limit?: number): string;
+  /** The selection is in a table. */
+  inTable(): boolean;
+  /** The page setup of the section the selection is in (twips). */
+  sectionPage(): SectionPage;
+  /** Every comment and reply, in order. */
+  comments(): { id: string; author: string; text: string; parentId?: string; resolved?: boolean }[];
+  doc: { properties: DocumentProperties };
+}
+
+export interface SectionPage {
+  width: number;
+  height: number;
+  landscape: boolean;
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  gutter: number;
+  header: number;
+  footer: number;
 }
 
 export interface AgentEnv {
@@ -33,6 +53,8 @@ const MAX_MATCHES = 20;
 const AUTHOR = 'Clip';
 
 class ToolError extends Error {}
+
+type TableAction = Extract<Extract<WireCommand, { kind: 'format' }>['action'], { kind: 'table' }>;
 
 const object = (v: unknown, what: string): Record<string, unknown> => {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new ToolError(`${what} must be an object`);
@@ -241,24 +263,413 @@ async function selectRange(env: AgentEnv, index: number, paragraph: Paragraph, f
   return null;
 }
 
+const MARKS: Mark[] = ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript', 'code'];
+
+/** A CSS color, as the formatting commands take it (#rrggbb). */
+function colorOf(value: string): string {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(value.trim());
+  if (!hex) throw new ToolError(`"${value}" is not a color; use a hex code like #1f4e79.`);
+  return `#${hex[1]!.toLowerCase()}`;
+}
+
 async function formatText(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
   editable(env);
   const { index, paragraph } = paragraphAt(env, args);
   const find = args.find === undefined ? undefined : text(args, 'find');
-  const wanted: [Mark, boolean | undefined][] = [
-    ['bold', flag(args, 'bold')],
-    ['italic', flag(args, 'italic')],
-    ['underline', flag(args, 'underline')],
-  ];
-  if (wanted.every(([, on]) => on === undefined)) throw new ToolError('Say what to change: bold, italic or underline.');
+  const marks = MARKS.map((mark): [Mark, boolean | undefined] => [mark, flag(args, mark)]);
+  const font = args.font === undefined ? undefined : text(args, 'font').trim();
+  const size = args.size === undefined ? undefined : int(args, 'size');
+  const color = args.color === undefined ? undefined : text(args, 'color').trim();
+  const highlight = args.highlight === undefined ? undefined : text(args, 'highlight').trim();
+  if (size !== undefined && (size < 1 || size > 1638)) throw new ToolError('`size` is in points, from 1 to 1638.');
+  const none = (v: string | undefined) => v !== undefined && /^(none|auto|automatic|)$/i.test(v);
+  const colorValue = color === undefined ? undefined : none(color) ? null : colorOf(color);
+  const highlightValue = highlight === undefined ? undefined : none(highlight) ? null : colorOf(highlight);
+  if (marks.every(([, on]) => on === undefined) && !font && size === undefined && colorValue === undefined && highlightValue === undefined) {
+    throw new ToolError('Say what to change: bold, italic, underline, strikethrough, superscript, subscript, code, font, size, color or highlight.');
+  }
   const problem = await selectRange(env, index, paragraph, find);
   if (problem) return problem;
-  for (const [mark, on] of wanted) {
+  for (const [mark, on] of marks) {
     if (on === undefined) continue;
     const now = env.format().marks?.[mark] === true;
     if (now !== on) await env.run({ kind: 'format', action: { kind: 'toggleMark', mark } });
   }
+  if (font) await env.run({ kind: 'format', action: { kind: 'setFont', family: font } });
+  if (size !== undefined) await env.run({ kind: 'format', action: { kind: 'setFontSize', points: size } });
+  if (colorValue !== undefined) await env.run({ kind: 'format', action: { kind: 'setColor', color: colorValue } });
+  if (highlightValue !== undefined) await env.run({ kind: 'format', action: { kind: 'setHighlight', color: highlightValue } });
   return `Formatted ${find ? `"${find}" in ` : ''}paragraph ${index}.`;
+}
+
+async function clearFormatting(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args);
+  const find = args.find === undefined ? undefined : text(args, 'find');
+  const problem = await selectRange(env, index, paragraph, find);
+  if (problem) return problem;
+  await env.run({ kind: 'format', action: { kind: 'clearFormatting' } });
+  return `Cleared the formatting of ${find ? `"${find}" in ` : ''}paragraph ${index}.`;
+}
+
+async function changeCase(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args);
+  const to = text(args, 'to');
+  if (to !== 'sentence' && to !== 'lower' && to !== 'upper' && to !== 'title' && to !== 'toggle') throw new ToolError('`to` must be sentence, lower, upper, title or toggle.');
+  const find = args.find === undefined ? undefined : text(args, 'find');
+  const problem = await selectRange(env, index, paragraph, find);
+  if (problem) return problem;
+  await env.run({ kind: 'format', action: { kind: 'changeCase', to } });
+  return `Changed the case of ${find ? `"${find}" in ` : ''}paragraph ${index} (${to}).`;
+}
+
+/** The paragraphs from `paragraph` to `last` (default: the same one). */
+function paragraphRange(env: AgentEnv, args: Record<string, unknown>): number[] {
+  const { index } = paragraphAt(env, args);
+  const last = args.last === undefined ? index : paragraphAt(env, args, 'last').index;
+  if (last < index) throw new ToolError('`last` must not be before `paragraph`.');
+  if (last - index >= MAX_RANGE) throw new ToolError(`At most ${MAX_RANGE} paragraphs at a time.`);
+  return Array.from({ length: last - index + 1 }, (_, k) => index + k);
+}
+
+const MAX_RANGE = 200;
+const TWIPS_PER_POINT = 20;
+
+async function formatParagraph(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const list = args.list === undefined ? undefined : text(args, 'list');
+  if (list !== undefined && list !== 'bullet' && list !== 'number' && list !== 'none') throw new ToolError('`list` must be bullet, number or none.');
+  const align = args.align === undefined ? undefined : text(args, 'align');
+  if (align !== undefined && align !== 'left' && align !== 'center' && align !== 'right' && align !== 'justify') throw new ToolError('`align` must be left, center, right or justify.');
+  const indent = args.indent === undefined ? undefined : text(args, 'indent');
+  if (indent !== undefined && indent !== 'increase' && indent !== 'decrease') throw new ToolError('`indent` must be increase or decrease.');
+  const number = (key: string, max: number): number | undefined => {
+    const v = args[key];
+    if (v === undefined) return undefined;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max) throw new ToolError(`\`${key}\` must be a number from 0 to ${max}.`);
+    return v;
+  };
+  const lineSpacing = number('line_spacing', 10);
+  const before = number('space_before', 500);
+  const after = number('space_after', 500);
+  const keepNext = flag(args, 'keep_with_next');
+  const pageBreakBefore = flag(args, 'page_break_before');
+  const paragraphs = paragraphRange(env, args);
+  if (!align && !list && !indent && lineSpacing === undefined && before === undefined && after === undefined && keepNext === undefined && pageBreakBefore === undefined) {
+    throw new ToolError('Say what to change: align, line_spacing, space_before, space_after, list, indent, keep_with_next or page_break_before.');
+  }
+  for (const k of paragraphs) {
+    await select(env, k, 0, 0);
+    if (align) await env.run({ kind: 'format', action: { kind: 'setAlignment', align } });
+    if (lineSpacing !== undefined && lineSpacing > 0) await env.run({ kind: 'format', action: { kind: 'setLineSpacing', lines: lineSpacing } });
+    if (before !== undefined || after !== undefined || keepNext !== undefined || pageBreakBefore !== undefined) {
+      await env.run({
+        kind: 'format',
+        action: {
+          kind: 'setParagraph',
+          ...(before !== undefined && { before: Math.round(before * TWIPS_PER_POINT) }),
+          ...(after !== undefined && { after: Math.round(after * TWIPS_PER_POINT) }),
+          ...(keepNext !== undefined && { keepNext }),
+          ...(pageBreakBefore !== undefined && { pageBreakBefore }),
+        },
+      });
+    }
+    if (list) {
+      const now = env.format().list ?? null;
+      // Choosing the list a paragraph is in turns it off; choosing the other one switches.
+      if (list === 'none' ? now : now !== list) await env.run({ kind: 'format', action: { kind: 'toggleList', list: list === 'none' ? now! : list } });
+    }
+    if (indent) await env.run({ kind: 'format', action: { kind: 'indent', direction: indent } });
+  }
+  return `Formatted ${paragraphs.length === 1 ? `paragraph ${paragraphs[0]}` : `paragraphs ${paragraphs[0]} to ${paragraphs.at(-1)}`}.`;
+}
+
+async function insertRule(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args, 'after');
+  await select(env, index, paragraphLength(paragraph), paragraphLength(paragraph));
+  const before = env.editor.paragraphs().length;
+  await env.run({ kind: 'format', action: { kind: 'insertHorizontalRule' } });
+  return env.editor.paragraphs().length > before ? `Added a horizontal rule after paragraph ${index}.` : 'A horizontal rule could not be added here.';
+}
+
+async function formatCodeBlock(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const on = flag(args, 'on') ?? true;
+  const paragraphs = paragraphRange(env, args);
+  for (const k of paragraphs) {
+    await select(env, k, 0, 0);
+    if ((env.format().style === 'Code') !== on) await env.run({ kind: 'format', action: { kind: 'insertCodeBlock' } });
+  }
+  const now = env.format().style === 'Code';
+  if (now !== on) return `This kind of document has no code blocks (the Code style is ${on ? 'not available' : 'still applied'}).`;
+  return `${on ? 'Made' : 'Made plain text of'} ${paragraphs.length === 1 ? `paragraph ${paragraphs[0]}` : `paragraphs ${paragraphs[0]} to ${paragraphs.at(-1)}`}${on ? ' a code block' : ''}.`;
+}
+
+async function insertLink(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args);
+  const url = text(args, 'url').trim();
+  if (!url) throw new ToolError('`url` must not be empty');
+  const find = args.find === undefined ? undefined : text(args, 'find');
+  const problem = await selectRange(env, index, paragraph, find);
+  if (problem) return problem;
+  const shownText = find ?? paragraphText(paragraph);
+  await env.run({ kind: 'setLink', url, text: shownText });
+  return `Linked ${find ? `"${find}" in ` : ''}paragraph ${index} to ${url}.`;
+}
+
+async function removeLink(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args);
+  const find = args.find === undefined ? undefined : text(args, 'find');
+  const problem = await selectRange(env, index, paragraph, find);
+  if (problem) return problem;
+  await env.run({ kind: 'removeLink' });
+  return `Removed the link in paragraph ${index}.`;
+}
+
+async function insertBreak(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args, 'after');
+  const kind = text(args, 'type');
+  if (kind !== 'page' && kind !== 'column' && kind !== 'line') throw new ToolError('`type` must be page, column or line.');
+  await select(env, index, paragraphLength(paragraph), paragraphLength(paragraph));
+  await env.run(kind === 'line' ? { kind: 'insertLineBreak' } : { kind: 'insertLineBreak', type: kind });
+  return `Added a ${kind} break after paragraph ${index}.`;
+}
+
+async function insertTable(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args, 'after');
+  const rows = int(args, 'rows');
+  const columns = int(args, 'columns');
+  if (rows < 1 || rows > MAX_TABLE || columns < 1 || columns > MAX_TABLE) throw new ToolError(`A table has 1 to ${MAX_TABLE} rows and columns.`);
+  const cells = args.cells;
+  if (cells !== undefined && (!Array.isArray(cells) || cells.some((row) => !Array.isArray(row) || row.some((c) => typeof c !== 'string')))) throw new ToolError('`cells` must be a list of rows, each a list of text.');
+  const grid = (cells ?? []) as string[][];
+  if (grid.length > rows || grid.some((row) => row.length > columns)) throw new ToolError(`\`cells\` has more than ${rows} rows or ${columns} columns.`);
+  const before = env.editor.paragraphs().length;
+  await select(env, index, paragraphLength(paragraph), paragraphLength(paragraph));
+  await env.run({ kind: 'format', action: { kind: 'insertTable', rows, columns } });
+  if (env.editor.paragraphs().length === before) return 'A table cannot be added here (it may be inside another table).';
+  // The caret is in the first cell: type each cell, Tab on to the next (but not past the last, which would add a row).
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < columns; c++) {
+      const value = grid[r]?.[c];
+      if (value) await env.run({ kind: 'insertText', text: value.replace(/\s*\n\s*/g, ' ') });
+      if (r < rows - 1 || c < columns - 1) await env.run({ kind: 'tab', backward: false });
+    }
+  }
+  return `Added a table of ${rows} rows and ${columns} columns after paragraph ${index}.`;
+}
+
+const MAX_TABLE = 50;
+const TABLE_OPS = ['insert_row_above', 'insert_row_below', 'insert_column_left', 'insert_column_right', 'delete_rows', 'delete_columns', 'delete_table', 'split_cells', 'merge_cells'] as const;
+const TABLE_ACTIONS: Record<string, TableOp> = {
+  insert_row_above: 'insertRowAbove',
+  insert_row_below: 'insertRowBelow',
+  insert_column_left: 'insertColumnLeft',
+  insert_column_right: 'insertColumnRight',
+  delete_rows: 'deleteRows',
+  delete_columns: 'deleteColumns',
+  delete_table: 'deleteTable',
+  split_cells: 'splitCells',
+  merge_cells: 'mergeCells',
+};
+
+async function editTable(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index } = paragraphAt(env, args);
+  const op = text(args, 'op');
+  if (!Object.hasOwn(TABLE_ACTIONS, op)) throw new ToolError(`\`op\` must be one of ${TABLE_OPS.join(', ')}.`);
+  await select(env, index, 0, 0);
+  if (!env.editor.inTable()) return `Paragraph ${index} is not in a table.`;
+  if (op === 'merge_cells') {
+    // The cells from the one `paragraph` is in to the one `to_paragraph` is in (and all between, as a block).
+    const to = paragraphAt(env, args, 'to_paragraph').index;
+    if (to === index) return 'Those cells could not be merged (they must be two or more different cells of one table).';
+    const cells = env.editor.paragraphs();
+    await env.run({ kind: 'select', paragraph: index, from: 0, to: 0, until: to });
+    await env.run({ kind: 'format', action: { kind: 'table', op: 'mergeCells' } });
+    // Merging rebuilds the table: its paragraphs are new ones. A merge that did nothing (one cell, or two tables) leaves them as they were.
+    const merged = env.editor.paragraphs().some((p, k) => p !== cells[k]);
+    return merged ? `Merged the cells from paragraph ${index} to paragraph ${to}.` : 'Those cells could not be merged (they must be two or more different cells of one table).';
+  }
+  const action: TableAction = { kind: 'table', op: TABLE_ACTIONS[op]! };
+  if (op === 'split_cells') {
+    action.columns = int(args, 'columns', 2);
+    action.rows = int(args, 'rows', 1);
+    if (action.columns < 1 || action.rows < 1 || action.columns > MAX_TABLE || action.rows > MAX_TABLE) throw new ToolError(`Split into 1 to ${MAX_TABLE} rows and columns.`);
+  }
+  await env.run({ kind: 'format', action });
+  return `Done: ${op.replaceAll('_', ' ')} at paragraph ${index}.`;
+}
+
+async function setColumns(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const count = int(args, 'count');
+  if (count < 1 || count > 12) throw new ToolError('`count` must be from 1 to 12.');
+  const scope = args.scope === undefined ? 'document' : text(args, 'scope');
+  if (scope !== 'document' && scope !== 'section' && scope !== 'forward') throw new ToolError('`scope` must be document, section or forward.');
+  if (scope !== 'document') {
+    const { index } = paragraphAt(env, args);
+    await select(env, index, 0, 0);
+  }
+  const space = args.space === undefined ? 720 : Math.round(Number(args.space) * TWIPS_PER_POINT);
+  if (!Number.isFinite(space) || space < 0) throw new ToolError('`space` is the gap between columns in points.');
+  await env.run({ kind: 'setColumns', count, space, sep: flag(args, 'line_between') ?? false, scope });
+  return `Set ${count} column${count === 1 ? '' : 's'} (${scope === 'document' ? 'whole document' : scope === 'section' ? 'that section' : 'from that paragraph on'}).`;
+}
+
+async function insertEquation(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { index, paragraph } = paragraphAt(env, args);
+  const latex = text(args, 'latex').trim();
+  if (!latex) throw new ToolError('`latex` must not be empty');
+  const display = flag(args, 'display') ?? false;
+  const { equation, errors } = parseLatex(latex, display);
+  if (errors.length) throw new ToolError(`The LaTeX has errors: ${errors.map((e) => (typeof e === 'string' ? e : JSON.stringify(e))).join('; ')}`);
+  const find = args.find === undefined ? undefined : text(args, 'find');
+  if (find) {
+    const problem = await selectRange(env, index, paragraph, find);
+    if (problem) return problem;
+  } else {
+    await select(env, index, paragraphLength(paragraph), paragraphLength(paragraph));
+  }
+  await env.run({ kind: 'insertContent', content: [mathInline(equation)] });
+  return `Inserted the equation ${find ? `in place of "${find}" ` : 'at the end '}in paragraph ${index}.`;
+}
+
+const PAGE_SIZES: Record<string, [number, number]> = {
+  letter: [12240, 15840],
+  legal: [12240, 20160],
+  tabloid: [15840, 24480],
+  a3: [16838, 23811],
+  a4: [11906, 16838],
+  a5: [8392, 11906],
+};
+const TWIPS_PER_INCH = 1440;
+
+async function setPage(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const scope = args.scope === undefined ? 'document' : text(args, 'scope');
+  if (scope !== 'document' && scope !== 'section' && scope !== 'forward') throw new ToolError('`scope` must be document, section or forward.');
+  if (scope !== 'document') await select(env, paragraphAt(env, args).index, 0, 0);
+  const now = env.editor.sectionPage();
+  let { width, height } = now;
+  let landscape = now.landscape;
+  const size = args.size === undefined ? undefined : text(args, 'size').toLowerCase();
+  if (size !== undefined) {
+    if (!Object.hasOwn(PAGE_SIZES, size)) throw new ToolError(`\`size\` must be one of ${Object.keys(PAGE_SIZES).join(', ')}.`);
+    [width, height] = PAGE_SIZES[size]!;
+    if (landscape) [width, height] = [height, width];
+  }
+  const orientation = args.orientation === undefined ? undefined : text(args, 'orientation');
+  if (orientation !== undefined) {
+    if (orientation !== 'portrait' && orientation !== 'landscape') throw new ToolError('`orientation` must be portrait or landscape.');
+    if ((orientation === 'landscape') !== landscape) [width, height] = [height, width];
+    landscape = orientation === 'landscape';
+  }
+  const margin = (key: string, was: number): number => {
+    const v = args[key];
+    if (v === undefined) return was;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 10) throw new ToolError(`\`${key}\` is in inches, from 0 to 10.`);
+    return Math.round(v * TWIPS_PER_INCH);
+  };
+  const all = args.margins;
+  const top = margin(all === undefined ? 'top' : 'margins', now.top);
+  const bottom = margin(all === undefined ? 'bottom' : 'margins', now.bottom);
+  const left = margin(all === undefined ? 'left' : 'margins', now.left);
+  const right = margin(all === undefined ? 'right' : 'margins', now.right);
+  if (left + right >= width || top + bottom >= height) throw new ToolError('The margins leave no room for text.');
+  await env.run({ kind: 'setPage', ...now, width, height, landscape, top, bottom, left, right, scope });
+  return `Page setup: ${(width / TWIPS_PER_INCH).toFixed(2)} x ${(height / TWIPS_PER_INCH).toFixed(2)} inches${landscape ? ' (landscape)' : ''}, margins ${top / TWIPS_PER_INCH}/${right / TWIPS_PER_INCH}/${bottom / TWIPS_PER_INCH}/${left / TWIPS_PER_INCH} inches (top/right/bottom/left).`;
+}
+
+function listComments(env: AgentEnv): string {
+  const comments = env.editor.comments();
+  if (!comments.length) return 'There are no comments.';
+  const lines = comments.map((c) => `[${c.id}]${c.parentId ? ` (reply to ${c.parentId})` : ''}${c.resolved ? ' (resolved)' : ''} ${c.author}: ${c.text}`);
+  return `${comments.length} comment${comments.length === 1 ? '' : 's'} and replies:\n${lines.join('\n')}`.slice(0, MAX_READ_CHARS);
+}
+
+function commentOf(env: AgentEnv, args: Record<string, unknown>) {
+  const id = text(args, 'id');
+  const found = env.editor.comments().find((c) => c.id === id);
+  if (!found) throw new ToolError(`There is no comment ${id}; use list_comments.`);
+  return found;
+}
+
+async function editComment(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { id } = commentOf(env, args);
+  const value = text(args, 'text').trim();
+  if (!value) throw new ToolError('`text` must not be empty');
+  await env.run({ kind: 'editComment', id, text: value });
+  return `Changed comment ${id}.`;
+}
+
+async function replyComment(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { id } = commentOf(env, args);
+  const value = text(args, 'text').trim();
+  if (!value) throw new ToolError('`text` must not be empty');
+  await env.run({ kind: 'replyComment', id, text: value, author: AUTHOR });
+  return `Replied to comment ${id}.`;
+}
+
+async function resolveComment(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { id } = commentOf(env, args);
+  const resolved = flag(args, 'resolved') ?? true;
+  await env.run({ kind: 'resolveComment', id, resolved });
+  return resolved ? `Resolved comment ${id}.` : `Reopened comment ${id}.`;
+}
+
+async function deleteComment(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const { id } = commentOf(env, args);
+  await env.run({ kind: 'deleteComment', id });
+  return `Deleted comment ${id} and its replies.`;
+}
+
+const PROPERTY_KEYS = ['title', 'subject', 'author', 'keywords', 'comments', 'category', 'company', 'manager'] as const;
+
+function getProperties(env: AgentEnv): string {
+  const p = env.editor.doc.properties;
+  const lines = PROPERTY_KEYS.filter((k) => p[k]).map((k) => `${k}: ${p[k]}`);
+  return lines.length ? lines.join('\n') : 'No properties are set.';
+}
+
+async function setProperties(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  editable(env);
+  const change: DocumentProperties = {};
+  for (const key of PROPERTY_KEYS) if (args[key] !== undefined) change[key] = text(args, key);
+  if (!Object.keys(change).length) throw new ToolError(`Say what to set: ${PROPERTY_KEYS.join(', ')}.`);
+  await env.run({ kind: 'setProperties', properties: { ...env.editor.doc.properties, ...change } });
+  return `Set ${Object.keys(change).join(', ')}.`;
+}
+
+function countWords(env: AgentEnv): string {
+  const list = env.editor.paragraphs();
+  let words = 0;
+  let characters = 0;
+  let spaces = 0;
+  for (const p of list) {
+    const line = paragraphText(p).replaceAll(OBJECT_CHAR, '');
+    words += line.split(/\s+/).filter(Boolean).length;
+    characters += line.replace(/\s/g, '').length;
+    spaces += line.length;
+  }
+  return `${words} words, ${characters} characters (${spaces} with spaces), ${list.length} paragraphs.`;
+}
+
+async function undoRedo(env: AgentEnv, kind: 'undo' | 'redo'): Promise<string> {
+  editable(env);
+  await env.run({ kind });
+  return kind === 'undo' ? 'Undid the last change.' : 'Redid the last change.';
 }
 
 async function addComment(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
@@ -284,6 +695,29 @@ const TOOLS: Record<string, (env: AgentEnv, args: Record<string, unknown>) => st
   set_style: setStyle,
   format_text: formatText,
   add_comment: addComment,
+  clear_formatting: clearFormatting,
+  change_case: changeCase,
+  format_paragraph: formatParagraph,
+  insert_horizontal_rule: insertRule,
+  format_code_block: formatCodeBlock,
+  insert_link: insertLink,
+  remove_link: removeLink,
+  insert_break: insertBreak,
+  insert_table: insertTable,
+  edit_table: editTable,
+  set_columns: setColumns,
+  insert_equation: insertEquation,
+  set_page: setPage,
+  list_comments: listComments,
+  edit_comment: editComment,
+  reply_comment: replyComment,
+  resolve_comment: resolveComment,
+  delete_comment: deleteComment,
+  get_properties: getProperties,
+  set_properties: setProperties,
+  count_words: countWords,
+  undo: (env) => undoRedo(env, 'undo'),
+  redo: (env) => undoRedo(env, 'redo'),
 };
 
 /** Runs one tool for the model. `argumentsJson` is what the model wrote. Never throws: problems are the answer. */

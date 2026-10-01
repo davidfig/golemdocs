@@ -11,7 +11,7 @@ import { OpcPackage } from '../src/opc/package.ts';
 import { CORPUS_DIR as CORPUS, corpusFiles } from './corpus.ts';
 
 const files = corpusFiles() ?? [];
-const needsCorpus = files.length ? {} : { skip: 'run `pnpm --filter @word/docx corpus` first' };
+const needsCorpus = files.length ? {} : { skip: 'run `pnpm --filter @golemdocs/docx corpus` first' };
 
 test('crc32 matches known vectors', () => {
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926);

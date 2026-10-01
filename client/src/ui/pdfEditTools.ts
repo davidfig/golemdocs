@@ -176,7 +176,7 @@ export class PdfEditTools {
     return (this.host.pageAt(rect.width / 2, rect.height / 2) ?? this.host.pageAt(rect.width / 2, rect.height / 3))?.page ?? null;
   }
 
-  private pageOp(op: Extract<WireCommand, { kind: 'pdfPageOp' }>['op']): void {
+  private pageOp(op: Exclude<Extract<WireCommand, { kind: 'pdfPageOp' }>['op'], 'move'>): void {
     const page = this.targetPage();
     if (!page) return;
     if (this.text || this.object) this.host.send({ kind: 'pdfPutDown' });

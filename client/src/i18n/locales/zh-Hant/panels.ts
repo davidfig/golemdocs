@@ -8,6 +8,9 @@ export const panels: Partial<Messages> = {
   'panels.billing.soFar': '{month}截至目前:{total}',
   'panels.billing.none': '本月尚無費用。',
   'panels.billing.asOf': '截至 {time}。Cloudflare 回報用量可能需要一段時間。',
+  'panels.billing.noneIn': '{month}沒有費用。',
+  'panels.billing.earlier': '過往月份',
+  'panels.billing.month': '{month}：{total}',
 
   // Comments
   'panels.comments.label': '註解',
@@ -120,4 +123,9 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': '刪除意見反應',
   'panels.feedback.deleteAsk': '要刪除這則意見反應嗎？此動作無法復原。',
   'panels.feedback.resolved': '已解決',
+  'panels.pages.label': '頁面',
+  'panels.pages.page': '第 {number} 頁',
+  'panels.pages.delete': '刪除第 {number} 頁',
+  'panels.pages.close': '關閉',
+  'panels.pages.hint': '切換到「{mode}」後即可重新排列或刪除頁面。',
 };

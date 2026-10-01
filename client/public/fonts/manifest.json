@@ -20,6 +20,7 @@
           "italic": false,
           "atlas": "calibri/regular.webp",
           "layout": "calibri/regular.json",
+          "font": "calibri/regular.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -59,14 +60,14 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          },
-          "font": "calibri/regular.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": false,
           "atlas": "calibri/bold.webp",
           "layout": "calibri/bold.json",
+          "font": "calibri/bold.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -106,14 +107,14 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          },
-          "font": "calibri/bold.ttf"
+          }
         },
         {
           "weight": 400,
           "italic": true,
           "atlas": "calibri/italic.webp",
           "layout": "calibri/italic.json",
+          "font": "calibri/italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -153,14 +154,14 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          },
-          "font": "calibri/italic.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": true,
           "atlas": "calibri/bold-italic.webp",
           "layout": "calibri/bold-italic.json",
+          "font": "calibri/bold-italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -200,10 +201,212 @@
               "xOffset": 0,
               "yOffset": 976
             }
-          },
-          "font": "calibri/bold-italic.ttf"
+          }
         }
       ]
+    },
+    {
+      "id": "calibri-extra",
+      "wordName": "Calibri (extra)",
+      "substitute": "Carlito",
+      "license": "OFL-1.1",
+      "licenseFile": "calibri-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "calibri-extra/regular.webp",
+          "layout": "calibri-extra/regular.json",
+          "font": "calibri/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1950,
+              "descender": -550,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1536,
+              "descender": -512,
+              "lineGap": 452,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1950,
+              "descent": 550
+            },
+            "xHeight": 978,
+            "capHeight": 1314,
+            "underline": {
+              "position": -103,
+              "thickness": 194
+            },
+            "strikeout": {
+              "size": 134,
+              "position": 512
+            },
+            "subscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 976
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "calibri-extra/bold.webp",
+          "layout": "calibri-extra/bold.json",
+          "font": "calibri/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1950,
+              "descender": -550,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1536,
+              "descender": -512,
+              "lineGap": 452,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1950,
+              "descent": 550
+            },
+            "xHeight": 993,
+            "capHeight": 1328,
+            "underline": {
+              "position": -103,
+              "thickness": 194
+            },
+            "strikeout": {
+              "size": 134,
+              "position": 512
+            },
+            "subscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 976
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "calibri-extra/italic.webp",
+          "layout": "calibri-extra/italic.json",
+          "font": "calibri/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1950,
+              "descender": -550,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1536,
+              "descender": -512,
+              "lineGap": 452,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1950,
+              "descent": 550
+            },
+            "xHeight": 983,
+            "capHeight": 1314,
+            "underline": {
+              "position": -103,
+              "thickness": 194
+            },
+            "strikeout": {
+              "size": 134,
+              "position": 512
+            },
+            "subscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 976
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "calibri-extra/bold-italic.webp",
+          "layout": "calibri-extra/bold-italic.json",
+          "font": "calibri/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1950,
+              "descender": -550,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1536,
+              "descender": -512,
+              "lineGap": 452,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1950,
+              "descent": 550
+            },
+            "xHeight": 993,
+            "capHeight": 1328,
+            "underline": {
+              "position": -103,
+              "thickness": 194
+            },
+            "strikeout": {
+              "size": 134,
+              "position": 512
+            },
+            "subscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1433,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 976
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "calibri",
+        "order": 0,
+        "coverage": "calibri-extra/coverage.json"
+      }
     },
     {
       "id": "cambria",
@@ -218,6 +421,7 @@
           "italic": false,
           "atlas": "cambria/regular.webp",
           "layout": "cambria/regular.json",
+          "font": "cambria/regular.ttf",
           "metrics": {
             "unitsPerEm": 1000,
             "hhea": {
@@ -257,14 +461,14 @@
               "xOffset": 0,
               "yOffset": 350
             }
-          },
-          "font": "cambria/regular.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": false,
           "atlas": "cambria/bold.webp",
           "layout": "cambria/bold.json",
+          "font": "cambria/bold.ttf",
           "metrics": {
             "unitsPerEm": 1000,
             "hhea": {
@@ -304,14 +508,14 @@
               "xOffset": 0,
               "yOffset": 350
             }
-          },
-          "font": "cambria/bold.ttf"
+          }
         },
         {
           "weight": 400,
           "italic": true,
           "atlas": "cambria/italic.webp",
           "layout": "cambria/italic.json",
+          "font": "cambria/italic.ttf",
           "metrics": {
             "unitsPerEm": 1000,
             "hhea": {
@@ -351,14 +555,14 @@
               "xOffset": 55,
               "yOffset": 350
             }
-          },
-          "font": "cambria/italic.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": true,
           "atlas": "cambria/bold-italic.webp",
           "layout": "cambria/bold-italic.json",
+          "font": "cambria/bold-italic.ttf",
           "metrics": {
             "unitsPerEm": 1000,
             "hhea": {
@@ -398,10 +602,212 @@
               "xOffset": 55,
               "yOffset": 350
             }
-          },
-          "font": "cambria/bold-italic.ttf"
+          }
         }
       ]
+    },
+    {
+      "id": "cambria-extra",
+      "wordName": "Cambria (extra)",
+      "substitute": "Caladea",
+      "license": "OFL-1.1",
+      "licenseFile": "cambria-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "cambria-extra/regular.webp",
+          "layout": "cambria-extra/regular.json",
+          "font": "cambria/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1050,
+              "descent": 250
+            },
+            "xHeight": 467,
+            "capHeight": 667,
+            "underline": {
+              "position": -75,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 280
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 100
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "cambria-extra/bold.webp",
+          "layout": "cambria-extra/bold.json",
+          "font": "cambria/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1050,
+              "descent": 250
+            },
+            "xHeight": 484,
+            "capHeight": 667,
+            "underline": {
+              "position": -75,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 290
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 100
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "cambria-extra/italic.webp",
+          "layout": "cambria-extra/italic.json",
+          "font": "cambria/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1050,
+              "descent": 250
+            },
+            "xHeight": 467,
+            "capHeight": 667,
+            "underline": {
+              "position": -75,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 280
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 100
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 55,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "cambria-extra/bold-italic.webp",
+          "layout": "cambria-extra/bold-italic.json",
+          "font": "cambria/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 900,
+              "descender": -250,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1050,
+              "descent": 250
+            },
+            "xHeight": 484,
+            "capHeight": 667,
+            "underline": {
+              "position": -75,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 290
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 100
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 55,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "cambria",
+        "order": 0,
+        "coverage": "cambria-extra/coverage.json"
+      }
     },
     {
       "id": "arial",
@@ -416,6 +822,7 @@
           "italic": false,
           "atlas": "arial/regular.webp",
           "layout": "arial/regular.json",
+          "font": "arial/regular.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -455,14 +862,14 @@
               "xOffset": 0,
               "yOffset": 977
             }
-          },
-          "font": "arial/regular.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": false,
           "atlas": "arial/bold.webp",
           "layout": "arial/bold.json",
+          "font": "arial/bold.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -502,14 +909,14 @@
               "xOffset": 0,
               "yOffset": 977
             }
-          },
-          "font": "arial/bold.ttf"
+          }
         },
         {
           "weight": 400,
           "italic": true,
           "atlas": "arial/italic.webp",
           "layout": "arial/italic.json",
+          "font": "arial/italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -549,14 +956,14 @@
               "xOffset": 90,
               "yOffset": 977
             }
-          },
-          "font": "arial/italic.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": true,
           "atlas": "arial/bold-italic.webp",
           "layout": "arial/bold-italic.json",
+          "font": "arial/bold-italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -596,10 +1003,212 @@
               "xOffset": 90,
               "yOffset": 977
             }
-          },
-          "font": "arial/bold-italic.ttf"
+          }
         }
       ]
+    },
+    {
+      "id": "arial-extra",
+      "wordName": "Arial (extra)",
+      "substitute": "Liberation Sans",
+      "license": "OFL-1.1",
+      "licenseFile": "arial-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "arial-extra/regular.webp",
+          "layout": "arial-extra/regular.json",
+          "font": "arial/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1854,
+              "descender": -434,
+              "lineGap": 67
+            },
+            "typo": {
+              "ascender": 1491,
+              "descender": -431,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1854,
+              "descent": 434
+            },
+            "xHeight": 1082,
+            "capHeight": 1409,
+            "underline": {
+              "position": -67,
+              "thickness": 150
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 283
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 977
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "arial-extra/bold.webp",
+          "layout": "arial-extra/bold.json",
+          "font": "arial/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1854,
+              "descender": -434,
+              "lineGap": 67
+            },
+            "typo": {
+              "ascender": 1491,
+              "descender": -431,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1854,
+              "descent": 434
+            },
+            "xHeight": 1082,
+            "capHeight": 1409,
+            "underline": {
+              "position": -2,
+              "thickness": 215
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 283
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 977
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "arial-extra/italic.webp",
+          "layout": "arial-extra/italic.json",
+          "font": "arial/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1854,
+              "descender": -434,
+              "lineGap": 67
+            },
+            "typo": {
+              "ascender": 1491,
+              "descender": -425,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1854,
+              "descent": 434
+            },
+            "xHeight": 1082,
+            "capHeight": 1409,
+            "underline": {
+              "position": -67,
+              "thickness": 150
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 30,
+              "yOffset": 283
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 90,
+              "yOffset": 977
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "arial-extra/bold-italic.webp",
+          "layout": "arial-extra/bold-italic.json",
+          "font": "arial/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1854,
+              "descender": -434,
+              "lineGap": 67
+            },
+            "typo": {
+              "ascender": 1491,
+              "descender": -431,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1854,
+              "descent": 434
+            },
+            "xHeight": 1082,
+            "capHeight": 1409,
+            "underline": {
+              "position": -2,
+              "thickness": 215
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 30,
+              "yOffset": 283
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 90,
+              "yOffset": 977
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "arial",
+        "order": 0,
+        "coverage": "arial-extra/coverage.json"
+      }
     },
     {
       "id": "times-new-roman",
@@ -614,6 +1223,7 @@
           "italic": false,
           "atlas": "times-new-roman/regular.webp",
           "layout": "times-new-roman/regular.json",
+          "font": "times-new-roman/regular.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -653,14 +1263,14 @@
               "xOffset": 0,
               "yOffset": 928
             }
-          },
-          "font": "times-new-roman/regular.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": false,
           "atlas": "times-new-roman/bold.webp",
           "layout": "times-new-roman/bold.json",
+          "font": "times-new-roman/bold.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -700,14 +1310,14 @@
               "xOffset": 0,
               "yOffset": 928
             }
-          },
-          "font": "times-new-roman/bold.ttf"
+          }
         },
         {
           "weight": 400,
           "italic": true,
           "atlas": "times-new-roman/italic.webp",
           "layout": "times-new-roman/italic.json",
+          "font": "times-new-roman/italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -747,14 +1357,14 @@
               "xOffset": 76,
               "yOffset": 928
             }
-          },
-          "font": "times-new-roman/italic.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": true,
           "atlas": "times-new-roman/bold-italic.webp",
           "layout": "times-new-roman/bold-italic.json",
+          "font": "times-new-roman/bold-italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -794,10 +1404,212 @@
               "xOffset": 76,
               "yOffset": 928
             }
-          },
-          "font": "times-new-roman/bold-italic.ttf"
+          }
         }
       ]
+    },
+    {
+      "id": "times-new-roman-extra",
+      "wordName": "Times New Roman (extra)",
+      "substitute": "Liberation Serif",
+      "license": "OFL-1.1",
+      "licenseFile": "times-new-roman-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "times-new-roman-extra/regular.webp",
+          "layout": "times-new-roman-extra/regular.json",
+          "font": "times-new-roman/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1825,
+              "descender": -443,
+              "lineGap": 87
+            },
+            "typo": {
+              "ascender": 1420,
+              "descender": -442,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1825,
+              "descent": 443
+            },
+            "xHeight": 940,
+            "capHeight": 1341,
+            "underline": {
+              "position": -123,
+              "thickness": 100
+            },
+            "strikeout": {
+              "size": 100,
+              "position": 420
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 293
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 928
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "times-new-roman-extra/bold.webp",
+          "layout": "times-new-roman-extra/bold.json",
+          "font": "times-new-roman/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1825,
+              "descender": -443,
+              "lineGap": 87
+            },
+            "typo": {
+              "ascender": 1387,
+              "descender": -442,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1825,
+              "descent": 443
+            },
+            "xHeight": 940,
+            "capHeight": 1341,
+            "underline": {
+              "position": -28,
+              "thickness": 195
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 293
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 928
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "times-new-roman-extra/italic.webp",
+          "layout": "times-new-roman-extra/italic.json",
+          "font": "times-new-roman/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1825,
+              "descender": -443,
+              "lineGap": 87
+            },
+            "typo": {
+              "ascender": 1422,
+              "descender": -442,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1825,
+              "descent": 443
+            },
+            "xHeight": 940,
+            "capHeight": 1341,
+            "underline": {
+              "position": -123,
+              "thickness": 100
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 44,
+              "yOffset": 293
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 76,
+              "yOffset": 928
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "times-new-roman-extra/bold-italic.webp",
+          "layout": "times-new-roman-extra/bold-italic.json",
+          "font": "times-new-roman/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1825,
+              "descender": -443,
+              "lineGap": 87
+            },
+            "typo": {
+              "ascender": 1387,
+              "descender": -442,
+              "lineGap": 307,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1825,
+              "descent": 443
+            },
+            "xHeight": 940,
+            "capHeight": 1341,
+            "underline": {
+              "position": -28,
+              "thickness": 195
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 44,
+              "yOffset": 293
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 76,
+              "yOffset": 928
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "times-new-roman",
+        "order": 0,
+        "coverage": "times-new-roman-extra/coverage.json"
+      }
     },
     {
       "id": "courier-new",
@@ -812,6 +1624,7 @@
           "italic": false,
           "atlas": "courier-new/regular.webp",
           "layout": "courier-new/regular.json",
+          "font": "courier-new/regular.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -851,14 +1664,14 @@
               "xOffset": 0,
               "yOffset": 865
             }
-          },
-          "font": "courier-new/regular.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": false,
           "atlas": "courier-new/bold.webp",
           "layout": "courier-new/bold.json",
+          "font": "courier-new/bold.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -898,14 +1711,14 @@
               "xOffset": 0,
               "yOffset": 865
             }
-          },
-          "font": "courier-new/bold.ttf"
+          }
         },
         {
           "weight": 400,
           "italic": true,
           "atlas": "courier-new/italic.webp",
           "layout": "courier-new/italic.json",
+          "font": "courier-new/italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -945,14 +1758,14 @@
               "xOffset": 80,
               "yOffset": 865
             }
-          },
-          "font": "courier-new/italic.ttf"
+          }
         },
         {
           "weight": 700,
           "italic": true,
           "atlas": "courier-new/bold-italic.webp",
           "layout": "courier-new/bold-italic.json",
+          "font": "courier-new/bold-italic.ttf",
           "metrics": {
             "unitsPerEm": 2048,
             "hhea": {
@@ -992,10 +1805,212 @@
               "xOffset": 80,
               "yOffset": 865
             }
-          },
-          "font": "courier-new/bold-italic.ttf"
+          }
         }
       ]
+    },
+    {
+      "id": "courier-new-extra",
+      "wordName": "Courier New (extra)",
+      "substitute": "Liberation Mono",
+      "license": "OFL-1.1",
+      "licenseFile": "courier-new-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "courier-new-extra/regular.webp",
+          "layout": "courier-new-extra/regular.json",
+          "font": "courier-new/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1705,
+              "descender": -615,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1255,
+              "descender": -386,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1705,
+              "descent": 615
+            },
+            "xHeight": 1082,
+            "capHeight": 1349,
+            "underline": {
+              "position": -393,
+              "thickness": 84
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 285
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 865
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "courier-new-extra/bold.webp",
+          "layout": "courier-new-extra/bold.json",
+          "font": "courier-new/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1705,
+              "descender": -615,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1297,
+              "descender": -428,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1705,
+              "descent": 615
+            },
+            "xHeight": 1082,
+            "capHeight": 1349,
+            "underline": {
+              "position": -272,
+              "thickness": 205
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 285
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 0,
+              "yOffset": 865
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "courier-new-extra/italic.webp",
+          "layout": "courier-new-extra/italic.json",
+          "font": "courier-new/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1705,
+              "descender": -615,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1255,
+              "descender": -386,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1705,
+              "descent": 615
+            },
+            "xHeight": 1082,
+            "capHeight": 1349,
+            "underline": {
+              "position": -393,
+              "thickness": 84
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 30,
+              "yOffset": 285
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 80,
+              "yOffset": 865
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "courier-new-extra/bold-italic.webp",
+          "layout": "courier-new-extra/bold-italic.json",
+          "font": "courier-new/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1705,
+              "descender": -615,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1297,
+              "descender": -428,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1705,
+              "descent": 615
+            },
+            "xHeight": 1082,
+            "capHeight": 1349,
+            "underline": {
+              "position": -272,
+              "thickness": 205
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 30,
+              "yOffset": 285
+            },
+            "superscript": {
+              "xSize": 1434,
+              "ySize": 1331,
+              "xOffset": 80,
+              "yOffset": 865
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "courier-new",
+        "order": 0,
+        "coverage": "courier-new-extra/coverage.json"
+      }
     },
     {
       "id": "georgia",
@@ -1190,6 +2205,209 @@
           }
         }
       ]
+    },
+    {
+      "id": "georgia-extra",
+      "wordName": "Georgia (extra)",
+      "substitute": "Gelasio",
+      "license": "OFL-1.1",
+      "licenseFile": "georgia-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "georgia-extra/regular.webp",
+          "layout": "georgia-extra/regular.json",
+          "font": "georgia/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 2600,
+              "descent": 800
+            },
+            "xHeight": 986,
+            "capHeight": 1419,
+            "underline": {
+              "position": -190,
+              "thickness": 106
+            },
+            "strikeout": {
+              "size": 106,
+              "position": 592
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": 0,
+              "yOffset": 154
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": 0,
+              "yOffset": 717
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "georgia-extra/bold.webp",
+          "layout": "georgia-extra/bold.json",
+          "font": "georgia/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 2600,
+              "descent": 800
+            },
+            "xHeight": 986,
+            "capHeight": 1419,
+            "underline": {
+              "position": -190,
+              "thickness": 106
+            },
+            "strikeout": {
+              "size": 106,
+              "position": 592
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": 0,
+              "yOffset": 154
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": 0,
+              "yOffset": 717
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "georgia-extra/italic.webp",
+          "layout": "georgia-extra/italic.json",
+          "font": "georgia/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 2600,
+              "descent": 800
+            },
+            "xHeight": 986,
+            "capHeight": 1419,
+            "underline": {
+              "position": -190,
+              "thickness": 106
+            },
+            "strikeout": {
+              "size": 106,
+              "position": 592
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": -23,
+              "yOffset": 154
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": 107,
+              "yOffset": 717
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "georgia-extra/bold-italic.webp",
+          "layout": "georgia-extra/bold-italic.json",
+          "font": "georgia/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -700,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 2600,
+              "descent": 800
+            },
+            "xHeight": 986,
+            "capHeight": 1419,
+            "underline": {
+              "position": -190,
+              "thickness": 106
+            },
+            "strikeout": {
+              "size": 106,
+              "position": 592
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": -23,
+              "yOffset": 154
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1229,
+              "xOffset": 107,
+              "yOffset": 717
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "georgia",
+        "order": 0,
+        "coverage": "georgia-extra/coverage.json"
+      }
     },
     {
       "id": "segoe-ui",
@@ -1659,8 +2877,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ja",
+      "page": {
+        "group": "ja",
         "order": 0,
         "coverage": "noto-sans-jp-1/coverage.json"
       }
@@ -1720,8 +2938,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ja",
+      "page": {
+        "group": "ja",
         "order": 1,
         "coverage": "noto-sans-jp-2/coverage.json"
       }
@@ -1781,8 +2999,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ja",
+      "page": {
+        "group": "ja",
         "order": 2,
         "coverage": "noto-sans-jp-3/coverage.json"
       }
@@ -1842,8 +3060,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ja",
+      "page": {
+        "group": "ja",
         "order": 3,
         "coverage": "noto-sans-jp-4/coverage.json"
       }
@@ -1903,8 +3121,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ja",
+      "page": {
+        "group": "ja",
         "order": 4,
         "coverage": "noto-sans-jp-5/coverage.json"
       }
@@ -1964,8 +3182,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ko",
+      "page": {
+        "group": "ko",
         "order": 0,
         "coverage": "noto-sans-kr-1/coverage.json"
       }
@@ -2025,8 +3243,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ko",
+      "page": {
+        "group": "ko",
         "order": 1,
         "coverage": "noto-sans-kr-2/coverage.json"
       }
@@ -2086,8 +3304,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ko",
+      "page": {
+        "group": "ko",
         "order": 2,
         "coverage": "noto-sans-kr-3/coverage.json"
       }
@@ -2147,8 +3365,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ko",
+      "page": {
+        "group": "ko",
         "order": 3,
         "coverage": "noto-sans-kr-4/coverage.json"
       }
@@ -2208,8 +3426,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ko",
+      "page": {
+        "group": "ko",
         "order": 4,
         "coverage": "noto-sans-kr-5/coverage.json"
       }
@@ -2269,8 +3487,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "ko",
+      "page": {
+        "group": "ko",
         "order": 5,
         "coverage": "noto-sans-kr-6/coverage.json"
       }
@@ -2330,8 +3548,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 0,
         "coverage": "noto-sans-sc-1/coverage.json"
       }
@@ -2391,8 +3609,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 1,
         "coverage": "noto-sans-sc-2/coverage.json"
       }
@@ -2452,8 +3670,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 2,
         "coverage": "noto-sans-sc-3/coverage.json"
       }
@@ -2513,8 +3731,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 3,
         "coverage": "noto-sans-sc-4/coverage.json"
       }
@@ -2574,8 +3792,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 4,
         "coverage": "noto-sans-sc-5/coverage.json"
       }
@@ -2635,8 +3853,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 5,
         "coverage": "noto-sans-sc-6/coverage.json"
       }
@@ -2696,8 +3914,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hans",
+      "page": {
+        "group": "zh-Hans",
         "order": 6,
         "coverage": "noto-sans-sc-7/coverage.json"
       }
@@ -2757,8 +3975,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hant",
+      "page": {
+        "group": "zh-Hant",
         "order": 0,
         "coverage": "noto-sans-tc-1/coverage.json"
       }
@@ -2818,8 +4036,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hant",
+      "page": {
+        "group": "zh-Hant",
         "order": 1,
         "coverage": "noto-sans-tc-2/coverage.json"
       }
@@ -2879,8 +4097,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hant",
+      "page": {
+        "group": "zh-Hant",
         "order": 2,
         "coverage": "noto-sans-tc-3/coverage.json"
       }
@@ -2940,8 +4158,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hant",
+      "page": {
+        "group": "zh-Hant",
         "order": 3,
         "coverage": "noto-sans-tc-4/coverage.json"
       }
@@ -3001,8 +4219,8 @@
           }
         }
       ],
-      "cjk": {
-        "lang": "zh-Hant",
+      "page": {
+        "group": "zh-Hant",
         "order": 4,
         "coverage": "noto-sans-tc-5/coverage.json"
       }

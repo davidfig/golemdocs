@@ -64,9 +64,9 @@ export class FontSet {
   private readonly metricsByFace = new Map<ManifestFace, FaceMetrics>();
   private readonly pending = new Map<ManifestFace, Promise<FaceMetrics>>();
   private readonly resolveCache = new Map<string, ResolvedFont>();
-  /** The pages of each CJK language, in order (see ManifestFamily.cjk). */
-  private readonly cjkPagesByLang = new Map<CjkLang, ManifestFamily[]>();
-  private readonly cjkFaces = new Set<ManifestFace>();
+  /** The pages of each group (a CJK language, or a family with an extra page), in order (see ManifestFamily.page). */
+  private readonly pagesByGroup = new Map<string, ManifestFamily[]>();
+  private readonly pageFaces = new Set<ManifestFace>();
   private readonly coverageOf = new Map<ManifestFamily, Promise<number[]>>();
   private readonly coverageLoaded = new Map<ManifestFamily, number[]>();
 
@@ -82,8 +82,8 @@ export class FontSet {
 
   /** The CJK language for text whose run doesn't say (the app's language). */
   defaultCjkLang: CjkLang = 'ja';
-  /** Counts CJK pages whose metrics have loaded: styles resolved earlier lack them in their fallbacks. */
-  cjkVersion = 0;
+  /** Counts pages whose metrics have loaded: styles resolved earlier lack them in their fallbacks. */
+  pageVersion = 0;
 
   private constructor(
     readonly manifest: FontManifest,
@@ -94,12 +94,13 @@ export class FontSet {
     for (const family of manifest.families) {
       // The math font is only used to lay out equations.
       if (family.math) continue;
-      // CJK pages are never chosen by name: they only draw what a run's own font lacks.
-      if (family.cjk) {
-        let pages = this.cjkPagesByLang.get(family.cjk.lang);
-        if (!pages) this.cjkPagesByLang.set(family.cjk.lang, (pages = []));
+      // Pages are never chosen by name: they only draw what a run's own font lacks.
+      if (family.page) {
+        let pages = this.pagesByGroup.get(family.page.group);
+        if (!pages) this.pagesByGroup.set(family.page.group, (pages = []));
         pages.push(family);
-        for (const face of family.faces) this.cjkFaces.add(face);
+        pages.sort((a, b) => a.page!.order - b.page!.order);
+        for (const face of family.faces) this.pageFaces.add(face);
         continue;
       }
       this.byName.set(family.wordName.toLowerCase(), { family });
@@ -204,23 +205,21 @@ export class FontSet {
     return (this.mathResolved ??= this.pick(family, undefined, { font: family.wordName }));
   }
 
-  // --- CJK pages ---------------------------------------------------------------------------
+  // --- Pages -------------------------------------------------------------------------------
 
-  /** The families holding a language's CJK pages, most used characters first. */
-  cjkPages(lang: CjkLang): readonly ManifestFamily[] {
-    return this.cjkPagesByLang.get(lang) ?? [];
+  /** The pages of a group (a CJK language, or a family's id for its extra characters), most used characters first. */
+  pages(group: string): readonly ManifestFamily[] {
+    return this.pagesByGroup.get(group) ?? [];
   }
 
   /**
-   * The fonts of a language's pages whose metrics are loaded, in order, styled like a request.
+   * The fonts of a group's pages whose metrics are loaded, in order, styled like a request.
    * Their keys differ per page (the key starts with the page's family id).
    */
-  cjkFonts(lang: CjkLang, bold: boolean, italic: boolean): ResolvedFont[] {
+  pageFonts(group: string, bold: boolean, italic: boolean): ResolvedFont[] {
     const out: ResolvedFont[] = [];
-    // The language's own pages, then its siblings' (for characters its pages lack).
-    const families = [lang, ...CJK_SIBLINGS[lang]].flatMap((l) => this.cjkPages(l));
-    for (const family of families) {
-      const key = `cjk\u0000${family.id}\u0000${bold ? 1 : 0}${italic ? 1 : 0}`;
+    for (const family of this.pages(group)) {
+      const key = `page\u0000${family.id}\u0000${bold ? 1 : 0}${italic ? 1 : 0}`;
       let font = this.resolveCache.get(key);
       if (!font) this.resolveCache.set(key, (font = this.pick(family, undefined, { font: family.wordName, bold, italic })));
       if (this.metricsByFace.has(font.face)) out.push(font);
@@ -228,32 +227,43 @@ export class FontSet {
     return out;
   }
 
+  /** The loaded fonts that draw a CJK language's characters: its own pages, then its siblings' (for characters its pages lack). */
+  cjkFonts(lang: CjkLang, bold: boolean, italic: boolean): ResolvedFont[] {
+    return [lang, ...CJK_SIBLINGS[lang]].flatMap((l) => this.pageFonts(l, bold, italic));
+  }
+
   /**
-   * Loads what drawing the given characters in a language takes: the coverage of every page of
-   * the language (small lists), then the metrics of the first page holding each character.
+   * Loads what drawing the given characters from a group's pages takes: the coverage of every page of
+   * the group (small lists), then the metrics of the first page holding each character, in the faces
+   * the given styles pick (a page with one face, like a CJK one, has just that). Returns the
+   * characters no page of the group has.
    */
-  async ensureCjk(lang: CjkLang, codePoints: Iterable<number>): Promise<void> {
+  async ensurePages(group: string, codePoints: Iterable<number>, styles: readonly { bold: boolean; italic: boolean }[] = [{ bold: false, italic: false }]): Promise<number[]> {
+    const pages = this.pages(group);
+    const wanted = [...codePoints];
+    if (pages.length === 0 || wanted.length === 0) return wanted;
+    await Promise.all(pages.map((family) => this.loadCoverage(family)));
     const needed = new Set<ManifestFamily>();
+    const remaining = wanted.filter((cp) => {
+      const family = pages.find((f) => covers(this.coverageLoaded.get(f)!, cp));
+      if (family) needed.add(family);
+      return !family;
+    });
+    await this.ensure([...needed].flatMap((family) => styles.map((style) => this.pick(family, undefined, { font: family.wordName, ...style }).face)));
+    return remaining;
+  }
+
+  /** Loads what drawing the given characters in a CJK language takes; each language takes the characters its pages hold, the rest go to its siblings. */
+  async ensureCjk(lang: CjkLang, codePoints: Iterable<number>): Promise<void> {
     let remaining = [...codePoints];
-    // Each language takes the characters its pages hold; the rest go to its siblings.
-    for (const l of [lang, ...CJK_SIBLINGS[lang]]) {
-      const pages = this.cjkPages(l);
-      if (pages.length === 0 || remaining.length === 0) continue;
-      await Promise.all(pages.map((family) => this.loadCoverage(family)));
-      remaining = remaining.filter((cp) => {
-        const family = pages.find((f) => covers(this.coverageLoaded.get(f)!, cp));
-        if (family) needed.add(family);
-        return !family;
-      });
-    }
-    await this.ensure([...needed].map((family) => family.faces[0]));
+    for (const l of [lang, ...CJK_SIBLINGS[lang]]) remaining = await this.ensurePages(l, remaining);
   }
 
   private loadCoverage(family: ManifestFamily): Promise<number[]> {
     let pending = this.coverageOf.get(family);
     if (!pending) {
       pending = (async () => {
-        const ranges = (await this.loadJson(family.cjk!.coverage)) as number[];
+        const ranges = (await this.loadJson(family.page!.coverage)) as number[];
         this.coverageLoaded.set(family, ranges);
         return ranges;
       })();
@@ -278,7 +288,7 @@ export class FontSet {
         pending = (async () => {
           const metrics = new FaceMetrics(face, (await this.loadJson(face.layout)) as MsdfLayout);
           this.metricsByFace.set(face, metrics);
-          if (this.cjkFaces.has(face)) this.cjkVersion++;
+          if (this.pageFaces.has(face)) this.pageVersion++;
           return metrics;
         })();
         pending.catch(() => this.pending.delete(face));

@@ -24,7 +24,7 @@ import { billingPanel } from './billingPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
-import { closePopup, setPopupLayer, showDialog } from './popup.ts';
+import { closePopup, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
@@ -34,6 +34,8 @@ import { iconElement } from './icons.ts';
 import { CommandPalette } from './commandPalette.ts';
 import { AccountButton } from './accountButton.ts';
 import { SyncButton } from './syncButton.ts';
+import { DocumentTitle } from './documentTitle.ts';
+import { displayDocumentName } from '../documentName.ts';
 import { DEFAULT_LAYOUT, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import './ui.css';
 
@@ -119,6 +121,8 @@ export class Chrome {
   private accountButton!: AccountButton;
   /** The command palette button, left of the format selector. */
   private palette!: CommandPalette;
+  /** The document's name in the middle of the menu bar. */
+  private docTitle!: DocumentTitle;
 
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
@@ -139,7 +143,8 @@ export class Chrome {
       this.customize();
     });
     this.formatBox = this.buildFormatBox();
-    this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.formatBox, this.toolbarsEl);
+    this.docTitle = new DocumentTitle(this.menuBar.el, this.formatBox, (name) => host.renameDocument(name), () => host.focusEditor());
+    this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.docTitle.el, this.formatBox, this.toolbarsEl);
     this.buildToolbars();
 
     window.addEventListener('keydown', (e) => this.shortcut(e), true);
@@ -188,6 +193,8 @@ export class Chrome {
     this.syncButton.update(this.state.sync);
     this.accountButton.update(this.state.sync, this.state.subscription);
     const name = this.state.documentName;
+    this.docTitle.show(displayDocumentName(name, this.state.kind), this.state.renamable);
+    this.docTitle.setPeople(this.state.people);
     const title = name ? `${name} - ${this.appName}` : this.appName;
     if (document.title !== title) document.title = title;
   }
@@ -226,6 +233,7 @@ export class Chrome {
       dialog('file.pageSetup', t('chrome.file.pageSetup'), 'pageSetup'),
       a('file.printPreview', t('chrome.file.printPreview'), { kind: 'printPreview' }, { icon: 'printPreview' }),
       a('file.print', t('chrome.file.print'), { kind: 'print' }, { icon: 'print', shortcut: 'Mod+P' }),
+      { id: 'file.rename', label: t('chrome.file.rename'), tooltip: t('chrome.file.rename.tip'), run: () => this.renameDocument(), enabled: (s) => s.renamable },
       dialog('file.properties', t('chrome.file.properties'), 'properties', { icon: 'properties' }),
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
       // Signed out, Subscribe signs in first. Once subscribed, the same place manages it.
@@ -259,6 +267,7 @@ export class Chrome {
       mode('view.print', t('chrome.view.print'), 'print'),
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
+      a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
@@ -547,6 +556,8 @@ export class Chrome {
           cmd('file.download'),
           cmd('file.downloadAll'),
           sep,
+          cmd('file.rename'),
+          sep,
           cmd('file.pageSetup'),
           cmd('file.printPreview'),
           cmd('file.print'),
@@ -591,6 +602,8 @@ export class Chrome {
           cmd('view.fillForm'),
           cmd('view.editForm'),
           sep,
+          cmd('view.pagesPanel'),
+          cmd('help.clip'),
           cmd('view.grid'),
           cmd('view.fullScreen'),
           sub(
@@ -735,7 +748,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.clip'), cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).
@@ -965,6 +978,24 @@ export class Chrome {
       this.syncButton.el,
       this.accountButton.el,
     );
+  }
+
+  /** File ▸ Rename: edits the name in the menu bar, or asks in a dialog when there is no room to show it there. */
+  private renameDocument(): void {
+    // After the menu has closed and handed the keyboard back to the document.
+    if (this.docTitle.visible) return void setTimeout(() => this.docTitle.focus(), 0);
+    const input = h('input', { attrs: { type: 'text', maxlength: '120', 'aria-label': t('chrome.title.label') }, class: 'wm-rename-input' });
+    input.value = displayDocumentName(this.state.documentName, this.state.kind);
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') input.closest('dialog')?.querySelector<HTMLElement>('.wm-dialog-buttons button:last-child')?.click();
+    });
+    void showConfirm(t('chrome.rename.title'), input, t('chrome.rename.action')).then((ok) => {
+      if (ok && input.value.trim()) this.options.host.renameDocument(input.value);
+      this.options.host.focusEditor();
+    });
+    input.focus();
+    input.select();
   }
 
   /** The switchable formats, plus the current one if it isn't switchable. */

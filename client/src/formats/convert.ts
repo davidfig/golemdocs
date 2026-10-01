@@ -5,8 +5,8 @@
 // target can't express. PDF is a fixed layout: exporting *to* it lays the document out and
 // writes pages; importing *from* it recovers text and structure (a reflowed document).
 
-import { WordDocument } from '@word/docx';
-import type { FontSet } from '@word/layout';
+import { WordDocument } from '@golemdocs/docx';
+import type { FontSet } from '@golemdocs/layout';
 import type { Extensions } from './wdoc.ts';
 import txtHandler from './handlers/txt.ts';
 import { csv as csvHandler, tsv as tsvHandler } from './handlers/csv.ts';

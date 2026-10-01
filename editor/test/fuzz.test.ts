@@ -1,14 +1,14 @@
 // Property tests for the editor: random command sequences keep the selection valid, undo and
 // redo restore the document exactly, and editors collaborating through a server converge.
-// Replay a failure with `SEED=n pnpm --filter @word/editor test`.
+// Replay a failure with `SEED=n pnpm --filter @golemdocs/editor test`.
 
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { paragraphLength, paragraphsIn, paragraphText, WordDocument, type Paragraph } from '@word/docx';
-import { FontSet, LayoutSession } from '@word/layout';
-import { CollabServer, Replica, type ClientMessage, type ServerMessage } from '@word/ops';
+import { paragraphLength, paragraphsIn, paragraphText, WordDocument, type Paragraph } from '@golemdocs/docx';
+import { FontSet, LayoutSession } from '@golemdocs/layout';
+import { CollabServer, Replica, type ClientMessage, type ServerMessage } from '@golemdocs/ops';
 import { Editor, type Command, type MoveTarget } from '../src/index.ts';
 import { forSeeds, randomText, rng, type Rand } from '../../ops/test/fuzz.ts';
 

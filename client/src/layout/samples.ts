@@ -1,8 +1,8 @@
 // Built-in sample documents, constructed through the same DOCX model as opened files so
 // every document takes one path: model -> layout -> renderer.
 
-import { WordDocument, type Paragraph, type Run, type RunProperties } from '@word/docx';
-import type { FontSet } from '@word/layout';
+import { WordDocument, type Paragraph, type Run, type RunProperties } from '@golemdocs/docx';
+import type { FontSet } from '@golemdocs/layout';
 
 const run = (text: string, properties: RunProperties = {}): Run => ({
   kind: 'run',
@@ -29,7 +29,7 @@ export async function fontShowcase(fonts: FontSet): Promise<WordDocument> {
   const doc = await WordDocument.create();
   const body: Paragraph[] = [paragraph([run('Fonts')], 'Title')];
   for (const family of fonts.families) {
-    if (family.cjk || family.math) continue; // CJK pages and the math font are internal, not fonts to show
+    if (family.page || family.math) continue; // pages and the math font are internal, not fonts to show
     const name = family.wordName;
     const face = (props: RunProperties): RunProperties => ({ ...props, fonts: { ascii: name, hAnsi: name, cs: name } });
     body.push(paragraph([run(`${name} – ${family.substitute}`, face({}))], 'Heading1'));

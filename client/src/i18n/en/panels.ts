@@ -6,6 +6,16 @@ export const panels = {
   'panels.billing.soFar': '{month} so far: {total}',
   'panels.billing.none': 'No charges yet this month.',
   'panels.billing.asOf': 'As of {time}. Cloudflare may take a while to report usage.',
+  'panels.billing.noneIn': 'No charges in {month}.',
+  'panels.billing.earlier': 'Earlier months',
+  'panels.billing.month': '{month}: {total}',
+
+  // Pages panel (View > Page Sidebar)
+  'panels.pages.label': 'Pages',
+  'panels.pages.page': 'Page {number}',
+  'panels.pages.delete': 'Delete page {number}',
+  'panels.pages.close': 'Close',
+  'panels.pages.hint': 'Switch to {mode} to reorder or delete pages.',
 
   // Comments
   'panels.comments.label': 'Comments',

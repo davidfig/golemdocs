@@ -1,6 +1,6 @@
 // OpenDocument text: the handler loaded when an .odt file is opened or exported to.
 
-import { readOdt, writeOdt } from '@word/odt';
+import { readOdt, writeOdt } from '@golemdocs/odt';
 import type { FormatHandler } from '../convert.ts';
 
 const handler: FormatHandler = {

@@ -20,7 +20,7 @@ import {
   WordDocument,
   type Paragraph,
   type Run,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { FontSet, LayoutSession, layoutDocument, packColor, type PageLayout } from '../src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');

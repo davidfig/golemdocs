@@ -25,7 +25,7 @@ Golem Docs (golemdocs.com) is a document editor that runs in your browser. This 
 
 **The assistant.** If you subscribe and ask the AI assistant something, your messages and the parts of your document it reads to answer are sent to an AI language model that runs on Cloudflare's Workers AI service. Nothing is sent unless you ask it. We don't keep the conversation on our servers, and the page doesn't save it either. We keep only a running total, per account and month, of how much of your monthly allowance you have used.
 
-**Feedback.** If you use Help ▸ Send Feedback, we keep your message along with your account, so we can read it and reply.
+**Feedback.** If you use Help › Send Feedback, we keep your message along with your account, so we can read it and reply.
 
 **Sign-in cookie.** Signing in sets one cookie that holds a random session token. It is needed to keep you signed in, lasts 30 days, and we store only a hash of it. We set no advertising or tracking cookies. The app also remembers a few choices, such as your language, theme and the last document you had open, in your browser's local storage on your device.
 
@@ -54,7 +54,7 @@ Documents and account details stay until you delete them or ask us to delete you
 ## Your choices
 
 - Use Golem Docs without signing in, and nothing leaves your browser.
-- Manage or cancel your subscription at any time from File ▸ Manage Subscription…, which opens Polar's customer portal.
+- Manage or cancel your subscription at any time from File › Manage Subscription…, which opens Polar's customer portal.
 - Sign out at any time from the account button. Clear local data there to remove what this browser has stored.
 - Ask us to see, correct or delete the information we hold about you, including your whole account, using the contact below. If you sign in with Google you can also remove Golem Docs' access from your Google Account's security settings.
 
@@ -68,6 +68,6 @@ If this policy changes, we'll update the date at the top. If a change is signifi
 
 ## Contact
 
-Questions or requests about your data: use Help ▸ Send Feedback in the app, or write to support@golemdocs.com.
+Questions or requests about your data: use Help › Send Feedback in the app, or write to support@golemdocs.com.
 
 See also our [Terms of Service](/terms).

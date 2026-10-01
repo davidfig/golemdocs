@@ -27,6 +27,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.fillForm': '&Preencher Formulário',
   'chrome.view.editForm': '&Editar PDF',
   'chrome.view.grid': '&Grade de Página',
+  'chrome.view.pagesPanel': 'Barra &Lateral de Páginas',
   'chrome.view.ruler': '&Régua',
   'chrome.view.formattingMarks': '&Marcas de Formatação',
   'chrome.view.zoomIn': '&Aumentar Zoom',
@@ -280,4 +281,10 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.needModifier': 'Inclua Ctrl, Alt ou ⌘ (ou use uma tecla de função).',
   'chrome.shortcuts.moved': '{label} não usa mais essas teclas.',
   'chrome.shortcuts.change': 'Alterar o atalho de {label}',
+  'chrome.file.rename': '&Renomear…',
+  'chrome.file.rename.tip': 'Alterar o nome deste documento',
+  'chrome.title.label': 'Nome do documento',
+  'chrome.title.tip': 'Clique para renomear',
+  'chrome.rename.title': 'Renomear documento',
+  'chrome.rename.action': 'Renomear',
 };

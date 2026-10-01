@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{meta.title}}</title>
+    <meta name="description" content="{{meta.description}}" />
+    <link rel="canonical" href="{{url}}" />
+{{alternates}}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Golem Docs" />
+    <meta property="og:locale" content="{{ogLocale}}" />
+    <meta property="og:title" content="{{meta.title}}" />
+    <meta property="og:description" content="{{meta.ogDescription}}" />
+    <meta property="og:url" content="{{url}}" />
+    <meta property="og:image" content="https://golemdocs.com/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+{{redirect}}
+    <script>
+      try {
+        var appearance = localStorage.getItem('golem.appearance');
+        if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
+      } catch (e) {}
+    </script>
+    <style>
+      @font-face { font-family: Carlito; font-weight: 400; font-display: swap; src: url(/fonts/calibri/regular.ttf) format('truetype'); }
+      @font-face { font-family: Carlito; font-weight: 700; font-display: swap; src: url(/fonts/calibri/bold.ttf) format('truetype'); }
+      :root {
+        --bg: #f6f7f9;
+        --surface: #fff;
+        --ink: #1c1d20;
+        --muted: #55585f;
+        --line: #dcdee3;
+        --brand: #2f5496;
+        --brand-ink: #fff;
+        --tint: #e9eef8;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 8px 28px rgba(0, 0, 0, 0.1);
+      }
+      html[data-theme='dark'] {
+        --bg: #1c1d20;
+        --surface: #2a2b30;
+        --ink: #eceef2;
+        --muted: #a9adb6;
+        --line: #3d3f46;
+        --brand: #8ab4f8;
+        --brand-ink: #1c1d20;
+        --tint: #262a35;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.4);
+      }
+      * { box-sizing: border-box; }
+      html { background: var(--bg); scroll-behavior: smooth; }
+      body { margin: 0; color: var(--ink); background: var(--bg); font: 17px/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+      a { color: var(--brand); }
+      .wrap { width: min(70rem, 100% - 32px); margin: 0 auto; }
+
+      header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+      header.top .wrap { display: flex; align-items: center; gap: 20px; height: 60px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: var(--ink); text-decoration: none; }
+      .brand img { width: 28px; height: 28px; }
+      nav { display: flex; gap: 22px; margin-left: auto; align-items: center; }
+      nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+      nav a:hover { color: var(--ink); }
+      .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; background: var(--brand); color: var(--brand-ink); font-weight: 600; text-decoration: none; border: 1px solid var(--brand); }
+      .btn:hover { filter: brightness(1.08); }
+      .btn.ghost { background: transparent; color: var(--brand); }
+      nav .btn { padding: 7px 16px; font-size: 0.95rem; color: var(--brand-ink); }
+      nav .btn:hover { color: var(--brand-ink); }
+
+      .hero { padding: 72px 0 56px; }
+      .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; }
+      h1 { margin: 0 0 18px; font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.1; letter-spacing: -0.02em; }
+      h1 em { font-style: normal; color: var(--brand); }
+      .lede { margin: 0 0 28px; font-size: 1.2rem; color: var(--muted); max-width: 34rem; }
+      .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+      .fine { margin: 16px 0 0; font-size: 0.9rem; color: var(--muted); }
+
+      /* The sheet: a page drawn the way the editor draws one, with the formats it can become around it. */
+      .sheet-stage { position: relative; }
+      .sheet { position: relative; background: #fff; color: #000; border-radius: 3px; box-shadow: var(--shadow); padding: 34px 38px 40px; font-family: Carlito, Calibri, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.32; transform: rotate(-1.5deg); }
+      .sheet h2 { margin: 0 0 10px; font-size: 30px; font-weight: 400; color: #2f5496; line-height: 1.15; }
+      .sheet h3 { margin: 16px 0 4px; font-size: 18px; font-weight: 400; color: #2f5496; }
+      .sheet p { margin: 0 0 9px; }
+      .sheet ul { margin: 0 0 9px; padding-left: 22px; }
+      .caret { display: inline-block; width: 2px; height: 1.05em; background: #000; vertical-align: -0.15em; animation: blink 1.1s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .cursor-tag { position: absolute; right: 26px; top: 116px; padding: 2px 8px; border-radius: 3px 3px 3px 0; background: #d0542f; color: #fff; font: 600 12px system-ui, sans-serif; }
+      .cursor-tag::after { content: ''; position: absolute; left: 0; top: 100%; width: 2px; height: 20px; background: #d0542f; }
+      .float { position: absolute; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 0.85rem; font-weight: 600; }
+      .float.a { left: -18px; bottom: -18px; }
+      .float.b { right: -14px; top: -14px; }
+
+      section { padding: 64px 0; }
+      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
+      .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
+      .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+      section.alt .card { background: var(--bg); }
+      .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
+      .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
+      .card .more-link:hover { text-decoration: underline; }
+      .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
+      .chips li { padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-weight: 600; font-size: 0.95rem; }
+
+      .steps { counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; margin: 0; padding: 0; list-style: none; }
+      .steps li { counter-increment: step; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+      .steps li::before { content: counter(step); display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 12px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 700; }
+      .steps h3 { margin: 0 0 6px; font-size: 1.05rem; }
+      .steps p { margin: 0; color: var(--muted); font-size: 0.98rem; }
+
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+      .checks { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+      .checks li { position: relative; padding-left: 32px; }
+      .checks li::before { content: '✓'; position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--tint); color: var(--brand); font-size: 0.8rem; font-weight: 700; }
+      .checks b { display: block; }
+      .checks span { color: var(--muted); font-size: 0.97rem; }
+
+      .closing { text-align: center; }
+      .closing .cta { justify-content: center; }
+      .closing .sub { margin-inline: auto; }
+
+      footer { padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.92rem; }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+      footer .langs { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
+      footer .langs [aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
+      footer .links { display: flex; gap: 22px; margin-left: auto; }
+      footer a { color: var(--muted); }
+      footer a:hover { color: var(--ink); }
+
+      @media (max-width: 52rem) {
+        .hero { padding-top: 40px; }
+        .hero .wrap, .split { grid-template-columns: 1fr; gap: 40px; }
+        nav a:not(.btn) { display: none; }
+        .float.a { left: 0; }
+        .float.b { right: 0; }
+        footer .links { margin-left: 0; }
+      }
+      @media (prefers-reduced-motion: reduce) { .caret { animation: none; } html { scroll-behavior: auto; } }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap">
+        <a class="brand" href="{{home}}"><img src="/favicon.svg" alt="" width="28" height="28" />Golem Docs</a>
+        <nav aria-label="{{nav.main}}">
+          <a href="#features">{{nav.features}}</a>
+          <a href="#formats">{{nav.formats}}</a>
+          <a href="#pricing">{{nav.pricing}}</a>
+          <a href="#privacy">{{nav.privacy}}</a>
+          <a class="btn" href="/">{{nav.open}}</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="hero">
+        <div class="wrap">
+          <div>
+            <h1>{{hero.title}}</h1>
+            <p class="lede">{{hero.lede}}</p>
+            <div class="cta">
+              <a class="btn" href="/">{{hero.start}}</a>
+              <a class="btn ghost" href="#features">{{hero.see}}</a>
+            </div>
+            <p class="fine">{{hero.fine}}</p>
+          </div>
+          <div class="sheet-stage" aria-hidden="true">
+            <div class="sheet">
+              <h2>{{sheet.title}}</h2>
+              <p>{{sheet.p1}}<span class="caret"></span></p>
+              <h3>{{sheet.h}}</h3>
+              <ul>
+                <li>{{sheet.li1}}</li>
+                <li>{{sheet.li2}}</li>
+                <li>{{sheet.li3}}</li>
+              </ul>
+              <p>{{sheet.p2}}</p>
+              <span class="cursor-tag">{{sheet.cursor}}</span>
+            </div>
+            <span class="float a">{{float.convert}}</span>
+            <span class="float b">{{float.share}}</span>
+          </div>
+        </div>
+      </div>
+
+      <section id="features" class="alt">
+        <div class="wrap">
+          <h2 class="title">{{features.title}}</h2>
+          <p class="sub">{{features.sub}}</p>
+          <div class="grid">
+            <div class="card">
+              <div class="ico" aria-hidden="true">⇄</div>
+              <h3>{{f.convert.h}}</h3>
+              <p>{{f.convert.p}}</p>
+              <a class="more-link" href="/home/convert">{{f.convert.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">✎</div>
+              <h3>{{f.pdf.h}}</h3>
+              <p>{{f.pdf.p}}</p>
+              <a class="more-link" href="/home/pdf">{{f.pdf.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">🖼</div>
+              <h3>{{f.images.h}}</h3>
+              <p>{{f.images.p}}</p>
+              <a class="more-link" href="/home/images">{{f.images.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">∑</div>
+              <h3>{{f.layout.h}}</h3>
+              <p>{{f.layout.p}}</p>
+              <a class="more-link" href="/home/documents">{{f.layout.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">👥</div>
+              <h3>{{f.live.h}}</h3>
+              <p>{{f.live.p}}</p>
+              <a class="more-link" href="/home/collaborate">{{f.live.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">✨</div>
+              <h3>{{f.ai.h}}</h3>
+              <p>{{f.ai.p}}</p>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">💾</div>
+              <h3>{{f.save.h}}</h3>
+              <p>{{f.save.p}}</p>
+              <a class="more-link" href="/home/documents">{{f.save.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">▤</div>
+              <h3>{{f.word.h}}</h3>
+              <p>{{f.word.p}}</p>
+              <a class="more-link" href="/home/customize">{{f.word.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">🎨</div>
+              <h3>{{f.you.h}}</h3>
+              <p>{{f.you.p}}</p>
+              <a class="more-link" href="/home/customize">{{f.you.link}}</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">📜</div>
+              <h3>{{f.large.h}}</h3>
+              <p>{{f.large.p}}</p>
+              <a class="more-link" href="/home/large-files">{{f.large.link}}</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="formats">
+        <div class="wrap">
+          <h2 class="title">{{formats.title}}</h2>
+          <p class="sub">{{formats.sub}}</p>
+          <ul class="chips">
+            <li>Word (.docx)</li>
+            <li>{{chip.doc}}</li>
+            <li>OpenDocument</li>
+            <li>{{chip.rtf}}</li>
+            <li>PDF</li>
+            <li>HTML</li>
+            <li>EPUB</li>
+            <li>{{chip.mhtml}}</li>
+            <li>{{chip.eml}}</li>
+            <li>Markdown</li>
+            <li>LaTeX</li>
+            <li>AsciiDoc</li>
+            <li>reStructuredText</li>
+            <li>Org</li>
+            <li>MediaWiki</li>
+            <li>Textile</li>
+            <li>{{chip.notebook}}</li>
+            <li>CSV</li>
+            <li>TSV</li>
+            <li>PNG</li>
+            <li>JPEG</li>
+            <li>WebP</li>
+            <li>GIF</li>
+            <li>BMP</li>
+            <li>SVG</li>
+            <li>{{chip.txt}}</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="alt">
+        <div class="wrap">
+          <h2 class="title">{{steps.title}}</h2>
+          <p class="sub">{{steps.sub}}</p>
+          <ol class="steps">
+            <li>
+              <h3>{{s1.h}}</h3>
+              <p>{{s1.p}}</p>
+            </li>
+            <li>
+              <h3>{{s2.h}}</h3>
+              <p>{{s2.p}}</p>
+            </li>
+            <li>
+              <h3>{{s3.h}}</h3>
+              <p>{{s3.p}}</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="pricing">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">{{pricing.title}}</h2>
+            <p class="sub" style="margin-bottom: 0">{{pricing.sub}}</p>
+          </div>
+          <ul class="checks">
+            <li><b>{{p1.h}}</b><span>{{p1.p}}</span></li>
+            <li><b>{{p2.h}}</b><span>{{p2.p}}</span></li>
+            <li><b>{{p3.h}}</b><span>{{p3.p}}</span></li>
+            <li><b>{{p4.h}}</b><span>{{p4.p}}</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="privacy" class="alt">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">{{privacy.title}}</h2>
+            <p class="sub" style="margin-bottom: 0">{{privacy.sub}}</p>
+          </div>
+          <ul class="checks">
+            <li><b>{{v1.h}}</b><span>{{v1.p}}</span></li>
+            <li><b>{{v2.h}}</b><span>{{v2.p}}</span></li>
+            <li><b>{{v3.h}}</b><span>{{v3.p}}</span></li>
+            <li><b>{{v4.h}}</b><span>{{v4.p}}</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="closing">
+        <div class="wrap">
+          <h2 class="title">{{closing.title}}</h2>
+          <p class="sub">{{closing.sub}}</p>
+          <div class="cta"><a class="btn" href="/">{{nav.open}}</a></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span>{{footer.copy}}</span>
+        <span class="links">
+          <a href="/home/privacy">{{footer.privacy}}</a>
+          <a href="/home/terms">{{footer.terms}}</a>
+          <a href="/">{{footer.app}}</a>
+        </span>
+        <ul class="langs" aria-label="{{footer.language}}">
+{{languages}}
+        </ul>
+      </div>
+    </footer>
+  </body>
+</html>

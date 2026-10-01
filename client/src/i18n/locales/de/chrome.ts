@@ -27,6 +27,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.fillForm': '&Formular ausfüllen',
   'chrome.view.editForm': 'PDF &bearbeiten',
   'chrome.view.grid': 'Seitenras&ter',
+  'chrome.view.pagesPanel': 'Seiten&leiste',
   'chrome.view.ruler': '&Lineal',
   'chrome.view.formattingMarks': 'Formatierungs&zeichen',
   'chrome.view.zoomIn': '&Vergrößern',
@@ -280,4 +281,10 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.needModifier': 'Verwenden Sie Strg, Alt oder ⌘ (oder eine Funktionstaste).',
   'chrome.shortcuts.moved': '{label} hat diese Tasten nicht mehr.',
   'chrome.shortcuts.change': 'Tastenkombination für {label} ändern',
+  'chrome.file.rename': '&Umbenennen…',
+  'chrome.file.rename.tip': 'Den Namen dieses Dokuments ändern',
+  'chrome.title.label': 'Dokumentname',
+  'chrome.title.tip': 'Zum Umbenennen klicken',
+  'chrome.rename.title': 'Dokument umbenennen',
+  'chrome.rename.action': 'Umbenennen',
 };

@@ -1,20 +1,20 @@
 {
-  "name": "@word/server",
+  "name": "@golemdocs/server",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
-    "dev": "mkdir -p ../client/dist && wrangler dev --env dev --port 3001",
-    "dev:local": "mkdir -p ../client/dist && wrangler dev --env local --port 3001",
+    "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p ../client/dist && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",
+    "dev:local": "tsx ../scripts/wrangler-config.ts && mkdir -p ../client/dist && wrangler dev --config wrangler.generated.jsonc --env local --port 3001",
     "build": "tsc",
     "typecheck": "tsc",
     "test": "tsx --test \"test/**/*.test.ts\"",
     "cf:setup": "wrangler d1 create golemdocs-directory && wrangler r2 bucket create golemdocs-files",
     "cf:setup:dev": "wrangler d1 create golemdocs-directory-dev && wrangler r2 bucket create golemdocs-files-dev",
-    "cf:migrate:dev": "wrangler d1 migrations apply DIRECTORY --env dev --remote",
-    "cf:migrate:local": "wrangler d1 migrations apply DIRECTORY --env local --local",
-    "cf:migrate": "wrangler d1 migrations apply DIRECTORY --env=\"\" --remote",
-    "deploy": "pnpm --filter @word/client build && wrangler deploy --env=\"\""
+    "cf:migrate:dev": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env dev --remote",
+    "cf:migrate:local": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env local --local",
+    "cf:migrate": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env=\"\" --remote",
+    "deploy": "pnpm --filter @golemdocs/client build && tsx ../scripts/wrangler-config.ts && wrangler deploy --config wrangler.generated.jsonc --env=\"\""
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -23,7 +23,7 @@
     "wrangler": "^4.143.0"
   },
   "dependencies": {
-    "@word/docx": "workspace:*",
-    "@word/ops": "workspace:*"
+    "@golemdocs/docx": "workspace:*",
+    "@golemdocs/ops": "workspace:*"
   }
 }

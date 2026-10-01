@@ -24,7 +24,7 @@ import {
   type TableCell,
   type TableRow,
   type WordDocument,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { blockKey, DocumentIndex } from './ids.ts';
 import type { PosMap } from './mapping.ts';
 import type { Operation, RunFormat } from './types.ts';

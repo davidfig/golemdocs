@@ -1,9 +1,9 @@
 // Messages between a document (in the layout worker) and a collaboration room. The document
-// part is @word/ops's ClientMessage / ServerMessage; around it: joining (the starting
+// part is @golemdocs/ops's ClientMessage / ServerMessage; around it: joining (the starting
 // snapshot and the log so far) and presence (where other people's carets are), which isn't
 // part of the document and isn't logged.
 
-import type { ClientMessage, Selection, ServerMessage, Transaction } from '@word/ops';
+import type { ClientMessage, Selection, ServerMessage, Transaction } from '@golemdocs/ops';
 
 export type RoomClientMessage =
   /** Join a room; `snapshot` becomes the room's document if the room is new. */

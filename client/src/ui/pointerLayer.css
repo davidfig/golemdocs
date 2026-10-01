@@ -34,3 +34,14 @@
   font: 11px/1.4 system-ui, sans-serif;
   white-space: nowrap;
 }
+
+.wm-pointer-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wm-pointer-name .wm-avatar {
+  border-color: #fff;
+  margin: -1px 0 -1px -5px;
+}

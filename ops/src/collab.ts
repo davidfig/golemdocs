@@ -10,7 +10,7 @@
 // The server never needs to understand operations. Every client ends up applying the same
 // log to the same starting document, and application is deterministic, so they converge.
 
-import type { Paragraph } from '@word/docx';
+import type { Paragraph } from '@golemdocs/docx';
 import type { Engine, Step } from './engine.ts';
 import { Mapping, mapOperation } from './mapping.ts';
 import type { Operation, Transaction } from './types.ts';

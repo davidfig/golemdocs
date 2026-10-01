@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { writeZip } from '@word/docx';
+import { writeZip } from '@golemdocs/docx';
 import { OdtError, readOdt } from '../src/index.ts';
 import { minimalContent, odtPackage } from './fixtures.ts';
 

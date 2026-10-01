@@ -1233,6 +1233,63 @@
   margin: 0;
 }
 
+/* --- Document name (centred in the menu bar) ------------------------------------------------ */
+
+.wm-doctitle {
+  position: absolute;
+  top: 2px;
+  height: 20px;
+  box-sizing: border-box;
+}
+
+.wm-doctitle[hidden] {
+  display: none;
+}
+
+.wm-doctitle-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--wm-text);
+  font: inherit;
+  text-align: center;
+  text-overflow: ellipsis;
+  outline: none;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  transition: background var(--wm-ease), border-color var(--wm-ease);
+}
+
+.wm-doctitle:not(.readonly) .wm-doctitle-input:hover {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-doctitle-input:focus {
+  background: var(--wm-menu-bg);
+  border-color: var(--wm-menu-border);
+  text-align: left;
+  text-overflow: clip;
+}
+
+.wm-doctitle.readonly .wm-doctitle-input {
+  cursor: default;
+}
+
+/* Measures the name's width: same font, out of sight. */
+.wm-doctitle-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+  pointer-events: none;
+}
+
 /* A pick-only list: its text is a label, not something to select or edit. */
 .wm-combo-input.readonly {
   cursor: default;
@@ -1424,6 +1481,15 @@
   padding-left: 32px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.wm-billing h4 {
+  margin: 16px 0 4px;
+}
+
+.wm-billing summary {
+  cursor: pointer;
+  padding: 2px 0;
 }
 
 .wm-billing-error {
@@ -2002,6 +2068,10 @@
     top: 6px;
     height: 26px;
   }
+  .wm-doctitle {
+    top: 6px;
+    height: 26px;
+  }
   .wm-format .wm-combo,
   .wm-sync {
     height: 26px;
@@ -2130,4 +2200,76 @@
 .wm-palette-empty {
   padding: 8px;
   color: var(--wm-muted);
+}
+
+/* A person's picture in a circle, with their initial under it (see avatar.ts). */
+.wm-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--wm-avatar, 24px);
+  height: var(--wm-avatar, 24px);
+  overflow: hidden;
+  border-radius: 50%;
+  color: var(--wm-text);
+  background: var(--wm-menu-bg);
+  border: 1px solid var(--wm-field-border);
+  font: 600 calc(var(--wm-avatar, 24px) * 0.5) / 1 system-ui, sans-serif;
+}
+
+.wm-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The account button shows the picture instead of the person icon. */
+.wm-account[data-picture='true'] {
+  overflow: hidden;
+  border: 0;
+  background: none;
+}
+
+.wm-account[data-picture='true'] .wm-avatar {
+  border: 0;
+}
+
+/* Beside the document's name: the people editing it together (see documentTitle.ts). */
+.wm-doctitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-doctitle-input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
+
+.wm-presence {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.wm-presence[hidden] {
+  display: none;
+}
+
+.wm-presence .wm-avatar {
+  border-width: 2px;
+}
+
+.wm-presence .wm-avatar + .wm-avatar {
+  margin-left: -6px;
+}
+
+.wm-presence-more {
+  border-color: var(--wm-field-border) !important;
 }

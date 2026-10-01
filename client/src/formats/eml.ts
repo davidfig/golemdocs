@@ -4,8 +4,8 @@
 // attachments. Writing makes a message of the document: the same headers, the body as text and HTML
 // (pictures inline), and the original attachments, which are kept with the document for that.
 
-import { WordDocument, paragraphText } from '@word/docx';
-import type { Block, Inline, Paragraph, Style } from '@word/docx';
+import { WordDocument, paragraphText } from '@golemdocs/docx';
+import type { Block, Inline, Paragraph, Style } from '@golemdocs/docx';
 import { t } from '../i18n/index.ts';
 import { documentToHtml, htmlToDocument } from './html.ts';
 import { MIME, collectImages } from './images.ts';

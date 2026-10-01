@@ -1,11 +1,11 @@
 // Marking up a PDF shown as its own pages: selecting its text, and adding, changing and removing
 // markup annotations (highlight, underline, strikeout, sticky notes) over it. The page text never
 // changes; the annotations are a layer kept with the document (the .wdoc's pdf extension) and
-// written into the file only when it's exported (see @word/pdf applyAnnotations). Its form fields
+// written into the file only when it's exported (see @golemdocs/pdf applyAnnotations). Its form fields
 // are a layer the same way, filled in and arranged by the page (see ../ui/formLayer.ts); one undo
 // history covers both.
 
-import { alignOf, cellsOf, isStandardName, nearestStandard, noteRect, quadBoxes, quadsFor, textOf, type Annotation, type AnnotationKind, type Box, type FormField, type ApplyResult, type PdfEdit, type Rgb, type ShapeEdit, type TextBlock, type TextEdit, type TextStyle } from '@word/pdf';
+import { alignOf, cellsOf, isStandardName, nearestStandard, noteRect, quadBoxes, quadsFor, textOf, type Annotation, type AnnotationKind, type Box, type FormField, type ApplyResult, type PdfEdit, type Rgb, type ShapeEdit, type TextBlock, type TextEdit, type TextStyle } from '@golemdocs/pdf';
 import type { PdfCharacter, PdfView } from '../formats/pdfPages.ts';
 
 /** A rectangle to show, on a page (by index), in page coordinates. */
@@ -235,6 +235,12 @@ export class PdfAnnotator {
     }
     const [start, end] = unit === 'word' ? expand(chars, index, (c) => /\s/.test(c.text)) : expand(chars, index, () => false);
     this.text = { page, anchor: start, focus: end, collapsed: false };
+  }
+
+  /** Selects characters `anchor` to `focus` of a page (by index), as dragging over them does. */
+  selectChars(page: number, anchor: number, focus: number): void {
+    this.selectedId = null;
+    this.text = { page, anchor, focus, collapsed: false };
   }
 
   selectPage(): void {

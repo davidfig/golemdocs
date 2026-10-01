@@ -15,9 +15,9 @@ import type {
   TableCellBorders,
   TableCellProperties,
   Underline,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { el, lengthToTwips, parseLength, parsePercent, percent, pointsToLength, twipsToLength } from './odf.ts';
-import type { XmlElement } from '@word/docx';
+import type { XmlElement } from '@golemdocs/docx';
 
 /** Attributes and children of a properties element that weren't mapped. */
 export interface Unmapped {

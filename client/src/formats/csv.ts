@@ -8,8 +8,8 @@
 // Reading follows RFC 4180 and forgives what real files do: quotes inside unquoted fields, a
 // missing final newline, ragged rows (short rows are padded so the table stays rectangular).
 
-import { WordDocument } from '@word/docx';
-import type { Block, Border, Inline, Paragraph, Table, TableCell, TableRow } from '@word/docx';
+import { WordDocument } from '@golemdocs/docx';
+import type { Block, Border, Inline, Paragraph, Table, TableCell, TableRow } from '@golemdocs/docx';
 import { encodeText } from './textFiles.ts';
 import type { CsvExtension } from './wdoc.ts';
 

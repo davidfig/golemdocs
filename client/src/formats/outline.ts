@@ -6,7 +6,7 @@
 // The conventions are Markdown's (see markdown.ts), so a document looks the same whichever of
 // these formats it was opened as.
 
-import { isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
+import { isMathInline, mathInline, parseLatex, readMathInline, StyleResolver, toLatex, WordDocument } from '@golemdocs/docx';
 import type {
   Block,
   Inline,
@@ -19,7 +19,7 @@ import type {
   Table,
   TableCell,
   TableRow,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { styleFor } from './markdownStyles.ts';
 
 // --- The outline ---------------------------------------------------------------------------------

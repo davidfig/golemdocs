@@ -1,6 +1,23 @@
 # What’s New
 
-## 0.3.2 - Unreleased
+## 0.4.0 - 2026-10-01
+
+### Added
+- Spell checking now works in German, Spanish, French, Italian, Portuguese and Russian as well as English. Each paragraph is checked in the language it is marked as, or else the one its words are in; text in Chinese, Japanese, Korean or another language without a dictionary isn't checked. Grammar checking is still English only.
+- The welcome document no longer shows spelling errors under format names such as OpenDocument and LaTeX, or under key names such as Ctrl and Cmd.
+- You can now rename a document: its name is shown in the middle of the menu bar, and clicking it lets you type a new one (Enter to keep it, Esc to cancel). File › Rename does the same. On a narrow window the name is shortened with “…”, or left out when there is no room. The AI assistant can rename the document too.
+- View › Page Sidebar (Alt+P) pulls out a column of page thumbnails beside the document, which you can keep open while you edit. It opens by itself when the window is wide enough (not on a phone), until you close it. Click a page to go to it. On a PDF in Edit PDF mode you can also drag pages into a new order and delete them (the × on a page, or the Delete key); undo brings a deleted page back. Thumbnails fill in once the document's fonts and pictures have loaded, instead of staying blank.
+- The Cloudflare Billing panel (admins) now lists the previous five months too, each expandable to its charges by service.
+- Profile pictures: signing in with Google or GitHub now keeps your picture, shown on the account button, beside your name on your mouse pointer when you edit a document together with others, and next to the people a document is shared with. Microsoft and Apple don't provide one, so those show a plain initial where a picture would go. Sign in again to pick yours up.
+- When other people are editing the same document, their pictures now appear beside the document's name in the menu bar (a plain initial for anyone without one, and “…” when there isn't room for them all). Hover them to see who is there.
+- The Golem Docs home page is now available in all 11 languages (for example golemdocs.com/home/de). It opens in your language automatically, and there are language links in its footer.
+
+- View › AI Assistant shows or hides the AI assistant (it used to be under Help). Once you hide it with its × button, it stays hidden until you bring it back.
+- The AI assistant can merge table cells too.
+- The AI assistant can now do nearly everything you can: change fonts, sizes, colors and highlights, set alignment, spacing, bullets and indents, add links, equations, page breaks, tables and columns, set page size, orientation and margins, work with comments and document properties, edit pictures, change the view, download or print, and convert the document to another format (Word, PDF, Markdown and so on). On a PDF it can read pages, highlight and add notes, edit and add text and shapes, change pages and fill in forms.
+
+### Fixed
+- Characters that Calibri, Cambria, Arial, Times New Roman, Courier New and Georgia have but the app did not draw (more Latin, Greek and Cyrillic letters, symbols and arrows) now show. They download only for documents that use them.
 
 ### Added
 - Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
@@ -8,7 +25,7 @@
 ## 0.3.1 - 2026-10-01
 
 ### Changed
-- The assistant no longer has a name: it is now just “AI” everywhere, including Help ▸ AI Assistant.
+- The assistant no longer has a name: it is now just “AI” everywhere, including Help › AI Assistant.
 
 ### Fixed
 - Subscribing now unlocks syncing, sharing and the AI assistant. Payment notices from Polar were being refused, so a new subscription was never recorded.
@@ -26,7 +43,7 @@
 ### Added
 - Comments now have replies and a Resolve button. Each comment sits beside its text, the open one shows its whole thread and a box to reply in, and there are Previous and Next buttons and a Show resolved switch. Writing or changing a comment happens in the panel instead of a pop-up box.
 - Comments are kept in more formats: OpenDocument (.odt), RTF and PDF (as notes) can now be opened and saved with their comments, old Word (.doc) files show their comments when opened, and Markdown (as CriticMarkup), HTML, EPUB and web archives keep them too. Comments carry over when you convert between formats.
-- File ▸ Subscribe… takes you to checkout to pay for sync, signing you in first if you are not. Once you subscribe, File ▸ Manage Subscription… opens the page where you change your card, see invoices or cancel. The same buttons are in the panel behind the Saved button at the top right.
+- File › Subscribe… takes you to checkout to pay for sync, signing you in first if you are not. Once you subscribe, File › Manage Subscription… opens the page where you change your card, see invoices or cancel. The same buttons are in the panel behind the Saved button at the top right.
 
 ### Fixed
 - Changing someone's access to a shared document (viewer or editor) now takes effect right away, even if they have it open.
@@ -53,7 +70,7 @@
 ## 0.2.0 - 2026-09-30
 
 ### Added
-- Clip, a big black binder clip with a face in the bottom right corner, is an assistant for subscribers. Ask it in the speech bubble to read your document, rewrite or add paragraphs, replace text, change styles, format text or leave comments, and Undo takes its changes back. Help ▸ Clip Assistant shows or hides it.
+- Clip, a big black binder clip with a face in the bottom right corner, is an assistant for subscribers. Ask it in the speech bubble to read your document, rewrite or add paragraphs, replace text, change styles, format text or leave comments, and Undo takes its changes back. Help › Clip Assistant shows or hides it.
 - A command palette button at the top right lists every command, with the ones you used recently first, and lets you search and run them. Press Ctrl+Shift+P (⌘⇧P on Mac) to open it.
 - The welcome document now links to the Golem Docs website.
 
@@ -72,11 +89,11 @@
 ### Added
 - golemdocs.com/home is a new home page that shows what Golem Docs does, with pages that explain converting formats, editing PDFs and pictures, Word documents, working together, themes, and large text files.
 - The plain Privacy Policy and Terms of Service pages are now at golemdocs.com/home/privacy and golemdocs.com/home/terms, and the old addresses redirect there.
-- Help ▸ Golem Docs Website opens the new home page.
-- Help ▸ What’s New shows this changelog.
-- File ▸ Download All (ZIP) downloads every saved document as one ZIP file.
+- Help › Golem Docs Website opens the new home page.
+- Help › What’s New shows this changelog.
+- File › Download All (ZIP) downloads every saved document as one ZIP file.
 - The home page now says you can download all your saved documents as one ZIP.
 
 ### Changed
-- File ▸ Convert To now lists formats under the same group headings, in the same order, as the format box.
+- File › Convert To now lists formats under the same group headings, in the same order, as the format box.
 - On phones and other narrow screens, documents now open in Normal view instead of Print layout, unless you have chosen a view before.

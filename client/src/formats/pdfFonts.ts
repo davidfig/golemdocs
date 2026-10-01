@@ -2,8 +2,8 @@
 // family's font written into the file, which needs its font file. Files are fetched only when an edit asks for one, and kept;
 // applying edits is synchronous, so what they need is loaded before (`ensure`) and looked up by `fontFile`.
 
-import type { FontSet } from '@word/layout';
-import { isStandardName, type ApplyOptions, type PdfEdit } from '@word/pdf';
+import type { FontSet } from '@golemdocs/layout';
+import { isStandardName, type ApplyOptions, type PdfEdit } from '@golemdocs/pdf';
 
 export class EditFonts {
   private readonly bytes = new Map<string, Uint8Array>();
@@ -24,7 +24,7 @@ export class EditFonts {
 
   /** Families the app has a font file for (the ones text in a PDF can be set in). */
   get families(): string[] {
-    return this.fonts.families.filter((f) => !f.cjk && !f.math && f.faces.some((face) => face.font)).map((f) => f.wordName);
+    return this.fonts.families.filter((f) => !f.page && !f.math && f.faces.some((face) => face.font)).map((f) => f.wordName);
   }
 
   /** Loads a family's file in a style (nothing, for a family with none). */

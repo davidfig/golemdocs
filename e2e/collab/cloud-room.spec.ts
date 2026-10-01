@@ -20,6 +20,18 @@ test.describe('a cloud document open on two devices', () => {
     await a.context.close();
   });
 
+  test('avatars beside the document name show who is here, and go when the other device leaves', async ({ browser }) => {
+    const { a, b } = await cloudPair(browser);
+    const presence = a.page.locator('.wm-doctitle .wm-presence');
+    await expect(presence).toBeVisible();
+    await expect(presence.locator('.wm-avatar')).toHaveCount(1);
+    await expect(presence).toHaveAttribute('title', a.name);
+    await b.page.close();
+    await expect(presence).toBeHidden();
+    await b.context.close();
+    await a.context.close();
+  });
+
   test('typing on either device reaches the other', async ({ browser }) => {
     const { a, b } = await cloudPair(browser, ['Hello']);
     await expectText(a.app, 'Hello');

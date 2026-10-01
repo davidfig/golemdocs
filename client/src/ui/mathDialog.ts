@@ -3,7 +3,7 @@
 // It is loaded when first used: the LaTeX parser is a good part of what an equation costs, and
 // most sessions never insert one.
 
-import { mathInline, parseLatex, toLatex, toMathML, type MathEquation, type Raw } from '@word/docx';
+import { mathInline, parseLatex, toLatex, toMathML, type MathEquation, type Raw } from '@golemdocs/docx';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import { insertKey, PALETTE, PALETTE_TABS, type PaletteId } from './mathPalette.ts';

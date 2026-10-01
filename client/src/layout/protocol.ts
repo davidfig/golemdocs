@@ -3,11 +3,11 @@
 // back encoded pages and selection geometry. Remote edits (multiplayer) will arrive in the
 // worker the same way local ones do.
 
-import type { DocumentProperties, MathEquation } from '@word/docx';
-import type { Command } from '@word/editor';
-import type { Pointer, RoomRole } from '@word/ops';
-import type { AnnotationKind, FormField } from '@word/pdf';
-import type { EncodedPage, FaceDescriptor } from '@word/layout';
+import type { DocumentProperties, MathEquation } from '@golemdocs/docx';
+import type { Command } from '@golemdocs/editor';
+import type { Pointer, RoomRole } from '@golemdocs/ops';
+import type { AnnotationKind, FormField } from '@golemdocs/pdf';
+import type { EncodedPage, FaceDescriptor } from '@golemdocs/layout';
 import type { Format } from '../formats/convert.ts';
 import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
@@ -133,8 +133,9 @@ export type WireCommand =
   | { kind: 'pdfAddImage'; page: number; box: WireBox; data: string }
   /** Adds a text box with its top left at a point of a page, and picks it to type in. */
   | { kind: 'pdfAddText'; page: number; x: number; y: number; /** What it says to begin with (a date, say). */ text?: string }
-  /** Changes the pages of the PDF: the page (by id) is deleted, turned, moved, copied, or a blank one is put after it. */
-  | { kind: 'pdfPageOp'; page: number; op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert' };
+  /** Changes the pages of the PDF: the page (by id) is deleted, turned, moved (a step, or to index `to` of the new order), copied, or a blank one is put after it. */
+  | { kind: 'pdfPageOp'; page: number; op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert' }
+  | { kind: 'pdfPageOp'; page: number; op: 'move'; to: number };
 
 /** The commands only a PDF shown as its own pages takes (not the editor). */
 export type PdfWireCommand = Extract<WireCommand, { kind: 'annotate' | 'setFields' | 'pdfPick' | 'pdfText' | 'pdfPutDown' | 'pdfStyle' | 'pdfMoveText' | 'pdfMove' | 'pdfShape' | 'pdfAddShape' | 'pdfAddImage' | 'pdfAddText' | 'pdfPageOp' }>;
@@ -198,7 +199,7 @@ export interface RoomState {
   mode: 'solo' | 'shared' | 'offline';
   role: RoomRole;
   /** Everyone in the room, including this user. */
-  people: { name: string; color: number }[];
+  people: { name: string; picture: string | null; color: number; /** This user. */ me: boolean }[];
   /** Edits the server hasn't confirmed (shared only). */
   unconfirmed: number;
 }
@@ -335,7 +336,7 @@ export type FromWorker =
   | ({ type: 'roomState'; doc: number } & RoomState)
   | { type: 'roomReplace'; doc: number }
   /** Where other people's mouse pointers are (page positions in display order, points). */
-  | { type: 'pointers'; doc: number; pointers: { page: number; x: number; y: number; color: number; name: string }[] }
+  | { type: 'pointers'; doc: number; pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[] }
   /** Someone else's edit changed the document (it needs saving here too). */
   | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }

@@ -1,11 +1,11 @@
 // HTML import/export (src/formats/html.ts).
 // Run: node --experimental-transform-types --test test/html.test.ts
-// (the flag is only needed because @word/docx uses TypeScript parameter properties.)
+// (the flag is only needed because @golemdocs/docx uses TypeScript parameter properties.)
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { StyleResolver, WordDocument, paragraphText, paragraphsIn } from '@word/docx';
-import type { Hyperlink, Inline, Paragraph, Run, Table, TableCell, TableRow } from '@word/docx';
+import { StyleResolver, WordDocument, paragraphText, paragraphsIn } from '@golemdocs/docx';
+import type { Hyperlink, Inline, Paragraph, Run, Table, TableCell, TableRow } from '@golemdocs/docx';
 import { documentToHtml, htmlToDocument } from '../src/formats/html.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
 
@@ -636,7 +636,7 @@ test('documents with no extension and odd content still export', async () => {
 
 // --- Comments -------------------------------------------------------------------------------------
 
-import { commentRanges } from '@word/docx';
+import { commentRanges } from '@golemdocs/docx';
 
 /** The text each comment covers, by comment id. */
 function coveredText(doc: WordDocument): Map<string, string> {

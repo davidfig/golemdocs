@@ -12,9 +12,17 @@ body {
   flex-direction: column;
 }
 
+/* The pages panel (see ui/pagesPanel.ts) beside the document. */
+#workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 #viewport {
   position: relative;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 

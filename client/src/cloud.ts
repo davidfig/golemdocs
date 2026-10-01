@@ -26,6 +26,7 @@ export interface Share {
   userId: string;
   name: string | null;
   email: string | null;
+  picture?: string | null;
   role: ShareRole;
 }
 

@@ -8,6 +8,9 @@ export const panels: Partial<Messages> = {
   'panels.billing.soFar': '{month} hasta ahora: {total}',
   'panels.billing.none': 'Aún no hay cargos este mes.',
   'panels.billing.asOf': 'A {time}. Cloudflare puede tardar en informar del uso.',
+  'panels.billing.noneIn': 'Sin cargos en {month}.',
+  'panels.billing.earlier': 'Meses anteriores',
+  'panels.billing.month': '{month}: {total}',
 
   // Comments
   'panels.comments.label': 'Comentarios',
@@ -120,4 +123,9 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'Eliminar comentario',
   'panels.feedback.deleteAsk': '¿Eliminar este comentario? No se puede deshacer.',
   'panels.feedback.resolved': 'Resuelto',
+  'panels.pages.label': 'Páginas',
+  'panels.pages.page': 'Página {number}',
+  'panels.pages.delete': 'Eliminar la página {number}',
+  'panels.pages.close': 'Cerrar',
+  'panels.pages.hint': 'Cambia a {mode} para reordenar o eliminar páginas.',
 };

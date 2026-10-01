@@ -173,3 +173,164 @@ test('a tool name from Object.prototype is not a tool, and an empty style is ref
 test('no document open is an error, not a hang', async () => {
   assert.match(await agent(9999, 'read_document'), /^Error: no document is open/);
 });
+
+// --- formatting and layout ----------------------------------------------------------------------
+
+test('format_text also sets font, size, color, highlight and strikethrough', async () => {
+  const doc = await openMarkdown('Plain words here.\n');
+  assert.equal(await agent(doc, 'format_text', { paragraph: 0, find: 'words', strikethrough: true, color: '#ff0000', size: 20, font: 'Arial' }), 'Formatted "words" in paragraph 0.');
+  const out = await md(doc);
+  assert.match(out, /~~words~~/);
+  assert.match(await agent(doc, 'format_text', { paragraph: 0, color: 'red' }), /not a color/);
+  assert.match(await agent(doc, 'format_text', { paragraph: 0 }), /Say what to change/);
+});
+
+test('change_case and clear_formatting work on a phrase', async () => {
+  const doc = await openMarkdown('Make this **loud** please.\n');
+  assert.match(await agent(doc, 'change_case', { paragraph: 0, find: 'loud', to: 'upper' }), /Changed the case/);
+  assert.match(await md(doc), /\*\*LOUD\*\*/);
+  await agent(doc, 'clear_formatting', { paragraph: 0, find: 'LOUD' });
+  assert.equal(await md(doc), 'Make this LOUD please.');
+  assert.match(await agent(doc, 'change_case', { paragraph: 0, to: 'shout' }), /^Error: `to` must be/);
+});
+
+test('format_paragraph makes bullets for a range, and turns them off again', async () => {
+  const doc = await openMarkdown('One\n\nTwo\n\nThree\n');
+  assert.equal(await agent(doc, 'format_paragraph', { paragraph: 0, last: 1, list: 'bullet' }), 'Formatted paragraphs 0 to 1.');
+  assert.equal(await md(doc), '- One\n- Two\n\nThree');
+  await agent(doc, 'format_paragraph', { paragraph: 0, last: 1, list: 'none' });
+  assert.equal(await md(doc), 'One\n\nTwo\n\nThree');
+  assert.match(await agent(doc, 'format_paragraph', { paragraph: 0 }), /Say what to change/);
+  assert.match(await agent(doc, 'format_paragraph', { paragraph: 2, last: 1, align: 'center' }), /must not be before/);
+});
+
+test('insert_link and remove_link', async () => {
+  const doc = await openMarkdown('See the docs for more.\n');
+  assert.match(await agent(doc, 'insert_link', { paragraph: 0, find: 'docs', url: 'https://example.com/' }), /Linked "docs"/);
+  assert.match(await md(doc), /\[docs\]\(https:\/\/example\.com\/\)/);
+  await agent(doc, 'remove_link', { paragraph: 0, find: 'docs' });
+  assert.equal(await md(doc), 'See the docs for more.');
+});
+
+test('insert_table fills the cells, edit_table changes it, and neither works where it makes no sense', async () => {
+  const doc = await openMarkdown('Before\n\nAfter\n');
+  assert.match(
+    await agent(doc, 'insert_table', {
+      after: 0,
+      rows: 2,
+      columns: 2,
+      cells: [
+        ['A', 'B'],
+        ['C', 'D'],
+      ],
+    }),
+    /Added a table of 2 rows and 2 columns/,
+  );
+  const out = await md(doc);
+  assert.match(out, /\| A\s*\| B\s*\|/);
+  assert.match(out, /\| C\s*\| D\s*\|/);
+  const list = await agent(doc, 'read_document');
+  const cell = Number(/\[(\d+)\] A/.exec(list)![1]);
+  assert.match(await agent(doc, 'edit_table', { paragraph: cell, op: 'insert_row_below' }), /Done/);
+  assert.match(await agent(doc, 'edit_table', { paragraph: 0, op: 'delete_rows' }), /is not in a table/);
+  assert.match(await agent(doc, 'edit_table', { paragraph: cell, op: 'explode' }), /^Error: `op` must be one of/);
+  assert.match(await agent(doc, 'insert_table', { after: 0, rows: 0, columns: 2 }), /^Error: A table has/);
+});
+
+test('insert_break, set_columns, count_words, undo and redo', async () => {
+  const doc = await openMarkdown('Alpha beta\n\nGamma\n');
+  assert.match(await agent(doc, 'insert_break', { after: 0, type: 'page' }), /Added a page break/);
+  assert.match(await agent(doc, 'set_columns', { count: 2 }), /Set 2 columns/);
+  assert.match(await agent(doc, 'set_columns', { count: 40 }), /^Error: `count` must be/);
+  assert.match(await agent(doc, 'count_words'), /^3 words, 14 characters/);
+  await agent(doc, 'replace_text', { find: 'Gamma', replace: 'Delta' });
+  assert.equal(await agent(doc, 'undo'), 'Undid the last change.');
+  assert.match(await md(doc), /Gamma/);
+  assert.equal(await agent(doc, 'redo'), 'Redid the last change.');
+  assert.match(await md(doc), /Delta/);
+});
+
+test('insert_equation puts LaTeX in a paragraph, and refuses LaTeX that does not parse', async () => {
+  const doc = await openMarkdown('Energy is\n\nDone\n');
+  assert.match(await agent(doc, 'insert_equation', { paragraph: 0, latex: 'E=mc^2' }), /Inserted the equation at the end in paragraph 0/);
+  assert.match(await md(doc), /Energy is.*E\s*=\s*mc/s);
+  assert.match(await agent(doc, 'insert_equation', { paragraph: 0, latex: '' }), /must not be empty/);
+});
+
+test('set_page changes orientation, size and margins, and refuses margins that leave no room', async () => {
+  const doc = await openMarkdown('Page\n');
+  assert.match(await agent(doc, 'set_page', { orientation: 'landscape', size: 'a4', margins: 0.5 }), /11\.69 x 8\.27 inches \(landscape\), margins 0\.5\/0\.5\/0\.5\/0\.5/);
+  assert.match(await agent(doc, 'set_page', { size: 'tabloid' }), /17\.00 x 11\.00 inches \(landscape\)/);
+  assert.match(await agent(doc, 'set_page', { size: 'huge' }), /^Error: `size` must be one of/);
+  assert.match(await agent(doc, 'set_page', { left: 9, right: 9 }), /^Error: The margins leave no room/);
+});
+
+test('comments can be listed, replied to, changed, resolved and deleted', async () => {
+  const doc = await openMarkdown('Alpha beta\n');
+  assert.equal(await agent(doc, 'list_comments'), 'There are no comments.');
+  await agent(doc, 'add_comment', { paragraph: 0, find: 'beta', text: 'Check this' });
+  const listed = await agent(doc, 'list_comments');
+  const id = /\[([^\]]+)\]/.exec(listed)![1]!;
+  assert.match(listed, /Check this/);
+  assert.match(await agent(doc, 'reply_comment', { id, text: 'Done' }), /Replied/);
+  assert.match(await agent(doc, 'list_comments'), /reply to .*Done/s);
+  assert.match(await agent(doc, 'edit_comment', { id, text: 'Check that' }), /Changed/);
+  assert.match(await agent(doc, 'resolve_comment', { id }), /Resolved/);
+  assert.match(await agent(doc, 'list_comments'), /\(resolved\)/);
+  assert.match(await agent(doc, 'delete_comment', { id }), /Deleted/);
+  assert.equal(await agent(doc, 'list_comments'), 'There are no comments.');
+  assert.match(await agent(doc, 'resolve_comment', { id: 'nope' }), /^Error: There is no comment nope/);
+});
+
+test('set_properties merges into the document properties', async () => {
+  const doc = await openMarkdown('Text\n');
+  assert.equal(await agent(doc, 'get_properties'), 'No properties are set.');
+  assert.equal(await agent(doc, 'set_properties', { title: 'My Title', author: 'Ann' }), 'Set title, author.');
+  await agent(doc, 'set_properties', { subject: 'Notes' });
+  assert.equal(await agent(doc, 'get_properties'), 'title: My Title\nsubject: Notes\nauthor: Ann');
+  assert.match(await agent(doc, 'set_properties', {}), /^Error: Say what to set/);
+});
+
+test('insert_horizontal_rule adds a rule between paragraphs, and format_code_block toggles code', async () => {
+  const doc = await openMarkdown('One\n\nTwo\n\nThree\n');
+  assert.equal(await agent(doc, 'insert_horizontal_rule', { after: 0 }), 'Added a horizontal rule after paragraph 0.');
+  assert.equal(await md(doc), 'One\n\n---\n\nTwo\n\nThree');
+  await run(doc, { kind: 'select', paragraph: 2, from: 3, to: 3 });
+  await run(doc, { kind: 'format', action: { kind: 'insertHorizontalRule' } });
+  assert.equal(await md(doc), 'One\n\n---\n\nTwo\n\n---\n\nThree');
+  assert.match(await agent(doc, 'format_code_block', { paragraph: 4, last: 4 }), /Made paragraph 4 a code block/);
+  assert.match(await md(doc), /```\nThree\n```/);
+  assert.match(await agent(doc, 'format_code_block', { paragraph: 4, on: false }), /Made plain text of paragraph 4/);
+  assert.ok(!(await md(doc)).includes('```'));
+  assert.match(await agent(doc, 'insert_horizontal_rule', { after: 99 }), /^Error: There is no paragraph 99/);
+});
+
+test('the Insert menu’s rule and code block act at the caret: a rule in an empty paragraph takes its place', async () => {
+  const doc = await openMarkdown('Alpha\n');
+  await run(doc, { kind: 'move', to: 'documentEnd' });
+  await run(doc, { kind: 'insertParagraph' });
+  await run(doc, { kind: 'format', action: { kind: 'insertHorizontalRule' } });
+  assert.equal(await md(doc), 'Alpha\n\n---');
+  const code = await openMarkdown('Alpha\n');
+  await run(code, { kind: 'format', action: { kind: 'insertCodeBlock' } });
+  assert.equal(await md(code), '```\nAlpha\n```');
+  await run(code, { kind: 'format', action: { kind: 'insertCodeBlock' } });
+  assert.equal(await md(code), 'Alpha');
+});
+
+test('edit_table merge_cells merges a block of cells, keeping their text, and says when it cannot', async () => {
+  const doc = await openMarkdown('Top\n');
+  await agent(doc, 'insert_table', { after: 0, rows: 2, columns: 3, cells: [['A', 'B', 'C'], ['D', 'E', 'F']] });
+  const list = await agent(doc, 'read_document');
+  const at = (t: string) => Number(new RegExp(`\\[(\\d+)\\] ${t}\\b`).exec(list)![1]);
+  assert.match(await agent(doc, 'edit_table', { paragraph: at('A'), op: 'merge_cells', to_paragraph: at('E') }), /Merged the cells/);
+  const after = await agent(doc, 'read_document');
+  assert.match(after, /A\b/);
+  assert.match(after, /B\b/);
+  assert.match(after, /D\b/);
+  assert.match(after, /E\b/);
+  assert.match(after, /\bC\b/);
+  assert.match(await agent(doc, 'edit_table', { paragraph: at('F'), op: 'merge_cells', to_paragraph: at('F') }), /could not be merged/);
+  assert.match(await agent(doc, 'edit_table', { paragraph: at('F'), op: 'merge_cells' }), /^Error: `to_paragraph` must be a whole number/);
+  assert.match(await agent(doc, 'edit_table', { paragraph: 0, op: 'merge_cells', to_paragraph: 1 }), /is not in a table/);
+});

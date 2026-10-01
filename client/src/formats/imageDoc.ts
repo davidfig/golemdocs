@@ -4,8 +4,8 @@
 // (see ui/imageTools.ts). The PNG, JPEG and WebP "formats" read a picture file into one and write
 // the picture back out, as the same type or converted.
 
-import { WordDocument, el } from '@word/docx';
-import type { Block, Inline, RunContent } from '@word/docx';
+import { WordDocument, el } from '@golemdocs/docx';
+import type { Block, Inline, RunContent } from '@golemdocs/docx';
 import { sniffImage } from './images.ts';
 import type { ImageData, ImageType } from './images.ts';
 

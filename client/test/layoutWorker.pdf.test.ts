@@ -344,9 +344,9 @@ test('a field taken out of the list is removed from the file', async () => {
 // --- pages -----------------------------------------------------------------------------------
 
 /** Sends a page operation and waits until the pages have been laid out again. */
-async function pageOp(doc: number, op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert', index = 0) {
+async function pageOp(doc: number, op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert' | 'move', index = 0, to = 0) {
   const from = posted.length;
-  command(doc, { kind: 'pdfPageOp', page: pageIds(doc)[index], op });
+  command(doc, op === 'move' ? { kind: 'pdfPageOp', page: pageIds(doc)[index], op, to } : { kind: 'pdfPageOp', page: pageIds(doc)[index], op });
   await waitFor('selection', (m) => m.doc === doc, from);
   await pause(100);
 }
@@ -363,6 +363,20 @@ test('page operations insert, duplicate, move, turn and delete pages, in the exp
   assert.equal(file.pageCount, 3);
   await pageOp(doc, 'delete', 2);
   assert.equal(load(await convert(doc, 'pdf')).pageCount, 2);
+});
+
+test('a page moved to an index lands there, and a move out of range changes nothing', async () => {
+  const doc = await openSample();
+  await pageOp(doc, 'insert');
+  await pageOp(doc, 'insert');
+  await pageOp(doc, 'rotateRight', 0); // 3 pages, only the first turned
+  const turns = async () => load(await convert(doc, 'pdf')).pages.map((p) => p.rotation);
+  assert.deepEqual(await turns(), [90, 0, 0]);
+  await pageOp(doc, 'move', 0, 2);
+  assert.deepEqual(await turns(), [0, 0, 90], 'the first page is now last');
+  command(doc, { kind: 'pdfPageOp', page: pageIds(doc)[2], op: 'move', to: 7 });
+  await pause(300);
+  assert.deepEqual(await turns(), [0, 0, 90], 'out of range: the file is as it was');
 });
 
 test('turning a page swaps its width and height', async () => {

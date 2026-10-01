@@ -8,6 +8,9 @@ export const panels: Partial<Messages> = {
   'panels.billing.soFar': '{month} のこれまでの請求額: {total}',
   'panels.billing.none': '今月はまだ請求がありません。',
   'panels.billing.asOf': '{time} 時点。Cloudflare が使用量を報告するまで時間がかかる場合があります。',
+  'panels.billing.noneIn': '{month}の請求はありません。',
+  'panels.billing.earlier': '過去の月',
+  'panels.billing.month': '{month}：{total}',
 
   // Comments
   'panels.comments.label': 'コメント',
@@ -120,4 +123,9 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'フィードバックの削除',
   'panels.feedback.deleteAsk': 'このフィードバックを削除しますか？元に戻せません。',
   'panels.feedback.resolved': '解決済み',
+  'panels.pages.label': 'ページ',
+  'panels.pages.page': '{number} ページ',
+  'panels.pages.delete': '{number} ページを削除',
+  'panels.pages.close': '閉じる',
+  'panels.pages.hint': 'ページの並べ替えや削除は「{mode}」に切り替えて行います。',
 };

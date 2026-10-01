@@ -2,9 +2,9 @@
 // is drawn with the browser's own fonts (a serif, sans or monospace stand-in, see standardFonts.ts),
 // each glyph at its laid-out position, so wrapping and page breaks match the editor.
 
-import type { WordDocument } from '@word/docx';
-import { TrueTypeFont } from '@word/pdf';
-import { layoutDocument, type FontSet, type GlyphList } from '@word/layout';
+import type { WordDocument } from '@golemdocs/docx';
+import { TrueTypeFont } from '@golemdocs/pdf';
+import { layoutDocument, type FontSet, type GlyphList } from '@golemdocs/layout';
 import { decodeImage, encodeCanvas, makeCanvas, type OutputType } from './imageCodec.ts';
 import { standardFamily } from './standardFonts.ts';
 

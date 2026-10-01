@@ -331,6 +331,20 @@ test('spellNext selects the next misspelled word and reports it with suggestions
   assert.equal(last.spell?.issue, null);
 });
 
+test('spellNext checks each paragraph in the language it is written in', async () => {
+  const doc = await openMarkdown('Das ist ein Dokument, das Sie mit der Anwendung bearbeiten können, aber nicht mit einer Dokumnet.\n\nThis is the text that you can edit with an applicaton.\n\nこれはアプリで編集できる文書です。 qwxzv\n');
+  // The first check reads the German dictionary (and the squiggles ask for it too, and report first).
+  await run(doc, { kind: 'spellNext', from: 'documentStart', grammar: false });
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const german = await run(doc, { kind: 'spellNext', from: 'documentStart', grammar: false });
+  assert.equal(german.spell?.issue?.text, 'Dokumnet', 'German words are not checked as English');
+  assert.ok(german.spell?.issue?.suggestions.includes('Dokument'));
+  const english = await run(doc, { kind: 'spellNext', from: 'selectionEnd', grammar: false });
+  assert.equal(english.spell?.issue?.text, 'applicaton');
+  const japanese = await run(doc, { kind: 'spellNext', from: 'selectionEnd', grammar: false });
+  assert.equal(japanese.spell?.issue, null, 'a language with no dictionary is not checked');
+});
+
 test('spellNext from the selection start finds the word under a selection again', async () => {
   const doc = await openMarkdown('a teh b wrng\n');
   await run(doc, { kind: 'spellNext', from: 'documentStart', grammar: false });

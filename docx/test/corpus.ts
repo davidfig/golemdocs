@@ -1,5 +1,5 @@
 // Real-world .docx files for round-trip tests: Apache POI's Word test corpus (Apache-2.0),
-// fetched at a pinned commit into the repo's .cache/ by `pnpm --filter @word/docx corpus`.
+// fetched at a pinned commit into the repo's .cache/ by `pnpm --filter @golemdocs/docx corpus`.
 
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';

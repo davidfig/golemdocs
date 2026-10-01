@@ -1,8 +1,9 @@
-import type { FormattingLayer, ListCounter, RunProperties, StyleResolver, WordDocument } from '@word/docx';
+import type { FormattingLayer, ListCounter, RunProperties, StyleResolver, WordDocument } from '@golemdocs/docx';
 import { packColor, parseHexColor } from './display.ts';
 import { langOfFontName, langOfTag, type CjkLang } from './fonts/cjk.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import { FALLBACK_FAMILY, type FontSet, type ResolvedFont } from './fonts/fontSet.ts';
+import type { ManifestFamily } from './fonts/fontTypes.ts';
 
 /** Values for PAGE / NUMPAGES fields while laying out a header or footer. */
 export interface FieldValues {
@@ -28,7 +29,7 @@ export interface LayoutContext {
   /** Fill behind the text (cell shading), for resolving "auto" text color. */
   background?: number;
   /** Last layout per paragraph (see layoutParagraph); owned by a LayoutSession. */
-  paragraphCache?: WeakMap<import('@word/docx').Paragraph, import('./paragraph.ts').CachedParagraph>;
+  paragraphCache?: WeakMap<import('@golemdocs/docx').Paragraph, import('./paragraph.ts').CachedParagraph>;
 }
 
 const layerIds = new WeakMap<object, number>();
@@ -51,7 +52,7 @@ export function cachedRunStyle(ctx: LayoutContext, paragraphStyle: string | unde
   const cache = (ctx.runStyles ??= new Map());
   const layerId = layerKey(ctx);
   // CJK pages that load later join the fallbacks of styles resolved from then on.
-  const context = `${layerId}|${paragraphStyle ?? ''}|${ctx.background ?? ''}|${ctx.fonts.cjkVersion}|${ctx.fonts.defaultCjkLang}`;
+  const context = `${layerId}|${paragraphStyle ?? ''}|${ctx.background ?? ''}|${ctx.fonts.pageVersion}|${ctx.fonts.defaultCjkLang}`;
   // Same properties object in the same context (re-layout after an edit): no work at all.
   const byObject = directCache.get(direct);
   if (byObject && byObject.context === context && byObject.cache === cache) return byObject.style;
@@ -149,9 +150,18 @@ export function runStyle(ctx: LayoutContext, props: RunProperties): RunStyle {
   const metrics = ctx.fonts.metrics(font.face);
   if (!metrics) throw new Error(`font ${font.key} used before it was loaded`);
 
+  // The run's own font, its extra characters, then the fallback family and its extra characters.
   const fallbackFont = ctx.fonts.resolve({ font: FALLBACK_FAMILY, bold, italic });
   const fallbackMetrics = ctx.fonts.metrics(fallbackFont.face);
-  const fallbacks = fallbackMetrics && fallbackMetrics !== metrics ? [{ font: fallbackFont, metrics: fallbackMetrics }] : [];
+  const fallbacks: RunStyle['fallbacks'] = [];
+  const addPages = (family: ManifestFamily) => {
+    for (const page of ctx.fonts.pageFonts(family.id, bold, italic)) fallbacks.push({ font: page, metrics: ctx.fonts.metrics(page.face)! });
+  };
+  addPages(font.family);
+  if (fallbackMetrics && fallbackMetrics !== metrics) {
+    fallbacks.push({ font: fallbackFont, metrics: fallbackMetrics });
+    addPages(fallbackFont.family);
+  }
   const cjkStart = fallbacks.length;
   for (const cjk of ctx.fonts.cjkFonts(cjkLangOf(ctx, props), bold, italic)) {
     fallbacks.push({ font: cjk, metrics: ctx.fonts.metrics(cjk.face)! });

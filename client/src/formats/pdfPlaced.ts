@@ -2,8 +2,8 @@
 // at the same place on the same page: a text box is a text box, a picture a picture, anchored to
 // the page's corner so reflowing the text around them doesn't move them.
 
-import { el, pointsToHalfPoints, type Paragraph, type RunContent, type WordDocument, type XmlElement } from '@word/docx';
-import { imageBytes, interpretPage, type ImageEdit, type PdfDocument, type PdfEdit, type PdfPage, type TextBoxEdit } from '@word/pdf';
+import { el, pointsToHalfPoints, type Paragraph, type RunContent, type WordDocument, type XmlElement } from '@golemdocs/docx';
+import { imageBytes, interpretPage, type ImageEdit, type PdfDocument, type PdfEdit, type PdfPage, type TextBoxEdit } from '@golemdocs/pdf';
 import { sniffImage, type ImageType } from './images.ts';
 import { wordFontFor } from './pdfImport.ts';
 

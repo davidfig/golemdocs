@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deleteText, insertText, paragraphsIn, paragraphText, WordDocument, ZipArchive, type Paragraph } from '@word/docx';
+import { deleteText, insertText, paragraphsIn, paragraphText, WordDocument, ZipArchive, type Paragraph } from '@golemdocs/docx';
 import { readOdt, writeOdt, type OdtExtension } from '../src/index.ts';
 import { libreOfficeFixture } from './fixtures.ts';
 import { find, textOf, validateOdt } from './validate.ts';

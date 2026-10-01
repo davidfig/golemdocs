@@ -38,7 +38,7 @@ Subscriptions are sold and billed by [Polar](https://polar.sh), our merchant of 
 
 **Price and renewal.** The price, currency and billing period are shown at checkout before you pay. A new subscription starts with a one-month free trial, and checkout shows when the trial ends and when you will first be charged. After that the subscription renews automatically every month until you cancel.
 
-**Cancelling.** You can cancel at any time from File ▸ Manage Subscription…, which opens Polar's customer portal, where you can also change your card and see your invoices. Cancelling stops the next renewal. You keep the subscription until the end of the period you have already paid for.
+**Cancelling.** You can cancel at any time from File › Manage Subscription…, which opens Polar's customer portal, where you can also change your card and see your invoices. Cancelling stops the next renewal. You keep the subscription until the end of the period you have already paid for.
 
 **Price changes.** We may change the price. We'll tell you before a new price applies to your next renewal, and you can cancel before then.
 
@@ -87,6 +87,6 @@ We may update these terms. The date at the top shows the latest version. If you 
 
 ## Contact
 
-Questions about these terms: use Help ▸ Send Feedback in the app, or write to support@golemdocs.com.
+Questions about these terms: use Help › Send Feedback in the app, or write to support@golemdocs.com.
 
 See also our [Privacy Policy](/privacy).

@@ -27,6 +27,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.fillForm': '양식 채우기(&F)',
   'chrome.view.editForm': 'PDF 편집(&E)',
   'chrome.view.grid': '페이지 눈금(&G)',
+  'chrome.view.pagesPanel': '페이지 사이드바(&B)',
   'chrome.view.ruler': '눈금자(&R)',
   'chrome.view.formattingMarks': '서식 기호(&M)',
   'chrome.view.zoomIn': '확대(&I)',
@@ -280,4 +281,10 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.needModifier': 'Ctrl, Alt 또는 ⌘(또는 기능 키)를 포함하세요.',
   'chrome.shortcuts.moved': '{label}에서 이 키가 제거되었습니다.',
   'chrome.shortcuts.change': '{label} 바로 가기 키 변경',
+  'chrome.file.rename': '이름 바꾸기(&R)…',
+  'chrome.file.rename.tip': '이 문서의 이름을 바꿉니다',
+  'chrome.title.label': '문서 이름',
+  'chrome.title.tip': '클릭하여 이름 바꾸기',
+  'chrome.rename.title': '문서 이름 바꾸기',
+  'chrome.rename.action': '이름 바꾸기',
 };

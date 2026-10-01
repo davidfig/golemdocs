@@ -2,7 +2,7 @@
 // EPUB, MHTML): recognising a picture's type and pixel size from its bytes, data: URIs, and
 // gathering a document's pictures for writing.
 
-import type { Block, Inline, WordDocument } from '@word/docx';
+import type { Block, Inline, WordDocument } from '@golemdocs/docx';
 
 export type ImageType = 'png' | 'jpeg' | 'gif' | 'webp' | 'bmp';
 

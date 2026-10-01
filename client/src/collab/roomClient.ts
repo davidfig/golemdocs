@@ -1,5 +1,5 @@
 // The client's side of a multiplayer room (the protocol, and who processes edits when, is
-// described in @word/ops multiplayer.ts). It knows nothing about documents or layout: what it
+// described in @golemdocs/ops multiplayer.ts). It knows nothing about documents or layout: what it
 // needs from the open document is the RoomHost below, so it can be tested with a fake socket.
 //
 // Solo, the document is saved to the cloud as usual and this only reports who else is here. When a
@@ -16,7 +16,7 @@ import {
   type RoomRole,
   type Selection,
   type ServerMessage,
-} from '@word/ops';
+} from '@golemdocs/ops';
 
 export interface SocketLike {
   send(data: string): void;
@@ -53,7 +53,7 @@ export type RoomState = {
   mode: 'solo' | 'shared' | 'offline';
   role: RoomRole;
   /** Everyone in the room, including us. */
-  people: { client: string; name: string; color: number }[];
+  people: { client: string; name: string; picture: string | null; color: number }[];
 };
 
 export type RoomStart =
@@ -101,7 +101,7 @@ export class RoomClient {
   }
 
   get state(): RoomState {
-    return { mode: this.mode, role: this.role, people: this.people.map(({ client, name, color }) => ({ client, name, color })) };
+    return { mode: this.mode, role: this.role, people: this.people.map(({ client, name, picture, color }) => ({ client, name, picture, color })) };
   }
 
   get canEdit(): boolean {

@@ -1,7 +1,7 @@
 import { test, expect, type App } from '../fixtures';
 import { DOC, MOD, clickAt, dialog, lineGaps, tool, waitCaretSettled } from './helpers';
 
-const spell = (app: App) => dialog(app.page, 'Spelling and Grammar: English (U.S.)');
+const spell = (app: App) => dialog(app.page, 'Spelling and Grammar');
 const btn = (app: App, name: string) => spell(app).getByRole('button', { name, exact: true }).last();
 
 async function withText(app: App, text: string) {
@@ -206,7 +206,7 @@ test.describe('grammar', () => {
 });
 
 test.describe('squiggles and the right-click menu', () => {
-  const menu = (app: App) => app.page.getByRole('menu', { name: 'Spelling and Grammar: English (U.S.)' });
+  const menu = (app: App) => app.page.getByRole('menu', { name: 'Spelling and Grammar' });
 
   async function rightClickWord(app: App, text: string, from: number, to: number) {
     await app.blank();

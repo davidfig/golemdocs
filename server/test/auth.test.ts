@@ -18,7 +18,7 @@ const MS_ISSUER = 'https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a
 
 function fakeD1(): any {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_users.sql', '0002_auth.sql']) {
+  for (const file of ['0001_users.sql', '0002_auth.sql', '0008_picture.sql']) {
     db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
   }
   const statement = (sql: string, params: unknown[]): any => ({
@@ -65,7 +65,7 @@ beforeEach(() => {
   globalThis.fetch = (async (input: any, init?: any) => {
     const url = String(input instanceof Request ? input.url : input);
     const reply = (data: unknown) => new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
-    if (url === 'https://api.github.com/user') return reply({ id: 4242, login: 'octo', name: 'Octo Cat' });
+    if (url === 'https://api.github.com/user') return reply({ id: 4242, login: 'octo', name: 'Octo Cat', avatar_url: 'https://avatars.githubusercontent.com/u/4242' });
     if (url === 'https://api.github.com/user/emails') return reply(githubEmails);
     requests.push({ url, body: new URLSearchParams(init?.body ?? '') });
     return reply(tokenResponse(url));
@@ -162,7 +162,7 @@ test('google: PKCE, session, /me, logout', async () => {
   const userId = await userOf(session);
   assert.ok(userId);
   const me = (await (await call('/api/auth/me', { headers: { cookie: `__Host-session=${session}` } })).json()) as any;
-  assert.deepEqual(me.user, { id: userId, email: 'dev@example.com', name: 'Dev', isAdmin: false });
+  assert.deepEqual(me.user, { id: userId, email: 'dev@example.com', name: 'Dev', picture: null, isAdmin: false });
   // Only a hash of the token is stored.
   const stored = (env.DIRECTORY as any).raw.prepare('SELECT token_hash FROM sessions').all() as { token_hash: string }[];
   assert.equal(stored.length, 1);
@@ -172,6 +172,24 @@ test('google: PKCE, session, /me, logout', async () => {
   const out = await call('/api/auth/logout', { method: 'POST', headers: { cookie: `__Host-session=${session}`, origin: ORIGIN } });
   assert.equal(out.status, 200);
   assert.equal(await userOf(session), null);
+});
+
+test('the profile picture comes from Google or GitHub, only over https, and stays when a later sign-in has none', async () => {
+  const me = async (session: string | undefined) => ((await (await call('/api/auth/me', { headers: { cookie: `__Host-session=${session}` } })).json()) as any).user;
+  const google = await signIn('google', { claims: { sub: 'g1', email: 'dev@example.com', email_verified: true, picture: 'https://lh3.googleusercontent.com/a/photo=s96-c' } });
+  assert.equal((await me(google.session)).picture, 'https://lh3.googleusercontent.com/a/photo=s96-c');
+  const again = await signIn('google', { claims: { sub: 'g1', email: 'dev@example.com', email_verified: true } });
+  assert.equal((await me(again.session)).picture, 'https://lh3.googleusercontent.com/a/photo=s96-c');
+  const insecure = await signIn('google', { claims: { sub: 'g2', email: 'two@example.com', email_verified: true, picture: 'http://example.com/a.png' } });
+  assert.equal((await me(insecure.session)).picture, null);
+  const script = await signIn('google', { claims: { sub: 'g3', email: 'three@example.com', email_verified: true, picture: 'javascript:alert(1)' } });
+  assert.equal((await me(script.session)).picture, null);
+});
+
+test('github: the avatar is the picture', async () => {
+  const github = await signIn('github');
+  const me = (await (await call('/api/auth/me', { headers: { cookie: `__Host-session=${github.session}` } })).json()) as any;
+  assert.equal(me.user.picture, 'https://avatars.githubusercontent.com/u/4242');
 });
 
 test('the same person signing in again gets the same user; sessions expire', async () => {

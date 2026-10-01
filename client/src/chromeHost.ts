@@ -45,6 +45,8 @@ export interface AppHooks {
   paste(): Promise<void>;
   /** Show what is on the clipboard and paste it in the form the user picks. */
   showPasteSpecial(): void;
+  /** Give the document a new name (cleaned for use in a file name). Returns the name kept, or null if it can't be renamed. */
+  renameDocument(name: string): string | null;
   /** Show the document's properties (title, author…) to look at or change. */
   showProperties(): void;
   /** Ask for the page size, margins and orientation, then set them. */
@@ -106,6 +108,8 @@ export interface AppHooks {
   focusEditor(): void;
   notify(message: string): void;
   toggleGrid(): void;
+  /** Pull the pages panel out beside the document, or push it back. */
+  togglePagesPanel(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
   /** Print layout (pages) or Normal (the text reflowed to the window). */
@@ -147,6 +151,7 @@ const SUPPORTED = new Set<ActionKind>([
   'zoom',
   'zoomBy',
   'toggleGrid',
+  'togglePagesPanel',
   'toggleFormattingMarks',
   'insertText',
   'convert',
@@ -349,6 +354,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleFormattingMarks();
         case 'toggleGrid':
           return app.toggleGrid();
+        case 'togglePagesPanel':
+          return app.togglePagesPanel();
         case 'insertText':
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':
@@ -381,6 +388,9 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'table':
           // Splitting cells needs to know into how many.
           return action.op === 'splitCells' && !(action.columns && action.rows) ? app.showSplitDialog() : app.send({ kind: 'format', action });
+        case 'insertHorizontalRule':
+        case 'insertCodeBlock':
+          return app.send({ kind: 'format', action });
         case 'insertTable':
           // Without a size, ask for one.
           return action.rows && action.columns ? app.send({ kind: 'format', action }) : app.showTableDialog();
@@ -397,6 +407,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
 
     focusEditor: app.focusEditor,
     notify: app.notify,
+    renameDocument: app.renameDocument,
     samples: app.samples,
     saved: app.saved,
     fonts: app.fonts,

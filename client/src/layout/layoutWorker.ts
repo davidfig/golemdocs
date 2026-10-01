@@ -154,6 +154,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     case 'eml':
     case 'ipynb':
     case 'textile':
+    case 'typst':
+    case 'docbook':
+    case 'jats':
+    case 'fb2':
+    case 'opml':
     case 'tsv':
     case 'mhtml':
     case 'html':

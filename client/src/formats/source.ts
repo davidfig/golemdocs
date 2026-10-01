@@ -19,6 +19,12 @@ const RST_FILE = /\.(rst|rest)$/i;
 const ORG_FILE = /\.org$/i;
 const MEDIAWIKI_FILE = /\.(wiki|mediawiki)$/i;
 const TEXTILE_FILE = /\.textile$/i;
+const TYPST_FILE = /\.typ$/i;
+const DOCBOOK_FILE = /\.(dbk|docbook)$/i;
+const JATS_FILE = /\.(nxml|jats)$/i;
+const FB2_FILE = /\.fb2$/i;
+const OPML_FILE = /\.opml$/i;
+const XML_FILE = /\.xml$/i;
 const EML_FILE = /\.eml$/i;
 const IPYNB_FILE = /\.ipynb$/i;
 const IMAGE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
@@ -49,6 +55,15 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
   if (ORG_FILE.test(name)) return { kind: 'org', name, bytes };
   if (MEDIAWIKI_FILE.test(name)) return { kind: 'mediawiki', name, bytes };
   if (TEXTILE_FILE.test(name)) return { kind: 'textile', name, bytes };
+  if (TYPST_FILE.test(name)) return { kind: 'typst', name, bytes };
+  if (DOCBOOK_FILE.test(name)) return { kind: 'docbook', name, bytes };
+  if (JATS_FILE.test(name)) return { kind: 'jats', name, bytes };
+  if (FB2_FILE.test(name)) return { kind: 'fb2', name, bytes };
+  if (OPML_FILE.test(name)) return { kind: 'opml', name, bytes };
+  if (XML_FILE.test(name)) {
+    const kind = xmlDocumentKind(bytes);
+    if (kind) return { kind, name, bytes };
+  }
   if (EML_FILE.test(name)) return { kind: 'eml', name, bytes };
   if (IPYNB_FILE.test(name)) return { kind: 'ipynb', name, bytes };
   if (IMAGE_FILE.test(name)) return { kind: 'image', name, bytes };
@@ -61,5 +76,23 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|svg|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|svg|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
+}
+
+/**
+ * The document format an .xml file is written in, from its root element (DocBook and JATS files are
+ * usually just .xml), or null for any other XML, which opens as text.
+ */
+export function xmlDocumentKind(bytes: ArrayBuffer): 'docbook' | 'jats' | 'fb2' | 'opml' | null {
+  const head = new TextDecoder('windows-1252').decode(new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 4096)));
+  // The root element: the first start tag after the declaration, comments and DOCTYPE.
+  const root = /<([A-Za-z][\w.:-]*)([^>]*)>/.exec(head.replace(/<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<![^>]*>/g, ''));
+  if (!root) return null;
+  const name = root[1].slice(root[1].indexOf(':') + 1);
+  const doctype = /<!DOCTYPE[^>]*>/i.exec(head)?.[0] ?? '';
+  if (name === 'FictionBook') return 'fb2';
+  if (name === 'opml') return 'opml';
+  if (/JATS|NLM|journalpublishing|archivearticle/i.test(doctype) || (name === 'article' && /dtd-version|article-type/.test(root[2]))) return 'jats';
+  if (/docbook/i.test(doctype) || /docbook\.org\/ns\/docbook/.test(root[2]) || (/^(book|article)$/.test(name) && !/xmlns=/.test(root[2]))) return 'docbook';
+  return null;
 }

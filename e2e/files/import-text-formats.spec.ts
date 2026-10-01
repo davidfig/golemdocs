@@ -27,6 +27,12 @@ const CASES: Case[] = [
   { file: text('readme.rst', 'Title\n=====\n\nHello **bold** text\n'), label: 'reStructuredText', text: 'Title\nHello bold text' },
   { file: text('page.textile', 'h1. Head\n\nHello *bold* text\n'), label: 'Textile', text: 'Head\nHello bold text' },
   { file: text('page.wiki', "= Head =\nHello '''bold''' text\n"), label: 'MediaWiki Markup', text: 'Head\nHello bold text' },
+  { file: text('paper.typ', '#set page(paper: "a4")\n= Head\n\nHello *bold* text\n'), label: 'Typst', text: 'Head\nHello bold text' },
+  { file: text('guide.dbk', '<article xmlns="http://docbook.org/ns/docbook" version="5.0"><title>Head</title><para>Hello <emphasis role="bold">bold</emphasis> text</para></article>'), label: 'DocBook', text: 'Head\nHello bold text' },
+  // DocBook and JATS files are usually just .xml: the root element says which they are.
+  { file: text('paper.xml', '<article dtd-version="1.3"><front><article-meta><title-group><article-title>Head</article-title></title-group></article-meta></front><body><p>Hello <bold>bold</bold> text</p></body></article>'), label: 'JATS', text: 'Head\nHello bold text' },
+  { file: text('book.fb2', '<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><body><section><title><p>Head</p></title><p>Hello <strong>bold</strong> text</p></section></body></FictionBook>'), label: 'FictionBook', text: 'Head\nHello bold text' },
+  { file: text('plan.opml', '<opml version="2.0"><head><title>Head</title></head><body><outline text="one"><outline text="two"/></outline></body></opml>'), label: 'OPML', text: 'Head\none\ntwo' },
 ];
 
 for (const c of CASES) {

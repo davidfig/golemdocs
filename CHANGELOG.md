@@ -9,6 +9,7 @@
 - Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
 - A folder's icon now shows small thumbnails of the first documents inside it.
 - The form and PDF editing tools panel can be dragged by its top edge to move it out of the way.
+- Open, edit and save five more formats: Typst (.typ), DocBook (.dbk), JATS journal articles (.nxml), FictionBook e-books (.fb2) and OPML outlines (.opml). DocBook and JATS files saved as plain .xml are recognized too. FictionBook has no lists or code blocks, so on the way out those become paragraphs, and an OPML file opens as a nested list. The AI assistant can convert to them as well.
 
 ### Fixed
 - Hovering over a toolbar button no longer makes its outline flicker.

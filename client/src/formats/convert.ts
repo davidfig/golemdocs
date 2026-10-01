@@ -12,9 +12,9 @@ import txtHandler from './handlers/txt.ts';
 import { csv as csvHandler, tsv as tsvHandler } from './handlers/csv.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'pdf' | 'md' | 'txt';
+export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'pdf' | 'md' | 'txt';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -60,6 +60,11 @@ const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   org: async () => (await import('./handlers/markup.ts')).org,
   mediawiki: async () => (await import('./handlers/markup.ts')).mediawiki,
   textile: async () => (await import('./handlers/markup.ts')).textile,
+  typst: async () => (await import('./handlers/markup.ts')).typst,
+  docbook: async () => (await import('./handlers/xmlDocuments.ts')).docbook,
+  jats: async () => (await import('./handlers/xmlDocuments.ts')).jats,
+  fb2: async () => (await import('./handlers/xmlDocuments.ts')).fb2,
+  opml: async () => (await import('./handlers/xmlDocuments.ts')).opml,
   eml: async () => (await import('./handlers/webArchives.ts')).eml,
   ipynb: async () => (await import('./handlers/ipynb.ts')).default,
   png: async () => (await import('./handlers/image.ts')).png,
@@ -111,10 +116,12 @@ export async function convertContent(content: OpenContent, to: Format, fonts: Fo
  */
 export function conversionIsLossy(from: Format, to: Format): boolean {
   if (from === to) return false;
+  // OPML holds plain one-line entries, and FictionBook has no lists or code blocks.
+  if (to === 'opml' || to === 'fb2') return from !== 'txt' && from !== 'csv' && from !== 'tsv';
   // A picture document is a page with the picture on it: nothing is lost going to Word or PDF, or to PNG; JPEG and WebP compress.
   if (from === 'png' || from === 'jpeg' || from === 'webp') return to === 'png' || to === 'jpeg' || to === 'webp' ? to !== 'png' : false;
   if (from === 'txt' || from === 'csv' || from === 'tsv') return to === 'pdf';
-  if (from === 'tex' || from === 'adoc' || from === 'rst' || from === 'org' || from === 'mediawiki' || from === 'textile' || from === 'eml' || from === 'ipynb') return to === 'txt' || to === 'pdf';
+  if (from === 'tex' || from === 'adoc' || from === 'rst' || from === 'org' || from === 'mediawiki' || from === 'textile' || from === 'typst' || from === 'docbook' || from === 'jats' || from === 'fb2' || from === 'opml' || from === 'eml' || from === 'ipynb') return to === 'txt' || to === 'pdf';
   if (from === 'md') return to === 'txt' || to === 'pdf';
   return true;
 }

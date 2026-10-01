@@ -46,6 +46,16 @@ export type DocumentSource =
   | { kind: 'mediawiki'; name: string; bytes: ArrayBuffer }
   /** Textile markup. */
   | { kind: 'textile'; name: string; bytes: ArrayBuffer }
+  /** Typst markup. */
+  | { kind: 'typst'; name: string; bytes: ArrayBuffer }
+  /** DocBook XML. */
+  | { kind: 'docbook'; name: string; bytes: ArrayBuffer }
+  /** A JATS (journal article) XML file. */
+  | { kind: 'jats'; name: string; bytes: ArrayBuffer }
+  /** A FictionBook e-book. */
+  | { kind: 'fb2'; name: string; bytes: ArrayBuffer }
+  /** An OPML outline. */
+  | { kind: 'opml'; name: string; bytes: ArrayBuffer }
   /** Org mode source. */
   | { kind: 'org'; name: string; bytes: ArrayBuffer }
   /** Comma-, semicolon- or pipe-delimited text, opened as a table. */

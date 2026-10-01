@@ -402,7 +402,7 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'convert_document',
-    description: 'Switch the document to another format, the same as File ▸ Convert To. It stays the same document; what the new format cannot hold is kept, so switching back restores it. Formats: docx, odt, rtf, html, epub, mhtml, csv, tsv, tex, adoc, rst, org, mediawiki, textile, eml, ipynb, png, jpeg, webp, pdf, md, txt. A PDF is read-only afterwards.',
+    description: 'Switch the document to another format, the same as File ▸ Convert To. It stays the same document; what the new format cannot hold is kept, so switching back restores it. Formats: docx, odt, rtf, html, epub, mhtml, csv, tsv, tex, adoc, rst, org, mediawiki, textile, typst, docbook, jats, fb2, opml, eml, ipynb, png, jpeg, webp, pdf, md, txt. A PDF is read-only afterwards.',
     parameters: { type: 'object', properties: { to: { type: 'string' } }, required: ['to'] },
   },
   {

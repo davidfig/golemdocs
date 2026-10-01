@@ -1,11 +1,12 @@
-// LaTeX, AsciiDoc, reStructuredText and Org import/export (src/formats/outline.ts and the four
-// syntaxes), through the same handlers the app uses.
+// LaTeX, AsciiDoc, reStructuredText, Org, MediaWiki, Textile, Typst, DocBook and JATS import/export
+// (src/formats/outline.ts and each syntax), through the same handlers the app uses.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { paragraphText } from '@golemdocs/docx';
 import type { Paragraph, Table } from '@golemdocs/docx';
-import { adoc, mediawiki, org, rst, tex, textile } from '../src/formats/handlers/markup.ts';
+import { adoc, mediawiki, org, rst, tex, textile, typst } from '../src/formats/handlers/markup.ts';
+import { docbook, jats } from '../src/formats/handlers/xmlDocuments.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
 import { documentToOutline, outlineToDocument } from '../src/formats/outline.ts';
 import type { Node } from '../src/formats/outline.ts';
@@ -50,7 +51,7 @@ const FIXTURE = [
   '',
 ].join('\n');
 
-const handlers = { LaTeX: tex, AsciiDoc: adoc, reStructuredText: rst, Org: org, MediaWiki: mediawiki, Textile: textile };
+const handlers = { LaTeX: tex, AsciiDoc: adoc, reStructuredText: rst, Org: org, MediaWiki: mediawiki, Textile: textile, Typst: typst, DocBook: docbook, JATS: jats };
 
 for (const [name, handler] of Object.entries(handlers)) {
   test(`${name}: a document survives a round trip`, async () => {
@@ -69,7 +70,7 @@ test('marks that a format has no syntax for are kept as text', async () => {
   const source = await markdownToDocument('Some ~~struck~~ text and **bold**.\n');
   const text = str(await rst.write(source, {}, fonts));
   assert.ok(text.includes('struck') && text.includes('**bold**') && !text.includes('~~'));
-  for (const handler of [adoc, org, tex, mediawiki, textile]) {
+  for (const handler of [adoc, org, tex, mediawiki, textile, typst, docbook, jats]) {
     const outline = documentToOutline((await handler.read(await handler.write(source, {}, fonts))).document);
     assert.ok(JSON.stringify(outline).includes('"strike":true'));
   }
@@ -155,7 +156,8 @@ test('Org: reads headings without keywords or tags, lists, and tables', async ()
 });
 
 test('empty and odd input never throws', async () => {
-  for (const handler of Object.values(handlers)) {
+  // (Not the XML formats: text that isn't XML is reported as an error, see xmlFormats.test.ts.)
+  for (const handler of Object.values(handlers).filter((h) => h !== docbook && h !== jats)) {
     for (const input of ['', '\n\n', '\\', '{', '*', '|', '::', '\\begin{itemize}', '= ', '+---+']) {
       const { document } = await handler.read(bytes(input));
       await handler.write(document, {}, fonts);

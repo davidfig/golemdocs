@@ -151,6 +151,11 @@ const TEXT_FORMATS: Case[] = [
   { format: 'org', profile: { ...FULL, avoid: /\]/g } },
   { format: 'mediawiki', profile: FULL },
   { format: 'textile', profile: FULL },
+  { format: 'typst', profile: FULL },
+  { format: 'docbook', profile: FULL },
+  { format: 'jats', profile: FULL },
+  // FictionBook has no lists or code blocks.
+  { format: 'fb2', profile: { ...FULL, nodes: ['heading', 'para', 'quote', 'table', 'rule'] } },
   { format: 'html', profile: FULL },
   { format: 'epub', profile: FULL },
   { format: 'mhtml', profile: FULL },
@@ -286,7 +291,7 @@ test('property: a .wdoc keeps its document, extensions and manifest', async () =
 
 // --- Garbage in ----------------------------------------------------------------------------------------
 
-const READABLE: Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'eml', 'ipynb', 'md', 'txt', 'pdf', 'png', 'jpeg', 'webp'];
+const READABLE: Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'md', 'txt', 'pdf', 'png', 'jpeg', 'webp'];
 /** Formats that can be written without fonts (the others draw pages). */
 const WRITABLE = new Set<Format>(READABLE.filter((f) => !['pdf', 'png', 'jpeg', 'webp'].includes(f)));
 

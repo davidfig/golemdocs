@@ -265,6 +265,13 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   ipynb: { ...MARKUP, kind: 'ipynb', label: 'Jupyter Notebook', extensions: ['.ipynb'], mime: 'application/x-ipynb+json', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
   textile: { ...MARKUP, kind: 'textile', label: 'Textile', extensions: ['.textile'], mime: 'text/x-textile', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
   org: { ...MARKUP, kind: 'org', label: 'Org Mode', extensions: ['.org'], mime: 'text/x-org', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
+  typst: { ...MARKUP, kind: 'typst', label: 'Typst', extensions: ['.typ'], mime: 'text/x-typst', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
+  docbook: { ...MARKUP, kind: 'docbook', label: 'DocBook', extensions: ['.dbk', '.docbook'], mime: 'application/docbook+xml', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
+  jats: { ...MARKUP, kind: 'jats', label: 'JATS', extensions: ['.nxml', '.jats'], mime: 'application/xml', marks: [...MARKUP_MARKS, 'underline', 'strikethrough'] },
+  // An e-book of sections, paragraphs, quotes and tables: no lists or code blocks.
+  fb2: { ...MARKUP, kind: 'fb2', label: 'FictionBook', extensions: ['.fb2'], mime: 'application/x-fictionbook+xml', marks: ['bold', 'italic', 'strikethrough', 'code', 'superscript', 'subscript'], lists: false, codeBlocks: false },
+  // An outline: headings and nested lists of plain text.
+  opml: { ...NOTHING, kind: 'opml', label: 'OPML', extensions: ['.opml'], mime: 'text/x-opml', styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'], lists: true, indent: true },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.largetext'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp', '.svg'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg'], mime: 'image/jpeg' },
@@ -297,7 +304,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
 };
 
 /** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
-export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
 
 /** What a picture can be converted to: the picture types, and the document types that can hold it. */
 export const PICTURE_CONVERT_ORDER: DocumentKind[] = ['png', 'jpeg', 'webp', 'docx', 'pdf'];
@@ -309,9 +316,9 @@ export const PICTURE_KINDS: readonly DocumentKind[] = ['png', 'jpeg', 'webp'];
 export const FORMAT_GROUPS: { id: 'popular' | 'documents' | 'web' | 'data' | 'markup' | 'images'; kinds: DocumentKind[] }[] = [
   { id: 'popular', kinds: ['docx', 'pdf', 'html', 'md', 'txt'] },
   { id: 'documents', kinds: ['odt', 'rtf'] },
-  { id: 'web', kinds: ['epub', 'mhtml'] },
+  { id: 'web', kinds: ['epub', 'fb2', 'mhtml'] },
   { id: 'data', kinds: ['csv', 'tsv'] },
-  { id: 'markup', kinds: ['tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile'] },
+  { id: 'markup', kinds: ['tex', 'typst', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'docbook', 'jats', 'opml'] },
   { id: 'images', kinds: ['png', 'jpeg', 'webp'] },
 ];
 

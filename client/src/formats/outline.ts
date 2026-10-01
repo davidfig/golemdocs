@@ -20,6 +20,8 @@ import type {
   TableCell,
   TableRow,
 } from '@golemdocs/docx';
+import type { DocumentProperties } from '@golemdocs/docx';
+import type { FormatHandler } from './convert.ts';
 import { styleFor } from './markdownStyles.ts';
 
 // --- The outline ---------------------------------------------------------------------------------
@@ -76,6 +78,37 @@ export function tidy(spans: readonly Span[]): Span[] {
     else out.push({ ...s });
   }
   return out;
+}
+
+/** Spans with whitespace collapsed as in XML or Typst (runs of spaces and line ends are one space), trimmed at both ends and around line breaks. */
+export function finishSpans(spans: Span[]): Span[] {
+  const out: Span[] = [];
+  let space = true; // at the start, and after a line break, leading space goes
+  for (const s of spans) {
+    if (s.br || s.math) {
+      if (s.br) trimEnd(out);
+      out.push(s);
+      space = !!s.br;
+      continue;
+    }
+    let text = s.text.replace(/[ \t\n\r]+/g, ' ');
+    if (space && text.startsWith(' ')) text = text.slice(1);
+    if (!text) continue;
+    out.push({ ...s, text });
+    space = text.endsWith(' ');
+  }
+  trimEnd(out);
+  return tidy(out);
+}
+
+function trimEnd(spans: Span[]): void {
+  while (spans.length) {
+    const last = spans[spans.length - 1];
+    if (last.br || last.math) return;
+    last.text = last.text.replace(/ +$/, '');
+    if (last.text) return;
+    spans.pop();
+  }
 }
 
 // --- Document -> outline -------------------------------------------------------------------------
@@ -612,3 +645,28 @@ export function renderSpans(spans: readonly Span[], f: SpanFormat): string {
 }
 
 export const isWord = (c: string | undefined): boolean => !!c && /[\p{L}\p{N}]/u.test(c);
+
+// --- Handlers ------------------------------------------------------------------------------------
+
+const decoder = new TextDecoder('utf-8');
+const encoder = new TextEncoder();
+
+/**
+ * The handler of a format that is an outline as text: `parse` and `render` are its syntax. XML
+ * formats decode the bytes in the encoding they declare; FictionBook and OPML write the document's
+ * title and author.
+ */
+export function outlineHandler(
+  parse: (text: string) => Node[],
+  render: (nodes: readonly Node[], properties: DocumentProperties) => string,
+  decode: (bytes: Uint8Array) => string = (bytes) => decoder.decode(bytes),
+): FormatHandler {
+  return {
+    async read(bytes) {
+      return { document: await outlineToDocument(parse(decode(bytes))), extensions: {} };
+    },
+    async write(document) {
+      return encoder.encode(render(documentToOutline(document), document.properties));
+    },
+  };
+}

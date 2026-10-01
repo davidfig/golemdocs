@@ -18,22 +18,27 @@ test('Convert To lists every format in groups, with the current one disabled', a
     'OpenDocument Text (.odt)',
     'Rich Text Format (.rtf)',
     'EPUB Book (.epub)',
+    'FictionBook (.fb2)',
     'Web Archive (.mhtml)',
     'CSV (Comma-Separated) (.csv)',
     'TSV (Tab-Separated) (.tsv)',
     'LaTeX (.tex)',
+    'Typst (.typ)',
     'AsciiDoc (.adoc)',
     'reStructuredText (.rst)',
     'Org Mode (.org)',
     'MediaWiki Markup (.wiki)',
     'Textile (.textile)',
+    'DocBook (.dbk)',
+    'JATS (.nxml)',
+    'OPML (.opml)',
     'PNG Image (.png)',
     'JPEG Image (.jpg)',
     'WebP Image (.webp)',
     'Email Message (.eml)',
     'Jupyter Notebook (.ipynb)',
   ].filter((l) => labels.includes(l)));
-  expect(labels.length).toBeGreaterThanOrEqual(20);
+  expect(labels.length).toBeGreaterThanOrEqual(25);
   await expect(submenu.getByRole('menuitem', { name: /^Word Document/ })).toHaveAttribute('aria-disabled', 'true');
   await expect(submenu.getByRole('menuitem', { name: /^Markdown/ })).toHaveAttribute('aria-disabled', 'false');
 });

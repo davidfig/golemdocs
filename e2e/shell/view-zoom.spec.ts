@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, MOD, test, type App } from '../fixtures';
-import { camera, choose, expectZoom, isChecked, menuRow, openMenu, zoom } from './helpers';
+import { blankReady, camera, choose, expectZoom, isChecked, menuRow, openMenu, zoom } from './helpers';
 
 const CSS_PX_PER_POINT = 96 / 72;
 
@@ -8,7 +8,7 @@ const zoomBox = (page: Page) => page.getByRole('toolbar').getByRole('combobox', 
 
 /** A blank document three pages long. */
 async function threePages(app: App): Promise<void> {
-  await app.blank();
+  await blankReady(app);
   await app.type('one');
   await app.press(`${MOD}+Enter`);
   await app.type('two');
@@ -27,7 +27,7 @@ async function geometry(page: Page) {
 
 test.describe('zoom from the View menu', () => {
   test('Actual Size is 100%, and the Zoom menu ticks the preset in use', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await choose(app, 'View', 'Zoom', '200%');
     expect(await expectZoom(page, (z) => Math.abs(z - 2) < 0.005)).toBeCloseTo(2, 2);
     await openMenu(app, 'View');
@@ -39,7 +39,7 @@ test.describe('zoom from the View menu', () => {
   });
 
   test('each percentage preset sets that zoom', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     for (const [label, value] of [['500%', 5], ['75%', 0.75], ['25%', 0.25], ['10%', 0.1], ['150%', 1.5]] as const) {
       await choose(app, 'View', 'Zoom', label);
       await expectZoom(page, (z) => Math.abs(z - value) < 0.005, label);
@@ -47,7 +47,7 @@ test.describe('zoom from the View menu', () => {
   });
 
   test('Zoom In and Zoom Out scale by a quarter steps from the current zoom', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await choose(app, 'View', 'Zoom', 'Actual Size');
     await expectZoom(page, (z) => Math.abs(z - 1) < 0.005);
     await choose(app, 'View', 'Zoom', 'Zoom In');
@@ -58,7 +58,7 @@ test.describe('zoom from the View menu', () => {
   });
 
   test('Page Width fills the window with the page, less a margin', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await choose(app, 'View', 'Zoom', 'Page Width');
     const g = await geometry(page);
     const expected = (g.view.width - 32) / (g.page.width * CSS_PX_PER_POINT);
@@ -66,7 +66,7 @@ test.describe('zoom from the View menu', () => {
   });
 
   test('Whole Page fits one page inside the window', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await choose(app, 'View', 'Zoom', 'Whole Page');
     const g = await geometry(page);
     const z = await expectZoom(page, (value) => value * g.page.height * CSS_PX_PER_POINT <= g.view.height && value * g.page.width * CSS_PX_PER_POINT <= g.view.width);
@@ -83,7 +83,7 @@ test.describe('zoom from the View menu', () => {
   });
 
   test('the zoom box shows the current zoom and follows the menu', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await choose(app, 'View', 'Zoom', '75%');
     await expect(zoomBox(page)).toHaveValue('75%');
     await choose(app, 'View', 'Zoom', 'Actual Size');
@@ -93,8 +93,9 @@ test.describe('zoom from the View menu', () => {
 
 test.describe('zoom box', () => {
   test('typing a percentage and pressing Enter zooms, and the document keeps the keyboard', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await zoomBox(page).fill('150');
+    await expect(zoomBox(page)).toHaveValue('150');
     await zoomBox(page).press('Enter');
     await expectZoom(page, (z) => Math.abs(z - 1.5) < 0.005);
     await expect(zoomBox(page)).toHaveValue('150%');
@@ -102,16 +103,18 @@ test.describe('zoom box', () => {
   });
 
   test('typing a percent sign works too', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await zoomBox(page).fill('50%');
+    await expect(zoomBox(page)).toHaveValue('50%');
     await zoomBox(page).press('Enter');
     await expectZoom(page, (z) => Math.abs(z - 0.5) < 0.005);
   });
 
   test('typing a preset name (Page Width) applies it', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await choose(app, 'View', 'Zoom', '500%');
     await zoomBox(page).fill('page width');
+    await expect(zoomBox(page)).toHaveValue('page width');
     await zoomBox(page).press('Enter');
     const g = await geometry(page);
     const expected = (g.view.width - 32) / (g.page.width * CSS_PX_PER_POINT);
@@ -119,16 +122,17 @@ test.describe('zoom box', () => {
   });
 
   test('text that is not a zoom goes back to the current value', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     const before = await zoom(page);
     await zoomBox(page).fill('banana');
+    await expect(zoomBox(page)).toHaveValue('banana');
     await zoomBox(page).press('Enter');
     await expect(zoomBox(page)).toHaveValue(`${Math.round(before * 100)}%`);
     expect(await zoom(page)).toBeCloseTo(before, 5);
   });
 
   test('the drop-down lists the presets and picking one zooms', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await page.getByRole('button', { name: 'Zoom list' }).first().click();
     const list = page.getByRole('listbox', { name: 'Zoom' });
     await expect(list.getByRole('option')).toHaveText(['500%', '200%', '150%', '100%', '75%', '50%', '25%', '10%', 'Page Width', 'Whole Page', 'All Pages']);
@@ -139,7 +143,7 @@ test.describe('zoom box', () => {
   });
 
   test('Escape in the drop-down closes it without changing the zoom', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     const before = await zoom(page);
     await page.getByRole('button', { name: 'Zoom list' }).first().click();
     await expect(page.getByRole('listbox', { name: 'Zoom' })).toBeVisible();
@@ -151,7 +155,7 @@ test.describe('zoom box', () => {
 
 test.describe('zoom with the keyboard and pointer', () => {
   test('Ctrl/Cmd + = and - zoom in and out, Ctrl/Cmd + 0 is Actual Size', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await page.keyboard.press(`${MOD}+0`);
     await expectZoom(page, (z) => Math.abs(z - 1) < 0.005);
     await page.keyboard.press(`${MOD}+=`);
@@ -164,7 +168,7 @@ test.describe('zoom with the keyboard and pointer', () => {
   });
 
   test('Ctrl + wheel (and so a trackpad pinch) zooms about the pointer', async ({ app, page }) => {
-    await app.blank();
+    await blankReady(app);
     await page.keyboard.press(`${MOD}+0`);
     await expectZoom(page, (z) => Math.abs(z - 1) < 0.005);
     await page.mouse.move(640, 400);

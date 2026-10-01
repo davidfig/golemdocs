@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { clickOnPage, decodePdf, dragOnPage, editMode, finalObjects, makePdf, openPdf, pointOnPage, readBack, showPage, tinyPng, tool } from './helpers';
+import { clickOnPage, decodePdf, dragOnPage, editMode, finalObjects, makePdf, openPdf, readBack, showPage, tinyPng, tool } from './helpers';
 
 type App = import('../fixtures').App;
 

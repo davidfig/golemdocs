@@ -63,7 +63,7 @@ test('a large file dropped on the window opens in the viewer', async ({ app, pag
   await expect(viewer(page).locator('.wm-large-status')).toContainText('150,000 lines', { timeout: 30_000 });
 });
 
-test('the viewer only looks: no editing, printing, converting or sharing in the menus', async ({ app, page }) => {
+test('the viewer only looks: no editing, printing, converting or sharing in the menus', async ({ app }) => {
   await openBig(app);
   const file = await menuContents(app, 'File');
   for (const item of ['Download', 'Download All', 'Open', 'Import', 'New']) expect(hasItem(file, item), item).toBe(true);

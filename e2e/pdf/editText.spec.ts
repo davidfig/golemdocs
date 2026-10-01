@@ -22,8 +22,11 @@ async function pick(app: App): Promise<void> {
   await openPdf(app, sample());
   await showPage(app.page, 0);
   await editMode(app.page);
-  await clickOnPage(app.page, 0, ...LINE1);
-  await expect(editor(app)).toBeFocused();
+  // The page's own text is scanned a moment after it opens, and a click before that picks nothing.
+  await expect(async () => {
+    await clickOnPage(app.page, 0, ...LINE1);
+    await expect(editor(app)).toBeFocused({ timeout: 1500 });
+  }).toPass({ timeout: 15_000 });
 }
 
 /** Saves the PDF and reads what text the saved file shows. */

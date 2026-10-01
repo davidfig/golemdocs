@@ -1,6 +1,6 @@
 // Helpers shared by the layout, table, math and picture specs.
 
-import { inflateRawSync, deflateSync } from 'node:zlib';
+import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { App } from '../fixtures';
 
@@ -259,7 +259,6 @@ export function pngSize(bytes: Buffer): { width: number; height: number } {
 
 /** The decoded RGBA pixels of a PNG made by `makePng` or by the browser (8-bit RGBA/RGB, any filters). */
 export function pngPixels(bytes: Buffer): { width: number; height: number; data: Uint8Array } {
-  const { inflateSync } = require('node:zlib') as typeof import('node:zlib');
   const { width, height } = pngSize(bytes);
   const colorType = bytes[25];
   const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : colorType === 0 ? 1 : colorType === 4 ? 2 : 0;
@@ -382,4 +381,49 @@ export async function fillCells(app: App, cells: string[][]): Promise<void> {
 export async function importFile(app: App, file: { name: string; mimeType: string; buffer: Buffer }): Promise<void> {
   const [chooser] = await Promise.all([app.page.waitForEvent('filechooser'), app.menu('File', 'Import…')]);
   await chooser.setFiles(file);
+}
+
+// --- Picture documents ---------------------------------------------------------------------------------
+
+export type Rgba = [number, number, number, number];
+
+export const WHITE: Rgba = [255, 255, 255, 255];
+
+/** Opens a PNG made in the test as a picture document (File ▸ Import…) and waits for its page. */
+export async function openPicture(app: App, png: Buffer, name = 'picture.png'): Promise<void> {
+  await app.blank();
+  await importFile(app, { name, mimeType: 'image/png', buffer: png });
+  await app.menubar.getByRole('menuitem', { name: 'Picture' }).waitFor();
+  await app.page.waitForFunction(() => (window as unknown as { pages: unknown[] }).pages.length === 1);
+}
+
+/** The open picture document downloaded and decoded. */
+export async function currentPicture(app: App): Promise<{ width: number; height: number; data: Uint8Array; bytes: Buffer }> {
+  const file = await app.download(() => app.menu('File', 'Download'));
+  return { ...pngPixels(file.bytes), bytes: file.bytes };
+}
+
+export function pixelAt(img: { width: number; data: Uint8Array }, x: number, y: number): Rgba {
+  const o = (Math.round(y) * img.width + Math.round(x)) * 4;
+  return [img.data[o], img.data[o + 1], img.data[o + 2], img.data[o + 3]];
+}
+
+export const isReddish = (p: Rgba): boolean => p[0] > 170 && p[1] < 130 && p[2] < 130;
+export const isWhite = (p: Rgba): boolean => p[0] > 250 && p[1] > 250 && p[2] > 250;
+
+/** Waits until the downloaded picture satisfies `check` (the picture tools replace the document asynchronously). */
+export async function expectPicture(app: App, check: (img: { width: number; height: number; data: Uint8Array }) => boolean | Promise<boolean>): Promise<void> {
+  await expect
+    .poll(async () => {
+      const img = await currentPicture(app);
+      return check(img);
+    }, { timeout: 20_000 })
+    .toBe(true);
+}
+
+/** Screen position of a pixel of the open picture (a picture `pictureWidth` pixels wide, shown as the first page). */
+export async function pictureToScreen(page: Page, pictureWidth: number, x: number, y: number): Promise<{ x: number; y: number }> {
+  const widthPt = await page.evaluate(() => (window as unknown as { pages: { width: number }[] }).pages[0].width);
+  const pt = widthPt / pictureWidth;
+  return screenPoint(page, 0, x * pt, y * pt);
 }

@@ -150,10 +150,8 @@ test.describe('Page Setup: Apply to', () => {
     await twoPages(app);
     await app.press('ArrowLeft', 3);
     await pageSetup(app, { orientation: 'landscape', apply: 'forward' });
-    await expect.poll(async () => (await pageBoxes(app.page)).length).toBeGreaterThanOrEqual(2);
-    const boxes = await pageBoxes(app.page);
-    expect(boxes[0]).toEqual({ width: 612, height: 792 });
-    expect(boxes[boxes.length - 1]).toEqual({ width: 792, height: 612 });
+    await expect.poll(async () => (await pageBoxes(app.page)).at(-1)).toEqual({ width: 792, height: 612 });
+    expect((await pageBoxes(app.page))[0]).toEqual({ width: 612, height: 792 });
     const { xml } = await docx(app);
     expect(count(xml, 'w:sectPr')).toBe(2);
     expect(attrs(xml, 'w:pgSz', 0)).toMatchObject({ 'w:w': '12240', 'w:h': '15840' });

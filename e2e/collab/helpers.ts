@@ -75,8 +75,8 @@ export interface CloudDoc {
 
 export async function cloudDocs(page: Page): Promise<CloudDoc[]> {
   const response = await page.request.get('/api/documents');
-  expect(response.ok()).toBe(true);
-  return (await response.json()) as CloudDoc[];
+  // A failure (the server restarting, say) reads as "nothing yet", so polling callers try again.
+  return response.ok() ? ((await response.json()) as CloudDoc[]) : [];
 }
 
 /** Waits until the account holds a document (the app uploads what you type), and returns it. */
@@ -86,6 +86,25 @@ export async function waitForCloudDoc(page: Page, pick: (docs: CloudDoc[]) => Cl
     .poll(async () => (found = pick(await cloudDocs(page))), { timeout: 30_000, message: 'the document reaches the account' })
     .toBeTruthy();
   return found!;
+}
+
+/**
+ * Waits until the account's copy of a document holds comments with all of `texts`: proof that
+ * the last edit was saved (locally first, then uploaded). The save indicator alone can still show
+ * the previous save for a moment after an edit.
+ */
+export async function waitForCloudComments(page: Page, id: string, texts: string[], options: { resolved?: boolean } = {}): Promise<void> {
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/documents/${id}`);
+      if (!response.ok()) return false;
+      let parts = unzip(Buffer.from(await response.body()));
+      if (parts['document.docx']) parts = unzip(parts['document.docx']); // the app's own wrapper around the .docx
+      const comments = parts['word/comments.xml']?.toString() ?? '';
+      const resolved = !options.resolved || (parts['word/commentsExtended.xml']?.toString() ?? '').includes('w15:done="1"');
+      return resolved && texts.every((t) => comments.includes(t));
+    }, { timeout: 30_000, message: 'the comments reach the account' })
+    .toBe(true);
 }
 
 /** Shares a cloud document from `owner` with `email` (who must have signed in once). */
@@ -162,7 +181,7 @@ export async function openDraft(app: App): Promise<Locator> {
 
 /**
  * Insert ▸ Comment on the current selection, writes `text` in the new card and sends it with the
- * Reply button (Enter also sends, but see the fixme about Enter reaching the document).
+ * Reply button.
  */
 export async function addComment(app: App, text: string): Promise<void> {
   const before = await app.page.locator('.wm-comments .wm-comment:not(.wm-comment-draft)').count();
@@ -192,9 +211,14 @@ export const commentTexts = (page: Page): Promise<string[]> =>
 
 export const commentsTitle = (page: Page) => page.locator('.wm-comments-bar h2');
 
-/** Waits until the sync button says the open document is saved to the account. */
+/**
+ * Waits until the save indicator says the open document is saved to the account, and the account
+ * holds a document. (The indicator can show the previous save for a moment after an edit, so tests
+ * that must be sure of a particular edit check the account's copy instead: waitForCloudComments.)
+ */
 export async function waitSaved(page: Page): Promise<void> {
   await expect(page.locator('.wm-sync')).toHaveAttribute('data-state', 'saved', { timeout: 30_000 });
+  await waitForCloudDoc(page);
 }
 
 // --- Files -------------------------------------------------------------------------------
@@ -240,7 +264,15 @@ export interface CloudPair {
 }
 
 /** A .docx made by the app (in a throwaway guest session, so nothing is uploaded) holding `paragraphs`. */
-export async function makeDocx(browser: Browser, paragraphs: string[]): Promise<Buffer> {
+const docxCache = new Map<string, Promise<Buffer>>();
+export function makeDocx(browser: Browser, paragraphs: string[]): Promise<Buffer> {
+  // Cached per worker: the same few documents are needed by many tests.
+  const key = JSON.stringify(paragraphs);
+  if (!docxCache.has(key)) docxCache.set(key, buildDocx(browser, paragraphs));
+  return docxCache.get(key)!;
+}
+
+async function buildDocx(browser: Browser, paragraphs: string[]): Promise<Buffer> {
   const context = await signedOutContext(browser);
   const app = new App(await context.newPage());
   await app.blank();

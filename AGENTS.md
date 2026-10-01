@@ -27,6 +27,8 @@ Load only the code a session needs. Every document format, every large panel and
 
 Add tests where reasonable. New logic, a bug fix or a changed behavior that can be exercised without a browser gets a test in the package's `test/` folder (`client/test/*.test.ts` for the client), next to the ones for the same area. Prefer testing the pure logic (readers, converters, layout, formatting) over DOM code. Run `pnpm --filter @word/client test` before finishing.
 
+**End-to-end tests** (`e2e/`, Playwright, `pnpm e2e`) drive the real app in Chromium for what only a user does: menus, dialogs, toolbars, keystrokes, mouse, clipboard, downloads, collaboration. A feature that adds or changes UI gets a spec in the matching `e2e/<area>/` folder. They run their own client and server on :5273 and :3101 (never the `pnpm dev` ones) against a throwaway local database. The editor is a canvas, so read the document through `app.text()` and the `window` hooks, or by downloading a file; see `e2e/fixtures.ts`. Give parallel runs their own `--output=<dir>`, and never `pkill -f playwright` (it kills the servers). Billing and the assistant are not covered yet.
+
 ## Localization
 
 Every user-visible string goes through `t('area.key')` (`client/src/i18n`), never an inline literal. Add the English to `client/src/i18n/en/` and call `t()` inside functions, not at module top level. Adding an English key makes the translation-completeness test fail until every language in `client/src/i18n/locales/` has it. See `docs/localization.md` for the conventions and how to add a language.

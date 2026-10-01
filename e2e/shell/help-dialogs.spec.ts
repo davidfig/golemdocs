@@ -114,7 +114,7 @@ test.describe('Help menu documents', () => {
     await expect.poll(() => app.text(), { timeout: 15_000 }).toMatch(/terms/i);
   });
 
-  test('the website item opens the marketing site in another tab', async ({ app, page, context }) => {
+  test('the website item opens the marketing site in another tab', async ({ app, context }) => {
     await app.blank();
     const popup = context.waitForEvent('page');
     await choose(app, 'Help', 'Golem Docs Website');

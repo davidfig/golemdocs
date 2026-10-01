@@ -171,7 +171,7 @@ test.describe('Paste Special', () => {
     await expect(box.getByRole('radio', { name: 'Unformatted text' })).not.toBeChecked();
     await expect(box).toContainText('Rich text');
     await box.getByRole('button', { name: 'Cancel' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
   });
 
   test('Cancel pastes nothing', async ({ app }) => {
@@ -219,11 +219,11 @@ test.describe('Paste Special', () => {
     await app.menu('Edit', 'Paste Special');
     const box = dialog(app.page, 'Paste Special');
     await box.getByRole('button', { name: 'Close' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await app.menu('Edit', 'Paste Special');
     await expect(box).toBeVisible();
     await app.page.keyboard.press('Escape');
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await expect.poll(() => app.text()).toBe('');
   });
 

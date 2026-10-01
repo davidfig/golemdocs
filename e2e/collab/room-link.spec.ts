@@ -202,7 +202,7 @@ test.describe('two people in one room', () => {
     await a.focus();
     await a.type('cell one');
     await expect.poll(async () => (await b.text()).includes('cell one')).toBe(true);
-    expect(await b.text()).toBe(await a.text());
+    await expect.poll(async () => (await b.text()) === (await a.text()), { message: 'both pages hold the same text' }).toBe(true);
     // The table's cells are separate paragraphs: more lines than the two we typed.
     expect((await b.text()).split('\n').length).toBeGreaterThan(3);
     await context.close();

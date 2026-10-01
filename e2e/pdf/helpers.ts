@@ -2,6 +2,7 @@
 // mapping page points to screen positions, and reading the PDFs the app downloads.
 
 import type { Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { deflateSync, inflateSync } from 'node:zlib';
 import type { App } from '../fixtures';
 import { expect } from '../fixtures';
@@ -60,7 +61,6 @@ export function makePdf(options: PdfOptions = {}): Buffer {
   const firstContent = firstPage + n;
   const firstWidget = firstContent + n;
   const objs: (string | [string, string])[] = [];
-  const widgets: { dict: (parent: number) => string; parentKey: string }[] = [];
   // Widgets all go on page 1. Radios and others with kids get a parent object.
   const fieldObjs: string[] = [];
   const widgetRefs: number[] = [];
@@ -250,7 +250,7 @@ export function decodePdf(bytes: Buffer): string {
         /* not Flate (an image, or plain content already in `raw`) */
       }
     }
-    re.lastIndex = end;
+    re.lastIndex = end + 'endstream'.length;
   }
   return out;
 }
@@ -385,4 +385,59 @@ export async function selectBetween(page: Page, index: number, from: [number, nu
   await dragOnPage(page, index, from, to);
   await settle(page);
   return page.evaluate(() => (window as unknown as { selectionState: { text: string } }).selectionState.text);
+}
+
+/** A one-page PDF that is only a picture (like a scan): a gray image drawn over the page, and no text. */
+export function makeScanPdf(): Buffer {
+  const pixels = Buffer.alloc(20 * 20, 0x99).toString('latin1');
+  return assemble([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Resources << /XObject << /Im1 5 0 R >> >> /Contents 4 0 R >>',
+    ['<< >>', 'q 300 0 0 200 50 50 cm /Im1 Do Q'],
+    ['<< /Type /XObject /Subtype /Image /Width 20 /Height 20 /ColorSpace /DeviceGray /BitsPerComponent 8 >>', pixels],
+  ]);
+}
+
+/** A PDF encrypted with the standard handler (RC4, 40-bit, empty user password) whose only page shows `text`. */
+export function makeEncryptedPdf(text = 'Secret words'): Buffer {
+  const md5 = (b: Buffer): Buffer => createHash('md5').update(b).digest();
+  const rc4 = (key: Buffer, data: Buffer): Buffer => {
+    const s = Array.from({ length: 256 }, (_, i) => i);
+    let j = 0;
+    for (let i = 0; i < 256; i++) {
+      j = (j + s[i] + key[i % key.length]) & 255;
+      [s[i], s[j]] = [s[j], s[i]];
+    }
+    const out = Buffer.alloc(data.length);
+    let a = 0;
+    let b = 0;
+    for (let k = 0; k < data.length; k++) {
+      a = (a + 1) & 255;
+      b = (b + s[a]) & 255;
+      [s[a], s[b]] = [s[b], s[a]];
+      out[k] = data[k] ^ s[(s[a] + s[b]) & 255];
+    }
+    return out;
+  };
+  const pad = Buffer.from('28BF4E5E4E758A4164004E56FFFA01082E2E00B6D0683E802F0CA9FE6453697A', 'hex');
+  const owner = md5(Buffer.from('owner'));
+  const owner32 = Buffer.concat([owner, owner]);
+  const permissions = Buffer.alloc(4);
+  permissions.writeInt32LE(-4);
+  const id = Buffer.from('0123456789abcdef', 'latin1');
+  const key = md5(Buffer.concat([pad, owner32, permissions, id])).subarray(0, 5);
+  const user = rc4(key, pad);
+  const objectKey = (n: number): Buffer => md5(Buffer.concat([key, Buffer.from([n & 255, (n >> 8) & 255, (n >> 16) & 255, 0, 0])])).subarray(0, 10);
+  const content = rc4(objectKey(4), Buffer.from(`BT /F1 18 Tf 40 240 Td (${text}) Tj ET`, 'latin1')).toString('latin1');
+  const hex = (b: Buffer) => `<${b.toString('hex')}>`;
+  const pdf = assemble([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 4 0 R >>',
+    ['<< >>', content],
+    `<< /Filter /Standard /V 1 /R 2 /O ${hex(owner32)} /U ${hex(user)} /P -4 >>`,
+  ]);
+  // Add the /Encrypt and /ID entries to the trailer.
+  return Buffer.from(pdf.toString('latin1').replace(/trailer\n<< \/Size (\d+) \/Root 1 0 R >>/, `trailer\n<< /Size $1 /Root 1 0 R /Encrypt 5 0 R /ID [${hex(id)} ${hex(id)}] >>`), 'latin1');
 }

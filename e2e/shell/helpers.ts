@@ -81,3 +81,17 @@ export async function resize(page: Page, width: number, height: number): Promise
 export const PHONE = { width: 390, height: 780 };
 export const TABLET = { width: 820, height: 1024 };
 export const DESKTOP = { width: 1280, height: 800 };
+
+/**
+ * A new blank document whose first layout has finished and whose camera has been placed, so a zoom or scroll
+ * the test makes is not undone by the automatic placement that follows the first layout.
+ */
+export async function blankReady(app: App): Promise<void> {
+  await app.blank();
+  await app.page.waitForFunction(() => {
+    const w = window as unknown as { loaded: boolean; status: string };
+    return w.loaded === true && /ready/i.test(w.status);
+  });
+  // File > New hands the keyboard to the document a moment after it opens; let that finish before a test moves focus.
+  await expect(app.editor).toBeFocused();
+}

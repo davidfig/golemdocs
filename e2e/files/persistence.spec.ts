@@ -22,7 +22,7 @@ test('typing is saved by itself, and a reload brings it back', async ({ app, pag
   await expect.poll(() => page.url()).toMatch(/doc=local%3A[\w-]+/);
   await page.reload();
   await app.ready();
-  expect(await app.text()).toBe('Saved without asking\nSecond paragraph');
+  await expect.poll(() => app.text()).toBe('Saved without asking\nSecond paragraph');
   await expect(page).toHaveTitle('Document1.docx - Golem Docs');
   expect(await formatLabel(page)).toBe('Word Document');
 });
@@ -42,7 +42,7 @@ test('opening the bare address carries on with the document that was open last',
   await waitForSaved(page);
   await page.goto('/');
   await app.ready();
-  expect(await app.text()).toBe('the one I was writing');
+  await expect.poll(() => app.text()).toBe('the one I was writing');
   await expect.poll(() => page.url()).toMatch(/doc=local%3A/);
 });
 
@@ -66,7 +66,10 @@ test('the welcome document is only saved once it has been changed', async ({ app
   await app.goto('?doc=welcome');
   await app.menu('File', 'Open…');
   await expect(page.locator('.wm-dashboard article.wm-card')).toHaveCount(0);
+  // Escape only closes it once the search box has the focus.
+  await expect(page.getByRole('searchbox', { name: 'Search documents' })).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(page.locator('.wm-dashboard')).toBeHidden();
   await app.focus();
   await app.type('my note ');
   await waitForSaved(page, 'Welcome to Golem Docs.*');
@@ -124,7 +127,7 @@ test('an address with ?doc=local:… opens that saved document', async ({ app, p
   await app.ready();
   await page.goto(address);
   await app.ready();
-  expect(await app.text()).toBe('addressable');
+  await expect.poll(() => app.text()).toBe('addressable');
 });
 
 // --- Clear Local Data ---------------------------------------------------------------------------
@@ -147,7 +150,7 @@ test('Clear Local Data asks first, saying what will go, and Cancel keeps everyth
   expect(await app.text()).toBe('keep me');
   await page.reload();
   await app.ready();
-  expect(await app.text()).toBe('keep me');
+  await expect.poll(() => app.text()).toBe('keep me');
 });
 
 test('Clear Local Data counts the documents, and Delete Everything wipes them and starts over', async ({ app, page }) => {
@@ -183,5 +186,5 @@ test('Escape also cancels Clear Local Data', async ({ app, page }) => {
   await expect(dialog(page)).toBeHidden();
   await page.reload();
   await app.ready();
-  expect(await app.text()).toBe('safe');
+  await expect.poll(() => app.text()).toBe('safe');
 });

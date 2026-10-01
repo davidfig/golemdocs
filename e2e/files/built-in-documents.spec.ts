@@ -51,7 +51,7 @@ test('?doc=fonts opens the fonts sample and ?doc=welcome the welcome text', asyn
   await expect(page).toHaveTitle('Welcome to Golem Docs - Golem Docs');
 });
 
-test('?doc=war-and-peace opens the long sample book as plain text', async ({ app, page }) => {
+test('?doc=war-and-peace opens the long sample book as plain text', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/?doc=war-and-peace');
   await page.waitForFunction(() => (window as unknown as { loaded: boolean }).loaded === true, null, { timeout: 100_000 });

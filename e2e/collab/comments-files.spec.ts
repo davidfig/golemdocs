@@ -1,5 +1,5 @@
 import { test, expect, App } from '../fixtures';
-import { addComment, commentTexts, commentsTitle, documentWithComments, newPerson, openFile, selectForward, unzip, waitForCloudDoc, waitSaved } from './helpers';
+import { commentTexts, commentsTitle, documentWithComments, newPerson, openFile, unzip, waitForCloudComments, waitForCloudDoc } from './helpers';
 import { signInAs } from './helpers';
 
 const card = (page: import('@playwright/test').Page, text: string) => page.locator('.wm-comments .wm-comment').filter({ hasText: text });
@@ -19,7 +19,7 @@ test.describe('comments persist', () => {
   test('comments are still there after reloading the page', async ({ browser }) => {
     const person = await newPerson(browser, 'persist');
     await documentWithComments(person.app, true);
-    await waitSaved(person.page);
+    await waitForCloudComments(person.page, (await waitForCloudDoc(person.page)).id, ['note on alpha', 'note on gamma']);
     await person.page.reload();
     await person.app.ready();
     await expect(commentsTitle(person.page)).toHaveText('Comments (2)');
@@ -32,7 +32,7 @@ test.describe('comments persist', () => {
   test('a reply and a resolved state survive a reload', async ({ browser }) => {
     const person = await newPerson(browser, 'persist');
     await richDocument(person.app);
-    await waitSaved(person.page);
+    await waitForCloudComments(person.page, (await waitForCloudDoc(person.page)).id, ['note on alpha', 'note on gamma', 'a reply'], { resolved: true });
     await person.page.reload();
     await person.app.ready();
     await expect(commentsTitle(person.page)).toHaveText('Comments (3)');
@@ -47,8 +47,8 @@ test.describe('comments persist', () => {
   test('the account keeps the comments: a second device opening the cloud copy sees them', async ({ browser }) => {
     const person = await newPerson(browser, 'persist');
     await documentWithComments(person.app, true);
-    await waitSaved(person.page);
     const doc = await waitForCloudDoc(person.page);
+    await waitForCloudComments(person.page, doc.id, ['note on alpha', 'note on gamma']);
     const other = await browser.newContext();
     await signInAs(other, person.email);
     const page = await other.newPage();

@@ -15,23 +15,37 @@ async function guest(browser: import('@playwright/test').Browser) {
   return { context, page, app: new App(page) };
 }
 
+/** The save indicator's panel (how the open document is saved). */
 async function openSyncPanel(page: Page) {
   await page.locator('.wm-sync').click();
   return page.locator('.wm-sync-panel');
 }
 
+/** The person icon's panel: who is signed in, Sign in / Sign out. */
+async function openAccountPanel(page: Page) {
+  await page.locator('.wm-account').click();
+  return page.locator('.wm-sync-panel');
+}
+
 test.describe('a guest (not signed in)', () => {
-  test('the server reports nobody signed in and the sync button offers to sign in', async ({ browser }) => {
+  test('the server reports nobody signed in; the save indicator says it is saved in this browser and the account menu offers to sign in', async ({ browser }) => {
     const { context, page, app } = await guest(browser);
     await app.blank();
+    await app.type('text');
     expect(await me(page)).toBeNull();
     const button = page.locator('.wm-sync');
     await expect(button).toHaveAttribute('data-state', 'guest');
-    await expect(button).toHaveText('Sign in');
-    const panel = await openSyncPanel(page);
-    await expect(panel).toContainText('Saved in this browser');
+    await expect(button).toHaveAttribute('data-local', 'saved', { timeout: 15_000 });
+    await expect(page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'false');
+    let panel = await openSyncPanel(page);
+    await expect(panel).toContainText('Saved locally');
+    await expect(panel).toContainText('isn’t uploaded anywhere');
+    await expect(panel.getByRole('button', { name: 'Sign in…' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    panel = await openAccountPanel(page);
+    await expect(panel).toContainText('Not signed in');
     await expect(panel.getByRole('button', { name: 'Sign in…' })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Subscribe…' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
     await context.close();
   });
 
@@ -91,7 +105,7 @@ test.describe('the sign-in dialog', () => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('before signing in');
-    const panel = await openSyncPanel(page);
+    const panel = await openAccountPanel(page);
     await panel.getByRole('button', { name: 'Sign in…' }).click();
     const dialog = signInDialog(page);
     await expect(dialog.getByText('Sign in to subscribe to sync, share documents')).toBeVisible();
@@ -117,7 +131,7 @@ test.describe('the sign-in dialog', () => {
       () => dialog.getByRole('button', { name: /close/i }).click(),
       () => page.keyboard.press('Escape'),
     ]) {
-      const panel = await openSyncPanel(page);
+      const panel = await openAccountPanel(page);
       await panel.getByRole('button', { name: 'Sign in…' }).click();
       await expect(dialog).toBeVisible();
       await dismiss();
@@ -136,7 +150,7 @@ test.describe('the sign-in dialog', () => {
     ] as const) {
       const { context, page, app } = await guest(browser);
       await app.goto(`?doc=welcome&auth_error=${reason}`);
-      const panel = await openSyncPanel(page);
+      const panel = await openAccountPanel(page);
       await panel.getByRole('button', { name: 'Sign in…' }).click();
       await expect(signInDialog(page).getByRole('alert')).toHaveText(message);
       expect(new URL(page.url()).searchParams.has('auth_error')).toBe(false);
@@ -148,7 +162,7 @@ test.describe('the sign-in dialog', () => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('my draft');
-    const panel = await openSyncPanel(page);
+    const panel = await openAccountPanel(page);
     await panel.getByRole('button', { name: 'Sign in…' }).click();
     await signInDialog(page).getByRole('link', { name: /^Continue with Dev User/ }).click();
     await app.ready();
@@ -156,20 +170,24 @@ test.describe('the sign-in dialog', () => {
     expect((await me(page))?.email).toBe('e2e@example.com');
     // The document came along, and the button now reports saving to the account.
     await expect.poll(() => app.text()).toBe('my draft');
-    await expect(page.locator('.wm-sync')).toHaveAttribute('data-state', /^(saving|saved)$/);
+    await expect(page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'true');
     await waitSaved(page);
     await context.close();
   });
 });
 
 test.describe('signed in', () => {
-  test('the sync button shows the account and its menu has no sign-in offer', async ({ browser }) => {
+  test('the save indicator says saved to the cloud and the account menu names the account', async ({ browser }) => {
     const person = await newPerson(browser, 'acct');
     await person.app.blank();
     await person.app.type('hi');
     await waitSaved(person.page);
-    const panel = await openSyncPanel(person.page);
-    await expect(panel).toContainText('All changes saved');
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'true');
+    let panel = await openSyncPanel(person.page);
+    await expect(panel).toContainText('Saved to cloud');
+    await expect(panel).toContainText('Last saved');
+    await person.page.keyboard.press('Escape');
+    panel = await openAccountPanel(person.page);
     await expect(panel).toContainText(`Signed in as ${person.email}`);
     await expect(panel.getByRole('button', { name: 'Sign in…' })).toHaveCount(0);
     await expect(panel.getByRole('button', { name: 'Sign out' })).toBeVisible();
@@ -182,12 +200,13 @@ test.describe('signed in', () => {
     await person.app.blank();
     await person.app.type('in the account');
     await waitSaved(person.page);
+    await waitForCloudDoc(person.page);
     await person.app.menu('File', 'Open');
     const dashboard = person.page.locator('.wm-dashboard');
     await expect(dashboard).toBeVisible();
     await expect(dashboard.getByRole('button', { name: 'Sign out' })).toBeVisible();
     await expect(dashboard.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
-    await expect(dashboard.getByText('Document1.docx').first()).toBeVisible();
+    await expect(dashboard.getByText(/Document1/).first()).toBeVisible();
     await person.context.close();
   });
 });
@@ -198,15 +217,17 @@ test.describe('signing out', () => {
     await person.app.blank();
     await person.app.type('account doc');
     await waitSaved(person.page);
-    const localUrl = await person.page.evaluate(() => location.href);
-    expect(localUrl).toMatch(/\?doc=local%3A/);
-    const panel = await openSyncPanel(person.page);
+    await waitForCloudDoc(person.page);
+    await expect(person.page).toHaveURL(/\?doc=local%3A/);
+    const localUrl = person.page.url();
+    const panel = await openAccountPanel(person.page);
     await panel.getByRole('button', { name: 'Sign out' }).click();
     await expect(person.page).not.toHaveURL(/\?doc=/, { timeout: 15_000 });
     await person.app.ready();
-    expect(new URL(person.page.url()).pathname).toBe('/');
+    expect(new URL(person.page.url()).search).not.toContain('doc=local');
     expect(await me(person.page)).toBeNull();
     await expect(person.page.locator('.wm-sync')).toHaveAttribute('data-state', 'guest');
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'false');
     // The session is really gone: the API refuses, and the cookie no longer works.
     expect((await person.page.request.get('/api/documents')).status()).toBe(401);
     // The copy kept in this browser went with it.
@@ -222,7 +243,7 @@ test.describe('signing out', () => {
     await person.app.type('come back to me');
     await waitSaved(person.page);
     const doc = await waitForCloudDoc(person.page);
-    const panel = await openSyncPanel(person.page);
+    const panel = await openAccountPanel(person.page);
     await panel.getByRole('button', { name: 'Sign out' }).click();
     await expect(person.page).not.toHaveURL(/\?doc=/, { timeout: 15_000 });
     await person.app.ready();
@@ -242,7 +263,7 @@ test.describe('signing out', () => {
     await waitSaved(person.page);
     await person.context.setOffline(true);
     await person.app.type(' unsent part');
-    const panel = await openSyncPanel(person.page);
+    const panel = await openAccountPanel(person.page);
     await panel.getByRole('button', { name: 'Sign out' }).click();
     const confirm = person.page.locator('dialog[open]').filter({ hasText: 'Sign Out Anyway' });
     await expect(confirm).toBeVisible();
@@ -287,6 +308,7 @@ test.describe('Clear Local Data', () => {
     const dialog = await confirmDialog(page, 'Delete Everything');
     await expect(dialog).toContainText('deletes the one document saved in this browser');
     await dialog.getByRole('button', { name: 'Delete Everything' }).click();
+    await page.waitForURL((u) => u.search === '');
     await app.ready();
     await expect.poll(() => app.text()).toContain('Welcome to Golem Docs');
     expect(new URL(page.url()).search).toBe('');
@@ -306,6 +328,7 @@ test.describe('Clear Local Data', () => {
     const dialog = await confirmDialog(person.page, 'Delete Everything');
     await expect(dialog).toContainText('Documents saved to your account are kept.');
     await dialog.getByRole('button', { name: 'Delete Everything' }).click();
+    await person.page.waitForURL((u) => u.search === '');
     await person.app.ready();
     await expect.poll(() => person.app.text()).toContain('Welcome to Golem Docs');
     expect((await me(person.page))?.email).toBe(person.email);

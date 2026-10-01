@@ -57,7 +57,7 @@ test.describe('Format ▸ Paragraph', () => {
     await box.getByRole('spinbutton', { name: 'After' }).fill('12');
     await box.getByRole('combobox', { name: 'Line spacing' }).selectOption('double');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await expect(tool(app, 'Align Right')).toHaveAttribute('aria-pressed', 'true');
     const raw = await pPr(app);
     expect(raw).toContain('w:jc w:val="right"');
@@ -92,7 +92,7 @@ test.describe('Format ▸ Paragraph', () => {
       await expect(box.getByRole('spinbutton', { name: 'At' })).toBeEnabled();
       await box.getByRole('spinbutton', { name: 'At' }).fill(at);
       await box.getByRole('button', { name: 'OK' }).click();
-      await expect(box).toBeHidden();
+      await expect(box).toHaveCount(0);
       await expect.poll(async () => pPr(app), { message: kind }).toMatch(new RegExp(`w:spacing [^>]*w:line="${line}"[^>]*w:lineRule="${rule}"|w:spacing [^>]*w:lineRule="${rule}"[^>]*w:line="${line}"`));
     }
   });
@@ -107,7 +107,7 @@ test.describe('Format ▸ Paragraph', () => {
     await expect(box).toBeVisible();
     await expect(box.getByRole('alert')).toContainText('Enter numbers that fit');
     await box.getByRole('button', { name: 'Cancel' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
   });
 
   test('Cancel, the close button and Escape change nothing', async ({ app }) => {
@@ -117,12 +117,12 @@ test.describe('Format ▸ Paragraph', () => {
       const box = await open(app);
       await box.getByRole('combobox', { name: 'Alignment' }).selectOption('center');
       await box.getByRole('button', { name: close, exact: true }).click();
-      await expect(box).toBeHidden();
+      await expect(box).toHaveCount(0);
     }
     const box = await open(app);
     await box.getByRole('combobox', { name: 'Alignment' }).selectOption('center');
     await app.page.keyboard.press('Escape');
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await expect(tool(app, 'Align Left')).toHaveAttribute('aria-pressed', 'true');
     expect(await pPr(app)).not.toContain('w:jc');
   });
@@ -133,7 +133,7 @@ test.describe('Format ▸ Paragraph', () => {
     const box = await open(app, { keepStep: true });
     await box.getByRole('spinbutton', { name: 'Before' }).fill('3');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await expect.poll(async () => pPr(app)).toMatch(/w:before="60"/);
   });
 
@@ -229,7 +229,7 @@ test.describe('Format ▸ Paragraph', () => {
     const box = await open(app);
     await box.getByRole('spinbutton', { name: 'Before' }).fill('3');
     await box.getByRole('spinbutton', { name: 'Before' }).press('Enter');
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await expect.poll(async () => pPr(app)).toMatch(/w:before="60"/);
   });
 });

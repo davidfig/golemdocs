@@ -15,6 +15,15 @@ async function saved(app: App) {
   return { xml, targets };
 }
 
+/**
+ * Waits until a link to `url` is in the document (or, for null, until there is none). Reading the
+ * text with Select All straight after the dialog closes can beat the link being applied, so the
+ * tests look at a saved copy, which leaves the selection alone.
+ */
+async function linkApplied(app: App, url: string | null): Promise<void> {
+  await expect.poll(async () => (await saved(app)).targets.includes(url ?? '\0') || (url === null && !(await saved(app)).xml.includes('<w:hyperlink'))).toBe(true);
+}
+
 const link = (page: import('@playwright/test').Page) => dialog(page, 'Insert Hyperlink');
 
 async function openLinkDialog(app: App) {
@@ -34,7 +43,7 @@ test.describe('Insert Hyperlink dialog', () => {
     await expect(box.getByRole('button', { name: 'Remove Link' })).toBeDisabled();
     await box.getByRole('textbox', { name: 'Address' }).fill('https://example.com/page');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await expect.poll(() => app.text()).toBe('click here');
     const { xml, targets } = await saved(app);
     expect(xml).toContain('<w:hyperlink');
@@ -49,7 +58,8 @@ test.describe('Insert Hyperlink dialog', () => {
     await box.getByRole('textbox', { name: 'Text to display' }).fill('the site');
     await box.getByRole('textbox', { name: 'Address' }).fill('example.org');
     await box.getByRole('textbox', { name: 'Address' }).press('Enter');
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, 'https://example.org');
     await expect.poll(() => app.text()).toBe('see the site');
     const { targets } = await saved(app);
     expect(targets).toContain('https://example.org');
@@ -61,11 +71,11 @@ test.describe('Insert Hyperlink dialog', () => {
     await tool(app, 'Hyperlink').click();
     await expect(link(app.page)).toBeVisible();
     await link(app.page).getByRole('button', { name: 'Cancel' }).click();
-    await expect(link(app.page)).toBeHidden();
+    await expect(link(app.page)).toHaveCount(0);
     await app.menu('Insert', 'Hyperlink');
     await expect(link(app.page)).toBeVisible();
     await link(app.page).getByRole('button', { name: 'Close' }).click();
-    await expect(link(app.page)).toBeHidden();
+    await expect(link(app.page)).toHaveCount(0);
   });
 
   const schemes: [string, string][] = [
@@ -84,7 +94,7 @@ test.describe('Insert Hyperlink dialog', () => {
       const box = await openLinkDialog(app);
       await box.getByRole('textbox', { name: 'Address' }).fill(typed);
       await box.getByRole('button', { name: 'OK' }).click();
-      await expect(box).toBeHidden();
+      await expect(box).toHaveCount(0);
       const { targets } = await saved(app);
       expect(targets).toContain(stored);
     });
@@ -120,11 +130,11 @@ test.describe('Insert Hyperlink dialog', () => {
     let box = await openLinkDialog(app);
     await box.getByRole('textbox', { name: 'Address' }).fill('example.com');
     await box.getByRole('button', { name: 'Cancel' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     box = await openLinkDialog(app);
     await box.getByRole('textbox', { name: 'Address' }).fill('example.com');
     await app.page.keyboard.press('Escape');
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     expect((await saved(app)).xml).not.toContain('<w:hyperlink');
   });
 
@@ -145,7 +155,7 @@ test.describe('Insert Hyperlink dialog', () => {
     const box = await openLinkDialog(app);
     await box.getByRole('textbox', { name: 'Address' }).fill('example.com');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
     await app.press(`${MOD}+End`);
     await expect(app.editor).toBeFocused();
   });
@@ -154,16 +164,16 @@ test.describe('Insert Hyperlink dialog', () => {
 test.describe('editing and removing a link', () => {
   async function linked(app: App) {
     await app.blank();
-    await app.type('before ');
+    await app.type('before  after');
+    await app.press('ArrowLeft', 6);
     await app.press(`${MOD}+k`);
     const box = link(app.page);
     await box.getByRole('textbox', { name: 'Text to display' }).fill('the link');
     await box.getByRole('textbox', { name: 'Address' }).fill('https://example.com/one');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
-    await expect.poll(() => app.text()).toBe('before the link');
-    await app.type(' after');
-    await expect.poll(() => app.text()).toMatch(/after$/);
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, 'https://example.com/one');
+    await expect.poll(() => app.text()).toBe('before the link after');
   }
 
   async function caretInLink(app: App) {
@@ -188,7 +198,8 @@ test.describe('editing and removing a link', () => {
     const box = await openLinkDialog(app);
     await box.getByRole('textbox', { name: 'Address' }).fill('https://example.com/two');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, 'https://example.com/two');
     const { targets, xml } = await saved(app);
     expect(targets).toContain('https://example.com/two');
     expect(xml.match(/<w:hyperlink/g)).toHaveLength(1);
@@ -201,7 +212,8 @@ test.describe('editing and removing a link', () => {
     const box = await openLinkDialog(app);
     await box.getByRole('textbox', { name: 'Text to display' }).fill('renamed');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
+    await expect.poll(async () => (await saved(app)).xml).toContain('renamed');
     await expect.poll(() => app.text()).toBe('before renamed after');
   });
 
@@ -210,7 +222,8 @@ test.describe('editing and removing a link', () => {
     await caretInLink(app);
     const box = await openLinkDialog(app);
     await box.getByRole('button', { name: 'Remove Link' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, null);
     await expect.poll(() => app.text()).toBe('before the link after');
     expect((await saved(app)).xml).not.toContain('<w:hyperlink');
   });
@@ -221,11 +234,31 @@ test.describe('editing and removing a link', () => {
     const box = await openLinkDialog(app);
     await box.getByRole('textbox', { name: 'Address' }).fill('example.com');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, 'https://example.com');
     await expect(app.editor).toBeFocused();
     await app.press(`${MOD}+z`);
     await expect.poll(async () => (await saved(app)).xml).not.toContain('<w:hyperlink');
     await expect.poll(() => app.text()).toBe('abc');
+  });
+
+  test.fixme('text typed right after the end of a link does not become part of the link (it does: the link grows)', async ({ app }) => {
+    await app.blank();
+    await app.type('the link');
+    await app.press(`Shift+Home`);
+    await app.press(`${MOD}+k`);
+    const box = link(app.page);
+    await box.getByRole('textbox', { name: 'Address' }).fill('https://example.com/one');
+    await box.getByRole('button', { name: 'OK' }).click();
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, 'https://example.com/one');
+    await app.press(`${MOD}+End`);
+    await app.type(' after');
+    await expect.poll(() => app.text()).toBe('the link after');
+    const gaps = await lineGaps(app, 'the link after'.length);
+    await clickAt(app, gaps[11]);
+    const again = await openLinkDialog(app);
+    await expect(again.getByRole('textbox', { name: 'Text to display' })).toHaveValue('the link');
   });
 
   test('Ctrl/Cmd+click follows the link in a new tab; a plain click only places the caret', async ({ app }) => {
@@ -236,7 +269,8 @@ test.describe('editing and removing a link', () => {
     await box.getByRole('textbox', { name: 'Text to display' }).fill('home');
     await box.getByRole('textbox', { name: 'Address' }).fill('http://localhost:5273/?doc=welcome');
     await box.getByRole('button', { name: 'OK' }).click();
-    await expect(box).toBeHidden();
+    await expect(box).toHaveCount(0);
+    await linkApplied(app, 'http://localhost:5273/?doc=welcome');
     await expect.poll(() => app.text()).toBe('go home');
     const gaps = await lineGaps(app, 'go home'.length);
     const inside = { x: (gaps[3].x + gaps[7].x) / 2, y: gaps[0].y };

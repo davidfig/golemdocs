@@ -36,7 +36,8 @@ for (const c of CASES) {
     expect(await app.text()).toBe(c.text);
     expect(await formatLabel(app.page)).toBe(c.label);
     await expect(app.page).toHaveTitle(`${c.file.name} - Golem Docs`);
-    expect(await status(app.page)).toContain(`${c.file.name}: ready`);
+    // Ready, or already saved (the autosave's message replaces it a moment later).
+    expect(await status(app.page)).toMatch(new RegExp(`${c.file.name.replace('.', '\\.')}: ready|Saved “${c.file.name.replace('.', '\\.')}” in this browser`));
   });
 }
 

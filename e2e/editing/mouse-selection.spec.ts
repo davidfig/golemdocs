@@ -37,8 +37,12 @@ test.describe('mouse on the canvas', () => {
   test('a click on another paragraph moves the caret there', async ({ app }) => {
     await app.blank();
     await app.type('first paragraph');
+    await waitCaretSettled(app);
+    const firstY = (await caretClient(app)).y;
     await app.press('Enter');
     await app.type('second paragraph');
+    await expect.poll(async () => (await caretClient(app)).y).toBeGreaterThan(firstY);
+    await waitCaretSettled(app);
     const bottom = await caretClient(app);
     await app.press('ArrowUp');
     await app.press('Home');
@@ -126,8 +130,12 @@ test.describe('mouse on the canvas', () => {
   test('dragging across paragraphs selects their text and the break between them', async ({ app }) => {
     await app.blank();
     await app.type('first');
+    await waitCaretSettled(app);
+    const firstY = (await caretClient(app)).y;
     await app.press('Enter');
     await app.type('second');
+    await expect.poll(async () => (await caretClient(app)).y).toBeGreaterThan(firstY);
+    await waitCaretSettled(app);
     const end = await caretClient(app);
     await app.press(`${DOC}+Home`);
     await waitCaretSettled(app);

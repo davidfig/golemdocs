@@ -1,5 +1,5 @@
 import { test, expect, type App } from '../fixtures';
-import { DOC, menuLast, MOD, IS_MAC, clickAt, downloadDocumentXml, lineGaps, paragraphProps, paragraphsOf, pickColor, propsFor, runsOf, tool, typeAndSelect } from './helpers';
+import { DOC, MOD, IS_MAC, clickAt, downloadDocumentXml, lineGaps, paragraphProps, paragraphsOf, pickColor, propsFor, runsOf, tool } from './helpers';
 
 const paragraphs = async (app: App) => (await downloadDocumentXml(app)) && paragraphsOf(await downloadDocumentXml(app));
 const pPr = async (app: App, index = 0) => paragraphProps((await paragraphs(app))[index]).raw;

@@ -27,7 +27,6 @@ test.describe('comments panel', () => {
   });
 
   test('sending a comment or a reply with Enter leaves the document text alone', async ({ app, page }) => {
-    test.fixme(true, 'Suspected app bug: Enter pressed in the comment/reply box also inserts a paragraph break in the document');
     await app.blank();
     await app.type('alpha beta');
     await app.press('Home');
@@ -105,7 +104,6 @@ test.describe('comments panel', () => {
   });
 
   test('Shift+Enter in the box is a new line, not a send', async ({ app, page }) => {
-    test.fixme(true, 'Suspected app bug: Shift+Enter in the comment box is default-prevented, so no new line is inserted');
     await app.blank();
     await app.type('alpha');
     await app.press('Home');

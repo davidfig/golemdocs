@@ -12,16 +12,22 @@ async function openEquation(app: App, title = 'Insert Equation') {
   return dlg;
 }
 
-/** Inserts an equation through the dialog, and waits until the document has taken it (the caret moves past it). */
+/** Inserts an equation through the dialog, and waits until the saved document has it (the worker finishes after the dialog closes). */
 async function insertEquation(app: App, latex: string, display = false): Promise<void> {
-  const before = JSON.stringify(await caretOf(app.page));
+  const before = count((await docx(app)).xml, 'm:oMath');
   const dlg = await openEquation(app);
   await dlg.getByRole('textbox', { name: LATEX }).fill(latex);
   if (display) await dlg.getByRole('checkbox', { name: /Show on its own line/ }).check();
   await dlg.getByRole('button', { name: 'Insert' }).click();
   await dlg.waitFor({ state: 'detached' });
-  await expect.poll(async () => JSON.stringify(await caretOf(app.page))).not.toBe(before);
+  await expect.poll(async () => count((await docx(app)).xml, 'm:oMath')).toBe(before + 1);
   await app.focus();
+}
+
+/** With the caret just after an equation, selects it (Shift+Left) and waits for the selection to be the equation. */
+async function selectEquation(app: App): Promise<void> {
+  await app.press('Shift+ArrowLeft');
+  await expect.poll(() => caretOf(app.page)).toBeNull();
 }
 
 test.describe('Insert ▸ Equation', () => {
@@ -180,7 +186,7 @@ test.describe('editing an existing equation', () => {
   });
 
   test('with the equation selected, Insert ▸ Equation edits it (Update) instead of adding another', async ({ app }) => {
-    await app.press('Shift+ArrowLeft');
+    await selectEquation(app);
     const dlg = await openEquation(app, 'Edit Equation');
     const box = dlg.getByRole('textbox', { name: LATEX });
     await expect(box).toHaveValue('mc^2');
@@ -197,7 +203,7 @@ test.describe('editing an existing equation', () => {
   });
 
   test('editing can turn an inline equation into a display one', async ({ app }) => {
-    await app.press('Shift+ArrowLeft');
+    await selectEquation(app);
     const dlg = await openEquation(app, 'Edit Equation');
     await expect(dlg.getByRole('checkbox', { name: /Show on its own line/ })).not.toBeChecked();
     await dlg.getByRole('checkbox', { name: /Show on its own line/ }).check();
@@ -207,7 +213,7 @@ test.describe('editing an existing equation', () => {
   });
 
   test('Cancel leaves the equation as it was', async ({ app }) => {
-    await app.press('Shift+ArrowLeft');
+    await selectEquation(app);
     const dlg = await openEquation(app, 'Edit Equation');
     await dlg.getByRole('textbox', { name: LATEX }).fill('zzz');
     await dlg.getByRole('button', { name: 'Cancel' }).click();

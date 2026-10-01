@@ -26,6 +26,20 @@ interface DocumentRow {
   updated_at: number;
   /** When the thumbnail was last uploaded; null if there is none. */
   thumb_at: number | null;
+  /** The folder it is in; null at the top level. */
+  folder_id: string | null;
+}
+
+interface FolderRow {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+function describeFolder(row: FolderRow) {
+  return { id: row.id, name: row.name, parentId: row.parent_id, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 /** What the client sees of a document (the R2 key stays server-side). */
@@ -38,7 +52,59 @@ function describe(row: DocumentRow, role: Role = 'owner') {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     thumbAt: row.thumb_at ?? null,
+    // Folders are the owner's own arrangement: nobody else sees where a document is kept.
+    folderId: role === 'owner' ? (row.folder_id ?? null) : null,
   };
+}
+
+const MAX_FOLDER_DEPTH = 32;
+
+/**
+ * /api/folders[/:id]: the user's folders. Clients make the ids, so a folder made offline can be
+ * sent as it is (PUT is create-or-update).
+ */
+async function handleFolders(request: Request, id: string | undefined, db: UserDb | null, syncing: boolean): Promise<Response> {
+  // GET /api/folders
+  if (id === undefined) {
+    if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+    return json(db ? (await db.all<FolderRow>('SELECT * FROM folders ORDER BY name')).map(describeFolder) : []);
+  }
+
+  // PUT /api/folders/:id { name, parentId }: creates it, or renames and moves it.
+  if (request.method === 'PUT') {
+    if (!db || !syncing) throw subscriptionRequired();
+    const body = (await request.json().catch(() => null)) as { name?: unknown; parentId?: unknown } | null;
+    const name = typeof body?.name === 'string' ? cleanName(body.name) : null;
+    const parentId = body?.parentId ?? null;
+    if (!name || (parentId !== null && typeof parentId !== 'string')) throw new HttpError(400, 'expected { name, parentId }');
+    if (parentId !== null) {
+      // The new parent must exist, and must not be this folder or inside it.
+      let at: string | null = parentId;
+      for (let depth = 0; at !== null; depth++) {
+        if (at === id || depth > MAX_FOLDER_DEPTH) throw new HttpError(400, 'a folder cannot go inside itself');
+        const parent: FolderRow | null = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [at]);
+        if (!parent) throw new HttpError(400, 'no such folder');
+        at = parent.parent_id;
+      }
+    }
+    const now = Date.now();
+    const existing = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
+    if (existing) await db.run('UPDATE folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?', [name, parentId, now, id]);
+    else await db.run('INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, name, parentId, now, now]);
+    return json(describeFolder({ id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now }), existing ? 200 : 201);
+  }
+
+  // DELETE /api/folders/:id: removes the folder only. What was in it moves up to where it was.
+  if (request.method === 'DELETE') {
+    const row = await db?.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
+    if (!db || !row) throw new HttpError(404, 'not found');
+    await db.run('UPDATE folders SET parent_id = ? WHERE parent_id = ?', [row.parent_id, id]);
+    await db.run('UPDATE documents SET folder_id = ? WHERE folder_id = ?', [row.parent_id, id]);
+    await db.run('DELETE FROM folders WHERE id = ?', [id]);
+    return new Response(null, { status: 204 });
+  }
+
+  throw new HttpError(405, 'method not allowed');
 }
 
 function json(data: unknown, status = 200): Response {
@@ -206,11 +272,12 @@ const handler: ExportedHandler = {
         return json({ ok: true }, 201);
       }
 
-      const match = /^\/api\/(documents|shared)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub, granteeId] = match;
       if (id !== undefined && !ID.test(id)) throw new HttpError(404, 'not found');
       if (collection === 'shared' && id !== undefined) throw new HttpError(404, 'not found');
+      if (collection === 'folders' && sub !== undefined) throw new HttpError(404, 'not found');
 
       // Locally, catalogues live in the simulated directory database (see userDb.ts).
       if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
@@ -242,6 +309,8 @@ const handler: ExportedHandler = {
         return json(out);
       }
 
+      if (collection === 'folders') return await handleFolders(request, id, ownDb, syncing);
+
       // GET /api/documents: the user's documents, newest first.
       if (!id && request.method === 'GET') {
         if (!ownDb) return json([]);
@@ -257,19 +326,22 @@ const handler: ExportedHandler = {
         const bytes = await readDocx(request);
         const docId = crypto.randomUUID();
         const name = cleanName(url.searchParams.get('name')) ?? 'Untitled.docx';
+        const folderId = url.searchParams.get('folder');
+        if (folderId !== null && !(await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
         const now = Date.now();
         // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
         await env.FILES.put(`${userId}/${docId}.docx`, bytes, { httpMetadata: { contentType: DOCX } });
-        await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [
+        await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [
           docId,
           name,
           bytes.byteLength,
           `${userId}/${docId}.docx`,
           now,
           now,
+          folderId,
         ]);
         await registerOwner(env, docId, userId);
-        return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null }, 201);
+        return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null, folderId }, 201);
       }
 
       if (!id) throw new HttpError(405, 'method not allowed');
@@ -385,6 +457,19 @@ const handler: ExportedHandler = {
         await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX } });
         await db.run('UPDATE documents SET name = ?, size = ?, updated_at = ? WHERE id = ?', [name, bytes.byteLength, now, id]);
         return json(describe({ ...row, name, size: bytes.byteLength, updated_at: now }, role));
+      }
+
+      // PATCH /api/documents/:id { folderId }: moves it to a folder (null: the top level). Only the
+      // owner arranges their documents; this does not count as editing one.
+      if (request.method === 'PATCH') {
+        if (role !== 'owner') throw new HttpError(403, 'only the owner can move this document');
+        requireStorage();
+        const body = (await request.json().catch(() => null)) as { folderId?: unknown } | null;
+        const folderId = body?.folderId;
+        if (folderId !== null && typeof folderId !== 'string') throw new HttpError(400, 'expected { folderId }');
+        if (folderId !== null && !(await db.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
+        await db.run('UPDATE documents SET folder_id = ? WHERE id = ?', [folderId, id]);
+        return json(describe({ ...row, folder_id: folderId }, role));
       }
 
       // DELETE /api/documents/:id

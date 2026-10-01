@@ -93,7 +93,7 @@ class LocalUserDb extends UserDb {
 
   override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     // Table and index names are the only identifiers the per-user schema uses (see schema.ts).
-    const rewritten = sql.replace(/\b(documents_updated|documents|_migrations)\b/g, `${this.prefix}$1`);
+    const rewritten = sql.replace(/\b(documents_updated|documents|folders|_migrations)\b/g, `${this.prefix}$1`);
     return (await this.directory.prepare(rewritten).bind(...params).all<T>()).results;
   }
 }

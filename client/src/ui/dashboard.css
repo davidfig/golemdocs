@@ -260,3 +260,140 @@
 .wm-dash-close:hover {
   background: var(--wm-hover, rgba(0, 0, 0, 0.08));
 }
+
+/* Folders: breadcrumbs, folder cards, the drop highlight and the "move to" list. */
+.wm-dash-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 14px;
+}
+
+.wm-dash-crumbs[hidden] {
+  display: none;
+}
+
+.wm-dashboard .wm-crumb {
+  padding: 2px 6px;
+  border-color: transparent;
+  background: none;
+}
+
+.wm-dashboard .wm-crumb:disabled {
+  color: inherit;
+  font-weight: 600;
+}
+
+.wm-crumb-sep {
+  color: #666;
+}
+
+.wm-folder-art {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.wm-folder-shape {
+  position: relative;
+  width: 82%;
+  height: 56%;
+  border-radius: 3px 8px 6px 6px;
+  background: #e8c872;
+  border: 1px solid #b89a45;
+}
+
+.wm-folder-shape::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  bottom: 100%;
+  width: 42%;
+  height: 12%;
+  min-height: 8px;
+  border: 1px solid #b89a45;
+  border-bottom: 0;
+  border-radius: 4px 6px 0 0;
+  background: #e8c872;
+}
+
+.wm-card-open:hover .wm-folder-art,
+.wm-card-open:focus-visible .wm-folder-art {
+  border-color: transparent;
+}
+
+.wm-folder-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border: 1px solid var(--wm-field-border, #7f9db9);
+  background: #fff;
+  font-weight: 600;
+}
+
+.wm-card[draggable='true'] {
+  cursor: grab;
+}
+
+.wm-dragging {
+  opacity: 0.45;
+}
+
+.wm-card.wm-drop {
+  outline: 2px solid var(--wm-hot-border, #316ac5);
+  outline-offset: 4px;
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-dashboard .wm-crumb.wm-drop {
+  border-color: var(--wm-hot-border, #316ac5);
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-move-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.3);
+}
+
+.wm-move {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100% - 24px));
+  max-height: min(480px, calc(100% - 24px));
+  padding: 14px;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  border-radius: 4px;
+  background: var(--wm-face, #f0f0f0);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
+}
+
+.wm-move h2 {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.wm-move-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.wm-dashboard .wm-move-choice {
+  text-align: left;
+  border-color: transparent;
+  background: none;
+}
+
+.wm-move-actions {
+  display: flex;
+  justify-content: flex-end;
+}

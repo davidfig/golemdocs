@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CloudDocument } from '../src/cloud.ts';
 import type { SavedInfo } from '../src/storage/local.ts';
+import { childFolders, folderOf, folderPath, folderTree, isInside, itemsIn, parentsFirst, type Folder } from '../src/folders.ts';
 import { classify, deletedElsewhere, hasUnsentChanges, mergeLibrary, type LibraryEntry } from '../src/sync.ts';
 import { THUMB_MAX_HEIGHT, THUMB_WIDTH, thumbnailSize, toTopDownOpaque } from '../src/thumbnail.ts';
 import { formatSize, matchesSearch, opensFromCloud, relativeTime, syncBadge } from '../src/ui/dashboardFormat.ts';
@@ -130,4 +131,47 @@ test('sizes, badges, search and where a card opens from', () => {
   assert.equal(matchesSearch(entry('synced', true, true), '  quarterly '), true);
   assert.equal(matchesSearch(entry('synced', true, true), 'budget'), false);
   assert.equal(matchesSearch(entry('synced', true, true), ''), true);
+});
+
+// --- Folders ----------------------------------------------------------------------------------
+
+const folder = (id: string, parentId: string | null = null, name = id): Folder => ({ id, name, parentId, createdAt: 1, updatedAt: 1 });
+
+test('folders list under their parent by name, and a missing folder counts as the top level', () => {
+  const folders = [folder('b', null, 'Bravo'), folder('a', null, 'alpha'), folder('c', 'a', 'Inner')];
+  assert.deepEqual(childFolders(folders, null).map((f) => f.id), ['a', 'b']);
+  assert.deepEqual(childFolders(folders, 'a').map((f) => f.id), ['c']);
+
+  const inA = mergeLibrary([local({ id: 'x', folderId: 'a' })], null);
+  const gone = mergeLibrary([local({ id: 'y', folderId: 'deleted' })], null);
+  assert.equal(folderOf(inA[0], folders), 'a');
+  assert.equal(folderOf(gone[0], folders), null, 'a document whose folder is unknown stays in view at the top level');
+  assert.deepEqual(itemsIn([...inA, ...gone], folders, null).map((e) => e.key), ['y']);
+  assert.deepEqual(itemsIn([...inA, ...gone], folders, 'a').map((e) => e.key), ['x']);
+});
+
+test('a document’s folder is the cloud’s record when it has one', () => {
+  const folders = [folder('a'), folder('b')];
+  const [entry] = mergeLibrary([linked({ folderId: 'a' })], [cloud({ folderId: 'b' })]);
+  assert.equal(entry.folderId, 'b');
+  assert.equal(folderOf(entry, folders), 'b');
+  const [unlinked] = mergeLibrary([local({ folderId: 'a' })], []);
+  assert.equal(unlinked.folderId, 'a');
+  const [cloudOnly] = mergeLibrary([], [cloud({ folderId: 'a' })]);
+  assert.equal(cloudOnly.folderId, 'a');
+  assert.equal(mergeLibrary([], [cloud()])[0].folderId, null);
+});
+
+test('paths, containment and the picker tree follow the nesting, and survive a cycle', () => {
+  const folders = [folder('a'), folder('b', 'a'), folder('c', 'b'), folder('d')];
+  assert.deepEqual(folderPath(folders, 'c').map((f) => f.id), ['a', 'b', 'c']);
+  assert.deepEqual(folderPath(folders, null), []);
+  assert.ok(isInside(folders, 'c', 'a'));
+  assert.ok(isInside(folders, 'a', 'a'), 'a folder is inside itself, so cannot be moved there');
+  assert.ok(!isInside(folders, 'd', 'a'));
+  assert.deepEqual(folderTree(folders).map((n) => [n.folder.id, n.depth]), [['a', 0], ['b', 1], ['c', 2], ['d', 0]]);
+  assert.deepEqual(parentsFirst([folder('c', 'b'), folder('b', 'a'), folder('a')]).map((f) => f.id), ['a', 'b', 'c']);
+
+  const loop = [folder('p', 'q'), folder('q', 'p')];
+  assert.ok(folderPath(loop, 'p').length <= 2, 'a corrupt cycle ends instead of looping');
 });

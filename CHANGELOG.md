@@ -2,6 +2,9 @@
 
 ## 0.3.2 - Unreleased
 
+### Added
+- Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
+
 ## 0.3.1 - 2026-10-01
 
 ### Changed

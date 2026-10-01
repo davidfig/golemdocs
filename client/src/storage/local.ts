@@ -1,6 +1,7 @@
 // Documents saved in this browser (IndexedDB). Signed out, these are the user's documents and
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
+import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 
 export interface SavedInfo {
@@ -16,6 +17,8 @@ export interface SavedInfo {
   cloudSyncedAt?: number;
   /** The cloud copy's `updatedAt` as of that sync (the server's clock), to tell whether it has changed since. */
   cloudUpdatedAt?: number;
+  /** The folder it is in (see ../folders.ts); absent at the top level. */
+  folderId?: string;
 }
 
 /** A first-page thumbnail, and which save of the document it shows. */
@@ -29,13 +32,14 @@ const DB_NAME = 'word';
 const META = 'meta';
 const BYTES = 'bytes';
 const THUMBS = 'thumbs';
+const FOLDERS = 'folders';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 2);
+      const request = indexedDB.open(DB_NAME, 3);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -43,6 +47,7 @@ function openDb(): Promise<IDBDatabase> {
           request.result.createObjectStore(BYTES);
         }
         if (from < 2) request.result.createObjectStore(THUMBS);
+        if (from < 3) request.result.createObjectStore(FOLDERS, { keyPath: 'id' });
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -99,6 +104,8 @@ interface WriteInput {
   bytes: Uint8Array | ArrayBuffer;
   /** The account it belongs to; kept from the saved copy when absent. */
   owner?: string;
+  /** The folder it goes in; kept from the saved copy when absent. */
+  folderId?: string;
 }
 
 async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
@@ -111,6 +118,7 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
     ...existing,
     id: input.id ?? crypto.randomUUID(),
     ...(input.owner !== undefined && { owner: input.owner }),
+    ...(input.folderId !== undefined && { folderId: input.folderId }),
     name: input.name,
     size: buffer.byteLength,
     // Strictly increasing per document, so "saved after the last sync" is always decidable.
@@ -154,6 +162,59 @@ export async function markSynced(id: string, sync: { cloudId: string; syncedAt: 
       ...(sync.cloudUpdatedAt !== undefined && { cloudUpdatedAt: sync.cloudUpdatedAt }),
     });
   }
+  await finished(tx);
+}
+
+/** Puts a saved document in a folder (null: the top level). Not an edit: its dates stay as they were. */
+export async function setSavedFolder(id: string, folderId: string | null): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(META, 'readwrite');
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  if (info) {
+    const { folderId: _was, ...rest } = info;
+    tx.objectStore(META).put(folderId === null ? rest : { ...rest, folderId });
+  }
+  await finished(tx);
+}
+
+/** The folders kept in this browser: those of someone not signed in (an account's are in the cloud). */
+export async function listLocalFolders(): Promise<Folder[]> {
+  const db = await openDb();
+  return done(db.transaction(FOLDERS).objectStore(FOLDERS).getAll() as IDBRequest<Folder[]>);
+}
+
+/** Creates or replaces a folder kept in this browser. */
+export async function putLocalFolder(folder: Folder): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(FOLDERS, 'readwrite');
+  tx.objectStore(FOLDERS).put(folder);
+  await finished(tx);
+}
+
+/** Forgets a folder record only, leaving the documents and folders that refer to it as they are. */
+export async function removeLocalFolderRecord(id: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(FOLDERS, 'readwrite');
+  tx.objectStore(FOLDERS).delete(id);
+  await finished(tx);
+}
+
+/**
+ * Removes a folder kept in this browser, if it is one; what was in it (folders and saved
+ * documents) moves to `parentId`, the folder's own parent, so nothing is lost.
+ */
+export async function deleteLocalFolder(id: string, parentId: string | null): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction([FOLDERS, META], 'readwrite');
+  const folders = tx.objectStore(FOLDERS);
+  for (const f of (await done(folders.getAll())) as Folder[]) if (f.parentId === id) folders.put({ ...f, parentId });
+  const meta = tx.objectStore(META);
+  for (const info of (await done(meta.getAll())) as SavedInfo[]) {
+    if (info.folderId !== id) continue;
+    const { folderId: _was, ...rest } = info;
+    meta.put(parentId === null ? rest : { ...rest, folderId: parentId });
+  }
+  folders.delete(id);
   await finished(tx);
 }
 

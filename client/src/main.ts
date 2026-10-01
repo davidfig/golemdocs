@@ -6,6 +6,7 @@ import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocument, documentUrl, listDocuments, listShared, saveDocument, type CloudDocument } from './cloud.ts';
+import { adoptGuestFolders } from './folderOps.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -701,6 +702,8 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   sharedDeviceNotice.update({ signedIn: signedIn !== null });
   assistant.update({ signedIn: signedIn !== null });
   if (account) {
+    // Folders made before signing in go to the account first, so the documents in them can be filed there.
+    await adoptGuestFolders().catch(() => {});
     const adopted = await adoptGuestDocuments(account.id).catch(() => []);
     if (adopted.length) notify(t('app.adopted', { count: adopted.length }));
   }
@@ -975,7 +978,9 @@ function saveInBrowser(): Promise<string | null> {
     const created = !doc.localId;
     try {
       const owner = account?.id;
-      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner });
+      const folderId = created ? (newDocumentFolder ?? undefined) : undefined;
+      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
+      if (created) newDocumentFolder = null;
       doc.localId = info.id;
       if (doc === current) {
         await makeThumbnail(info);
@@ -1101,6 +1106,9 @@ async function signOut(): Promise<void> {
   await deleteOwnedBy(user.id).catch(() => {});
   location.replace(location.pathname);
 }
+
+/** The folder (chosen on the dashboard) the document being started goes in once it is first saved. */
+let newDocumentFolder: string | null = null;
 
 /** Deletes a document (from the dashboard): from the account, and this browser's copy. */
 async function deleteEverywhere(entry: LibraryEntry): Promise<void> {
@@ -2594,12 +2602,19 @@ canvas.addEventListener('contextmenu', (e) => {
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.
 const dashboard = new Dashboard(document.getElementById('viewport')!, {
-  newDocument: () => void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput),
+  newDocument: (folderId) => {
+    newDocumentFolder = folderId;
+    void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput);
+  },
   open: (entry) => {
+    newDocumentFolder = null;
     showLoading(entry.name);
     openSource(sourceOf(entry));
   },
-  importFile: () => void chromeHost.perform({ kind: 'import' }),
+  importFile: (folderId) => {
+    newDocumentFolder = folderId;
+    void chromeHost.perform({ kind: 'import' });
+  },
   delete: deleteEverywhere,
   account: () => account,
   signedIn: () => signedIn,

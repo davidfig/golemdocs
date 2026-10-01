@@ -1,5 +1,6 @@
 // Client for the server's document API (server/src/worker.ts): a user's .docx files, kept in
 // Cloudflare R2 with their catalogue in the user's own D1 database.
+import type { Folder } from './folders.ts';
 import { t } from './i18n/index.ts';
 
 export interface CloudDocument {
@@ -10,6 +11,8 @@ export interface CloudDocument {
   updatedAt: number;
   /** When its thumbnail was uploaded; null if it has none yet. */
   thumbAt: number | null;
+  /** The folder it is in (see folders.ts); null at the top level. Only the owner's own documents have one. */
+  folderId?: string | null;
   /** What this user may do with it. Anything but 'owner' is a document someone shared with them. */
   role?: 'owner' | 'editor' | 'viewer';
   /** Who shared it (documents shared with this user). */
@@ -72,8 +75,9 @@ export async function listDocuments(): Promise<CloudDocument[]> {
   return (await check(await fetch('/api/documents'))).json();
 }
 
-export async function createDocument(name: string, bytes: Uint8Array): Promise<CloudDocument> {
-  const response = await fetch(`/api/documents?name=${encodeURIComponent(name)}`, {
+export async function createDocument(name: string, bytes: Uint8Array, folderId?: string): Promise<CloudDocument> {
+  const folder = folderId ? `&folder=${encodeURIComponent(folderId)}` : '';
+  const response = await fetch(`/api/documents?name=${encodeURIComponent(name)}${folder}`, {
     method: 'POST',
     headers: { 'content-type': DOCX },
     body: bytes as Uint8Array<ArrayBuffer>,
@@ -100,6 +104,28 @@ export async function saveDocument(id: string, bytes: Uint8Array, name?: string,
 
 export async function deleteDocument(id: string): Promise<void> {
   await check(await fetch(`/api/documents/${id}`, { method: 'DELETE' }));
+}
+
+/** Moves a document to a folder (null: the top level). */
+export async function moveDocument(id: string, folderId: string | null): Promise<CloudDocument> {
+  const response = await fetch(`/api/documents/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ folderId }) });
+  return (await check(response)).json();
+}
+
+export async function listFolders(): Promise<Folder[]> {
+  return (await check(await fetch('/api/folders'))).json();
+}
+
+/** Creates a folder with this id, or renames and moves it if there already is one. */
+export async function putFolder(folder: Pick<Folder, 'id' | 'name' | 'parentId'>): Promise<Folder> {
+  const body = JSON.stringify({ name: folder.name, parentId: folder.parentId });
+  const response = await fetch(`/api/folders/${folder.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body });
+  return (await check(response)).json();
+}
+
+/** Deletes the folder only: its folders and documents move up to where it was. */
+export async function deleteFolder(id: string): Promise<void> {
+  await check(await fetch(`/api/folders/${id}`, { method: 'DELETE' }));
 }
 
 /** Documents other people shared with this user. */

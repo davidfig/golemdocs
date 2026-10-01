@@ -17,4 +17,17 @@ export const USER_MIGRATIONS: string[][] = [
   // 2: a thumbnail of the first page, rendered by the client that saved the document (the bytes
   // live in R2 at `<r2_key minus .docx>.thumb`). thumb_at is null until one has been uploaded.
   [`ALTER TABLE documents ADD COLUMN thumb_at INTEGER`],
+  // 3: folders, nested through parent_id (null: the top level), and the folder a document is in
+  // (folder_id, null: the top level). Only the owner's own arrangement; a shared document sits
+  // outside it for the people it is shared with.
+  [
+    `CREATE TABLE folders (
+       id         TEXT PRIMARY KEY,
+       name       TEXT NOT NULL,
+       parent_id  TEXT,
+       created_at INTEGER NOT NULL,
+       updated_at INTEGER NOT NULL
+     )`,
+    `ALTER TABLE documents ADD COLUMN folder_id TEXT`,
+  ],
 ];

@@ -29,19 +29,29 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
   const bytes = new Uint8Array(saved.bytes);
   let doc: CloudDocument;
   let conflictCopy = false;
+  // A new cloud document goes in the folder it is in here. If the account doesn't have that folder
+  // (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
+  const create = async (name: string) => {
+    try {
+      return await createDocument(name, bytes, info.folderId);
+    } catch (error) {
+      if (info.folderId && error instanceof CloudError && error.status === 400) return createDocument(name, bytes);
+      throw error;
+    }
+  };
   try {
-    doc = info.cloudId ? await saveDocument(info.cloudId, bytes, info.name, info.cloudUpdatedAt) : await createDocument(info.name, bytes);
+    doc = info.cloudId ? await saveDocument(info.cloudId, bytes, info.name, info.cloudUpdatedAt) : await create(info.name);
   } catch (error) {
     if (!info.cloudId || !(error instanceof CloudError)) throw error;
     if (error.status === 404) {
       // The cloud copy was deleted elsewhere: start a new one.
-      doc = await createDocument(info.name, bytes);
+      doc = await create(info.name);
     } else if (error.status === 409 && retry && (await getSaved(localId))?.info.cloudUpdatedAt !== info.cloudUpdatedAt) {
       // Another tab uploaded this copy meanwhile, so the cloud moved on from here: go again from there.
       return uploadToCloud(localId, false);
     } else if (error.status === 409) {
       // Changed elsewhere too: keep both. This copy carries on as the conflicted one.
-      doc = await createDocument(conflictCopyName(info.name), bytes);
+      doc = await create(conflictCopyName(info.name));
       conflictCopy = true;
     } else {
       throw error;

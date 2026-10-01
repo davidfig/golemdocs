@@ -8,8 +8,9 @@
 // app's job (main.ts), one at a time: this only says which copies have something to send.
 
 import type { User } from './auth.ts';
-import { CloudError, listDocuments, listShared, type CloudDocument } from './cloud.ts';
-import { deleteSaved, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
+import { CloudError, listDocuments, listFolders, listShared, type CloudDocument } from './cloud.ts';
+import type { Folder } from './folders.ts';
+import { deleteSaved, listLocalFolders, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
 
 export type SyncState =
@@ -36,6 +37,8 @@ export interface LibraryEntry {
   local: SavedInfo | null;
   cloud: CloudDocument | null;
   state: SyncState;
+  /** The folder it is in, as recorded (folders.ts says whether that folder still exists). */
+  folderId: string | null;
 }
 
 /** How a browser copy and its cloud copy relate. `cloud` is null when it's missing or unknown. */
@@ -77,11 +80,12 @@ export function mergeLibrary(local: readonly SavedInfo[], cloud: readonly CloudD
       local: l,
       cloud: c,
       state,
+      folderId: c ? (c.folderId ?? null) : (l.folderId ?? null),
     });
   }
   for (const c of cloud ?? []) {
     if (linked.has(c.id)) continue;
-    entries.push({ key: c.id, name: c.name, size: c.size, updatedAt: c.updatedAt, local: null, cloud: c, state: 'cloud-only' });
+    entries.push({ key: c.id, name: c.name, size: c.size, updatedAt: c.updatedAt, local: null, cloud: c, state: 'cloud-only', folderId: c.folderId ?? null });
   }
   return entries.sort((a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
 }
@@ -103,34 +107,38 @@ export interface Library {
   signedOut: boolean;
   /** Documents other people shared with the user. */
   shared: CloudDocument[];
+  /** The folders the documents are arranged in. */
+  folders: Folder[];
 }
 
 const CATALOGUE_KEY = 'wm.catalogue';
 
 /** The account's catalogue as last listed, kept so the dashboard can show it before the network answers. */
-function readCatalogue(user: User | null): { cloud: CloudDocument[]; shared: CloudDocument[] } | null {
+function readCatalogue(user: User | null): { cloud: CloudDocument[]; shared: CloudDocument[]; folders: Folder[] } | null {
   if (!user) return null;
   try {
     const saved = JSON.parse(localStorage.getItem(CATALOGUE_KEY) ?? 'null');
-    return saved && saved.user === user.id ? { cloud: saved.cloud, shared: saved.shared } : null;
+    return saved && saved.user === user.id ? { cloud: saved.cloud, shared: saved.shared, folders: saved.folders ?? [] } : null;
   } catch {
     return null;
   }
 }
 
-function writeCatalogue(user: User, cloud: CloudDocument[], shared: CloudDocument[]): void {
+function writeCatalogue(user: User, cloud: CloudDocument[], shared: CloudDocument[], folders: Folder[]): void {
   try {
-    localStorage.setItem(CATALOGUE_KEY, JSON.stringify({ user: user.id, cloud, shared }));
+    localStorage.setItem(CATALOGUE_KEY, JSON.stringify({ user: user.id, cloud, shared, folders }));
   } catch {
     // Only a head start; the next listing fills it in.
   }
 }
 
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
-export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; shared: CloudDocument[] }> {
+export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; shared: CloudDocument[]; folders: Folder[] }> {
   const cached = readCatalogue(user);
   const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
-  return { entries: mergeLibrary(local, cached?.cloud ?? null), shared: cached?.shared ?? [] };
+  // Signed in, the folders are the account's; otherwise they are this browser's.
+  const folders = user ? (cached?.folders ?? []) : await listLocalFolders().catch(() => []);
+  return { entries: mergeLibrary(local, cached?.cloud ?? null), shared: cached?.shared ?? [], folders };
 }
 
 /**
@@ -142,7 +150,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
   if (!user) {
     const shared = identity ? await listShared().catch(() => []) : [];
-    return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared };
+    return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };
   }
 
   let cloud: CloudDocument[];
@@ -151,7 +159,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   } catch (error) {
     const signedOut = error instanceof CloudError && error.status === 401;
     const problem = signedOut ? t('app.signedOutProblem') : t('app.cloudUnreachable', { message: (error as Error).message });
-    return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut, shared: [] };
+    return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut, shared: [], folders: readCatalogue(user)?.folders ?? [] };
   }
 
   const gone = deletedElsewhere(local, cloud);
@@ -159,6 +167,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   const kept = gone.length ? local.filter((l) => !gone.includes(l)) : local;
   // Not worth failing the dashboard over.
   const shared = await listShared().catch(() => []);
-  writeCatalogue(user, cloud, shared);
-  return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared };
+  const folders = await listFolders().catch(() => readCatalogue(user)?.folders ?? []);
+  writeCatalogue(user, cloud, shared, folders);
+  return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared, folders };
 }

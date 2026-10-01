@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
-import { WordDocument, type Paragraph, type Run } from '@word/docx';
-import { FontSet } from '@word/layout';
+import { WordDocument, type Paragraph, type Run } from '@golemdocs/docx';
+import { FontSet } from '@golemdocs/layout';
 import { documentToImage } from '../src/formats/pageImage.ts';
 import { installFakeCanvas } from './fakeCanvas.ts';
 

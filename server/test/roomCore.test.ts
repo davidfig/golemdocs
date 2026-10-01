@@ -2,8 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, WordDocument } from '@word/docx';
-import { Engine, ROOM_CLOSE, type MultiplayerServerMessage, type Operation, type Transaction } from '@word/ops';
+import { paragraphsIn, WordDocument } from '@golemdocs/docx';
+import { Engine, ROOM_CLOSE, type MultiplayerServerMessage, type Operation, type Transaction } from '@golemdocs/ops';
 import { INITIAL_META, RoomCore, type Peer, type RoomMeta, type RoomStore } from '../src/roomCore.ts';
 
 class MemoryStore implements RoomStore {

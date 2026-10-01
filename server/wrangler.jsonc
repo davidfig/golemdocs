@@ -48,12 +48,12 @@
 		"binding": "AI"
 	},
 	// Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
-	// Create it with `pnpm --filter @word/server cf:setup`, then paste its id below.
+	// Create it with `pnpm --filter @golemdocs/server cf:setup`, then put its id in wrangler.local.json (see README).
 	"d1_databases": [
 		{
 			"binding": "DIRECTORY",
 			"database_name": "golemdocs-directory",
-			"database_id": "5c644ff5-3e2b-42c1-b684-b649e30c7943",
+			"database_id": "REPLACE_DIRECTORY_ID",
 			"migrations_dir": "migrations/directory"
 		}
 	],
@@ -61,8 +61,8 @@
 		// production | dev | local. Decides what per-user databases are called (golemdocs-user-… in
 		// production, golemdocs-dev-user-… otherwise) and whether cloud storage is on (not when "local").
 		"ENVIRONMENT": "production",
-		// Your Cloudflare account id (per-user databases are created and queried through the REST API).
-		"CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
+		// Your Cloudflare account id, from wrangler.local.json (per-user databases are created and queried through the REST API).
+		"CF_ACCOUNT_ID": "REPLACE_ACCOUNT_ID",
 		// Microsoft accounts allowed to sign in: common | organizations | consumers | <tenant id>.
 		"MICROSOFT_TENANT": "common",
 		// "true": cloud documents, sharing and rooms need a subscription (see src/subscriptions.ts). While
@@ -70,12 +70,12 @@
 		"REQUIRE_SUBSCRIPTION": "false"
 	},
 	// Bindings and vars aren't inherited by environments, so each one lists its own. The top level
-	// above is production: only `pnpm --filter @word/server deploy` uses it.
+	// above is production: only `pnpm --filter @golemdocs/server deploy` uses it.
 	"env": {
 		// `pnpm dev`: the Worker runs on your machine but D1 and R2 are the real *dev* resources
 		// ("remote": true), so local testing exercises the same services as production without ever
-		// touching production data. Create them with `pnpm --filter @word/server cf:setup:dev`, then
-		// paste the printed database id here (and your account id below).
+		// touching production data. Create them with `pnpm --filter @golemdocs/server cf:setup:dev`, then
+		// put the printed database id in wrangler.local.json (and your account id).
 		"dev": {
 			"ai": {
 				"binding": "AI"
@@ -107,14 +107,14 @@
 				{
 					"binding": "DIRECTORY",
 					"database_name": "golemdocs-directory-dev",
-					"database_id": "24783707-80b7-4b25-a666-f45c83eba1a6",
+					"database_id": "REPLACE_DIRECTORY_DEV_ID",
 					"migrations_dir": "migrations/directory",
 					"remote": true
 				}
 			],
 			"vars": {
 				"ENVIRONMENT": "dev",
-				"CF_ACCOUNT_ID": "c26bf9c3c6d07baf4199811569c33f32",
+				"CF_ACCOUNT_ID": "REPLACE_ACCOUNT_ID",
 				"MICROSOFT_TENANT": "common"
 			}
 		},

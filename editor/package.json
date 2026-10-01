@@ -1,5 +1,5 @@
 {
-  "name": "@word/editor",
+  "name": "@golemdocs/editor",
   "private": true,
   "version": "0.3.1",
   "type": "module",
@@ -11,9 +11,9 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@word/docx": "workspace:*",
-    "@word/layout": "workspace:*",
-    "@word/ops": "workspace:*"
+    "@golemdocs/docx": "workspace:*",
+    "@golemdocs/layout": "workspace:*",
+    "@golemdocs/ops": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

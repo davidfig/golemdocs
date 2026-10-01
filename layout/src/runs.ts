@@ -2,7 +2,7 @@
 // formatting, evaluates fields, drops deleted and hidden text, maps symbol fonts and collects
 // inline and floating drawings.
 
-import { formatNumber, inlineLength, inlinesLength, isMathInline, itemLength, readMathInline, type Drawing, type Inline, type MathEquation, type Run, type RunContent, type RunProperties } from '@word/docx';
+import { formatNumber, inlineLength, inlinesLength, isMathInline, itemLength, readMathInline, type Drawing, type Inline, type MathEquation, type Run, type RunContent, type RunProperties } from '@golemdocs/docx';
 import type { SourceSpan } from './offsets.ts';
 import { cachedRunStyle, runStyle, type LayoutContext, type RunStyle } from './context.ts';
 
@@ -91,7 +91,7 @@ export class TextCollector {
   readonly ptabs = new Map<number, PositionalTab>();
   private readonly fields: Field[] = [];
   readonly spans: SourceSpan[] = [];
-  /** Model offset of the next content item (see @word/docx edit/text.ts). */
+  /** Model offset of the next content item (see @golemdocs/docx edit/text.ts). */
   private model = 0;
 
   constructor(

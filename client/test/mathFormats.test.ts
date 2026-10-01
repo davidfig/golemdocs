@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isMathInline, mathAt, paragraphsIn, readMathInline, type Paragraph } from '@word/docx';
+import { isMathInline, mathAt, paragraphsIn, readMathInline, type Paragraph } from '@golemdocs/docx';
 import { adoc, org, rst, tex } from '../src/formats/handlers/markup.ts';
 import { documentToOutline } from '../src/formats/outline.ts';
 

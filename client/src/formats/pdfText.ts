@@ -1,7 +1,7 @@
 // A PDF page's text as characters with positions, for selecting it and for finding the text
 // under an annotation.
 
-import { extractText, type PdfDocument } from '@word/pdf';
+import { extractText, type PdfDocument } from '@golemdocs/pdf';
 
 /** A character on a page, where it's drawn, in page coordinates (points from the top-left, y down). */
 export interface PdfCharacter {

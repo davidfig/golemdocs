@@ -1,6 +1,6 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
-import type { MoveTarget } from '@word/editor';
+import type { MoveTarget } from '@golemdocs/editor';
 import { deskColor, onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
@@ -170,7 +170,7 @@ let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>
   if (wanted?.startsWith('local:')) earlySaved = { id: wanted.slice(6), saved: getSaved(wanted.slice(6)).catch(() => null) };
 }
 
-// Development convenience: the round-trip test corpus (pnpm --filter @word/docx corpus),
+// Development convenience: the round-trip test corpus (pnpm --filter @golemdocs/docx corpus),
 // served by a dev-only Vite plugin (see vite.config.ts), so builds never include it.
 const CORPUS_URL = '/__corpus/';
 let corpusNames: string[] = [];

@@ -1,9 +1,9 @@
-# @word/docx
+# @golemdocs/docx
 
 Code shared by client and server. Currently: a from-scratch, dependency-free DOCX reader and writer.
 
 ```ts
-import { WordDocument, StyleResolver, ListCounter } from '@word/docx';
+import { WordDocument, StyleResolver, ListCounter } from '@golemdocs/docx';
 
 const doc = await WordDocument.read(bytes);      // Uint8Array of a .docx
 doc.body;                                        // paragraphs, tables, content controls, ...
@@ -27,7 +27,7 @@ Unmodeled content is never dropped: unknown elements are kept (`extra`, `Raw`, `
 ## Tests
 
 ```sh
-pnpm --filter @word/docx corpus     # once: fetch Apache POI's .docx test corpus into .cache/
-pnpm --filter @word/docx test
-pnpm --filter @word/docx roundtrip  # per-part diff report for every corpus document
+pnpm --filter @golemdocs/docx corpus     # once: fetch Apache POI's .docx test corpus into .cache/
+pnpm --filter @golemdocs/docx test
+pnpm --filter @golemdocs/docx roundtrip  # per-part diff report for every corpus document
 ```

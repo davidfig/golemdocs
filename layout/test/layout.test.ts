@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { WordDocument, type Paragraph, type Run, type Table } from '@word/docx';
+import { WordDocument, type Paragraph, type Run, type Table } from '@golemdocs/docx';
 import { encodePage, FontSet, GLYPH_INSTANCE_BYTES, layoutDocument, setFormattingMarks, setReflowWidth, type PageLayout } from '../src/index.ts';
 
 // Uses the generated font metrics in client/public/fonts (run `pnpm fonts` first).
@@ -332,7 +332,7 @@ test('an autofit table wider than its column narrows to it; a fixed one keeps it
 });
 
 test('a floating text box is drawn at its place on the page, apart from the text flow', skip, async () => {
-  const { el } = await import('@word/docx');
+  const { el } = await import('@golemdocs/docx');
   const doc = await WordDocument.create();
   const cx = String(200 * 12700);
   const cy = String(40 * 12700);

@@ -1,7 +1,7 @@
 // Opening an OpenDocument package: the ZIP (or a flat .fodt XML file), its parts parsed with
 // namespace prefixes normalised, and every other file loaded for pictures and embedded objects.
 
-import { parseXml, ZipArchive, type XmlElement } from '@word/docx';
+import { parseXml, ZipArchive, type XmlElement } from '@golemdocs/docx';
 import { CONFIG_NS, MIME_TEXT, MIME_TEXT_TEMPLATE, ODF_NS, OdtError, childElements, firstChild, fragment, normalizeNamespaces } from './odf.ts';
 
 export interface OdfPackage {

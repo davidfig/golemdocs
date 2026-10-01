@@ -4,8 +4,8 @@
 // document. Its paragraphs and tables are what gets pasted; what they need from that document to
 // look as they did (the styles they use, their list definitions) is carried over as operations.
 
-import { paragraphsIn, type Block, type Inline, type Style, type WordDocument } from '@word/docx';
-import type { Operation } from '@word/ops';
+import { paragraphsIn, type Block, type Inline, type Style, type WordDocument } from '@golemdocs/docx';
+import type { Operation } from '@golemdocs/ops';
 import { importDocument } from './convert.ts';
 import { styleFor } from './markdownStyles.ts';
 import { linkAddress } from '../ui/linkDialog.ts';

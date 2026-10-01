@@ -2,8 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { WordDocument, paragraphText } from '@word/docx';
-import type { Block, Hyperlink, Paragraph, Run, Table } from '@word/docx';
+import { WordDocument, paragraphText } from '@golemdocs/docx';
+import type { Block, Hyperlink, Paragraph, Run, Table } from '@golemdocs/docx';
 import { documentToRtf } from '../src/formats/rtfExport.ts';
 import { rtfToDocument } from '../src/formats/rtfImport.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
@@ -100,7 +100,7 @@ function rangeText(doc: WordDocument, id: string): { text: string; references: n
   let inside = false;
   let text = '';
   let references = 0;
-  const visit = (inlines: readonly import('@word/docx').Inline[]) => {
+  const visit = (inlines: readonly import('@golemdocs/docx').Inline[]) => {
     for (const inline of inlines) {
       if (inline.kind === 'raw' && inline.xml.attrs['w:id'] === id) {
         if (inline.xml.name === 'w:commentRangeStart') inside = true;
@@ -165,11 +165,11 @@ test('writes comments and reads them back, replies and unicode included', async 
   const first = doc.comments[0];
   doc.comments.push({ id: '9', author: 'Zoë 日本', initials: 'Z', date: '2025-12-31T23:59:00Z', paragraphs: ['Reply {a} \\ b', 'ünï'], parentId: first.id });
   // The reply is over the same range as its parent.
-  const { commentStart, commentEnd, commentReference, insertInlines } = await import('@word/docx');
+  const { commentStart, commentEnd, commentReference, insertInlines } = await import('@golemdocs/docx');
   const p = paragraphs(doc)[0];
   const fp = p.children.findIndex((c) => c.kind === 'raw' && c.xml.name === 'w:commentRangeEnd');
   assert.ok(fp > 0);
-  const offsets = (await import('@word/docx')).commentMarkerOffsets(p, first.id);
+  const offsets = (await import('@golemdocs/docx')).commentMarkerOffsets(p, first.id);
   insertInlines(p, offsets[1], [commentEnd('9'), commentReference('9')]);
   insertInlines(p, offsets[2], [commentStart('9')]);
 

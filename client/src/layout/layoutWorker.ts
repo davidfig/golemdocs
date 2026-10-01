@@ -2,9 +2,9 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { isMathInline, paragraphLength, paragraphText, plainText, type DocumentProperties, type Inline, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@word/docx';
-import { Editor, type Command } from '@word/editor';
-import { Replica, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@word/ops';
+import { isMathInline, paragraphLength, paragraphText, plainText, type DocumentProperties, type Inline, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { Editor, type Command } from '@golemdocs/editor';
+import { Replica, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@golemdocs/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
 import { RoomClient, type RoomHost, type RoomStart, type SocketLike } from '../collab/roomClient.ts';
 import {
@@ -18,12 +18,12 @@ import {
   type EncodedPage,
   PageLayout,
   type FaceDescriptor,
-} from '@word/layout';
+} from '@golemdocs/layout';
 import { exportDocument, importDocument, type Format } from '../formats/convert.ts';
 import type { PdfView } from '../formats/pdfPages.ts';
 import { sniffImage } from '../formats/images.ts';
 import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
-import type { FormField } from '@word/pdf';
+import type { FormField } from '@golemdocs/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
 import { getLocale, loadLocale, t } from '../i18n/index.ts';
 

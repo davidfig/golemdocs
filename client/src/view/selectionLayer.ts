@@ -1,4 +1,4 @@
-import { packColor, RECT_INSTANCE_BYTES } from '@word/layout';
+import { packColor, RECT_INSTANCE_BYTES } from '@golemdocs/layout';
 import type { SelectionUpdate } from '../layout/protocol.ts';
 import { RectBatch } from '../shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';

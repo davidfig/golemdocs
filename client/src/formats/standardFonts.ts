@@ -2,7 +2,7 @@
 // the real font file isn't at hand: the PDF's standard-14 fonts, and the browser's own fonts
 // when a page is drawn as a picture.
 
-import type { ResolvedFont } from '@word/layout';
+import type { ResolvedFont } from '@golemdocs/layout';
 
 export type Standard = 'Times' | 'Helvetica' | 'Courier';
 

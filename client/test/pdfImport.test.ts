@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { WordDocument, type Paragraph, type Run } from '@word/docx';
+import { WordDocument, type Paragraph, type Run } from '@golemdocs/docx';
 import { PageDrawing, PdfDocument, PasswordError, type PdfFont } from '../../pdf/src/index.ts';
 import { pdfToDocument, wordFontFor } from '../src/formats/pdfImport.ts';
 

@@ -15,8 +15,8 @@
 // and floating shapes, tracked changes, fields other than links (their results are kept).
 // Files from Word 6/95 (a different format) and encrypted files are refused.
 
-import { WordDocument } from '@word/docx';
-import { commentEnd, commentReference, commentStart, insertInlines } from '@word/docx';
+import { WordDocument } from '@golemdocs/docx';
+import { commentEnd, commentReference, commentStart, insertInlines } from '@golemdocs/docx';
 import type {
   Block,
   Inline,
@@ -30,7 +30,7 @@ import type {
   Table,
   TableCell,
   TableRow,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { t } from '../i18n/index.ts';
 import { Cfb, CfbError, isCfb } from './cfb.ts';
 import { dttmToIso } from './commentRanges.ts';

@@ -1,5 +1,5 @@
 {
-  "name": "@word/odt",
+  "name": "@golemdocs/odt",
   "private": true,
   "version": "0.3.1",
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@word/docx": "workspace:*"
+    "@golemdocs/docx": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

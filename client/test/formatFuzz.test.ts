@@ -1,13 +1,13 @@
 // Round-trip and robustness fuzzing for the document formats (src/formats). Generated documents are
 // exported and read back, and must keep what the format can hold; arbitrary bytes must never hang
 // or throw anything but an Error. Every input comes from a seed: replay one with
-// `SEED=n pnpm --filter @word/client test` (FUZZ_SEEDS=n for n times as many seeds).
+// `SEED=n pnpm --filter @golemdocs/client test` (FUZZ_SEEDS=n for n times as many seeds).
 
 import assert from 'node:assert/strict';
 import { Worker } from 'node:worker_threads';
 import { test } from 'node:test';
 import { forSeeds, randomText, rng, seedsFor, type Rand } from '../../ops/test/fuzz.ts';
-import { WordDocument } from '@word/docx';
+import { WordDocument } from '@golemdocs/docx';
 import { exportDocument, importDocument, type Format } from '../src/formats/convert.ts';
 import { isWdoc, readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../src/formats/wdoc.ts';
 import { documentToOutline, outlineToDocument, tidy, type ListItem, type Node, type Span } from '../src/formats/outline.ts';

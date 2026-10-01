@@ -1,5 +1,5 @@
-import type { FaceDescriptor } from '@word/layout';
-import type { Pointer } from '@word/ops';
+import type { FaceDescriptor } from '@golemdocs/layout';
+import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
 import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';

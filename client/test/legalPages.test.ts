@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import type { Paragraph } from '@word/docx';
+import type { Paragraph } from '@golemdocs/docx';
 import { markdownToDocument } from '../src/formats/markdown.ts';
 
 const links = async (md: string): Promise<string[]> => {

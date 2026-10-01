@@ -2,10 +2,10 @@
 // PDF font's own advances position each character), drawn with our substitute MSDF faces.
 // Pages are interpreted lazily, one layoutPage() call each. The page text stays unchanged; what
 // can change is the layer of markup annotations over it (highlights, notes...: see
-// @word/pdf annotations), which are drawn from the appearance streams they're given.
+// @golemdocs/pdf annotations), which are drawn from the appearance streams they're given.
 
-import { FontSet, PageLayout, isCjk, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@word/layout';
-import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type FontStyle, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@word/pdf';
+import { FontSet, PageLayout, isCjk, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
+import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type FontStyle, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
 import type { EditFonts } from './pdfFonts.ts';
 
@@ -97,7 +97,7 @@ interface FaceChoice {
 
 /**
  * Opens a PDF. Throws PdfError for files that aren't PDFs and PasswordError/EncryptionError
- * for encrypted ones without the right password (exported by @word/pdf).
+ * for encrypted ones without the right password (exported by @golemdocs/pdf).
  */
 export async function openPdfView(
   bytes: Uint8Array,

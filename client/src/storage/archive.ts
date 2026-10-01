@@ -1,5 +1,5 @@
 // File ▸ Download All: every saved document, zipped. Only ever `import()`ed (it pulls in the ZIP writer).
-import { writeZip } from '@word/docx';
+import { writeZip } from '@golemdocs/docx';
 
 export interface ArchiveDoc {
   name: string;

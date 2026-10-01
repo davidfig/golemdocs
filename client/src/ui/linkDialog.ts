@@ -1,5 +1,5 @@
 // Insert ▸ Hyperlink: the address a piece of text links to, and the text that shows. A modal
-// dialog like the others; the editor does the linking (see @word/editor).
+// dialog like the others; the editor does the linking (see @golemdocs/editor).
 
 import { docAddress, parseDocAddress } from '../formats/wikiLinks.ts';
 import { t } from '../i18n/index.ts';

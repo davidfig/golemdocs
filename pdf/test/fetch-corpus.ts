@@ -1,7 +1,7 @@
 // Fetches pdf.js's test PDFs (~1,000 files, ~120 MB, many deliberately broken or unusual)
 // into .cache/pdfjs with a sparse, blobless git clone, pinned to a commit for reproducibility.
 //
-//   pnpm --filter @word/pdf fetch-corpus && pnpm --filter @word/pdf corpus
+//   pnpm --filter @golemdocs/pdf fetch-corpus && pnpm --filter @golemdocs/pdf corpus
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commentMarkerOffsets, commentRanges, paragraphsIn, paragraphText } from '@word/docx';
+import { commentMarkerOffsets, commentRanges, paragraphsIn, paragraphText } from '@golemdocs/docx';
 import { docToDocument } from '../src/formats/docImport.ts';
 
 const FREE = 0xffffffff;

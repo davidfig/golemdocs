@@ -2,11 +2,11 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ZipArchive, paragraphText } from '@word/docx';
-import type { Paragraph } from '@word/docx';
+import { ZipArchive, paragraphText } from '@golemdocs/docx';
+import type { Paragraph } from '@golemdocs/docx';
 import { epub, mhtml } from '../src/formats/handlers/webArchives.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';
-import { parseXml } from '@word/docx';
+import { parseXml } from '@golemdocs/docx';
 
 const texts = (doc: { body: { kind: string }[] }) =>
   (doc.body as Paragraph[]).filter((b) => b.kind === 'paragraph').map(paragraphText).filter(Boolean);
@@ -25,7 +25,7 @@ test('an EPUB written from a document reads back, and is well-formed XHTML', asy
 });
 
 test('an EPUB is read in spine order', async () => {
-  const { writeZip } = await import('@word/docx');
+  const { writeZip } = await import('@golemdocs/docx');
   const enc = new TextEncoder();
   const f = (name: string, s: string) => ({ name, data: enc.encode(s) });
   const bytes = await writeZip([
@@ -83,7 +83,7 @@ test('comments survive EPUB and MHTML', async () => {
 });
 
 test('a book with a stray % in an address or no spine is read or refused, not crashed on', async () => {
-  const { writeZip } = await import('@word/docx');
+  const { writeZip } = await import('@golemdocs/docx');
   const enc = new TextEncoder();
   const f = (name: string, s: string) => ({ name, data: enc.encode(s) });
   const container = f('META-INF/container.xml', '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="pack.opf"/></rootfiles></container>');

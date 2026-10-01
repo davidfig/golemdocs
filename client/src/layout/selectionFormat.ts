@@ -6,10 +6,10 @@
 // agrees. Font and size are never left blank: when the selection mixes them, the start of the
 // selection wins.
 
-import { FALLBACK_FAMILY } from '@word/layout';
-import { inlineLength, paragraphLength, StyleResolver, type Inline, type Paragraph, type Run, type RunProperties, type WordDocument } from '@word/docx';
-import { withFormat, type Position } from '@word/editor';
-import type { RunFormat } from '@word/ops';
+import { FALLBACK_FAMILY } from '@golemdocs/layout';
+import { inlineLength, paragraphLength, StyleResolver, type Inline, type Paragraph, type Run, type RunProperties, type WordDocument } from '@golemdocs/docx';
+import { withFormat, type Position } from '@golemdocs/editor';
+import type { RunFormat } from '@golemdocs/ops';
 import { isCode } from './formatting.ts';
 import type { Alignment, FormatState, ListKind, Mark, ParagraphChoice } from '../ui/actions.ts';
 

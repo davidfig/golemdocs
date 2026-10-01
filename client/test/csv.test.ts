@@ -2,8 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Paragraph, Table, TableCell } from '@word/docx';
-import { paragraphText } from '@word/docx';
+import type { Paragraph, Table, TableCell } from '@golemdocs/docx';
+import { paragraphText } from '@golemdocs/docx';
 import { csv, tsv } from '../src/formats/handlers/csv.ts';
 import { parseDelimited, sniffDelimiter } from '../src/formats/csv.ts';
 import { markdownToDocument } from '../src/formats/markdown.ts';

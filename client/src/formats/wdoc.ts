@@ -11,10 +11,10 @@
 //   extensions/<ns>.json  what only one format can express (Extensions), one file per namespace
 //   originals/source.pdf  the original PDF, when the document came from one
 
-import { ZipArchive, writeZip } from '@word/docx';
-import type { OdtExtension } from '@word/odt';
+import { ZipArchive, writeZip } from '@golemdocs/docx';
+import type { OdtExtension } from '@golemdocs/odt';
 import type { HtmlExtension } from './html.ts';
-import type { Annotation, FormField, PdfEdit } from '@word/pdf';
+import type { Annotation, FormField, PdfEdit } from '@golemdocs/pdf';
 import type { Format } from './convert.ts';
 import { t } from '../i18n/index.ts';
 
@@ -44,7 +44,7 @@ export interface Extensions {
   md?: MarkdownExtension;
   txt?: TextExtension;
   pdf?: PdfExtension;
-  /** What only ODF can express (styles, sections, frames...), see @word/odt. */
+  /** What only ODF can express (styles, sections, frames...), see @golemdocs/odt. */
   odt?: OdtExtension;
   /** What only HTML can express (head, tags, attributes, unmappable elements), see html.ts. */
   html?: HtmlExtension;

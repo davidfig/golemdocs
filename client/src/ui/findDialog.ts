@@ -1,6 +1,6 @@
 // Edit ▸ Find, Replace and Go To: one dialog with a tab for each, as in Word 2003. It isn't
 // modal, so the document stays usable while it is open. Find selects each match in turn (the
-// editor does the searching, see @word/editor); Go To scrolls to a page or selects a comment.
+// editor does the searching, see @golemdocs/editor); Go To scrolls to a page or selects a comment.
 
 import { t } from '../i18n/index.ts';
 import { h, makeDraggable } from './dom.ts';

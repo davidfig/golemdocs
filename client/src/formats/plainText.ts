@@ -3,8 +3,8 @@
 // line, nothing inferred, and `documentToText(await textToDocument(s)) === s` for any `s`
 // (after CRLF/CR normalisation and BOM removal).
 
-import { isMathInline, ListCounter, readMathInline, StyleResolver, toLatex, WordDocument } from '@word/docx';
-import type { Block, Inline, Paragraph, RunContent, Table } from '@word/docx';
+import { isMathInline, ListCounter, readMathInline, StyleResolver, toLatex, WordDocument } from '@golemdocs/docx';
+import type { Block, Inline, Paragraph, RunContent, Table } from '@golemdocs/docx';
 
 const MONOSPACE = 'Courier New';
 

@@ -1,11 +1,11 @@
 // Markdown import/export (src/formats/markdown.ts).
 // Run: node --experimental-transform-types --test test/markdown.test.ts
-// (the flag is only needed because @word/docx uses TypeScript parameter properties.)
+// (the flag is only needed because @golemdocs/docx uses TypeScript parameter properties.)
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { StyleResolver, WordDocument, paragraphText } from '@word/docx';
-import type { Block, Hyperlink, Inline, Paragraph, Run, Table } from '@word/docx';
+import { StyleResolver, WordDocument, paragraphText } from '@golemdocs/docx';
+import type { Block, Hyperlink, Inline, Paragraph, Run, Table } from '@golemdocs/docx';
 import { documentToMarkdown, markdownToDocument } from '../src/formats/markdown.ts';
 
 // --- Helpers --------------------------------------------------------------------------------------
@@ -618,7 +618,7 @@ test('pathological large inputs finish quickly (linear-ish)', async () => {
 
 // --- Comments (CriticMarkup) ----------------------------------------------------------------------
 
-import { commentRanges } from '@word/docx';
+import { commentRanges } from '@golemdocs/docx';
 
 /** The text each comment covers, by comment id. */
 function covered(doc: WordDocument): Map<string, string> {

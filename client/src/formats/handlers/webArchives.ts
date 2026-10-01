@@ -2,7 +2,7 @@
 // share one chunk (and the HTML chunk) instead of each being a few kilobytes of its own.
 
 import { documentToHtml, htmlToDocument } from '../html.ts';
-import { paragraphText } from '@word/docx';
+import { paragraphText } from '@golemdocs/docx';
 import { documentToEml, emailToDocument } from '../eml.ts';
 import { epubToHtml, htmlToEpub } from '../epub.ts';
 import type { EpubImage } from '../epub.ts';
@@ -11,7 +11,7 @@ import { htmlToMhtml, readMhtml } from '../mhtml.ts';
 import type { MhtmlResource } from '../mhtml.ts';
 import { t } from '../../i18n/index.ts';
 import type { FormatHandler } from '../convert.ts';
-import type { WordDocument } from '@word/docx';
+import type { WordDocument } from '@golemdocs/docx';
 
 const titleOf = (document: WordDocument): string => {
   for (const block of document.body) {

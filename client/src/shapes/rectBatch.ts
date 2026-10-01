@@ -1,4 +1,4 @@
-import { RECT_INSTANCE_BYTES as INSTANCE_BYTES } from '@word/layout';
+import { RECT_INSTANCE_BYTES as INSTANCE_BYTES } from '@golemdocs/layout';
 import { createProgram, uniforms } from '../gl/program.ts';
 import type { Camera } from '../view/camera.ts';
 

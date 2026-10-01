@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, WordDocument, type Inline, type Paragraph } from '@word/docx';
-import { FontSet, LayoutSession, layoutDocument } from '@word/layout';
-import { Replica } from '@word/ops';
+import { paragraphsIn, paragraphText, WordDocument, type Inline, type Paragraph } from '@golemdocs/docx';
+import { FontSet, LayoutSession, layoutDocument } from '@golemdocs/layout';
+import { Replica } from '@golemdocs/ops';
 import { Editor, type Command } from '../src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');

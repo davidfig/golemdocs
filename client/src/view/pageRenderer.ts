@@ -1,4 +1,4 @@
-import { packColor } from '@word/layout';
+import { packColor } from '@golemdocs/layout';
 import { RectBatchRenderer, type RectBatch } from '../shapes/rectBatch.ts';
 import { ImageRenderer, type DrawImage } from '../shapes/imageRenderer.ts';
 import { RectRenderer } from '../shapes/rectRenderer.ts';

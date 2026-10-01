@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { paragraphsIn, paragraphText, WordDocument, type Paragraph, type Run } from '@word/docx';
-import { Editor, type Command } from '@word/editor';
-import { FontSet, LayoutSession } from '@word/layout';
-import { Replica } from '@word/ops';
+import { paragraphsIn, paragraphText, WordDocument, type Paragraph, type Run } from '@golemdocs/docx';
+import { Editor, type Command } from '@golemdocs/editor';
+import { FontSet, LayoutSession } from '@golemdocs/layout';
+import { Replica } from '@golemdocs/ops';
 import { formatCommand, highlightName, type FormatAction } from '../src/layout/formatting.ts';
 import { FormatReader } from '../src/layout/selectionFormat.ts';
 

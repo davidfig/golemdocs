@@ -6,9 +6,9 @@
 // which list to continue. This works that out against the open document and the formatting
 // at the selection, and hands the editor commands it can apply as one undoable step.
 
-import { StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@word/docx';
-import type { Command, Editor, ParagraphFormat, TableEdit } from '@word/editor';
-import type { Operation, RunFormat } from '@word/ops';
+import { StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@golemdocs/docx';
+import type { Command, Editor, ParagraphFormat, TableEdit } from '@golemdocs/editor';
+import type { Operation, RunFormat } from '@golemdocs/ops';
 import { styleFor } from '../formats/markdownStyles.ts';
 import type { Action, CaseChange, FormatState, Mark } from '../ui/actions.ts';
 

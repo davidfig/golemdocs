@@ -3,7 +3,7 @@
 // document, so switching to another format and back to ODT restores it.
 //
 // Anything tied to a place in the text is anchored by paragraph id (the paragraph's
-// `w14:paraId`) and a model offset within it (see @word/docx edit/text.ts). On export, an
+// `w14:paraId`) and a model offset within it (see @golemdocs/docx edit/text.ts). On export, an
 // anchor whose paragraph no longer exists, or whose offset is past the paragraph's end, is
 // skipped silently; ranges whose end can't be placed after their start degrade to points.
 

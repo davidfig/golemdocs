@@ -11,7 +11,7 @@ Prefer fewer dependencies. Default to hand-coding functionality rather than pull
   - why hand-coding it isn't reasonable (rough size/complexity of a hand-rolled version)
   - its footprint: bundle size, transitive dependencies, and maintenance status
 - If a small helper, utility, or wrapper would do the job, write it instead.
-- Moving code between existing workspace packages (`@word/*`) is not adding a dependency and doesn't need approval.
+- Moving code between existing workspace packages (`@golemdocs/*`) is not adding a dependency and doesn't need approval.
 
 ## Bundle size and lazy loading
 
@@ -21,11 +21,11 @@ Load only the code a session needs. Every document format, every large panel and
 - **One feature, one chunk:** code that is always needed together (a format's reader, writer and helpers) goes behind a single entry module that is only ever `import()`ed, so it builds as one chunk rather than several tiny ones. Never import the same module both statically and dynamically: the static import defeats the split.
 - **Document formats:** each is a `FormatHandler` in `client/src/formats/handlers/`, registered in `HANDLERS` (`formats/convert.ts`). The always-present ones (Word, plain text) are a few hundred bytes of glue, so they are imported statically; anything larger is `import()`ed there.
 - **Fonts:** never load a face's metrics or atlas until a document uses it (`FontSet.ensure`). No font data goes in a JS bundle.
-- **Check your work:** run `pnpm --filter @word/client build` and read the chunk list. The layout worker (`layoutWorker-*.js`) and the main `index-*.js` should not grow because of a new format, and a new chunk under ~20 kB means it should be merged back in.
+- **Check your work:** run `pnpm --filter @golemdocs/client build` and read the chunk list. The layout worker (`layoutWorker-*.js`) and the main `index-*.js` should not grow because of a new format, and a new chunk under ~20 kB means it should be merged back in.
 
 ## Tests
 
-Add tests where reasonable. New logic, a bug fix or a changed behavior that can be exercised without a browser gets a test in the package's `test/` folder (`client/test/*.test.ts` for the client), next to the ones for the same area. Prefer testing the pure logic (readers, converters, layout, formatting) over DOM code. Run `pnpm --filter @word/client test` before finishing.
+Add tests where reasonable. New logic, a bug fix or a changed behavior that can be exercised without a browser gets a test in the package's `test/` folder (`client/test/*.test.ts` for the client), next to the ones for the same area. Prefer testing the pure logic (readers, converters, layout, formatting) over DOM code. Run `pnpm --filter @golemdocs/client test` before finishing.
 
 **End-to-end tests** (`e2e/`, Playwright, `pnpm e2e`) drive the real app in Chromium for what only a user does: menus, dialogs, toolbars, keystrokes, mouse, clipboard, downloads, collaboration. A feature that adds or changes UI gets a spec in the matching `e2e/<area>/` folder. They run their own client and server on :5273 and :3101 (never the `pnpm dev` ones) against a throwaway local database. The editor is a canvas, so read the document through `app.text()` and the `window` hooks, or by downloading a file; see `e2e/fixtures.ts`. Give parallel runs their own `--output=<dir>`, and never `pkill -f playwright` (it kills the servers). Billing and the assistant are not covered yet.
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseLatex } from '@word/docx';
+import { parseLatex } from '@golemdocs/docx';
 import { insertKey, PALETTE, PALETTE_TABS } from '../src/ui/mathPalette.ts';
 
 const key = (tab: keyof typeof PALETTE, tip: string) => PALETTE[tab].find((k) => k.tip === tip)!;

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ROOM_CLOSE, type ClientMessage, type MultiplayerServerMessage, type Person, type ServerMessage } from '@word/ops';
+import { ROOM_CLOSE, type ClientMessage, type MultiplayerServerMessage, type Person, type ServerMessage } from '@golemdocs/ops';
 import { RoomClient, type RoomHost, type RoomState, type SocketLike } from '../src/collab/roomClient.ts';
 
 class FakeSocket implements SocketLike {

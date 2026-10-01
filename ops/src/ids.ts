@@ -4,7 +4,7 @@
 // paragraph so they survive saving. Paragraphs without one (or with a duplicate) get one on
 // load, deterministically, so every client loading the same file assigns the same ids.
 
-import { paragraphsIn, type Block, type Paragraph, type Table, type TableCell, type TableRow, type WordDocument } from '@word/docx';
+import { paragraphsIn, type Block, type Paragraph, type Table, type TableCell, type TableRow, type WordDocument } from '@golemdocs/docx';
 
 const ID_ATTR = 'w14:paraId';
 const MAX_ID = 0x80000000;

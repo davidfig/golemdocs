@@ -1,8 +1,8 @@
 // Built-in sample documents, constructed through the same DOCX model as opened files so
 // every document takes one path: model -> layout -> renderer.
 
-import { WordDocument, type Paragraph, type Run, type RunProperties } from '@word/docx';
-import type { FontSet } from '@word/layout';
+import { WordDocument, type Paragraph, type Run, type RunProperties } from '@golemdocs/docx';
+import type { FontSet } from '@golemdocs/layout';
 
 const run = (text: string, properties: RunProperties = {}): Run => ({
   kind: 'run',

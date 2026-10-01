@@ -1,5 +1,5 @@
 // A document's collaboration room: who is here, and who processes the edits (the protocol and its
-// modes are described in @word/ops multiplayer.ts). This is the room without Cloudflare in it:
+// modes are described in @golemdocs/ops multiplayer.ts). This is the room without Cloudflare in it:
 // storage, files, connections and the alarm clock are handed in, so it can be tested in Node. The
 // Durable Object in room.ts supplies the real ones.
 //
@@ -7,8 +7,8 @@
 // transactions (persisted, so it survives the object being evicted) and turns it into .docx files:
 // on a timer while people keep editing, and for good when the epoch ends.
 
-import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomMode, type RoomRole } from '@word/ops';
-import type { Transaction } from '@word/ops';
+import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomMode, type RoomRole } from '@golemdocs/ops';
+import type { Transaction } from '@golemdocs/ops';
 import { applyLog } from './snapshot.ts';
 
 export interface RoomMeta {

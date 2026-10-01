@@ -1,11 +1,11 @@
 // Plain text import/export (src/formats/plainText.ts).
 // Run: node --experimental-transform-types --test test/plainText.test.ts
-// (the flag is only needed because @word/docx uses TypeScript parameter properties.)
+// (the flag is only needed because @golemdocs/docx uses TypeScript parameter properties.)
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { WordDocument, paragraphText } from '@word/docx';
-import type { Block, Paragraph, Run, Table } from '@word/docx';
+import { WordDocument, paragraphText } from '@golemdocs/docx';
+import type { Block, Paragraph, Run, Table } from '@golemdocs/docx';
 import { documentToMarkdown, markdownToDocument } from '../src/formats/markdown.ts';
 import { documentToText, textToDocument } from '../src/formats/plainText.ts';
 

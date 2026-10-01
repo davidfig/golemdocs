@@ -3,8 +3,8 @@
 import assert from 'node:assert/strict';
 import { deflateSync } from 'node:zlib';
 import { test } from 'node:test';
-import { WordDocument, ZipArchive } from '@word/docx';
-import type { Drawing, Inline, Paragraph } from '@word/docx';
+import { WordDocument, ZipArchive } from '@golemdocs/docx';
+import type { Drawing, Inline, Paragraph } from '@golemdocs/docx';
 import { epub, mhtml } from '../src/formats/handlers/webArchives.ts';
 import html from '../src/formats/handlers/html.ts';
 import rtf from '../src/formats/handlers/rtf.ts';
@@ -132,7 +132,7 @@ test('EPUB: pictures travel as files in the book and come back', async () => {
 });
 
 test('EPUB: pictures in other folders of a book, and with escaped names, are found', async () => {
-  const { writeZip } = await import('@word/docx');
+  const { writeZip } = await import('@golemdocs/docx');
   const enc = new TextEncoder();
   const f = (name: string, data: string | Uint8Array) => ({ name, data: typeof data === 'string' ? enc.encode(data) : data });
   const book = await writeZip([

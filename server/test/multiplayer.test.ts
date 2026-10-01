@@ -3,8 +3,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paragraphsIn, WordDocument } from '@word/docx';
-import { Replica, type MultiplayerServerMessage } from '@word/ops';
+import { paragraphsIn, WordDocument } from '@golemdocs/docx';
+import { Replica, type MultiplayerServerMessage } from '@golemdocs/ops';
 import { RoomClient, type RoomHost, type RoomState, type SocketLike } from '../../client/src/collab/roomClient.ts';
 import { INITIAL_META, RoomCore, type Peer, type RoomMeta, type RoomStore } from '../src/roomCore.ts';
 

@@ -1,17 +1,17 @@
 {
-  "name": "word",
+  "name": "golemdocs",
   "private": true,
   "version": "0.3.1",
   "type": "module",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
-    "dev:client": "pnpm --filter @word/client dev",
-    "dev:server": "pnpm --filter @word/server dev",
+    "dev:client": "pnpm --filter @golemdocs/client dev",
+    "dev:server": "pnpm --filter @golemdocs/server dev",
     "kill": "tsx scripts/kill.ts",
     "build": "pnpm --recursive build",
     "typecheck": "tsc && pnpm --recursive typecheck",
     "fonts": "tsx scripts/fonts/generate.ts",
-    "test": "pnpm --no-bail --filter @word/docx --filter @word/layout --filter @word/ops --filter @word/editor --filter @word/server --filter @word/client --filter @word/pdf --filter @word/odt test",
+    "test": "pnpm --no-bail --filter @golemdocs/docx --filter @golemdocs/layout --filter @golemdocs/ops --filter @golemdocs/editor --filter @golemdocs/server --filter @golemdocs/client --filter @golemdocs/pdf --filter @golemdocs/odt test",
     "test:coverage": "tsx scripts/coverage.ts",
     "e2e": "playwright test"
   },

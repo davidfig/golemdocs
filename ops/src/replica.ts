@@ -1,7 +1,7 @@
 // A document being edited: local edits as transactions, undo and redo, and (when connected)
 // collaboration. This is what an editor drives and what a server-side document could reuse.
 
-import type { Paragraph, WordDocument } from '@word/docx';
+import type { Paragraph, WordDocument } from '@golemdocs/docx';
 import { CollabClient, type ClientMessage, type RemoteChange, type ServerMessage } from './collab.ts';
 import { Engine, type Applied } from './engine.ts';
 import { History, type HistoryEntry, type Selection } from './history.ts';

@@ -5,7 +5,7 @@
 // becomes Markdown cells, code blocks become code cells, and the output, run counts and metadata of cells
 // whose code wasn't changed come back from the notebook that was opened (kept with the document).
 
-import { WordDocument, paragraphsIn, paragraphText } from '@word/docx';
+import { WordDocument, paragraphsIn, paragraphText } from '@golemdocs/docx';
 import { t } from '../i18n/index.ts';
 import { sniffImage } from './images.ts';
 import { markdownToDocument } from './markdown.ts';

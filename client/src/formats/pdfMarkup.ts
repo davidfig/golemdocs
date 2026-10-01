@@ -7,8 +7,8 @@
 // each marked line are looked up in the reflowed paragraphs, in reading order. Text that reflow
 // changed beyond recognition (or that isn't there) is skipped.
 
-import { commentEnd, commentReference, commentStart, formatText, insertInlines, paragraphsIn, paragraphText, type Paragraph, type WordDocument } from '@word/docx';
-import { parseDate, quadBoxes, type Annotation, type PdfDocument } from '@word/pdf';
+import { commentEnd, commentReference, commentStart, formatText, insertInlines, paragraphsIn, paragraphText, type Paragraph, type WordDocument } from '@golemdocs/docx';
+import { parseDate, quadBoxes, type Annotation, type PdfDocument } from '@golemdocs/pdf';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
 
 /** Word's highlight colors, which are named (w:highlight), with their RGB. */

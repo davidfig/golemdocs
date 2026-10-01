@@ -1,4 +1,4 @@
-# @word/ops
+# @golemdocs/ops
 
 Edits as operations: undo and redo, and collaboration through a central server.
 

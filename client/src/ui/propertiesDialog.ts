@@ -1,8 +1,8 @@
 // File ▸ Properties: the title, author and other details kept with the document (Summary), and its
 // dates and size (Statistics), as in Word 2003. The values live in the layout worker's document; this
-// asks for them and sends back what was changed (see @word/editor setProperties).
+// asks for them and sends back what was changed (see @golemdocs/editor setProperties).
 
-import type { DocumentProperties } from '@word/docx';
+import type { DocumentProperties } from '@golemdocs/docx';
 import { getLocale, t, type MessageKey } from '../i18n/index.ts';
 import type { WireCommand, WordStats } from '../layout/protocol.ts';
 import { h } from './dom.ts';

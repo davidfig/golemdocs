@@ -2,7 +2,7 @@
 // sets, each inserting LaTeX at the caret. A structure marks where the caret goes with `§`; if
 // text is selected, it goes there instead.
 
-import { SYMBOLS } from '@word/docx';
+import { SYMBOLS } from '@golemdocs/docx';
 
 export interface PaletteKey {
   /** What the key shows. */

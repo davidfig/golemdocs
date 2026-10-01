@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isMathInline, paragraphsIn, parseLatex, mathInline, readMathInline, WordDocument, type Paragraph } from '@word/docx';
+import { isMathInline, paragraphsIn, parseLatex, mathInline, readMathInline, WordDocument, type Paragraph } from '@golemdocs/docx';
 import { documentToHtml, htmlToDocument } from '../src/formats/html.ts';
 import { documentToMarkdown, markdownToDocument } from '../src/formats/markdown.ts';
 import { documentToText } from '../src/formats/plainText.ts';

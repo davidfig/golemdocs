@@ -2,7 +2,7 @@
 // Apart from the Markdown reader and writer so that formatting commands can define a style
 // without loading them.
 
-import type { Style } from '@word/docx';
+import type { Style } from '@golemdocs/docx';
 
 const MONO = 'Courier New';
 export const MONO_FONTS = { ascii: MONO, hAnsi: MONO, eastAsia: MONO, cs: MONO };

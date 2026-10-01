@@ -7,7 +7,7 @@ const CORPUS_DIR = path.resolve(import.meta.dirname, '../.cache/docx-corpus');
 const CORPUS_URL = '/__corpus/';
 
 /**
- * The round-trip test corpus (pnpm --filter @word/docx corpus), served by the dev server only:
+ * The round-trip test corpus (pnpm --filter @golemdocs/docx corpus), served by the dev server only:
  * GET /__corpus/ lists the files, /__corpus/<name> serves one. Builds never reference it.
  */
 function docxCorpus(): Plugin {

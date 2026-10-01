@@ -22,8 +22,8 @@ jobs:
       # The font metrics the layout tests use are committed; the .docx corpus is not. Without it
       # the round-trip and incremental-layout tests skip silently.
       - name: Fetch the .docx test corpus
-        run: pnpm --filter @word/docx corpus
+        run: pnpm --filter @golemdocs/docx corpus
       - run: pnpm test
       - name: Coverage
         run: pnpm test:coverage
-      - run: pnpm --filter @word/client build
+      - run: pnpm --filter @golemdocs/client build

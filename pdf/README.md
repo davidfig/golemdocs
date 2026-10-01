@@ -1,9 +1,9 @@
-# @word/pdf
+# @golemdocs/pdf
 
 A from-scratch, dependency-free PDF reader and writer. Reads real-world files (damaged, encrypted, incrementally updated), extracts text with positions, edits the object graph, and writes new documents with embedded, subset fonts and images.
 
 ```ts
-import { PdfDocument } from '@word/pdf';
+import { PdfDocument } from '@golemdocs/pdf';
 
 // Reading
 const doc = PdfDocument.load(bytes, { password: 'optional' });
@@ -51,9 +51,9 @@ const pdfBytes = await out.save();                // or { incremental: true } af
 ## Tests
 
 ```sh
-pnpm --filter @word/pdf test            # unit tests and fixtures (test/fixtures, see its README)
-pnpm --filter @word/pdf fetch-corpus    # once: pdf.js's ~1,000 test PDFs into .cache/pdfjs
-pnpm --filter @word/pdf corpus          # load → text → full and incremental save → reload, for every file
+pnpm --filter @golemdocs/pdf test            # unit tests and fixtures (test/fixtures, see its README)
+pnpm --filter @golemdocs/pdf fetch-corpus    # once: pdf.js's ~1,000 test PDFs into .cache/pdfjs
+pnpm --filter @golemdocs/pdf corpus          # load → text → full and incremental save → reload, for every file
 ```
 
 On the pdf.js corpus every file loads or is rejected for a reason (not a PDF, needs a password), none crash, and every full save reloads with the same pages and text. Extracted text averages 96% character recall against poppler's `pdftotext`, and most of the gap is files where poppler's output is itself garbage.

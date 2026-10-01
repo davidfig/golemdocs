@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { FontSet, packColor } from '@word/layout';
+import { FontSet, packColor } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument } from '../../pdf/src/index.ts';
 import { N, PdfDict, PdfStream, PdfString } from '../../pdf/src/core/objects.ts';
 import { toUnicodeCMap } from '../../pdf/src/write/fonts.ts';

@@ -66,8 +66,8 @@ Russian (`ru`).
    `name` is the language's own name (shown in the picker). Add `aliases` for tags the id doesn't
    cover, and `dir: 'rtl'` for right-to-left languages.
 4. Add a `pickLocale` case to `client/test/i18n.test.ts`.
-5. Run `pnpm --filter @word/client test`. It fails on unknown keys, placeholders that differ from
-   English, and keys the translation is missing. Then `pnpm --filter @word/client build` and check the
+5. Run `pnpm --filter @golemdocs/client test`. It fails on unknown keys, placeholders that differ from
+   English, and keys the translation is missing. Then `pnpm --filter @golemdocs/client build` and check the
    new chunk is roughly 30 kB and the main `index-*.js` and `layoutWorker-*.js` didn't grow.
 6. Open the app in the language and look through the menus and dialogs. Long words (German) and
    mnemonics are where translations most often go wrong.

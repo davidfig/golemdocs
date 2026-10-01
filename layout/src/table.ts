@@ -16,7 +16,7 @@ import {
   type TableRow,
   type TableStyleConditionType,
   type TableWidth,
-} from '@word/docx';
+} from '@golemdocs/docx';
 import { parseHexColor, type PageLayout } from './display.ts';
 import { BLACK, type LayoutContext } from './context.ts';
 import { emitLine, layoutParagraph, type LineLayout, type ParagraphLayout } from './paragraph.ts';

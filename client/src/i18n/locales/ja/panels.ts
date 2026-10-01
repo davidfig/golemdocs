@@ -12,6 +12,16 @@ export const panels: Partial<Messages> = {
   'panels.billing.earlier': '過去の月',
   'panels.billing.month': '{month}：{total}',
 
+  // Status bar (View > Status Bar)
+  'panels.footer.page': '{current} / {count} ページ',
+  'panels.footer.words.one': '{n} 語',
+  'panels.footer.words': '{n} 語',
+  'panels.footer.selection.one': '{selected} / {n} 語',
+  'panels.footer.selection': '{selected} / {n} 語',
+  'panels.footer.table': '{rows} 行 × {columns} 列',
+  'panels.footer.pixels': '{width} × {height} px',
+  'panels.footer.zoom': '{percent}%',
+
   // Comments
   'panels.comments.label': 'コメント',
   'panels.comments.title': 'コメント ({count})',

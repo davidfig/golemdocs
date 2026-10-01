@@ -390,6 +390,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'toggleGrid':
     case 'togglePagesPanel':
     case 'toggleRuler':
+    case 'toggleFooter':
     case 'toggleFormattingMarks':
       return true;
     case 'setFormMode':

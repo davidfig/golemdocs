@@ -96,7 +96,7 @@ export type WireCommand =
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   | { kind: 'spellAt'; page: number; x: number; y: number }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
-  | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean }
+  | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean; /** The status bar is asking: the answer comes back as `footerStats`, not `stats`. */ footer?: boolean }
   /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */
   | { kind: 'pasteHtml'; html: string; text: string }
   /** Ask for the document's properties (title, author…): the answer is `SelectionUpdate.docProperties`. */
@@ -277,6 +277,8 @@ export interface SelectionUpdate {
   docProperties?: DocumentProperties;
   /** Set once after `countWords`: the counts, or null when this document has none to give (a PDF shown as pages). */
   stats?: WordStats | null;
+  /** Set once after a `countWords` the status bar asked for. */
+  footerStats?: WordStats | null;
   /** The page size and margins of the section the selection is in, for the Page Setup dialog (twips). */
   page?: { width: number; height: number; landscape: boolean; top: number; bottom: number; left: number; right: number; gutter: number; header: number; footer: number };
   /** The columns of the section the selection is in, for the Columns dialog (spacing and width in twips). */
@@ -354,6 +356,8 @@ export interface WordStats {
   paragraphs: number;
   lines: number;
   selection: boolean;
+  /** A CSV or TSV document's size, for the status bar. */
+  table?: { rows: number; columns: number };
 }
 
 /** A problem the Spelling and Grammar check found, with the sentence around it. */

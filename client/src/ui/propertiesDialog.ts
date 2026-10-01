@@ -18,7 +18,7 @@ const SUMMARY: { key: keyof DocumentProperties; label: MessageKey; multiline?: b
   { key: 'comments', label: 'properties.comments', multiline: true },
 ];
 
-const COUNTS: { key: keyof Omit<WordStats, 'selection'>; label: MessageKey }[] = [
+const COUNTS: { key: keyof Omit<WordStats, 'selection' | 'table'>; label: MessageKey }[] = [
   { key: 'pages', label: 'wordCount.pages' },
   { key: 'words', label: 'wordCount.words' },
   { key: 'charactersWithoutSpaces', label: 'wordCount.charactersWithoutSpaces' },

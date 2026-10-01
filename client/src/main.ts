@@ -44,7 +44,7 @@ import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
-import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
+import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand, type WordStats } from './layout/protocol.ts';
 import { ImageRenderer } from './shapes/imageRenderer.ts';
 import { AtlasLibrary } from './text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
@@ -61,6 +61,7 @@ import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/past
 import { cleanDocumentName, displayDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
+import { Footer } from './ui/footer.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
@@ -147,6 +148,23 @@ try {
 }
 const roomForPages = matchMedia('(min-width: 900px)');
 const pagesOpen = (): boolean => pagesChoice ?? roomForPages.matches;
+
+// The status bar (View > Status Bar): off until chosen, then remembered in this browser.
+const FOOTER_KEY = 'word.footer';
+let footerOn = false;
+try {
+  footerOn = localStorage.getItem(FOOTER_KEY) === 'on';
+} catch {
+  // Storage unavailable: the bar starts off.
+}
+
+/** The counts of the whole document and of the selection, as the worker last gave them (null: none, or not asked for yet). */
+let footerWords: WordStats | null = null;
+let footerSelection: WordStats | null = null;
+let footerTimer = 0;
+/** The pixel size of the open picture, found once per opening (and which are being looked up). */
+const pictureSizes = new WeakMap<object, { width: number; height: number }>();
+const pictureSizing = new WeakSet<object>();
 
 // View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
 const VIEW_KEY = 'word.viewMode';
@@ -288,6 +306,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pdfTools.setMode(formMode);
   selectionFormat = {};
   canUndo = canRedo = false;
+  footerWords = footerSelection = null;
+  window.clearTimeout(footerTimer);
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
   renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded);
@@ -1668,6 +1688,11 @@ function applySelection(update: SelectionUpdate): void {
     propertiesDialog.reportStats(update.stats);
   }
   if (update.docProperties) propertiesDialog.reportProperties(update.docProperties);
+  if (update.footerStats !== undefined) {
+    if (update.footerStats?.selection) footerSelection = update.footerStats;
+    else footerWords = update.footerStats;
+    requestRender();
+  } else if (footerOn) refreshFooterSoon();
   formLayer.update(update.fields ?? null);
   pdfTextLayer.update(update.pdfText ?? null);
   pdfTools.update(update.pdfText ?? null, update.pdfObject ?? null);
@@ -1876,6 +1901,7 @@ function render(): void {
     zoom: camera.zoom,
     grid,
     pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
+    footer: footerOn,
     format: selectionFormat,
     canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
     canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
@@ -1892,6 +1918,7 @@ function render(): void {
   pointerLayer.position();
   commentsPanel.position();
   syncPagesPanel();
+  updateFooter();
   cropLayer.position();
   drawLayer.position();
   updateDebug();
@@ -2314,6 +2341,18 @@ function togglePagesPanel(): void {
   requestRender();
 }
 
+function toggleFooter(): void {
+  footerOn = !footerOn;
+  try {
+    localStorage.setItem(FOOTER_KEY, footerOn ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  if (footerOn) refreshFooter();
+  // The bar takes room from the document: the canvas is resized by its observer, and the view is placed again.
+  requestRender();
+}
+
 function toggleGrid(): void {
   grid = !grid;
   cameraPlaced = false;
@@ -2542,6 +2581,7 @@ const chromeHost = createChromeHost({
   notify: reportError,
   toggleGrid,
   togglePagesPanel,
+  toggleFooter,
   setViewMode: (mode) => {
     viewMode = mode;
     try {
@@ -2785,12 +2825,17 @@ const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<strin
       void chromeHost.perform({ kind: 'toggleGrid' });
       done.push(`grid ${showGrid ? 'on' : 'off'}`);
     }
+    const bar = optionalFlag(args, 'status_bar');
+    if (bar !== undefined && bar !== footerOn) {
+      void chromeHost.perform({ kind: 'toggleFooter' });
+      done.push(`status bar ${bar ? 'on' : 'off'}`);
+    }
     const marks = optionalFlag(args, 'formatting_marks');
     if (marks !== undefined && marks !== formattingMarks) {
       void chromeHost.perform({ kind: 'toggleFormattingMarks' });
       done.push(`formatting marks ${marks ? 'on' : 'off'}`);
     }
-    if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid or formatting_marks.');
+    if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid, status_bar or formatting_marks.');
     return `Changed the view: ${done.join(', ')}.`;
   },
   async edit_picture(args) {
@@ -2870,6 +2915,54 @@ function changePages(index: number, op: { op: 'delete' } | { op: 'move'; to: num
 }
 
 let panelCamera = '';
+
+// --- Status bar ------------------------------------------------------------------------
+
+const footer = new Footer(document.getElementById('footer')!);
+
+/** Asks the worker for the counts, once the document has been still for a moment. */
+function refreshFooterSoon(): void {
+  window.clearTimeout(footerTimer);
+  footerTimer = window.setTimeout(refreshFooter, 300);
+}
+
+function refreshFooter(): void {
+  if (!footerOn || !loaded || isPicture() || largeView.active) return;
+  send({ kind: 'countWords', whole: true, footer: true });
+  if (selection.text.length > 0) send({ kind: 'countWords', footer: true });
+  else footerSelection = null;
+}
+
+/** Shows or hides the bar and says what it says, for the kind of document open. */
+function updateFooter(): void {
+  const visible = footerOn && !largeView.active;
+  footer.setVisible(visible);
+  if (!visible) return;
+  let picture = null;
+  if (isPicture()) {
+    picture = pictureSizes.get(current) ?? null;
+    if (!picture && !pictureSizing.has(current)) {
+      const doc = current;
+      pictureSizing.add(doc);
+      void pictureBytes().then((bytes) => {
+        const size = sniffImage(bytes);
+        if (!size) return;
+        pictureSizes.set(doc, { width: size.width, height: size.height });
+        requestRender();
+      });
+    }
+  }
+  const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  const here = reflowing() ? null : nearestPage(pages, center.x, center.y);
+  footer.update({
+    kind: documentKind,
+    page: here ? { current: pages.indexOf(here) + 1, count: pages.length } : null,
+    zoom: camera.zoom,
+    words: footerWords,
+    selection: selection.text.length > 0 ? footerSelection : null,
+    picture,
+  });
+}
 
 /** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
 function syncPagesPanel(): void {

@@ -27,6 +27,7 @@ export const chrome = {
   'chrome.view.grid': 'Page &Grid',
   'chrome.view.pagesPanel': 'Page Side&bar',
   'chrome.view.ruler': '&Ruler',
+  'chrome.view.footer': 'St&atus Bar',
   'chrome.view.formattingMarks': 'Formatting &Marks',
   'chrome.view.zoomIn': 'Zoom &In',
   'chrome.view.zoomOut': 'Zoom &Out',

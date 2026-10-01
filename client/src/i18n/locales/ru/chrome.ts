@@ -29,6 +29,7 @@ export const chrome: Catalog = {
   'chrome.view.grid': 'Сет&ка страницы',
   'chrome.view.pagesPanel': 'Панель стр&аниц',
   'chrome.view.ruler': 'Ли&нейка',
+  'chrome.view.footer': 'Строка со&стояния',
   'chrome.view.formattingMarks': 'Непечатаемые &знаки',
   'chrome.view.zoomIn': 'У&величить',
   'chrome.view.zoomOut': 'У&меньшить',

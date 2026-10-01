@@ -29,6 +29,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.grid': 'ページ グリッド(&G)',
   'chrome.view.pagesPanel': 'ページ サイドバー(&B)',
   'chrome.view.ruler': 'ルーラー(&R)',
+  'chrome.view.footer': 'ステータス バー(&U)',
   'chrome.view.formattingMarks': '編集記号(&M)',
   'chrome.view.zoomIn': '拡大(&I)',
   'chrome.view.zoomOut': '縮小(&O)',

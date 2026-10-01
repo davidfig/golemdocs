@@ -29,6 +29,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.grid': '网格线(&G)',
   'chrome.view.pagesPanel': '页面侧栏(&B)',
   'chrome.view.ruler': '标尺(&R)',
+  'chrome.view.footer': '状态栏(&U)',
   'chrome.view.formattingMarks': '格式标记(&M)',
   'chrome.view.zoomIn': '放大(&I)',
   'chrome.view.zoomOut': '缩小(&O)',

@@ -110,6 +110,8 @@ export interface AppHooks {
   toggleGrid(): void;
   /** Pull the pages panel out beside the document, or push it back. */
   togglePagesPanel(): void;
+  /** Show or hide the status bar under the document. */
+  toggleFooter(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
   /** Print layout (pages) or Normal (the text reflowed to the window). */
@@ -152,6 +154,7 @@ const SUPPORTED = new Set<ActionKind>([
   'zoomBy',
   'toggleGrid',
   'togglePagesPanel',
+  'toggleFooter',
   'toggleFormattingMarks',
   'insertText',
   'convert',
@@ -356,6 +359,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleGrid();
         case 'togglePagesPanel':
           return app.togglePagesPanel();
+        case 'toggleFooter':
+          return app.toggleFooter();
         case 'insertText':
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':

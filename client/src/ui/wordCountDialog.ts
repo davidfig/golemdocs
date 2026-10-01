@@ -5,7 +5,7 @@ import { t, type MessageKey } from '../i18n/index.ts';
 import type { WireCommand, WordStats } from '../layout/protocol.ts';
 import { h } from './dom.ts';
 
-const ROWS: { key: keyof Omit<WordStats, 'selection'>; label: MessageKey }[] = [
+const ROWS: { key: keyof Omit<WordStats, 'selection' | 'table'>; label: MessageKey }[] = [
   { key: 'pages', label: 'wordCount.pages' },
   { key: 'words', label: 'wordCount.words' },
   { key: 'charactersWithoutSpaces', label: 'wordCount.charactersWithoutSpaces' },

@@ -104,6 +104,7 @@ export type Action =
   | { kind: 'toggleGrid' }
   | { kind: 'togglePagesPanel' }
   | { kind: 'toggleRuler' }
+  | { kind: 'toggleFooter' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
   | { kind: 'setFormMode'; mode: FormMode }
@@ -216,6 +217,8 @@ export interface ChromeState {
   /** The pages panel is pulled out beside the document. */
   pagesPanel: boolean;
   rulerVisible: boolean;
+  /** The status bar is showing under the document. */
+  footer: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
   format: FormatState;
@@ -271,6 +274,7 @@ export const DEFAULT_STATE: ChromeState = {
   grid: false,
   pagesPanel: false,
   rulerVisible: false,
+  footer: false,
   formattingMarks: false,
   trackChanges: false,
   format: {},

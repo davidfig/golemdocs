@@ -29,6 +29,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.grid': '&Grade de Página',
   'chrome.view.pagesPanel': 'Barra &Lateral de Páginas',
   'chrome.view.ruler': '&Régua',
+  'chrome.view.footer': 'Barra de &Status',
   'chrome.view.formattingMarks': '&Marcas de Formatação',
   'chrome.view.zoomIn': '&Aumentar Zoom',
   'chrome.view.zoomOut': 'Red&uzir Zoom',

@@ -2273,3 +2273,22 @@
 .wm-presence-more {
   border-color: var(--wm-field-border) !important;
 }
+
+/* The status bar (View > Status Bar, see ui/footer.ts): a strip under the document. */
+#footer {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  padding: 3px 10px;
+  border-top: 1px solid var(--wm-border);
+  background: var(--wm-face);
+  color: var(--wm-muted);
+  font: 12px/1.4 var(--wm-font);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+#footer[hidden] {
+  display: none;
+}

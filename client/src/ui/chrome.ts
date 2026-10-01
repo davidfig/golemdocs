@@ -269,6 +269,7 @@ export class Chrome {
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
+      a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
@@ -603,6 +604,7 @@ export class Chrome {
           cmd('view.editForm'),
           sep,
           cmd('view.pagesPanel'),
+          cmd('view.footer'),
           cmd('help.clip'),
           cmd('view.grid'),
           cmd('view.fullScreen'),

@@ -12,6 +12,20 @@ export const panels: Catalog = {
   'panels.billing.earlier': 'Предыдущие месяцы',
   'panels.billing.month': '{month}: {total}',
 
+  // Status bar (View > Status Bar)
+  'panels.footer.page': 'Страница {current} из {count}',
+  'panels.footer.words.one': '{n} слово',
+  'panels.footer.words.few': '{n} слова',
+  'panels.footer.words.many': '{n} слов',
+  'panels.footer.words': '{n} слов',
+  'panels.footer.selection.one': '{selected} из {n} слова',
+  'panels.footer.selection.few': '{selected} из {n} слов',
+  'panels.footer.selection.many': '{selected} из {n} слов',
+  'panels.footer.selection': '{selected} из {n} слов',
+  'panels.footer.table': '{rows} строк × {columns} столбцов',
+  'panels.footer.pixels': '{width} × {height} px',
+  'panels.footer.zoom': '{percent}%',
+
   // Comments
   'panels.comments.label': 'Примечания',
   'panels.comments.title': 'Примечания ({count})',

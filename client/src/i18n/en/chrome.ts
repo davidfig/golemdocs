@@ -145,7 +145,7 @@ export const chrome = {
   'chrome.help.privacy': '&Privacy Policy',
   'chrome.help.terms': '&Terms of Service',
   'chrome.help.changelog': '&What’s New',
-  'chrome.help.clip': '&Holden Assistant',
+  'chrome.help.clip': 'A&I Assistant',
   'chrome.perform.insert': 'Insert',
   'chrome.menu.file': '&File',
   'chrome.menu.edit': '&Edit',

@@ -22,7 +22,7 @@ You can use the editor without an account. Syncing, sharing and the assistant ne
 
 - Saving your documents to your account, so they follow you to your other devices.
 - Sharing documents with a link or with specific people, and editing together live.
-- The assistant, Holden, which uses AI to read and edit the document you have open.
+- The AI assistant, which uses AI to read and edit the document you have open.
 
 **Limits.** These apply to the subscription today. We may change them, and if we do we'll say so in the app.
 

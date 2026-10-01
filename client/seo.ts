@@ -139,31 +139,31 @@ function sitePage({ name, description, md, feature }: SitePage): string {
 }
 
 /**
- * Holden (the app's assistant, whose files are still named Clip), as a scripted sample on every marketing page: the app's own art and animation (`src/assistant/`),
+ * The AI assistant (whose files are still named Clip), as a scripted sample on every marketing page: the app's own art and animation (`src/assistant/`),
  * a bubble that says up front it is not AI (`site/clip.css`, `site/clip.js`), and canned replies chosen by keyword. It stays
  * hidden until the script runs, so a crawler or a browser with scripts off never sees a button that does nothing.
  */
 function withClip(html: string): string {
   const css = `${readFileSync(path.resolve(import.meta.dirname, 'src/assistant/assistant.css'), 'utf8')}\n${readFileSync(path.join(SITE, 'clip.css'), 'utf8')}`;
   const markup = `<div class="wm-clip" id="clip" data-state="idle" hidden>
-  <div class="wm-clip-panel" role="dialog" aria-label="Holden, a scripted demo" hidden>
-    <div class="wm-clip-head"><span>Holden <small>(website demo)</small></span><button class="wm-clip-close" type="button" aria-label="Close">×</button></div>
-    <p class="wm-clip-demo"><strong>This is a scripted demo, not AI.</strong> The real Holden lives in the app, where it uses AI to read and edit your document (for subscribers). Nothing you type here leaves this page.</p>
+  <div class="wm-clip-panel" role="dialog" aria-label="AI assistant, a scripted demo" hidden>
+    <div class="wm-clip-head"><span>AI <small>(website demo)</small></span><button class="wm-clip-close" type="button" aria-label="Close">×</button></div>
+    <p class="wm-clip-demo"><strong>This is a scripted demo, not AI.</strong> The real assistant lives in the app, where it uses AI to read and edit your document (for subscribers). Nothing you type here leaves this page.</p>
     <div class="wm-clip-log" role="log" aria-live="polite"></div>
     <div class="wm-clip-foot">
-      <form class="wm-clip-form"><textarea class="wm-clip-input" rows="1" placeholder="Say something to Holden" aria-label="Message to Holden"></textarea><button class="wm-clip-button" type="submit">Send</button></form>
-      <p class="wm-clip-credits">Want the real one? <a href="/">Open Golem Docs</a> and look for Holden in the corner.</p>
+      <form class="wm-clip-form"><textarea class="wm-clip-input" rows="1" placeholder="Say something to the assistant" aria-label="Message to the assistant"></textarea><button class="wm-clip-button" type="submit">Send</button></form>
+      <p class="wm-clip-credits">Want the real one? <a href="/">Open Golem Docs</a> and look for the AI assistant in the corner.</p>
     </div>
   </div>
-  <button class="wm-clip-body" type="button" aria-expanded="false" aria-haspopup="dialog" aria-label="Chat with Holden, a scripted demo">${CLIP_SVG}</button>
-  <button class="wm-clip-hide" type="button" aria-label="Hide Holden">×</button>
+  <button class="wm-clip-body" type="button" aria-expanded="false" aria-haspopup="dialog" aria-label="Chat with the AI assistant, a scripted demo">${CLIP_SVG}</button>
+  <button class="wm-clip-hide" type="button" aria-label="Hide AI">×</button>
 </div>
 <script>${readFileSync(path.join(SITE, 'clip.js'), 'utf8')}</script>
 `;
   return html.replace('</style>', () => `${css}\n    </style>`).replace('</body>', () => `${markup}  </body>`);
 }
 
-/** The home page (`public/home/index.html`), with Holden. */
+/** The home page (`public/home/index.html`), with the AI assistant. */
 const homePage = (): string => withClip(readFileSync(HOME, 'utf8'));
 
 /**

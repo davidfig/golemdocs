@@ -126,7 +126,7 @@ test.describe('Help menu documents', () => {
     await app.goto('?doc=welcome');
     await openMenu(app, 'Help');
     const labels = await page.locator('.wm-menu .wm-item span.label').allTextContents();
-    expect(labels).toEqual(['Keyboard Shortcuts', 'Send Feedback…', 'Holden Assistant', 'What’s New', 'About Golem Docs', 'Golem Docs Website', 'Privacy Policy', 'Terms of Service']);
+    expect(labels).toEqual(['Keyboard Shortcuts', 'Send Feedback…', 'AI Assistant', 'What’s New', 'About Golem Docs', 'Golem Docs Website', 'Privacy Policy', 'Terms of Service']);
   });
 });
 

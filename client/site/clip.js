@@ -1,5 +1,5 @@
-// Holden on the marketing pages: the app's assistant, as a scripted sample. No AI and no network: replies are picked from a
-// short list by keywords. The bubble says so at the top, and the real Holden (which is in the app) is the only one that uses AI.
+// The AI assistant on the marketing pages, as a scripted sample. No AI and no network: replies are picked from a
+// short list by keywords. The bubble says so at the top, and the real assistant (which is in the app) is the only one that uses AI.
 (function () {
   var root = document.getElementById('clip');
   if (!root) return;
@@ -15,7 +15,7 @@
   } catch (e) {}
   root.hidden = false;
 
-  // --- What Holden says -----------------------------------------------------------------------------------------------------
+  // --- What the assistant says -----------------------------------------------------------------------------------------------------
   var RULES = [
     [/\b(are you|is this|you)\b.*\b(ai|gpt|chatgpt|claude|llm|bot|robot|real|smart|intelligent|alive)\b|\b(ai|gpt|chatgpt|llm)\b/i, [
       'Honest answer: not here. On this page I am a handful of if-statements in a trench coat. In the app, the real me is an AI that can read and edit your document. That one is for subscribers.',
@@ -51,8 +51,8 @@
     'Beep boop. Wait, that is a robot. I am a clip.',
     'Great question! Sadly, I only have canned answers. The real me can look at your actual document and tell you.',
   ];
-  var GREETING = 'Hi, I am Holden! I am the website demo, so I am all script and no brain. Ask me something silly.';
-  var REMINDER = 'By the way, I am not AI. I am a lookup table with eyebrows. The real Holden is in the app and can rewrite your paragraphs.';
+  var GREETING = 'Hi! I am the website demo, so I am all script and no brain. Ask me something silly.';
+  var REMINDER = 'By the way, I am not AI. I am a lookup table with eyebrows. The real assistant is in the app and can rewrite your paragraphs.';
 
   var last = '';
   var count = 0;
@@ -142,7 +142,7 @@
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(input.value); }
   });
 
-  // Typing: Holden raises an eyebrow and wobbles while you type, and settles a moment after you stop.
+  // Typing: The assistant raises an eyebrow and wobbles while you type, and settles a moment after you stop.
   var settle = 0;
   input.addEventListener('input', function () {
     input.style.height = 'auto';

@@ -96,15 +96,15 @@ test.describe('home page', () => {
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 
-  test('Holden the scripted demo opens, says it is not AI and answers', async ({ page }) => {
+  test('the scripted AI demo opens, says it is not AI and answers', async ({ page }) => {
     await page.goto('/home');
-    const button = page.getByRole('button', { name: /Chat with Holden/ });
+    const button = page.getByRole('button', { name: /Chat with the AI assistant/ });
     await expect(button).toBeVisible();
     await button.click();
-    const panel = page.getByRole('dialog', { name: /Holden/ });
+    const panel = page.getByRole('dialog', { name: /AI assistant/ });
     await expect(panel).toBeVisible();
     await expect(panel).toContainText('This is a scripted demo, not AI.');
-    await panel.getByRole('textbox', { name: 'Message to Holden' }).fill('hello');
+    await panel.getByRole('textbox', { name: 'Message to the assistant' }).fill('hello');
     await panel.getByRole('button', { name: 'Send' }).click();
     await expect(panel.getByRole('log')).toContainText('hello');
   });

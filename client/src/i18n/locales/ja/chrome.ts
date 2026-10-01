@@ -147,7 +147,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.privacy': 'プライバシー ポリシー(&P)',
   'chrome.help.terms': '利用規約(&T)',
   'chrome.help.changelog': '新機能(&W)',
-  'chrome.help.clip': 'Holden アシスタント(&H)',
+  'chrome.help.clip': 'AI アシスタント(&I)',
   'chrome.perform.insert': '挿入',
   'chrome.menu.file': 'ファイル(&F)',
   'chrome.menu.edit': '編集(&E)',

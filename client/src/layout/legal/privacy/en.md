@@ -23,7 +23,7 @@ Golem Docs (golemdocs.com) is a document editor that runs in your browser. This 
 
 **Your subscription and payments.** Subscriptions are sold and billed by [Polar](https://polar.sh), our merchant of record. When you start to subscribe, we send Polar your account identifier and, if your sign-in provider has verified it, your email address, to fill in the checkout. Polar collects your name, billing details and payment details itself, through its payment processor, and we never receive your card number. We keep only which Polar subscription is yours, its status and its dates, so we know whether you have one. Polar's [privacy policy](https://polar.sh/legal/privacy) applies to what it collects.
 
-**The assistant.** If you subscribe and ask the assistant (Holden) something, your messages and the parts of your document it reads to answer are sent to an AI language model that runs on Cloudflare's Workers AI service. Nothing is sent unless you ask it. We don't keep the conversation on our servers, and the page doesn't save it either. We keep only a running total, per account and month, of how much of your monthly allowance you have used.
+**The assistant.** If you subscribe and ask the AI assistant something, your messages and the parts of your document it reads to answer are sent to an AI language model that runs on Cloudflare's Workers AI service. Nothing is sent unless you ask it. We don't keep the conversation on our servers, and the page doesn't save it either. We keep only a running total, per account and month, of how much of your monthly allowance you have used.
 
 **Feedback.** If you use Help ▸ Send Feedback, we keep your message along with your account, so we can read it and reply.
 

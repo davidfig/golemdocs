@@ -61,7 +61,8 @@ export type DialogName =
 export type Action =
   // File
   /** The screen of thumbnails of every document. */
-  | { kind: 'new' }
+  /** A blank document. `folderId` is where it is filed (null: the top level); left out, the folder of the open document. */
+  | { kind: 'new'; folderId?: string | null }
   | { kind: 'open' }
   | { kind: 'import' }
   | { kind: 'openSample'; id: string }

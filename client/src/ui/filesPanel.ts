@@ -59,6 +59,8 @@ export class FilesPanel {
   private readonly expanded = new Set<string>();
   private generation = 0;
   private timer = 0;
+  /** The open document the tree was last opened up to, so a folder closed afterwards stays closed. */
+  private revealed = '';
 
   constructor(parent: HTMLElement, private readonly host: FilesPanelHost) {
     this.el.hidden = true;
@@ -90,8 +92,10 @@ export class FilesPanel {
   setVisible(visible: boolean): void {
     if (this.el.hidden === !visible) return;
     this.el.hidden = !visible;
-    if (visible) void this.refresh();
-    else this.generation++;
+    if (visible) {
+      this.revealed = '';
+      void this.refresh();
+    } else this.generation++;
   }
 
   /** Lists again soon, if it's showing (something was saved, uploaded or moved). */
@@ -110,12 +114,14 @@ export class FilesPanel {
     this.entries = start.entries;
     this.folders = start.folders;
     this.render();
+    this.reveal();
     const library = await loadLibrary(this.host.account(), this.host.signedIn());
     if (generation !== this.generation) return;
     this.entries = library.entries;
     // Unless they couldn't be listed: what is on screen is better than none.
     if (library.folders) this.folders = library.folders;
     this.render();
+    this.reveal();
   }
 
   /** Marks the open document again (another was opened, or it was just saved for the first time). */
@@ -129,6 +135,30 @@ export class FilesPanel {
       if (on) el.setAttribute('aria-current', 'true');
       else el.removeAttribute('aria-current');
     }
+    this.reveal();
+  }
+
+  /** Opens the folders the open document is in and scrolls to it, once for each document that is opened. */
+  private reveal(): void {
+    const here = this.host.current();
+    const key = `${here.localId}|${here.cloudId}`;
+    if (key === this.revealed) return;
+    const entry = this.entries.find((e) => (here.localId !== null && e.local?.id === here.localId) || (here.cloudId !== null && e.cloud?.id === here.cloudId));
+    if (!entry) return; // not listed yet: tried again when it is
+    this.revealed = key;
+    const opened: string[] = [];
+    for (let id = folderOf(entry, this.folders); id !== null && !opened.includes(id); id = this.folders.find((f) => f.id === id)?.parentId ?? null) opened.push(id);
+    const closed = opened.filter((id) => !this.expanded.has(id));
+    if (closed.length) {
+      for (const id of closed) this.expanded.add(id);
+      try {
+        localStorage.setItem(OPEN_KEY, JSON.stringify([...this.expanded]));
+      } catch {
+        // Storage unavailable: they stay open for this session only.
+      }
+      this.render();
+    }
+    this.tree.querySelector<HTMLElement>(`[data-row="d:${CSS.escape(entry.key)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
 
   private render(): void {

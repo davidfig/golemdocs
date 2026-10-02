@@ -28,7 +28,7 @@ import {
   type SavedInfo,
 } from './storage/local.ts';
 import { folderOf, folderPath } from './folders.ts';
-import { forgetInCatalogue, hasUnsentChanges, mergeLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
+import { forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, mergeLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -2747,6 +2747,18 @@ function fontFamilies(withFile = false): Promise<string[]> {
 // Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
 const chromeHost = createChromeHost({
   dashboard: () => dashboard.toggle(),
+  prepareNew: async (folderId) => {
+    if (folderId !== undefined) {
+      newDocumentFolder = folderId;
+      return;
+    }
+    // A document not saved yet keeps the folder it is waiting to be filed in.
+    const localId = current.localId;
+    if (!localId) return;
+    const { entries, folders } = await loadLocalLibrary(accountForFiles());
+    const here = entries.find((e) => e.local?.id === localId);
+    newDocumentFolder = here ? folderOf(here, folders) : null;
+  },
   loading: (name) => (name === null ? loadingScreen.hide() : showLoading(name)),
   canvas,
   camera,
@@ -2991,8 +3003,7 @@ canvas.addEventListener('contextmenu', (e) => {
 const dashboard = new Dashboard(document.body, {
   currentDocument: () => ({ localId: current.localId, cloudId: current.shared?.id ?? null }),
   newDocument: (folderId) => {
-    newDocumentFolder = folderId;
-    void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput);
+    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
   },
   open: (entry) => {
     newDocumentFolder = null;
@@ -3291,8 +3302,7 @@ const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
     if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });
   },
   newDocument: (folderId) => {
-    newDocumentFolder = folderId;
-    void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput);
+    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
   },
   importFile: (folderId) => {
     newDocumentFolder = folderId;

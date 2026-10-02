@@ -2,6 +2,12 @@
 
 ## 0.7.1 - Unreleased
 
+### Added
+- Opening a document now shows it in the Files sidebar, with the folders it is in opened and scrolled into view.
+
+### Changed
+- File › New started from inside a document now puts the new document in the same folder as the one you are in.
+
 ### Fixed
 - Renaming a document from the name in the menu bar now updates the Files sidebar and document list right away, and the new name is kept for the next visit (also for documents shared with you).
 

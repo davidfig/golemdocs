@@ -19,6 +19,8 @@ import { t } from './i18n/index.ts';
 export interface AppHooks {
   /** Show (or hide) the dashboard of all documents. */
   dashboard(): void;
+  /** Chooses the folder a new document is filed in: `folderId`, or (left out) the open document's. */
+  prepareNew(folderId: string | null | undefined): Promise<void>;
   canvas: HTMLCanvasElement;
   camera: Camera;
   pages(): readonly GpuPage[];
@@ -272,6 +274,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'setFormMode':
           return app.setFormMode(action.mode);
         case 'new':
+          await app.prepareNew(action.folderId);
           untitled++;
           app.open({ kind: 'blank', name: `${t('app.blankDocumentName')}${untitled}` });
           return;

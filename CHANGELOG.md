@@ -32,6 +32,7 @@
 - File › Download All keeps your folders: documents are zipped inside the same folder structure.
 
 ### Fixed
+- Deleting several ticked folders or documents on the Documents screen now deletes them, instead of them coming back a moment later.
 - A deleted folder or document no longer flashes back into the Files Sidebar for a moment before disappearing.
 
 ## 0.5.1 - 2026-10-01

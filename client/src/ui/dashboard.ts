@@ -129,7 +129,7 @@ export class Dashboard {
       }, false);
     });
     const moveSelected = action('moveToFolder', t('panels.dashboard.move'), t('panels.dashboard.moveSelected'), () => this.moveSelection());
-    const deleteSelected = this.deleteButton(() => this.selectedItems(), (before) => this.deleteSelection(before), 'trash');
+    const deleteSelected = this.deleteButton(() => this.selectedItems(), (before, items) => this.deleteSelection(before, items), 'trash');
     const clearSelection = action('close', t('panels.dashboard.clearSelection'), t('panels.dashboard.clearSelection'), () => this.setSelection([]));
     this.selectionCount = h('span', { class: 'wm-dash-selected', attrs: { role: 'status' } });
     this.selectionBar = h('div', { class: 'wm-dash-selection' }, this.selectionCount, moveSelected, deleteSelected, clearSelection);
@@ -533,8 +533,8 @@ export class Dashboard {
     );
   }
 
-  private async deleteSelection(before: Listed): Promise<void> {
-    const { docs, folders } = this.selectedItems();
+  /** Deletes what was ticked when Delete was confirmed (the screen, and so the selection, has already lost them). */
+  private async deleteSelection(before: Listed, { docs, folders }: { docs: LibraryEntry[]; folders: Folder[] }): Promise<void> {
     this.selected.clear();
     // Folders go with the documents in them (once each), and with the selected documents: one call.
     const inFolders = new Set(folders.flatMap((f) => folderContents(before.folders, before.entries, f).items));
@@ -684,7 +684,7 @@ export class Dashboard {
   }
 
   /** A Delete button: asks first, in a dialog listing everything that would go, then runs `run`. */
-  private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: (before: Listed) => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
+  private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: (before: Listed, items: { docs: LibraryEntry[]; folders: Folder[] }) => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
     const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
     this.setLabel(button, label, icon, iconOnly);
     button.addEventListener('click', async () => {
@@ -698,7 +698,7 @@ export class Dashboard {
       this.folders = left.folders;
       this.entries = left.entries;
       this.render();
-      run(before).then(
+      run(before, { docs, folders }).then(
         () => this.refresh(),
         (error) => {
           this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });

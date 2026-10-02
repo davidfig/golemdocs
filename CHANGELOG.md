@@ -31,6 +31,9 @@
 - Deleting the document you have open now switches to the Welcome document, instead of leaving the deleted one on screen.
 - File › Download All keeps your folders: documents are zipped inside the same folder structure.
 
+### Fixed
+- A deleted folder or document no longer flashes back into the Files Sidebar for a moment before disappearing.
+
 ## 0.5.1 - 2026-10-01
 
 ### Fixed

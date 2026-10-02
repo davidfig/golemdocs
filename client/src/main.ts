@@ -28,7 +28,7 @@ import {
   type SavedInfo,
 } from './storage/local.ts';
 import { folderOf, folderPath } from './folders.ts';
-import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
+import { forgetInCatalogue, hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -1346,6 +1346,7 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
   // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
   const refused = new Map<string, string>();
   if (account && (cloudIds.length || folderIds.length)) for (const f of (await deleteDocuments(cloudIds, folderIds)).failed) if (f.error !== 'not found') refused.set(f.id, f.error);
+  if (account) forgetInCatalogue(account, cloudIds.filter((id) => !refused.has(id)), folderIds.filter((id) => !refused.has(id)));
   for (const entry of entries) {
     if (refused.has(entry.cloud?.id ?? entry.local?.cloudId ?? '')) continue;
     if (!entry.local) continue;

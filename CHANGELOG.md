@@ -33,10 +33,12 @@
 
 ### Fixed
 - Right-clicking in the Files Sidebar and choosing New folder now leaves the new folder's name ready to type. It used to lose the name box straight away, as the list refreshed.
+- A deleted folder or document no longer flashes back into the Files Sidebar for a moment before disappearing.
 
 ## 0.5.1 - 2026-10-01
 
 ### Fixed
+- Deleting a folder that has no documents in it (only subfolders) no longer fails with "The number of keys in the request must be between 1 and 1000".
 - The Files Sidebar now shows your saved folders and documents the moment the app opens, instead of only this browser's files until the account has answered.
 - A document name that fits in the menu bar is no longer cut short with “…”.
 

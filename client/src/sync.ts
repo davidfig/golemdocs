@@ -132,6 +132,13 @@ function writeCatalogue(user: User, cloud: CloudDocument[], shared: CloudDocumen
   }
 }
 
+/** Takes deleted documents and folders out of the cached catalogue, so the next head start doesn't show them again. */
+export function forgetInCatalogue(user: User, cloudIds: readonly string[], folderIds: readonly string[]): void {
+  const cached = readCatalogue(user);
+  if (!cached) return;
+  writeCatalogue(user, cached.cloud.filter((d) => !cloudIds.includes(d.id)), cached.shared, cached.folders.filter((f) => !folderIds.includes(f.id)));
+}
+
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
 export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; shared: CloudDocument[]; folders: Folder[] }> {
   const cached = readCatalogue(user);

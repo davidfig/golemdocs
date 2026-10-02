@@ -67,3 +67,23 @@ test('Shift-click ticks a range from the last card ticked', async ({ app, page }
   await card(page, 'beta.md').click({ modifiers: ['Shift'] });
   await expect(dashboard(page).getByRole('status').filter({ hasText: 'selected' })).toHaveText('2 selected');
 });
+
+test('deleting several ticked folders deletes them for good, not just off the screen', async ({ app, page }) => {
+  await setup(app);
+  for (const name of ['One', 'Two']) {
+    await dashboard(page).getByRole('button', { name: 'New folder', exact: true }).click();
+    const field = dashboard(page).getByRole('textbox', { name: 'Folder name' });
+    await field.fill(name);
+    await field.press('Enter');
+  }
+  await expect(folders(page)).toHaveCount(2);
+  await dashboard(page).getByRole('heading').click();
+  await page.keyboard.press('Control+a');
+  await dashboard(page).locator('.wm-dash-selection').getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(folders(page)).toHaveCount(0);
+  // Not back once the dashboard has listed again.
+  await page.waitForTimeout(3000);
+  await expect(folders(page)).toHaveCount(0);
+  await expect(cards(page)).toHaveCount(0);
+});

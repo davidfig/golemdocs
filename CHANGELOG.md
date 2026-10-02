@@ -6,7 +6,7 @@
 - Tools › Show Markdown at the Caret (experimental, off by default): in a Markdown document, the line the caret is in shows its Markdown prefix (`## `, `- [ ] `), and the bold, italic, strikethrough, code or link text the caret is in shows its `**`, `*`, `~~`, `` ` `` or `[](url)` in gray, while the rest stays formatted. Edit the Markdown, then move the caret away to see it formatted. Showing and hiding the Markdown is not an edit, so Undo only sees what you changed.
 
 ### Fixed
-- Moving a folder or document in the sidebar no longer flickers back to where it was and then jumps to the new place.
+- Moving a folder or document, or making a folder, in the sidebar no longer flickers back to how it was before showing the change.
 - Saving a Word document no longer rewrites its comments when they haven't changed, so Word's own comment details are kept exactly as they were.
 
 ## 0.6.0 - 2026-10-02

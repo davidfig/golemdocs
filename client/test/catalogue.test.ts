@@ -19,7 +19,7 @@ const folder = (id: string, parentId: string | null) => ({ id, name: id, parentI
 test('a moved folder is moved in the cached catalogue', () => {
   store.set('wm.catalogue', JSON.stringify({ user: 'u', cloud: [], shared: [], folders: [folder('a', null), folder('b', null)] }));
   updateFoldersInCatalogue([folder('a', 'b')]);
-  assert.deepEqual(read().folders.map((f: { id: string; parentId: string | null }) => [f.id, f.parentId]), [['b', null], ['a', 'b']].reverse());
+  assert.deepEqual(read().folders.map((f: { id: string; parentId: string | null }) => [f.id, f.parentId]), [['a', 'b'], ['b', null]]);
   assert.equal(read().user, 'u');
 });
 

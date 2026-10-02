@@ -1,9 +1,10 @@
 /* The dashboard: a screen over the editor's canvas (see dashboard.ts). Uses the chrome's tokens. */
 
 .wm-dashboard {
-  position: absolute;
+  /* Over the whole window, the menu bar and toolbars too (z-index 10), but under menus and dialogs (100+). */
+  position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   background: var(--wm-gutter, #eeeeea);

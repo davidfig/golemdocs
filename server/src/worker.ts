@@ -224,6 +224,88 @@ async function readBody(request: Request, limit: number, what: string): Promise<
   return bytes;
 }
 
+/**
+ * Most bytes one batch upload may carry: as much as one document may, and no more, because a Worker
+ * has 128 MB of memory and the whole body is held at once (a single large document must still fit).
+ */
+const MAX_BATCH_BYTES = MAX_BYTES + 1024 * 1024;
+/** D1 allows 100 bound values in a statement (developers.cloudflare.com/d1/platform/limits): a row of documents has 7, so 14 rows fit. */
+const ROWS_PER_INSERT = 14;
+
+type Uploaded = { document: ReturnType<typeof describe> } | { error: string };
+
+/**
+ * POST /api/documents/batch: the body is a 4-byte big-endian length, that many bytes of JSON
+ * `{ documents: [{ name, size, folderId? }] }`, then the documents' bytes one after the other.
+ * Answers one result per document, in order: the document, or why it wasn't saved (the others
+ * still are). A batch costs a few requests to Cloudflare's API however many documents it holds,
+ * where one request per document would use up its rate limit.
+ */
+async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuffer): Promise<Uploaded[]> {
+  const bad = () => new HttpError(400, 'expected a batch of documents');
+  if (body.byteLength < 4) throw bad();
+  const headerLength = new DataView(body).getUint32(0);
+  if (4 + headerLength > body.byteLength) throw bad();
+  let header: { documents?: unknown };
+  try {
+    header = JSON.parse(new TextDecoder().decode(new Uint8Array(body, 4, headerLength)));
+  } catch {
+    throw bad();
+  }
+  const list = header.documents;
+  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_BATCH) throw new HttpError(400, `expected at most ${MAX_BATCH} documents`);
+  let offset = 4 + headerLength;
+  const items = list.map((raw: { name?: unknown; size?: unknown; folderId?: unknown }) => {
+    if (typeof raw?.size !== 'number' || !Number.isInteger(raw.size) || raw.size < 0 || (raw.folderId != null && typeof raw.folderId !== 'string')) throw bad();
+    const item = { name: cleanName(typeof raw.name === 'string' ? raw.name : null) ?? 'Untitled.docx', folderId: (raw.folderId as string | null | undefined) ?? null, start: offset, size: raw.size };
+    offset += raw.size;
+    return item;
+  });
+  if (offset !== body.byteLength) throw bad();
+
+  // One query for every folder named, rather than one per document.
+  const wanted = [...new Set(items.flatMap((i) => (i.folderId === null ? [] : [i.folderId])))];
+  const folders = new Set<string>();
+  for (let i = 0; i < wanted.length; i += 90) {
+    const chunk = wanted.slice(i, i + 90);
+    for (const row of await db.all<{ id: string }>(`SELECT id FROM folders WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk)) folders.add(row.id);
+  }
+
+  const results: Uploaded[] = [];
+  const saved: { id: string; name: string; size: number; folderId: string | null; index: number }[] = [];
+  const now = Date.now();
+  await Promise.all(
+    items.map(async (item, index) => {
+      if (item.size === 0) return void (results[index] = { error: 'empty body' });
+      if (item.size > MAX_BYTES) return void (results[index] = { error: 'document too large' });
+      if (item.folderId !== null && !folders.has(item.folderId)) return void (results[index] = { error: 'no such folder' });
+      const id = crypto.randomUUID();
+      try {
+        // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
+        await env.FILES.put(`${userId}/${id}.docx`, new Uint8Array(body, item.start, item.size), { httpMetadata: { contentType: DOCX } });
+        saved.push({ id, name: item.name, size: item.size, folderId: item.folderId, index });
+      } catch (error) {
+        console.error(error);
+        results[index] = { error: 'internal error' };
+      }
+    }),
+  );
+
+  const statements: { sql: string; params: unknown[] }[] = [];
+  for (let i = 0; i < saved.length; i += ROWS_PER_INSERT) {
+    const rows = saved.slice(i, i + ROWS_PER_INSERT);
+    statements.push({
+      sql: `INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES ${rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      params: rows.flatMap((r) => [r.id, r.name, r.size, `${userId}/${r.id}.docx`, now, now, r.folderId]),
+    });
+  }
+  // If this fails part way the objects stay unreferenced and the caller sees a failed request.
+  await db.runAll(statements);
+  await Promise.all(saved.map((r) => registerOwner(env, r.id, userId)));
+  for (const r of saved) results[r.index] = { document: describe({ id: r.id, name: r.name, size: r.size, created_at: now, updated_at: now, thumb_at: null, folder_id: r.folderId } as DocumentRow) };
+  return results;
+}
+
 const readDocx = (request: Request) => readBody(request, MAX_BYTES, 'document');
 
 /**
@@ -379,7 +461,8 @@ const handler: ExportedHandler = {
       const match = /^\/api\/(documents|shared|folders)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub, granteeId] = match;
-      if (id !== undefined && !ID.test(id)) throw new HttpError(404, 'not found');
+      const batchUpload = collection === 'documents' && id === 'batch' && sub === undefined;
+      if (id !== undefined && !batchUpload && !ID.test(id)) throw new HttpError(404, 'not found');
       if (collection === 'shared' && id !== undefined) throw new HttpError(404, 'not found');
       if (collection === 'folders' && sub !== undefined) throw new HttpError(404, 'not found');
 
@@ -443,6 +526,13 @@ const handler: ExportedHandler = {
       if (!id && request.method === 'GET') {
         if (!ownDb) return json([]);
         return json((await listDocuments(env, userId, ownDb)).map((row) => describe(row)));
+      }
+
+      // POST /api/documents/batch: many new documents in one request (see uploadBatch).
+      if (batchUpload) {
+        if (request.method !== 'POST') throw new HttpError(405, 'method not allowed');
+        if (!ownDb || !syncing) throw subscriptionRequired();
+        return json({ results: await uploadBatch(env, userId, ownDb, await readBody(request, MAX_BATCH_BYTES, 'upload')) }, 201);
       }
 
       // POST /api/documents?name=…: a new document from the request body (.docx bytes).
@@ -669,6 +759,12 @@ const handler: ExportedHandler = {
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
       console.error(error instanceof CloudflareError ? `${error.message} ${JSON.stringify(error.errors)}` : error);
+      // Cloudflare's API is rate limited: tell the page to wait and try again, not that the server broke.
+      if (error instanceof CloudflareError && error.status === 429) {
+        // Past its limit Cloudflare blocks the API for five minutes.
+        const wait = Math.min(Math.ceil(error.retryAfter ?? 30), 300);
+        return new Response(JSON.stringify({ error: 'busy, try again shortly' }), { status: 429, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': String(wait) } });
+      }
       return json({ error: 'internal error' }, 500);
     }
   },

@@ -307,3 +307,38 @@ test('signed in without sync, the library is the browser\'s own documents plus w
   assert.deepEqual((await loadLibrary(null, null)).shared, [], 'signed out sees nothing shared');
   assert.equal(calls.length, 0);
 });
+
+test('new documents are uploaded in one request, and one the server refused is left for the ordinary upload', async () => {
+  const a = await local.saveSaved({ name: 'A.md', bytes: bytes(1, 2) });
+  const b = await local.saveSaved({ name: 'B.md', bytes: bytes(3) });
+  const sent: { size: number; name: string }[] = [];
+  globalThis.fetch = (async (input: unknown, init?: { body?: Uint8Array }) => {
+    calls.push({ method: 'POST', url: String(input) });
+    const body = init!.body!;
+    const headerLength = new DataView(body.buffer, body.byteOffset).getUint32(0);
+    const { documents } = JSON.parse(new TextDecoder().decode(body.slice(4, 4 + headerLength)));
+    sent.push(...documents);
+    const results = documents.map((d: { name: string }, i: number) => (d.name === 'B.md' ? { error: 'no such folder' } : { document: { id: `n${i}`, name: d.name, size: 1, createdAt: 1, updatedAt: 5, thumbAt: null } }));
+    return new Response(JSON.stringify({ results }), { status: 201 });
+  }) as typeof fetch;
+  const { uploadNewToCloud } = await import('../src/library.ts');
+  const made = await uploadNewToCloud([a.id, b.id]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.url, '/api/documents/batch');
+  assert.deepEqual(sent.map((d) => d.size), [2, 1]);
+  assert.deepEqual([...made.keys()], [a.id]);
+  const info = (await local.getSaved(a.id))!.info;
+  assert.equal(info.cloudId, 'n0');
+  assert.equal(info.cloudUpdatedAt, 5);
+  assert.equal((await local.getSaved(b.id))!.info.cloudId, undefined);
+});
+
+test('a request the server answers with 429 waits as long as it asked, then is sent again', async () => {
+  const { send } = await import('../src/cloud.ts');
+  let tries = 0;
+  globalThis.fetch = (async () => (++tries < 3 ? new Response('{}', { status: 429, headers: { 'retry-after': '0.01' } }) : new Response('ok'))) as typeof fetch;
+  const started = Date.now();
+  assert.equal(await (await send('/api/documents')).text(), 'ok');
+  assert.equal(tries, 3);
+  assert.ok(Date.now() - started < 1000);
+});

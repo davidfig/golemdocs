@@ -41,6 +41,24 @@ export class CloudError extends Error {
   }
 }
 
+/** Longest the server may ask us to wait before a request is sent again (Cloudflare blocks its API for five minutes when it is over its limit), and how many times it is. */
+const MAX_WAIT_SECONDS = 300;
+const MAX_RETRIES = 3;
+
+/**
+ * `fetch`, but a 429 (the server's way of saying it is being used too fast: it did nothing with
+ * the request) waits as long as it asked, then sends the request again.
+ */
+export async function send(input: string, init?: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(input, init);
+    if (response.status !== 429 || attempt === MAX_RETRIES) return response;
+    const asked = Number(response.headers.get('retry-after'));
+    const seconds = Math.min(Number.isFinite(asked) && asked > 0 ? asked : 5 * (attempt + 1), MAX_WAIT_SECONDS);
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+  }
+}
+
 async function check(response: Response): Promise<Response> {
   if (response.ok) return response;
   const message = await response.json().then((b: { error?: string }) => b.error, () => undefined);
@@ -54,7 +72,7 @@ export function documentUrl(id: string): string {
 
 /** The document's .docx bytes. */
 export async function downloadDocument(id: string): Promise<ArrayBuffer> {
-  return (await check(await fetch(documentUrl(id)))).arrayBuffer();
+  return (await check(await send(documentUrl(id)))).arrayBuffer();
 }
 
 /** Where a document's thumbnail image is (the version in the URL makes it safe to cache forever). */
@@ -64,7 +82,7 @@ export function thumbnailUrl(doc: Pick<CloudDocument, 'id' | 'thumbAt'>): string
 
 /** Uploads the first-page thumbnail for a document. */
 export async function uploadThumbnail(id: string, image: Blob): Promise<CloudDocument> {
-  const response = await fetch(`/api/documents/${id}/thumbnail`, {
+  const response = await send(`/api/documents/${id}/thumbnail`, {
     method: 'PUT',
     headers: { 'content-type': image.type },
     body: image,
@@ -83,18 +101,49 @@ const deleted = new Set<string>();
 export const isDeleted = (id: string | null | undefined): boolean => !!id && deleted.has(id);
 
 export async function listDocuments(): Promise<CloudDocument[]> {
-  const docs: CloudDocument[] = await (await check(await fetch('/api/documents'))).json();
+  const docs: CloudDocument[] = await (await check(await send('/api/documents'))).json();
   return docs.filter((d) => !deleted.has(d.id));
 }
 
 export async function createDocument(name: string, bytes: Uint8Array, folderId?: string): Promise<CloudDocument> {
   const folder = folderId ? `&folder=${encodeURIComponent(folderId)}` : '';
-  const response = await fetch(`/api/documents?name=${encodeURIComponent(name)}${folder}`, {
+  const response = await send(`/api/documents?name=${encodeURIComponent(name)}${folder}`, {
     method: 'POST',
     headers: { 'content-type': DOCX },
     body: bytes as Uint8Array<ArrayBuffer>,
   });
   return (await check(response)).json();
+}
+
+/** A document to upload in a batch: where it goes, and what happened to it. */
+export interface NewDocument {
+  name: string;
+  bytes: Uint8Array;
+  folderId?: string | null;
+}
+
+/** Most documents, and most bytes, in one batch (the server takes up to 500 documents and 51 MB; see server/src/worker.ts). A larger document goes in a batch of its own. */
+export const BATCH_MAX_DOCUMENTS = 200;
+export const BATCH_MAX_BYTES = 24 * 1024 * 1024;
+
+/**
+ * Uploads several documents in one request: the server answers for each, in order, with the new
+ * document or why it wasn't saved (a failure of one doesn't stop the rest). A whole request that
+ * fails throws, and none of it can be counted on.
+ */
+export async function createDocuments(documents: readonly NewDocument[]): Promise<(CloudDocument | { error: string })[]> {
+  const header = new TextEncoder().encode(JSON.stringify({ documents: documents.map((d) => ({ name: d.name, size: d.bytes.byteLength, folderId: d.folderId ?? null })) }));
+  const body = new Uint8Array(4 + header.byteLength + documents.reduce((sum, d) => sum + d.bytes.byteLength, 0));
+  new DataView(body.buffer).setUint32(0, header.byteLength);
+  body.set(header, 4);
+  let at = 4 + header.byteLength;
+  for (const d of documents) {
+    body.set(d.bytes, at);
+    at += d.bytes.byteLength;
+  }
+  const response = await send('/api/documents/batch', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body });
+  const { results } = (await (await check(response)).json()) as { results: ({ document: CloudDocument } | { error: string })[] };
+  return results.map((r) => ('document' in r ? r.document : r));
 }
 
 /**
@@ -106,7 +155,7 @@ export async function saveDocument(id: string, bytes: Uint8Array, name?: string,
   if (name) params.set('name', name);
   if (base !== undefined) params.set('base', String(base));
   const query = params.size ? `?${params}` : '';
-  const response = await fetch(`/api/documents/${id}${query}`, {
+  const response = await send(`/api/documents/${id}${query}`, {
     method: 'PUT',
     headers: { 'content-type': DOCX },
     body: bytes as Uint8Array<ArrayBuffer>,
@@ -122,7 +171,7 @@ export interface BatchResult<T> {
 
 /** Sends a batch (JSON body) and returns how each item went; only the request failing as a whole throws. */
 async function batch<T>(method: string, url: string, body: unknown): Promise<BatchResult<T>> {
-  return (await check(await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).json();
+  return (await check(await send(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).json();
 }
 
 /**
@@ -149,7 +198,7 @@ export function moveDocuments(ids: readonly string[], folderId: string | null): 
 }
 
 export async function listFolders(): Promise<Folder[]> {
-  const folders: Folder[] = await (await check(await fetch('/api/folders'))).json();
+  const folders: Folder[] = await (await check(await send('/api/folders'))).json();
   return folders.filter((f) => !deleted.has(f.id));
 }
 
@@ -168,21 +217,21 @@ export function throwIfFailed(result: BatchResult<unknown>): void {
 
 /** Documents other people shared with this user. */
 export async function listShared(): Promise<CloudDocument[]> {
-  return (await check(await fetch('/api/shared'))).json();
+  return (await check(await send('/api/shared'))).json();
 }
 
 /** Who a document is shared with (owner only). */
 export async function listShares(id: string): Promise<Share[]> {
-  return (await check(await fetch(`/api/documents/${id}/shares`))).json();
+  return (await check(await send(`/api/documents/${id}/shares`))).json();
 }
 
 /** Shares a document with the person who signed in with this email, or changes their role. */
 export async function addShare(id: string, email: string, role: ShareRole): Promise<Share> {
-  const response = await fetch(`/api/documents/${id}/shares`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, role }) });
+  const response = await send(`/api/documents/${id}/shares`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, role }) });
   return (await check(response)).json();
 }
 
 /** Stops sharing with someone (or, for the user themselves, leaves a document shared with them). */
 export async function removeShare(id: string, userId: string): Promise<void> {
-  await check(await fetch(`/api/documents/${id}/shares/${userId}`, { method: 'DELETE' }));
+  await check(await send(`/api/documents/${id}/shares/${userId}`, { method: 'DELETE' }));
 }

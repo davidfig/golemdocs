@@ -116,3 +116,74 @@ test('a listing still works when the cache table is missing', async () => {
   await create();
   assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).length, 2);
 });
+
+/** The body of POST /api/documents/batch (see uploadBatch in worker.ts). */
+function batchBody(documents: { name: string; bytes: number[]; folderId?: string | null }[]): Uint8Array {
+  const header = new TextEncoder().encode(JSON.stringify({ documents: documents.map((d) => ({ name: d.name, size: d.bytes.length, folderId: d.folderId ?? null })) }));
+  const body = new Uint8Array(4 + header.length + documents.reduce((n, d) => n + d.bytes.length, 0));
+  new DataView(body.buffer).setUint32(0, header.length);
+  body.set(header, 4);
+  let at = 4 + header.length;
+  for (const d of documents) {
+    body.set(d.bytes, at);
+    at += d.bytes.length;
+  }
+  return body;
+}
+
+test('a batch upload makes every document, in a folder if it names one, and reports each that cannot be made', async () => {
+  const folder = (await (await call('PUT', '/api/folders/' + crypto.randomUUID(), { body: JSON.stringify({ name: 'Books', parentId: null }), type: 'application/json' })).json()) as any;
+  const sent = [
+    { name: 'A.md', bytes: [1, 2], folderId: folder.id },
+    { name: 'B.md', bytes: [3] },
+    { name: 'Empty.md', bytes: [] },
+    { name: 'Lost.md', bytes: [4], folderId: crypto.randomUUID() },
+  ];
+  const response = await call('POST', '/api/documents/batch', { body: batchBody(sent) });
+  assert.equal(response.status, 201);
+  const { results } = (await response.json()) as { results: any[] };
+  assert.equal(results.length, 4);
+  assert.equal(results[0].document.name, 'A.md');
+  assert.equal(results[0].document.folderId, folder.id);
+  assert.equal(results[1].document.folderId, null);
+  assert.equal(results[2].error, 'empty body');
+  assert.equal(results[3].error, 'no such folder');
+
+  const listed = (await (await call('GET', '/api/documents')).json()) as any[];
+  assert.deepEqual(listed.map((d) => d.name).sort(), ['A.md', 'B.md']);
+  const got = await call('GET', `/api/documents/${results[0].document.id}`);
+  assert.deepEqual([...new Uint8Array(await got.arrayBuffer())], [1, 2]);
+});
+
+test('a batch of many documents takes few requests to Cloudflare', async () => {
+  await create(); // the first request makes and migrates the user's database
+  const realFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = ((...args: Parameters<typeof fetch>) => (requests++, realFetch(...args))) as typeof fetch;
+  const many = Array.from({ length: 40 }, (_, i) => ({ name: `Doc ${i}.md`, bytes: [i + 1] }));
+  const { results } = (await (await call('POST', '/api/documents/batch', { body: batchBody(many) })).json()) as { results: any[] };
+  assert.equal(results.filter((r) => r.document).length, 40);
+  // One request for the three inserts (14 rows each), not a folder check and an insert per document.
+  assert.equal(requests, 1);
+  assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).length, 41);
+});
+
+test('a malformed batch is refused', async () => {
+  assert.equal((await call('POST', '/api/documents/batch', { body: new Uint8Array([0, 0]) })).status, 400);
+  const truncated = batchBody([{ name: 'A.md', bytes: [1, 2, 3] }]).slice(0, -1);
+  assert.equal((await call('POST', '/api/documents/batch', { body: truncated })).status, 400);
+  assert.equal((await call('GET', '/api/documents/batch')).status, 405);
+});
+
+test('when Cloudflare rate limits the API the page is told to wait, not that the server broke', async () => {
+  await create();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ success: false, errors: [{ code: 971, message: 'rate limited' }] }), { status: 429, headers: { 'retry-after': '7' } })) as typeof fetch;
+  try {
+    const response = await call('GET', '/api/documents');
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '7');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

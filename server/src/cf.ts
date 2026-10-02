@@ -29,7 +29,7 @@ export interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
   put(
     key: string,
-    value: ArrayBuffer | ReadableStream | string,
+    value: ArrayBuffer | ArrayBufferView | ReadableStream | string,
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
   delete(keys: string | string[]): Promise<void>;

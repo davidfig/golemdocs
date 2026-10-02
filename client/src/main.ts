@@ -10,7 +10,7 @@ import { importFiles, readZipFiles } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { fileTools } from './assistant/fileTools.ts';
 import { adoptGuestFolders, createFolder } from './folderOps.ts';
-import { openFromCloud, prefetchFromCloud, uploadToCloud } from './library.ts';
+import { openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
   releaseToGuest,
@@ -1098,6 +1098,11 @@ async function downloadAll(): Promise<void> {
 
 /** How often a ZIP import shows what it has added so far in the dashboard and the Files panel. */
 const IMPORT_REFRESH_MS = 1000;
+/** Into the account the lists cost the server requests to Cloudflare's API, which limits them, so they are shown less often. */
+const IMPORT_CLOUD_REFRESH_MS = 15_000;
+/** A ZIP's documents are sent to the account this many at a time (or this many bytes, if that comes first). */
+const IMPORT_UPLOAD_COUNT = 50;
+const IMPORT_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 /**
  * File ▸ Import of a ZIP: its documents go in the folders they were in (made as needed, or the ones
@@ -1124,12 +1129,31 @@ async function importZip(file: File): Promise<void> {
     // What has been imported so far shows in the lists as it lands, not all at the end.
     let shownAt = 0;
     const showSoFar = (): void => {
-      if (Date.now() - shownAt < IMPORT_REFRESH_MS) return;
+      if (Date.now() - shownAt < (cloud ? IMPORT_CLOUD_REFRESH_MS : IMPORT_REFRESH_MS)) return;
       shownAt = Date.now();
       void refreshLibrary().then(() => {
         if (filesPanel.visible) void filesPanel.refresh();
         dashboard.refreshIfVisible();
       });
+    };
+    let waiting: string[] = [];
+    let waitingBytes = 0;
+    const sendWaiting = async (): Promise<void> => {
+      const ids = waiting;
+      waiting = [];
+      waitingBytes = 0;
+      if (!ids.length || !account || offline || signedOutRemotely) return;
+      try {
+        const made = await uploadNewToCloud(ids);
+        for (const id of made.keys()) dirty.delete(id);
+        const added = new Set([...made.values()].map((d) => d.id));
+        cloudDocs = [...made.values(), ...cloudDocs.filter((d) => !added.has(d.id))];
+      } catch (e) {
+        // Left in the queue: each is sent on its own, which also finds out what is wrong with it.
+        if (e instanceof TypeError) wentOffline();
+      }
+      savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
+      showSync();
     };
     const result = await importFiles(files, {
       folders,
@@ -1153,14 +1177,18 @@ async function importZip(file: File): Promise<void> {
         }
         const info = await saveSaved({ name: doc.name, bytes: doc.bytes, owner, ...(folderId !== null && { folderId }) });
         if (owner) {
-          // Uploaded now, so the bar counts the upload too (offline, it waits in the queue as usual).
+          // Sent in batches (and left in the queue meanwhile, so whatever a batch doesn't take goes the ordinary way, offline too).
           dirty.add(info.id);
-          await flushUploads();
+          waiting.push(info.id);
+          waitingBytes += doc.bytes.byteLength;
+          if (waiting.length >= IMPORT_UPLOAD_COUNT || waitingBytes >= IMPORT_UPLOAD_BYTES) await sendWaiting();
         }
         showSoFar();
         return true;
       },
     });
+    await sendWaiting();
+    await flushUploads();
     await refreshLibrary();
     dashboard.refreshIfVisible();
     const left = skipped + result.skipped;

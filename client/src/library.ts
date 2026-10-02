@@ -4,7 +4,7 @@
 // of a copy that started from an older version than the cloud's becomes a separate
 // "(conflicted copy)" document instead.
 
-import { CloudError, createDocument, downloadDocument, saveDocument, uploadThumbnail, type CloudDocument } from './cloud.ts';
+import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, createDocument, createDocuments, downloadDocument, saveDocument, uploadThumbnail, type CloudDocument } from './cloud.ts';
 import { getSaved, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
 
@@ -65,6 +65,41 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
     doc = await uploadThumbnail(doc.id, thumbnail.blob).catch(() => doc);
   }
   return { doc, conflictCopy };
+}
+
+/**
+ * Uploads browser copies that have no cloud document yet in as few requests as possible (a ZIP's
+ * worth of documents would otherwise make a request each, which the server can't keep up with).
+ * Returns the cloud documents made, by browser copy id. Copies that were left out (they are
+ * already in the cloud, the server refused them, or are gone) are for `uploadToCloud` to deal with.
+ */
+export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map<string, CloudDocument>> {
+  const made = new Map<string, CloudDocument>();
+  let batch: { id: string; info: SavedInfo; bytes: Uint8Array }[] = [];
+  let size = 0;
+  const send = async () => {
+    const sending = batch;
+    batch = [];
+    size = 0;
+    if (!sending.length) return;
+    const results = await createDocuments(sending.map(({ info, bytes }) => ({ name: info.name, bytes, folderId: info.folderId ?? null })));
+    for (const [i, result] of results.entries()) {
+      if ('error' in result) continue;
+      const { id, info } = sending[i]!;
+      await markSynced(id, { cloudId: result.id, syncedAt: info.updatedAt, cloudUpdatedAt: result.updatedAt });
+      made.set(id, result);
+    }
+  };
+  for (const id of localIds) {
+    const saved = await getSaved(id);
+    if (!saved || saved.info.cloudId) continue;
+    const bytes = new Uint8Array(saved.bytes);
+    if (batch.length >= BATCH_MAX_DOCUMENTS || (batch.length && size + bytes.byteLength > BATCH_MAX_BYTES)) await send();
+    batch.push({ id, info: saved.info, bytes });
+    size += bytes.byteLength;
+  }
+  await send();
+  return made;
 }
 
 /** Downloads started ahead of an open (the pointer is on the document), by id; each is good for a short while. */

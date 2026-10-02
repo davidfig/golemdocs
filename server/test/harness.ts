@@ -89,7 +89,22 @@ export function world(options: { local?: boolean } = {}): World {
       return ok({ uuid });
     }
     const query = /\/d1\/database\/([^/]+)\/query$/.exec(url.pathname);
-    if (query) return ok([{ results: userDatabases.get(query[1]!)!.prepare(body.sql).all(...body.params) }]);
+    if (query) {
+      const db = userDatabases.get(query[1]!)!;
+      // `batch` runs its statements as one transaction, as D1 does.
+      if (body.batch) {
+        db.exec('BEGIN');
+        try {
+          const results = body.batch.map((q: { sql: string; params: unknown[] }) => ({ results: db.prepare(q.sql).all(...q.params) }));
+          db.exec('COMMIT');
+          return ok(results);
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+      }
+      return ok([{ results: db.prepare(body.sql).all(...body.params) }]);
+    }
     throw new Error(`unexpected request to ${url}`);
   }) as typeof fetch;
 

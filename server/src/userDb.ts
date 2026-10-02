@@ -19,10 +19,13 @@ interface Envelope<T> {
 export class CloudflareError extends Error {
   status: number;
   errors: { code: number; message: string }[];
-  constructor(status: number, errors: { code: number; message: string }[]) {
+  /** Seconds Cloudflare asked us to wait (a 429's Retry-After), when it said. */
+  retryAfter?: number;
+  constructor(status: number, errors: { code: number; message: string }[], retryAfter?: number) {
     super(`Cloudflare API ${status}: ${errors.map((e) => e.message).join('; ') || 'request failed'}`);
     this.status = status;
     this.errors = errors;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -33,7 +36,10 @@ async function api<T>(env: Env, path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const envelope = (await response.json().catch(() => null)) as Envelope<T> | null;
-  if (!response.ok || !envelope?.success) throw new CloudflareError(response.status, envelope?.errors ?? []);
+  if (!response.ok || !envelope?.success) {
+    const wait = Number(response.headers.get('retry-after'));
+    throw new CloudflareError(response.status, envelope?.errors ?? [], Number.isFinite(wait) && wait > 0 ? wait : undefined);
+  }
   return envelope.result;
 }
 
@@ -63,6 +69,17 @@ export class UserDb {
   async run(sql: string, params: unknown[] = []): Promise<void> {
     await this.all(sql, params);
     await this.invalidate();
+  }
+
+  /** Several changes in one request to Cloudflare, which D1 runs as a transaction (all or none), dropping the cached lists once. */
+  async runAll(statements: { sql: string; params: unknown[] }[]): Promise<void> {
+    if (!statements.length) return;
+    await this.batch(statements);
+    await this.invalidate();
+  }
+
+  protected async batch(statements: { sql: string; params: unknown[] }[]): Promise<void> {
+    await api(this.env, `/d1/database/${this.databaseId}/query`, { batch: statements });
   }
 
   private async invalidate(): Promise<void> {
@@ -152,6 +169,10 @@ class LocalUserDb extends UserDb {
     if (!/^[0-9a-f]+$/.test(userId)) throw new Error('unexpected user id');
     this.prefix = `local_${userId}_`;
     this.cacheKey = this.prefix;
+  }
+
+  protected override async batch(statements: { sql: string; params: unknown[] }[]): Promise<void> {
+    for (const { sql, params } of statements) await this.all(sql, params);
   }
 
   override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {

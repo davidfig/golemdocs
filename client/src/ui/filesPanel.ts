@@ -211,7 +211,12 @@ export class FilesPanel {
         finish(false);
       }
     });
-    input.addEventListener('blur', () => finish(true));
+    // Listing again rebuilds the rows and drops this field, which blurs it: that is not the person leaving it, so only a field still in the page is done.
+    input.addEventListener('blur', () =>
+      setTimeout(() => {
+        if (input.isConnected) finish(true);
+      }, 0),
+    );
     return input;
   }
 

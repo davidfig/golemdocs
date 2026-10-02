@@ -35,10 +35,10 @@ test('with nothing saved, the dashboard says so and offers a blank document and 
   await expect(dashboard(page)).toBeVisible();
   await expect(dashboard(page).getByRole('heading', { name: 'Documents' })).toBeVisible();
   await expect(dashboard(page).getByText('Documents you save will show up here.')).toBeVisible();
-  await expect(dashboard(page).getByText('Saved in this browser')).toBeVisible();
   await expect(dashboard(page).getByRole('button', { name: 'New document' })).toBeVisible();
-  await expect(dashboard(page).getByRole('button', { name: 'Import a file from this computer' })).toBeVisible();
-  await expect(dashboard(page).getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(dashboard(page).getByRole('button', { name: 'Import file' })).toBeVisible();
+  // Signing in and the account are in the menus, not on this screen.
+  await expect(dashboard(page).getByRole('button', { name: 'Sign in' })).toHaveCount(0);
   await expect(cards(page)).toHaveCount(0);
 });
 
@@ -150,7 +150,7 @@ test('the blank document tile starts a new document', async ({ app, page }) => {
 test('the import tile opens the file chooser, and the file opens over the dashboard', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await app.menu('File', 'Open…');
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), dashboard(page).getByRole('button', { name: 'Import a file from this computer' }).click()]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), dashboard(page).getByRole('button', { name: 'Import file' }).click()]);
   await chooser.setFiles({ name: 'tile.md', mimeType: 'text/markdown', buffer: Buffer.from('# From tile') });
   await waitForOpen(app, 'tile.md');
   await expect(dashboard(page)).toBeHidden();

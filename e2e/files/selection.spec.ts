@@ -33,7 +33,7 @@ test('ticked documents and a folder move together; Esc clears the selection befo
   await card(page, 'beta.md').getByRole('checkbox').check();
   await expect(dashboard(page).getByRole('status').filter({ hasText: 'selected' })).toHaveText('2 selected');
 
-  await dashboard(page).getByRole('button', { name: 'Move the selected items' }).click();
+  await dashboard(page).locator('.wm-dash-selection').getByRole('button', { name: 'Move…' }).click();
   await dashboard(page).getByRole('dialog').getByRole('button', { name: 'Reports' }).click();
   await expect(cards(page)).toHaveCount(0);
   await expect(folders(page).locator('.wm-card-meta')).toHaveText('2 items');

@@ -31,6 +31,9 @@
 - Deleting the document you have open now switches to the Welcome document, instead of leaving the deleted one on screen.
 - File › Download All keeps your folders: documents are zipped inside the same folder structure.
 
+### Fixed
+- Right-clicking in the Files Sidebar and choosing New folder now leaves the new folder's name ready to type. It used to lose the name box straight away, as the list refreshed.
+
 ## 0.5.1 - 2026-10-01
 
 ### Fixed

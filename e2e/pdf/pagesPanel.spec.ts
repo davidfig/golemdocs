@@ -27,8 +27,10 @@ async function pageTexts(app: App): Promise<string[]> {
 }
 
 test.describe('Page Sidebar', () => {
+  // These are about the sidebar, which is open by default when the window has room: start from that, not from the suite's closed one.
+  test.use({ sidebarDefault: true });
+
   test.describe('by default', () => {
-    test.use({ sidebarDefault: true });
     test('it is closed by default on a narrow window', async ({ app, page }) => {
       // The menu bar is a drawer on a narrow window, so just open a document.
       await page.setViewportSize({ width: 600, height: 800 });
@@ -155,7 +157,6 @@ test.describe('Page Sidebar', () => {
   });
 
   test.describe('with the default', () => {
-    test.use({ sidebarDefault: true });
     test('a Word document gets thumbnails and navigation, and can still be edited with the panel open', async ({ app }) => {
       await app.blank();
       await app.type('one');

@@ -22,6 +22,7 @@
 - The browser's Back and Forward buttons now move between the documents you opened and the Documents screen, instead of leaving the app.
 
 ### Changed
+- Documents on the Documents screen that have no picture yet show the Golem face's page text in place of grey lines.
 - Deleting, moving or renaming a document or folder on the Documents screen or in the Files Sidebar shows at once instead of after it is saved; if saving fails, it comes back with the reason.
 - Moving or deleting many documents and folders at once is now one request to your account instead of one per item, so it is much faster.
 - Opening a document from your account is faster, especially with many files: the server no longer looks the document up over the network on every open, a document starts downloading as soon as you rest the pointer on it, and the lists refresh after it appears instead of before.

@@ -58,6 +58,9 @@ type Dragged = { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: 
 
 // --- The screen -----------------------------------------------------------------------------
 
+/** The folders and documents as listed before a delete took its items off the screen, which is what finding what is inside a folder needs. */
+type Listed = { folders: Folder[]; entries: LibraryEntry[] };
+
 export class Dashboard {
   private readonly root: HTMLElement;
   private readonly search: HTMLInputElement;
@@ -126,7 +129,7 @@ export class Dashboard {
       }, false);
     });
     const moveSelected = action('moveToFolder', t('panels.dashboard.move'), t('panels.dashboard.moveSelected'), () => this.moveSelection());
-    const deleteSelected = this.deleteButton(() => this.selectedItems(), () => this.deleteSelection(), 'trash');
+    const deleteSelected = this.deleteButton(() => this.selectedItems(), (before) => this.deleteSelection(before), 'trash');
     const clearSelection = action('close', t('panels.dashboard.clearSelection'), t('panels.dashboard.clearSelection'), () => this.setSelection([]));
     this.selectionCount = h('span', { class: 'wm-dash-selected', attrs: { role: 'status' } });
     this.selectionBar = h('div', { class: 'wm-dash-selection' }, this.selectionCount, moveSelected, deleteSelected, clearSelection);
@@ -432,7 +435,7 @@ export class Dashboard {
     move.addEventListener('click', () =>
       this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
     );
-    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), () => this.deleteFolderTrees([folder]), 'trash', true, t('panels.dashboard.deleteFolder')));
+    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), (before) => this.deleteFolderTrees(before, [folder]), 'trash', true, t('panels.dashboard.deleteFolder')));
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
@@ -530,19 +533,19 @@ export class Dashboard {
     );
   }
 
-  private async deleteSelection(): Promise<void> {
+  private async deleteSelection(before: Listed): Promise<void> {
     const { docs, folders } = this.selectedItems();
     this.selected.clear();
     // Folders go with the documents in them (once each), and with the selected documents: one call.
-    const inFolders = new Set(folders.flatMap((f) => folderContents(this.folders, this.entries, f).items));
+    const inFolders = new Set(folders.flatMap((f) => folderContents(before.folders, before.entries, f).items));
     const loose = docs.filter((e) => !inFolders.has(e));
-    if (folders.length) await this.deleteFolderTrees(folders, loose);
+    if (folders.length) await this.deleteFolderTrees(before, folders, loose);
     else await this.host.delete(loose);
   }
 
   /** Deletes folders with everything in them (their documents and subfolders), and `alsoDocs`, in one call. */
-  private deleteFolderTrees(folders: Folder[], alsoDocs: LibraryEntry[] = []): Promise<void> {
-    return removeFolderTree(this.folders, this.entries, folders, (entries, folderIds) => this.host.delete([...alsoDocs, ...entries], folderIds));
+  private deleteFolderTrees(before: Listed, folders: Folder[], alsoDocs: LibraryEntry[] = []): Promise<void> {
+    return removeFolderTree(before.folders, before.entries, folders, (entries, folderIds) => this.host.delete([...alsoDocs, ...entries], folderIds));
   }
 
   /** "Documents › A › B": where this is, and a way back up (a place to drop things, too). */
@@ -681,7 +684,7 @@ export class Dashboard {
   }
 
   /** A Delete button: asks first, in a dialog listing everything that would go, then runs `run`. */
-  private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: () => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
+  private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: (before: Listed) => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
     const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
     this.setLabel(button, label, icon, iconOnly);
     button.addEventListener('click', async () => {
@@ -690,11 +693,12 @@ export class Dashboard {
       const lines = deletionList(this.folders, this.entries, folders, docs);
       if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
       // Gone from the screen at once; if it fails, the refresh below brings it back with the reason.
-      const left = withoutDeleted(this.folders, this.entries, folders, docs);
+      const before = { folders: this.folders, entries: this.entries };
+      const left = withoutDeleted(before.folders, before.entries, folders, docs);
       this.folders = left.folders;
       this.entries = left.entries;
       this.render();
-      run().then(
+      run(before).then(
         () => this.refresh(),
         (error) => {
           this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });

@@ -243,7 +243,7 @@ export class FilesPanel {
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(document.body, this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
       'separator',
-      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], () => removeFolderTree(this.folders, this.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
+      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
     ];
   }
 
@@ -259,15 +259,16 @@ export class FilesPanel {
   // --- Changes -------------------------------------------------------------------------------
 
   /** Asks, in a dialog listing all that would go, whether to delete these; if so, runs `remove`. */
-  private async ask(folders: Folder[], docs: LibraryEntry[], remove: () => Promise<void>): Promise<void> {
+  private async ask(folders: Folder[], docs: LibraryEntry[], remove: (before: { folders: Folder[]; entries: LibraryEntry[] }) => Promise<void>): Promise<void> {
     const lines = deletionList(this.folders, this.entries, folders, docs);
     if (await confirmDelete(deleteTitle(folders, docs, lines), lines)) {
       // Gone from the list at once; if it fails, the list fetched again brings it back with the reason.
-      const left = withoutDeleted(this.folders, this.entries, folders, docs);
+      const before = { folders: this.folders, entries: this.entries };
+      const left = withoutDeleted(before.folders, before.entries, folders, docs);
       this.folders = left.folders;
       this.entries = left.entries;
       this.render();
-      await this.run(remove);
+      await this.run(() => remove(before));
     }
     else this.host.focusEditor();
   }

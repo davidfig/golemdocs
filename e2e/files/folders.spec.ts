@@ -148,3 +148,19 @@ test('a document made from inside a folder is filed there', async ({ app, page }
   await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
   await expect(folder(page, 'Reports').locator('.wm-card-meta')).toHaveText('1 item');
 });
+
+test('deleting a folder deletes the folders inside it too', async ({ app, page }) => {
+  await twoDocuments(app);
+  await makeFolder(page, 'Outer');
+  await folder(page, 'Outer').getByRole('button', { name: 'Open folder Outer' }).click();
+  await expect(dashboard(page).getByRole('navigation')).toContainText('Outer');
+  await makeFolder(page, 'Inner');
+  await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
+  await folder(page, 'Outer').hover();
+  await folder(page, 'Outer').getByRole('button', { name: 'Delete folder' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(folders(page)).toHaveCount(0);
+  // Not back once the dashboard has listed again, and not just a nested folder left behind at the top level.
+  await page.waitForTimeout(3000);
+  await expect(folders(page)).toHaveCount(0);
+});

@@ -2892,7 +2892,7 @@ canvas.addEventListener('contextmenu', (e) => {
 
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.
-const dashboard = new Dashboard(document.getElementById('workspace')!, {
+const dashboard = new Dashboard(document.body, {
   currentDocument: () => ({ localId: current.localId, cloudId: current.shared?.id ?? null }),
   newDocument: (folderId) => {
     newDocumentFolder = folderId;

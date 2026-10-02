@@ -162,7 +162,7 @@ select.wm-field {
 }
 
 .wm-forms-grip {
-  height: 18px;
+  height: 22px;
   margin: -8px -8px 2px;
   cursor: move;
   touch-action: none;
@@ -188,7 +188,7 @@ select.wm-field {
   align-items: center;
   justify-content: center;
   width: 22px;
-  height: 18px;
+  height: 22px;
   padding: 0;
   line-height: 1;
   background: none;
@@ -209,12 +209,7 @@ select.wm-field {
 }
 
 .wm-forms-palette-min .wm-forms-grip {
-  height: 22px;
   margin: 0;
-}
-
-.wm-forms-palette-min .wm-forms-minimize {
-  height: 22px;
 }
 
 

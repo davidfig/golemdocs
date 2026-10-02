@@ -201,7 +201,9 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
     await removeFromIndex(env, row.id);
     if (env.ROOMS) await roomFor(env, row.id).fetch(new Request('https://room/end'));
   }
-  await env.FILES.delete(rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]));
+  // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
+  const keys = rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]);
+  for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
 }
 
 function json(data: unknown, status = 200): Response {

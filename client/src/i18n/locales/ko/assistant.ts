@@ -44,4 +44,7 @@ export const assistant: Partial<Messages> = {
   'assistant.pictureFailed': '그림을 준비하지 못했어요. 다른 그림을 사용해 보세요.',
   'assistant.describePicture': '이 그림에 대해 알려 주세요.',
   'assistant.tool.viewPicture': '그림을 보는 중…',
+  'assistant.tool.searchDocuments': '문서를 검색하는 중…',
+  'assistant.tool.readOtherDocument': '다른 문서를 읽는 중…',
+  'assistant.tool.insertFromDocument': '다른 문서에서 복사하는 중…',
 };

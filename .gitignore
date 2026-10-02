@@ -23,3 +23,5 @@ e2e/.report
 # Cloudflare ids for this account (merged into wrangler.generated.jsonc by scripts/wrangler-config.ts)
 server/wrangler.local.json
 server/wrangler.generated.jsonc
+e2e/.state-*
+e2e/.results-*

@@ -49,6 +49,9 @@ const API_PORT = Number(process.env.WORD_API_PORT ?? 3001);
 
 export default defineConfig({
   plugins: [docxCorpus(), welcomeContent()],
+  // Each end-to-end client keeps its own dependency cache: two dev servers sharing one (a second e2e run
+  // alongside the first, or `pnpm dev`) can invalidate each other's, and a server that dies takes the run with it.
+  cacheDir: process.env.WORD_CLIENT_PORT ? path.resolve(import.meta.dirname, `node_modules/.vite-e2e-${CLIENT_PORT}`) : undefined,
   // The layout worker is an ES module (it imports the docx and layout packages).
   worker: {
     format: 'es',

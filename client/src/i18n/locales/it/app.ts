@@ -41,6 +41,13 @@ export const app: Partial<Messages> = {
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': 'Scaricati tutti i documenti salvati',
   'app.downloadFailed': 'Download non riuscito: {message}',
+  'app.importingZip': 'Importazione di {name}…',
+  'app.importZipNone': '{name} non contiene documenti importabili',
+  'app.importedZip': 'Documenti importati: {count}',
+  'app.importedZipSkipped': 'Documenti importati: {count}. File non apribili ignorati: {skipped}',
+  'app.importZipFailed': 'Importazione non riuscita: {message}',
+  'app.importProgress': '{done} di {total}',
+  'app.importCancelled': 'Importazione annullata. Documenti importati: {count}',
 
   // Collaboration
   'app.editingAlone': 'Stai di nuovo modificando da solo',

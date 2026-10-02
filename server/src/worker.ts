@@ -7,6 +7,7 @@ import type { Env, ExportedHandler } from './cf.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
+import { handleSearch, removeFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError, existingUserDb, userDb, type UserDb } from './userDb.ts';
@@ -59,6 +60,16 @@ function describe(row: DocumentRow, role: Role = 'owner') {
 
 const MAX_FOLDER_DEPTH = 32;
 
+/** An owner's documents, newest first, from the catalogue cache when it is current. */
+function listDocuments(env: Env, ownerId: string, db: UserDb): Promise<DocumentRow[]> {
+  return db.cachedList('documents', async () => {
+    const rows = await db.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
+    // Documents from before sharing existed are claimed here, so rooms and shares can find them.
+    await Promise.all(rows.map((row) => registerOwner(env, row.id, ownerId)));
+    return rows;
+  });
+}
+
 /**
  * /api/folders[/:id]: the user's folders. Clients make the ids, so a folder made offline can be
  * sent as it is (PUT is create-or-update).
@@ -67,7 +78,7 @@ async function handleFolders(request: Request, id: string | undefined, db: UserD
   // GET /api/folders
   if (id === undefined) {
     if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
-    return json(db ? (await db.all<FolderRow>('SELECT * FROM folders ORDER BY name')).map(describeFolder) : []);
+    return json(db ? (await db.cachedList('folders', () => db.all<FolderRow>('SELECT * FROM folders ORDER BY name'))).map(describeFolder) : []);
   }
 
   // PUT /api/folders/:id { name, parentId }: creates it, or renames and moves it.
@@ -168,8 +179,8 @@ const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: stri
  * The user's access to a document. Documents from before sharing existed have no owner record;
  * finding one in the user's own catalogue claims it.
  */
-async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb | null): Promise<Access | null> {
-  const access = await accessFor(env, userId, docId);
+async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: UserDb | null, early?: Promise<Access | null>): Promise<Access | null> {
+  const access = await (early ?? accessFor(env, userId, docId));
   if (access) return access;
   if (knownDb === null) return null; // no database of their own, so nothing to claim
   if (env.ENVIRONMENT !== 'local' && !env.CF_API_TOKEN) return null;
@@ -234,6 +245,9 @@ const handler: ExportedHandler = {
         throw new HttpError(405, 'method not allowed');
       }
 
+      // GET /api/assistant/search?q=…: which of this user's documents are about something (see search.ts).
+      if (path === '/api/assistant/search' && request.method === 'GET') return json(await handleSearch(env, userId, url.searchParams.get('q') ?? '', await existingUserDb(env, userId)));
+
       // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
       if (path === '/api/admin/billing' && request.method === 'GET') {
         if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
@@ -285,6 +299,9 @@ const handler: ExportedHandler = {
       if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
         throw new HttpError(503, 'cloud storage is not configured');
       }
+      // Who may open the document doesn't depend on the user's database, so both are looked up together.
+      const earlyAccess = id !== undefined && collection === 'documents' ? accessFor(env, userId, id) : undefined;
+      earlyAccess?.catch(() => {}); // reported where it is awaited
       // Whether this user may keep documents in the cloud. Without it they get no database of their
       // own (so nothing is created for people who only open what a subscriber shares), and what
       // they already have can be read and deleted but not changed.
@@ -299,16 +316,15 @@ const handler: ExportedHandler = {
           if (!byOwner.has(s.ownerId)) byOwner.set(s.ownerId, new Map());
           byOwner.get(s.ownerId)!.set(s.docId, s.role);
         }
-        const out: unknown[] = [];
-        for (const [ownerId, roles] of byOwner) {
-          // A share lasts while its owner has sync.
-          if (!(await hasSync(env, ownerId))) continue;
-          const ids = [...roles.keys()];
-          const rows = await (await userDb(env, ownerId)).all<DocumentRow>(`SELECT * FROM documents WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
-          const owner = await person(env, ownerId);
-          for (const row of rows) out.push({ ...describe(row, roles.get(row.id)!), owner: { name: owner.name, email: owner.email } });
-        }
-        return json(out);
+        const perOwner = await Promise.all(
+          [...byOwner].map(async ([ownerId, roles]) => {
+            // A share lasts while its owner has sync.
+            if (!(await hasSync(env, ownerId))) return [];
+            const [rows, owner] = await Promise.all([listDocuments(env, ownerId, await userDb(env, ownerId)), person(env, ownerId)]);
+            return rows.filter((row) => roles.has(row.id)).map((row) => ({ ...describe(row, roles.get(row.id)!), owner: { name: owner.name, email: owner.email } }));
+          }),
+        );
+        return json(perOwner.flat());
       }
 
       if (collection === 'folders') return await handleFolders(request, id, ownDb, syncing);
@@ -316,10 +332,7 @@ const handler: ExportedHandler = {
       // GET /api/documents: the user's documents, newest first.
       if (!id && request.method === 'GET') {
         if (!ownDb) return json([]);
-        const rows = await ownDb.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
-        // Documents from before sharing existed are claimed here, so rooms and shares can find them.
-        await Promise.all(rows.map((row) => registerOwner(env, row.id, userId)));
-        return json(rows.map((row) => describe(row)));
+        return json((await listDocuments(env, userId, ownDb)).map((row) => describe(row)));
       }
 
       // POST /api/documents?name=…: a new document from the request body (.docx bytes).
@@ -349,7 +362,7 @@ const handler: ExportedHandler = {
       if (!id) throw new HttpError(405, 'method not allowed');
 
       // Whose document is it, and what may this user do with it?
-      const access = await resolveAccess(env, userId, id, ownDb);
+      const access = await resolveAccess(env, userId, id, ownDb, earlyAccess);
       if (!access) throw new HttpError(404, 'not found');
       const { role, ownerId } = access;
       // Someone else's document is theirs to keep only while they have sync; reading your own never lapses.
@@ -363,7 +376,10 @@ const handler: ExportedHandler = {
       if (!db) throw new HttpError(404, 'not found');
       const thumbKeyFor = (docId: string) => `${ownerId}/${docId}.thumb`;
 
-      const row = await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [id]);
+      // Reads take the row from the cached catalogue (one native query) instead of asking the user's
+      // own database over the network. Writes always read it afresh: they check what is current.
+      const reading = request.method === 'GET' && (sub === undefined || sub === 'thumbnail');
+      const row = (reading ? (await db.peekList<DocumentRow>('documents'))?.find((r) => r.id === id) : undefined) ?? (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [id]));
       if (!row) throw new HttpError(404, 'not found');
       const requireWrite = () => {
         if (!canWrite(role)) throw new HttpError(403, 'this document is read-only for you');
@@ -480,6 +496,7 @@ const handler: ExportedHandler = {
         // Row first: a failure leaves an unreferenced object, never a row pointing at nothing.
         await db.run('DELETE FROM documents WHERE id = ?', [id]);
         await forgetDocument(env, id);
+        await removeFromIndex(env, id);
         if (env.ROOMS) await roomFor(env, id).fetch(new Request('https://room/end'));
         await env.FILES.delete([row.r2_key, thumbKeyFor(id)]);
         return new Response(null, { status: 204 });

@@ -4,6 +4,7 @@ export { StyleResolver, mergeProperties, type FormattingLayer } from './model/re
 export { ListCounter, formatNumber, type ListLabel, type ListState } from './model/lists.ts';
 export * from './edit/text.ts';
 export * from './edit/comments.ts';
+export { paragraphSegments, type Segment } from './edit/segments.ts';
 export { WordDocument } from './docx/document.ts';
 export { OpcPackage, PackageError, REL, CONTENT_TYPE } from './opc/package.ts';
 export { ZipArchive, ZipError, writeZip } from './zip/zip.ts';

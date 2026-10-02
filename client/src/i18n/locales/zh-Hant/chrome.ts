@@ -28,6 +28,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.editForm': '編輯 PDF(&E)',
   'chrome.view.grid': '頁面格線(&G)',
   'chrome.view.pagesPanel': '頁面側邊欄(&B)',
+  'chrome.view.filesPanel': '檔案側邊欄(&L)',
   'chrome.view.ruler': '尺規(&R)',
   'chrome.view.footer': '狀態列(&U)',
   'chrome.view.formattingMarks': '格式標記(&M)',

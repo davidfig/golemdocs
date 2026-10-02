@@ -41,6 +41,18 @@ export function itemsIn<T extends Placed>(items: readonly T[], folders: readonly
   return items.filter((item) => folderOf(item, folders) === folderId);
 }
 
+/** A folder and every folder inside it (deepest first, so each can be deleted in turn), and every item in any of them. */
+export function folderContents<T extends Placed>(folders: readonly Folder[], items: readonly T[], folder: Folder): { folders: Folder[]; items: T[] } {
+  const all: Folder[] = [];
+  const walk = (f: Folder) => {
+    for (const child of childFolders(folders, f.id)) walk(child);
+    all.push(f);
+  };
+  walk(folder);
+  const ids = new Set(all.map((f) => f.id));
+  return { folders: all, items: items.filter((item) => ids.has(folderOf(item, folders) ?? '')) };
+}
+
 /** The folders from the top level down to `id`, inclusive; empty for the top level. */
 export function folderPath(folders: readonly Folder[], id: string | null): Folder[] {
   const byId = new Map(folders.map((f) => [f.id, f]));
@@ -70,4 +82,55 @@ export function folderTree(folders: readonly Folder[]): { folder: Folder; depth:
 /** The folders with parents before the folders inside them (what a server needs them in to accept them). */
 export function parentsFirst(folders: readonly Folder[]): Folder[] {
   return folderTree(folders).map((n) => n.folder);
+}
+
+/** One line of the files sidebar's tree. */
+export type TreeRow<T> = { kind: 'folder'; folder: Folder; depth: number; open: boolean } | { kind: 'file'; item: T; depth: number };
+
+/**
+ * The tree the files sidebar shows, as rows from the top: each folder's own folders, then its
+ * documents (by name). Only the folders in `expanded` show what is inside them.
+ */
+export function treeRows<T extends Placed & { name: string }>(folders: readonly Folder[], items: readonly T[], expanded: ReadonlySet<string>): TreeRow<T>[] {
+  const rows: TreeRow<T>[] = [];
+  const walk = (parentId: string | null, depth: number) => {
+    for (const folder of childFolders(folders, parentId)) {
+      const open = expanded.has(folder.id);
+      rows.push({ kind: 'folder', folder, depth, open });
+      if (open) walk(folder.id, depth + 1);
+    }
+    const files = itemsIn(items, folders, parentId).sort((a, b) => a.name.localeCompare(b.name));
+    for (const item of files) rows.push({ kind: 'file', item, depth });
+  };
+  walk(null, 0);
+  return rows;
+}
+
+/**
+ * What deleting `roots` (folders, with everything in them) and `docs` removes, as lines for the
+ * confirmation: each folder as "A/B/" and each document as "A/B/name", paths from where the
+ * deleted folder sat. A document inside a deleted folder is listed once, and not as a document alone.
+ */
+export function deletionList<T extends Placed & { name: string }>(folders: readonly Folder[], items: readonly T[], roots: readonly Folder[], docs: readonly T[]): string[] {
+  const top = roots.filter((r) => !roots.some((o) => o !== r && isInside(folders, r.id, o.id) && r.id !== o.id));
+  const lines: string[] = [];
+  const seen = new Set<T>();
+  const pathFrom = (from: Folder | null, id: string | null) => {
+    const base = from ? folderPath(folders, from.parentId).length : 0;
+    return folderPath(folders, id).slice(base).map((f) => f.name);
+  };
+  for (const root of top) {
+    const inside = folderContents(folders, items, root);
+    const list: { sort: string; line: string }[] = [];
+    for (const f of inside.folders) list.push({ sort: pathFrom(root, f.id).join('/') + '/', line: pathFrom(root, f.id).join('/') + '/' });
+    for (const item of inside.items) {
+      seen.add(item);
+      const line = [...pathFrom(root, folderOf(item, folders)), item.name].join('/');
+      list.push({ sort: line, line });
+    }
+    list.sort((a, b) => a.sort.localeCompare(b.sort));
+    lines.push(...list.map((l) => l.line));
+  }
+  for (const doc of docs) if (!seen.has(doc)) lines.push(doc.name);
+  return lines;
 }

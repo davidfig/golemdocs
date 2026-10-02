@@ -4,6 +4,7 @@
 // see share-people.spec.ts.)
 
 import { test, expect, App, MOD } from '../fixtures';
+import { CLIENT_ORIGIN } from '../ports.ts';
 import { addComment, cloudPair, commentTexts, commentsTitle, expectText, newPerson, openCloud, others, selectForward, signInAs, statusLine } from './helpers';
 
 test.describe('a cloud document open on two devices', () => {
@@ -164,7 +165,7 @@ test.describe('a cloud document open on two devices', () => {
     const { a, b, doc } = await cloudPair(browser);
     const response = await a.page.request.put(`/api/documents/${doc.id}`, {
       data: Buffer.from('not a real docx'),
-      headers: { origin: 'http://localhost:5273' },
+      headers: { origin: CLIENT_ORIGIN },
     });
     expect(response.status()).toBe(423);
     await b.context.close();

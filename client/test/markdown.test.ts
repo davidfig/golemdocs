@@ -240,9 +240,9 @@ test('table-ish text that is not a table stays a paragraph', async () => {
   assert.equal(tables(doc).length, 0);
 });
 
-test('footnotes, task boxes and raw HTML stay literal', async () => {
+test('footnotes and raw HTML stay literal; task boxes become check glyphs', async () => {
   const doc = await markdownToDocument('Text[^1]\n\n[^1]: the note\n\n- [ ] todo\n\n<div>html</div>');
-  assert.deepEqual(texts(doc), ['Text[^1]', '[^1]: the note', '[ ] todo', '<div>html</div>']);
+  assert.deepEqual(texts(doc), ['Text[^1]', '[^1]: the note', '\u2610 todo', '<div>html</div>']);
 });
 
 test('CRLF, CR and a BOM are normalised', async () => {
@@ -727,4 +727,10 @@ test('pipes in a table cell link address, image and autolink are escaped', async
   const image = cells[1].children[0].children.find((i): i is Hyperlink => i.kind === 'hyperlink');
   assert.equal(image?.url, 'img|1.png');
   assert.equal(paragraphText(cells[1].children[0]), '[Image: p|q]');
+});
+
+test('task list items round trip through check glyphs', async () => {
+  const doc = await markdownToDocument('- [ ] todo\n- [x] done\n- [X] caps\n- [ ]nope\n');
+  assert.deepEqual(texts(doc), ['☐ todo', '☑ done', '☑ caps', '[ ]nope']);
+  assert.equal(documentToMarkdown(doc), '- [ ] todo\n- [x] done\n- [x] caps\n- [ ]nope\n');
 });

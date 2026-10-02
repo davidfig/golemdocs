@@ -89,15 +89,16 @@ test('the search box filters the cards by name', async ({ app, page }) => {
   await expect(cards(page)).toHaveCount(3);
 });
 
-test('deleting takes two clicks, and then the document is gone for good', async ({ app, page }) => {
+test('deleting asks in a dialog listing the document, and then it is gone for good', async ({ app, page }) => {
   await saveThree(app);
   await app.menu('File', 'Open…');
   const beta = cards(page).filter({ hasText: 'beta.md' });
   await pressDelete(beta);
-  // The first click only asks.
-  await expect(beta.getByRole('button', { name: 'Click again to confirm' })).toBeVisible();
+  // The button only asks.
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.locator('.wm-delete-list li')).toHaveText(['beta.md']);
   await expect(cards(page)).toHaveCount(3);
-  await beta.getByRole('button', { name: 'Click again to confirm' }).click();
+  await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(cards(page)).toHaveCount(2);
   expect(await cardNames(page)).toEqual(['gamma.csv', 'alpha.txt']);
   // Open Recent no longer lists it either.
@@ -109,15 +110,12 @@ test('deleting takes two clicks, and then the document is gone for good', async 
   expect(recent).not.toContain('beta.md');
 });
 
-test('the delete confirmation moves on if another card is clicked', async ({ app, page }) => {
+test('cancelling the delete dialog keeps the document', async ({ app, page }) => {
   await saveThree(app);
   await app.menu('File', 'Open…');
   await pressDelete(cards(page).filter({ hasText: 'beta.md' }));
-  await pressDelete(cards(page).filter({ hasText: 'alpha.txt' }));
-  // Only the last one asked is waiting for its second click; the first went back to Delete.
-  await expect(dashboard(page).locator('.wm-danger', { hasText: 'Click again to confirm' })).toHaveCount(1);
-  await expect(cards(page).filter({ hasText: 'alpha.txt' }).locator('.wm-danger')).toHaveText('Click again to confirm');
-  await expect(cards(page).filter({ hasText: 'beta.md' }).locator('.wm-danger')).toHaveText('Delete');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
   await expect(cards(page)).toHaveCount(3);
 });
 

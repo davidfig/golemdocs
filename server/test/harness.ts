@@ -12,7 +12,7 @@ const realFetch = globalThis.fetch;
 
 function fakeDirectory(): { db: DatabaseSync; binding: any } {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_users.sql', '0002_auth.sql', '0003_sharing.sql', '0004_feedback.sql', '0005_feedback_resolved.sql', '0006_subscriptions.sql', '0007_assistant_usage.sql', '0008_picture.sql']) db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
+  for (const file of ['0001_users.sql', '0002_auth.sql', '0003_sharing.sql', '0004_feedback.sql', '0005_feedback_resolved.sql', '0006_subscriptions.sql', '0007_assistant_usage.sql', '0008_picture.sql', '0009_catalogue_cache.sql', '0010_doc_index.sql']) db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
   const statement = (sql: string, params: unknown[]): any => ({
     bind: (...values: unknown[]) => statement(sql, values),
     first: async () => (db.prepare(sql).get(...(params as any[])) as any) ?? null,

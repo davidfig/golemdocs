@@ -16,8 +16,9 @@
 //    style "ImagePlaceholder") reads "[Image: alt]"; export turns it back into an image.
 //  - Tables: Table with style TableGrid; the first row is a header row (row.properties.header),
 //    column alignment is the paragraph justification of the cells.
-//  - Footnotes ([^1] and definitions), task-list boxes and raw HTML are kept as literal text: the
-//    model has no footnote part to attach them to.
+//  - Task-list boxes (`- [ ]` / `- [x]`) become a leading ☐ / ☑ in the item's text and are written back.
+//  - Footnotes ([^1] and definitions) and raw HTML are kept as literal text: the model has no
+//    footnote part to attach them to.
 //
 // Comments use CriticMarkup, the usual convention for comments in Markdown (other editors show or
 // ignore it, and the text stays readable): a commented range is `{==the text==}` followed by one
@@ -976,6 +977,17 @@ interface Marker {
   contentIdx: number;
 }
 
+/** A task-list box: "[ ] " or "[x] " at the start of an item becomes ☐ / ☑ text (and back on export). */
+function taskBox(text: string): string {
+  const m = /^\[([ xX])\](?=[ \t]|$)/.exec(text);
+  return m ? (m[1] === ' ' ? '\u2610' : '\u2611') + text.slice(3) : text;
+}
+
+function taskMarker(text: string): string {
+  const c = text.charAt(0);
+  return (c === '\u2610' || c === '\u2611') && (text.length === 1 || text[1] === ' ') ? (c === '\u2610' ? '[ ]' : '[x]') + text.slice(1) : text;
+}
+
 function listMarker(line: string, cols: number, idx: number): Marker | null {
   if (cols >= 4) return null;
   const c = line[idx];
@@ -1297,7 +1309,7 @@ function parseBlocks(b: Builder, lines: string[], ctx: Ctx, out: Block[]): void 
         const w = leading(l);
         const m = listMarker(l, w.cols, w.idx);
         if (!m || m.ordered !== first.ordered || m.marker !== first.marker || isHr(l, w.cols, w.idx)) break;
-        const item = { lines: [l.slice(m.contentIdx)] };
+        const item = { lines: [taskBox(l.slice(m.contentIdx))] };
         j++;
         while (j < n) {
           const l2 = lines[j];
@@ -2110,6 +2122,7 @@ class Exporter {
     state.col = startCol + marker.length + 1;
     const pad = ' '.repeat(state.col);
     const lines = this.text(p, 'block').split('\n');
+    lines[0] = taskMarker(lines[0]);
     const head = `${' '.repeat(startCol)}${marker}${lines[0] ? ` ${lines[0]}` : ''}`;
     const rest = lines.slice(1).map((line) => (line ? pad + line : line));
     // A new top-level list gets a blank line before it (nested lists stay tight under their item).

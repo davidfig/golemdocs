@@ -40,6 +40,13 @@ export const app: Partial<Messages> = {
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': '저장된 모든 문서를 다운로드했습니다',
   'app.downloadFailed': '다운로드하지 못했습니다: {message}',
+  'app.importingZip': '{name} 가져오는 중…',
+  'app.importZipNone': '{name}에 가져올 수 있는 문서가 없습니다',
+  'app.importedZip': '가져온 문서: {count}',
+  'app.importedZipSkipped': '가져온 문서: {count}. 열 수 없는 파일은 건너뛰었습니다: {skipped}',
+  'app.importZipFailed': '가져오지 못했습니다: {message}',
+  'app.importProgress': '{done} / {total}',
+  'app.importCancelled': '가져오기를 취소했습니다. 가져온 문서: {count}',
 
   // Collaboration
   'app.editingAlone': '다시 혼자 편집하고 있습니다',

@@ -2217,7 +2217,7 @@
   color: var(--wm-text);
   background: var(--wm-menu-bg);
   border: 1px solid var(--wm-field-border);
-  font: 600 calc(var(--wm-avatar, 24px) * 0.5) / 1 system-ui, sans-serif;
+  font: 600 calc(var(--wm-avatar, 24px) * 0.5) / 1 var(--wm-font);
 }
 
 .wm-avatar img {

@@ -28,6 +28,7 @@ export const chrome: Catalog = {
   'chrome.view.editForm': '&Редактировать PDF',
   'chrome.view.grid': 'Сет&ка страницы',
   'chrome.view.pagesPanel': 'Панель стр&аниц',
+  'chrome.view.filesPanel': 'Панель фа&йлов',
   'chrome.view.ruler': 'Ли&нейка',
   'chrome.view.footer': 'Строка со&стояния',
   'chrome.view.formattingMarks': 'Непечатаемые &знаки',

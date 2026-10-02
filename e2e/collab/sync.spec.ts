@@ -2,6 +2,7 @@
 // the panel's Try again. (The subscription states belong to billing and aren't covered.)
 
 import { test, expect } from '../fixtures';
+import { CLIENT_ORIGIN } from '../ports.ts';
 import { newPerson, waitForCloudDoc } from './helpers';
 
 const state = (page: import('@playwright/test').Page, expected: string | RegExp) => expect(page.locator('.wm-sync')).toHaveAttribute('data-state', expected, { timeout: 30_000 });
@@ -88,7 +89,7 @@ test.describe('the save indicator when signed in', () => {
     await state(person.page, 'saved');
     // The session ends (as if it expired or was revoked).
     await person.context.clearCookies();
-    await person.context.addCookies([{ name: 'dev_signed_out', value: '1', url: 'http://localhost:5273' }]);
+    await person.context.addCookies([{ name: 'dev_signed_out', value: '1', url: CLIENT_ORIGIN }]);
     await person.app.type(' and then more');
     await state(person.page, 'signedOut');
     await expect(person.page.locator('.wm-sync')).toHaveText('Sign in to save');
@@ -109,7 +110,7 @@ test.describe('the save indicator when signed in', () => {
     await state(person.page, 'saved');
     await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'true');
     await person.context.clearCookies();
-    await person.context.addCookies([{ name: 'dev_signed_out', value: '1', url: 'http://localhost:5273' }]);
+    await person.context.addCookies([{ name: 'dev_signed_out', value: '1', url: CLIENT_ORIGIN }]);
     await person.app.type('y');
     await state(person.page, 'signedOut');
     await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'false');

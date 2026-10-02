@@ -1,6 +1,6 @@
 // The server's HTTP contract, called directly (no browser UI): who may call what, origin checks,
 // the document/share/thumbnail routes and the sign-in routes. Requests go through the client's
-// Vite proxy, like the app's own, so the origin the server expects is http://localhost:5273.
+// Vite proxy, like the app's own, so the origin the server expects is the e2e client origin (e2e/ports.ts).
 //
 // Being signed out: send the `dev_signed_out` cookie (what signing out sets), which switches off
 // the dev-user shortcut. `apiAs` makes a request context with a session for a unique account.
@@ -10,8 +10,9 @@ import type { APIRequestContext, PlaywrightWorkerArgs } from '@playwright/test';
 
 type Playwright = PlaywrightWorkerArgs['playwright'];
 import { uniqueEmail } from './helpers';
+import { CLIENT_ORIGIN } from '../ports.ts';
 
-const BASE = 'http://localhost:5273';
+const BASE = CLIENT_ORIGIN;
 const ORIGIN = { origin: BASE };
 const SIGNED_OUT = { cookie: 'dev_signed_out=1' };
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';

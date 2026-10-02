@@ -31,7 +31,7 @@
   border-radius: 3px;
   background: var(--wm-pointer, #e8590c);
   color: #fff;
-  font: 11px/1.4 system-ui, sans-serif;
+  font: 11px/1.4 var(--wm-font, system-ui, sans-serif);
   white-space: nowrap;
 }
 

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CloudDocument } from '../src/cloud.ts';
 import type { SavedInfo } from '../src/storage/local.ts';
-import { childFolders, folderOf, folderPath, folderTree, isInside, itemsIn, parentsFirst, type Folder } from '../src/folders.ts';
+import { childFolders, folderOf, folderPath, folderTree, isInside, itemsIn, parentsFirst, treeRows, type Folder } from '../src/folders.ts';
 import { classify, deletedElsewhere, hasUnsentChanges, mergeLibrary, type LibraryEntry } from '../src/sync.ts';
 import { THUMB_MAX_HEIGHT, THUMB_WIDTH, thumbnailSize, toTopDownOpaque } from '../src/thumbnail.ts';
 import { formatSize, matchesSearch, opensFromCloud, relativeTime, syncBadge } from '../src/ui/dashboardFormat.ts';
@@ -174,4 +174,16 @@ test('paths, containment and the picker tree follow the nesting, and survive a c
 
   const loop = [folder('p', 'q'), folder('q', 'p')];
   assert.ok(folderPath(loop, 'p').length <= 2, 'a corrupt cycle ends instead of looping');
+});
+
+test('treeRows lists folders before documents, and only looks inside the folders that are open', () => {
+  const at = (id: string, parentId: string | null): Folder => ({ id, name: id, parentId, createdAt: 0, updatedAt: 0 });
+  const folders = [at('b', null), at('a', null), at('a1', 'a')];
+  const doc = (name: string, folderId: string | null) => ({ name, cloud: { folderId } });
+  const items = [doc('top', null), doc('in-a', 'a'), doc('in-a1', 'a1'), doc('gone', 'deleted')];
+  const shape = (open: string[]) =>
+    treeRows(folders, items, new Set(open)).map((r) => `${r.depth}${r.kind === 'folder' ? (r.open ? '-' : '+') + r.folder.id : ' ' + r.item.name}`);
+  assert.deepEqual(shape([]), ['0+a', '0+b', '0 gone', '0 top']);
+  assert.deepEqual(shape(['a']), ['0-a', '1+a1', '1 in-a', '0+b', '0 gone', '0 top']);
+  assert.deepEqual(shape(['a', 'a1']), ['0-a', '1-a1', '2 in-a1', '1 in-a', '0+b', '0 gone', '0 top']);
 });

@@ -139,6 +139,14 @@ export function forgetInCatalogue(user: User, cloudIds: readonly string[], folde
   writeCatalogue(user, cached.cloud.filter((d) => !cloudIds.includes(d.id)), cached.shared, cached.folders.filter((f) => !folderIds.includes(f.id)));
 }
 
+/** Adds folders just made in the account to the cached catalogue, so a head start from it knows them (documents in them would otherwise show at the top level). */
+export function addFoldersToCatalogue(user: User, folders: readonly Folder[]): void {
+  const cached = readCatalogue(user);
+  if (!cached) return;
+  const ids = new Set(folders.map((f) => f.id));
+  writeCatalogue(user, cached.cloud, cached.shared, [...cached.folders.filter((f) => !ids.has(f.id)), ...folders]);
+}
+
 /** `user`'s copies in this browser, less those of documents deleted from the account (they are on their way out). */
 function notDeleted(saved: readonly SavedInfo[], user: User | null): SavedInfo[] {
   return ownedBy(saved, user?.id ?? null).filter((l) => !isDeleted(l.cloudId));

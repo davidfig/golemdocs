@@ -47,4 +47,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.searchDocuments': '문서를 검색하는 중…',
   'assistant.tool.readOtherDocument': '다른 문서를 읽는 중…',
   'assistant.tool.insertFromDocument': '다른 문서에서 복사하는 중…',
+  'assistant.tool.files': '파일을 처리하는 중…',
 };

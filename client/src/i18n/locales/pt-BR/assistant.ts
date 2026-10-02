@@ -47,4 +47,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.searchDocuments': 'Procurando nos seus documentos…',
   'assistant.tool.readOtherDocument': 'Lendo outro documento…',
   'assistant.tool.insertFromDocument': 'Copiando de outro documento…',
+  'assistant.tool.files': 'Trabalhando nos seus arquivos…',
 };

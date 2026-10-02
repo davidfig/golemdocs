@@ -46,4 +46,5 @@ export const assistant = {
   'assistant.tool.searchDocuments': 'Looking through your documents…',
   'assistant.tool.readOtherDocument': 'Reading another document…',
   'assistant.tool.insertFromDocument': 'Copying from another document…',
+  'assistant.tool.files': 'Working on your files…',
 };

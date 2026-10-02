@@ -1,11 +1,12 @@
 // Paragraph layout: turns one paragraph into lines of positioned glyphs for a given width.
 // Pure and independent of pagination, so edits can re-lay out just the changed paragraph.
 
-import { mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@golemdocs/docx';
+import { CHECKBOX, mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@golemdocs/docx';
 import { parseHexColor } from './display.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import type { ResolvedFont } from './fonts/fontSet.ts';
 import { BLACK, type LayoutContext, type RunStyle } from './context.ts';
+import { checkbox, type CheckboxBox } from './checkbox.ts';
 import { TAB, TextCollector } from './runs.ts';
 import type { SourceSpan } from './offsets.ts';
 import { layerKey } from './context.ts';
@@ -49,6 +50,8 @@ export interface LineLayout {
   /** Left edge and width of the line's content, for hit testing. */
   left: number;
   width: number;
+  /** The check box of a task list item, on its first line. */
+  box?: CheckboxBox;
   /** The line ends with a page or column break. */
   pageBreak: boolean;
   /** ...and it is a column break (the next column, not the next page, in a section with columns). */
@@ -130,6 +133,7 @@ class LineBuilder {
   rectColors: number[] = [];
   rectLayers: number[] = [];
   images: LineLayout['images'] = [];
+  box: CheckboxBox | undefined;
 
   rect(layer: number, x: number, y: number, w: number, h: number, color: number): void {
     if (w <= 0 || h <= 0) return;
@@ -152,7 +156,9 @@ class LineBuilder {
       rectLayers: Uint8Array.from(this.rectLayers),
       images: this.images,
       stops,
+      ...(this.box && { box: this.box }),
     };
+    this.box = undefined;
     this.glyph.length = this.x.length = this.style.length = this.size.length = this.dy.length = this.font.length = 0;
     this.rects.length = this.rectColors.length = this.rectLayers.length = 0;
     this.images = [];
@@ -235,6 +241,7 @@ function layoutParagraphUncached(
 
   // List label, drawn in the paragraph mark's formatting plus the level's.
   let labelLength = 0;
+  let boxLabel: 'unchecked' | 'checked' | undefined;
   if (label) {
     const level = resolver.listLevel(props.numbering!.id!, label.level);
     const labelProps = resolver.run(
@@ -243,9 +250,10 @@ function layoutParagraphUncached(
       ctx.layer,
     );
     const style = collector.resolvedStyle(labelProps);
-    const text =
-      TextCollector.labelText(label.text, collector.styles[style]) +
-      (label.suffix === 'tab' ? TAB : label.suffix === 'space' ? ' ' : '');
+    const suffix = label.suffix === 'tab' ? TAB : label.suffix === 'space' ? ' ' : '';
+    // A check box is drawn, not typeset: its label is a space, and the box goes where the label starts.
+    boxLabel = label.text === CHECKBOX.unchecked ? 'unchecked' : label.text === CHECKBOX.checked ? 'checked' : undefined;
+    const text = (boxLabel ? '\u00a0' : TextCollector.labelText(label.text, collector.styles[style])) + suffix;
     collector.prepend(text, style);
     labelLength = text.length;
   }
@@ -519,7 +527,9 @@ function layoutParagraphUncached(
         runStart = j;
         runX = pen;
       }
-      if (glyphs[j] >= 0 && fonts[faceOf[j]].metrics.visible[glyphs[j]]) {
+      if (boxLabel && j === 0) {
+        builder.box = checkbox((rx, ry, rw, rh, c) => builder.rect(OVER, rx, ry, rw, rh, c), pen, baseline, sizes[j], styles[s].color, boxLabel === 'checked');
+      } else if (glyphs[j] >= 0 && fonts[faceOf[j]].metrics.visible[glyphs[j]]) {
         builder.glyph.push(glyphs[j]);
         builder.x.push(pen);
         builder.style.push(s);
@@ -670,6 +680,7 @@ export function emitLine(
     column: x,
     columnWidth,
     stops: line.stops,
+    box: line.box,
     spans: paragraph.spans,
     trailingSpace: line.trailingSpace,
     last: line === paragraph.lines[paragraph.lines.length - 1],

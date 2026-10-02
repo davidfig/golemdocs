@@ -69,6 +69,9 @@ import { FormatReader } from './selectionFormat.ts';
 import { runAgentTool } from './agentTools.ts';
 import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
+import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, type LineContext } from './autoformat.ts';
+import { FORMATS, formatAllows } from '../ui/formats.ts';
+import type { Action, DocumentKind, Mark } from '../ui/actions.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText, tableShape } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
@@ -224,7 +227,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'spellAt', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -1309,9 +1312,12 @@ class OpenDocument {
   }
 
   /** The address of the link under a point on a page (null when there is none, or the document isn't text). */
-  linkAt(pageId: number, x: number, y: number): string | null {
+  linkAt(pageId: number, x: number, y: number): { url: string | null; checkbox: boolean } {
     const page = this.session?.displayPages.find((p) => p.id === pageId);
-    return this.editor && page && !this.closed && !this.annotator ? this.editor.linkUnder(page, x, y) : null;
+    if (!this.editor || !page || this.closed || this.annotator) return { url: null, checkbox: false };
+    const profile = FORMATS[this.format as DocumentKind];
+    const checkbox = !this.readOnly && !!profile?.editable && profile.lists && !!this.editor.checkboxUnder(page, x, y);
+    return { url: this.editor.linkUnder(page, x, y), checkbox };
   }
 
   /** Right click: selects the mistake under the point and reports it for the menu (nothing, if there is none). */
@@ -1401,6 +1407,10 @@ class OpenDocument {
       live.grammar = wire.grammar;
       return acceptSpelling(wire.words ?? [], []).then(() => this.sendSelection());
     }
+    if (wire.kind === 'autoFormat') {
+      live.autoFormat = wire.on;
+      return;
+    }
     if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
@@ -1420,33 +1430,182 @@ class OpenDocument {
     if (wire.kind === 'insertParagraph' && this.endEmptyListItem(editor)) return;
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
+    // Backspace right after a shortcut turned into formatting takes it back to the characters typed.
+    const converted = this.converted;
+    this.converted = null;
     let edited: boolean;
+    let after: void | Promise<void> = undefined;
     if (wire.kind === 'undo') edited = editor.undo().edited;
     else if (wire.kind === 'redo') edited = editor.redo().edited;
-    else {
+    else if (converted && wire.kind === 'delete' && wire.direction === 'backward' && wire.unit !== 'word' && editor.collapsed) {
+      for (let k = 0; k < converted.steps; k++) editor.undo();
+      editor.apply({ kind: 'select', paragraph: converted.paragraph, from: converted.offset, to: converted.offset });
+      edited = true;
+    } else {
       let command: Command;
       if (wire.kind === 'pointer') {
         const page = session.displayPages.find((p) => p.id === wire.page) ?? session.pages.find((p) => p.id === wire.page);
         if (!page) return;
         command = { ...wire, page };
       } else command = wire;
-      const result = editor.apply(command);
-      edited = result.edited;
-      if (command.kind === 'find' || command.kind === 'replaceAll') this.search = { found: result.found, replaced: result.replaced };
+      const rule = command.kind === 'insertParagraph' ? this.lineShortcut(editor) : command.kind === 'pointer' ? this.checkboxClick(editor, command) : null;
+      if (rule) {
+        edited = true;
+        after = rule;
+      } else {
+        const result = editor.apply(command);
+        edited = result.edited;
+        if (command.kind === 'find' || command.kind === 'replaceAll') this.search = { found: result.found, replaced: result.replaced };
+        if (edited && command.kind === 'insertText') after = this.typedShortcut(editor, command.text);
+      }
     }
     // Edits send the selection once the changed pages are laid out.
-    if (edited) {
-      this.edited = true;
-      void this.pump();
-      this.status();
-    } else this.sendSelection();
+    const finish = () => {
+      if (edited) {
+        this.edited = true;
+        void this.pump();
+        this.status();
+      } else this.sendSelection();
+    };
+    if (after) return after.then(finish);
+    finish();
+  }
+
+  // --- Markdown shortcuts as you type (see autoformat.ts) ---------------------------------------
+
+  /** The last shortcut turned into formatting: the edits to undo to get the typed characters back, and the caret then. */
+  private converted: { steps: number; paragraph: number; offset: number } | null = null;
+
+  /** What shortcuts may do here: the format can express headings, lists and marks, and the caret is in plain text. */
+  private shortcutContext(editor: Editor): { profile: (typeof FORMATS)[DocumentKind]; line: LineContext; code: boolean; index: number; before: string } | null {
+    if (!live.autoFormat || !editor.collapsed || this.annotator || this.readOnly) return null;
+    const profile = FORMATS[this.format as DocumentKind];
+    if (!profile?.editable) return null;
+    const [at] = editor.ordered();
+    const properties = at.paragraph.properties;
+    const style = properties.style;
+    return {
+      profile,
+      line: { styled: !!style && style !== 'Normal' && style !== 'ListParagraph', listed: !!properties.numbering?.id },
+      code: style === 'Code',
+      index: editor.paragraphs().indexOf(at.paragraph),
+      before: paragraphText(at.paragraph).slice(0, at.offset),
+    };
+  }
+
+  /** Runs formatting from the menus' actions, one edit each; fonts the formatting needs are loaded first. */
+  private async formatSteps(editor: Editor, actions: Action[]): Promise<void> {
+    const session = this.session;
+    if (!session || !this.formats) return;
+    const read = () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending);
+    const fonts = new Set<string>();
+    for (const action of actions) formatCommand(action as FormatAction, editor, read(), fonts);
+    if (fonts.size) await session.ensureFonts(fonts);
+    if (this.closed) return;
+    for (const action of actions) {
+      const command = formatCommand(action as FormatAction, editor, read(), new Set());
+      if (command) editor.apply(command);
+    }
+  }
+
+  /** A character was typed: if it finishes a Markdown shortcut, turns what was typed into formatting. */
+  private typedShortcut(editor: Editor, typed: string): void | Promise<void> {
+    if (typed.length !== 1) return;
+    const context = this.shortcutContext(editor);
+    if (!context) return;
+    const { profile, line, code, index, before } = context;
+    const end = before.length;
+    const allows = (actions: Action[]) => actions.every((a) => formatAllows(profile, a));
+    const select = (from: number, to: number) => editor.apply({ kind: 'select', paragraph: index, from, to });
+    if (typed === ' ') {
+      // A link is made by the space after it: the text typed next then goes after the link, not into it.
+      const link = code ? null : linkShortcut(before.slice(0, -1));
+      if (link && allows([{ kind: 'insertLink' } as Action])) {
+        select(link.start, end - 1);
+        editor.apply({ kind: 'setLink', url: link.url, text: link.text });
+        select(link.start + link.text.length + 1, link.start + link.text.length + 1);
+        this.converted = { steps: 1, paragraph: index, offset: end };
+        return;
+      }
+      const block = blockShortcut(before, line);
+      if (!block || code || !allows(block.actions)) return;
+      select(end - block.remove, end);
+      editor.apply({ kind: 'delete', direction: 'backward' });
+      this.converted = { steps: 1 + block.actions.length, paragraph: index, offset: end };
+      return this.formatSteps(editor, block.actions);
+    }
+    if (code) return;
+    // Marked text is only closed where it does not run into the word after the caret.
+    const next = paragraphText(editor.ordered()[0].paragraph).charAt(end);
+    if (/[\p{L}\p{N}]/u.test(next)) return;
+    const span = inlineShortcut(before);
+    if (!span || !allows([{ kind: 'toggleMark', mark: span.mark }])) return;
+    const inner = end - 2 * span.marker - span.start;
+    if (before.slice(span.start, end).includes('\uFFFC')) return;
+    select(end - span.marker, end);
+    editor.apply({ kind: 'delete', direction: 'backward' });
+    select(span.start, span.start + span.marker);
+    editor.apply({ kind: 'delete', direction: 'backward' });
+    select(span.start, span.start + inner);
+    this.converted = { steps: 3, paragraph: index, offset: end };
+    return this.formatSteps(editor, [{ kind: 'toggleMark', mark: span.mark }]).then(() => {
+      // What is typed next is not marked.
+      select(span.start + inner, span.start + inner);
+      editor.apply({ kind: 'formatText', format: unmark(span.mark) });
+    });
+  }
+
+  /** A click on the check box of a task list item checks or unchecks it (and puts the caret in the item). */
+  private checkboxClick(editor: Editor, click: Extract<Command, { kind: 'pointer' }>): Promise<void> | null {
+    if (click.extend || (click.unit && click.unit !== 'character') || this.annotator || this.readOnly) return null;
+    const profile = FORMATS[this.format as DocumentKind];
+    if (!profile?.editable || !profile.lists) return null;
+    const hit = editor.checkboxUnder(click.page, click.x, click.y);
+    if (!hit) return null;
+    editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: 0, to: 0 });
+    return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]);
+  }
+
+  /** Enter on a line of "---" or "```": a horizontal rule or a code block instead of a new paragraph. */
+  private lineShortcut(editor: Editor): Promise<void> | null {
+    const context = this.shortcutContext(editor);
+    if (!context) return null;
+    const [at] = editor.ordered();
+    const text = paragraphText(at.paragraph);
+    if (at.offset !== text.length) return null;
+    const kind = lineShortcut(text, context.line);
+    if (!kind) return null;
+    const action: Action = kind === 'rule' ? { kind: 'insertHorizontalRule' } : { kind: 'insertCodeBlock' };
+    if (!formatAllows(context.profile, action)) return null;
+    const { index } = context;
+    editor.apply({ kind: 'select', paragraph: index, from: 0, to: text.length });
+    editor.apply({ kind: 'delete', direction: 'backward' });
+    this.converted = { steps: 2, paragraph: index, offset: text.length };
+    return this.formatSteps(editor, [action]).then(() => {
+      // A rule that took the empty line's place: the caret goes on to the line after it.
+      if (kind === 'rule' && editor.ordered()[0].paragraph.properties.borders?.bottom) editor.apply({ kind: 'move', to: 'right' });
+    });
+  }
+}
+
+/** The change that takes a mark off what is typed next. */
+function unmark(mark: Mark): RunFormat {
+  switch (mark) {
+    case 'bold':
+      return { bold: null, boldCs: null };
+    case 'italic':
+      return { italic: null, italicCs: null };
+    case 'strikethrough':
+      return { strike: null, doubleStrike: null };
+    default:
+      return { style: null, fonts: null };
   }
 }
 
 /** Words the user added to the dictionary or chose to ignore, and grammar rules to ignore: for every document. */
 const spelling = { words: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
-const live = { spelling: true, grammar: true };
+const live = { spelling: true, grammar: true, autoFormat: true };
 const dictionaries = new Map<SpellLanguage, Promise<Dictionary>>();
 const loadedDictionaries = new Map<SpellLanguage, Dictionary>();
 /** Changes when what counts as a mistake does, so checked paragraphs are checked again. */
@@ -1801,7 +1960,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       void media(message.doc, message.request, message.part);
       break;
     case 'linkAt':
-      post({ type: 'linkAt', request: message.request, url: current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : null });
+      post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, checkbox: false }) });
       break;
     case 'command':
       if (current?.doc === message.doc) {

@@ -47,4 +47,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.searchDocuments': '正在搜索你的文档…',
   'assistant.tool.readOtherDocument': '正在阅读另一个文档…',
   'assistant.tool.insertFromDocument': '正在从另一个文档复制…',
+  'assistant.tool.files': '正在处理你的文件…',
 };

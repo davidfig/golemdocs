@@ -103,6 +103,8 @@ export type WireCommand =
   | { kind: 'spellWords'; words?: string[]; rules?: string[] }
   /** Check-as-you-type: what to underline in the document, and the user's dictionary words to accept. */
   | { kind: 'spellCheck'; spelling: boolean; grammar: boolean; words?: string[] }
+  /** Whether typed Markdown shortcuts ("# ", "- ", "**bold**") turn into formatting (see autoformat.ts). */
+  | { kind: 'autoFormat'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   | { kind: 'spellAt'; page: number; x: number; y: number }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
@@ -352,7 +354,7 @@ export type FromWorker =
   /** Someone else's edit changed the document (it needs saving here too). */
   | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
-  | { type: 'linkAt'; request: number; url: string | null }
+  | { type: 'linkAt'; request: number; url: string | null; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
   /** What an assistant tool did or found. */
   /** `images` are pictures the tool fetched for the model to look at (data: URIs). */

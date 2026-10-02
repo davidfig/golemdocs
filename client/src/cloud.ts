@@ -103,30 +103,45 @@ export async function saveDocument(id: string, bytes: Uint8Array, name?: string,
   return (await check(response)).json();
 }
 
-export async function deleteDocument(id: string): Promise<void> {
-  await check(await fetch(`/api/documents/${id}`, { method: 'DELETE' }));
+/** What a request on several things did: the ones it did, and each that it could not with why (`status` 404 is "already gone"). */
+export interface BatchResult<T> {
+  ok: T[];
+  failed: { id: string; error: string }[];
 }
 
-/** Moves a document to a folder (null: the top level). */
-export async function moveDocument(id: string, folderId: string | null): Promise<CloudDocument> {
-  const response = await fetch(`/api/documents/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ folderId }) });
-  return (await check(response)).json();
+/** Sends a batch (JSON body) and returns how each item went; only the request failing as a whole throws. */
+async function batch<T>(method: string, url: string, body: unknown): Promise<BatchResult<T>> {
+  return (await check(await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).json();
+}
+
+/**
+ * Deletes documents and folders, in one request. A folder goes with everything inside it. The
+ * caller sees which could not be deleted.
+ */
+export function deleteDocuments(ids: readonly string[], folderIds: readonly string[] = []): Promise<BatchResult<string>> {
+  return batch('DELETE', '/api/documents', { ids, folders: folderIds });
+}
+
+/** Moves documents to a folder (null: the top level), in one request. */
+export function moveDocuments(ids: readonly string[], folderId: string | null): Promise<BatchResult<string>> {
+  return batch('PATCH', '/api/documents', { ids, folderId });
 }
 
 export async function listFolders(): Promise<Folder[]> {
   return (await check(await fetch('/api/folders'))).json();
 }
 
-/** Creates a folder with this id, or renames and moves it if there already is one. */
-export async function putFolder(folder: Pick<Folder, 'id' | 'name' | 'parentId'>): Promise<Folder> {
-  const body = JSON.stringify({ name: folder.name, parentId: folder.parentId });
-  const response = await fetch(`/api/folders/${folder.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body });
-  return (await check(response)).json();
+/**
+ * Creates folders with these ids, or renames and moves the ones that exist, in one request. They
+ * are made in order, so a folder may go inside one earlier in the list.
+ */
+export function putFolders(folders: readonly Pick<Folder, 'id' | 'name' | 'parentId'>[]): Promise<BatchResult<Folder>> {
+  return batch('PUT', '/api/folders', { folders: folders.map(({ id, name, parentId }) => ({ id, name, parentId })) });
 }
 
-/** Deletes the folder only: its folders and documents move up to where it was. */
-export async function deleteFolder(id: string): Promise<void> {
-  await check(await fetch(`/api/folders/${id}`, { method: 'DELETE' }));
+/** The reason the first failure of a batch gives, as an error; nothing when all went through. */
+export function throwIfFailed(result: BatchResult<unknown>): void {
+  if (result.failed.length) throw new CloudError(0, result.failed[0]!.error);
 }
 
 /** Documents other people shared with this user. */

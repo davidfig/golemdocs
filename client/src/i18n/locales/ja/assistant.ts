@@ -47,4 +47,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.searchDocuments': 'ドキュメントを検索しています…',
   'assistant.tool.readOtherDocument': '別のドキュメントを読んでいます…',
   'assistant.tool.insertFromDocument': '別のドキュメントからコピーしています…',
+  'assistant.tool.files': 'ファイルを処理しています…',
 };

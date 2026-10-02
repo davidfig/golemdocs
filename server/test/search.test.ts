@@ -182,6 +182,19 @@ test('deleting a document removes it from the index and from results', async () 
   assert.deepEqual(((await (await search(me, 'remember')).json()) as { hits: unknown[] }).hits, []);
 });
 
+test('deleting documents together removes each from the index and from results too', async () => {
+  const me = 'sub@example.com';
+  await w.signUp(me, 'Sub', { subscribed: true });
+  const first = await upload(me, 'One.docx', await docx('# One', 'remember this one'));
+  const second = await upload(me, 'Two.docx', await docx('# Two', 'remember this two'));
+  await search(me, 'remember');
+  assert.ok(vectors.has(`${first.id}:0`) && vectors.has(`${second.id}:0`));
+  const response = await w.call(me, 'DELETE', '/api/documents', { body: JSON.stringify({ ids: [first.id, second.id] }), type: 'application/json' });
+  assert.equal(response.status, 200);
+  assert.equal(vectors.size, 0);
+  assert.deepEqual(((await (await search(me, 'remember')).json()) as { hits: unknown[] }).hits, []);
+});
+
 test('a document that cannot be read is skipped, not fatal', async () => {
   const me = 'sub@example.com';
   await w.signUp(me, 'Sub', { subscribed: true });

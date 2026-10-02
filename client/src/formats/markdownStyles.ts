@@ -2,7 +2,7 @@
 // Apart from the Markdown reader and writer so that formatting commands can define a style
 // without loading them.
 
-import type { Style } from '@golemdocs/docx';
+import { CHECKBOX, type Style } from '@golemdocs/docx';
 
 const MONO = 'Courier New';
 export const MONO_FONTS = { ascii: MONO, hAnsi: MONO, eastAsia: MONO, cs: MONO };
@@ -131,3 +131,6 @@ export function styleFor(id: string): Style | undefined {
   }
   return undefined;
 }
+
+/** The labels of lists of check boxes (Markdown task lists): not done, done. The layout draws a box for them. */
+export const TASK_GLYPHS = { task: CHECKBOX.unchecked, taskDone: CHECKBOX.checked } as const;

@@ -75,47 +75,133 @@ function listDocuments(env: Env, ownerId: string, db: UserDb): Promise<DocumentR
  * sent as it is (PUT is create-or-update).
  */
 async function handleFolders(request: Request, id: string | undefined, db: UserDb | null, syncing: boolean): Promise<Response> {
-  // GET /api/folders
   if (id === undefined) {
-    if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
-    return json(db ? (await db.cachedList('folders', () => db.all<FolderRow>('SELECT * FROM folders ORDER BY name'))).map(describeFolder) : []);
+    // GET /api/folders
+    if (request.method === 'GET') return json(db ? (await db.cachedList('folders', () => db.all<FolderRow>('SELECT * FROM folders ORDER BY name'))).map(describeFolder) : []);
+
+    // PUT /api/folders { folders: [{ id, name, parentId }] }: creates or updates several, in order
+    // (so a folder may go inside one made earlier in the list). Each is reported on its own.
+    if (request.method === 'PUT') {
+      if (!db || !syncing) throw subscriptionRequired();
+      const body = (await request.json().catch(() => null)) as { folders?: unknown } | null;
+      if (!Array.isArray(body?.folders) || body.folders.length > MAX_BATCH) throw new HttpError(400, `expected { folders: [{ id, name, parentId }] } of at most ${MAX_BATCH}`);
+      const ok: ReturnType<typeof describeFolder>[] = [];
+      const failed: Failure[] = [];
+      for (const item of body.folders as { id?: unknown; name?: unknown; parentId?: unknown }[]) {
+        const itemId = typeof item?.id === 'string' ? item.id : '';
+        try {
+          if (!ID.test(itemId)) throw new HttpError(400, 'expected an id');
+          ok.push((await putFolder(db, itemId, item)).folder);
+        } catch (error) {
+          failed.push(failure(itemId, error));
+        }
+      }
+      return json({ ok, failed });
+    }
+
+    // DELETE /api/folders { ids }: removes the folders only; what was in each moves up.
+    if (request.method === 'DELETE') {
+      if (!db) throw new HttpError(404, 'not found');
+      const ids = idList(await request.json().catch(() => null));
+      const ok: string[] = [];
+      const failed: Failure[] = [];
+      for (const folderId of ids) {
+        try {
+          await removeFolder(db, folderId);
+          ok.push(folderId);
+        } catch (error) {
+          failed.push(failure(folderId, error));
+        }
+      }
+      return json({ ok, failed });
+    }
+    throw new HttpError(405, 'method not allowed');
   }
 
   // PUT /api/folders/:id { name, parentId }: creates it, or renames and moves it.
   if (request.method === 'PUT') {
     if (!db || !syncing) throw subscriptionRequired();
-    const body = (await request.json().catch(() => null)) as { name?: unknown; parentId?: unknown } | null;
-    const name = typeof body?.name === 'string' ? cleanName(body.name) : null;
-    const parentId = body?.parentId ?? null;
-    if (!name || (parentId !== null && typeof parentId !== 'string')) throw new HttpError(400, 'expected { name, parentId }');
-    if (parentId !== null) {
-      // The new parent must exist, and must not be this folder or inside it.
-      let at: string | null = parentId;
-      for (let depth = 0; at !== null; depth++) {
-        if (at === id || depth > MAX_FOLDER_DEPTH) throw new HttpError(400, 'a folder cannot go inside itself');
-        const parent: FolderRow | null = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [at]);
-        if (!parent) throw new HttpError(400, 'no such folder');
-        at = parent.parent_id;
-      }
-    }
-    const now = Date.now();
-    const existing = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
-    if (existing) await db.run('UPDATE folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?', [name, parentId, now, id]);
-    else await db.run('INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, name, parentId, now, now]);
-    return json(describeFolder({ id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now }), existing ? 200 : 201);
+    const { folder, created } = await putFolder(db, id, (await request.json().catch(() => null)) as { name?: unknown; parentId?: unknown } | null);
+    return json(folder, created ? 201 : 200);
   }
 
   // DELETE /api/folders/:id: removes the folder only. What was in it moves up to where it was.
   if (request.method === 'DELETE') {
-    const row = await db?.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
-    if (!db || !row) throw new HttpError(404, 'not found');
-    await db.run('UPDATE folders SET parent_id = ? WHERE parent_id = ?', [row.parent_id, id]);
-    await db.run('UPDATE documents SET folder_id = ? WHERE folder_id = ?', [row.parent_id, id]);
-    await db.run('DELETE FROM folders WHERE id = ?', [id]);
+    if (!db) throw new HttpError(404, 'not found');
+    await removeFolder(db, id);
     return new Response(null, { status: 204 });
   }
 
   throw new HttpError(405, 'method not allowed');
+}
+
+const MAX_BATCH = 500;
+
+/** One item of a batch that did not go through. */
+interface Failure {
+  id: string;
+  error: string;
+}
+
+const failure = (id: string, error: unknown): Failure => ({ id, error: error instanceof HttpError ? error.message : 'internal error' });
+
+/** The `ids` of a batch request: a list of ids (at most MAX_BATCH), without repeats. */
+function idList(body: unknown, key = 'ids', optional = false): string[] {
+  const ids = (body as Record<string, unknown> | null)?.[key];
+  if (optional && ids === undefined) return [];
+  if (!Array.isArray(ids) || ids.length > MAX_BATCH || !ids.every((id) => typeof id === 'string' && ID.test(id))) throw new HttpError(400, `expected { ${key}: [...] } of at most ${MAX_BATCH} ids`);
+  return [...new Set(ids as string[])];
+}
+
+/** Creates the folder `id`, or renames and moves it. */
+async function putFolder(db: UserDb, id: string, body: { name?: unknown; parentId?: unknown } | null): Promise<{ folder: ReturnType<typeof describeFolder>; created: boolean }> {
+  const name = typeof body?.name === 'string' ? cleanName(body.name) : null;
+  const parentId = body?.parentId ?? null;
+  if (!name || (parentId !== null && typeof parentId !== 'string')) throw new HttpError(400, 'expected { name, parentId }');
+  if (parentId !== null) {
+    // The new parent must exist, and must not be this folder or inside it.
+    let at: string | null = parentId;
+    for (let depth = 0; at !== null; depth++) {
+      if (at === id || depth > MAX_FOLDER_DEPTH) throw new HttpError(400, 'a folder cannot go inside itself');
+      const parent: FolderRow | null = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [at]);
+      if (!parent) throw new HttpError(400, 'no such folder');
+      at = parent.parent_id;
+    }
+  }
+  const now = Date.now();
+  const existing = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
+  if (existing) await db.run('UPDATE folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?', [name, parentId, now, id]);
+  else await db.run('INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, name, parentId, now, now]);
+  return { folder: describeFolder({ id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now }), created: !existing };
+}
+
+/** Deletes the folder only: what was in it moves up to where it was. */
+async function removeFolder(db: UserDb, id: string): Promise<void> {
+  const row = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
+  if (!row) throw new HttpError(404, 'not found');
+  await db.run('UPDATE folders SET parent_id = ? WHERE parent_id = ?', [row.parent_id, id]);
+  await db.run('UPDATE documents SET folder_id = ? WHERE folder_id = ?', [row.parent_id, id]);
+  await db.run('DELETE FROM folders WHERE id = ?', [id]);
+}
+
+/** Moves the document to a folder (null: the top level); the owner's call. */
+async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Promise<DocumentRow> {
+  if (folderId !== null && typeof folderId !== 'string') throw new HttpError(400, 'expected { folderId }');
+  if (folderId !== null && !(await db.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
+  await db.run('UPDATE documents SET folder_id = ? WHERE id = ?', [folderId, row.id]);
+  return { ...row, folder_id: folderId };
+}
+
+/** Deletes the owner's documents: the rows, then their shares, search entries, rooms and files. */
+async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[]): Promise<void> {
+  // Rows first: a failure leaves unreferenced objects, never a row pointing at nothing.
+  for (const row of rows) await db.run('DELETE FROM documents WHERE id = ?', [row.id]);
+  for (const row of rows) {
+    await forgetDocument(env, row.id);
+    await removeFromIndex(env, row.id);
+    if (env.ROOMS) await roomFor(env, row.id).fetch(new Request('https://room/end'));
+  }
+  await env.FILES.delete(rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]));
 }
 
 function json(data: unknown, status = 200): Response {
@@ -302,6 +388,28 @@ const handler: ExportedHandler = {
       // Who may open the document doesn't depend on the user's database, so both are looked up together.
       const earlyAccess = id !== undefined && collection === 'documents' ? accessFor(env, userId, id) : undefined;
       earlyAccess?.catch(() => {}); // reported where it is awaited
+      // Reading a document's bytes or thumbnail needs only who owns it (the directory knows) and the
+      // object in R2, whose key follows from both. So the common read skips the user's own database
+      // (and the catalogue) altogether; a document stored under another key takes the full route below.
+      if (earlyAccess && request.method === 'GET' && (sub === undefined || sub === 'thumbnail')) {
+        const access = await earlyAccess;
+        if (access && (access.ownerId === userId || (await hasSync(env, access.ownerId)))) {
+          const thumb = sub === 'thumbnail';
+          const object = await env.FILES.get(`${access.ownerId}/${id}.${thumb ? 'thumb' : 'docx'}`);
+          if (object) {
+            return new Response(object.body, {
+              headers: thumb
+                ? {
+                    'content-type': object.httpMetadata?.contentType ?? 'image/webp',
+                    'content-length': String(object.size),
+                    etag: object.httpEtag,
+                    'cache-control': url.searchParams.has('v') ? 'private, max-age=31536000, immutable' : 'private, no-cache',
+                  }
+                : { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache' },
+            });
+          }
+        }
+      }
       // Whether this user may keep documents in the cloud. Without it they get no database of their
       // own (so nothing is created for people who only open what a subscriber shares), and what
       // they already have can be read and deleted but not changed.
@@ -357,6 +465,68 @@ const handler: ExportedHandler = {
         ]);
         await registerOwner(env, docId, userId);
         return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null, folderId }, 201);
+      }
+
+      // DELETE /api/documents { ids?, folders? } and PATCH /api/documents { ids, folderId }: the same
+      // as the calls below for one document, for several at once. Each is reported on its own. A
+      // delete may name folders too: they go with everything inside them (documents and subfolders).
+      if (!id && (request.method === 'DELETE' || request.method === 'PATCH')) {
+        const body = await request.json().catch(() => null);
+        const deleting = request.method === 'DELETE';
+        const folderIds = deleting ? idList(body, 'folders', true) : [];
+        const ids = idList(body, 'ids', deleting && folderIds.length > 0);
+        if (!deleting && !syncing) throw subscriptionRequired();
+        const ok: string[] = [];
+        const failed: Failure[] = [];
+        const doomed: DocumentRow[] = [];
+        for (const docId of ids) {
+          try {
+            const own = ownDb ? await ownDb.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [docId]) : null;
+            if (!own || !ownDb) {
+              const access = await accessFor(env, userId, docId);
+              throw access ? new HttpError(403, `only the owner can ${deleting ? 'delete' : 'move'} this document`) : new HttpError(404, 'not found');
+            }
+            if (deleting) doomed.push(own);
+            else await moveDocument(ownDb, own, (body as { folderId?: unknown }).folderId);
+            if (!deleting) ok.push(docId);
+          } catch (error) {
+            failed.push(failure(docId, error));
+          }
+        }
+        // The folders asked for, and every folder inside them, with the documents in any of them.
+        const doomedFolders = new Set<string>();
+        const asked: string[] = [];
+        if (folderIds.length && ownDb) {
+          const all = await ownDb.all<FolderRow>('SELECT * FROM folders');
+          for (const folderId of folderIds) {
+            if (!all.some((f) => f.id === folderId)) {
+              failed.push({ id: folderId, error: 'not found' });
+              continue;
+            }
+            asked.push(folderId);
+            const walk = (at: string) => {
+              doomedFolders.add(at);
+              for (const child of all) if (child.parent_id === at && !doomedFolders.has(child.id)) walk(child.id);
+            };
+            walk(folderId);
+          }
+          if (doomedFolders.size) {
+            for (const row of await ownDb.all<DocumentRow>('SELECT * FROM documents')) {
+              if (row.folder_id !== null && doomedFolders.has(row.folder_id) && !doomed.some((d) => d.id === row.id)) doomed.push(row);
+            }
+          }
+        } else for (const folderId of folderIds) failed.push({ id: folderId, error: 'not found' });
+        if (ownDb && (doomed.length || asked.length)) {
+          try {
+            await deleteDocuments(env, userId, ownDb, doomed);
+            for (const folderId of doomedFolders) await ownDb.run('DELETE FROM folders WHERE id = ?', [folderId]);
+            ok.push(...doomed.map((row) => row.id).filter((docId) => ids.includes(docId)), ...asked);
+          } catch (error) {
+            failed.push(...[...ids.filter((docId) => doomed.some((d) => d.id === docId)), ...asked].map((x) => failure(x, error)));
+            console.error(error);
+          }
+        }
+        return json({ ok, failed });
       }
 
       if (!id) throw new HttpError(405, 'method not allowed');
@@ -483,22 +653,13 @@ const handler: ExportedHandler = {
         if (role !== 'owner') throw new HttpError(403, 'only the owner can move this document');
         requireStorage();
         const body = (await request.json().catch(() => null)) as { folderId?: unknown } | null;
-        const folderId = body?.folderId;
-        if (folderId !== null && typeof folderId !== 'string') throw new HttpError(400, 'expected { folderId }');
-        if (folderId !== null && !(await db.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
-        await db.run('UPDATE documents SET folder_id = ? WHERE id = ?', [folderId, id]);
-        return json(describe({ ...row, folder_id: folderId }, role));
+        return json(describe(await moveDocument(db, row, body?.folderId), role));
       }
 
       // DELETE /api/documents/:id
       if (request.method === 'DELETE') {
         if (role !== 'owner') throw new HttpError(403, 'only the owner can delete this document');
-        // Row first: a failure leaves an unreferenced object, never a row pointing at nothing.
-        await db.run('DELETE FROM documents WHERE id = ?', [id]);
-        await forgetDocument(env, id);
-        await removeFromIndex(env, id);
-        if (env.ROOMS) await roomFor(env, id).fetch(new Request('https://room/end'));
-        await env.FILES.delete([row.r2_key, thumbKeyFor(id)]);
+        await deleteDocuments(env, ownerId, db, [row]);
         return new Response(null, { status: 204 });
       }
 

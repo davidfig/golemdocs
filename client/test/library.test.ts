@@ -3,64 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-
-// --- A just-enough IndexedDB: stores are maps; requests answer on the next tick. -----------------
-
-function fakeIndexedDB(): unknown {
-  const databases = new Map<string, Map<string, { keyPath?: string; rows: Map<unknown, unknown> }>>();
-  const request = (produce: () => unknown) => {
-    const req: { result?: unknown; error: null; onsuccess?: () => void; onerror?: () => void } = { error: null };
-    setTimeout(() => {
-      req.result = produce();
-      req.onsuccess?.();
-    }, 0);
-    return req;
-  };
-  return {
-    open(name: string) {
-      const first = !databases.has(name);
-      if (first) databases.set(name, new Map());
-      const stores = databases.get(name)!;
-      const db = {
-        createObjectStore(store: string, options?: { keyPath?: string }) {
-          stores.set(store, { keyPath: options?.keyPath, rows: new Map() });
-        },
-        transaction(names: string | string[]) {
-          const allowed = new Set([names].flat());
-          return {
-            objectStore(store: string) {
-              assert.ok(allowed.has(store), `store ${store} not in transaction`);
-              const s = stores.get(store)!;
-              return {
-                get: (key: unknown) => request(() => structuredClone(s.rows.get(key))),
-                getAll: () => request(() => [...s.rows.values()].map((v) => structuredClone(v))),
-                put(value: unknown, key?: unknown) {
-                  s.rows.set(s.keyPath ? (value as Record<string, unknown>)[s.keyPath] : key, structuredClone(value));
-                  return request(() => undefined);
-                },
-                delete(key: unknown) {
-                  s.rows.delete(key);
-                  return request(() => undefined);
-                },
-              };
-            },
-            set oncomplete(fn: () => void) {
-              setTimeout(fn, 0);
-            },
-            set onerror(_fn: unknown) {},
-            set onabort(_fn: unknown) {},
-          };
-        },
-      };
-      const req: { result?: unknown; error: null; onupgradeneeded?: () => void; onsuccess?: () => void } = { error: null, result: db };
-      setTimeout(() => {
-        if (first) (req.onupgradeneeded as ((e: unknown) => void) | undefined)?.({ oldVersion: 0 });
-        req.onsuccess?.();
-      }, 0);
-      return req;
-    },
-  };
-}
+import { fakeIndexedDB } from './fakeIndexedDB.ts';
 
 // --- A stubbed server. ------------------------------------------------------------------------------
 
@@ -110,7 +53,7 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 (globalThis as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
-const { openFromCloud, uploadToCloud } = await import('../src/library.ts');
+const { openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
 const { loadLibrary } = await import('../src/sync.ts');
 
 beforeEach(async () => {
@@ -168,6 +111,20 @@ test('a cloud copy deleted elsewhere is recreated; signed-out uploads fail with 
 
   signedIn = false;
   await assert.rejects(uploadToCloud(doc.id), (e: unknown) => e instanceof CloudError && e.status === 401);
+});
+
+test('a prefetched download is used once by the open that follows, and only for the same version', async () => {
+  const gets = () => calls.filter((c) => c.method === 'GET' && c.url === '/api/documents/c1').length;
+  const before = gets();
+  prefetchFromCloud({ id: 'c1', updatedAt: 3 });
+  prefetchFromCloud({ id: 'c1', updatedAt: 3 }); // already on its way
+  await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 3 });
+  assert.equal(gets() - before, 1, 'one download served both');
+
+  const stale = gets();
+  prefetchFromCloud({ id: 'c1', updatedAt: 3 });
+  await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 4 }); // changed since: fetched again
+  assert.equal(gets() - stale, 2, 'the stale prefetch is not used; the newer version is downloaded too');
 });
 
 test('opening from the cloud creates one linked browser copy and refreshes it while in sync', async () => {

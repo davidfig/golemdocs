@@ -33,7 +33,7 @@ export async function availableProviders(): Promise<AuthProvider[]> {
 const REMEMBERED_KEY = 'golem.account';
 
 /** The account last seen signed in here, so that offline the app still shows that account's documents. */
-function remembered(): User | null {
+export function remembered(): User | null {
   try {
     return JSON.parse(localStorage.getItem(REMEMBERED_KEY) ?? 'null') as User | null;
   } catch {

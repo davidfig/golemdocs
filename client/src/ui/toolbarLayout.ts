@@ -64,6 +64,7 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
       SEPARATOR,
       'format.numbering',
       'format.bullets',
+      'format.checklist',
       'format.outdent',
       'format.indent',
       SEPARATOR,

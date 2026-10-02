@@ -2,7 +2,8 @@
 // left of the document, so another document is one click away without the dashboard. Folders open
 // and close; a document opens in the editor. It lists what the dashboard does (see sync.ts).
 
-import { createFolder, moveEntry, removeFolderTree, updateFolder } from '../folderOps.ts';
+import { warmOnHover } from './warmOnHover.ts';
+import { createFolder, moveEntries, removeFolderTree, updateFolder, withoutDeleted } from '../folderOps.ts';
 import { deletionList, folderOf, isInside, treeRows, type Folder, type TreeRow } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
@@ -17,12 +18,14 @@ import './filesPanel.css';
 
 export interface FilesPanelHost {
   open(entry: LibraryEntry): void;
+  /** The pointer is on this document: a chance to start fetching what opening it needs. */
+  warm(entry: LibraryEntry): void;
   /** Starts a blank document, to be filed in `folderId` (null: the top level) when it is first saved. */
   newDocument(folderId: string | null): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
   /** Deletes the document everywhere: from the account and from this browser. */
-  delete(entry: LibraryEntry): Promise<void>;
+  delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
   account(): User | null;
@@ -167,6 +170,7 @@ export class FilesPanel {
       toggleClass(el, 'wm-files-current', isCurrent);
       if (isCurrent) el.setAttribute('aria-current', 'true');
     }
+    if (!folder) warmOnHover(el, () => this.host.warm(row.item));
     el.addEventListener('click', (event) => {
       const e = event as MouseEvent;
       // Command-click (like a right click) opens the menu instead.
@@ -223,7 +227,7 @@ export class FilesPanel {
       ...(entry.cloud ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
       { label: t('panels.dashboard.move'), run: () => pickFolder(document.body, this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
       'separator',
-      { label: t('panels.dashboard.delete'), run: () => void this.ask([], [entry], () => this.host.delete(entry)) },
+      { label: t('panels.dashboard.delete'), run: () => void this.ask([], [entry], () => this.host.delete([entry])) },
     ];
     return items;
   }
@@ -239,7 +243,7 @@ export class FilesPanel {
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(document.body, this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
       'separator',
-      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], () => removeFolderTree(this.host.account() !== null, this.folders, this.entries, folder, (entry) => this.host.delete(entry))) },
+      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], () => removeFolderTree(this.folders, this.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
     ];
   }
 
@@ -257,7 +261,14 @@ export class FilesPanel {
   /** Asks, in a dialog listing all that would go, whether to delete these; if so, runs `remove`. */
   private async ask(folders: Folder[], docs: LibraryEntry[], remove: () => Promise<void>): Promise<void> {
     const lines = deletionList(this.folders, this.entries, folders, docs);
-    if (await confirmDelete(deleteTitle(folders, docs, lines), lines)) await this.run(remove);
+    if (await confirmDelete(deleteTitle(folders, docs, lines), lines)) {
+      // Gone from the list at once; if it fails, the list fetched again brings it back with the reason.
+      const left = withoutDeleted(this.folders, this.entries, folders, docs);
+      this.folders = left.folders;
+      this.entries = left.entries;
+      this.render();
+      await this.run(remove);
+    }
     else this.host.focusEditor();
   }
 
@@ -291,6 +302,8 @@ export class FilesPanel {
   }
 
   private async changeFolder(folder: Folder, change: { name?: string; parentId?: string | null }): Promise<void> {
+    this.folders = this.folders.map((f) => (f.id === folder.id ? { ...f, ...change } : f));
+    this.render();
     const next = await updateFolder(this.host.account() !== null, folder, change);
     this.folders = this.folders.map((f) => (f.id === next.id ? next : f));
   }
@@ -299,12 +312,13 @@ export class FilesPanel {
     return this.run(async () => {
       if (item.kind === 'folder') await this.changeFolder(item.folder, { parentId: to });
       else {
-        await moveEntry(item.entry, to);
         if (item.entry.cloud) item.entry.cloud.folderId = to;
         if (item.entry.local) {
           if (to === null) delete item.entry.local.folderId;
           else item.entry.local.folderId = to;
         }
+        this.render();
+        await moveEntries([item.entry], to);
       }
       if (to !== null) this.toggleFolder(to, true);
     });

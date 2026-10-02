@@ -3,7 +3,8 @@
 ## 0.6.0 - Unreleased
 
 ### Added
-- Markdown task lists (`- [ ]` and `- [x]`) open as items with ☐ and ☑ boxes and are saved back the same way.
+- Format as you type: typing `# `, `- `, `1. `, `> `, `[ ] ` at the start of a line makes a heading, list, quote or check box list; `**bold**`, `*italic*`, `` `code` ``, `~~strike~~` and `[text](url)` followed by a space become formatted text; `---` or three backticks then Enter make a line or a code block. Backspace right after takes it back. Turn it off under Tools › Autoformat as You Type.
+- Markdown task lists (`- [ ]` and `- [x]`) show a check box in place of the bullet, and are saved back the same way. Click a box to check or uncheck it. Check box lists are on the toolbar and in the Insert menu.
 - Each kind of file (Word, Markdown, PDF, HTML, spreadsheet, image and more) has its own small icon before its name on the Documents screen and in the Files Sidebar.
 - Reopening a document puts you back where you left off: the same scroll position, zoom and caret, remembered on this computer.
 - The Documents screen now opens in the folder of the document you have open, instead of at the top level.
@@ -14,19 +15,25 @@
 - The Documents screen has an icon-size slider at the top right. The document icons now start smaller, with less space between rows, and the size you choose is remembered.
 - The action buttons on files and folders in the Documents screen (Share, Move, Rename, Delete, Leave) are now icons; point at one to see its name.
 - The Documents screen no longer shows your account name or the Sign in, Sign out and Subscribe buttons; they are in the menus.
+- Clip can now organize your files: list your documents and folders, make and rename folders, move documents and folders, and delete them, many at a time in a single step.
 - The Edit PDF and Fill In panel has a minimize button (a chevron) that rolls it up to just its drag handle and the button; click it again to open it. It stays the way you left it.
 - The AI assistant can now look through all your other documents (the ones in your account, saved in this browser, or shared with you): it can find the ones about a topic, read them, and copy paragraphs from them into the document you are working on, with their headings and lists.
 - The AI assistant can now look at pictures. Drop a picture on its bubble, paste one, or use the ＋ button to attach up to four, then ask about it. It can also look at a picture in the document you have open, or one saved in your library (“what is in the second picture?”). Pictures are scaled down before they are sent.
+- The browser's Back and Forward buttons now move between the documents you opened and the Documents screen, instead of leaving the app.
 
 ### Changed
-- Opening a document from your account is faster, especially with many files: the server no longer looks the document up over the network on every open, and the lists refresh after the document appears instead of before.
+- Deleting, moving or renaming a document or folder on the Documents screen or in the Files Sidebar shows at once instead of after it is saved; if saving fails, it comes back with the reason.
+- Moving or deleting many documents and folders at once is now one request to your account instead of one per item, so it is much faster.
+- Opening a document from your account is faster, especially with many files: the server no longer looks the document up over the network on every open, a document starts downloading as soon as you rest the pointer on it, and the lists refresh after it appears instead of before.
 - Your list of documents and folders in the account loads much faster: the server keeps a copy of it instead of querying your storage each time, and the document, shared and folder lists are now fetched together.
 - Deleting a folder now deletes every file and folder inside it too, and a confirmation dialog lists everything that will be deleted, in a scrollable box. The same dialog now asks before any document or folder is deleted, on the Documents screen and in the Files Sidebar.
+- Deleting the document you have open now switches to the Welcome document, instead of leaving the deleted one on screen.
 - File › Download All keeps your folders: documents are zipped inside the same folder structure.
 
 ## 0.5.1 - 2026-10-01
 
 ### Fixed
+- The Files Sidebar now shows your saved folders and documents the moment the app opens, instead of only this browser's files until the account has answered.
 - A document name that fits in the menu bar is no longer cut short with “…”.
 
 ## 0.5.0 - 2026-10-01

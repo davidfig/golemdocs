@@ -7,7 +7,7 @@
 // selection wins.
 
 import { FALLBACK_FAMILY } from '@golemdocs/layout';
-import { inlineLength, paragraphLength, StyleResolver, type Inline, type Paragraph, type Run, type RunProperties, type WordDocument } from '@golemdocs/docx';
+import { CHECKBOX, inlineLength, paragraphLength, StyleResolver, type Inline, type Paragraph, type Run, type RunProperties, type WordDocument } from '@golemdocs/docx';
 import { withFormat, type Position } from '@golemdocs/editor';
 import type { RunFormat } from '@golemdocs/ops';
 import { isCode } from './formatting.ts';
@@ -246,7 +246,7 @@ class Accumulator {
     this.agree('widowControl', props.widowControl !== false);
     const id = props.numbering?.id;
     const level = id ? styles.listLevel(id, props.numbering?.level ?? 0) : undefined;
-    this.list.add(!level || level.format === 'none' ? null : level.format === 'bullet' ? 'bullet' : 'number');
+    this.list.add(!level || level.format === 'none' ? null : level.format === 'bullet' ? (level.text === CHECKBOX.unchecked || level.text === CHECKBOX.checked ? 'task' : 'bullet') : 'number');
   }
 
   result(): FormatState {

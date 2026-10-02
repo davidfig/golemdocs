@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.6.1 - Unreleased
+## 0.7.0 - 2026-10-02
 
 ### Added
 - Deleting a large number of documents or a big folder shows a progress card.

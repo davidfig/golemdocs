@@ -67,6 +67,30 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
   return { doc, conflictCopy };
 }
 
+/** Downloads started ahead of an open (the pointer is on the document), by id; each is good for a short while. */
+const prefetched = new Map<string, { updatedAt?: number; bytes: Promise<ArrayBuffer>; at: number }>();
+const PREFETCH_TTL_MS = 30_000;
+const PREFETCH_MAX = 3;
+
+/** Starts downloading a cloud document so that opening it a moment later has the bytes already. */
+export function prefetchFromCloud(cloud: { id: string; updatedAt?: number }): void {
+  const now = Date.now();
+  const have = prefetched.get(cloud.id);
+  if (have && have.updatedAt === cloud.updatedAt && now - have.at < PREFETCH_TTL_MS) return;
+  const bytes = downloadDocument(cloud.id);
+  bytes.catch(() => prefetched.delete(cloud.id)); // a failed one is not reused; opening asks again
+  prefetched.delete(cloud.id);
+  prefetched.set(cloud.id, { updatedAt: cloud.updatedAt, bytes, at: now });
+  while (prefetched.size > PREFETCH_MAX) prefetched.delete(prefetched.keys().next().value!);
+}
+
+/** The prefetched download of this version of the document, if there is a fresh one (used once). */
+function takePrefetched(cloud: { id: string; updatedAt?: number }): Promise<ArrayBuffer> | null {
+  const have = prefetched.get(cloud.id);
+  prefetched.delete(cloud.id);
+  return have && have.updatedAt === cloud.updatedAt && Date.now() - have.at < PREFETCH_TTL_MS ? have.bytes : null;
+}
+
 export interface OpenedFromCloud {
   info: SavedInfo;
   bytes: ArrayBuffer;
@@ -92,7 +116,7 @@ export async function openFromCloud(cloud: { id: string; name: string; updatedAt
   }
   let bytes: ArrayBuffer;
   try {
-    bytes = await downloadDocument(cloud.id);
+    bytes = await (takePrefetched(cloud) ?? downloadDocument(cloud.id));
   } catch (error) {
     // Offline: the copy this browser has is better than nothing.
     const saved = linked && !(error instanceof CloudError) ? await getSaved(linked.id) : null;

@@ -204,6 +204,15 @@ test('format_paragraph makes bullets for a range, and turns them off again', asy
   assert.match(await agent(doc, 'format_paragraph', { paragraph: 2, last: 1, align: 'center' }), /must not be before/);
 });
 
+test('format_paragraph makes check box lists, written as Markdown task lists', async () => {
+  const doc = await openMarkdown('One\n\nTwo\n\nThree\n');
+  await agent(doc, 'format_paragraph', { paragraph: 0, list: 'task' });
+  await agent(doc, 'format_paragraph', { paragraph: 1, list: 'task_done' });
+  assert.equal(await md(doc), '- [ ] One\n- [x] Two\n\nThree');
+  await agent(doc, 'format_paragraph', { paragraph: 0, last: 1, list: 'none' });
+  assert.equal(await md(doc), 'One\n\nTwo\n\nThree');
+});
+
 test('insert_link and remove_link', async () => {
   const doc = await openMarkdown('See the docs for more.\n');
   assert.match(await agent(doc, 'insert_link', { paragraph: 0, find: 'docs', url: 'https://example.com/' }), /Linked "docs"/);

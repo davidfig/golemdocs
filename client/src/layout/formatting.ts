@@ -9,7 +9,7 @@
 import { paragraphLength, StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@golemdocs/docx';
 import type { Command, Editor, ParagraphFormat, TableEdit } from '@golemdocs/editor';
 import type { Operation, RunFormat } from '@golemdocs/ops';
-import { styleFor } from '../formats/markdownStyles.ts';
+import { styleFor, TASK_GLYPHS } from '../formats/markdownStyles.ts';
 import type { Action, CaseChange, FormatState, Mark } from '../ui/actions.ts';
 
 /** The actions that change formatting (the worker applies these; see WireCommand). */
@@ -244,7 +244,9 @@ function builtInStyle(name: string): Style | undefined {
 }
 
 /** Nine list levels, all bullets or all numbers, indented half an inch per level. */
-function listLevels(bullet: boolean): NumberingLevel[] {
+const GLYPHS: readonly string[] = Object.values(TASK_GLYPHS);
+
+function listLevels(bullet: boolean, glyph?: string): NumberingLevel[] {
   const bullets = ['•', 'o', '▪'];
   const formats = ['decimal', 'lowerLetter', 'lowerRoman'];
   const levels: NumberingLevel[] = [];
@@ -254,7 +256,7 @@ function listLevels(bullet: boolean): NumberingLevel[] {
       start: 1,
       format: bullet ? 'bullet' : formats[l % 3],
       suffix: 'tab',
-      text: bullet ? bullets[l % 3] : `%${l + 1}.`,
+      text: bullet ? (glyph ?? bullets[l % 3]) : `%${l + 1}.`,
       justification: 'left',
       paragraphProperties: { indent: { left: INDENT_STEP * (l + 1), hanging: 360 } },
       attrs: {},
@@ -468,6 +470,7 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
       };
     }
     case 'toggleList':
+      if (action.list === 'task' || action.list === 'taskDone') return listCommand(true, !action.force && format.list === 'task', editor, styles, TASK_GLYPHS[action.list]);
       return listCommand(action.list === 'bullet', format.list === action.list, editor, styles);
   }
 }
@@ -480,13 +483,19 @@ function defineStyle(doc: WordDocument, id: string): Operation[] {
   return [...(style.basedOn ? defineStyle(doc, style.basedOn) : []), { type: 'setStyle', id, style }];
 }
 
+/** The numbering instance whose first level's bullet is `glyph`, if the document has one. */
+function existingList(doc: WordDocument, glyph: string): number | undefined {
+  const abstract = doc.numbering.abstracts.find((a) => a.levels[0]?.format === 'bullet' && a.levels[0].text === glyph);
+  return abstract && doc.numbering.instances.find((n) => n.abstractId === abstract.id)?.id;
+}
+
 /** Bullets or numbering on the selected paragraphs, or off if they already have them. */
-function listCommand(bullet: boolean, off: boolean, editor: Editor, styles: StyleResolver): Command {
+function listCommand(bullet: boolean, off: boolean, editor: Editor, styles: StyleResolver, glyph?: string): Command {
   const doc = editor.doc;
   const isList = (p: Paragraph | undefined) => {
     const id = p?.properties.numbering?.id;
     const level = id ? styles.listLevel(id, p!.properties.numbering?.level ?? 0) : undefined;
-    return !!level && level.format !== 'none' && (level.format === 'bullet') === bullet;
+    return !!level && level.format !== 'none' && (level.format === 'bullet') === bullet && (glyph ? level.text === glyph : !GLYPHS.includes(level.text ?? ''));
   };
   if (off) {
     return {
@@ -500,13 +509,15 @@ function listCommand(bullet: boolean, off: boolean, editor: Editor, styles: Styl
   const before = all[all.indexOf(selected[0]) - 1];
   const define: Operation[] = [];
   let id: number;
-  if (isList(before)) id = before.properties.numbering!.id!;
+  // One list of check boxes of each kind serves the whole document (bullets are not counted).
+  const reuse = isList(before) ? before.properties.numbering!.id! : glyph ? existingList(doc, glyph) : undefined;
+  if (reuse !== undefined) id = reuse;
   else {
     const taken = new Set([...doc.numbering.instances.map((n) => n.id), ...doc.numbering.abstracts.map((a) => a.id)]);
     // Random, so two people starting lists at once don't collide.
     do id = 1000 + Math.floor(Math.random() * 1_000_000);
     while (taken.has(id));
-    const abstract: AbstractNumbering = { id, multiLevelType: 'hybridMultilevel', levels: listLevels(bullet), attrs: {} };
+    const abstract: AbstractNumbering = { id, multiLevelType: 'hybridMultilevel', levels: listLevels(bullet, glyph), attrs: {} };
     define.push({ type: 'setList', id, list: { instance: { id, abstractId: id, overrides: [], attrs: {} }, abstract } });
   }
   define.push(...defineStyle(doc, 'ListParagraph'));

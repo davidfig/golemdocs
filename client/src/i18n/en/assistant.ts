@@ -34,4 +34,5 @@ export const assistant = {
   'assistant.tool.convert': 'Converting the document…',
   'assistant.tool.other': 'Working…',
   'assistant.tool.rename': 'Renaming the document…',
+  'assistant.tool.files': 'Working on your files…',
 };

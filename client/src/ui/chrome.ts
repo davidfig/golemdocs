@@ -28,6 +28,7 @@ import { closePopup, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
+import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
 import { SCHEMES, currentAppearance, currentScheme, isDark, setAppearance, setScheme, toggleDark } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
@@ -373,6 +374,7 @@ export class Chrome {
       align('justify', t('chrome.format.align.justify'), 'justify', 'Mod+J'),
       a('format.bullets', t('chrome.format.bullets'), { kind: 'toggleList', list: 'bullet' }, { icon: 'bullets', checked: (s) => s.format.list === 'bullet' }),
       a('format.numbering', t('chrome.format.numbering'), { kind: 'toggleList', list: 'number' }, { icon: 'numbering', checked: (s) => s.format.list === 'number' }),
+      a('format.checklist', t('chrome.format.checklist'), { kind: 'toggleList', list: 'task' }, { icon: 'checklist', checked: (s) => s.format.list === 'task' }),
       a('format.indent', t('chrome.format.indent'), { kind: 'indent', direction: 'increase' }, { icon: 'indentIncrease', shortcut: { other: 'Mod+M' } }),
       a('format.outdent', t('chrome.format.outdent'), { kind: 'indent', direction: 'decrease' }, { icon: 'indentDecrease', shortcut: { other: 'Mod+Shift+M' } }),
       dialog('format.paragraph', t('chrome.format.paragraph'), 'paragraph'),
@@ -392,6 +394,7 @@ export class Chrome {
       dialog('tools.wordCount', t('chrome.tools.wordCount'), 'wordCount', { icon: 'wordCount' }),
       a('tools.trackChanges', t('chrome.tools.trackChanges'), { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
       dialog('tools.options', t('chrome.tools.options'), 'options'),
+      { id: 'tools.autoFormat', label: t('chrome.tools.autoFormat'), tooltip: t('chrome.tools.autoFormat.tip'), run: () => setAutoFormat(!autoFormatOn()), checked: autoFormatOn },
     );
 
     // Table
@@ -504,6 +507,9 @@ export class Chrome {
       heading(t('chrome.menu.insert')),
       cmd('insert.image'),
       cmd('insert.table'),
+      cmd('format.bullets'),
+      cmd('format.numbering'),
+      cmd('format.checklist'),
       cmd('insert.link'),
       cmd('insert.comment'),
       cmd('insert.footnote'),
@@ -519,6 +525,7 @@ export class Chrome {
       cmd('tools.spelling'),
       cmd('tools.wordCount'),
       cmd('tools.trackChanges'),
+      cmd('tools.autoFormat'),
       cmd('file.pageSetup'),
       cmd('file.properties'),
       cmd('tools.options'),
@@ -662,6 +669,10 @@ export class Chrome {
           cmd('insert.horizontalRule'),
           cmd('insert.codeBlock'),
           sep,
+          cmd('format.bullets'),
+          cmd('format.numbering'),
+          cmd('format.checklist'),
+          sep,
           cmd('insert.link'),
           cmd('insert.bookmark'),
           cmd('insert.math'),
@@ -701,7 +712,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),

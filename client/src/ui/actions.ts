@@ -7,7 +7,9 @@
 
 export type Mark = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'superscript' | 'subscript' | 'code';
 export type Alignment = 'left' | 'center' | 'right' | 'justify';
-export type ListKind = 'bullet' | 'number';
+export type ListKind = 'bullet' | 'number' | 'task';
+/** What Bullets and Numbering can start: also lists of check boxes (☐ not done, ☑ done), which Markdown task lists are. */
+export type ListChoice = ListKind | 'taskDone';
 export type CaseChange = 'sentence' | 'lower' | 'upper' | 'title' | 'toggle';
 export type BreakKind = 'page' | 'column' | 'line' | 'sectionNextPage' | 'sectionContinuous';
 /** Print: pages as they print. Normal: the text reflowed to the window, without page edges (Word's Web Layout). */
@@ -127,7 +129,7 @@ export type Action =
   | { kind: 'setAlignment'; align: Alignment }
   | { kind: 'setLineSpacing'; lines: number }
   | ({ kind: 'setParagraph' } & ParagraphChoice)
-  | { kind: 'toggleList'; list: ListKind }
+  | { kind: 'toggleList'; list: ListChoice; force?: boolean }
   | { kind: 'indent'; direction: 'increase' | 'decrease' }
   // Insert
   | { kind: 'insertText'; text: string }

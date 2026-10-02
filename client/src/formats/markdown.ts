@@ -16,7 +16,7 @@
 //    style "ImagePlaceholder") reads "[Image: alt]"; export turns it back into an image.
 //  - Tables: Table with style TableGrid; the first row is a header row (row.properties.header),
 //    column alignment is the paragraph justification of the cells.
-//  - Task-list boxes (`- [ ]` / `- [x]`) become a leading ☐ / ☑ in the item's text and are written back.
+//  - Task-list items (`- [ ]` / `- [x]`) are bullet items whose label is ☐ / ☑ (drawn as a box) (a numbering per box state).
 //  - Footnotes ([^1] and definitions) and raw HTML are kept as literal text: the model has no
 //    footnote part to attach them to.
 //
@@ -56,7 +56,7 @@ import type {
 } from '@golemdocs/docx';
 
 import { commentMarker, commentThreads, RangeTracker } from './commentRanges.ts';
-import { MONO_FONTS, styleFor } from './markdownStyles.ts';
+import { MONO_FONTS, styleFor, TASK_GLYPHS } from './markdownStyles.ts';
 
 const MAX_DEPTH = 24;
 const PAGE_TEXT_WIDTH = 9360;
@@ -977,15 +977,13 @@ interface Marker {
   contentIdx: number;
 }
 
-/** A task-list box: "[ ] " or "[x] " at the start of an item becomes ☐ / ☑ text (and back on export). */
-function taskBox(text: string): string {
-  const m = /^\[([ xX])\](?=[ \t]|$)/.exec(text);
-  return m ? (m[1] === ' ' ? '\u2610' : '\u2611') + text.slice(3) : text;
-}
+const UNCHECKED = TASK_GLYPHS.task;
+const CHECKED = TASK_GLYPHS.taskDone;
 
-function taskMarker(text: string): string {
-  const c = text.charAt(0);
-  return (c === '\u2610' || c === '\u2611') && (text.length === 1 || text[1] === ' ') ? (c === '\u2610' ? '[ ]' : '[x]') + text.slice(1) : text;
+/** A task-list box at the start of an item: "[ ] " or "[x] ". */
+function taskBox(text: string): { box: string | null; text: string } {
+  const m = /^\[([ xX])\](?:[ \t]+|$)/.exec(text);
+  return m ? { box: m[1] === ' ' ? UNCHECKED : CHECKED, text: text.slice(m[0].length) } : { box: null, text };
 }
 
 function listMarker(line: string, cols: number, idx: number): Marker | null {
@@ -1130,7 +1128,7 @@ class Builder {
   }
 
   /** A fresh numbering definition (own counters) for one list; returns the numId. */
-  newList(ordered: boolean, start: number, level: number): number {
+  newList(ordered: boolean, start: number, level: number, box?: string): number {
     const levels: NumberingLevel[] = [];
     for (let l = 0; l < 9; l++) {
       levels.push({
@@ -1138,7 +1136,7 @@ class Builder {
         start: l === level ? start : 1,
         format: ordered ? ORDERED_FORMATS[l % 3] : 'bullet',
         suffix: 'tab',
-        text: ordered ? `%${l + 1}.` : BULLETS[l % 3],
+        text: ordered ? `%${l + 1}.` : (box ?? BULLETS[l % 3]),
         justification: 'left',
         paragraphProperties: { indent: { left: 720 * (l + 1), hanging: 360 } },
         attrs: {},
@@ -1302,14 +1300,15 @@ function parseBlocks(b: Builder, lines: string[], ctx: Ctx, out: Block[]): void 
     // List.
     const first = nest ? listMarker(line, cols, idx) : null;
     if (first) {
-      const items: { lines: string[] }[] = [];
+      const items: { lines: string[]; box: string | null }[] = [];
       let j = i;
       while (j < n) {
         const l = lines[j];
         const w = leading(l);
         const m = listMarker(l, w.cols, w.idx);
         if (!m || m.ordered !== first.ordered || m.marker !== first.marker || isHr(l, w.cols, w.idx)) break;
-        const item = { lines: [taskBox(l.slice(m.contentIdx))] };
+        const task = m.ordered ? { box: null, text: l.slice(m.contentIdx) } : taskBox(l.slice(m.contentIdx));
+        const item = { lines: [task.text], box: task.box };
         j++;
         while (j < n) {
           const l2 = lines[j];
@@ -1344,11 +1343,17 @@ function parseBlocks(b: Builder, lines: string[], ctx: Ctx, out: Block[]): void 
       const level = Math.min(ctx.level, 8);
       const numId = b.newList(first.ordered, first.start, level);
       const childCtx: Ctx = { depth: ctx.depth + 1, quote: ctx.quote, level: ctx.level + 1 };
+      const boxLists = new Map<string, number>();
       for (const item of items) {
         const blocks: Block[] = [];
         parseBlocks(b, item.lines, childCtx, blocks);
         const head = blocks[0];
-        const numbering: NumberingReference = { id: numId, level };
+        let id = numId;
+        if (item.box) {
+          id = boxLists.get(item.box) ?? b.newList(false, 1, level, item.box);
+          boxLists.set(item.box, id);
+        }
+        const numbering: NumberingReference = { id, level };
         if (head && head.kind === 'paragraph' && b.plain.has(head)) {
           head.properties = { style: 'ListParagraph', numbering };
         } else {
@@ -1767,7 +1772,7 @@ class Exporter {
   private readonly body: Block[];
   private readonly chunks: string[] = [];
   private prev: 'none' | 'list' | 'listcont' | 'other' = 'none';
-  private levels: ({ id: number; ordered: boolean; parity: number; count: number; col: number } | undefined)[] = [];
+  private levels: ({ id: number; ordered: boolean; parity: number; count: number; col: number; task: boolean } | undefined)[] = [];
   private lastCol = 0;
   private readonly kinds = new Map<string | undefined, Kind>();
   /** Per comment thread (by its first comment's id), its comment blocks (as Markdown) for each kind of place. */
@@ -2106,13 +2111,14 @@ class Exporter {
 
   private listItem(p: Paragraph, numId: number, level: number, def: NumberingLevel): void {
     const ordered = def.format !== 'bullet';
+    const box = !ordered && (def.text === UNCHECKED || def.text === CHECKED) ? def.text : null;
     this.levels.length = Math.min(this.levels.length, level + 1);
     let state = this.levels[level];
     let fresh = false;
-    if (!state || state.id !== numId || state.ordered !== ordered) {
+    if (!state || (state.id !== numId && !(box && state.task)) || state.ordered !== ordered) {
       // A different list directly after another at the same level must not merge with it on re-import.
       const parity = state && state.ordered === ordered ? state.parity ^ 1 : 0;
-      state = { id: numId, ordered, parity, count: (def.start ?? 1) - 1, col: 0 };
+      state = { id: numId, ordered, parity, count: (def.start ?? 1) - 1, col: 0, task: box !== null };
       this.levels[level] = state;
       fresh = true;
     }
@@ -2122,7 +2128,7 @@ class Exporter {
     state.col = startCol + marker.length + 1;
     const pad = ' '.repeat(state.col);
     const lines = this.text(p, 'block').split('\n');
-    lines[0] = taskMarker(lines[0]);
+    if (box) lines[0] = `[${box === CHECKED ? 'x' : ' '}]${lines[0] ? ` ${lines[0]}` : ''}`;
     const head = `${' '.repeat(startCol)}${marker}${lines[0] ? ` ${lines[0]}` : ''}`;
     const rest = lines.slice(1).map((line) => (line ? pad + line : line));
     // A new top-level list gets a blank line before it (nested lists stay tight under their item).

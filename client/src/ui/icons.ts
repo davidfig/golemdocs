@@ -241,6 +241,11 @@ export const ICONS: Record<string, string> = {
     `<circle cx="4.5" cy="5.5" r="2.1" fill="${RED}" stroke-width="1.2"/><circle cx="4.5" cy="12" r="2.1" fill="${YELLOW}" stroke-width="1.2"/><circle cx="4.5" cy="18.5" r="2.1" fill="${BLUE}" stroke-width="1.2"/>` +
       `<path d="M9.5 5.5h11M9.5 12h11M9.5 18.5h11" stroke-width="2.2"/>`,
   ),
+  checklist: svg(
+    `<rect x="2.5" y="3.5" width="6" height="6" rx="1.3" fill="none" stroke="${BLUE}" stroke-width="1.5"/><path d="M4 6.6l1.5 1.5 2.5-3.2" fill="none" stroke="${GREEN}" stroke-width="1.8"/>` +
+      `<rect x="2.5" y="14.5" width="6" height="6" rx="1.3" fill="none" stroke="${BLUE}" stroke-width="1.5"/>` +
+      `<path d="M11.5 6.5h9M11.5 17.5h9" stroke-width="2.2"/>`,
+  ),
   numbering: svg(
     ['1', '2', '3']
       .map(

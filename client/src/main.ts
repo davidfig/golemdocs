@@ -3,13 +3,14 @@ import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@golemdocs/editor';
 import { deskColor, onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
-import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
+import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocument, documentUrl, listDocuments, listFolders, listShared, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocuments, documentUrl, listDocuments, listFolders, listShared, saveDocument, type CloudDocument } from './cloud.ts';
 import { importFiles, readZipFiles } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
+import { fileTools } from './assistant/fileTools.ts';
 import { adoptGuestFolders, createFolder } from './folderOps.ts';
-import { openFromCloud, uploadToCloud } from './library.ts';
+import { openFromCloud, prefetchFromCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
   releaseToGuest,
@@ -59,6 +60,7 @@ import { PageRenderer, type FrameStats } from './webgl/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
+import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
@@ -205,12 +207,23 @@ function lastDoc(): string | null {
 const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', changelog: '/changelog' };
 /** The document the address asks for: `?doc=…`, or a page's path. */
 const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === location.pathname) ?? null;
-/** Sets the address to `params` at the app's root, or at a page's path when it holds only that built-in document. */
-function setUrl(params: URLSearchParams): void {
+/** The document the address names now (`?doc=…` or a page's path), so Back knows whether a step in history changes it. */
+let urlDoc: string | null = null;
+/**
+ * Sets the address to `params` at the app's root, or at a page's path when it holds only that built-in document.
+ * `push` makes it a step Back returns from (opening another document); otherwise it only corrects the current one.
+ * Leaving the Documents screen to open something replaces its history entry, so Back doesn't land on it.
+ */
+function setUrl(params: URLSearchParams, push = false): void {
   const doc = params.get('doc');
   const path = doc ? PAGE_PATHS[doc] : undefined;
   if (path) params.delete('doc');
-  history.replaceState(null, '', `${path ?? '/'}${params.size ? `?${params}` : ''}`);
+  const url = `${path ?? '/'}${params.size ? `?${params}` : ''}`;
+  urlDoc = doc;
+  const changed = url !== location.pathname + location.search;
+  if (push && history.state?.dashboard) history.replaceState(null, '', url);
+  else if (push && changed) history.pushState(null, '', url);
+  else history.replaceState(history.state, '', url);
 }
 
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
@@ -377,6 +390,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       annotating = fixedPages;
       if (outdated) pendingNotice = outdatedPages();
       spellDialog.sendLive();
+      worker.command({ kind: 'autoFormat', on: autoFormatOn() });
       setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
@@ -627,17 +641,22 @@ function showLoading(name: string): void {
 }
 
 function openFile(file: File): void {
-  setUrl(new URLSearchParams());
+  setUrl(new URLSearchParams(), true);
   chromeHost.openFile(file);
 }
 
-/** Opens a document by name; `keepRoom` keeps the URL's collaboration room (else it's left). */
-function openSource(source: string, keepRoom = false): void {
+/**
+ * Opens a document by name; `keepRoom` keeps the URL's collaboration room (else it's left).
+ * `step` says how the address changes: a new step in history (Back returns to the document before),
+ * or `'replace'` for the one at start-up or after a delete, or `'none'` when Back/Forward already moved it.
+ */
+function openSource(source: string, keepRoom = false, step: 'push' | 'replace' | 'none' = 'push'): void {
   wantedDocKey = source;
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
   if (!keepRoom) params.delete('room');
-  setUrl(params);
+  if (step === 'none') urlDoc = source;
+  else setUrl(params, step === 'push');
   if (source === 'war-and-peace') {
     open({ kind: 'text-url', name: t('app.warAndPeaceName'), url: warAndPeaceUrl });
   } else if (source.startsWith('corpus:')) {
@@ -775,6 +794,16 @@ let signedIn: User | null = null;
  * (no subscription) they are saved in this browser, as for someone signed out.
  */
 let account: User | null = null;
+/** `connect()` has finished once: until then `account` is only a guess (see `accountForFiles`). */
+let accountResolved = false;
+/**
+ * The account the Files Sidebar lists for. On load, before the server has said who is signed in,
+ * that is whoever was last, so the sidebar can show its saved catalogue at once instead of waiting
+ * for the sign-in, plan and listing round trips.
+ */
+function accountForFiles(): User | null {
+  return accountResolved ? account : (remembered() ?? account);
+}
 /** Whose cloud documents the screens last drew: when it changes, the dashboard draws again. */
 let drawnFor: string | null = null;
 /** This browser's copies of the documents in view: the account's, or signed out, the browser's own. */
@@ -798,6 +827,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   applyPlan(plan);
   // An unknown plan (offline) or a server that doesn't say leaves sync on; the server refuses what isn't allowed.
   account = signedIn && plan?.sync !== false ? signedIn : null;
+  accountResolved = true;
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
   sharedDeviceNotice.update({ signedIn: signedIn !== null });
@@ -1296,32 +1326,32 @@ async function signOut(): Promise<void> {
 /** The folder (chosen on the dashboard) the document being started goes in once it is first saved. */
 let newDocumentFolder: string | null = null;
 
-/** Deletes a document (from the dashboard): from the account, and this browser's copy. */
-async function deleteEverywhere(entry: LibraryEntry): Promise<void> {
-  if (entry.local && entry.local.id === current.localId) {
+/** Deletes documents (from the dashboard, or the assistant): from the account in one request, and this browser's copies. */
+async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: readonly string[] = []): Promise<void> {
+  const deletingOpen = entries.some((entry) => entry.local && entry.local.id === current.localId);
+  if (deletingOpen) {
     // The open document: its next autosave (or one under way) would write it back, and upload it
-    // again as a new cloud document. It stays open, and is only saved again if it is changed.
+    // again as a new cloud document. It is replaced by the Welcome document once it is gone.
     clearTimeout(autosaveTimer);
     await saving;
     current.localId = null;
     current.unsavedSince = 0;
     current.builtIn = true;
   }
-  const cloudId = entry.cloud?.id ?? entry.local?.cloudId;
-  if (cloudId && account) {
-    try {
-      await deleteDocument(cloudId);
-    } catch (e) {
-      // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
-      if (!(e instanceof CloudError && e.status === 404)) throw e;
-    }
-  }
-  if (entry.local) {
+  const cloudIds = [...new Set(entries.flatMap((entry) => (account ? [entry.cloud?.id ?? entry.local?.cloudId ?? ''] : [])).filter(Boolean))];
+  // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
+  const refused = new Map<string, string>();
+  if (account && (cloudIds.length || folderIds.length)) for (const f of (await deleteDocuments(cloudIds, folderIds)).failed) if (f.error !== 'not found') refused.set(f.id, f.error);
+  for (const entry of entries) {
+    if (refused.has(entry.cloud?.id ?? entry.local?.cloudId ?? '')) continue;
+    if (!entry.local) continue;
     dirty.delete(entry.local.id);
     failures.delete(entry.local.id);
     await deleteSaved(entry.local.id);
   }
   await refreshLibrary();
+  if (deletingOpen) openSource('welcome', true, 'replace');
+  if (refused.size) throw new Error([...refused.values()][0]);
 }
 
 /**
@@ -1876,13 +1906,14 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
 /** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
+onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
 let commandsAtOpen = 0;
 
 function send(command: WireCommand): void {
   commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -2321,9 +2352,11 @@ let hoverBusy = false;
 let hoverInside = false;
 /** The pointer is over a link, and the key that follows links (Cmd on a Mac, else Ctrl) is down: the cursor is a hand. */
 let overLink = false;
+/** The pointer is over the check box of a task list item: a click changes it. */
+let overCheckbox = false;
 let linkKeyDown = false;
 function updateCursor(): void {
-  const cursor = painting ? 'copy' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
+  const cursor = painting ? 'copy' : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
   if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
 }
 function linkKeyChanged(e: { metaKey: boolean; ctrlKey: boolean }): void {
@@ -2341,9 +2374,11 @@ function hoverLink(at: Hover): void {
     const asked = hoverAt;
     hoverAt = null;
     const hit = asked && loaded ? pageAt(asked.x, asked.y) : null;
-    const url = hit ? await worker.linkAt(hit.page.id, hit.x, hit.y) : null;
+    const found = hit ? await worker.linkAt(hit.page.id, hit.x, hit.y) : null;
+    const url = found?.url ?? null;
     hoverBusy = false;
     overLink = url !== null && hoverInside;
+    overCheckbox = !!found?.checkbox && hoverInside;
     updateCursor();
     if (asked && hoverInside) pointerTip(url ? t(MAC ? 'app.linkTip.cmd' : 'app.linkTip.ctrl', { url }) : null, asked.clientX, asked.clientY);
     const moved = hoverAt as Hover | null; // the pointer may have moved while asking
@@ -2355,6 +2390,7 @@ canvas.addEventListener('pointerleave', () => {
   hoverInside = false;
   hoverAt = null;
   overLink = false;
+  overCheckbox = false;
   updateCursor();
   pointerTip(null, 0, 0);
 });
@@ -2617,7 +2653,7 @@ const chromeHost = createChromeHost({
   pages: () => pages,
   bounds: () => bounds,
   open: (source) => {
-    setUrl(new URLSearchParams());
+    setUrl(new URLSearchParams(), true);
     open(source, { store: true });
   },
   openSample: openSource,
@@ -2863,6 +2899,9 @@ const dashboard = new Dashboard(document.getElementById('workspace')!, {
     showLoading(entry.name);
     openSource(sourceOf(entry));
   },
+  warm: (entry) => {
+    if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });
+  },
   importFile: (folderId) => {
     newDocumentFolder = folderId;
     void chromeHost.perform({ kind: 'import' });
@@ -2933,6 +2972,16 @@ const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
 
 /** The assistant's tools that act on the app rather than the document's text. The rest run in the layout worker. */
 const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<string> | string> = {
+  ...fileTools({
+    cloud: () => account !== null,
+    entries: () => mergeLibrary(savedDocs, account ? cloudDocs : null),
+    folders: async () => (account ? await listFolders() : await listLocalFolders()),
+    deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
+    changed: async () => {
+      await refreshLibrary();
+      dashboard.refreshIfVisible();
+    },
+  }),
   get_document_info: () => `The document is "${documentName}", edited as ${formatLabel(documentKind)}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`,
   rename_document(args) {
     if (typeof args.name !== 'string') return 'Error: `name` must be text.';
@@ -3062,6 +3111,9 @@ const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
     showLoading(entry.name);
     openSource(sourceOf(entry));
   },
+  warm: (entry) => {
+    if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });
+  },
   newDocument: (folderId) => {
     newDocumentFolder = folderId;
     void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput);
@@ -3072,7 +3124,7 @@ const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
   },
   delete: deleteEverywhere,
   share: (id, name) => showShareDialog({ name, people: { id } }),
-  account: () => account,
+  account: accountForFiles,
   signedIn: () => signedIn,
   current: () => ({ localId: current.localId, cloudId: savedDocs.find((d) => d.id === current.localId)?.cloudId ?? null }),
   close: toggleFilesPanel,
@@ -3254,6 +3306,21 @@ Object.defineProperties(window, {
   selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others }) },
 });
 
+// Back and Forward: the document and the Documents screen the address names.
+window.addEventListener('popstate', () => {
+  const params = new URLSearchParams(location.search);
+  // A collaboration room is joined from the address, so changing to or from one starts the page over.
+  if (params.get('room') || room) return location.reload();
+  const doc = wantedDoc(params);
+  if (doc && doc !== urlDoc) {
+    const name = savedDocs.find((d) => `local:${d.id}` === doc)?.name;
+    if (name) showLoading(name);
+    openSource(doc, true, 'none');
+  }
+  if (history.state?.dashboard) void dashboard.show(false);
+  else if (dashboard.visible) dashboard.dismiss(false);
+});
+
 {
   const params = new URLSearchParams(location.search);
   const doc = wantedDoc(params);
@@ -3283,20 +3350,20 @@ Object.defineProperties(window, {
   }
   // Joining a room without a document: the room has it.
   if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? t('app.blankDocumentName') });
-  else if (doc) openSource(doc, true);
+  else if (doc) openSource(doc, true, 'replace');
   // Nothing asked for: carry on with the document last open here (else the newest saved one);
   // someone with no documents yet is welcomed with what Golem Docs is.
   else {
     const early = earlySaved;
     void (async () => {
-      if (early && (await early.saved)) return openSource(`local:${early.id}`, true);
+      if (early && (await early.saved)) return openSource(`local:${early.id}`, true, 'replace');
       try {
         const saved = await listSaved();
         const last = lastDoc();
         const id = saved.some((d) => `local:${d.id}` === last) ? last : [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id;
-        openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', true);
+        openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', true, 'replace');
       } catch {
-        openSource('welcome', true);
+        openSource('welcome', true, 'replace');
       }
     })();
   }

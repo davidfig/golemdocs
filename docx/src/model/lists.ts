@@ -4,6 +4,12 @@
 import type { NumberingReference } from './types.ts';
 import type { StyleResolver } from './resolve.ts';
 
+/**
+ * The labels of lists of check boxes (Markdown task lists). They are never drawn as text (no font has them):
+ * the layout draws a box in their place, and a click on it changes the list from one to the other.
+ */
+export const CHECKBOX = { unchecked: '\u2610', checked: '\u2611' } as const;
+
 const ROMAN: [number, string][] = [
   [1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'],
   [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i'],

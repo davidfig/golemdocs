@@ -8,8 +8,9 @@
 // when its card scrolls into view.
 
 import { removeShare, thumbnailUrl, type CloudDocument } from '../cloud.ts';
-import { createFolder, moveEntry, removeFolderTree, updateFolder } from '../folderOps.ts';
+import { createFolder, moveEntries, removeFolderTree, updateFolders, withoutDeleted } from '../folderOps.ts';
 import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, type Folder } from '../folders.ts';
+import { warmOnHover } from './warmOnHover.ts';
 import { getThumbnail } from '../storage/local.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
@@ -34,10 +35,12 @@ export interface DashboardHost {
   /** The document open behind the dashboard (its ids in this browser and in the account), whose folder the dashboard starts in. */
   currentDocument(): { localId: string | null; cloudId: string | null };
   open(entry: LibraryEntry): void;
+  /** The pointer is on this document: a chance to start fetching what opening it needs. */
+  warm(entry: LibraryEntry): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
   /** Deletes the document everywhere: from the account and from this browser. */
-  delete(entry: LibraryEntry): Promise<void>;
+  delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Whose cloud documents are shown: who is signed in, if they have sync (null: nobody, or no sync). */
   account(): User | null;
   /** Who is signed in, with or without sync. */
@@ -190,8 +193,12 @@ export class Dashboard {
     else void this.show();
   }
 
-  /** Shows the dashboard and refreshes it: what this browser has first, then the account's. */
-  async show(): Promise<void> {
+  /**
+   * Shows the dashboard and refreshes it: what this browser has first, then the account's.
+   * It is a step in the browser's history (so Back closes it); `step` is false when Forward is what brought it here.
+   */
+  async show(step = true): Promise<void> {
+    if (step && !this.visible && !history.state?.dashboard) history.pushState({ dashboard: true }, '', location.href);
     this.root.hidden = false;
     this.search.value = '';
     this.folderId = null;
@@ -217,10 +224,11 @@ export class Dashboard {
     return entry ? folderOf(entry, this.folders) : null;
   }
 
-  /** Hides it (without opening anything). */
-  dismiss(): void {
+  /** Hides it (without opening anything), undoing its step in history unless Back is what closed it. */
+  dismiss(step = true): void {
     if (!this.visible) return;
     this.hide();
+    if (step && history.state?.dashboard) history.back();
     this.host.closed();
   }
 
@@ -343,6 +351,7 @@ export class Dashboard {
 
     const meta = [relativeTime(entry.updatedAt), formatSize(entry.size)].join(' · ');
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', title: entry.name }, fileIcon(entry.name), setFileName(h('span', { class: 'wm-card-title' }), entry.name)), h('span', { class: 'wm-card-meta', text: meta }));
+    warmOnHover(open, () => this.host.warm(entry));
     open.addEventListener('click', () => {
       this.hide();
       this.host.open(entry);
@@ -352,7 +361,7 @@ export class Dashboard {
     const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
 
-    const actions = h('div', { class: 'wm-card-actions' }, this.deleteButton(() => ({ docs: [entry], folders: [] }), () => this.host.delete(entry), 'trash', true));
+    const actions = h('div', { class: 'wm-card-actions' }, this.deleteButton(() => ({ docs: [entry], folders: [] }), () => this.host.delete([entry]), 'trash', true));
     if (entry.cloud) {
       const share = this.iconButton('share', t('panels.dashboard.share'));
       share.addEventListener('click', () => this.host.share(entry.cloud!.id, entry.cloud!.name));
@@ -388,7 +397,7 @@ export class Dashboard {
         finished = true;
         this.renaming = null;
         const name = input.value.trim();
-        if (save && name && name !== folder.name) void this.run(() => this.changeFolder(folder, { name }));
+        if (save && name && name !== folder.name) void this.run(() => this.changeFolders([{ folder, name }]));
         else this.render();
       };
       input.addEventListener('keydown', (e) => {
@@ -423,7 +432,7 @@ export class Dashboard {
     move.addEventListener('click', () =>
       this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
     );
-    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), () => this.deleteFolderTree(folder), 'trash', true, t('panels.dashboard.deleteFolder')));
+    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), () => this.deleteFolderTrees([folder]), 'trash', true, t('panels.dashboard.deleteFolder')));
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
@@ -514,14 +523,8 @@ export class Dashboard {
     const excluded = (id: string) => folders.some((f) => isInside(this.folders, id, f.id));
     this.pickFolder(t('panels.dashboard.moveSelectedTitle', { count }), excluded, undefined, (to) =>
       this.run(async () => {
-        for (const entry of docs) {
-          if (folderOf(entry, this.folders) === to) continue;
-          await this.relocateEntry(entry, to);
-        }
-        for (const folder of folders) {
-          if (folder.parentId === to) continue;
-          await this.changeFolder(folder, { parentId: to });
-        }
+        await this.relocateEntries(docs.filter((entry) => folderOf(entry, this.folders) !== to), to);
+        await this.changeFolders(folders.filter((folder) => folder.parentId !== to).map((folder) => ({ folder, parentId: to })));
         this.selected.clear();
       }),
     );
@@ -530,29 +533,16 @@ export class Dashboard {
   private async deleteSelection(): Promise<void> {
     const { docs, folders } = this.selectedItems();
     this.selected.clear();
-    const failed: string[] = [];
-    // A selected document inside a selected folder goes with the folder: don't delete it twice.
+    // Folders go with the documents in them (once each), and with the selected documents: one call.
     const inFolders = new Set(folders.flatMap((f) => folderContents(this.folders, this.entries, f).items));
-    for (const entry of docs.filter((e) => !inFolders.has(e))) {
-      try {
-        await this.host.delete(entry);
-      } catch (error) {
-        failed.push(error instanceof Error ? error.message : String(error));
-      }
-    }
-    for (const folder of folders.filter((f) => !folders.some((other) => other !== f && isInside(this.folders, f.id, other.id)))) {
-      try {
-        await this.deleteFolderTree(folder);
-      } catch (error) {
-        failed.push(error instanceof Error ? error.message : String(error));
-      }
-    }
-    if (failed.length) throw new Error(failed[0]);
+    const loose = docs.filter((e) => !inFolders.has(e));
+    if (folders.length) await this.deleteFolderTrees(folders, loose);
+    else await this.host.delete(loose);
   }
 
-  /** Deletes a folder with everything in it: its documents and its subfolders. */
-  private deleteFolderTree(folder: Folder): Promise<void> {
-    return removeFolderTree(this.host.account() !== null, this.folders, this.entries, folder, (entry) => this.host.delete(entry));
+  /** Deletes folders with everything in them (their documents and subfolders), and `alsoDocs`, in one call. */
+  private deleteFolderTrees(folders: Folder[], alsoDocs: LibraryEntry[] = []): Promise<void> {
+    return removeFolderTree(this.folders, this.entries, folders, (entries, folderIds) => this.host.delete([...alsoDocs, ...entries], folderIds));
   }
 
   /** "Documents › A › B": where this is, and a way back up (a place to drop things, too). */
@@ -593,24 +583,31 @@ export class Dashboard {
 
   private relocate(item: Dragged, to: string | null): Promise<void> {
     return this.run(
-      item.kind === 'doc' ? () => this.relocateEntry(item.entry, to) : () => this.changeFolder(item.folder, { parentId: to }),
+      item.kind === 'doc' ? () => this.relocateEntries([item.entry], to) : () => this.changeFolders([{ folder: item.folder, parentId: to }]),
     );
   }
 
-  private async relocateEntry(entry: LibraryEntry, to: string | null): Promise<void> {
-    await moveEntry(entry, to);
-    // Shown in its new place at once, before the lists are fetched again.
-    if (entry.cloud) entry.cloud.folderId = to;
-    if (entry.local) {
-      if (to === null) delete entry.local.folderId;
-      else entry.local.folderId = to;
+  private async relocateEntries(entries: LibraryEntry[], to: string | null): Promise<void> {
+    // Shown in their new place at once; if saving fails, the lists fetched again put them back.
+    for (const entry of entries) {
+      if (entry.cloud) entry.cloud.folderId = to;
+      if (entry.local) {
+        if (to === null) delete entry.local.folderId;
+        else entry.local.folderId = to;
+      }
     }
+    this.render();
+    await moveEntries(entries, to);
   }
 
-  /** Renames and/or moves a folder, and shows it so at once. */
-  private async changeFolder(folder: Folder, change: { name?: string; parentId?: string | null }): Promise<void> {
-    const next = await updateFolder(this.host.account() !== null, folder, change);
-    this.folders = this.folders.map((f) => (f.id === next.id ? next : f));
+  /** Renames and/or moves folders, and shows them so at once. */
+  private async changeFolders(changes: { folder: Folder; name?: string; parentId?: string | null }[]): Promise<void> {
+    if (!changes.length) return;
+    const shown = changes.map(({ folder, ...change }) => ({ ...folder, ...change }));
+    this.folders = this.folders.map((f) => shown.find((n) => n.id === f.id) ?? f);
+    this.render();
+    const next = await updateFolders(this.host.account() !== null, changes);
+    this.folders = this.folders.map((f) => next.find((n) => n.id === f.id) ?? f);
   }
 
   /** Whether the thing being dragged may go in `to` (null: the top level): somewhere new, and never into itself. */
@@ -692,7 +689,11 @@ export class Dashboard {
       const { docs, folders } = what();
       const lines = deletionList(this.folders, this.entries, folders, docs);
       if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
-      button.disabled = true;
+      // Gone from the screen at once; if it fails, the refresh below brings it back with the reason.
+      const left = withoutDeleted(this.folders, this.entries, folders, docs);
+      this.folders = left.folders;
+      this.entries = left.entries;
+      this.render();
       run().then(
         () => this.refresh(),
         (error) => {

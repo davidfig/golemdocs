@@ -1,7 +1,7 @@
 export * from './model/types.ts';
 export * from './model/units.ts';
 export { StyleResolver, mergeProperties, type FormattingLayer } from './model/resolve.ts';
-export { ListCounter, formatNumber, type ListLabel, type ListState } from './model/lists.ts';
+export { CHECKBOX, ListCounter, formatNumber, type ListLabel, type ListState } from './model/lists.ts';
 export * from './edit/text.ts';
 export * from './edit/comments.ts';
 export { WordDocument } from './docx/document.ts';

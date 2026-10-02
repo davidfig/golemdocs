@@ -43,6 +43,18 @@ export abstract class EditorLinks extends EditorEditing {
     return at ? (at.link.url ?? (at.link.anchor ? `#${at.link.anchor}` : '')) : null;
   }
 
+  /** The paragraph of the task list item whose check box is under the page point (x, y), and whether it is checked. */
+  checkboxUnder(page: PageLayout, x: number, y: number): { paragraph: Paragraph; checked: boolean } | null {
+    const margin = 3;
+    for (const line of page.lines) {
+      const box = line.box;
+      if (!box) continue;
+      const left = line.column + box.x;
+      if (x >= left - margin && x <= left + box.size + margin && y >= line.y + box.y - margin && y <= line.y + box.y + box.size + margin) return { paragraph: line.paragraph, checked: box.checked };
+    }
+    return null;
+  }
+
   /** The equation the selection is exactly (one selected position holding one), for Insert Equation to edit. */
   selectedMath(): MathEquation | null {
     if (this.collapsed) return null;

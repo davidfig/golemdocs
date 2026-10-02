@@ -35,4 +35,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': '문서를 변환하는 중…',
   'assistant.tool.other': '작업하는 중…',
   'assistant.tool.rename': '문서 이름을 바꾸는 중…',
+  'assistant.tool.files': '파일을 처리하는 중…',
 };

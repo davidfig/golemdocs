@@ -35,4 +35,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': 'Dokument wird konvertiert…',
   'assistant.tool.other': 'Wird bearbeitet…',
   'assistant.tool.rename': 'Dokument wird umbenannt…',
+  'assistant.tool.files': 'Ihre Dateien werden bearbeitet…',
 };

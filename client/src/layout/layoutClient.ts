@@ -32,7 +32,7 @@ export class LayoutClient {
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
-  private readonly linkRequests = new Map<number, (url: string | null) => void>();
+  private readonly linkRequests = new Map<number, (found: { url: string | null; checkbox: boolean }) => void>();
   private readonly agentRequests = new Map<number, (result: string) => void>();
 
   constructor(
@@ -100,8 +100,8 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'media', doc: this.doc, request, part })).then((bytes) => new Uint8Array(bytes));
   }
 
-  /** The address of the link under a point on a page, or null when there is none. */
-  linkAt(page: number, x: number, y: number): Promise<string | null> {
+  /** What is under a point on a page: the address of a link (null when there is none), and whether it is a check box that a click changes. */
+  linkAt(page: number, x: number, y: number): Promise<{ url: string | null; checkbox: boolean }> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.linkRequests.set(request, resolve);
@@ -142,7 +142,7 @@ export class LayoutClient {
 
   private receive(message: FromWorker): void {
     if (message.type === 'linkAt') {
-      this.linkRequests.get(message.request)?.(message.url);
+      this.linkRequests.get(message.request)?.({ url: message.url, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
       return;
     }

@@ -339,7 +339,7 @@ const TWIPS_PER_POINT = 20;
 async function formatParagraph(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
   editable(env);
   const list = args.list === undefined ? undefined : text(args, 'list');
-  if (list !== undefined && list !== 'bullet' && list !== 'number' && list !== 'none') throw new ToolError('`list` must be bullet, number or none.');
+  if (list !== undefined && list !== 'bullet' && list !== 'number' && list !== 'task' && list !== 'task_done' && list !== 'none') throw new ToolError('`list` must be bullet, number, task, task_done or none.');
   const align = args.align === undefined ? undefined : text(args, 'align');
   if (align !== undefined && align !== 'left' && align !== 'center' && align !== 'right' && align !== 'justify') throw new ToolError('`align` must be left, center, right or justify.');
   const indent = args.indent === undefined ? undefined : text(args, 'indent');
@@ -378,7 +378,8 @@ async function formatParagraph(env: AgentEnv, args: Record<string, unknown>): Pr
     if (list) {
       const now = env.format().list ?? null;
       // Choosing the list a paragraph is in turns it off; choosing the other one switches.
-      if (list === 'none' ? now : now !== list) await env.run({ kind: 'format', action: { kind: 'toggleList', list: list === 'none' ? now! : list } });
+      if (list === 'task' || list === 'task_done') await env.run({ kind: 'format', action: { kind: 'toggleList', list: list === 'task' ? 'task' : 'taskDone', force: true } });
+      else if (list === 'none' ? now : now !== list) await env.run({ kind: 'format', action: { kind: 'toggleList', list: list === 'none' ? now! : list } });
     }
     if (indent) await env.run({ kind: 'format', action: { kind: 'indent', direction: indent } });
   }

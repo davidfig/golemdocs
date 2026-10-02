@@ -169,6 +169,8 @@ export interface LineRecord {
   columnWidth?: number;
   /** Caret positions relative to `column`, for visible offsets start..end inclusive. */
   stops: Float32Array;
+  /** The check box of a task list item (x from `column`, y from the line's top). */
+  box?: { x: number; y: number; size: number; checked: boolean };
   /** Visible to model offsets for the paragraph (shared by its lines). */
   spans: SourceSpan[];
   /** The line ends in a space or break that belongs to it. */

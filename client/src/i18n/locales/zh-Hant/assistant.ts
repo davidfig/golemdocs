@@ -35,4 +35,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': '正在轉換文件…',
   'assistant.tool.other': '正在處理…',
   'assistant.tool.rename': '正在重新命名文件…',
+  'assistant.tool.files': '正在處理你的檔案…',
 };

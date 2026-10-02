@@ -8,8 +8,8 @@
 // when its card scrolls into view.
 
 import { removeShare, thumbnailUrl, type CloudDocument } from '../cloud.ts';
-import { createFolder, moveEntry, removeFolder, updateFolder } from '../folderOps.ts';
-import { childFolders, folderOf, folderPath, folderTree, isInside, itemsIn, type Folder } from '../folders.ts';
+import { createFolder, moveEntry, removeFolderTree, updateFolder } from '../folderOps.ts';
+import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, type Folder } from '../folders.ts';
 import { getThumbnail } from '../storage/local.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
@@ -17,8 +17,15 @@ import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardF
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
+import { confirmDelete, deleteTitle } from './deleteDialog.ts';
+import { pickFolder } from './folderPicker.ts';
 import { iconElement } from './icons.ts';
 import './dashboard.css';
+
+const SIZE_KEY = 'golemdocs.dashboardIconSize';
+const SIZE_MIN = 80;
+const SIZE_MAX = 260;
+const SIZE_DEFAULT = 120;
 
 /** What the dashboard asks of the application. */
 export interface DashboardHost {
@@ -35,14 +42,10 @@ export interface DashboardHost {
   account(): User | null;
   /** Who is signed in, with or without sync. */
   signedIn(): User | null;
-  /** Pay for sync (signing in first if needed). */
-  subscribe(): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
   /** Opens a document someone else shared with the user. */
   openShared(doc: CloudDocument): void;
-  signIn(): Promise<void>;
-  signOut(): Promise<void>;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
   closed(): void;
 }
@@ -55,7 +58,6 @@ type Dragged = { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: 
 export class Dashboard {
   private readonly root: HTMLElement;
   private readonly search: HTMLInputElement;
-  private readonly account: HTMLElement;
   private readonly notice: HTMLElement;
   private readonly grid: HTMLElement;
   private readonly sharedTitle: HTMLElement;
@@ -84,14 +86,13 @@ export class Dashboard {
   /** Bumped on every show and refresh, so a slow answer never replaces a newer one. */
   private generation = 0;
   /** Cards showing a "click again to confirm" button, and the timer that resets them. */
-  private confirming: { button: HTMLButtonElement; label: string; icon?: string; timer: number } | null = null;
+  private confirming: { button: HTMLButtonElement; label: string; icon?: string; iconOnly: boolean; timer: number } | null = null;
 
   constructor(
     parent: HTMLElement,
     private readonly host: DashboardHost,
   ) {
     this.search = h('input', { class: 'wm-dash-search', attrs: { type: 'search', placeholder: t('panels.dashboard.search'), 'aria-label': t('panels.dashboard.search') } });
-    this.account = h('div', { class: 'wm-dash-account' });
     this.notice = h('p', { class: 'wm-dash-notice', attrs: { role: 'status' } });
     this.grid = h('div', { class: 'wm-dash-grid' });
     this.crumbs = h('nav', { class: 'wm-dash-crumbs', attrs: { 'aria-label': t('panels.dashboard.location') } });
@@ -122,16 +123,17 @@ export class Dashboard {
       }, false);
     });
     const moveSelected = action('moveToFolder', t('panels.dashboard.move'), t('panels.dashboard.moveSelected'), () => this.moveSelection());
-    const deleteSelected = this.confirmButton(t('panels.dashboard.delete'), () => this.deleteSelection(), 'trash');
+    const deleteSelected = this.deleteButton(() => this.selectedItems(), () => this.deleteSelection(), 'trash');
     const clearSelection = action('close', t('panels.dashboard.clearSelection'), t('panels.dashboard.clearSelection'), () => this.setSelection([]));
     this.selectionCount = h('span', { class: 'wm-dash-selected', attrs: { role: 'status' } });
     this.selectionBar = h('div', { class: 'wm-dash-selection' }, this.selectionCount, moveSelected, deleteSelected, clearSelection);
     this.selectionBar.hidden = true;
     const actions = h('div', { class: 'wm-dash-actions' }, blank, importButton, this.newFolderButton, this.selectionBar);
+    const size = this.sizeSlider();
     this.root = h(
       'section',
       { class: 'wm-dashboard', attrs: { 'aria-label': t('panels.dashboard.title') } },
-      h('header', { class: 'wm-dash-head' }, h('h1', { text: t('panels.dashboard.title') }), this.search, this.account, close),
+      h('header', { class: 'wm-dash-head' }, h('h1', { text: t('panels.dashboard.title') }), this.search, size, close),
       actions,
       this.scroller,
     );
@@ -148,11 +150,35 @@ export class Dashboard {
         // The first Esc drops a selection; the next closes.
         if (this.selected.size) this.setSelection([]);
         else this.dismiss();
-      } else if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey) && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+      } else if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey) && (e.target === this.search ? !this.search.value : !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement))) {
         e.preventDefault();
         this.setSelection([...this.grid.querySelectorAll<HTMLElement>('[data-select]')].map((el) => el.dataset.select!));
       }
     });
+  }
+
+  /** The icon-size slider: sets the card width (remembered in this browser). */
+  private sizeSlider(): HTMLElement {
+    let size = SIZE_DEFAULT;
+    try {
+      const saved = Number(localStorage.getItem(SIZE_KEY));
+      if (saved >= SIZE_MIN && saved <= SIZE_MAX) size = saved;
+    } catch {
+      // Storage blocked: the default size.
+    }
+    const apply = (value: number): void => this.root.style.setProperty('--wm-card-size', `${value}px`);
+    const range = h('input', { class: 'wm-dash-size', attrs: { type: 'range', min: String(SIZE_MIN), max: String(SIZE_MAX), step: '10', value: String(size), 'aria-label': t('panels.dashboard.iconSize'), title: t('panels.dashboard.iconSize') } });
+    range.addEventListener('input', () => {
+      const value = Number(range.value);
+      apply(value);
+      try {
+        localStorage.setItem(SIZE_KEY, String(value));
+      } catch {
+        // Not remembered.
+      }
+    });
+    queueMicrotask(() => apply(size));
+    return range;
   }
 
   get visible(): boolean {
@@ -212,7 +238,6 @@ export class Dashboard {
   private async refresh(generation = ++this.generation): Promise<void> {
     const user = this.host.account();
     const identity = this.host.signedIn();
-    this.setAccount(identity, user !== null);
     const library = await loadLibrary(user, identity);
     if (generation !== this.generation) return;
     this.entries = library.entries;
@@ -224,32 +249,6 @@ export class Dashboard {
   }
 
   // --- Rendering ---------------------------------------------------------------------------
-
-  private setAccount(user: User | null, syncs = user !== null): void {
-    const button = (text: string, run: () => Promise<void>) => {
-      const b = h('button', { text, attrs: { type: 'button' } });
-      b.addEventListener('click', () =>
-        void run().then(
-          () => this.refresh(),
-          (error: unknown) => {
-            this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
-          },
-        ),
-      );
-      return b;
-    };
-    if (user) {
-      const who = user.email ?? user.name ?? t('panels.dashboard.yourAccount');
-      // Signed in without sync: their documents are in this browser, and Subscribe keeps them in the account.
-      this.account.replaceChildren(
-        h('span', { text: who }),
-        ...(syncs ? [] : [button(t('panels.dashboard.subscribe'), () => this.host.subscribe())]),
-        button(t('panels.dashboard.signOut'), () => this.host.signOut()),
-      );
-    } else {
-      this.account.replaceChildren(h('span', { text: t('panels.dashboard.savedHere') }), button(t('panels.dashboard.signIn'), () => this.host.signIn()));
-    }
-  }
 
   private releaseThumbnails(): void {
     this.observer?.disconnect();
@@ -323,9 +322,15 @@ export class Dashboard {
     if (user) {
       const userId = user.id;
       actions.append(
-        this.confirmButton(t('panels.dashboard.leave'), async () => {
-          await removeShare(doc.id, userId);
-        }),
+        this.confirmButton(
+          t('panels.dashboard.leave'),
+          async () => {
+            await removeShare(doc.id, userId);
+          },
+          'leave',
+          undefined,
+          true,
+        ),
       );
     }
     return h('article', { class: 'wm-card' }, open, badges, actions);
@@ -347,13 +352,13 @@ export class Dashboard {
     const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
 
-    const actions = h('div', { class: 'wm-card-actions' }, this.confirmButton(t('panels.dashboard.delete'), () => this.host.delete(entry)));
+    const actions = h('div', { class: 'wm-card-actions' }, this.deleteButton(() => ({ docs: [entry], folders: [] }), () => this.host.delete(entry), 'trash', true));
     if (entry.cloud) {
-      const share = h('button', { text: t('panels.dashboard.share'), attrs: { type: 'button' } });
+      const share = this.iconButton('share', t('panels.dashboard.share'));
       share.addEventListener('click', () => this.host.share(entry.cloud!.id, entry.cloud!.name));
       actions.prepend(share);
     }
-    const move = h('button', { text: t('panels.dashboard.move'), attrs: { type: 'button' } });
+    const move = this.iconButton('moveToFolder', t('panels.dashboard.move'));
     move.addEventListener('click', () => this.pickFolder(t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => this.relocate({ kind: 'doc', entry }, to)));
     actions.prepend(move);
     const card = h('article', { class: 'wm-card' }, open, badges, actions);
@@ -409,16 +414,16 @@ export class Dashboard {
       });
     }
 
-    const rename = h('button', { text: t('panels.dashboard.rename'), attrs: { type: 'button' } });
+    const rename = this.iconButton('rename', t('panels.dashboard.rename'));
     rename.addEventListener('click', () => {
       this.renaming = folder.id;
       this.render();
     });
-    const move = h('button', { text: t('panels.dashboard.move'), attrs: { type: 'button' } });
+    const move = this.iconButton('moveToFolder', t('panels.dashboard.move'));
     move.addEventListener('click', () =>
       this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
     );
-    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.confirmButton(t('panels.dashboard.deleteFolder'), () => removeFolder(this.host.account() !== null, folder)));
+    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), () => this.deleteFolderTree(folder), 'trash', true, t('panels.dashboard.deleteFolder')));
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
@@ -526,22 +531,28 @@ export class Dashboard {
     const { docs, folders } = this.selectedItems();
     this.selected.clear();
     const failed: string[] = [];
-    // Documents first: a folder's own documents are unaffected by deleting it (they move up).
-    for (const entry of docs) {
+    // A selected document inside a selected folder goes with the folder: don't delete it twice.
+    const inFolders = new Set(folders.flatMap((f) => folderContents(this.folders, this.entries, f).items));
+    for (const entry of docs.filter((e) => !inFolders.has(e))) {
       try {
         await this.host.delete(entry);
       } catch (error) {
         failed.push(error instanceof Error ? error.message : String(error));
       }
     }
-    for (const folder of folders) {
+    for (const folder of folders.filter((f) => !folders.some((other) => other !== f && isInside(this.folders, f.id, other.id)))) {
       try {
-        await removeFolder(this.host.account() !== null, folder);
+        await this.deleteFolderTree(folder);
       } catch (error) {
         failed.push(error instanceof Error ? error.message : String(error));
       }
     }
     if (failed.length) throw new Error(failed[0]);
+  }
+
+  /** Deletes a folder with everything in it: its documents and its subfolders. */
+  private deleteFolderTree(folder: Folder): Promise<void> {
+    return removeFolderTree(this.host.account() !== null, this.folders, this.entries, folder, (entry) => this.host.delete(entry));
   }
 
   /** "Documents › A › B": where this is, and a way back up (a place to drop things, too). */
@@ -643,43 +654,14 @@ export class Dashboard {
     });
   }
 
-  /**
-   * Asks which folder to move something to: a list of every folder (and the top level), except
-   * those `excluded` and the one it is in already.
-   */
   private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
-    const choices = [{ id: null as string | null, name: t('panels.dashboard.title'), depth: 0 }, ...folderTree(this.folders).filter((n) => !excluded(n.folder.id)).map((n) => ({ id: n.folder.id as string | null, name: n.folder.name, depth: n.depth + 1 }))];
-    const close = () => backdrop.remove();
-    const buttons = choices.map((choice) => {
-      const b = h('button', { class: 'wm-move-choice', text: choice.name, attrs: { type: 'button' } });
-      b.style.paddingLeft = `${10 + choice.depth * 16}px`;
-      b.disabled = choice.id === current;
-      b.addEventListener('click', () => {
-        close();
-        pick(choice.id);
-      });
-      return b;
-    });
-    const cancel = h('button', { text: t('panels.dashboard.cancel'), attrs: { type: 'button' } });
-    cancel.addEventListener('click', close);
-    const dialog = h('div', { class: 'wm-move', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': title } }, h('h2', { text: title }), h('div', { class: 'wm-move-list' }, ...buttons), h('div', { class: 'wm-move-actions' }, cancel));
-    const backdrop = h('div', { class: 'wm-move-backdrop' }, dialog);
-    backdrop.addEventListener('mousedown', (e) => {
-      if (e.target === backdrop) close();
-    });
-    backdrop.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      close();
-    });
-    this.root.append(backdrop);
-    (buttons.find((b) => !b.disabled) ?? cancel).focus();
+    pickFolder(this.root, this.folders, title, excluded, current, pick);
   }
 
   /** A button that needs a second click, within a few seconds, to do something that can't be undone. */
-  private confirmButton(label: string, run: () => Promise<void>, icon?: string): HTMLButtonElement {
+  private confirmButton(label: string, run: () => Promise<void>, icon?: string, confirmLabel?: string, iconOnly = false): HTMLButtonElement {
     const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
-    this.setLabel(button, label, icon);
+    this.setLabel(button, label, icon, iconOnly);
     button.addEventListener('click', () => {
       if (this.confirming?.button === button) {
         clearTimeout(this.confirming.timer);
@@ -695,21 +677,57 @@ export class Dashboard {
         return;
       }
       this.resetConfirm();
-      this.setLabel(button, t('panels.dashboard.confirm'), icon);
-      this.confirming = { button, label, icon, timer: window.setTimeout(() => this.resetConfirm(), 4000) };
+      this.setLabel(button, confirmLabel ?? t('panels.dashboard.confirm'), icon);
+      this.confirming = { button, label, icon, iconOnly, timer: window.setTimeout(() => this.resetConfirm(), 4000) };
+    });
+    return button;
+  }
+
+  /** A Delete button: asks first, in a dialog listing everything that would go, then runs `run`. */
+  private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: () => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
+    const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
+    this.setLabel(button, label, icon, iconOnly);
+    button.addEventListener('click', async () => {
+      this.resetConfirm();
+      const { docs, folders } = what();
+      const lines = deletionList(this.folders, this.entries, folders, docs);
+      if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
+      button.disabled = true;
+      run().then(
+        () => this.refresh(),
+        (error) => {
+          this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
+          void this.refresh();
+        },
+      );
     });
     return button;
   }
 
   /** A button's text, with its icon in front when it has one. */
-  private setLabel(button: HTMLButtonElement, label: string, icon?: string): void {
+  private setLabel(button: HTMLButtonElement, label: string, icon?: string, iconOnly = false): void {
+    if (iconOnly && icon) {
+      button.replaceChildren(iconElement(icon));
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      return;
+    }
+    button.removeAttribute('title');
+    button.removeAttribute('aria-label');
     button.replaceChildren(...(icon ? [iconElement(icon)] : []), h('span', { text: label }));
+  }
+
+  /** A card action shown as an icon, named by its tooltip and accessible label. */
+  private iconButton(icon: string, label: string): HTMLButtonElement {
+    const button = h('button', { class: 'wm-icon-action', attrs: { type: 'button', title: label, 'aria-label': label } });
+    button.append(iconElement(icon));
+    return button;
   }
 
   private resetConfirm(): void {
     if (!this.confirming) return;
     clearTimeout(this.confirming.timer);
-    this.setLabel(this.confirming.button, this.confirming.label, this.confirming.icon);
+    this.setLabel(this.confirming.button, this.confirming.label, this.confirming.icon, this.confirming.iconOnly);
     this.confirming = null;
   }
 

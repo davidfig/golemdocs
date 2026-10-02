@@ -202,6 +202,8 @@ export class Chrome {
   private shortcut(e: KeyboardEvent): void {
     if (e.defaultPrevented || e.isComposing || this.menuBar.active) return;
     if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
+    // The Documents screen covers the editor and has its own keys (Ctrl/Cmd+A selects its cards).
+    if (document.querySelector('.wm-dashboard:not([hidden])')) return;
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
     for (const command of this.registry.all()) {
       if (!command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;

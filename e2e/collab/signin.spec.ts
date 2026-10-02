@@ -87,7 +87,7 @@ test.describe('a guest (not signed in)', () => {
     await context.close();
   });
 
-  test('the dashboard offers to sign in and lists what is saved in this browser', async ({ browser }) => {
+  test('the dashboard lists what is saved in this browser, with no account controls', async ({ browser }) => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('listed');
@@ -95,8 +95,8 @@ test.describe('a guest (not signed in)', () => {
     await app.menu('File', 'Open');
     const dashboard = page.locator('.wm-dashboard');
     await expect(dashboard).toBeVisible();
-    await expect(dashboard.getByText('Saved in this browser')).toBeVisible();
-    await expect(dashboard.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(dashboard.getByText(/Document1/).first()).toBeVisible();
+    await expect(dashboard.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
     await expect(dashboard.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
     await context.close();
   });
@@ -197,7 +197,7 @@ test.describe('signed in', () => {
     await person.context.close();
   });
 
-  test('the dashboard lists the account and has a Sign out button', async ({ browser }) => {
+  test('the dashboard lists the account\'s documents, with no account controls', async ({ browser }) => {
     const person = await newPerson(browser, 'acct');
     await person.app.blank();
     await person.app.type('in the account');
@@ -206,7 +206,7 @@ test.describe('signed in', () => {
     await person.app.menu('File', 'Open');
     const dashboard = person.page.locator('.wm-dashboard');
     await expect(dashboard).toBeVisible();
-    await expect(dashboard.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    await expect(dashboard.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
     await expect(dashboard.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
     await expect(dashboard.getByText(/Document1/).first()).toBeVisible();
     await person.context.close();

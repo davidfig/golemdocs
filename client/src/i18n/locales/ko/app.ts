@@ -45,6 +45,8 @@ export const app: Partial<Messages> = {
   'app.importedZip': '가져온 문서: {count}',
   'app.importedZipSkipped': '가져온 문서: {count}. 열 수 없는 파일은 건너뛰었습니다: {skipped}',
   'app.importZipFailed': '가져오지 못했습니다: {message}',
+  'app.importProgress': '{done} / {total}',
+  'app.importCancelled': '가져오기를 취소했습니다. 가져온 문서: {count}',
 
   // Collaboration
   'app.editingAlone': '다시 혼자 편집하고 있습니다',

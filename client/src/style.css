@@ -10,6 +10,17 @@ body {
 body {
   display: flex;
   flex-direction: column;
+  /* The font of all the interface, so anything added to the page (menus, dialogs) has it too. */
+  font: 13px/1.2 var(--wm-font, system-ui, sans-serif);
+  color: var(--wm-text, #000);
+}
+
+/* Form controls don't inherit the font by default. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 /* The pages panel (see ui/pagesPanel.ts) beside the document. */

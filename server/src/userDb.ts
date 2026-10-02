@@ -37,13 +37,21 @@ async function api<T>(env: Env, path: string, body?: unknown): Promise<T> {
   return envelope.result;
 }
 
+/** Longest a cached list is trusted, in case an invalidation was lost. */
+const CACHE_TTL_MS = 10 * 60 * 1000;
+/** D1 rows are limited to 2 MB; a list bigger than this is just not cached. */
+const CACHE_MAX_JSON = 900_000;
+
 export class UserDb {
   private readonly env: Env;
   readonly databaseId: string;
+  /** What this database's cached lists are filed under in the directory. */
+  protected cacheKey: string;
 
   constructor(env: Env, databaseId: string) {
     this.env = env;
     this.databaseId = databaseId;
+    this.cacheKey = databaseId;
   }
 
   async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
@@ -51,8 +59,62 @@ export class UserDb {
     return result?.results ?? [];
   }
 
+  /** Every change goes through here (reads use `all` and `first`), so it is where cached lists are dropped. */
   async run(sql: string, params: unknown[] = []): Promise<void> {
     await this.all(sql, params);
+    await this.invalidate();
+  }
+
+  private async invalidate(): Promise<void> {
+    try {
+      await this.env.DIRECTORY.prepare(
+        "INSERT INTO catalogue_cache (db_key, kind, json, cached_at) VALUES (?, '', '', ?) ON CONFLICT(db_key, kind) DO UPDATE SET cached_at = MAX(cached_at, excluded.cached_at)",
+      )
+        .bind(this.cacheKey, Date.now())
+        .run();
+    } catch {
+      // No cache table yet (or the directory is down): lists are read afresh until the TTL passes.
+    }
+  }
+
+  /**
+   * A list from this database (`kind` names it), served from the directory's copy when that is
+   * current. `load` reads it for real; it runs on a miss and its result is kept. The copy is dated
+   * from before `load` started, so a change made while it ran leaves the copy out of date, never wrong.
+   */
+  /** The cached copy of a list if it is current, else null. */
+  async peekList<T>(kind: string): Promise<T[] | null> {
+    try {
+      const { results } = await this.env.DIRECTORY.prepare('SELECT kind, json, cached_at FROM catalogue_cache WHERE db_key = ?')
+        .bind(this.cacheKey)
+        .all<{ kind: string; json: string; cached_at: number }>();
+      const changedAt = results.find((r) => r.kind === '')?.cached_at ?? 0;
+      const hit = results.find((r) => r.kind === kind);
+      if (hit && hit.cached_at > changedAt && Date.now() - hit.cached_at < CACHE_TTL_MS) return JSON.parse(hit.json) as T[];
+    } catch {
+      // No cache: the caller reads the database itself.
+    }
+    return null;
+  }
+
+  async cachedList<T>(kind: string, load: () => Promise<T[]>): Promise<T[]> {
+    const started = Date.now();
+    const directory = this.env.DIRECTORY;
+    const cached = await this.peekList<T>(kind);
+    if (cached) return cached;
+    const rows = await load();
+    try {
+      const json = JSON.stringify(rows);
+      if (json.length <= CACHE_MAX_JSON) {
+        await directory
+          .prepare('INSERT INTO catalogue_cache (db_key, kind, json, cached_at) VALUES (?, ?, ?, ?) ON CONFLICT(db_key, kind) DO UPDATE SET json = excluded.json, cached_at = excluded.cached_at')
+          .bind(this.cacheKey, kind, json, started)
+          .run();
+      }
+    } catch {
+      // Only a head start for the next listing.
+    }
+    return rows;
   }
 
   async first<T>(sql: string, params: unknown[] = []): Promise<T | null> {
@@ -89,6 +151,7 @@ class LocalUserDb extends UserDb {
     super(env, 'local');
     if (!/^[0-9a-f]+$/.test(userId)) throw new Error('unexpected user id');
     this.prefix = `local_${userId}_`;
+    this.cacheKey = this.prefix;
   }
 
   override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
@@ -97,6 +160,9 @@ class LocalUserDb extends UserDb {
     return (await this.directory.prepare(rewritten).bind(...params).all<T>()).results;
   }
 }
+
+/** Local users whose tables are known to be current, per simulated directory database. */
+const migratedLocally = new WeakMap<object, Set<string>>();
 
 async function createDatabase(env: Env, userId: string): Promise<string> {
   // Dev databases live in the same account but can never be mistaken for (or collide with) production's.
@@ -130,7 +196,13 @@ export async function existingUserDb(env: Env, userId: string): Promise<UserDb |
 export async function userDb(env: Env, userId: string): Promise<UserDb> {
   if (env.ENVIRONMENT === 'local') {
     const local = new LocalUserDb(env.DIRECTORY, userId, env);
-    await migrate(local);
+    // Once per process: migrating on every request cost several queries (and dropped the cached lists each time).
+    const done = migratedLocally.get(env.DIRECTORY) ?? new Set<string>();
+    migratedLocally.set(env.DIRECTORY, done);
+    if (!done.has(userId)) {
+      await migrate(local);
+      done.add(userId);
+    }
     return local;
   }
   const lookup = () =>

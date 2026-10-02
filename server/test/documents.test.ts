@@ -83,3 +83,36 @@ test('a save based on an older version is refused, not written over the newer on
   // Without a base, a save always goes through.
   assert.equal((await call('PUT', `/api/documents/${doc.id}`, { body: new Uint8Array([5]), type: DOCX })).status, 200);
 });
+
+test('the document list is cached, and every change shows up in the next listing', async () => {
+  const doc = await create();
+  const names = async () => ((await (await call('GET', '/api/documents')).json()) as any[]).map((d) => d.name);
+  assert.deepEqual(await names(), ['Doc.docx']);
+  const cached = w.directory.prepare("SELECT kind FROM catalogue_cache WHERE kind = 'documents'").all();
+  assert.equal(cached.length, 1, 'the first listing is kept');
+
+  await call('PUT', `/api/documents/${doc.id}?name=Renamed.docx`, { body: new Uint8Array([4]), type: DOCX });
+  assert.deepEqual(await names(), ['Renamed.docx']);
+  await create();
+  assert.equal((await names()).length, 2);
+  await call('DELETE', `/api/documents/${doc.id}`);
+  assert.equal((await names()).length, 1);
+});
+
+test('a folder change shows up in the next listing', async () => {
+  const folders = async () => ((await (await call('GET', '/api/folders')).json()) as any[]).map((f) => f.name);
+  assert.deepEqual(await folders(), []);
+  const fid = crypto.randomUUID();
+  await call('PUT', `/api/folders/${fid}`, { body: JSON.stringify({ name: 'A', parentId: null }), type: 'application/json' });
+  assert.deepEqual(await folders(), ['A']);
+  await call('PUT', `/api/folders/${fid}`, { body: JSON.stringify({ name: 'B', parentId: null }), type: 'application/json' });
+  assert.deepEqual(await folders(), ['B']);
+});
+
+test('a listing still works when the cache table is missing', async () => {
+  await create();
+  w.directory.exec('DROP TABLE catalogue_cache');
+  assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).length, 1);
+  await create();
+  assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).length, 2);
+});

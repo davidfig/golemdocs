@@ -46,6 +46,8 @@ export const app = {
   'app.importedZip': 'Imported documents: {count}',
   'app.importedZipSkipped': 'Imported documents: {count}. Skipped files that cannot be opened: {skipped}',
   'app.importZipFailed': 'Import failed: {message}',
+  'app.importProgress': '{done} of {total}',
+  'app.importCancelled': 'Import cancelled. Imported documents: {count}',
 
   // Collaboration
   'app.editingAlone': 'Editing on your own again',

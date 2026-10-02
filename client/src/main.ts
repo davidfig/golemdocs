@@ -7,6 +7,7 @@ import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocument, documentUrl, listDocuments, listFolders, listShared, saveDocument, type CloudDocument } from './cloud.ts';
 import { importFiles, readZipFiles } from './storage/zipImport.ts';
+import { showProgress } from './ui/progressToast.ts';
 import { adoptGuestFolders, createFolder } from './folderOps.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
 import {
@@ -1067,9 +1068,15 @@ async function downloadAll(): Promise<void> {
 async function importZip(file: File): Promise<void> {
   const root = newDocumentFolder;
   newDocumentFolder = null;
+  const progress = showProgress(t('app.importingZip', { name: file.name }));
+  // Reading the ZIP is the first 30% of the bar, saving what is in it the rest.
+  const READ_SHARE = 30;
   try {
     setStatus(t('app.importingZip', { name: file.name }));
-    const { files, skipped } = await readZipFiles(new Uint8Array(await file.arrayBuffer()));
+    const { files, skipped } = await readZipFiles(new Uint8Array(await file.arrayBuffer()), {
+      signal: progress.signal,
+      onProgress: (done, total) => progress.update((done / total) * READ_SHARE, 100, t('app.importProgress', { done, total })),
+    });
     if (!files.length) return setStatus(t('app.importZipNone', { name: file.name }));
     const cloud = account !== null;
     // Not guessed from nothing: a folder list that can't be read would make every folder a duplicate.
@@ -1079,6 +1086,8 @@ async function importZip(file: File): Promise<void> {
       folders,
       documents: mergeLibrary(savedDocs, cloud ? cloudDocs : null).map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
       root: root !== null && folders.some((f) => f.id === root) ? root : null,
+      signal: progress.signal,
+      onProgress: (done, total) => progress.update(READ_SHARE + (done / total) * (100 - READ_SHARE), 100, t('app.importProgress', { done, total })),
       makeFolder: (name, parentId) => createFolder(cloud, name, parentId),
       async save(name, bytes, folderId) {
         let doc = { name, bytes };
@@ -1099,9 +1108,13 @@ async function importZip(file: File): Promise<void> {
     await refreshLibrary();
     dashboard.refreshIfVisible();
     const left = skipped + result.skipped;
+    if (result.cancelled) return setStatus(t('app.importCancelled', { count: result.imported }));
     setStatus(left ? t('app.importedZipSkipped', { count: result.imported, skipped: left }) : t('app.importedZip', { count: result.imported }));
   } catch (e) {
+    if (progress.signal.aborted) return setStatus(t('app.importCancelled', { count: 0 }));
     reportError(t('app.importZipFailed', { message: (e as Error).message }));
+  } finally {
+    progress.close();
   }
 }
 
@@ -1410,7 +1423,7 @@ function share(): void {
 
 async function openCloud(id: string): Promise<void> {
   try {
-    if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary();
+    if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary(); // only for an address opened before the list arrived
     const cloud = cloudDocs.find((d) => d.id === id);
     const name = cloud?.name ?? t('app.cloudDocumentName');
     setStatus(t('app.opening', { name }));
@@ -1418,7 +1431,8 @@ async function openCloud(id: string): Promise<void> {
     const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
     open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id, cloudId: info.cloudId });
     rememberInUrl(`local:${info.id}`);
-    void refreshLibrary();
+    // Only the lists need the new browser copy, so they catch up after the document is on screen.
+    window.setTimeout(() => void refreshLibrary(), 1000);
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `cloud:${id}` }));
     else reportError(t('app.openFailed', { message: (e as Error).message }));
@@ -2856,14 +2870,11 @@ const dashboard = new Dashboard(document.getElementById('workspace')!, {
   delete: deleteEverywhere,
   account: () => account,
   signedIn: () => signedIn,
-  subscribe,
   share: (id, name) => showShareDialog({ name, people: { id } }),
   openShared: (doc) => {
     sharedDocs.set(doc.id, doc);
     openSource(`shared:${doc.id}`);
   },
-  signIn: () => signIn({ dashboard: true }),
-  signOut,
   closed: focusInput,
 });
 
@@ -3051,6 +3062,16 @@ const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
     showLoading(entry.name);
     openSource(sourceOf(entry));
   },
+  newDocument: (folderId) => {
+    newDocumentFolder = folderId;
+    void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput);
+  },
+  importFile: (folderId) => {
+    newDocumentFolder = folderId;
+    void chromeHost.perform({ kind: 'import' });
+  },
+  delete: deleteEverywhere,
+  share: (id, name) => showShareDialog({ name, people: { id } }),
   account: () => account,
   signedIn: () => signedIn,
   current: () => ({ localId: current.localId, cloudId: savedDocs.find((d) => d.id === current.localId)?.cloudId ?? null }),

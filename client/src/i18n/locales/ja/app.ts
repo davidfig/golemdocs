@@ -45,6 +45,8 @@ export const app: Partial<Messages> = {
   'app.importedZip': 'インポートしたドキュメント：{count}',
   'app.importedZipSkipped': 'インポートしたドキュメント：{count}。開けないファイルはスキップしました：{skipped}',
   'app.importZipFailed': 'インポートに失敗しました：{message}',
+  'app.importProgress': '{done} / {total}',
+  'app.importCancelled': 'インポートをキャンセルしました。インポートしたドキュメント：{count}',
 
   // Collaboration
   'app.editingAlone': '再び 1 人で編集しています',

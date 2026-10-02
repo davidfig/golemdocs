@@ -74,15 +74,17 @@
 
 .wm-files-twist {
   flex: none;
-  width: 12px;
-  font-size: 10px;
+  width: 16px;
+  font-size: 14px;
+  line-height: 1;
   text-align: center;
 }
 
 .wm-files .wm-file-icon {
   display: inline-flex;
   flex: none;
-  margin-right: 4px;
+  width: 16px;
+  justify-content: center;
 }
 
 .wm-files-name {
@@ -90,10 +92,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.wm-files-folder {
-  font-weight: 600;
 }
 
 .wm-files-current {
@@ -108,4 +106,26 @@
 .wm-files-empty {
   margin: 10px;
   color: var(--wm-disabled);
+}
+
+.wm-files-notice {
+  margin: 6px 10px;
+  color: var(--wm-error);
+}
+
+.wm-files-notice[hidden] {
+  display: none;
+}
+
+.wm-files-rename {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 1px 3px;
+  font: inherit;
+}
+
+.wm-files-row.wm-drop,
+.wm-files-tree.wm-drop {
+  background: var(--wm-hot);
 }

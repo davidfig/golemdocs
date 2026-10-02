@@ -46,3 +46,32 @@ test('dragging its edge resizes it, and the width is kept', async ({ app, page }
   await app.ready();
   expect(await width()).toBe(280);
 });
+
+test('right click makes a folder, renames it, and deletes it with what is in it', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  const file = text('inside.txt', 'kept');
+  await importFile(app, file);
+  await waitForSaved(page, file.name);
+  await app.menu('View', 'Files Sidebar');
+
+  await panel(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
+  await page.getByRole('menuitem', { name: 'New folder' }).click();
+  await page.locator('.wm-files-rename').fill('Notes');
+  await page.keyboard.press('Enter');
+  const folder = panel(page).locator('.wm-files-folder', { hasText: 'Notes' });
+  await expect(folder).toHaveCount(1);
+
+  await row(page, 'inside').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Move…' }).click();
+  await page.locator('.wm-move-choice', { hasText: 'Notes' }).click();
+  await folder.click();
+  await expect(row(page, 'inside')).toHaveCount(1);
+
+  await folder.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete folder' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.locator('.wm-delete-list li')).toHaveText(['Notes/inside.txt']);
+  await dialog.getByRole('button', { name: 'Delete' }).click();
+  await expect(folder).toHaveCount(0);
+  await expect(row(page, 'inside')).toHaveCount(0);
+});

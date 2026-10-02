@@ -69,7 +69,7 @@ test('makes the folders that are missing and reuses the ones that exist', async 
     { name: 'c.txt', folderId: 'new1' },
     { name: 'd.txt', folderId: 'new0' },
   ]);
-  assert.deepEqual(result, { imported: 4, skipped: 0, folders: 2 });
+  assert.deepEqual(result, { imported: 4, skipped: 0, folders: 2, cancelled: false });
 });
 
 test('never takes a name that is in use in the same folder', async () => {
@@ -87,5 +87,36 @@ test('the top level of the ZIP goes in the chosen folder', async () => {
 
 test('a document that cannot be saved is counted as skipped', async () => {
   const { t } = target({ save: async (name) => name !== 'bad.png' });
-  assert.deepEqual(await importFiles([file('ok.txt'), file('bad.png')], t), { imported: 1, skipped: 1, folders: 0 });
+  assert.deepEqual(await importFiles([file('ok.txt'), file('bad.png')], t), { imported: 1, skipped: 1, folders: 0, cancelled: false });
+});
+
+test('importing reports progress and stops when aborted, keeping what was saved', async () => {
+  const abort = new AbortController();
+  const seen: number[] = [];
+  const saved: string[] = [];
+  const files = ['a.txt', 'b.txt', 'c.txt'].map((name) => ({ folders: [], name, bytes: enc.encode(name) }));
+  const result = await importFiles(files, {
+    folders: [],
+    documents: [],
+    root: null,
+    signal: abort.signal,
+    onProgress: (done, total) => seen.push(done / total),
+    makeFolder: async () => folder('x', 'x'),
+    async save(name) {
+      saved.push(name);
+      if (saved.length === 2) abort.abort();
+      return true;
+    },
+  });
+  assert.deepEqual(saved, ['a.txt', 'b.txt']);
+  assert.equal(result.imported, 2);
+  assert.equal(result.cancelled, true);
+  assert.deepEqual(seen, [0, 1 / 3]);
+});
+
+test('reading a ZIP rejects when aborted', async () => {
+  const zip = await writeZip([{ name: 'a.txt', data: enc.encode('a') }]);
+  const abort = new AbortController();
+  abort.abort();
+  await assert.rejects(readZipFiles(zip, { signal: abort.signal }), { name: 'AbortError' });
 });

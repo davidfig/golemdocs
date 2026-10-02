@@ -203,6 +203,14 @@ export const ICONS: Record<string, string> = {
       `<path d="M3.5 7h17" stroke-width="2"/><path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7" fill="${PAPER}"/>` +
       `<path d="M10 11v6M14 11v6" stroke="${RED}" stroke-width="1.8"/>`,
   ),
+  share: svg(
+    `<circle cx="6.5" cy="12" r="2.8" fill="${BLUE}"/><circle cx="17.5" cy="6" r="2.8" fill="${GREEN}"/><circle cx="17.5" cy="18" r="2.8" fill="${PINK}"/>` +
+      `<path d="M9 10.6l6-3.2M9 13.4l6 3.2" stroke-width="1.8"/>`,
+  ),
+  rename: svg(`<path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z" fill="${YELLOW}"/><path d="M14.5 6l3.5 3.5M4 20l4.5-1-3.5-3.5z" fill="${MIST}"/>`),
+  leave: svg(
+    `<path d="M10 4H6a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 6 20h4" fill="${SKY}"/>` + outlined('M9.5 12h10', RED) + outlined('M16 8l4 4-4 4', RED),
+  ),
   move: svg(`<path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5" stroke-width="2"/>`),
   fill: svg(`<rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="${BLUE}" stroke-width="2.2"/>`),
   drawColor: svg(`<path d="M4 17l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 16z" fill="${YELLOW}"/><path d="M4 17l4-1-3-3z" fill="${MIST}"/>` + SWATCH),

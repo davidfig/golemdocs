@@ -24,11 +24,15 @@ export interface ZipContents {
 const isJunk = (segments: readonly string[]): boolean => segments[0] === '__MACOSX' || segments.some((s) => s.startsWith('.'));
 
 /** The documents in a ZIP, with the folders they were in. Hidden files, and files of types that don't open here, are left out. */
-export async function readZipFiles(bytes: Uint8Array): Promise<ZipContents> {
+export async function readZipFiles(bytes: Uint8Array, progress: { signal?: AbortSignal; onProgress?(done: number, total: number): void } = {}): Promise<ZipContents> {
   const archive = ZipArchive.read(bytes);
   const files: ZipFile[] = [];
   let skipped = 0;
+  let done = 0;
   for (const [path, entry] of archive.entries) {
+    // An abort rejects with its AbortError; what was read is dropped.
+    progress.signal?.throwIfAborted();
+    progress.onProgress?.(done++, archive.entries.size);
     const segments = path.split(/[\\/]/).filter((s) => s !== '' && s !== '.' && s !== '..');
     if (!segments.length || isJunk(segments)) continue;
     const name = cleanDocumentName(segments.pop()!);
@@ -52,6 +56,10 @@ export interface ImportTarget {
   makeFolder(name: string, parentId: string | null): Promise<Folder>;
   /** Saves a document. Returns false if it couldn't be (a picture that can't be read, say), and it is counted as skipped. */
   save(name: string, bytes: Uint8Array, folderId: string | null): Promise<boolean>;
+  /** Stops after the file being saved when it aborts; what was done stays. */
+  signal?: AbortSignal;
+  /** Called before each file, with how many are done. */
+  onProgress?(done: number, total: number): void;
 }
 
 export interface ImportResult {
@@ -59,11 +67,13 @@ export interface ImportResult {
   skipped: number;
   /** Folders that had to be made. */
   folders: number;
+  /** It was stopped before the last file. */
+  cancelled: boolean;
 }
 
 /** Puts the files in their folders. A failure to make a folder or save stops it (what was done stays). */
 export async function importFiles(files: readonly ZipFile[], target: ImportTarget): Promise<ImportResult> {
-  const result: ImportResult = { imported: 0, skipped: 0, folders: 0 };
+  const result: ImportResult = { imported: 0, skipped: 0, folders: 0, cancelled: false };
   const known = new Map<string, string>(); // "parent\0name" lowercase → folder id
   for (const f of target.folders) known.set(`${f.parentId ?? ''}\0${f.name.toLowerCase()}`, f.id);
   const taken = new Map<string, Set<string>>(); // folder id ("" top level) → lowercase names
@@ -89,7 +99,12 @@ export async function importFiles(files: readonly ZipFile[], target: ImportTarge
     return parent;
   };
 
-  for (const file of files) {
+  for (const [i, file] of files.entries()) {
+    if (target.signal?.aborted) {
+      result.cancelled = true;
+      break;
+    }
+    target.onProgress?.(i, files.length);
     const folderId = await folderFor(file.folders);
     const name = uniqueName(file.name, namesIn(folderId));
     if (await target.save(name, file.bytes, folderId)) result.imported++;

@@ -21,7 +21,7 @@ const COS_TILT = Math.cos(TILT);
 const SIN_TILT = Math.sin(TILT);
 
 /** Tools that change the document (the reply reminds the person that Undo takes their changes back). */
-const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'convert_document']);
+const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'convert_document']);
 
 /** What Clip says it is doing while a tool runs. */
 function toolNote(name: string): string {
@@ -30,6 +30,13 @@ function toolNote(name: string): string {
       return t('assistant.tool.readDocument');
     case 'get_selection':
       return t('assistant.tool.getSelection');
+    case 'list_documents':
+    case 'search_documents':
+      return t('assistant.tool.searchDocuments');
+    case 'read_other_document':
+      return t('assistant.tool.readOtherDocument');
+    case 'insert_from_document':
+      return t('assistant.tool.insertFromDocument');
     case 'find_text':
       return t('assistant.tool.findText');
     case 'replace_paragraph':

@@ -37,3 +37,30 @@ export async function askServer(messages: Message[], signal: AbortSignal): Promi
   }
   throw new AssistantError(response.status === 503 ? 'unavailable' : 'failed');
 }
+
+/** One of the person's own cloud documents the server's search found, with the part of it that matched. */
+export interface SearchHit {
+  /** The cloud document's id. */
+  id: string;
+  name: string;
+  /** Similarity to the question, 0 to 1. */
+  score: number;
+  paragraph: number;
+  text: string;
+}
+
+export interface SearchAnswer {
+  hits: SearchHit[];
+  /** Documents the index hasn't caught up with yet (a later search includes them). */
+  pending: number;
+}
+
+/** The server's search by meaning over the person's own cloud documents; null when it can't be used (not set up, offline), and the page searches itself. */
+export async function searchServer(query: string): Promise<SearchAnswer | null> {
+  try {
+    const response = await fetch(`/api/assistant/search?q=${encodeURIComponent(query)}`);
+    return response.ok ? ((await response.json()) as SearchAnswer) : null;
+  } catch {
+    return null;
+  }
+}

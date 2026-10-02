@@ -7,6 +7,7 @@ import type { Env, ExportedHandler } from './cf.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
+import { handleSearch, removeFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError, existingUserDb, userDb, type UserDb } from './userDb.ts';
@@ -233,6 +234,9 @@ const handler: ExportedHandler = {
         if (request.method === 'POST') return await handleAssistant(request, env, userId, json);
         throw new HttpError(405, 'method not allowed');
       }
+
+      // GET /api/assistant/search?q=…: which of this user's documents are about something (see search.ts).
+      if (path === '/api/assistant/search' && request.method === 'GET') return json(await handleSearch(env, userId, url.searchParams.get('q') ?? '', await existingUserDb(env, userId)));
 
       // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
       if (path === '/api/admin/billing' && request.method === 'GET') {
@@ -480,6 +484,7 @@ const handler: ExportedHandler = {
         // Row first: a failure leaves an unreferenced object, never a row pointing at nothing.
         await db.run('DELETE FROM documents WHERE id = ?', [id]);
         await forgetDocument(env, id);
+        await removeFromIndex(env, id);
         if (env.ROOMS) await roomFor(env, id).fetch(new Request('https://room/end'));
         await env.FILES.delete([row.r2_key, thumbKeyFor(id)]);
         return new Response(null, { status: 204 });

@@ -5,7 +5,7 @@ import { deskColor, onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocument, documentUrl, listDocuments, listShared, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocument, documentUrl, downloadDocument, listDocuments, listShared, saveDocument, type CloudDocument } from './cloud.ts';
 import { adoptGuestFolders } from './folderOps.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
 import {
@@ -40,6 +40,9 @@ import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { Assistant } from './assistant/index.ts';
+import { searchServer } from './assistant/api.ts';
+import { OtherDocuments, type StoredDocument } from './assistant/libraryDocs.ts';
+import { MAX_COPY } from './assistant/otherDocs.ts';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
@@ -2762,6 +2765,33 @@ const wholeNumber = (args: Record<string, unknown>, key: string, min: number, ma
   return v;
 };
 
+/**
+ * The person's other documents, for the assistant: this browser's copies and the account's, and
+ * what others shared with them. Everything but the open document.
+ */
+const otherDocuments = new OtherDocuments(async () => {
+  const own: StoredDocument[] = mergeLibrary(savedDocs, account ? cloudDocs : null)
+    .filter((e) => e.key !== current.localId && e.cloud?.id !== current.shared?.id)
+    .map((e) => ({
+      id: e.key,
+      name: e.name,
+      updatedAt: e.updatedAt,
+      size: e.size,
+      ...(e.cloud && { cloudId: e.cloud.id }),
+      load: async () => (e.local && !opensFromCloud(e) ? (await getSaved(e.local.id))?.bytes : null) ?? downloadDocument(e.cloud!.id),
+    }));
+  const shared: StoredDocument[] = signedIn
+    ? (await listShared().catch(() => [])).filter((d) => d.id !== current.shared?.id).map((d) => ({ id: d.id, name: d.name, updatedAt: d.updatedAt, size: d.size, place: `shared by ${d.owner?.name ?? d.owner?.email ?? 'someone'}`, load: () => downloadDocument(d.id) }))
+    : [];
+  return [...own, ...shared];
+}, searchServer);
+
+/** A whole number argument that may be left out. */
+const optionalNumber = (args: Record<string, unknown>, key: string, fallback: number, min: number, max: number): number => {
+  if (args[key] === undefined) return fallback;
+  return wholeNumber(args, key, min, max);
+};
+
 const IMAGE_OPS: Record<string, ImageOp> = {
   rotate_left: 'rotateLeft',
   rotate_right: 'rotateRight',
@@ -2779,6 +2809,36 @@ const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
 
 /** The assistant's tools that act on the app rather than the document's text. The rest run in the layout worker. */
 const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<string> | string> = {
+  list_documents: (args) => otherDocuments.describeAll(optionalNumber(args, 'start', 0, 0, 100_000), optionalNumber(args, 'count', 30, 1, 100)),
+  search_documents(args) {
+    if (typeof args.query !== 'string') return 'Error: `query` must be text.';
+    return otherDocuments.search(args.query);
+  },
+  read_other_document(args) {
+    if (typeof args.document !== 'string') return 'Error: `document` must be text: an id or a name.';
+    return otherDocuments.read(args.document, optionalNumber(args, 'start', 0, 0, 1_000_000), optionalNumber(args, 'count', 40, 1, 100));
+  },
+  async insert_from_document(args) {
+    if (typeof args.document !== 'string') return 'Error: `document` must be text: an id or a name.';
+    const found = await otherDocuments.paragraphs(args.document);
+    if (typeof found === 'string') return found;
+    const { name, segments } = found;
+    if (!segments.length) return `Error: "${name}" has no text to copy.`;
+    const first = wholeNumber(args, 'start', 0, Math.max(0, segments.length - 1));
+    const last = optionalNumber(args, 'end', first, first, Math.max(first, segments.length - 1));
+    if (last - first + 1 > MAX_COPY) return `Error: copy at most ${MAX_COPY} paragraphs at a time.`;
+    const after = wholeNumber(args, 'after', -1, 1_000_000);
+    // Put in one paragraph at a time with the tools the model has itself, so each is an ordinary, undoable edit.
+    for (let k = first; k <= last; k++) {
+      const seg = segments[k]!;
+      const at = after + (k - first);
+      const added = await worker.agent('insert_paragraph', JSON.stringify({ after: at, text: seg.text, style: seg.style ?? 'Normal' }));
+      if (added.startsWith('Error:')) return `${added} Copied ${k - first} of ${last - first + 1} paragraphs from "${name}" before stopping.`;
+      if (seg.list) await worker.agent('format_paragraph', JSON.stringify({ paragraph: at + 1, list: seg.list }));
+    }
+    const count = last - first + 1;
+    return `Copied ${count === 1 ? `paragraph ${first}` : `paragraphs ${first} to ${last}`} of "${name}" into this document as paragraphs ${after + 1} to ${after + count}. Pictures and tables in them are not carried over, only their text; undo steps back.`;
+  },
   get_document_info: () => `The document is "${documentName}", edited as ${formatLabel(documentKind)}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`,
   rename_document(args) {
     if (typeof args.name !== 'string') return 'Error: `name` must be text.';

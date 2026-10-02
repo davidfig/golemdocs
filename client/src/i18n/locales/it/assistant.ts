@@ -35,4 +35,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': 'Conversione del documento…',
   'assistant.tool.other': 'Al lavoro…',
   'assistant.tool.rename': 'Rinomina del documento…',
+  'assistant.tool.searchDocuments': 'Cerco tra i tuoi documenti…',
+  'assistant.tool.readOtherDocument': 'Leggo un altro documento…',
+  'assistant.tool.insertFromDocument': 'Copio da un altro documento…',
 };

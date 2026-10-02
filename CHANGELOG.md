@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.6.0 - 2026-10-02
+
+### Added
+- The AI assistant can now look through all your other documents (the ones in your account, saved in this browser, or shared with you): it can find the ones about a topic, read them, and copy paragraphs from them into the document you are working on, with their headings and lists.
+
 ## 0.5.1 - 2026-10-01
 
 ### Fixed

@@ -359,7 +359,8 @@ export type FromWorker =
   | { type: 'linkAt'; request: number; url: string | null; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
   /** What an assistant tool did or found. */
-  | { type: 'agentResult'; request: number; result: string };
+  /** `images` are pictures the tool fetched for the model to look at (data: URIs). */
+  | { type: 'agentResult'; request: number; result: string; images?: string[] };
 
 /** What Tools ▸ Word Count shows. `selection`: they are for the selected text, not the document. */
 export interface WordStats {

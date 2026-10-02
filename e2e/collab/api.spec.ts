@@ -237,7 +237,9 @@ test.describe('documents', () => {
     expect(await empty.json()).toEqual({ error: 'empty body' });
     expect((await api.get('/api/documents/not-a-uuid')).status()).toBe(404);
     expect((await api.get('/api/documents/00000000-0000-4000-8000-000000000000')).status()).toBe(404);
-    expect((await api.patch('/api/documents', { data: 'x', headers: ORIGIN })).status()).toBe(405);
+    // PATCH and DELETE on the collection are the batch move and delete: a body that is not { ids } is a bad request.
+    expect((await api.patch('/api/documents', { data: 'x', headers: ORIGIN })).status()).toBe(400);
+    expect((await api.put('/api/documents', { data: 'x', headers: ORIGIN })).status()).toBe(405);
     const doc = await upload(api);
     expect((await api.post(`/api/documents/${doc.id}`, { data: 'x', headers: ORIGIN })).status()).toBe(405);
     // PATCH moves a document to a folder, so a body that is not { folderId } is a bad request, not an unsupported method.

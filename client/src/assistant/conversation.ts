@@ -12,7 +12,7 @@ export interface ToolCall {
 }
 
 export type Message =
-  | { role: 'user'; content: string }
+  | { role: 'user'; content: string; /** Pictures as `data:image/...;base64,` URIs. */ images?: string[] }
   | { role: 'assistant'; content: string; tool_calls?: ToolCall[] }
   | { role: 'tool'; tool_call_id: string; content: string };
 
@@ -31,10 +31,16 @@ export class AssistantError extends Error {
   }
 }
 
+/** What a tool answers: text, and any pictures it fetched for the model to look at. */
+export type ToolResult = string | { text: string; images?: string[] };
+
+/** What the person asks: their words, and the pictures they attached. */
+export type Request = string | { text: string; images?: string[] };
+
 export interface Deps {
   ask(messages: Message[], signal: AbortSignal): Promise<Reply>;
   /** Runs a tool on the open document; answers with what it did or found. */
-  tool(name: string, args: string): Promise<string>;
+  tool(name: string, args: string): Promise<ToolResult>;
 }
 
 export interface Progress {
@@ -57,6 +63,16 @@ export const MAX_STEPS = 10;
 /** The server refuses conversations over 60,000 characters; stay well under. */
 export const MAX_HISTORY_CHARS = 45_000;
 const MAX_TOOL_RESULT_CHARS = 9_000;
+/** The server's limits on pictures (server/src/assistant.ts): per message, and in the whole conversation. */
+export const MAX_IMAGES_PER_MESSAGE = 4;
+export const MAX_IMAGES = 6;
+const FETCHED_PICTURES = 'The picture you asked to see is attached.';
+const OMITTED_PICTURE = ' (a picture was attached here; it is no longer shown)';
+
+/** The conversation without its pictures: they cost money on every turn, so they are shown once, with the request they belong to. */
+export function withoutImages(messages: Message[]): Message[] {
+  return messages.map((m) => (m.role === 'user' && m.images ? { role: 'user', content: m.content + OMITTED_PICTURE } : m));
+}
 
 const size = (m: Message): number => m.content.length + ('tool_calls' in m && m.tool_calls ? m.tool_calls.reduce((n, c) => n + c.arguments.length + c.name.length, 0) : 0);
 
@@ -82,8 +98,11 @@ export function trimHistory(messages: Message[], limit = MAX_HISTORY_CHARS): Mes
 }
 
 /** Answers `request`, given the conversation so far. */
-export async function converse(deps: Deps, history: Message[], request: string, signal: AbortSignal, progress: Progress = {}, maxSteps = MAX_STEPS): Promise<Outcome> {
-  const messages: Message[] = [...history, { role: 'user', content: request }];
+export async function converse(deps: Deps, history: Message[], request: Request, signal: AbortSignal, progress: Progress = {}, maxSteps = MAX_STEPS): Promise<Outcome> {
+  const asked = typeof request === 'string' ? { text: request, images: undefined } : request;
+  const pictures = asked.images?.slice(0, MAX_IMAGES_PER_MESSAGE);
+  const messages: Message[] = [...withoutImages(history), pictures?.length ? { role: 'user', content: asked.text, images: pictures } : { role: 'user', content: asked.text }];
+  let shown = pictures?.length ?? 0;
   let answer = '';
   for (let step = 0; step < maxSteps; step++) {
     const reply = await deps.ask(trimHistory(messages), signal);
@@ -91,15 +110,26 @@ export async function converse(deps: Deps, history: Message[], request: string, 
     const { content, tool_calls } = reply.message;
     messages.push(tool_calls?.length ? { role: 'assistant', content, tool_calls } : { role: 'assistant', content });
     answer = content;
-    if (!tool_calls?.length) return { messages, answer, stopped: false };
+    if (!tool_calls?.length) return { messages: withoutImages(messages), answer, stopped: false };
+    const fetched: string[] = [];
     for (const call of tool_calls) {
       if (signal.aborted) throw new DOMException('Stopped', 'AbortError');
       progress.tool?.(call.name);
       const result = await deps.tool(call.name, call.arguments);
-      messages.push({ role: 'tool', tool_call_id: call.id, content: result.length > MAX_TOOL_RESULT_CHARS ? `${result.slice(0, MAX_TOOL_RESULT_CHARS)}… (cut short)` : result });
+      let text = typeof result === 'string' ? result : result.text;
+      const images = typeof result === 'string' ? [] : (result.images ?? []);
+      // The server takes only so many pictures: past that, say so instead of sending ones it would refuse.
+      if (images.length && shown + fetched.length + images.length <= MAX_IMAGES && fetched.length + images.length <= MAX_IMAGES_PER_MESSAGE) fetched.push(...images);
+      else if (images.length) text += ' (Not shown: too many pictures are already in this conversation.)';
+      messages.push({ role: 'tool', tool_call_id: call.id, content: text.length > MAX_TOOL_RESULT_CHARS ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}… (cut short)` : text });
+    }
+    // A tool can't hand the model a picture, so what it fetched arrives as a message of its own after the results.
+    if (fetched.length) {
+      shown += fetched.length;
+      messages.push({ role: 'user', content: FETCHED_PICTURES, images: fetched });
     }
   }
   // Out of steps with the model still asking for tools: end on something the server accepts next time.
   messages.push({ role: 'assistant', content: answer });
-  return { messages, answer, stopped: true };
+  return { messages: withoutImages(messages), answer, stopped: true };
 }

@@ -64,13 +64,13 @@ test('right click makes a folder, renames it, and deletes it with what is in it'
   await row(page, 'inside').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Move…' }).click();
   await page.locator('.wm-move-choice', { hasText: 'Notes' }).click();
-  await folder.click();
+  // The folder a document is moved into opens, so it shows there without clicking the folder.
   await expect(row(page, 'inside')).toHaveCount(1);
 
   await folder.click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Delete folder' }).click();
   const dialog = page.getByRole('alertdialog');
-  await expect(dialog.locator('.wm-delete-list li')).toHaveText(['Notes/inside.txt']);
+  await expect(dialog.locator('.wm-delete-list li')).toHaveText(['Notes/', 'Notes/inside.txt']);
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(folder).toHaveCount(0);
   await expect(row(page, 'inside')).toHaveCount(0);

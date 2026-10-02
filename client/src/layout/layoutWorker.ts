@@ -1119,7 +1119,7 @@ class OpenDocument {
   }
 
   /** One of the assistant's tools, run on this document (see agentTools.ts). Settles with its answer once its edits have taken effect. */
-  async agent(name: string, args: string): Promise<string> {
+  async agent(name: string, args: string, show: (images: string[]) => void = () => {}): Promise<string> {
     if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
     const editor = this.editor;
     if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
@@ -1138,6 +1138,7 @@ class OpenDocument {
             while (this.waiting) await this.waiting;
           },
           format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
+          show,
         },
         name,
         args,
@@ -2187,12 +2188,13 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     case 'agent':
       // Always answered, even if the tool fails: the page waits for it.
-      void (current?.doc === message.doc ? current.agent(message.name, message.args) : Promise.resolve('Error: no document is open.'))
+      const shown: string[] = [];
+      void (current?.doc === message.doc ? current.agent(message.name, message.args, (images) => shown.push(...images)) : Promise.resolve('Error: no document is open.'))
         .catch((e: unknown) => {
           console.error(e);
           return 'Error: that did not work.';
         })
-        .then((result) => post({ type: 'agentResult', request: message.request, result }));
+        .then((result) => post({ type: 'agentResult', request: message.request, result, ...(shown.length && { images: shown }) }));
       break;
   }
 };

@@ -33,7 +33,7 @@ export class LayoutClient {
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; checkbox: boolean }) => void>();
-  private readonly agentRequests = new Map<number, (result: string) => void>();
+  private readonly agentRequests = new Map<number, (result: string | { text: string; images: string[] }) => void>();
 
   constructor(
     /** New faces, before any page that uses them. Called for every document, stale or not. */
@@ -119,8 +119,8 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'convert', doc: this.doc, request, to })).then((bytes) => new Uint8Array(bytes));
   }
 
-  /** Runs one of the assistant's tools on the open document (see agentTools.ts). Answers with what it did or found. */
-  agent(name: string, args: string): Promise<string> {
+  /** Runs one of the assistant's tools on the open document (see agentTools.ts). Answers with what it did or found, and any pictures it fetched for the model. */
+  agent(name: string, args: string): Promise<string | { text: string; images: string[] }> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.agentRequests.set(request, resolve);
@@ -147,7 +147,7 @@ export class LayoutClient {
       return;
     }
     if (message.type === 'agentResult') {
-      this.agentRequests.get(message.request)?.(message.result);
+      this.agentRequests.get(message.request)?.(message.images?.length ? { text: message.result, images: message.images } : message.result);
       this.agentRequests.delete(message.request);
       return;
     }

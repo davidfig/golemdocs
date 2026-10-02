@@ -11,7 +11,7 @@
 
 import type { Env } from './cf.ts';
 import { HttpError } from './http.ts';
-import { MAX_OUTPUT_TOKENS, complete, costMicro, estimateTokens, type ChatMessage } from './model.ts';
+import { IMAGE_TOKENS, MAX_OUTPUT_TOKENS, complete, costMicro, estimateTokens, type ChatMessage } from './model.ts';
 import { SYSTEM_PROMPT, TOOLS } from './assistantTools.ts';
 import { subscriptionFor } from './subscriptions.ts';
 
@@ -21,6 +21,19 @@ export const MONTHLY_BUDGET_MICRO = 1_250_000;
 /** Limits on what the page may send. */
 export const MAX_MESSAGES = 80;
 export const MAX_CONVERSATION_CHARS = 60_000;
+/** Pictures: how many one message and the whole conversation may carry, and the longest one's data URI (about 1 MB of picture). The page scales them to fit. */
+export const MAX_IMAGES_PER_MESSAGE = 4;
+export const MAX_IMAGES = 6;
+export const MAX_IMAGE_CHARS = 1_400_000;
+const IMAGE_URI = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/** The pictures on a user message (none if it has none); anything but a few small picture data URIs is refused. */
+function parseImages(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_IMAGES_PER_MESSAGE) throw new HttpError(400, 'bad images');
+  for (const uri of value) if (typeof uri !== 'string' || uri.length > MAX_IMAGE_CHARS || !IMAGE_URI.test(uri)) throw new HttpError(400, 'bad images');
+  return value.length ? (value as string[]) : undefined;
+}
 
 /** The month a spend belongs to. */
 export const periodOf = (now = Date.now()): string => new Date(now).toISOString().slice(0, 7);
@@ -34,11 +47,17 @@ export function parseMessages(body: unknown): ChatMessage[] {
   if (list.length > MAX_MESSAGES) throw new HttpError(413, 'the conversation is too long');
   const out: ChatMessage[] = [];
   let chars = 0;
+  let images = 0;
   for (const raw of list) {
     const m = raw as Record<string, unknown> | null;
     if (!m || typeof m !== 'object' || typeof m.content !== 'string') throw new HttpError(400, 'bad message');
     chars += m.content.length;
-    if (m.role === 'user') out.push({ role: 'user', content: m.content });
+    if (m.role === 'user') {
+      const pictures = parseImages(m.images);
+      images += pictures?.length ?? 0;
+      if (images > MAX_IMAGES) throw new HttpError(413, 'too many pictures');
+      out.push(pictures ? { role: 'user', content: m.content, images: pictures } : { role: 'user', content: m.content });
+    }
     else if (m.role === 'tool') {
       if (typeof m.tool_call_id !== 'string') throw new HttpError(400, 'bad message');
       chars += m.tool_call_id.length;
@@ -100,9 +119,10 @@ export async function handleAssistant(request: Request, env: Env, userId: string
   if (!(await subscriptionFor(env, userId))?.active) return respond({ error: 'the assistant is for subscribers', code: 'subscription' }, 402);
   const messages = parseMessages(await request.json().catch(() => null));
 
-  // Worst case: every character of the conversation and the prompt is input, and the model writes as much as it may.
+  // Worst case: every character of the conversation and the prompt is input (and each picture a full picture's worth of tokens), and the model writes as much as it may.
+  const pictures = messages.reduce((n, m) => n + (m.role === 'user' ? (m.images?.length ?? 0) : 0), 0);
   const promptChars = SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + messages.reduce((n, m) => n + m.content.length + ('tool_calls' in m ? JSON.stringify(m.tool_calls).length : 0) + ('tool_call_id' in m ? m.tool_call_id.length : 0), 0);
-  const hold = costMicro(estimateTokens(promptChars), MAX_OUTPUT_TOKENS);
+  const hold = costMicro(estimateTokens(promptChars) + pictures * IMAGE_TOKENS, MAX_OUTPUT_TOKENS);
   const period = periodOf();
   if (!(await reserve(env, userId, period, hold))) return respond({ error: 'out of assistant credits for this month', code: 'credits', creditsLeft: 0 }, 402);
 

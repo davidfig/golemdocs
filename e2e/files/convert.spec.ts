@@ -88,7 +88,7 @@ test('converting is reversible: Word to Markdown to Word keeps the document', as
   await expect(app.page).toHaveTitle('Document1.docx - Golem Docs');
 });
 
-test('converting a document to a picture makes a picture next to the original', async ({ app }) => {
+test('converting a document to a picture makes a picture next to the original', { tag: '@heavy' }, async ({ app }) => {
   await blankWith(app, 'Picture of text');
   await app.menu('File', 'Convert To', 'PNG Image (.png)');
   // The notice gives way to the autosave's a second later.

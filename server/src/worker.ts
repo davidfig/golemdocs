@@ -7,6 +7,7 @@ import type { Env, ExportedHandler } from './cf.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
+import { handleSearch, removeFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError, existingUserDb, userDb, type UserDb } from './userDb.ts';
@@ -191,15 +192,18 @@ async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Pr
   return { ...row, folder_id: folderId };
 }
 
-/** Deletes the owner's documents: the rows, then their files and rooms. */
+/** Deletes the owner's documents: the rows, then their shares, search entries, rooms and files. */
 async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[]): Promise<void> {
   // Rows first: a failure leaves unreferenced objects, never a row pointing at nothing.
   for (const row of rows) await db.run('DELETE FROM documents WHERE id = ?', [row.id]);
   for (const row of rows) {
     await forgetDocument(env, row.id);
+    await removeFromIndex(env, row.id);
     if (env.ROOMS) await roomFor(env, row.id).fetch(new Request('https://room/end'));
   }
-  await env.FILES.delete(rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]));
+  // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
+  const keys = rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]);
+  for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
 }
 
 function json(data: unknown, status = 200): Response {
@@ -328,6 +332,9 @@ const handler: ExportedHandler = {
         if (request.method === 'POST') return await handleAssistant(request, env, userId, json);
         throw new HttpError(405, 'method not allowed');
       }
+
+      // GET /api/assistant/search?q=…: which of this user's documents are about something (see search.ts).
+      if (path === '/api/assistant/search' && request.method === 'GET') return json(await handleSearch(env, userId, url.searchParams.get('q') ?? '', await existingUserDb(env, userId)));
 
       // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
       if (path === '/api/admin/billing' && request.method === 'GET') {

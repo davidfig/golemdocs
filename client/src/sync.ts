@@ -139,14 +139,6 @@ export function forgetInCatalogue(user: User, cloudIds: readonly string[], folde
   writeCatalogue(user, cached.cloud.filter((d) => !cloudIds.includes(d.id)), cached.shared, cached.folders.filter((f) => !folderIds.includes(f.id)));
 }
 
-/** Adds folders just made in the account to the cached catalogue, so a head start from it knows them (documents in them would otherwise show at the top level). */
-export function addFoldersToCatalogue(user: User, folders: readonly Folder[]): void {
-  const cached = readCatalogue(user);
-  if (!cached) return;
-  const ids = new Set(folders.map((f) => f.id));
-  writeCatalogue(user, cached.cloud, cached.shared, [...cached.folders.filter((f) => !ids.has(f.id)), ...folders]);
-}
-
 /** Edits the cached catalogue, whoever's it is (changes to the account only happen for the one signed in), so a head start from it matches what was just saved. */
 function patchCatalogue(edit: (cached: { cloud: CloudDocument[]; shared: CloudDocument[]; folders: Folder[] }) => void): void {
   try {
@@ -158,6 +150,14 @@ function patchCatalogue(edit: (cached: { cloud: CloudDocument[]; shared: CloudDo
   } catch {
     // Only a head start; the next listing fills it in.
   }
+}
+
+/** Adds folders just made in the account to the cached catalogue, so a head start from it knows them (documents in them would otherwise show at the top level). */
+export function addFoldersToCatalogue(folders: readonly Folder[]): void {
+  patchCatalogue((cached) => {
+    const ids = new Set(folders.map((f) => f.id));
+    cached.folders = [...cached.folders.filter((f) => !ids.has(f.id)), ...folders];
+  });
 }
 
 /** Records folders just renamed or moved in the account in the cached catalogue, so the next head start doesn't show them as they were. */

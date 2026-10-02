@@ -4,7 +4,7 @@
 import { listFolders, moveDocuments, putFolders, throwIfFailed, type BatchResult } from './cloud.ts';
 import { folderContents, folderPath, parentsFirst, type Folder } from './folders.ts';
 import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder } from './storage/local.ts';
-import { moveDocsInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
+import { addFoldersToCatalogue, moveDocsInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
 
 /** Folders that were not saved by a batch call (the cloud's answer for each), as an error naming the first reason. */
 function saved<T extends { id: string }>(result: BatchResult<T>): T[] {
@@ -16,7 +16,12 @@ function saved<T extends { id: string }>(result: BatchResult<T>): T[] {
 export async function createFolders(cloud: boolean, wanted: readonly { name: string; parentId: string | null; id?: string }[]): Promise<Folder[]> {
   const now = Date.now();
   const folders: Folder[] = wanted.map((w) => ({ id: w.id ?? crypto.randomUUID(), name: w.name, parentId: w.parentId, createdAt: now, updatedAt: now }));
-  if (cloud) return saved(await putFolders(folders));
+  if (cloud) {
+    // The Files panel lists from the cached catalogue first: without the folders, they (and what is put in them) would vanish until the account answers.
+    const done = saved(await putFolders(folders));
+    addFoldersToCatalogue(done);
+    return done;
+  }
   for (const folder of folders) await putLocalFolder(folder);
   return folders;
 }
@@ -95,6 +100,7 @@ export async function adoptGuestFolders(): Promise<void> {
   const theirs = new Set((await listFolders()).map((f) => f.id));
   // Parents first, in one request; those the account refused stay here for next time.
   const result = await putFolders(parentsFirst(mine).filter((f) => !theirs.has(f.id)));
+  addFoldersToCatalogue(result.ok);
   const refused = new Set(result.failed.map((f) => f.id));
   for (const folder of mine) if (!refused.has(folder.id)) await removeLocalFolderRecord(folder.id);
 }

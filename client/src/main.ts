@@ -28,7 +28,7 @@ import {
   type SavedInfo,
 } from './storage/local.ts';
 import { folderOf, folderPath } from './folders.ts';
-import { addFoldersToCatalogue, forgetInCatalogue, hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
+import { forgetInCatalogue, hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -1138,10 +1138,7 @@ async function importZip(file: File): Promise<void> {
       signal: progress.signal,
       onProgress: (done, total) => progress.update(READ_SHARE + (done / total) * (100 - READ_SHARE), 100, t('app.importProgress', { done, total })),
       async makeFolder(name, parentId) {
-        const folder = await createFolder(cloud, name, parentId);
-        // The Files panel lists from this cache first: without the folder, documents put in it show at the top level until the account answers.
-        if (account) addFoldersToCatalogue(account, [folder]);
-        return folder;
+        return createFolder(cloud, name, parentId);
       },
       async save(name, bytes, folderId) {
         let doc = { name, bytes };

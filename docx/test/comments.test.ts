@@ -86,3 +86,22 @@ test('a reference inside a run anchors where it is in the run', () => {
   assert.equal(range.start.offset, 4);
   assert.deepEqual(commentMarkerOffsets(p, '0'), [4]);
 });
+
+test('unchanged comments leave their parts as they were; edits keep the extended part root', async () => {
+  const doc = await commented();
+  doc.comments.push({ id: '1', author: 'Bo', paragraphs: ['Yes'], parentId: '0' });
+  const zip = ZipArchive.read(await doc.write());
+  // Word's own attributes, which the writer doesn't produce itself.
+  const comments = (await zip.entries.get('word/comments.xml')!.text()).replace('<w:comments ', '<w:comments data-extra="1" ');
+  const extended = (await zip.entries.get('word/commentsExtended.xml')!.text()).replace('mc:Ignorable="w15"', 'mc:Ignorable="w14 w15 w16se"');
+  const { writeZip } = await import('../src/index.ts');
+  const replaced: Record<string, string> = { 'word/comments.xml': comments, 'word/commentsExtended.xml': extended };
+  const entries = [...zip.entries.values()].map((e) => (replaced[e.name] ? { name: e.name, data: new TextEncoder().encode(replaced[e.name]) } : { name: e.name, entry: e }));
+  const read = await WordDocument.read(await writeZip(entries));
+  const same = ZipArchive.read(await read.write());
+  assert.equal(await same.entries.get('word/comments.xml')!.text(), comments);
+  assert.equal(await same.entries.get('word/commentsExtended.xml')!.text(), extended);
+  read.comments[1].paragraphs = ['Edited'];
+  const edited = ZipArchive.read(await read.write());
+  assert.match(await edited.entries.get('word/commentsExtended.xml')!.text(), /mc:Ignorable="w14 w15 w16se"/);
+});

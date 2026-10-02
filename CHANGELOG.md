@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.6.1 - Unreleased
+
+### Fixed
+- Saving a Word document no longer rewrites its comments when they haven't changed, so Word's own comment details are kept exactly as they were.
+
 ## 0.6.0 - 2026-10-02
 
 ### Added

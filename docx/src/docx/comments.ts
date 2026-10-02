@@ -10,6 +10,8 @@ import { el, elements, textContent, type XmlElement } from '../xml/xml.ts';
 export interface CommentsPart {
   comments: Comment[];
   rootAttrs: Record<string, string>;
+  /** The extended part's root attributes as read (its namespaces and mc:Ignorable), if it had one. */
+  extendedRootAttrs?: Record<string, string>;
   /** Each comment's element as read, and the comment it was read as (to tell if it changed). */
   originals: Map<string, { comment: string; xml: XmlElement }>;
 }
@@ -60,7 +62,7 @@ export function readComments(root: XmlElement, extended?: XmlElement): CommentsP
     if (parent && parent !== comment) comment.parentId = parent.id;
     if (local(ex, 'done') === '1' || local(ex, 'done') === 'true') comment.resolved = true;
   }
-  return { comments, rootAttrs: { ...root.attrs }, originals };
+  return { comments, rootAttrs: { ...root.attrs }, ...(extended && { extendedRootAttrs: { ...extended.attrs } }), originals };
 }
 
 /** Text of a comment paragraph: its text, tabs and breaks (the annotation reference mark is skipped). */
@@ -102,14 +104,15 @@ export interface WrittenComments {
   extended?: XmlElement;
 }
 
-export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' | 'originals'>, hadExtended = false): WrittenComments {
+export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' | 'extendedRootAttrs' | 'originals'>, hadExtended = false): WrittenComments {
+  const writeExtended = hadExtended || part.comments.some((c) => c.parentId || c.resolved);
   const ids = new Map<string, string>();
   const children = part.comments.map((comment) => {
     const original = part.originals.get(comment.id);
     if (original && original.comment === content(comment)) {
       let xml = original.xml;
       let id = lastParaId(xml);
-      if (!id) {
+      if (!id && writeExtended) {
         // Give the last paragraph an id so the extended part can point at it.
         id = paraId(comment, comment.paragraphs.length - 1);
         xml = { ...xml, children: [...xml.children] };
@@ -119,7 +122,7 @@ export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' 
           xml.children[at] = { ...p, attrs: { 'w14:paraId': id, ...p.attrs } };
         }
       }
-      ids.set(comment.id, id);
+      if (id) ids.set(comment.id, id);
       return xml;
     }
     const texts = comment.paragraphs.length ? comment.paragraphs : [''];
@@ -137,15 +140,16 @@ export function writeComments(part: Pick<CommentsPart, 'comments' | 'rootAttrs' 
     );
   });
   const comments = el('w:comments', { ...part.rootAttrs }, children);
-  const threaded = part.comments.some((c) => c.parentId || c.resolved);
-  if (!threaded && !hadExtended) return { comments };
+  if (!writeExtended) return { comments };
   const extended = el(
     'w15:commentsEx',
-    {
-      'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
-      'xmlns:w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
-      'mc:Ignorable': 'w15',
-    },
+    part.extendedRootAttrs
+      ? { ...part.extendedRootAttrs }
+      : {
+          'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+          'xmlns:w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
+          'mc:Ignorable': 'w15',
+        },
     part.comments.map((c) => el('w15:commentEx', { 'w15:paraId': ids.get(c.id), 'w15:paraIdParent': c.parentId ? ids.get(c.parentId) : undefined, 'w15:done': c.resolved ? 1 : 0 })),
   );
   return { comments, extended };

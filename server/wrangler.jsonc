@@ -78,7 +78,7 @@
 		"REQUIRE_SUBSCRIPTION": "false"
 	},
 	// Bindings and vars aren't inherited by environments, so each one lists its own. The top level
-	// above is production: only `pnpm --filter @golemdocs/server deploy` uses it.
+	// above is production: only `pnpm --filter @golemdocs/server deploy:prod` uses it.
 	"env": {
 		// `pnpm dev`: the Worker runs on your machine but D1 and R2 are the real *dev* resources
 		// ("remote": true), so local testing exercises the same services as production without ever

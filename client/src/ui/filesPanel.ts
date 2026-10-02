@@ -8,7 +8,7 @@ import { deletionList, folderOf, isInside, treeRows, type Folder, type TreeRow }
 import { t } from '../i18n/index.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
-import { h, toggleClass } from './dom.ts';
+import { h, isFileDrag, toggleClass } from './dom.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
@@ -24,6 +24,8 @@ export interface FilesPanelHost {
   newDocument(folderId: string | null): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
+  /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved. */
+  dropFile(file: File, folderId: string | null): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
@@ -189,7 +191,8 @@ export class FilesPanel {
       this.menuAt(e.clientX, e.clientY, folder ? this.folderItems(row.folder, row.open) : this.fileItems(row.item), el);
     });
     this.makeDraggable(el, folder ? { kind: 'folder', folder: row.folder } : { kind: 'doc', entry: row.item });
-    if (folder) this.makeDropTarget(el, row.folder.id);
+    // Dropped on a document, a thing goes in the folder that document is in.
+    this.makeDropTarget(el, folder ? row.folder.id : folderOf(row.item, this.folders));
     return el;
   }
 
@@ -350,24 +353,38 @@ export class FilesPanel {
     el.addEventListener('dragend', () => (this.dragged = null));
   }
 
+  /**
+   * A row (or the tree, for the top level) that takes documents and folders dragged here, and files
+   * dropped from the computer, into `folderId`. The folder's own row lights up, whichever row it is over.
+   */
   private makeDropTarget(el: HTMLElement, folderId: string | null): void {
-    const accepts = () => this.dragged !== null && this.canDrop(this.dragged, folderId);
+    const isRow = el !== this.tree;
+    const accepts = (e: DragEvent) => (this.dragged !== null ? this.canDrop(this.dragged, folderId) : isFileDrag(e));
+    const lit = (): HTMLElement => (folderId === null ? this.tree : (this.tree.querySelector<HTMLElement>(`[data-row="f:${CSS.escape(folderId)}"]`) ?? el));
     el.addEventListener('dragover', (e) => {
-      if (!accepts()) return;
+      if (!accepts(e)) {
+        // Over a row, a thing that can't go in its folder goes nowhere (not to the top level behind it).
+        if (isRow && (this.dragged || isFileDrag(e))) e.stopPropagation();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-      el.classList.add('wm-drop');
+      if (e.dataTransfer) e.dataTransfer.dropEffect = this.dragged ? 'move' : 'copy';
+      lit().classList.add('wm-drop');
     });
-    el.addEventListener('dragleave', () => el.classList.remove('wm-drop'));
+    el.addEventListener('dragleave', () => lit().classList.remove('wm-drop'));
     el.addEventListener('drop', (e) => {
-      el.classList.remove('wm-drop');
-      const item = this.dragged;
-      if (!item || !accepts()) return;
+      lit().classList.remove('wm-drop');
+      if (!accepts(e)) return;
       e.preventDefault();
       e.stopPropagation();
+      const item = this.dragged;
       this.dragged = null;
-      void this.relocate(item, folderId);
+      if (item) return void this.relocate(item, folderId);
+      const file = e.dataTransfer?.files[0];
+      if (!file) return;
+      if (folderId !== null) this.toggleFolder(folderId, true);
+      this.host.dropFile(file, folderId);
     });
   }
 

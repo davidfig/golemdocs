@@ -1784,6 +1784,13 @@ async function dropped(file: File, x: number, y: number): Promise<void> {
     if (choice === undefined) return focusInput();
     if (choice === 'insert') return insertPicture(file, { x, y });
   }
+  // Dropped on the document, not a folder: it goes in the top level.
+  dropFile(file, null);
+}
+
+/** Opens a dropped file (a ZIP is imported), filed in `folderId` (null: the top level) when it is first saved. */
+function dropFile(file: File, folderId: string | null): void {
+  newDocumentFolder = folderId;
   if (isZipName(file.name)) return void importZip(file);
   openFile(file);
 }
@@ -2936,6 +2943,7 @@ const dashboard = new Dashboard(document.body, {
     newDocumentFolder = folderId;
     void chromeHost.perform({ kind: 'import' });
   },
+  dropFile,
   delete: deleteEverywhere,
   account: () => account,
   signedIn: () => signedIn,
@@ -3227,6 +3235,7 @@ const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
     newDocumentFolder = folderId;
     void chromeHost.perform({ kind: 'import' });
   },
+  dropFile,
   delete: deleteEverywhere,
   share: (id, name) => showShareDialog({ name, people: { id } }),
   account: accountForFiles,

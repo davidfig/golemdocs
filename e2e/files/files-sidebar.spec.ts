@@ -1,7 +1,7 @@
 // View > Files Sidebar: the documents as a tree beside the editor.
 
 import { expect, test } from './fixtures';
-import { importFile, text, waitForSaved } from './helpers';
+import { dropFileOn, importFile, text, waitForOpen, waitForSaved } from './helpers';
 
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
 const row = (page: import('@playwright/test').Page, name: string) => panel(page).locator('.wm-files-file', { hasText: name });
@@ -74,4 +74,34 @@ test('right click makes a folder, renames it, and deletes it with what is in it'
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(folder).toHaveCount(0);
   await expect(row(page, 'inside')).toHaveCount(0);
+});
+
+test('a file dropped from the computer goes in the folder it is dropped on, or the one of the document it is dropped on', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  await panel(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
+  await page.getByRole('menuitem', { name: 'New folder' }).click();
+  await page.locator('.wm-files-rename').fill('Notes');
+  await page.keyboard.press('Enter');
+  const folder = panel(page).locator('.wm-files-folder', { hasText: 'Notes' });
+  await expect(folder).toHaveCount(1);
+
+  await dropFileOn(folder, text('first.txt', 'one'));
+  await waitForOpen(app, 'first.txt');
+  expect(await app.text()).toBe('one');
+  await waitForSaved(page, 'first.txt');
+  // The folder opens to show it, one level in.
+  await expect(folder).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'first')).toHaveAttribute('aria-level', '2');
+
+  await dropFileOn(row(page, 'first'), text('second.txt', 'two'));
+  await waitForOpen(app, 'second.txt');
+  await waitForSaved(page, 'second.txt');
+  await expect(row(page, 'second')).toHaveAttribute('aria-level', '2');
+
+  // Below the rows: the top level.
+  await dropFileOn(panel(page).locator('.wm-files-tree'), text('third.txt', 'three'));
+  await waitForOpen(app, 'third.txt');
+  await waitForSaved(page, 'third.txt');
+  await expect(row(page, 'third')).toHaveAttribute('aria-level', '1');
 });

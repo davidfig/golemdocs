@@ -1,7 +1,7 @@
 // Helpers for the files/formats/dashboard specs: building files to upload, reading ZIPs back,
 // driving the File menu's file chooser, and dropping files on the window.
 
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { deflateRawSync, deflateSync, inflateRawSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -193,6 +193,23 @@ export async function dropFile(page: Page, file: Upload, at = { x: 400, y: 400 }
       window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, clientX: at.x, clientY: at.y, bubbles: true, cancelable: true }));
     },
     { name: file.name, base64: file.buffer.toString('base64'), mimeType: file.mimeType ?? '', at },
+  );
+}
+
+/** Drags `file` from the desktop over `target` (a folder, say) and drops it there. */
+export async function dropFileOn(target: Locator, file: Upload): Promise<void> {
+  await target.evaluate(
+    (el, { name, base64, mimeType }) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], name, { type: mimeType }));
+      const box = el.getBoundingClientRect();
+      const at = { clientX: box.x + box.width / 2, clientY: box.y + Math.min(box.height / 2, 10), bubbles: true, cancelable: true, dataTransfer: dt };
+      el.dispatchEvent(new DragEvent('dragenter', at));
+      el.dispatchEvent(new DragEvent('dragover', at));
+      el.dispatchEvent(new DragEvent('drop', at));
+    },
+    { name: file.name, base64: file.buffer.toString('base64'), mimeType: file.mimeType ?? '' },
   );
 }
 

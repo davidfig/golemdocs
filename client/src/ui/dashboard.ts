@@ -16,7 +16,7 @@ import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
-import { h } from './dom.ts';
+import { h, isFileDrag } from './dom.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
@@ -39,6 +39,8 @@ export interface DashboardHost {
   warm(entry: LibraryEntry): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
+  /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved. */
+  dropFile(file: File, folderId: string | null): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Whose cloud documents are shown: who is signed in, if they have sync (null: nobody, or no sync). */
@@ -144,6 +146,7 @@ export class Dashboard {
       this.scroller,
     );
     this.root.hidden = true;
+    this.takeFiles(this.root);
     parent.append(this.root);
 
     this.search.addEventListener('input', () => this.render());
@@ -635,23 +638,49 @@ export class Dashboard {
     });
   }
 
+  /** A folder (or crumb) that takes documents and folders dragged here, and files dropped from the computer. */
   private makeDropTarget(el: HTMLElement, folderId: string | null): void {
-    const accepts = () => this.dragged !== null && this.canDrop(this.dragged, folderId);
+    const accepts = (e: DragEvent) => (this.dragged !== null ? this.canDrop(this.dragged, folderId) : isFileDrag(e));
     el.addEventListener('dragover', (e) => {
-      if (!accepts()) return;
+      if (!accepts(e)) return;
       e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = this.dragged ? 'move' : 'copy';
       el.classList.add('wm-drop');
     });
     el.addEventListener('dragleave', () => el.classList.remove('wm-drop'));
     el.addEventListener('drop', (e) => {
       el.classList.remove('wm-drop');
-      const item = this.dragged;
-      if (!item || !accepts()) return;
+      if (!accepts(e)) return;
       e.preventDefault();
+      e.stopPropagation();
+      const item = this.dragged;
       this.dragged = null;
-      void this.relocate(item, folderId);
+      if (item) void this.relocate(item, folderId);
+      else this.dropFiles(e, folderId);
     });
+  }
+
+  /** Anywhere else on the dashboard, a file from the computer goes in the folder being looked at. */
+  private takeFiles(el: HTMLElement): void {
+    el.addEventListener('dragover', (e) => {
+      if (this.dragged || !isFileDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+    el.addEventListener('drop', (e) => {
+      if (this.dragged || !isFileDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.dropFiles(e, this.folderId);
+    });
+  }
+
+  /** Opens a file dropped from the computer, as dropping it on a document does, and files it in `folderId`. */
+  private dropFiles(e: DragEvent, folderId: string | null): void {
+    const file = e.dataTransfer?.files[0];
+    if (file) this.host.dropFile(file, folderId);
   }
 
   private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {

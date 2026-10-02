@@ -2,7 +2,7 @@
 
 import type { Locator, Page } from '@playwright/test';
 import { expect, test, type App } from './fixtures';
-import { importFile, text, waitForSaved } from './helpers';
+import { dropFileOn, importFile, text, waitForOpen, waitForSaved } from './helpers';
 
 const dashboard = (page: Page) => page.locator('.wm-dashboard');
 const cards = (page: Page) => dashboard(page).locator('article.wm-card:not(.wm-folder)');
@@ -147,6 +147,31 @@ test('a document made from inside a folder is filed there', async ({ app, page }
   await expectNames(cards(page), ['Document1.docx']);
   await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
   await expect(folder(page, 'Reports').locator('.wm-card-meta')).toHaveText('1 item');
+});
+
+test('a file dropped from the computer on a folder opens, filed in that folder', async ({ app, page }) => {
+  await twoDocuments(app);
+  await makeFolder(page, 'Reports');
+  await dropFileOn(folder(page, 'Reports'), text('dropped.txt', 'from the desktop'));
+  await waitForOpen(app, 'dropped.txt');
+  expect(await app.text()).toBe('from the desktop');
+  await waitForSaved(page, 'dropped.txt');
+  await openDashboard(app);
+  await expectNames(cards(page), ['dropped.txt']);
+  await expect(dashboard(page).getByRole('navigation', { name: 'Location' })).toContainText('Reports');
+});
+
+test('a file dropped elsewhere on the dashboard goes in the folder being looked at', async ({ app, page }) => {
+  await twoDocuments(app);
+  await makeFolder(page, 'Reports');
+  await folder(page, 'Reports').getByRole('button', { name: 'Open folder Reports' }).click();
+  await dropFileOn(dashboard(page), text('here.md', '# Here'));
+  await waitForOpen(app, 'here.md');
+  await waitForSaved(page, 'here.md');
+  await openDashboard(app);
+  await expectNames(cards(page), ['here.md']);
+  await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
+  await expectNames(cards(page), ['alpha.txt', 'beta.md']);
 });
 
 test('deleting a folder deletes the folders inside it too', async ({ app, page }) => {

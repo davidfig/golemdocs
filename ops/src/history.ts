@@ -30,6 +30,12 @@ export interface HistoryEntry {
   time: number;
 }
 
+/** The undo and redo stacks at a moment (see History.mark). */
+export interface HistoryMark {
+  undo: HistoryEntry[];
+  redo: HistoryEntry[];
+}
+
 export interface HistoryOptions {
   /** Edits in one group (typing) within this many ms of each other undo together. */
   groupMs?: number;
@@ -55,6 +61,32 @@ export class History {
 
   get canRedo(): boolean {
     return this.redoStack.length > 0;
+  }
+
+  /** The stacks as they are now, to put back with `restore` or to fold what comes after into one entry with `fold`. */
+  mark(): HistoryMark {
+    return { undo: [...this.undoStack], redo: [...this.redoStack] };
+  }
+
+  /** Puts the stacks back as they were at `mark`: whatever was recorded since leaves no trace. */
+  restore(mark: HistoryMark): void {
+    this.undoStack = [...mark.undo];
+    this.redoStack = [...mark.redo];
+  }
+
+  /** Makes every entry recorded since `mark` one, so they undo and redo together. */
+  fold(mark: HistoryMark): void {
+    const entries = this.undoStack.splice(mark.undo.length);
+    if (entries.length < 2) {
+      this.undoStack.push(...entries);
+      return;
+    }
+    this.undoStack.push({
+      parts: entries.flatMap((e) => e.parts),
+      before: entries[0].before,
+      after: entries[entries.length - 1].after,
+      time: 0,
+    });
   }
 
   /** A local edit. `group` joins it to the previous entry if that was the same kind of edit, just before, where it ended. */

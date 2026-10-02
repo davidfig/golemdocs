@@ -1468,6 +1468,8 @@ interface Seg {
   note?: string;
   /** A comment range's start or end, between segments (gone once applied). */
   mark?: { id: string; end: boolean };
+  /** The properties of the run the text is from. */
+  props?: RunProperties;
 }
 
 type Mode = 'block' | 'heading' | 'cell';
@@ -1779,7 +1781,11 @@ class Exporter {
   private readonly threads: Map<string, Comment[]>;
   private readonly notes = new Map<Mode, Map<string, string>>();
 
-  constructor(doc: WordDocument) {
+  constructor(
+    doc: WordDocument,
+    /** Runs marked noProof are Markdown already, written as they are (see paragraphSource). */
+    private readonly verbatim = false,
+  ) {
     this.resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
     this.body = doc.body;
     this.threads = commentThreads(doc.comments);
@@ -1807,6 +1813,17 @@ class Exporter {
       } else out.push(tracker.ids.length ? { ...seg, cm: tracker.ids.join(',') } : seg);
     }
     return out;
+  }
+
+  /** A paragraph's inline segments, and the Markdown of just its text. */
+  inlineParts(p: Paragraph): { segs: Seg[]; body: string } {
+    const segs = this.segments(p.children);
+    return { segs, body: renderInline(segs, this.classify(p).kind === 'heading' ? 'heading' : 'block') };
+  }
+
+  /** Whether a paragraph is a line of a code block (written inside a fence, so not as a paragraph of its own). */
+  isCode(p: Paragraph): boolean {
+    return this.classify(p).kind === 'code';
   }
 
   run(): string {
@@ -1936,10 +1953,15 @@ class Exporter {
       for (const inline of list) {
         switch (inline.kind) {
           case 'run': {
+            if (this.verbatim && inline.properties.noProof) {
+              const text = inline.content.map((c) => (c.kind === 'text' ? c.text : '')).join('');
+              if (text) segs.push({ text, ...plainFmt, raw: true });
+              break;
+            }
             const fmt = this.marks(inline.properties);
             let acc = '';
             const flush = (): void => {
-              if (acc) segs.push({ text: acc, ...fmt, link });
+              if (acc) segs.push({ text: acc, ...fmt, link, props: inline.properties });
               acc = '';
             };
             for (const item of inline.content) {
@@ -2202,4 +2224,57 @@ class Exporter {
  */
 export function documentToMarkdown(doc: WordDocument): string {
   return new Exporter(doc).run();
+}
+
+const RAW_RUN_KEYS = new Set(['style', 'fonts', 'bold', 'boldCs', 'italic', 'italicCs', 'strike', 'lang']);
+
+/** Whether everything in some inlines is something Markdown writes as text: plain and marked text, and links. */
+function markdownInlines(inlines: readonly Inline[]): boolean {
+  return inlines.every((inline) => {
+    if (inline.kind === 'run') {
+      return Object.keys(inline.properties).every((k) => RAW_RUN_KEYS.has(k)) && inline.content.every((c) => c.kind === 'text');
+    }
+    if (inline.kind === 'hyperlink') return inline.url !== undefined && inline.anchor === undefined && markdownInlines(inline.children);
+    return false;
+  });
+}
+
+/** A paragraph's text in pieces of one kind of formatting each (see `paragraphParts`). */
+export type MarkdownSegment = Seg;
+
+/**
+ * One paragraph as the Markdown source it would be written as (`## Title`, `- [ ] item`, `some **bold** text`),
+ * in parts: the whole `source`, its block `prefix` (`## `, `- [ ] `), and the text's `segs` (see `renderSegments`).
+ * Null if it can't be written as a paragraph of its own without losing something (a picture, an equation,
+ * a comment, a line of a code block, a colour...). Lists are numbered from 1.
+ */
+export function paragraphParts(doc: WordDocument, p: Paragraph): { source: string; prefix: string; segs: MarkdownSegment[] } | null {
+  if (!markdownInlines(p.children)) return null;
+  const alone = Object.assign(Object.create(doc), { body: [p] }) as WordDocument;
+  const exporter = new Exporter(alone);
+  if (exporter.isCode(p)) return null;
+  const { segs, body } = exporter.inlineParts(p);
+  let source = exporter.run().replace(/\n$/, '');
+  // An empty list item is written as its marker alone: the space lets what is typed next follow it.
+  if (/^\s*(?:[-*+]|\d+[.)])(?: \[[ x]\])?$/.test(source)) source = `${source} `;
+  return { source, prefix: source.endsWith(body) ? source.slice(0, source.length - body.length) : '', segs };
+}
+
+/** The source of a paragraph (see `paragraphParts`), or null. */
+export function paragraphToMarkdown(doc: WordDocument, p: Paragraph): string | null {
+  return paragraphParts(doc, p)?.source ?? null;
+}
+
+/** Some segments of a paragraph's text as Markdown (`some **bold**`). */
+export function renderSegments(segs: readonly MarkdownSegment[]): string {
+  return renderInline(segs.map((s) => ({ ...s })), 'block');
+}
+
+/**
+ * A paragraph being edited as Markdown, written out: text in runs marked noProof is Markdown already and goes
+ * as it is, the rest (formatted text) is written as Markdown.
+ */
+export function paragraphSource(doc: WordDocument, p: Paragraph): string {
+  const alone = Object.assign(Object.create(doc), { body: [p] }) as WordDocument;
+  return renderInline(new Exporter(alone, true).inlineParts(p).segs, 'block');
 }

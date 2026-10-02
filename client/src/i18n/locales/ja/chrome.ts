@@ -74,6 +74,8 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '変更履歴の記録(&T)',
   'chrome.tools.autoFormat': '入力時に自動書式設定(&A)',
   'chrome.tools.autoFormat.tip': '「# 」「- 」「**太字**」などの Markdown 記法を、入力中に書式へ変換します',
+  'chrome.tools.livePreview': 'カーソル位置の Markdown を表示(&M)',
+  'chrome.tools.livePreview.tip': 'Markdown 文書で、カーソルのある段落の Markdown 記法を表示します(試験的機能)',
   'chrome.tools.options': 'オプション(&O)…',
   'chrome.tools.language': '言語(&L)',
   'chrome.format.bold': '太字(&B)',

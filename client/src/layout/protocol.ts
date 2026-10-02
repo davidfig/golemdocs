@@ -105,6 +105,8 @@ export type WireCommand =
   | { kind: 'spellCheck'; spelling: boolean; grammar: boolean; words?: string[] }
   /** Whether typed Markdown shortcuts ("# ", "- ", "**bold**") turn into formatting (see autoformat.ts). */
   | { kind: 'autoFormat'; on: boolean }
+  /** Whether the paragraph the caret is in shows its Markdown source, in Markdown documents (see livePreview.ts). */
+  | { kind: 'livePreview'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   | { kind: 'spellAt'; page: number; x: number; y: number }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */

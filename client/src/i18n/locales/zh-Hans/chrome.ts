@@ -74,6 +74,8 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '修订(&T)',
   'chrome.tools.autoFormat': '键入时自动套用格式(&A)',
   'chrome.tools.autoFormat.tip': '键入时将“# ”“- ”“**粗体**”等 Markdown 快捷写法转换为格式',
+  'chrome.tools.livePreview': '在光标处显示 &Markdown',
+  'chrome.tools.livePreview.tip': '在 Markdown 文档中,显示光标所在段落的 Markdown 源码(实验性)',
   'chrome.tools.options': '选项(&O)…',
   'chrome.tools.language': '语言(&L)',
   'chrome.format.bold': '粗体(&B)',

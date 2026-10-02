@@ -2,9 +2,9 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { isMathInline, paragraphLength, paragraphText, plainText, type DocumentProperties, type Inline, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { isMathInline, paragraphLength, paragraphText, plainText, type DocumentProperties, type Inline, type NumberingReference, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
-import { Replica, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@golemdocs/ops';
+import { Replica, type HistoryMark, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@golemdocs/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
 import { RoomClient, type RoomHost, type RoomStart, type SocketLike } from '../collab/roomClient.ts';
 import {
@@ -14,6 +14,7 @@ import {
   LayoutSession,
   setFormattingMarks,
   setReflowWidth,
+  setShowingSource,
   toModel,
   type EncodedPage,
   PageLayout,
@@ -471,8 +472,8 @@ class OpenDocument {
       reveal: this.reveal,
       text: editor.selectedText(CLIPBOARD_LIMIT),
       format: this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
-      canUndo: this.replica!.history.canUndo,
-      canRedo: this.replica!.history.canRedo,
+      canUndo: this.canUndo(),
+      canRedo: this.canRedo(),
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote,
       search: this.search ?? undefined,
@@ -1122,21 +1123,29 @@ class OpenDocument {
     if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
     const editor = this.editor;
     if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
-    return runAgentTool(
-      {
-        editor,
-        readOnly: this.readOnly || this.format === 'pdf',
-        run: async (wire) => {
-          // Another document was opened meanwhile: this one's editor is no longer the page's.
-          if (this.closed) throw new Error('the document was closed');
-          this.command(wire);
-          while (this.waiting) await this.waiting;
+    // The assistant works on the formatted text: a source being edited is put away until it is done.
+    this.rawPaused++;
+    try {
+      await new Promise<void>((resolve) => this.later(() => this.syncRaw().then(() => this.finishRaw()).finally(resolve)));
+      return await runAgentTool(
+        {
+          editor,
+          readOnly: this.readOnly || this.format === 'pdf',
+          run: async (wire) => {
+            // Another document was opened meanwhile: this one's editor is no longer the page's.
+            if (this.closed) throw new Error('the document was closed');
+            this.command(wire);
+            while (this.waiting) await this.waiting;
+          },
+          format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
         },
-        format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
-      },
-      name,
-      args,
-    );
+        name,
+        args,
+      );
+    } finally {
+      this.rawPaused--;
+      this.later(() => this.syncRaw().then(() => this.finishRaw()));
+    }
   }
 
   /** One of the assistant's tools on a PDF shown as its own pages (see agentPdfTools.ts). */
@@ -1392,6 +1401,10 @@ class OpenDocument {
   }
 
   private runCommand(wire: WireCommand, cjkReady = false, mathReady = false): void | Promise<void> {
+    // Formatting and pasting work on the formatted paragraph: its source is put away first, and shown again after.
+    if (this.raw && (wire.kind === 'format' || wire.kind === 'pasteHtml' || wire.kind === 'applyPainter')) {
+      return this.leaveRaw().then(() => Promise.resolve(this.runCommand(wire)).then(() => this.syncRaw()).then(() => this.finishRaw()));
+    }
     if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (wire.kind === 'applyPainter') return this.applyPainter();
     if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false, wire.footer ?? false);
@@ -1410,6 +1423,10 @@ class OpenDocument {
       live.autoFormat = wire.on;
       return;
     }
+    if (wire.kind === 'livePreview') {
+      live.livePreview = wire.on;
+      return this.syncRaw().then(() => this.finishRaw());
+    }
     if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
@@ -1426,6 +1443,10 @@ class OpenDocument {
     }
     // Shown as PDF: selecting and moving only.
     if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
+    // Undo, redo and Enter work on the formatted paragraph, not on its source.
+    if (this.raw && (wire.kind === 'undo' || wire.kind === 'redo' || wire.kind === 'insertParagraph')) {
+      return this.leaveRaw().then(() => this.runCommand(wire, cjkReady, mathReady));
+    }
     if (wire.kind === 'insertParagraph' && this.endEmptyListItem(editor)) return;
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
@@ -1439,6 +1460,8 @@ class OpenDocument {
     else if (converted && wire.kind === 'delete' && wire.direction === 'backward' && wire.unit !== 'word' && editor.collapsed) {
       for (let k = 0; k < converted.steps; k++) editor.undo();
       editor.apply({ kind: 'select', paragraph: converted.paragraph, from: converted.offset, to: converted.offset });
+      edited = true;
+    } else if (this.raw && wire.kind === 'tab' && this.indentSource(editor, wire.backward)) {
       edited = true;
     } else {
       let command: Command;
@@ -1460,14 +1483,183 @@ class OpenDocument {
     }
     // Edits send the selection once the changed pages are laid out.
     const finish = () => {
-      if (edited) {
-        this.edited = true;
+      if (edited) this.edited = true;
+      if (edited || this.rawTouched) {
+        this.rawTouched = false;
         void this.pump();
         this.status();
       } else this.sendSelection();
     };
-    if (after) return after.then(finish);
-    finish();
+    // The caret may have come into a paragraph or left one: its source is shown or put away.
+    const synced = () => (live.livePreview || this.raw ? this.syncRaw().then(finish) : finish());
+    if (after) return after.then(synced);
+    return synced();
+  }
+
+  // --- Live preview: the paragraph the caret is in shows its Markdown source (see livePreview.ts) -----
+
+  /** The paragraph showing its source: what it was (to put back if nothing was changed) and the undo history before it. */
+  private raw: { id: string; source: string; text: string; numbering?: NumberingReference; mark: HistoryMark } | null = null;
+  /** Showing or putting away a source changed the pages. */
+  private rawTouched = false;
+  /** Above 0 while something works on the formatted text (the assistant): no source is shown. */
+  private rawPaused = 0;
+
+  private livePreviewCode?: Promise<typeof import('./livePreview.ts')>;
+  private livePreview() {
+    return (this.livePreviewCode ??= import('./livePreview.ts'));
+  }
+
+  /** Whether the paragraph at the caret may show its source: Markdown documents, edited alone. */
+  private rawAllowed(): boolean {
+    return live.livePreview && !this.rawPaused && this.format === 'md' && !this.annotator && !this.readOnly && !!this.editor && !this.editor.replica.connected;
+  }
+
+  /** Puts away the source of the paragraph that shows it, and shows the one the caret is in. */
+  private async syncRaw(): Promise<void> {
+    const editor = this.editor;
+    if (!editor || this.closed) return;
+    const [start, end] = editor.ordered();
+    // A selection across paragraphs, or part of one the source isn't shown in, shows no source.
+    const target = start.paragraph === end.paragraph ? start.paragraph : null;
+    const wanted = this.rawAllowed() && target ? editor.paragraphId(target) : null;
+    if (this.raw && this.raw.id === wanted) {
+      // The caret moved out of the Markdown it showed (to other text of the paragraph): that is put away, and the Markdown of where the caret is shows.
+      if (!editor.collapsed || !target) return;
+      const code = await this.livePreview();
+      if (this.closed || !this.raw || code.caretInSource(target, editor.ordered()[0].offset)) return;
+    }
+    if (this.raw) await this.leaveRaw();
+    if (this.closed || !wanted || !target || !editor.collapsed || !this.rawAllowed()) return;
+    const [at] = editor.ordered();
+    if (editor.paragraphId(at.paragraph) !== wanted) return;
+    await this.enterRaw(at.paragraph, at.offset);
+  }
+
+  /** Shows a paragraph as its source. */
+  private async enterRaw(paragraph: Paragraph, caret: number): Promise<void> {
+    const editor = this.editor;
+    if (!editor || editor.inTable()) return;
+    const code = await this.livePreview();
+    if (this.closed) return;
+    const view = code.rawView(editor.doc, paragraph, caret);
+    if (!view) return;
+    const mark = editor.historyMark();
+    const numbering = paragraph.properties.numbering && structuredClone(paragraph.properties.numbering);
+    setShowingSource(paragraph, true);
+    editor.replaceParagraph(paragraph, view.properties, view.content, view.caret);
+    this.raw = { id: editor.paragraphId(paragraph), source: view.source, text: view.text, ...(numbering && { numbering }), mark };
+    this.rawTouched = true;
+  }
+
+  /** Puts a paragraph's source away: back to how it was if nothing changed, else read as Markdown. */
+  private async leaveRaw(): Promise<void> {
+    const editor = this.editor;
+    const raw = this.raw;
+    if (!editor || !raw) return;
+    this.raw = null;
+    const paragraph = editor.paragraphWithId(raw.id);
+    // The paragraph is gone (joined to the one before): its text stays as it is.
+    if (!paragraph) return;
+    setShowingSource(paragraph, false);
+    const code = await this.livePreview();
+    if (this.closed) return;
+    const text = paragraphText(paragraph);
+    const selection = editor.selectionIds;
+    // Where a position of the text shown goes in the paragraph as it is after.
+    let place: (offset: number, after: string) => number;
+    if (text === raw.text) {
+      // Nothing was changed: as it was, and as if it had not been touched in the undo history either.
+      while (editor.undoDepth > raw.mark.undo.length && editor.undo().edited);
+      editor.restoreHistory(raw.mark);
+      place = (offset, after) => code.visibleOffset(after, text, offset);
+    } else {
+      const source = code.writtenSource(editor.doc, paragraph);
+      place = (offset, after) => code.visibleOffset(after, source, code.sourceOffset(text, source, offset, false));
+      const parsed = await code.parseRaw(source, editor.doc, { source: raw.source, numbering: raw.numbering, properties: paragraph.properties });
+      if (this.closed) return;
+      editor.replaceParagraph(paragraph, parsed.properties, parsed.content, 0, parsed.define);
+      // Showing the source, editing it and reading it back are one undo step.
+      editor.foldHistory(raw.mark);
+      this.edited = true;
+    }
+    // A caret or selection end in the paragraph goes to the same place in the text, not in the source.
+    const shown = editor.paragraphWithId(raw.id);
+    const remap = (pos: { paragraph: string; offset: number }) => (pos.paragraph === raw.id && shown ? { paragraph: pos.paragraph, offset: place(pos.offset, paragraphText(shown)) } : pos);
+    editor.setSelectionIds({ anchor: remap(selection.anchor), focus: remap(selection.focus) });
+    this.rawTouched = true;
+  }
+
+  /** After the source was shown or put away outside a command: lays out again. */
+  private finishRaw(): void {
+    if (this.rawTouched) {
+      this.rawTouched = false;
+      void this.pump();
+      this.status();
+    } else this.sendSelection();
+  }
+
+  /** Before the document is saved or exported: the source being edited is read back, so the file has the formatting (the source shows again after). */
+  /** Tab and Shift+Tab in the source of a list item move the item a level (two spaces), as in Markdown. False if the caret is not in one. */
+  private indentSource(editor: Editor, backward: boolean): boolean {
+    const raw = this.raw;
+    const paragraph = raw && editor.paragraphWithId(raw.id);
+    if (!paragraph || !editor.collapsed) return false;
+    const text = paragraphText(paragraph);
+    if (!/^[ \t]*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text)) return false;
+    const index = editor.paragraphs().indexOf(paragraph);
+    const [at] = editor.ordered();
+    const move = (from: number, to: number) => editor.apply({ kind: 'select', paragraph: index, from, to });
+    let caret = at.offset;
+    if (backward) {
+      const spaces = Math.min(/^ */.exec(text)![0].length, 2);
+      if (spaces === 0) return true;
+      move(0, spaces);
+      editor.apply({ kind: 'delete', direction: 'backward' });
+      caret = Math.max(caret - spaces, 0);
+    } else {
+      move(0, 0);
+      editor.apply({ kind: 'insertText', text: '  ' });
+      caret += 2;
+    }
+    move(caret, caret);
+    return true;
+  }
+
+  /** What undo and redo can do: not counting the showing of a source, which is no edit. */
+  private canUndo(): boolean {
+    const history = this.replica!.history;
+    const raw = this.raw;
+    if (!raw) return history.canUndo;
+    const paragraph = this.editor?.paragraphWithId(raw.id);
+    return raw.mark.undo.length > 0 || (!!paragraph && paragraphText(paragraph) !== raw.text);
+  }
+
+  private canRedo(): boolean {
+    return this.raw ? this.raw.mark.redo.length > 0 : this.replica!.history.canRedo;
+  }
+
+  /**
+   * Before the document is saved or exported: the source being edited is read back, so the file has the formatting.
+   * Returns what puts the source back on screen, to call once the file is made.
+   */
+  async flushRaw(): Promise<() => void> {
+    if (!this.raw) return () => {};
+    this.rawPaused++;
+    await new Promise<void>((resolve) =>
+      this.later(async () => {
+        try {
+          await this.leaveRaw();
+          this.finishRaw();
+        } finally {
+          resolve();
+        }
+      }),
+    );
+    return () => {
+      this.rawPaused--;
+      this.later(() => this.syncRaw().then(() => this.finishRaw()));
+    };
   }
 
   // --- Markdown shortcuts as you type (see autoformat.ts) ---------------------------------------
@@ -1477,7 +1669,7 @@ class OpenDocument {
 
   /** What shortcuts may do here: the format can express headings, lists and marks, and the caret is in plain text. */
   private shortcutContext(editor: Editor): { profile: (typeof FORMATS)[DocumentKind]; line: LineContext; code: boolean; index: number; before: string } | null {
-    if (!live.autoFormat || !editor.collapsed || this.annotator || this.readOnly) return null;
+    if (!live.autoFormat || this.raw || !editor.collapsed || this.annotator || this.readOnly) return null;
     const profile = FORMATS[this.format as DocumentKind];
     if (!profile?.editable) return null;
     const [at] = editor.ordered();
@@ -1604,7 +1796,7 @@ function unmark(mark: Mark): RunFormat {
 /** Words the user added to the dictionary or chose to ignore, and grammar rules to ignore: for every document. */
 const spelling = { words: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
-const live = { spelling: true, grammar: true, autoFormat: true };
+const live = { spelling: true, grammar: true, autoFormat: true, livePreview: false };
 const dictionaries = new Map<SpellLanguage, Promise<Dictionary>>();
 const loadedDictionaries = new Map<SpellLanguage, Dictionary>();
 /** Changes when what counts as a mistake does, so checked paragraphs are checked again. */
@@ -1844,14 +2036,20 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
   try {
     const open = current;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    const resume = await open.flushRaw();
     // A document changed since it was opened records when.
     if (open.document && open.edited) open.document.properties.modified = now();
-    const bytes = await writeWdoc({
-      manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
-      document: open.document ? await open.document.write() : null,
-      original: open.original,
-      extensions: currentExtensions(open),
-    });
+    let bytes: Uint8Array;
+    try {
+      bytes = await writeWdoc({
+        manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
+        document: open.document ? await open.document.write() : null,
+        original: open.original,
+        extensions: currentExtensions(open),
+      });
+    } finally {
+      resume();
+    }
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {
@@ -1864,10 +2062,15 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
   try {
     const open = current;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    const resume = await open.flushRaw();
     let bytes: Uint8Array;
-    // A PDF whose text wasn't edited exports as the original, pages and all.
-    if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
-    else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
+    try {
+      // A PDF whose text wasn't edited exports as the original, pages and all.
+      if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
+      else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
+    } finally {
+      resume();
+    }
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {

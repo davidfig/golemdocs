@@ -49,10 +49,15 @@ function unwrapUnsafeLinks(inlines: Inline[]): Inline[] {
  */
 export async function htmlToPaste(html: string, target: WordDocument): Promise<Pasted | null> {
   const { document } = await importDocument('html', encoder.encode(html));
+  return pastedFrom(document, target);
+}
+
+/** The blocks of a scratch document, with what they need from it, as something to paste into `target` (empty ones at the ends go unless `trim` is off). */
+export function pastedFrom(document: WordDocument, target: WordDocument, trim = true): Pasted | null {
   // Blocks as they are: no section breaks, no unmodeled content, and no empty lines at the ends.
   let blocks: Block[] = structuredClone(document.body).flatMap((b): Block[] => (b.kind === 'wrapper' ? b.children : b.kind === 'raw' ? [] : [b]));
-  while (blocks.length && isEmpty(blocks[0])) blocks.shift();
-  while (blocks.length && isEmpty(blocks[blocks.length - 1])) blocks.pop();
+  while (trim && blocks.length && isEmpty(blocks[0])) blocks.shift();
+  while (trim && blocks.length && isEmpty(blocks[blocks.length - 1])) blocks.pop();
   if (blocks.length === 0) return null;
 
   const paragraphs = paragraphsIn(blocks);

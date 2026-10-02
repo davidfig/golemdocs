@@ -72,6 +72,8 @@ export const chrome = {
   'chrome.tools.trackChanges': '&Track Changes',
   'chrome.tools.autoFormat': '&Autoformat as You Type',
   'chrome.tools.autoFormat.tip': 'Turn Markdown shortcuts such as "# ", "- " and "**bold**" into formatting as you type',
+  'chrome.tools.livePreview': 'Show &Markdown at the Caret',
+  'chrome.tools.livePreview.tip': 'In Markdown documents, show the Markdown of the paragraph the caret is in (experimental)',
   'chrome.tools.options': '&Options…',
   'chrome.tools.language': '&Language',
   'chrome.format.bold': '&Bold',

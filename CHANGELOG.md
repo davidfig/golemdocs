@@ -4,6 +4,7 @@
 
 ### Added
 - Format as you type: typing `# `, `- `, `1. `, `> `, `[ ] ` at the start of a line makes a heading, list, quote or check box list; `**bold**`, `*italic*`, `` `code` ``, `~~strike~~` and `[text](url)` followed by a space become formatted text; `---` or three backticks then Enter make a line or a code block. Backspace right after takes it back. Turn it off under Tools › Autoformat as You Type.
+- Tools › Show Markdown at the Caret (experimental, off by default): in a Markdown document, the line the caret is in shows its Markdown prefix (`## `, `- [ ] `), and the bold, italic, strikethrough, code or link text the caret is in shows its `**`, `*`, `~~`, `` ` `` or `[](url)` in gray, while the rest stays formatted. Edit the Markdown, then move the caret away to see it formatted. Showing and hiding the Markdown is not an edit, so Undo only sees what you changed.
 - Markdown task lists (`- [ ]` and `- [x]`) show a check box in place of the bullet, and are saved back the same way. Click a box to check or uncheck it. Check box lists are on the toolbar and in the Insert menu.
 - Each kind of file (Word, Markdown, PDF, HTML, spreadsheet, image and more) has its own small icon before its name on the Documents screen and in the Files Sidebar.
 - Reopening a document puts you back where you left off: the same scroll position, zoom and caret, remembered on this computer.

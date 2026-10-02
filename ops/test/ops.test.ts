@@ -137,6 +137,38 @@ test('typing groups into one undo step', async () => {
   assert.deepEqual(undone.selection?.focus, { paragraph: p, offset: 0 });
 });
 
+test('history marks: edits since a mark can be forgotten or folded into one step', async () => {
+  const doc = await WordDocument.read(await sampleBytes());
+  const replica = new Replica(doc);
+  const p = replica.id(paragraphsIn(doc.body)[5]);
+  const type = (o: number, text: string) => replica.edit([{ type: 'insertText', paragraph: p, offset: o, text }]);
+  const original = body(doc);
+  type(0, 'a');
+  const mark = replica.history.mark();
+  const afterFirst = body(doc);
+  type(0, 'b');
+  type(0, 'c');
+  // Forgotten: the document keeps the edits, undo does not know them.
+  replica.history.restore(mark);
+  assert.notEqual(body(doc), afterFirst);
+  assert.ok(replica.undo(), 'the first edit is still there to undo');
+  assert.equal(replica.history.canUndo, false, 'and nothing more');
+  assert.ok(replica.redo());
+  // Folded: undone together.
+  const folded = replica.history.mark();
+  const before = body(doc);
+  type(0, 'x');
+  type(0, 'y');
+  replica.history.fold(folded);
+  assert.ok(replica.undo());
+  assert.equal(body(doc), before);
+  assert.ok(replica.redo());
+  assert.ok(replica.undo());
+  assert.ok(replica.undo());
+  assert.equal(replica.history.canUndo, false);
+  assert.equal(body(doc).length, original.length + 2, 'the forgotten edits ("b", "c") stay in the document');
+});
+
 /** Clients editing concurrently through a server, with messages delivered in random order. */
 async function simulate(seed: number, clients: number, actions: number, bytes: Uint8Array) {
   const rand = random(seed);

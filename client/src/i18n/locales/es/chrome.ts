@@ -74,6 +74,8 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '&Control de cambios',
   'chrome.tools.autoFormat': '&Autoformato al escribir',
   'chrome.tools.autoFormat.tip': 'Convierte atajos de Markdown como «# », «- » y «**negrita**» en formato mientras escribes',
+  'chrome.tools.livePreview': 'Mostrar &Markdown en el cursor',
+  'chrome.tools.livePreview.tip': 'En documentos Markdown, muestra el código Markdown del párrafo donde está el cursor (experimental)',
   'chrome.tools.options': 'Opci&ones…',
   'chrome.tools.language': '&Idioma',
   'chrome.format.bold': '&Negrita',

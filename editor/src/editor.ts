@@ -12,8 +12,8 @@
 // links > search > formatting > comments > sections > tables. This file adds `apply`, which
 // dispatches a command to them.
 
-import { commentRanges, inlinesLength, paragraphLength } from '@golemdocs/docx';
-import { type Operation, type Pos } from '@golemdocs/ops';
+import { commentRanges, inlinesLength, paragraphLength, type Inline, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
+import { END, type Operation, type Pos } from '@golemdocs/ops';
 import { type Command, type CommandResult, NO_CHANGE, combine } from './types.ts';
 import { EditorTables } from './tables.ts';
 
@@ -21,6 +21,30 @@ export * from './types.ts';
 export { withFormat } from './formatting.ts';
 
 export class Editor extends EditorTables {
+  /** The paragraph's id, which stays the same as it is edited. */
+  paragraphId(paragraph: Paragraph): string {
+    return this.replica.id(paragraph);
+  }
+
+  /** The paragraph with an id, if it is still in the document. */
+  paragraphWithId(id: string): Paragraph | undefined {
+    return this.replica.paragraph(id);
+  }
+
+  /**
+   * Gives a paragraph other properties and content (as one edit, in place: the paragraph keeps its id
+   * and its section), with the caret `caret` model offsets into it.
+   */
+  replaceParagraph(paragraph: Paragraph, properties: ParagraphProperties, content: Inline[], caret: number, define: Operation[] = []): CommandResult {
+    const id = this.replica.id(paragraph);
+    const next: ParagraphProperties = { ...structuredClone(properties) };
+    if (paragraph.properties.section) next.section = paragraph.properties.section;
+    else delete next.section;
+    const ops: Operation[] = [...define, { type: 'delete', paragraph: id, from: 0, to: END }, { type: 'setParagraphProperties', paragraph: id, properties: next }];
+    if (content.length) ops.push({ type: 'insertContent', paragraph: id, offset: 0, content: structuredClone(content) });
+    return this.edit([ops, { paragraph: id, offset: Math.min(caret, inlinesLength(content)) }]);
+  }
+
   // --- Commands --------------------------------------------------------------------------
 
   /** Applies a command. Edits invalidate the session; run it afterwards to update layout. */

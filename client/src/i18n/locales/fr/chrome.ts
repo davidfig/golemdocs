@@ -74,6 +74,8 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '&Suivi des modifications',
   'chrome.tools.autoFormat': '&Mise en forme automatique à la frappe',
   'chrome.tools.autoFormat.tip': 'Transforme les raccourcis Markdown comme « # », « - » et « **gras** » en mise en forme pendant la frappe',
+  'chrome.tools.livePreview': 'Afficher le &Markdown au curseur',
+  'chrome.tools.livePreview.tip': 'Dans les documents Markdown, affiche le code Markdown du paragraphe où se trouve le curseur (expérimental)',
   'chrome.tools.options': 'Op&tions…',
   'chrome.tools.language': '&Langue',
   'chrome.format.bold': '&Gras',

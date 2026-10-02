@@ -74,6 +74,8 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '&Änderungen nachverfolgen',
   'chrome.tools.autoFormat': '&Automatisch formatieren beim Tippen',
   'chrome.tools.autoFormat.tip': 'Wandelt Markdown-Kürzel wie „# “, „- “ und „**fett**“ beim Tippen in Formatierung um',
+  'chrome.tools.livePreview': 'Markdown am &Cursor anzeigen',
+  'chrome.tools.livePreview.tip': 'Zeigt in Markdown-Dokumenten den Markdown-Quelltext des Absatzes, in dem der Cursor steht (experimentell)',
   'chrome.tools.options': '&Optionen…',
   'chrome.tools.language': '&Sprache',
   'chrome.format.bold': '&Fett',

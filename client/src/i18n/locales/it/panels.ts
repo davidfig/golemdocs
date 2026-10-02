@@ -12,6 +12,16 @@ export const panels: Partial<Messages> = {
   'panels.billing.earlier': 'Mesi precedenti',
   'panels.billing.month': '{month}: {total}',
 
+  // Status bar (View > Status Bar)
+  'panels.footer.page': 'Pagina {current} di {count}',
+  'panels.footer.words.one': '{n} parola',
+  'panels.footer.words': '{n} parole',
+  'panels.footer.selection.one': '{selected} di {n} parola',
+  'panels.footer.selection': '{selected} di {n} parole',
+  'panels.footer.table': '{rows} righe × {columns} colonne',
+  'panels.footer.pixels': '{width} × {height} px',
+  'panels.footer.zoom': '{percent}%',
+
   // Comments
   'panels.comments.label': 'Commenti',
   'panels.comments.title': 'Commenti ({count})',

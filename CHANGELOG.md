@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.5.0 - 2026-10-02
+## 0.6.0 - Unreleased
 
 ### Added
 - Each kind of file (Word, Markdown, PDF, HTML, spreadsheet, image and more) has its own small icon before its name on the Documents screen and in the Files Sidebar.
@@ -8,15 +8,31 @@
 - The Documents screen now opens in the folder of the document you have open, instead of at the top level.
 - View › Files Sidebar pulls out a tree of your folders and documents beside the editor, so you can switch documents without the Documents screen. Click a folder to open or close it, and a document to open it; the one you are editing is marked. It stays closed until you choose it, and the choice is remembered.
 - Both the Page Sidebar and the Files Sidebar can be resized by dragging their right edge (or with the arrow keys once it is focused; double-click resets it). The page thumbnails grow and shrink with the Page Sidebar. Widths are remembered.
+- File › Import (or dropping a file on the window) accepts a ZIP: its documents go in the same folders as in the ZIP, making the folders that are missing and reusing the ones you already have. Nothing is overwritten; a document whose name is taken in its folder gets (2), (3) and so on. Imported from inside a folder on the Documents screen, the ZIP's contents go in that folder.
+
+### Changed
+- File › Download All keeps your folders: documents are zipped inside the same folder structure.
+
+## 0.5.1 - 2026-10-01
+
+### Fixed
+- A document name that fits in the menu bar is no longer cut short with “…”.
+
+## 0.5.0 - 2026-10-01
+
+### Added
+- View › Status Bar (off until you turn it on) shows a strip under the document with facts about it, which depend on the kind of document: the page and word count of a text document (and how many words are selected), the rows and columns of a CSV or TSV file, the page of a PDF, the size in pixels of a picture, and the zoom. The AI assistant can turn it on and off too.
 - The Documents screen's New document, Import and New folder are now buttons in its header, and Esc closes it from anywhere.
 - Select several documents and folders on the Documents screen (tick boxes, Ctrl/Cmd-click, Shift-click for a range, or Ctrl/Cmd+A) to move or delete them all at once.
 - Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
 - A folder's icon now shows small thumbnails of the first documents inside it.
-- File › Import (or dropping a file on the window) accepts a ZIP: its documents go in the same folders as in the ZIP, making the folders that are missing and reusing the ones you already have. Nothing is overwritten; a document whose name is taken in its folder gets (2), (3) and so on. Imported from inside a folder on the Documents screen, the ZIP's contents go in that folder.
 - The form and PDF editing tools panel can be dragged by its top edge to move it out of the way.
+- Pressing Enter on an empty bullet or numbered item now ends the list instead of adding another empty item.
+- Open, edit and save five more formats: Typst (.typ), DocBook (.dbk), JATS journal articles (.nxml), FictionBook e-books (.fb2) and OPML outlines (.opml). DocBook and JATS files saved as plain .xml are recognized too. FictionBook has no lists or code blocks, so on the way out those become paragraphs, and an OPML file opens as a nested list. The AI assistant can convert to them as well.
 
-### Changed
-- File › Download All keeps your folders: documents are zipped inside the same folder structure.
+### Fixed
+- Holding Cmd while a flick-scroll coasts into the edge of the document no longer starts zooming.
+- Hovering over a toolbar button no longer makes its outline flicker.
 
 ## 0.4.0 - 2026-10-01
 

@@ -30,6 +30,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.pagesPanel': 'Barra lateral de pá&ginas',
   'chrome.view.filesPanel': 'Barra lateral de arc&hivos',
   'chrome.view.ruler': 'Re&gla',
+  'chrome.view.footer': '&Barra de estado',
   'chrome.view.formattingMarks': 'Marcas de &formato',
   'chrome.view.zoomIn': '&Ampliar',
   'chrome.view.zoomOut': '&Reducir',

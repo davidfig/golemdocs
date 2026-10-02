@@ -10,7 +10,7 @@ import { isZipName, sourceFromFile } from './formats/source.ts';
 import { toPng } from './formats/imageCodec.ts';
 import { LARGE_TEXT_BYTES, looksLikeText } from './formats/textFiles.ts';
 import { nearestPage, type Bounds } from './document/arrange.ts';
-import type { GpuPage } from './view/gpuPage.ts';
+import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { acceptList, type ImageOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
@@ -114,6 +114,8 @@ export interface AppHooks {
   togglePagesPanel(): void;
   /** Pull the files sidebar (the account's folders and documents) out beside the document, or push it back. */
   toggleFilesPanel(): void;
+  /** Show or hide the status bar under the document. */
+  toggleFooter(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
   /** Print layout (pages) or Normal (the text reflowed to the window). */
@@ -157,6 +159,7 @@ const SUPPORTED = new Set<ActionKind>([
   'toggleGrid',
   'togglePagesPanel',
   'toggleFilesPanel',
+  'toggleFooter',
   'toggleFormattingMarks',
   'insertText',
   'convert',
@@ -169,7 +172,7 @@ const SUPPORTED = new Set<ActionKind>([
 const ANNOTATION_ACTIONS = new Set<ActionKind>(['setHighlight', 'toggleMark']);
 
 /** The formats a document can be converted to. */
-const CONVERTIBLE = new Set<DocumentKind>(['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt']);
+const CONVERTIBLE = new Set<DocumentKind>(['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt']);
 
 export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: File): void } {
   let untitled = 0;
@@ -363,6 +366,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.togglePagesPanel();
         case 'toggleFilesPanel':
           return app.toggleFilesPanel();
+        case 'toggleFooter':
+          return app.toggleFooter();
         case 'insertText':
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':

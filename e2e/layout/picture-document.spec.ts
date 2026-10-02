@@ -158,7 +158,7 @@ test.describe('Adjust Colors', () => {
     await expectPicture(app, (i) => pixelAt(i, 20, 20)[0] > 130);
   });
 
-  test('contrast and saturation change the pixels; zero everywhere changes nothing', async ({ app }) => {
+  test('contrast and saturation change the pixels; zero everywhere changes nothing', { tag: '@heavy' }, async ({ app }) => {
     await openPicture(app, makePng(40, 40, () => [200, 100, 50, 255]));
     await app.menu('Picture', 'Adjust Colors…');
     let dlg = dialog(app, 'Adjust Colors');

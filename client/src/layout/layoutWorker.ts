@@ -63,14 +63,14 @@ async function legalText(page: LegalPage): Promise<string> {
 async function changelogText(): Promise<string> {
   return (await import('../../../CHANGELOG.md?raw')).default;
 }
-import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
+import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { runAgentTool } from './agentTools.ts';
 import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
-import { countText } from './wordCount.ts';
+import { countText, tableShape } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
 import { APP_WORDS } from '../spelling/appWords.ts';
 import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../spelling/dictionary.ts';
@@ -154,6 +154,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     case 'eml':
     case 'ipynb':
     case 'textile':
+    case 'typst':
+    case 'docbook':
+    case 'jats':
+    case 'fb2':
+    case 'opml':
     case 'tsv':
     case 'mhtml':
     case 'html':
@@ -287,6 +292,7 @@ class OpenDocument {
   private loadingMarks = new Set<SpellLanguage>();
   /** The last Word Count's answer, sent with the next selection (null: none to give). */
   private stats: SelectionUpdate['stats'] = undefined;
+  private footerStats: SelectionUpdate['footerStats'] = undefined;
   /** The document's properties, asked for by File ▸ Properties, sent with the next selection. */
   private props: DocumentProperties | undefined = undefined;
   /** Formatting the Format Painter has picked up: the paragraph's only when a whole paragraph was copied. */
@@ -476,11 +482,13 @@ class OpenDocument {
       page: editor.sectionPage(),
       spell: this.spell ?? undefined,
       stats: this.stats,
+      footerStats: this.footerStats,
       docProperties: this.props,
     };
     this.search = null;
     this.spell = null;
     this.stats = undefined;
+    this.footerStats = undefined;
     this.props = undefined;
     this.reveal = false;
     this.commandAt = 0;
@@ -510,6 +518,7 @@ class OpenDocument {
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote: [],
       stats: this.stats,
+      footerStats: this.footerStats,
       docProperties: this.props,
       fields: annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
       pdfText: this.wirePicked(annotator),
@@ -1170,6 +1179,17 @@ class OpenDocument {
     this.apply(command);
   }
 
+  /** Enter on an empty list item ends the list: the paragraph loses its bullet or number instead of splitting. */
+  private endEmptyListItem(editor: Editor): boolean {
+    if (!editor.collapsed || !this.formats) return false;
+    const [at] = editor.ordered();
+    if (paragraphLength(at.paragraph) > 0) return false;
+    const { list } = this.formats.read(...editor.ordered(), editor.paragraphs(), editor.pending);
+    if (!list) return false;
+    this.applyFormat({ kind: 'toggleList', list });
+    return true;
+  }
+
   /** The formatting at the selection: its text's, and its paragraphs' when it covers a whole paragraph. */
   private pickUpFormat(editor: Editor): NonNullable<OpenDocument['painter']> {
     const [start, end] = editor.ordered();
@@ -1221,10 +1241,10 @@ class OpenDocument {
   }
 
   /** Counts the words and the rest of the selection, or of the whole document if nothing is selected. */
-  private countWords(whole: boolean): void {
+  private countWords(whole: boolean, footer: boolean): void {
     const { editor, session } = this;
-    if (!editor || !session || this.closed || this.annotator) this.stats = null;
-    else {
+    let stats: WordStats | null = null;
+    if (editor && session && !this.closed && !this.annotator) {
       const list = editor.paragraphs();
       const [start, end] = editor.ordered();
       const selection = !editor.collapsed && !whole;
@@ -1253,8 +1273,12 @@ class OpenDocument {
           pagesUsed.add(page);
         }
       }
-      this.stats = { ...countText(texts), pages: selection ? pagesUsed.size : session.displayPages.length, lines, selection };
+      stats = { ...countText(texts), pages: selection ? pagesUsed.size : session.displayPages.length, lines, selection };
+      if (footer && (this.format === 'csv' || this.format === 'tsv') && this.document) stats.table = tableShape(this.document.body);
     }
+    // The status bar asks on its own: its answer must not land in the Word Count dialog.
+    if (footer) this.footerStats = stats;
+    else this.stats = stats;
     this.sendSelection();
   }
 
@@ -1364,7 +1388,7 @@ class OpenDocument {
   private runCommand(wire: WireCommand, cjkReady = false, mathReady = false): void | Promise<void> {
     if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (wire.kind === 'applyPainter') return this.applyPainter();
-    if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false);
+    if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false, wire.footer ?? false);
     if (wire.kind === 'pasteHtml') return this.pasteHtml(wire.html, wire.text);
     if (wire.kind === 'getProperties') {
       this.props = { ...this.document?.properties };
@@ -1390,11 +1414,12 @@ class OpenDocument {
       const text = commandText(wire);
       if (text && /[^\u0000-\u009f]/.test(text)) return session.ensurePages(text).then(() => this.runCommand(wire, true, mathReady));
     }
+    // Shown as PDF: selecting and moving only.
+    if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
+    if (wire.kind === 'insertParagraph' && this.endEmptyListItem(editor)) return;
     this.reveal = wire.kind !== 'pointer';
     this.commandAt = performance.now();
     let edited: boolean;
-    // Shown as PDF: selecting and moving only.
-    if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
     if (wire.kind === 'undo') edited = editor.undo().edited;
     else if (wire.kind === 'redo') edited = editor.redo().edited;
     else {

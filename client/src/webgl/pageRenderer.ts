@@ -1,11 +1,11 @@
 import { packColor } from '@golemdocs/layout';
-import { RectBatchRenderer, type RectBatch } from '../shapes/rectBatch.ts';
-import { ImageRenderer, type DrawImage } from '../shapes/imageRenderer.ts';
-import { RectRenderer } from '../shapes/rectRenderer.ts';
-import type { TextBatch } from '../text/textBatch.ts';
-import { TextRenderer } from '../text/textRenderer.ts';
+import { RectBatchRenderer, type RectBatch } from './shapes/rectBatch.ts';
+import { ImageRenderer, type DrawImage } from './shapes/imageRenderer.ts';
+import { RectRenderer } from './shapes/rectRenderer.ts';
+import type { TextBatch } from './text/textBatch.ts';
+import { TextRenderer } from './text/textRenderer.ts';
 import { deskColor } from '../ui/theme.ts';
-import type { Camera } from './camera.ts';
+import type { Camera } from '../view/camera.ts';
 import type { GpuPage } from './gpuPage.ts';
 import type { SelectionLayer } from './selectionLayer.ts';
 

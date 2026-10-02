@@ -49,12 +49,12 @@ import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
-import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand } from './layout/protocol.ts';
-import { ImageRenderer } from './shapes/imageRenderer.ts';
-import { AtlasLibrary } from './text/gpuFace.ts';
+import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand, type WordStats } from './layout/protocol.ts';
+import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
+import { AtlasLibrary } from './webgl/text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
-import { GpuPage } from './view/gpuPage.ts';
-import { PageRenderer, type FrameStats } from './view/pageRenderer.ts';
+import { GpuPage } from './webgl/gpuPage.ts';
+import { PageRenderer, type FrameStats } from './webgl/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
@@ -66,6 +66,7 @@ import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/past
 import { cleanDocumentName, displayDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
+import { Footer } from './ui/footer.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
@@ -75,7 +76,7 @@ import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
-import { SelectionLayer } from './view/selectionLayer.ts';
+import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { FORMAT_LIST, isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
@@ -161,6 +162,23 @@ try {
 } catch {
   // Storage unavailable: it starts closed.
 }
+
+// The status bar (View > Status Bar): off until chosen, then remembered in this browser.
+const FOOTER_KEY = 'word.footer';
+let footerOn = false;
+try {
+  footerOn = localStorage.getItem(FOOTER_KEY) === 'on';
+} catch {
+  // Storage unavailable: the bar starts off.
+}
+
+/** The counts of the whole document and of the selection, as the worker last gave them (null: none, or not asked for yet). */
+let footerWords: WordStats | null = null;
+let footerSelection: WordStats | null = null;
+let footerTimer = 0;
+/** The pixel size of the open picture, found once per opening (and which are being looked up). */
+const pictureSizes = new WeakMap<object, { width: number; height: number }>();
+const pictureSizing = new WeakSet<object>();
 
 // View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
 const VIEW_KEY = 'word.viewMode';
@@ -272,7 +290,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
     return isFormat(kind) ? kind : 'docx';
   }
   if (source.kind === 'image') return kindFromName(source.name, 'png');
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -330,6 +348,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   pdfTools.setMode(formMode);
   selectionFormat = {};
   canUndo = canRedo = false;
+  footerWords = footerSelection = null;
+  window.clearTimeout(footerTimer);
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
   renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded);
@@ -1660,7 +1680,7 @@ function openLarge(name: string, bytes: Uint8Array): void {
 // document the link is in when that is text (so a wiki links to more wiki pages).
 
 /** The formats a new, empty document can be made in from nothing: the text ones. */
-const EMPTY_TEXT = new Set<DocumentKind>(['md', 'txt', 'mediawiki', 'textile', 'tex', 'adoc', 'rst', 'org', 'html']);
+const EMPTY_TEXT = new Set<DocumentKind>(['md', 'txt', 'mediawiki', 'textile', 'tex', 'typst', 'adoc', 'rst', 'org', 'html']);
 
 async function openDocumentLink(title: string): Promise<void> {
   await saving;
@@ -1789,6 +1809,11 @@ function applySelection(update: SelectionUpdate): void {
     propertiesDialog.reportStats(update.stats);
   }
   if (update.docProperties) propertiesDialog.reportProperties(update.docProperties);
+  if (update.footerStats !== undefined) {
+    if (update.footerStats?.selection) footerSelection = update.footerStats;
+    else footerWords = update.footerStats;
+    requestRender();
+  } else if (footerOn) refreshFooterSoon();
   formLayer.update(update.fields ?? null);
   pdfTextLayer.update(update.pdfText ?? null);
   pdfTools.update(update.pdfText ?? null, update.pdfObject ?? null);
@@ -2004,6 +2029,7 @@ function render(): void {
     grid,
     pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
     filesPanel: filesOpen,
+    footer: footerOn,
     format: selectionFormat,
     canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
     canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
@@ -2020,6 +2046,7 @@ function render(): void {
   pointerLayer.position();
   commentsPanel.position();
   syncPagesPanel();
+  updateFooter();
   cropLayer.position();
   drawLayer.position();
   updateDebug();
@@ -2357,7 +2384,8 @@ canvas.addEventListener('pointercancel', (e) => (e.pointerType === 'touch' ? tou
 
 // Trackpad pinch arrives as ctrl+wheel; cmd/ctrl+wheel zooms with a mouse; plain wheel scrolls.
 // Browsers don't flag macOS momentum events, so while a scroll is still coasting, cmd only takes
-// over once the deltas grow again (fresh wheel/trackpad input); a decaying tail keeps scrolling.
+// over once the deltas jump up sharply (fresh wheel/trackpad input); a decaying tail keeps scrolling,
+// including its jitter once the view is clamped at a bound.
 const WHEEL_GESTURE_GAP_MS = 200;
 let wheelZooming = false;
 let lastWheelTime = -Infinity;
@@ -2370,7 +2398,7 @@ canvas.addEventListener(
     userMoved = true;
     const zoomKey = e.ctrlKey || e.metaKey;
     const magnitude = Math.hypot(e.deltaX, e.deltaY) * unit;
-    const coasting = e.timeStamp - lastWheelTime <= WHEEL_GESTURE_GAP_MS && magnitude <= lastWheelMagnitude * 1.1 + 1;
+    const coasting = e.timeStamp - lastWheelTime <= WHEEL_GESTURE_GAP_MS && magnitude <= lastWheelMagnitude * 2 + 8;
     if (!zoomKey) wheelZooming = false;
     else if (wheelZooming || !coasting) wheelZooming = true;
     lastWheelTime = e.timeStamp;
@@ -2439,6 +2467,18 @@ function togglePagesPanel(): void {
   } catch {
     // Storage unavailable: the choice lasts for this session only.
   }
+  requestRender();
+}
+
+function toggleFooter(): void {
+  footerOn = !footerOn;
+  try {
+    localStorage.setItem(FOOTER_KEY, footerOn ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  if (footerOn) refreshFooter();
+  // The bar takes room from the document: the canvas is resized by its observer, and the view is placed again.
   requestRender();
 }
 
@@ -2672,6 +2712,7 @@ const chromeHost = createChromeHost({
   toggleGrid,
   togglePagesPanel,
   toggleFilesPanel,
+  toggleFooter,
   setViewMode: (mode) => {
     viewMode = mode;
     try {
@@ -2928,12 +2969,17 @@ const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<strin
       void chromeHost.perform({ kind: 'toggleGrid' });
       done.push(`grid ${showGrid ? 'on' : 'off'}`);
     }
+    const bar = optionalFlag(args, 'status_bar');
+    if (bar !== undefined && bar !== footerOn) {
+      void chromeHost.perform({ kind: 'toggleFooter' });
+      done.push(`status bar ${bar ? 'on' : 'off'}`);
+    }
     const marks = optionalFlag(args, 'formatting_marks');
     if (marks !== undefined && marks !== formattingMarks) {
       void chromeHost.perform({ kind: 'toggleFormattingMarks' });
       done.push(`formatting marks ${marks ? 'on' : 'off'}`);
     }
-    if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid or formatting_marks.');
+    if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid, status_bar or formatting_marks.');
     return `Changed the view: ${done.join(', ')}.`;
   },
   async edit_picture(args) {
@@ -3029,6 +3075,54 @@ function changePages(index: number, op: { op: 'delete' } | { op: 'move'; to: num
 }
 
 let panelCamera = '';
+
+// --- Status bar ------------------------------------------------------------------------
+
+const footer = new Footer(document.getElementById('footer')!);
+
+/** Asks the worker for the counts, once the document has been still for a moment. */
+function refreshFooterSoon(): void {
+  window.clearTimeout(footerTimer);
+  footerTimer = window.setTimeout(refreshFooter, 300);
+}
+
+function refreshFooter(): void {
+  if (!footerOn || !loaded || isPicture() || largeView.active) return;
+  send({ kind: 'countWords', whole: true, footer: true });
+  if (selection.text.length > 0) send({ kind: 'countWords', footer: true });
+  else footerSelection = null;
+}
+
+/** Shows or hides the bar and says what it says, for the kind of document open. */
+function updateFooter(): void {
+  const visible = footerOn && !largeView.active;
+  footer.setVisible(visible);
+  if (!visible) return;
+  let picture = null;
+  if (isPicture()) {
+    picture = pictureSizes.get(current) ?? null;
+    if (!picture && !pictureSizing.has(current)) {
+      const doc = current;
+      pictureSizing.add(doc);
+      void pictureBytes().then((bytes) => {
+        const size = sniffImage(bytes);
+        if (!size) return;
+        pictureSizes.set(doc, { width: size.width, height: size.height });
+        requestRender();
+      });
+    }
+  }
+  const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  const here = reflowing() ? null : nearestPage(pages, center.x, center.y);
+  footer.update({
+    kind: documentKind,
+    page: here ? { current: pages.indexOf(here) + 1, count: pages.length } : null,
+    zoom: camera.zoom,
+    words: footerWords,
+    selection: selection.text.length > 0 ? footerSelection : null,
+    picture,
+  });
+}
 
 /** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
 function syncPagesPanel(): void {

@@ -1,6 +1,6 @@
 import { RECT_INSTANCE_BYTES as INSTANCE_BYTES } from '@golemdocs/layout';
-import { createProgram, uniforms } from '../gl/program.ts';
-import type { Camera } from '../view/camera.ts';
+import { createProgram, uniforms } from '../program.ts';
+import type { Camera } from '../../view/camera.ts';
 
 // Retained rectangles in document space (a page's shading, underlines, borders), uploaded
 // once and positioned with uniforms like text, so zooming never touches the buffers.

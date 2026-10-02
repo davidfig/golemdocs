@@ -2,7 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { countText } from '../src/layout/wordCount.ts';
+import { delimitedToDocument } from '../src/formats/csv.ts';
+import { countText, tableShape } from '../src/layout/wordCount.ts';
 
 test('words are runs without spaces, and every paragraph counts', () => {
   assert.deepEqual(countText([]), { words: 0, charactersWithSpaces: 0, charactersWithoutSpaces: 0, paragraphs: 0 });
@@ -24,4 +25,9 @@ test('tabs are characters, line breaks are not, and either separates words', () 
 test('accents and characters outside the basic plane count once each', () => {
   assert.equal(countText(['café']).charactersWithoutSpaces, 4);
   assert.equal(countText(['日本語のテキスト']).words, 1);
+});
+
+test('tableShape counts the rows and the widest row of a CSV document', async () => {
+  const doc = await delimitedToDocument([['a', 'b', 'c'], ['1', '2'], ['3', '4', '5']]);
+  assert.deepEqual(tableShape(doc.body), { rows: 3, columns: 3 });
 });

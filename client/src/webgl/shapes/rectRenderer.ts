@@ -1,4 +1,4 @@
-import { createProgram, uniforms } from '../gl/program.ts';
+import { createProgram, uniforms } from '../program.ts';
 
 const VERTEX = /* glsl */ `#version 300 es
 precision highp float;

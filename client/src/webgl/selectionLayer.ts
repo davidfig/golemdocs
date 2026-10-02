@@ -1,6 +1,6 @@
 import { packColor, RECT_INSTANCE_BYTES } from '@golemdocs/layout';
 import type { SelectionUpdate } from '../layout/protocol.ts';
-import { RectBatch } from '../shapes/rectBatch.ts';
+import { RectBatch } from './shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';
 
 const HIGHLIGHT = packColor(0x3390ff, 0.28);

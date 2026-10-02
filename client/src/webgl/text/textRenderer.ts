@@ -1,5 +1,5 @@
-import { createProgram, uniforms } from '../gl/program.ts';
-import type { Camera } from '../view/camera.ts';
+import { createProgram, uniforms } from '../program.ts';
+import type { Camera } from '../../view/camera.ts';
 import type { GpuFace } from './gpuFace.ts';
 import type { TextBatch } from './textBatch.ts';
 import { TEXT_FRAGMENT, TEXT_VERTEX } from './textShaders.ts';

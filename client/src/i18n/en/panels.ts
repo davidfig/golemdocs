@@ -21,6 +21,16 @@ export const panels = {
   'panels.files.close': 'Close',
   'panels.resize': 'Resize sidebar',
 
+  // Status bar (View > Status Bar)
+  'panels.footer.page': 'Page {current} of {count}',
+  'panels.footer.words.one': '{n} word',
+  'panels.footer.words': '{n} words',
+  'panels.footer.selection.one': '{selected} of {n} word',
+  'panels.footer.selection': '{selected} of {n} words',
+  'panels.footer.table': '{rows} rows × {columns} columns',
+  'panels.footer.pixels': '{width} × {height} px',
+  'panels.footer.zoom': '{percent}%',
+
   // Comments
   'panels.comments.label': 'Comments',
   'panels.comments.title': 'Comments ({count})',

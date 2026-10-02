@@ -359,10 +359,10 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'set_view',
-    description: 'Change how the document is shown: view_mode (print or normal), zoom (a percentage, or page_width, whole_page, all_pages), grid, formatting_marks.',
+    description: 'Change how the document is shown: view_mode (print or normal), zoom (a percentage, or page_width, whole_page, all_pages), grid, status_bar (the bar under the document with its page, word count and size), formatting_marks.',
     parameters: {
       type: 'object',
-      properties: { view_mode: { type: 'string', enum: ['print', 'normal'] }, zoom: { type: ['number', 'string'] }, grid: { type: 'boolean' }, formatting_marks: { type: 'boolean' } },
+      properties: { view_mode: { type: 'string', enum: ['print', 'normal'] }, zoom: { type: ['number', 'string'] }, grid: { type: 'boolean' }, status_bar: { type: 'boolean' }, formatting_marks: { type: 'boolean' } },
     },
   },
   {
@@ -402,7 +402,7 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'convert_document',
-    description: 'Switch the document to another format, the same as File ▸ Convert To. It stays the same document; what the new format cannot hold is kept, so switching back restores it. Formats: docx, odt, rtf, html, epub, mhtml, csv, tsv, tex, adoc, rst, org, mediawiki, textile, eml, ipynb, png, jpeg, webp, pdf, md, txt. A PDF is read-only afterwards.',
+    description: 'Switch the document to another format, the same as File ▸ Convert To. It stays the same document; what the new format cannot hold is kept, so switching back restores it. Formats: docx, odt, rtf, html, epub, mhtml, csv, tsv, tex, adoc, rst, org, mediawiki, textile, typst, docbook, jats, fb2, opml, eml, ipynb, png, jpeg, webp, pdf, md, txt. A PDF is read-only afterwards.',
     parameters: { type: 'object', properties: { to: { type: 'string' } }, required: ['to'] },
   },
   {

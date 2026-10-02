@@ -4,8 +4,8 @@
 // IndexedDB (storage/local.ts) and, for documents in the cloud, uploaded with them (library.ts).
 
 import { Camera } from './view/camera.ts';
-import type { GpuPage } from './view/gpuPage.ts';
-import type { PageRenderer } from './view/pageRenderer.ts';
+import type { GpuPage } from './webgl/gpuPage.ts';
+import type { PageRenderer } from './webgl/pageRenderer.ts';
 
 /** Thumbnails are at most this many pixels wide and tall (about 2x their size on the dashboard). */
 export const THUMB_WIDTH = 320;

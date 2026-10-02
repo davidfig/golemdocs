@@ -22,7 +22,8 @@ async function pageTexts(app: App): Promise<string[]> {
   const out: string[] = [];
   for (let i = 0; i < boxes.length; i++) {
     await showPage(app.page, i);
-    out.push((await selectBetween(app.page, i, [15, 15], [boxes[i].width - 2, boxes[i].height - 2])).trim());
+    // Each drag starts a little further along, so that a quick run of them is never read as a double-click.
+    out.push((await selectBetween(app.page, i, [15 + i * 8, 15 + i * 8], [boxes[i].width - 2, boxes[i].height - 2])).trim());
   }
   await editMode(app.page);
   return out;

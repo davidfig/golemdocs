@@ -83,7 +83,9 @@ export class Toolbar {
   /** Moves the buttons that don't fit into the overflow panel (all of them stay in the row when it is wide). */
   private fit(): void {
     if (this.el.hidden || !this.el.clientWidth || popupOpenFor(this.more)) return;
-    for (const { el } of this.entries) this.el.insertBefore(el, this.more);
+    // Only move buttons back when some are in the overflow: moving a hovered button out of the row and back
+    // drops its :hover, so its outline would flicker on every refresh.
+    if (this.overflow.childElementCount) for (const { el } of this.entries) this.el.insertBefore(el, this.more);
     this.more.hidden = true;
     if (!narrow().matches || this.el.scrollWidth <= this.el.clientWidth) return;
     this.more.hidden = false;

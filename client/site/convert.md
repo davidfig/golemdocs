@@ -11,8 +11,10 @@ Some conversions can't keep everything. Going from a richer format to a poorer o
 ## What you can open and save
 
 - **Word processors:** Word (.docx, and .docm and .dotx), OpenDocument Text, and Rich Text. Older Word 97–2003 (.doc) files open too, and save as .docx.
-- **Web and books:** HTML, EPUB, Web Archive (MHTML), and email messages (.eml).
-- **Markup:** Markdown, LaTeX, AsciiDoc, reStructuredText, Org, MediaWiki, and Textile.
+- **Web and books:** HTML, EPUB, FictionBook (.fb2), Web Archive (MHTML), and email messages (.eml).
+- **Markup:** Markdown, LaTeX, Typst, AsciiDoc, reStructuredText, Org, MediaWiki, and Textile.
+- **XML documents:** DocBook and JATS journal articles, including ones saved as plain .xml files.
+- **Outlines:** OPML from outliners and feed readers, which opens as a nested list.
 - **Notebooks:** Jupyter notebooks (.ipynb).
 - **Data:** CSV and TSV open as tables you can edit, and save as the same file.
 - **PDF:** open it to mark it up or [edit it](/home/pdf), or convert it to another format as a reflowed copy.

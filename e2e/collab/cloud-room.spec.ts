@@ -121,7 +121,7 @@ test.describe('a cloud document open on two devices', () => {
     await a.context.close();
   });
 
-  test('editing offline, then reconnecting, merges both sides', async ({ browser }) => {
+  test('editing offline, then reconnecting, merges both sides', { tag: '@heavy' }, async ({ browser }) => {
     const { a, b } = await cloudPair(browser, ['base']);
     await b.context.setOffline(true);
     await b.app.focus();

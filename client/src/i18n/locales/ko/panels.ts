@@ -12,6 +12,16 @@ export const panels: Partial<Messages> = {
   'panels.billing.earlier': '이전 달',
   'panels.billing.month': '{month}: {total}',
 
+  // Status bar (View > Status Bar)
+  'panels.footer.page': '{current} / {count} 페이지',
+  'panels.footer.words.one': '{n}단어',
+  'panels.footer.words': '{n}단어',
+  'panels.footer.selection.one': '{selected} / {n}단어',
+  'panels.footer.selection': '{selected} / {n}단어',
+  'panels.footer.table': '{rows}행 × {columns}열',
+  'panels.footer.pixels': '{width} × {height} px',
+  'panels.footer.zoom': '{percent}%',
+
   // Comments
   'panels.comments.label': '메모',
   'panels.comments.title': '메모({count})',

@@ -223,7 +223,7 @@ test.describe('editing a sketch before Done', () => {
     await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)) && isReddish(pixelAt(i, 40, 150)) && isWhite(pixelAt(i, 120, 150)));
   });
 
-  test('Cancel and Escape throw the sketch away', async ({ app }) => {
+  test('Cancel and Escape throw the sketch away', { tag: '@heavy' }, async ({ app }) => {
     await start(app, 'Rectangle');
     await drag(app, [40, 40], [120, 100]);
     await app.page.locator('.wm-draw').getByRole('button', { name: 'Cancel' }).click();

@@ -171,6 +171,17 @@ test('lists: a bullet list is toggled on and off, and numbering is reported', as
   assert.equal(await md(doc), 'item\n');
 });
 
+test('lists: Enter on an empty item ends the list, and Enter on one with text adds an item', async () => {
+  const doc = await openMarkdown('- one\n');
+  await run(doc, { kind: 'move', to: 'documentEnd' });
+  const added = await run(doc, { kind: 'insertParagraph' });
+  assert.equal(added.format.list, 'bullet', 'a new item continues the list');
+  const ended = await run(doc, { kind: 'insertParagraph' });
+  assert.equal(ended.format.list, null, 'Enter on the empty item takes the bullet off it');
+  await run(doc, { kind: 'insertText', text: 'after' });
+  assert.equal(await md(doc), '- one\n\nafter\n');
+});
+
 test('the Format Painter picks up formatting and paints the next selection', async () => {
   const doc = await openMarkdown('**bold** plain\n');
   await run(doc, { kind: 'select', paragraph: 0, from: 0, to: 4 });

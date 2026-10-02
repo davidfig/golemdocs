@@ -270,6 +270,7 @@ export class Chrome {
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
       a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
+      a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
@@ -605,6 +606,7 @@ export class Chrome {
           sep,
           cmd('view.pagesPanel'),
           cmd('view.filesPanel'),
+          cmd('view.footer'),
           cmd('help.clip'),
           cmd('view.grid'),
           cmd('view.fullScreen'),

@@ -40,7 +40,7 @@ test('moving documents into a folder keeps them there as the dashboard refreshes
   await person.context.close();
 });
 
-test('documents made in the app (with a copy in this browser) stay in their folder as the dashboard refreshes', async ({ browser }) => {
+test('documents made in the app (with a copy in this browser) stay in their folder as the dashboard refreshes', { tag: '@heavy' }, async ({ browser }) => {
   const person = await newPerson(browser, 'folders');
   const { page, app } = person;
   await app.goto('?doc=welcome');

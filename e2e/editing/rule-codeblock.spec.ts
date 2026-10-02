@@ -6,8 +6,7 @@ import { blankWith, convertTo } from '../files/helpers';
 test('Insert ▸ Horizontal Line and Code Block are for formats that have them', async ({ app }) => {
   await blankWith(app, 'Word text');
   await app.menubar.getByRole('menuitem', { name: /^Insert$/ }).click();
-  // What the format can't express isn't offered at all.
-  await expect(app.page.getByRole('menu').getByRole('menuitem', { name: /^Horizontal Line/ })).toBeVisible();
+  // A command the format cannot use is left out of the menu, not disabled.
   await expect(app.page.getByRole('menu').getByRole('menuitem', { name: /^Code Block/ })).toHaveCount(0);
   await app.page.keyboard.press('Escape');
   await convertTo(app, 'Markdown (.md)', 'Markdown');

@@ -14,7 +14,7 @@ after(stopWorker);
 const SOURCE = '# Round Trip Heading\n\nA paragraph with **bold words** and a [link](https://example.com/page).\n\n- first item\n- second item\n';
 
 /** Formats that carry the text of a document and are opened as the kind of the same name. */
-const TEXT_FORMATS = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'eml', 'ipynb', 'md', 'txt'] as const satisfies readonly Format[];
+const TEXT_FORMATS = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'md', 'txt'] as const satisfies readonly Format[];
 
 for (const format of TEXT_FORMATS) {
   test(`exporting as ${format} and opening the file gives back the text`, async () => {

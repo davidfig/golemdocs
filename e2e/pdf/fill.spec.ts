@@ -67,7 +67,7 @@ test.describe('Fill In mode', () => {
     expect(await download(app)).toMatch(/\/V\s*\(Peru\)/);
   });
 
-  test('a filled-in form, downloaded and opened again, still holds what was filled in', async ({ app }) => {
+  test('a filled-in form, downloaded and opened again, still holds what was filled in', { tag: '@heavy' }, async ({ app }) => {
     await field(app, 'FullName').fill('Bob');
     await field(app, 'Agree').click();
     await app.page.getByRole('radio').nth(1).click();
@@ -101,7 +101,7 @@ test.describe('Fill In mode', () => {
     for (const name of ['rect', 'ellipse', 'line', 'whiteout', 'redact', 'picture']) await expect(app.page.locator(`.wm-pdftools-section button[data-tool="${name}"]`)).toBeHidden();
   });
 
-  test('switching to Edit PDF turns the inputs into boxes to arrange, and back again restores them', async ({ app }) => {
+  test('switching to Edit PDF turns the inputs into boxes to arrange, and back again restores them', { tag: '@heavy' }, async ({ app }) => {
     await editMode(app.page);
     await expect(app.page.locator('.wm-field-box')).toHaveCount(6);
     await expect(app.page.locator('.wm-field')).toHaveCount(0);

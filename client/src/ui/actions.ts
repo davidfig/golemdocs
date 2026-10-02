@@ -105,6 +105,7 @@ export type Action =
   | { kind: 'togglePagesPanel' }
   | { kind: 'toggleFilesPanel' }
   | { kind: 'toggleRuler' }
+  | { kind: 'toggleFooter' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
   | { kind: 'setFormMode'; mode: FormMode }
@@ -156,7 +157,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'txt';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'txt';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
@@ -219,6 +220,8 @@ export interface ChromeState {
   /** The files sidebar is pulled out beside the document. */
   filesPanel: boolean;
   rulerVisible: boolean;
+  /** The status bar is showing under the document. */
+  footer: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
   format: FormatState;
@@ -275,6 +278,7 @@ export const DEFAULT_STATE: ChromeState = {
   pagesPanel: false,
   filesPanel: false,
   rulerVisible: false,
+  footer: false,
   formattingMarks: false,
   trackChanges: false,
   format: {},

@@ -9,8 +9,9 @@ import type { ChromeState } from './actions.ts';
 /** The gap kept beside the title, and the least room worth showing it in. */
 const GAP = 12;
 const MIN_WIDTH = 72;
-/** Room for the field's padding and border around the text. */
-const PADDING = 18;
+/** Room for the field's padding and border around the text, plus a few pixels' slack: the field and the measuring span round
+ *  the text's width differently, and with none to spare a name that just fits is cut short with "…". */
+const PADDING = 18 + 4;
 /** The people editing together: each avatar's diameter, how far the next starts, and the gap after the title. */
 const AVATAR = 18;
 const STEP = 12;
@@ -124,8 +125,14 @@ export class DocumentTitle {
     const titleWidth = Math.min(room, Math.ceil(this.measure.offsetWidth) + PADDING);
     const shown = this.showPeople(room - Math.min(titleWidth, TITLE_MIN) - PEOPLE_GAP);
     const beside = shown ? shown + PEOPLE_GAP : 0;
-    const width = this.editing ? room : Math.min(room, titleWidth + beside);
+    let width = this.editing ? room : Math.min(room, titleWidth + beside);
     this.el.style.width = `${width}px`;
+    // The field has the last word: if its text still overflows (the span measured it short), widen by what is cut off.
+    const cut = this.input.scrollWidth - this.input.clientWidth;
+    if (!this.editing && cut > 0) {
+      width = Math.min(room, width + cut);
+      this.el.style.width = `${width}px`;
+    }
     this.el.style.left = `${left + GAP + (room - width) / 2 - origin}px`;
   }
 

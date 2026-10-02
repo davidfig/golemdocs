@@ -204,3 +204,21 @@ export async function handleSearch(env: Env, userId: string, query: string, db: 
     },
   );
 }
+
+/** `removeFromIndex` for many documents: a query and a delete per 50 of them, and the vectors in lists of 100, rather than a round trip each. */
+export async function removeManyFromIndex(env: Env, docIds: readonly string[]): Promise<void> {
+  if (!env.VECTORS) return;
+  for (let i = 0; i < docIds.length; i += 50) {
+    const chunk = docIds.slice(i, i + 50);
+    try {
+      const marks = chunk.map(() => '?').join(',');
+      const rows = (await env.DIRECTORY.prepare(`SELECT doc_id, chunks FROM doc_index WHERE doc_id IN (${marks})`).bind(...chunk).all<{ doc_id: string; chunks: number }>()).results;
+      if (!rows.length) continue;
+      const vectors = rows.flatMap((r) => Array.from({ length: r.chunks }, (_, n) => vectorId(r.doc_id, n)));
+      for (let v = 0; v < vectors.length; v += 100) await env.VECTORS.deleteByIds(vectors.slice(v, v + 100));
+      await env.DIRECTORY.prepare(`DELETE FROM doc_index WHERE doc_id IN (${marks})`).bind(...chunk).run();
+    } catch (e) {
+      console.error('search index removal failed', e);
+    }
+  }
+}

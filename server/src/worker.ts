@@ -7,8 +7,8 @@ import type { Env, ExportedHandler } from './cf.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError } from './http.ts';
 import { Room } from './room.ts';
-import { handleSearch, removeFromIndex } from './search.ts';
-import { accessFor, canWrite, forgetDocument, person, registerOwner, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
+import { handleSearch, removeManyFromIndex } from './search.ts';
+import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError, existingUserDb, userDb, type UserDb } from './userDb.ts';
 
@@ -65,7 +65,7 @@ function listDocuments(env: Env, ownerId: string, db: UserDb): Promise<DocumentR
   return db.cachedList('documents', async () => {
     const rows = await db.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
     // Documents from before sharing existed are claimed here, so rooms and shares can find them.
-    await Promise.all(rows.map((row) => registerOwner(env, row.id, ownerId)));
+    await registerOwners(env, rows.map((row) => row.id), ownerId);
     return rows;
   });
 }
@@ -192,18 +192,39 @@ async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Pr
   return { ...row, folder_id: folderId };
 }
 
-/** Deletes the owner's documents: the rows, then their shares, search entries, rooms and files. */
-async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[]): Promise<void> {
-  // Rows first: a failure leaves unreferenced objects, never a row pointing at nothing.
-  for (const row of rows) await db.run('DELETE FROM documents WHERE id = ?', [row.id]);
-  for (const row of rows) {
-    await forgetDocument(env, row.id);
-    await removeFromIndex(env, row.id);
-    if (env.ROOMS) await roomFor(env, row.id).fetch(new Request('https://room/end'));
+/** D1 allows 100 bound values in a statement (developers.cloudflare.com/d1/platform/limits). */
+const IDS_PER_QUERY = 90;
+const ROOMS_AT_ONCE = 25;
+
+/**
+ * Deletes the owner's documents: the rows, then their shares, search entries, rooms and files. The
+ * rows are what make a document gone, so once they are deleted the rest is cleanup: with `defer`
+ * it is handed over to carry on after the response (it cannot fail the request; a failure leaves
+ * unreferenced objects, never a row pointing at nothing), otherwise it is done before returning.
+ */
+async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[], defer?: (work: Promise<unknown>) => void): Promise<void> {
+  // Many to a statement and all in one request to Cloudflare, which limits how many it takes.
+  const statements: { sql: string; params: unknown[] }[] = [];
+  for (let i = 0; i < rows.length; i += IDS_PER_QUERY) {
+    const chunk = rows.slice(i, i + IDS_PER_QUERY);
+    statements.push({ sql: `DELETE FROM documents WHERE id IN (${chunk.map(() => '?').join(',')})`, params: chunk.map((r) => r.id) });
   }
-  // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
-  const keys = rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]);
-  for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+  await db.runAll(statements);
+  const cleanup = async () => {
+    await forgetDocuments(env, rows.map((r) => r.id));
+    await removeManyFromIndex(env, rows.map((r) => r.id));
+    // Each room is told in its own request: a few dozen at a time rather than one after another.
+    if (env.ROOMS) {
+      for (let i = 0; i < rows.length; i += ROOMS_AT_ONCE) {
+        await Promise.all(rows.slice(i, i + ROOMS_AT_ONCE).map((row) => roomFor(env, row.id).fetch(new Request('https://room/end'))));
+      }
+    }
+    // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
+    const keys = rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]);
+    for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+  };
+  if (defer) defer(cleanup().catch((error) => console.error('delete cleanup failed', error)));
+  else await cleanup();
 }
 
 function json(data: unknown, status = 200): Response {
@@ -215,12 +236,12 @@ function cleanName(raw: string | null): string | null {
   return name ? name : null;
 }
 
-async function readBody(request: Request, limit: number, what: string): Promise<ArrayBuffer> {
+async function readBody(request: Request, limit: number, what: string, allowEmpty = false): Promise<ArrayBuffer> {
   const declared = Number(request.headers.get('content-length') ?? 0);
   if (declared > limit) throw new HttpError(413, `${what} too large`);
   const bytes = await request.arrayBuffer();
   if (bytes.byteLength > limit) throw new HttpError(413, `${what} too large`);
-  if (bytes.byteLength === 0) throw new HttpError(400, 'empty body');
+  if (bytes.byteLength === 0 && !allowEmpty) throw new HttpError(400, 'empty body');
   return bytes;
 }
 
@@ -276,7 +297,6 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
   const now = Date.now();
   await Promise.all(
     items.map(async (item, index) => {
-      if (item.size === 0) return void (results[index] = { error: 'empty body' });
       if (item.size > MAX_BYTES) return void (results[index] = { error: 'document too large' });
       if (item.folderId !== null && !folders.has(item.folderId)) return void (results[index] = { error: 'no such folder' });
       const id = crypto.randomUUID();
@@ -301,12 +321,12 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
   }
   // If this fails part way the objects stay unreferenced and the caller sees a failed request.
   await db.runAll(statements);
-  await Promise.all(saved.map((r) => registerOwner(env, r.id, userId)));
+  await registerOwners(env, saved.map((r) => r.id), userId);
   for (const r of saved) results[r.index] = { document: describe({ id: r.id, name: r.name, size: r.size, created_at: now, updated_at: now, thumb_at: null, folder_id: r.folderId } as DocumentRow) };
   return results;
 }
 
-const readDocx = (request: Request) => readBody(request, MAX_BYTES, 'document');
+const readDocx = (request: Request) => readBody(request, MAX_BYTES, 'document', true);
 
 /**
  * The request's URL as the browser sees it. In development the client's Vite server proxies
@@ -361,7 +381,7 @@ async function resolveAccess(env: Env, userId: string, docId: string, knownDb?: 
 }
 
 const handler: ExportedHandler = {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       const url = publicUrl(request, env);
       const path = url.pathname;
@@ -571,9 +591,17 @@ const handler: ExportedHandler = {
         const ok: string[] = [];
         const failed: Failure[] = [];
         const doomed: DocumentRow[] = [];
+        // One query per 90 ids rather than one per id (each is a request to Cloudflare, which limits them).
+        const owned = new Map<string, DocumentRow>();
+        if (ownDb) {
+          for (let i = 0; i < ids.length; i += IDS_PER_QUERY) {
+            const chunk = ids.slice(i, i + IDS_PER_QUERY);
+            for (const row of await ownDb.all<DocumentRow>(`SELECT * FROM documents WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk)) owned.set(row.id, row);
+          }
+        }
         for (const docId of ids) {
           try {
-            const own = ownDb ? await ownDb.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [docId]) : null;
+            const own = owned.get(docId) ?? null;
             if (!own || !ownDb) {
               const access = await accessFor(env, userId, docId);
               throw access ? new HttpError(403, `only the owner can ${deleting ? 'delete' : 'move'} this document`) : new HttpError(404, 'not found');
@@ -603,15 +631,22 @@ const handler: ExportedHandler = {
             walk(folderId);
           }
           if (doomedFolders.size) {
+            const already = new Set(doomed.map((d) => d.id));
             for (const row of await ownDb.all<DocumentRow>('SELECT * FROM documents')) {
-              if (row.folder_id !== null && doomedFolders.has(row.folder_id) && !doomed.some((d) => d.id === row.id)) doomed.push(row);
+              if (row.folder_id !== null && doomedFolders.has(row.folder_id) && !already.has(row.id)) doomed.push(row);
             }
           }
         } else for (const folderId of folderIds) failed.push({ id: folderId, error: 'not found' });
         if (ownDb && (doomed.length || asked.length)) {
           try {
-            await deleteDocuments(env, userId, ownDb, doomed);
-            for (const folderId of doomedFolders) await ownDb.run('DELETE FROM folders WHERE id = ?', [folderId]);
+            await deleteDocuments(env, userId, ownDb, doomed, ctx && ((work) => ctx.waitUntil(work)));
+            const gone = [...doomedFolders];
+            await ownDb.runAll(
+              Array.from({ length: Math.ceil(gone.length / IDS_PER_QUERY) }, (_, n) => {
+                const chunk = gone.slice(n * IDS_PER_QUERY, (n + 1) * IDS_PER_QUERY);
+                return { sql: `DELETE FROM folders WHERE id IN (${chunk.map(() => '?').join(',')})`, params: chunk };
+              }),
+            );
             ok.push(...doomed.map((row) => row.id).filter((docId) => ids.includes(docId)), ...asked);
           } catch (error) {
             failed.push(...[...ids.filter((docId) => doomed.some((d) => d.id === docId)), ...asked].map((x) => failure(x, error)));

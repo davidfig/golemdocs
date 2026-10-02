@@ -22,7 +22,20 @@ function fakeDirectory(): { db: DatabaseSync; binding: any } {
     },
     all: async () => ({ results: db.prepare(sql).all(...(params as any[])), success: true, meta: {} }),
   });
-  return { db, binding: { prepare: (sql: string) => statement(sql, []) } };
+  // Like D1's batch: all or none, in order.
+  const batch = async (statements: any[]) => {
+    const results = [];
+    db.exec('BEGIN');
+    try {
+      for (const s of statements) results.push(await s.run());
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    return results;
+  };
+  return { db, binding: { prepare: (sql: string) => statement(sql, []), batch } };
 }
 
 export interface World {
@@ -39,13 +52,16 @@ export interface World {
   signUp(email: string, name?: string, options?: { subscribed?: boolean }): Promise<string>;
   /** What reached the (fake) room objects: [document id, path, headers]. */
   roomCalls: { doc: string; path: string; headers: Headers }[];
+  /** Work the worker left running after a response (`waitUntil`); a test awaits it to see the end state. */
+  background: Promise<unknown>[];
   /** What the fake rooms answer to /state. */
   room: { maySave: boolean };
   restore(): void;
 }
 
-/** `local`: as `pnpm dev --local` runs it, with no Cloudflare API to call (any call to it fails the test). */
-export function world(options: { local?: boolean } = {}): World {
+/** `local`: as `pnpm dev --local` runs it, with no Cloudflare API to call (any call to it fails the test). `background`: gives the worker an execution context, so what it defers runs after the response, as in production. */
+export function world(options: { local?: boolean; background?: boolean } = {}): World {
+  const background: Promise<unknown>[] = [];
   const objects: World['objects'] = new Map();
   const userDatabases = new Map<string, DatabaseSync>();
   const directory = fakeDirectory();
@@ -113,11 +129,13 @@ export function world(options: { local?: boolean } = {}): World {
     directory: directory.db,
     objects,
     roomCalls,
+    background,
     room,
     call: (as, method, path, init = {}) =>
       worker.fetch(
         new Request(`${ORIGIN}${path}`, { method, body: init.body, headers: { origin: ORIGIN, ...(init.type ? { 'content-type': init.type } : {}), ...init.headers } }),
         { ...env, DEV_USER: as ?? undefined },
+        options.background ? { waitUntil: (work) => void background.push(work) } : undefined,
       ),
     async signUp(email, name, options = {}) {
       const { userIdFor } = await import('../src/auth.ts');

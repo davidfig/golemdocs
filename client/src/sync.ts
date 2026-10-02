@@ -136,7 +136,8 @@ function writeCatalogue(user: User, cloud: CloudDocument[], shared: CloudDocumen
 export function forgetInCatalogue(user: User, cloudIds: readonly string[], folderIds: readonly string[]): void {
   const cached = readCatalogue(user);
   if (!cached) return;
-  writeCatalogue(user, cached.cloud.filter((d) => !cloudIds.includes(d.id)), cached.shared, cached.folders.filter((f) => !folderIds.includes(f.id)));
+  // A deleted folder takes the documents in it along, whether or not they were named.
+  writeCatalogue(user, cached.cloud.filter((d) => !cloudIds.includes(d.id) && !(d.folderId && folderIds.includes(d.folderId))), cached.shared, cached.folders.filter((f) => !folderIds.includes(f.id)));
 }
 
 /** Edits the cached catalogue, whoever's it is (changes to the account only happen for the one signed in), so a head start from it matches what was just saved. */
@@ -152,8 +153,12 @@ function patchCatalogue(edit: (cached: { cloud: CloudDocument[]; shared: CloudDo
   }
 }
 
+/** Folders made in the account during this page's life, so a head start knows them even when the cache is missing or a moment behind. */
+const madeFolders = new Map<string, Folder>();
+
 /** Adds folders just made in the account to the cached catalogue, so a head start from it knows them (documents in them would otherwise show at the top level). */
 export function addFoldersToCatalogue(folders: readonly Folder[]): void {
+  for (const f of folders) madeFolders.set(f.id, f);
   patchCatalogue((cached) => {
     const ids = new Set(folders.map((f) => f.id));
     cached.folders = [...cached.folders.filter((f) => !ids.has(f.id)), ...folders];
@@ -162,6 +167,7 @@ export function addFoldersToCatalogue(folders: readonly Folder[]): void {
 
 /** Records folders just renamed or moved in the account in the cached catalogue, so the next head start doesn't show them as they were. */
 export function updateFoldersInCatalogue(folders: readonly Folder[]): void {
+  for (const f of folders) if (madeFolders.has(f.id)) madeFolders.set(f.id, f);
   patchCatalogue((cached) => {
     const next = new Map(folders.map((f) => [f.id, f]));
     cached.folders = cached.folders.map((f) => next.get(f.id) ?? f);
@@ -185,7 +191,7 @@ export async function loadLocalLibrary(user: User | null): Promise<{ entries: Li
   const cached = readCatalogue(user);
   const local = notDeleted(await listSaved().catch(() => []), user);
   // Signed in, the folders are the account's; otherwise they are this browser's.
-  const folders = user ? (cached?.folders ?? []).filter((f) => !isDeleted(f.id)) : await listLocalFolders().catch(() => []);
+  const folders = user ? [...(cached?.folders ?? []), ...[...madeFolders.values()].filter((m) => !cached?.folders.some((f) => f.id === m.id))].filter((f) => !isDeleted(f.id)) : await listLocalFolders().catch(() => []);
   const cloud = cached ? cached.cloud.filter((d) => !isDeleted(d.id)) : null;
   return { entries: mergeLibrary(local, cloud), shared: cached?.shared ?? [], folders };
 }

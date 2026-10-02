@@ -3,9 +3,14 @@
 ## 0.6.1 - Unreleased
 
 ### Added
+- Deleting a large number of documents or a big folder shows a progress card.
 - Tools › Show Markdown at the Caret (experimental, off by default): in a Markdown document, the line the caret is in shows its Markdown prefix (`## `, `- [ ] `), and the bold, italic, strikethrough, code or link text the caret is in shows its `**`, `*`, `~~`, `` ` `` or `[](url)` in gray, while the rest stays formatted. Edit the Markdown, then move the caret away to see it formatted. Showing and hiding the Markdown is not an edit, so Undo only sees what you changed.
 
 ### Fixed
+- Deleting a folder with thousands of documents is far faster and no longer stalls with no progress.
+- Deleting or moving a very large folder (more than 500 items) no longer fails with an error about too many ids.
+- While a ZIP is importing, documents no longer show at the top level before jumping into their folders.
+- Importing a ZIP that contains empty files no longer leaves them failing to upload to your account.
 - Importing a large ZIP into your account no longer fails part way with server errors: documents are sent in batches, the lists refresh less often while it runs, and if the server asks for a pause the import waits and carries on.
 - Moving a folder or document, or making a folder, in the sidebar no longer flickers back to how it was before showing the change.
 - Saving a Word document no longer rewrites its comments when they haven't changed, so Word's own comment details are kept exactly as they were.

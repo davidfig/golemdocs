@@ -146,11 +146,11 @@ test('a batch upload makes every document, in a folder if it names one, and repo
   assert.equal(results[0].document.name, 'A.md');
   assert.equal(results[0].document.folderId, folder.id);
   assert.equal(results[1].document.folderId, null);
-  assert.equal(results[2].error, 'empty body');
+  assert.equal(results[2].document.size, 0);
   assert.equal(results[3].error, 'no such folder');
 
   const listed = (await (await call('GET', '/api/documents')).json()) as any[];
-  assert.deepEqual(listed.map((d) => d.name).sort(), ['A.md', 'B.md']);
+  assert.deepEqual(listed.map((d) => d.name).sort(), ['A.md', 'B.md', 'Empty.md']);
   const got = await call('GET', `/api/documents/${results[0].document.id}`);
   assert.deepEqual([...new Uint8Array(await got.arrayBuffer())], [1, 2]);
 });
@@ -186,4 +186,18 @@ test('when Cloudflare rate limits the API the page is told to wait, not that the
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test('a delete answers once the rows are gone and cleans up after the response', async () => {
+  w.restore();
+  w = world({ background: true });
+  const folder = (await (await call('PUT', '/api/folders/' + crypto.randomUUID(), { body: JSON.stringify({ name: 'Books', parentId: null }), type: 'application/json' })).json()) as any;
+  const made = (await (await call('POST', `/api/documents?name=A.docx&folder=${folder.id}`, { body: new Uint8Array([1]), type: DOCX })).json()) as any;
+  assert.equal(w.objects.size, 1);
+  const response = await call('DELETE', '/api/documents', { body: JSON.stringify({ folders: [folder.id] }), type: 'application/json' });
+  assert.deepEqual(((await response.json()) as any).failed, []);
+  assert.deepEqual(await (await call('GET', '/api/documents')).json(), [], 'gone from the list at once');
+  assert.equal((await call('GET', `/api/documents/${made.id}`)).status, 404);
+  await Promise.all(w.background);
+  assert.equal(w.objects.size, 0, 'the files go with the cleanup');
 });

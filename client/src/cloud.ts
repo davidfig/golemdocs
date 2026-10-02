@@ -174,16 +174,39 @@ async function batch<T>(method: string, url: string, body: unknown): Promise<Bat
   return (await check(await send(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).json();
 }
 
+/** Most ids or folders the server takes in one request (MAX_BATCH in server/src/worker.ts). */
+const BATCH_ITEMS = 500;
+
+/** Sends a batch in as many requests as the server's limit needs, in order, and joins what they did. */
+async function chunked<T, I>(items: readonly I[], send: (chunk: I[]) => Promise<BatchResult<T>>, onProgress?: (done: number, total: number) => void): Promise<BatchResult<T>> {
+  const joined: BatchResult<T> = { ok: [], failed: [] };
+  for (let i = 0; i < Math.max(items.length, 1); i += BATCH_ITEMS) {
+    const result = await send(items.slice(i, i + BATCH_ITEMS));
+    joined.ok.push(...result.ok);
+    joined.failed.push(...result.failed);
+    onProgress?.(Math.min(i + BATCH_ITEMS, items.length), items.length);
+  }
+  return joined;
+}
+
 /**
- * Deletes documents and folders, in one request. A folder goes with everything inside it. The
+ * Deletes documents and folders, in as few requests as the server's limit allows. A folder goes with everything inside it. The
  * caller sees which could not be deleted.
  */
-export async function deleteDocuments(ids: readonly string[], folderIds: readonly string[] = []): Promise<BatchResult<string>> {
+export async function deleteDocuments(ids: readonly string[], folderIds: readonly string[] = [], onProgress?: (done: number, total: number) => void): Promise<BatchResult<string>> {
   // Left out of listings from now on; those that turn out not to be deleted come back.
   const all = [...ids, ...folderIds];
   for (const id of all) deleted.add(id);
   try {
-    const result = await batch<string>('DELETE', '/api/documents', { ids, folders: folderIds });
+    const result = await chunked<string, { id: string; folder: boolean }>(
+      [...ids.map((id) => ({ id, folder: false })), ...folderIds.map((id) => ({ id, folder: true }))],
+      (chunk) =>
+        batch<string>('DELETE', '/api/documents', {
+          ids: chunk.filter((c) => !c.folder).map((c) => c.id),
+          folders: chunk.filter((c) => c.folder).map((c) => c.id),
+        }),
+      onProgress,
+    );
     for (const f of result.failed) if (f.error !== 'not found') deleted.delete(f.id);
     return result;
   } catch (error) {
@@ -194,7 +217,7 @@ export async function deleteDocuments(ids: readonly string[], folderIds: readonl
 
 /** Moves documents to a folder (null: the top level), in one request. */
 export function moveDocuments(ids: readonly string[], folderId: string | null): Promise<BatchResult<string>> {
-  return batch('PATCH', '/api/documents', { ids, folderId });
+  return chunked(ids, (chunk) => batch<string>('PATCH', '/api/documents', { ids: chunk, folderId }));
 }
 
 export async function listFolders(): Promise<Folder[]> {
@@ -207,7 +230,8 @@ export async function listFolders(): Promise<Folder[]> {
  * are made in order, so a folder may go inside one earlier in the list.
  */
 export function putFolders(folders: readonly Pick<Folder, 'id' | 'name' | 'parentId'>[]): Promise<BatchResult<Folder>> {
-  return batch('PUT', '/api/folders', { folders: folders.map(({ id, name, parentId }) => ({ id, name, parentId })) });
+  const wanted = folders.map(({ id, name, parentId }) => ({ id, name, parentId }));
+  return chunked(wanted, (chunk) => batch<Folder>('PUT', '/api/folders', { folders: chunk }));
 }
 
 /** The reason the first failure of a batch gives, as an error; nothing when all went through. */

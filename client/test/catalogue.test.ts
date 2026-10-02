@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { addFoldersToCatalogue, moveDocsInCatalogue, updateFoldersInCatalogue } from '../src/sync.ts';
+import { addFoldersToCatalogue, forgetInCatalogue, moveDocsInCatalogue, updateFoldersInCatalogue } from '../src/sync.ts';
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -33,4 +33,11 @@ test('moved documents are moved in the cached catalogue', () => {
   store.set('wm.catalogue', JSON.stringify({ user: 'u', cloud: [{ id: 'd1', folderId: null }, { id: 'd2', folderId: null }], shared: [], folders: [] }));
   moveDocsInCatalogue(['d1'], 'f');
   assert.deepEqual(read().cloud.map((d: { folderId: string | null }) => d.folderId), ['f', null]);
+});
+
+test('deleting a folder takes the documents in it out of the cached catalogue, named or not', () => {
+  store.set('wm.catalogue', JSON.stringify({ user: 'u', cloud: [{ id: 'd1', folderId: 'f' }, { id: 'd2', folderId: null }, { id: 'd3', folderId: 'g' }], shared: [], folders: [folder('f', null), folder('g', null)] }));
+  forgetInCatalogue({ id: 'u' } as never, [], ['f']);
+  assert.deepEqual(read().cloud.map((d: { id: string }) => d.id), ['d2', 'd3']);
+  assert.deepEqual(read().folders.map((f: { id: string }) => f.id), ['g']);
 });

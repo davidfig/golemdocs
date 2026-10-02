@@ -44,6 +44,7 @@ export const app: Catalog = {
   'app.downloadedAll': 'Все сохранённые документы скачаны',
   'app.downloadFailed': 'Не удалось скачать: {message}',
   'app.importingZip': 'Импорт {name}…',
+  'app.deleting': 'Удаление…',
   'app.importZipNone': 'В {name} нет документов, которые можно импортировать',
   'app.importedZip': 'Импортировано документов: {count}',
   'app.importedZipSkipped': 'Импортировано документов: {count}. Файлы, которые нельзя открыть, пропущены: {skipped}',

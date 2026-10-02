@@ -41,6 +41,7 @@ export const app: Partial<Messages> = {
   'app.downloadedAll': '已下載所有已儲存的文件',
   'app.downloadFailed': '下載失敗：{message}',
   'app.importingZip': '正在匯入 {name}…',
+  'app.deleting': '正在刪除…',
   'app.importZipNone': '{name} 中沒有可匯入的文件',
   'app.importedZip': '已匯入的文件：{count}',
   'app.importedZipSkipped': '已匯入的文件：{count}。已略過無法開啟的檔案：{skipped}',

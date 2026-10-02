@@ -41,6 +41,7 @@ export const app: Partial<Messages> = {
   'app.downloadedAll': '保存済みのドキュメントをすべてダウンロードしました',
   'app.downloadFailed': 'ダウンロードに失敗しました：{message}',
   'app.importingZip': '{name} をインポートしています…',
+  'app.deleting': '削除しています…',
   'app.importZipNone': '{name} にインポートできるドキュメントはありません',
   'app.importedZip': 'インポートしたドキュメント：{count}',
   'app.importedZipSkipped': 'インポートしたドキュメント：{count}。開けないファイルはスキップしました：{skipped}',

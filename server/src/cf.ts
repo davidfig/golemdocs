@@ -16,6 +16,8 @@ export interface D1PreparedStatement {
 
 export interface D1Database {
   prepare(query: string): D1PreparedStatement;
+  /** Several statements in one round trip, run in order as a transaction. */
+  batch(statements: D1PreparedStatement[]): Promise<D1Result[]>;
 }
 
 export interface R2ObjectBody {
@@ -134,6 +136,11 @@ export interface Env {
   APPLE_PRIVATE_KEY?: string;
 }
 
+export interface ExecutionContext {
+  /** Keeps the Worker running until this settles, after the response has been sent. */
+  waitUntil(promise: Promise<unknown>): void;
+}
+
 export interface ExportedHandler {
-  fetch(request: Request, env: Env): Promise<Response> | Response;
+  fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> | Response;
 }

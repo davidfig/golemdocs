@@ -15,8 +15,8 @@ export interface Progress {
   close(): void;
 }
 
-/** Shows the card with `title` and returns what drives it. A second card stacks above the first. */
-export function showProgress(title: string): Progress {
+/** Shows the card with `title` and returns what drives it. A second card stacks above the first. Work that can't be stopped half way passes `cancellable: false`, which leaves out the button. */
+export function showProgress(title: string, cancellable = true): Progress {
   const abort = new AbortController();
   const detail = h('div', { class: 'wm-progress-detail' });
   const bar = h('div', { class: 'wm-progress-bar' });
@@ -27,7 +27,7 @@ export function showProgress(title: string): Progress {
     h('div', { class: 'wm-progress-title', text: title }),
     detail,
     h('div', { class: 'wm-progress-track', attrs: { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' } }, bar),
-    cancel,
+    ...(cancellable ? [cancel] : []),
   );
   cancel.addEventListener('click', () => {
     abort.abort();

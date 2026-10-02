@@ -342,3 +342,18 @@ test('a request the server answers with 429 waits as long as it asked, then is s
   assert.equal(tries, 3);
   assert.ok(Date.now() - started < 1000);
 });
+
+test('deleting more ids than the server takes in a request is split into several', async () => {
+  const { deleteDocuments } = await import('../src/cloud.ts');
+  const sent: { ids: string[]; folders: string[] }[] = [];
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    const body = JSON.parse(init!.body!);
+    sent.push(body);
+    return new Response(JSON.stringify({ ok: [...body.ids, ...body.folders], failed: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  const ids = Array.from({ length: 1100 }, (_, i) => `d${i}`);
+  const result = await deleteDocuments(ids, ['f1', 'f2']);
+  assert.ok(sent.every((b) => b.ids.length + b.folders.length <= 500));
+  assert.equal(sent.length, 3);
+  assert.equal(result.ok.length, 1102);
+});

@@ -1380,6 +1380,9 @@ async function signOut(): Promise<void> {
 /** The folder (chosen on the dashboard) the document being started goes in once it is first saved. */
 let newDocumentFolder: string | null = null;
 
+/** A delete of more than this many documents and folders shows a progress card. */
+const DELETE_PROGRESS_FROM = 200;
+
 /** Deletes documents (from the dashboard, or the assistant): from the account in one request, and this browser's copies. */
 async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: readonly string[] = []): Promise<void> {
   const deletingOpen = entries.some((entry) => entry.local && entry.local.id === current.localId);
@@ -1399,17 +1402,37 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
   for (const id of localIds) dirty.delete(id);
   if (uploading !== null && localIds.has(uploading)) await flushing;
   const cloudIdOf = (entry: LibraryEntry) => entry.cloud?.id ?? savedDocs.find((d) => d.id === entry.local?.id)?.cloudId ?? entry.local?.cloudId ?? '';
-  const cloudIds = [...new Set(entries.flatMap((entry) => (account ? [cloudIdOf(entry)] : [])).filter(Boolean))];
+  // The server deletes a folder's documents with it, so those are not named (a big folder is then one id, not thousands).
+  const inDeleted = new Set(folderIds);
+  const cloudIds = [
+    ...new Set(
+      entries.flatMap((entry) => (account && !(entry.cloud?.folderId && inDeleted.has(entry.cloud.folderId)) ? [cloudIdOf(entry)] : [])).filter(Boolean),
+    ),
+  ];
   // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
   const refused = new Map<string, string>();
-  if (account && (cloudIds.length || folderIds.length)) for (const f of (await deleteDocuments(cloudIds, folderIds)).failed) if (f.error !== 'not found') refused.set(f.id, f.error);
-  if (account) forgetInCatalogue(account, cloudIds.filter((id) => !refused.has(id)), folderIds.filter((id) => !refused.has(id)));
-  for (const entry of entries) {
-    if (refused.has(cloudIdOf(entry))) continue;
-    if (!entry.local) continue;
-    dirty.delete(entry.local.id);
-    failures.delete(entry.local.id);
-    await deleteSaved(entry.local.id);
+  // A big delete takes several requests and as many removals here: say how far it is. Stopping half way would leave a folder part deleted, so there is no Cancel.
+  const cloudWork = account ? cloudIds.length + folderIds.length : 0;
+  const total = cloudWork + localIds.size;
+  const progress = total > DELETE_PROGRESS_FROM ? showProgress(t('app.deleting'), false) : null;
+  progress?.update(0, total);
+  try {
+    if (account && (cloudIds.length || folderIds.length)) {
+      const result = await deleteDocuments(cloudIds, folderIds, (done) => progress?.update(done, total));
+      for (const f of result.failed) if (f.error !== 'not found') refused.set(f.id, f.error);
+    }
+    if (account) forgetInCatalogue(account, cloudIds.filter((id) => !refused.has(id)), folderIds.filter((id) => !refused.has(id)));
+    let removed = cloudWork;
+    for (const entry of entries) {
+      if (refused.has(cloudIdOf(entry)) || (entry.cloud?.folderId && refused.has(entry.cloud.folderId))) continue;
+      if (!entry.local) continue;
+      dirty.delete(entry.local.id);
+      failures.delete(entry.local.id);
+      await deleteSaved(entry.local.id);
+      progress?.update(++removed, total);
+    }
+  } finally {
+    progress?.close();
   }
   await refreshLibrary();
   if (deletingOpen) openSource('welcome', true, 'replace');

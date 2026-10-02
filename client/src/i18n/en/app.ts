@@ -42,6 +42,7 @@ export const app = {
   'app.downloadedAll': 'Downloaded all saved documents',
   'app.downloadFailed': 'Download failed: {message}',
   'app.importingZip': 'Importing {name}…',
+  'app.deleting': 'Deleting…',
   'app.importZipNone': '{name} has no documents that can be imported',
   'app.importedZip': 'Imported documents: {count}',
   'app.importedZipSkipped': 'Imported documents: {count}. Skipped files that cannot be opened: {skipped}',

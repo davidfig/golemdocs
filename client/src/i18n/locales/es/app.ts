@@ -42,6 +42,7 @@ export const app: Partial<Messages> = {
   'app.downloadedAll': 'Se descargaron todos los documentos guardados',
   'app.downloadFailed': 'Error al descargar: {message}',
   'app.importingZip': 'Importando {name}…',
+  'app.deleting': 'Eliminando…',
   'app.importZipNone': '{name} no tiene documentos que se puedan importar',
   'app.importedZip': 'Documentos importados: {count}',
   'app.importedZipSkipped': 'Documentos importados: {count}. Se omitieron los archivos que no se pueden abrir: {skipped}',

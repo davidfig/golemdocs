@@ -32,6 +32,31 @@ export async function registerOwner(env: Env, docId: string, ownerId: string): P
     .run();
 }
 
+/** D1 runs a batch of statements in one round trip; this many to a batch keeps each one small. */
+const DIRECTORY_BATCH = 50;
+
+/** `registerOwner` for many documents, a batch at a time instead of a query each (a directory flooded with queries refuses them as overloaded). */
+export async function registerOwners(env: Env, docIds: readonly string[], ownerId: string): Promise<void> {
+  const now = Date.now();
+  for (let i = 0; i < docIds.length; i += DIRECTORY_BATCH) {
+    await env.DIRECTORY.batch(
+      docIds.slice(i, i + DIRECTORY_BATCH).map((id) => env.DIRECTORY.prepare('INSERT INTO document_owners (doc_id, owner_id, created_at) VALUES (?, ?, ?) ON CONFLICT(doc_id) DO NOTHING').bind(id, ownerId, now)),
+    );
+  }
+}
+
+/** `forgetDocument` for many documents, a batch at a time. */
+export async function forgetDocuments(env: Env, docIds: readonly string[]): Promise<void> {
+  for (let i = 0; i < docIds.length; i += DIRECTORY_BATCH) {
+    await env.DIRECTORY.batch(
+      docIds.slice(i, i + DIRECTORY_BATCH).flatMap((id) => [
+        env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(id),
+        env.DIRECTORY.prepare('DELETE FROM document_owners WHERE doc_id = ?').bind(id),
+      ]),
+    );
+  }
+}
+
 /** Forgets a deleted document's owner and everything shared from it. */
 export async function forgetDocument(env: Env, docId: string): Promise<void> {
   await env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(docId).run();

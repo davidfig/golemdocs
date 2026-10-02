@@ -28,6 +28,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.editForm': 'PDF &bearbeiten',
   'chrome.view.grid': 'Seitenras&ter',
   'chrome.view.pagesPanel': 'Seiten&leiste',
+  'chrome.view.filesPanel': '&Dateileiste',
   'chrome.view.ruler': '&Lineal',
   'chrome.view.formattingMarks': 'Formatierungs&zeichen',
   'chrome.view.zoomIn': '&Vergrößern',

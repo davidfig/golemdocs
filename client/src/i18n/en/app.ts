@@ -41,6 +41,11 @@ export const app = {
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': 'Downloaded all saved documents',
   'app.downloadFailed': 'Download failed: {message}',
+  'app.importingZip': 'Importing {name}…',
+  'app.importZipNone': '{name} has no documents that can be imported',
+  'app.importedZip': 'Imported documents: {count}',
+  'app.importedZipSkipped': 'Imported documents: {count}. Skipped files that cannot be opened: {skipped}',
+  'app.importZipFailed': 'Import failed: {message}',
 
   // Collaboration
   'app.editingAlone': 'Editing on your own again',

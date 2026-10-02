@@ -40,6 +40,11 @@ export const app: Partial<Messages> = {
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': '保存済みのドキュメントをすべてダウンロードしました',
   'app.downloadFailed': 'ダウンロードに失敗しました：{message}',
+  'app.importingZip': '{name} をインポートしています…',
+  'app.importZipNone': '{name} にインポートできるドキュメントはありません',
+  'app.importedZip': 'インポートしたドキュメント：{count}',
+  'app.importedZipSkipped': 'インポートしたドキュメント：{count}。開けないファイルはスキップしました：{skipped}',
+  'app.importZipFailed': 'インポートに失敗しました：{message}',
 
   // Collaboration
   'app.editingAlone': '再び 1 人で編集しています',

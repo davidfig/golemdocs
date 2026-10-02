@@ -7,6 +7,7 @@
 import { t } from '../i18n/index.ts';
 import { h, toggleClass } from './dom.ts';
 import { dropSlot, moveTarget } from './pageOrder.ts';
+import { makeResizable } from './sidebarResize.ts';
 import './pagesPanel.css';
 
 /** What the panel needs to know about a page. The object itself identifies it: a page that is replaced is a new object. */
@@ -39,8 +40,8 @@ interface Item {
   onScreen: boolean;
 }
 
-/** How wide a thumbnail is, in CSS px (see pagesPanel.css). */
-const THUMB_WIDTH = 120;
+/** What the panel's width has besides the thumbnail: the margins and the frame's border (see pagesPanel.css). */
+const THUMB_MARGIN = 52;
 /** Thumbnails drawn at once, before giving the editor a turn. */
 const BATCH = 2;
 /** How long to wait before redrawing thumbnails of pages that changed, so typing isn't slowed by it. */
@@ -81,6 +82,8 @@ export class PagesPanel {
       if (!this.list.contains(e.relatedTarget as Node | null)) this.clearDrop();
     });
     parent.append(this.el);
+    // A wider panel has bigger thumbnails: they are drawn again at the new size once the dragging pauses.
+    makeResizable(this.el, { key: 'word.pagesWidth', min: 120, max: 480, initial: 168, changed: () => this.refresh() });
   }
 
   get visible(): boolean {
@@ -226,7 +229,7 @@ export class PagesPanel {
       if (drawn === BATCH) return this.schedule(16);
       drawn++;
       const { width, height } = item.page;
-      const w = Math.max(1, Math.round(THUMB_WIDTH * dpr));
+      const w = Math.max(1, Math.round(Math.max(40, this.el.clientWidth - THUMB_MARGIN) * dpr));
       const h = Math.max(1, Math.round((w * height) / Math.max(1, width)));
       const pixels = this.host.draw(item.page, w, h);
       item.stale = false;

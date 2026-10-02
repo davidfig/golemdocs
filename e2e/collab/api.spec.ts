@@ -1,6 +1,6 @@
 // The server's HTTP contract, called directly (no browser UI): who may call what, origin checks,
 // the document/share/thumbnail routes and the sign-in routes. Requests go through the client's
-// Vite proxy, like the app's own, so the origin the server expects is http://localhost:5273.
+// Vite proxy, like the app's own, so the origin the server expects is the e2e client origin (e2e/ports.ts).
 //
 // Being signed out: send the `dev_signed_out` cookie (what signing out sets), which switches off
 // the dev-user shortcut. `apiAs` makes a request context with a session for a unique account.
@@ -10,8 +10,9 @@ import type { APIRequestContext, PlaywrightWorkerArgs } from '@playwright/test';
 
 type Playwright = PlaywrightWorkerArgs['playwright'];
 import { uniqueEmail } from './helpers';
+import { CLIENT_ORIGIN } from '../ports.ts';
 
-const BASE = 'http://localhost:5273';
+const BASE = CLIENT_ORIGIN;
 const ORIGIN = { origin: BASE };
 const SIGNED_OUT = { cookie: 'dev_signed_out=1' };
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -238,7 +239,8 @@ test.describe('documents', () => {
     expect((await api.get('/api/documents/00000000-0000-4000-8000-000000000000')).status()).toBe(404);
     expect((await api.patch('/api/documents', { data: 'x', headers: ORIGIN })).status()).toBe(405);
     const doc = await upload(api);
-    expect((await api.patch(`/api/documents/${doc.id}`, { data: 'x', headers: ORIGIN })).status()).toBe(405);
+    // PATCH moves a document to a folder, so a body that isn't JSON is a bad request.
+    expect((await api.patch(`/api/documents/${doc.id}`, { data: 'x', headers: ORIGIN })).status()).toBe(400);
     // A document without a name gets a default one.
     const unnamed = await api.post('/api/documents', { data: Buffer.from('x'), headers: ORIGIN });
     expect((await unnamed.json()).name).toBe('Untitled.docx');

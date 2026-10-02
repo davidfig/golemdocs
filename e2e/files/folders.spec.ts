@@ -140,5 +140,8 @@ test('a document made from inside a folder is filed there', async ({ app, page }
   await app.page.keyboard.type('hello');
   await waitForSaved(page, 'Document1.docx');
   await openDashboard(app);
+  // The Documents screen opens in the folder of the open document.
+  await expectNames(cards(page), ['Document1.docx']);
+  await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
   await expect(folder(page, 'Reports').locator('.wm-card-meta')).toHaveText('1 item');
 });

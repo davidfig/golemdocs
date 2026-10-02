@@ -28,6 +28,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.editForm': '编辑 PDF(&E)',
   'chrome.view.grid': '网格线(&G)',
   'chrome.view.pagesPanel': '页面侧栏(&B)',
+  'chrome.view.filesPanel': '文件侧栏(&L)',
   'chrome.view.ruler': '标尺(&R)',
   'chrome.view.formattingMarks': '格式标记(&M)',
   'chrome.view.zoomIn': '放大(&I)',

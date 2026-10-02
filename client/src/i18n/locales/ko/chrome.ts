@@ -28,6 +28,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.editForm': 'PDF 편집(&E)',
   'chrome.view.grid': '페이지 눈금(&G)',
   'chrome.view.pagesPanel': '페이지 사이드바(&B)',
+  'chrome.view.filesPanel': '파일 사이드바(&L)',
   'chrome.view.ruler': '눈금자(&R)',
   'chrome.view.formattingMarks': '서식 기호(&M)',
   'chrome.view.zoomIn': '확대(&I)',

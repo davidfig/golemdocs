@@ -20,6 +20,7 @@
 import { inflateRawSync } from 'node:zlib';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import { App, expect } from '../fixtures';
+import { CLIENT_ORIGIN } from '../ports.ts';
 
 export interface Person {
   context: BrowserContext;
@@ -45,7 +46,7 @@ export async function signInAs(context: BrowserContext, email: string): Promise<
 }
 
 /** Signs the context out, as File/Sign out does (the dev-user shortcut stops applying). */
-export async function signOutContext(context: BrowserContext, baseURL = 'http://localhost:5273'): Promise<void> {
+export async function signOutContext(context: BrowserContext, baseURL = CLIENT_ORIGIN): Promise<void> {
   await context.addCookies([{ name: 'dev_signed_out', value: '1', url: baseURL }]);
 }
 
@@ -289,7 +290,7 @@ async function buildDocx(browser: Browser, paragraphs: string[]): Promise<Buffer
 export async function uploadDoc(page: Page, name: string, bytes: Buffer): Promise<CloudDoc> {
   const response = await page.request.post(`/api/documents?name=${encodeURIComponent(name)}`, {
     data: bytes,
-    headers: { origin: new URL(page.url() === 'about:blank' ? 'http://localhost:5273' : page.url()).origin },
+    headers: { origin: new URL(page.url() === 'about:blank' ? CLIENT_ORIGIN : page.url()).origin },
   });
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()) as CloudDoc;

@@ -58,6 +58,9 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
   return null;
 }
 
+/** Whether a file is a ZIP of documents, which is imported (into folders) rather than opened. */
+export const isZipName = (name: string): boolean => /\.zip$/i.test(name);
+
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');

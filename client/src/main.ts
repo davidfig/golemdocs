@@ -5,8 +5,9 @@ import { deskColor, onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocument, documentUrl, listDocuments, listShared, saveDocument, type CloudDocument } from './cloud.ts';
-import { adoptGuestFolders } from './folderOps.ts';
+import { CloudError, deleteDocument, documentUrl, listDocuments, listFolders, listShared, saveDocument, type CloudDocument } from './cloud.ts';
+import { importFiles, readZipFiles } from './storage/zipImport.ts';
+import { adoptGuestFolders, createFolder } from './folderOps.ts';
 import { openFromCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -16,6 +17,7 @@ import {
   deleteSaved,
   getSaved,
   getThumbnail,
+  listLocalFolders,
   listSaved,
   markSynced,
   ownedBy,
@@ -23,10 +25,13 @@ import {
   saveThumbnail,
   type SavedInfo,
 } from './storage/local.ts';
+import { folderOf, folderPath } from './folders.ts';
 import { hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
+import { loadView, saveView, type SavedView } from './viewMemory.ts';
 import { mnemonicLabel } from './ui/dom.ts';
+import { FilesPanel } from './ui/filesPanel.ts';
 import { PagesPanel } from './ui/pagesPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
 import { PdfEditTools } from './ui/pdfEditTools.ts';
@@ -72,7 +77,7 @@ import type { ChromeState, ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
 import { SelectionLayer } from './view/selectionLayer.ts';
 import { FORMAT_LIST, isFormat, type Format } from './formats/convert.ts';
-import { sourceFromFile, stem } from './formats/source.ts';
+import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, toUtf8 } from './formats/textFiles.ts';
 import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
@@ -147,6 +152,15 @@ try {
 }
 const roomForPages = matchMedia('(min-width: 900px)');
 const pagesOpen = (): boolean => pagesChoice ?? roomForPages.matches;
+
+// The files sidebar (View > Files Sidebar): optional, so closed until chosen; remembered in this browser.
+const FILES_KEY = 'word.filesPanel';
+let filesOpen = false;
+try {
+  filesOpen = localStorage.getItem(FILES_KEY) === 'on';
+} catch {
+  // Storage unavailable: it starts closed.
+}
 
 // View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
 const VIEW_KEY = 'word.viewMode';
@@ -225,6 +239,28 @@ let loaded = false;
 let cameraPlaced = false;
 /** The user has scrolled or zoomed since opening (streaming then stops moving the camera). */
 let userMoved = false;
+/** The source of the open document (`local:<id>`, ...), which its scroll position and zoom are remembered under. */
+let viewDocKey: string | null = null;
+/** The source the next open() is for, until that call takes it as `viewKey`. */
+let wantedDocKey: string | null = null;
+/** Where this browser last left the document being opened, applied as its pages arrive. */
+let pendingView: SavedView | null = null;
+/** `pendingView` was used to place the camera. */
+let viewRestored = false;
+
+/** The caret is in text that a click can put it back in (not a picture, a grid or a PDF's own pages). */
+const textCaret = (): boolean => !grid && !annotating && !isPicture();
+
+/** Remembers where the open document is scrolled to and its zoom, so opening it again returns there. */
+function rememberView(): void {
+  if (!viewDocKey || !loaded || !cameraPlaced) return;
+  const view: SavedView = {};
+  if (userMoved && !grid) view.camera = { x: camera.x, y: camera.y, zoom: camera.zoom, reflow: reflowing() };
+  const caret = selection.caret;
+  const page = caret ? pages.findIndex((p) => p.id === caret.page) : -1;
+  if (caret && page >= 0 && textCaret()) view.caret = { page, x: caret.x, y: caret.y + caret.height / 2 };
+  if (view.camera || view.caret) saveView(viewDocKey, view);
+}
 
 /**
  * The format a source is opened as (everything but PDF, Markdown and text is a Word document).
@@ -257,6 +293,12 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   let firstPage = 0;
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
+  rememberView();
+  viewDocKey = wantedDocKey;
+  wantedDocKey = null;
+  pendingView = viewDocKey ? loadView(viewDocKey) : null;
+  commandsAtOpen = commandsSent;
+  viewRestored = false;
   cropLayer.cancel();
   largeView.close();
   drawLayer.cancel();
@@ -326,6 +368,15 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       loaded = true;
       loadingScreen.hide();
       arrange();
+      if (pendingView) {
+        // Streaming is over, so the restored position can be held to the real page bounds now.
+        if (viewRestored) userMoved = true;
+        const caret = pendingView.caret;
+        const page = caret && textCaret() ? pages[caret.page] : undefined;
+        // Not in a document with comments: a caret put back inside commented text would open that thread (even a resolved one).
+        if (caret && page && commandsSent === commandsAtOpen && comments.length === 0) send({ kind: 'pointer', page: page.id, x: caret.x, y: caret.y });
+        pendingView = null;
+      }
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
       loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: times.read, fonts: times.fonts, body: times.body, headers: times.headers };
       setStatus(t('app.ready', { name }));
@@ -455,6 +506,7 @@ async function enterRoom(): Promise<string> {
   return location.href;
 }
 window.addEventListener('pagehide', () => {
+  rememberView();
   saveIfEdited();
   worker.leave();
 });
@@ -518,6 +570,14 @@ const PAGE_FIT_MARGIN_PX = 16;
 
 function placeCamera(): void {
   cameraPlaced = true;
+  const saved = pendingView?.camera;
+  if (saved && saved.reflow === reflowing() && !grid) {
+    camera.zoom = Math.min(Math.max(saved.zoom, camera.minZoom), camera.maxZoom);
+    camera.x = saved.x;
+    camera.y = saved.y;
+    viewRestored = true;
+    return;
+  }
   if (reflowing()) {
     // Normal view: the text fills the window from the top, at the zoom the user has.
     camera.x = bounds.x;
@@ -552,6 +612,7 @@ function openFile(file: File): void {
 
 /** Opens a document by name; `keepRoom` keeps the URL's collaboration room (else it's left). */
 function openSource(source: string, keepRoom = false): void {
+  wantedDocKey = source;
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
   if (!keepRoom) params.delete('room');
@@ -671,6 +732,7 @@ async function uploadShared(): Promise<void> {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'hidden') return;
+  rememberView();
   saveIfEdited();
   void saving.then(() => flushUploads()); // the page may be closing: don't wait for the pause
 });
@@ -750,6 +812,7 @@ async function refreshLibrary(): Promise<void> {
   }
   savedDocs = ownedBy(await listSaved().catch(() => []), account?.id ?? null);
   showSync();
+  filesPanel.refreshSoon();
 }
 
 /** Where to open a listed document from: the account only when this browser's copy is missing or older. */
@@ -810,6 +873,7 @@ function syncStatus(): SyncStatus {
 }
 
 function showSync(): void {
+  filesPanel.mark();
   chrome.update({ sync: syncStatus() });
 }
 
@@ -922,6 +986,7 @@ function rememberInUrl(doc: string): void {
   if (params.get('room')) return;
   params.set('doc', doc);
   setUrl(params);
+  viewDocKey ??= doc; // a new document, saved for the first time
   if (doc.startsWith('local:')) {
     try {
       localStorage.setItem(LAST_DOC_KEY, doc);
@@ -953,8 +1018,17 @@ async function downloadAll(): Promise<void> {
   try {
     const docs = (await Promise.all(savedDocs.map((d) => getSaved(d.id)))).filter((d) => d !== null);
     if (docs.length === 0) return setStatus(t('app.downloadAllNone'));
+    // Folder ids are unique, so the account's folders and this browser's can be looked up together.
+    const folders = [...(account ? await listFolders().catch(() => []) : []), ...(await listLocalFolders().catch(() => []))];
+    const placed = new Map(mergeLibrary(savedDocs, account ? cloudDocs : null).filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
     const { zipDocuments } = await import('./storage/archive.ts');
-    const bytes = await zipDocuments(docs.map((d) => ({ name: d.info.name, bytes: d.bytes })));
+    const bytes = await zipDocuments(
+      docs.map((d) => ({
+        name: d.info.name,
+        bytes: d.bytes,
+        folders: folderPath(folders, folderOf({ local: { folderId: placed.get(d.info.id) ?? null } }, folders)).map((f) => f.name),
+      })),
+    );
     const name = t('app.downloadAllName');
     const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/zip' }));
     Object.assign(document.createElement('a'), { href: url, download: name }).click();
@@ -962,6 +1036,52 @@ async function downloadAll(): Promise<void> {
     setStatus(t('app.downloadedAll', { count: docs.length }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
+  }
+}
+
+/**
+ * File ▸ Import of a ZIP: its documents go in the folders they were in (made as needed, or the ones
+ * here with the same names), and keep to their own names, with " (2)" and so on where one is taken.
+ * From the dashboard, the ZIP's top level goes in the folder being looked at.
+ */
+async function importZip(file: File): Promise<void> {
+  const root = newDocumentFolder;
+  newDocumentFolder = null;
+  try {
+    setStatus(t('app.importingZip', { name: file.name }));
+    const { files, skipped } = await readZipFiles(new Uint8Array(await file.arrayBuffer()));
+    if (!files.length) return setStatus(t('app.importZipNone', { name: file.name }));
+    const cloud = account !== null;
+    // Not guessed from nothing: a folder list that can't be read would make every folder a duplicate.
+    const folders = cloud ? await listFolders() : await listLocalFolders();
+    const owner = account?.id;
+    const result = await importFiles(files, {
+      folders,
+      documents: mergeLibrary(savedDocs, cloud ? cloudDocs : null).map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
+      root: root !== null && folders.some((f) => f.id === root) ? root : null,
+      makeFolder: (name, parentId) => createFolder(cloud, name, parentId),
+      async save(name, bytes, folderId) {
+        let doc = { name, bytes };
+        if (sourceFromFile(name, new ArrayBuffer(0))?.kind === 'image') {
+          // GIF, BMP and SVG are kept as the PNG they open as.
+          try {
+            const picture = await toPng(name, bytes);
+            doc = { name: picture.name, bytes: picture.bytes };
+          } catch {
+            return false;
+          }
+        }
+        const info = await saveSaved({ name: doc.name, bytes: doc.bytes, owner, ...(folderId !== null && { folderId }) });
+        if (owner) scheduleUpload(info.id);
+        return true;
+      },
+    });
+    await refreshLibrary();
+    dashboard.refreshIfVisible();
+    const left = skipped + result.skipped;
+    setStatus(left ? t('app.importedZipSkipped', { count: result.imported, skipped: left }) : t('app.importedZip', { count: result.imported }));
+  } catch (e) {
+    reportError(t('app.importZipFailed', { message: (e as Error).message }));
   }
 }
 
@@ -1570,6 +1690,7 @@ async function dropped(file: File, x: number, y: number): Promise<void> {
     if (choice === undefined) return focusInput();
     if (choice === 'insert') return insertPicture(file, { x, y });
   }
+  if (isZipName(file.name)) return void importZip(file);
   openFile(file);
 }
 
@@ -1715,7 +1836,13 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 /** Commands that change a PDF's annotations (on its own pages, nothing else changes). */
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
+/** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
+let commandsSent = 0;
+/** `commandsSent` when the document being opened was asked for. */
+let commandsAtOpen = 0;
+
 function send(command: WireCommand): void {
+  commandsSent++;
   if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
@@ -1858,7 +1985,7 @@ function render(): void {
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   syncReflow();
   renderer.flat = reflowing();
-  camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight);
+  if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
   if (renderer.flat) camera.x = bounds.x;
   lastStats = renderer.render(camera, pages, selection, caretVisible);
   const end = performance.now();
@@ -1876,6 +2003,7 @@ function render(): void {
     zoom: camera.zoom,
     grid,
     pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
+    filesPanel: filesOpen,
     format: selectionFormat,
     canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
     canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
@@ -2443,6 +2571,7 @@ const chromeHost = createChromeHost({
   share,
   download,
   downloadAll,
+  importZip,
   toggleClip: () => assistant.setVisible(!assistant.visible),
   print,
   showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
@@ -2542,6 +2671,7 @@ const chromeHost = createChromeHost({
   notify: reportError,
   toggleGrid,
   togglePagesPanel,
+  toggleFilesPanel,
   setViewMode: (mode) => {
     viewMode = mode;
     try {
@@ -2551,6 +2681,7 @@ const chromeHost = createChromeHost({
     }
     cameraPlaced = false;
     userMoved = false;
+    pendingView = null;
     syncReflow(true);
     arrange();
   },
@@ -2642,6 +2773,17 @@ const spellMenu = new SpellMenu({
   focusEditor: focusInput,
 });
 /** Where the last right click was, for the menu it may open. */
+function toggleFilesPanel(): void {
+  filesOpen = !filesOpen;
+  try {
+    localStorage.setItem(FILES_KEY, filesOpen ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  filesPanel.setVisible(filesOpen);
+  chrome.update({ filesPanel: filesOpen });
+}
+
 let spellMenuAt: { x: number; y: number } | null = null;
 canvas.addEventListener('contextmenu', (e) => {
   if (annotating || !spellDialog.checkingLive) return;
@@ -2656,6 +2798,7 @@ canvas.addEventListener('contextmenu', (e) => {
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.
 const dashboard = new Dashboard(document.getElementById('workspace')!, {
+  currentDocument: () => ({ localId: current.localId, cloudId: current.shared?.id ?? null }),
   newDocument: (folderId) => {
     newDocumentFolder = folderId;
     void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput);
@@ -2854,6 +2997,22 @@ const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
   focusEditor: focusInput,
 });
 document.getElementById('workspace')!.prepend(pagesPanel.el);
+
+// The account's folders and documents as a tree, left of everything else (see ui/filesPanel.ts).
+const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
+  open: (entry) => {
+    newDocumentFolder = null;
+    showLoading(entry.name);
+    openSource(sourceOf(entry));
+  },
+  account: () => account,
+  signedIn: () => signedIn,
+  current: () => ({ localId: current.localId, cloudId: savedDocs.find((d) => d.id === current.localId)?.cloudId ?? null }),
+  close: toggleFilesPanel,
+  focusEditor: focusInput,
+});
+document.getElementById('workspace')!.prepend(filesPanel.el);
+filesPanel.setVisible(filesOpen);
 
 /** A font or picture has loaded: the document redraws, and so do the thumbnails drawn without it. */
 function assetLoaded(): void {

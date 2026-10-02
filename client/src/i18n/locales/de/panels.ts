@@ -135,4 +135,8 @@ export const panels: Partial<Messages> = {
   'panels.pages.delete': 'Seite {number} löschen',
   'panels.pages.close': 'Schließen',
   'panels.pages.hint': 'Wechseln Sie zu „{mode}“, um Seiten umzuordnen oder zu löschen.',
+  'panels.files.label': 'Dateien',
+  'panels.files.empty': 'Noch keine Dokumente.',
+  'panels.files.close': 'Schließen',
+  'panels.resize': 'Seitenleiste in der Größe ändern',
 };

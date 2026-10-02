@@ -1,0 +1,48 @@
+// View > Files Sidebar: the documents as a tree beside the editor.
+
+import { expect, test } from './fixtures';
+import { importFile, text, waitForSaved } from './helpers';
+
+const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
+const row = (page: import('@playwright/test').Page, name: string) => panel(page).locator('.wm-files-file', { hasText: name });
+
+test('it is closed until chosen, lists the documents, opens one on a click, and the choice is kept', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await expect(panel(page)).toBeHidden();
+  for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
+    await importFile(app, file);
+    await waitForSaved(page, file.name);
+  }
+
+  await app.menu('View', 'Files Sidebar');
+  await expect(panel(page)).toBeVisible();
+  await expect(row(page, 'alpha')).toHaveCount(1);
+  await expect(row(page, 'beta')).toHaveCount(1);
+  await expect(row(page, 'beta')).toHaveClass(/wm-files-current/);
+
+  await row(page, 'alpha').click();
+  await expect(row(page, 'alpha')).toHaveClass(/wm-files-current/);
+  await expect.poll(() => app.text()).toContain('the first');
+
+  await page.reload();
+  await app.ready();
+  await expect(panel(page)).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Close' }).click();
+  await expect(panel(page)).toBeHidden();
+});
+
+test('dragging its edge resizes it, and the width is kept', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  const width = async () => (await panel(page).boundingBox())!.width;
+  expect(await width()).toBe(200);
+  const edge = (await panel(page).getByRole('separator').boundingBox())!;
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + edge.width / 2 + 80, edge.y + 100, { steps: 4 });
+  await page.mouse.up();
+  expect(await width()).toBe(280);
+  await page.reload();
+  await app.ready();
+  expect(await width()).toBe(280);
+});

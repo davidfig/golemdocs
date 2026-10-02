@@ -28,6 +28,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.editForm': 'PDF を編集(&E)',
   'chrome.view.grid': 'ページ グリッド(&G)',
   'chrome.view.pagesPanel': 'ページ サイドバー(&B)',
+  'chrome.view.filesPanel': 'ファイル サイドバー(&L)',
   'chrome.view.ruler': 'ルーラー(&R)',
   'chrome.view.formattingMarks': '編集記号(&M)',
   'chrome.view.zoomIn': '拡大(&I)',

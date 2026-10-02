@@ -28,6 +28,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.editForm': '&Editar PDF',
   'chrome.view.grid': 'C&uadrícula de página',
   'chrome.view.pagesPanel': 'Barra lateral de pá&ginas',
+  'chrome.view.filesPanel': 'Barra lateral de arc&hivos',
   'chrome.view.ruler': 'Re&gla',
   'chrome.view.formattingMarks': 'Marcas de &formato',
   'chrome.view.zoomIn': '&Ampliar',

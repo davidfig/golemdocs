@@ -268,6 +268,7 @@ export class Chrome {
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
+      a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
@@ -603,6 +604,7 @@ export class Chrome {
           cmd('view.editForm'),
           sep,
           cmd('view.pagesPanel'),
+          cmd('view.filesPanel'),
           cmd('help.clip'),
           cmd('view.grid'),
           cmd('view.fullScreen'),

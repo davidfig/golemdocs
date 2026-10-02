@@ -135,4 +135,8 @@ export const panels: Partial<Messages> = {
   'panels.pages.delete': 'Supprimer la page {number}',
   'panels.pages.close': 'Fermer',
   'panels.pages.hint': 'Passez en mode {mode} pour réorganiser ou supprimer des pages.',
+  'panels.files.label': 'Fichiers',
+  'panels.files.empty': 'Aucun document pour l’instant.',
+  'panels.files.close': 'Fermer',
+  'panels.resize': 'Redimensionner la barre latérale',
 };

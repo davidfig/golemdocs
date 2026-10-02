@@ -135,4 +135,8 @@ export const panels: Partial<Messages> = {
   'panels.pages.delete': '删除第 {number} 页',
   'panels.pages.close': '关闭',
   'panels.pages.hint': '切换到“{mode}”后即可重新排列或删除页面。',
+  'panels.files.label': '文件',
+  'panels.files.empty': '还没有文档。',
+  'panels.files.close': '关闭',
+  'panels.resize': '调整侧栏大小',
 };

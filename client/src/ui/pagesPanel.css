@@ -5,7 +5,7 @@
   flex: none;
   flex-direction: column;
   box-sizing: border-box;
-  width: 168px;
+  width: 168px; /* until resized (see sidebarResize.ts) */
   border-right: 1px solid var(--wm-border);
   background: var(--wm-face);
   color: var(--wm-text);
@@ -70,7 +70,7 @@
 
 .wm-pages-frame {
   position: relative;
-  width: 120px;
+  width: calc(100% - 48px);
   border: 2px solid transparent;
   border-radius: 3px;
   line-height: 0;

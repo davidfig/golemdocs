@@ -71,3 +71,25 @@ export function folderTree(folders: readonly Folder[]): { folder: Folder; depth:
 export function parentsFirst(folders: readonly Folder[]): Folder[] {
   return folderTree(folders).map((n) => n.folder);
 }
+
+/** One line of the files sidebar's tree. */
+export type TreeRow<T> = { kind: 'folder'; folder: Folder; depth: number; open: boolean } | { kind: 'file'; item: T; depth: number };
+
+/**
+ * The tree the files sidebar shows, as rows from the top: each folder's own folders, then its
+ * documents (by name). Only the folders in `expanded` show what is inside them.
+ */
+export function treeRows<T extends Placed & { name: string }>(folders: readonly Folder[], items: readonly T[], expanded: ReadonlySet<string>): TreeRow<T>[] {
+  const rows: TreeRow<T>[] = [];
+  const walk = (parentId: string | null, depth: number) => {
+    for (const folder of childFolders(folders, parentId)) {
+      const open = expanded.has(folder.id);
+      rows.push({ kind: 'folder', folder, depth, open });
+      if (open) walk(folder.id, depth + 1);
+    }
+    const files = itemsIn(items, folders, parentId).sort((a, b) => a.name.localeCompare(b.name));
+    for (const item of files) rows.push({ kind: 'file', item, depth });
+  };
+  walk(null, 0);
+  return rows;
+}

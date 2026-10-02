@@ -8,10 +8,7 @@
 // Billing and the assistant (Clip) are deliberately not covered yet.
 
 import { defineConfig, devices } from '@playwright/test';
-
-const CLIENT_PORT = 5273;
-const API_PORT = 3101;
-const STATE = '../e2e/.state';
+import { API_PORT, CLIENT_PORT, STATE } from './e2e/ports.ts';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -38,9 +35,9 @@ export default defineConfig({
     {
       // Fresh database and storage every run, then the Worker (API and collaboration rooms).
       command:
-        `rm -rf e2e/.state && mkdir -p client/dist && cd server && ` +
-        `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ${STATE} && ` +
-        `pnpm exec wrangler dev --env local --port ${API_PORT} --persist-to ${STATE} --var DEV_USER:e2e@example.com`,
+        `rm -rf ${STATE} && mkdir -p client/dist && cd server && ` +
+        `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ../${STATE} && ` +
+        `pnpm exec wrangler dev --env local --port ${API_PORT} --persist-to ../${STATE} --var DEV_USER:e2e@example.com`,
       url: `http://localhost:${API_PORT}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

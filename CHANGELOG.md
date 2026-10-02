@@ -1,13 +1,22 @@
 # What’s New in Golem Docs
 
-## 0.4.1 - Unreleased
+## 0.5.0 - 2026-10-02
 
 ### Added
+- Each kind of file (Word, Markdown, PDF, HTML, spreadsheet, image and more) has its own small icon before its name on the Documents screen and in the Files Sidebar.
+- Reopening a document puts you back where you left off: the same scroll position, zoom and caret, remembered on this computer.
+- The Documents screen now opens in the folder of the document you have open, instead of at the top level.
+- View › Files Sidebar pulls out a tree of your folders and documents beside the editor, so you can switch documents without the Documents screen. Click a folder to open or close it, and a document to open it; the one you are editing is marked. It stays closed until you choose it, and the choice is remembered.
+- Both the Page Sidebar and the Files Sidebar can be resized by dragging their right edge (or with the arrow keys once it is focused; double-click resets it). The page thumbnails grow and shrink with the Page Sidebar. Widths are remembered.
 - The Documents screen's New document, Import and New folder are now buttons in its header, and Esc closes it from anywhere.
 - Select several documents and folders on the Documents screen (tick boxes, Ctrl/Cmd-click, Shift-click for a range, or Ctrl/Cmd+A) to move or delete them all at once.
 - Folders: organize your documents in nested folders on the Documents screen. Make a folder, rename it, and move documents and folders into it by dragging or with Move…. Deleting a folder keeps what was in it. Folders sync with your account, and a document you start from inside a folder is saved there.
 - A folder's icon now shows small thumbnails of the first documents inside it.
+- File › Import (or dropping a file on the window) accepts a ZIP: its documents go in the same folders as in the ZIP, making the folders that are missing and reusing the ones you already have. Nothing is overwritten; a document whose name is taken in its folder gets (2), (3) and so on. Imported from inside a folder on the Documents screen, the ZIP's contents go in that folder.
 - The form and PDF editing tools panel can be dragged by its top edge to move it out of the way.
+
+### Changed
+- File › Download All keeps your folders: documents are zipped inside the same folder structure.
 
 ## 0.4.0 - 2026-10-01
 

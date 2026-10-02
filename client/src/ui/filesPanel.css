@@ -1,0 +1,111 @@
+/* The files sidebar (see filesPanel.ts): the account's folders and documents, left of the editor. */
+
+.wm-files {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 200px;
+  border-right: 1px solid var(--wm-border);
+  background: var(--wm-face);
+  color: var(--wm-text);
+  font: 12px/1.4 var(--wm-font);
+}
+
+.wm-files[hidden],
+.wm-files-empty[hidden] {
+  display: none;
+}
+
+.wm-files-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--wm-toolbar-border);
+}
+
+.wm-files-bar h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wm-files-close {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wm-files-close:hover,
+.wm-files-row:hover {
+  background: var(--wm-hot);
+}
+
+.wm-files-tree {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0;
+  overflow: auto;
+}
+
+.wm-files-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 8px 3px 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wm-files-twist {
+  flex: none;
+  width: 12px;
+  font-size: 10px;
+  text-align: center;
+}
+
+.wm-files .wm-file-icon {
+  display: inline-flex;
+  flex: none;
+  margin-right: 4px;
+}
+
+.wm-files-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-files-folder {
+  font-weight: 600;
+}
+
+.wm-files-current {
+  background: var(--wm-hot);
+}
+
+.wm-files-row:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: -2px;
+}
+
+.wm-files-empty {
+  margin: 10px;
+  color: var(--wm-disabled);
+}

@@ -103,6 +103,7 @@ export type Action =
   | { kind: 'zoomBy'; factor: number }
   | { kind: 'toggleGrid' }
   | { kind: 'togglePagesPanel' }
+  | { kind: 'toggleFilesPanel' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
@@ -215,6 +216,8 @@ export interface ChromeState {
   grid: boolean;
   /** The pages panel is pulled out beside the document. */
   pagesPanel: boolean;
+  /** The files sidebar is pulled out beside the document. */
+  filesPanel: boolean;
   rulerVisible: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
@@ -270,6 +273,7 @@ export const DEFAULT_STATE: ChromeState = {
   viewMode: 'print',
   grid: false,
   pagesPanel: false,
+  filesPanel: false,
   rulerVisible: false,
   formattingMarks: false,
   trackChanges: false,

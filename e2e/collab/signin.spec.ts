@@ -4,6 +4,7 @@
 
 import { test, expect, App } from '../fixtures';
 import { newPerson, signedOutContext, statusLine, waitSaved, waitForCloudDoc } from './helpers';
+import { waitForSaved } from '../files/helpers';
 import type { Page } from '@playwright/test';
 
 const signInDialog = (page: Page) => page.locator('dialog[open]').filter({ hasText: 'Not now' });
@@ -54,6 +55,7 @@ test.describe('a guest (not signed in)', () => {
     await app.blank();
     await app.type('kept locally');
     await expect(page).toHaveURL(/\?doc=local%3A/, { timeout: 15_000 });
+    await waitForSaved(page); // a reload before the autosave has run would lose the typing
     await page.reload();
     await app.ready();
     await expect.poll(() => app.text()).toBe('kept locally');

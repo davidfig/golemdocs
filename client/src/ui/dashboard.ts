@@ -16,6 +16,7 @@ import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { fileIcon, setFileName } from './fileIcons.ts';
 import { iconElement } from './icons.ts';
 import './dashboard.css';
 
@@ -23,6 +24,8 @@ import './dashboard.css';
 export interface DashboardHost {
   /** Starts a blank document, to be filed in `folderId` (null: the top level) when it is first saved. */
   newDocument(folderId: string | null): void;
+  /** The document open behind the dashboard (its ids in this browser and in the account), whose folder the dashboard starts in. */
+  currentDocument(): { localId: string | null; cloudId: string | null };
   open(entry: LibraryEntry): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
@@ -174,10 +177,18 @@ export class Dashboard {
     this.entries = start.entries;
     this.folders = start.folders;
     this.shared = start.shared;
+    this.folderId = this.currentFolder();
     this.notice.textContent = '';
     this.render();
     this.search.focus({ preventScroll: true });
     await this.refresh(generation);
+  }
+
+  /** The folder the open document is in (null: the top level, or it isn't saved yet), so Open starts where it is. */
+  private currentFolder(): string | null {
+    const { localId, cloudId } = this.host.currentDocument();
+    const entry = this.entries.find((e) => (localId !== null && e.key === localId) || (cloudId !== null && e.cloud?.id === cloudId));
+    return entry ? folderOf(entry, this.folders) : null;
   }
 
   /** Hides it (without opening anything). */
@@ -301,7 +312,7 @@ export class Dashboard {
     this.reuseThumbnail(thumb, `shared:${doc.id}`, thumbnailUrl(doc) ?? '');
     const by = doc.owner?.name ?? doc.owner?.email;
     const meta = [by ? t('panels.dashboard.from', { name: by }) : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
-    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', text: doc.name, title: doc.name }), h('span', { class: 'wm-card-meta', text: meta }));
+    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', title: doc.name }, fileIcon(doc.name), setFileName(h('span', { class: 'wm-card-title' }), doc.name)), h('span', { class: 'wm-card-meta', text: meta }));
     open.addEventListener('click', () => {
       this.hide();
       this.host.openShared(doc);
@@ -326,7 +337,7 @@ export class Dashboard {
     this.reuseThumbnail(thumb, entry.key, this.thumbSignature(entry));
 
     const meta = [relativeTime(entry.updatedAt), formatSize(entry.size)].join(' · ');
-    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', text: entry.name, title: entry.name }), h('span', { class: 'wm-card-meta', text: meta }));
+    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', title: entry.name }, fileIcon(entry.name), setFileName(h('span', { class: 'wm-card-title' }), entry.name)), h('span', { class: 'wm-card-meta', text: meta }));
     open.addEventListener('click', () => {
       this.hide();
       this.host.open(entry);
@@ -388,7 +399,7 @@ export class Dashboard {
       open = h('div', { class: 'wm-card-open' }, art, input);
     } else {
       const count = itemsIn(this.entries, this.folders, folder.id).length + childFolders(this.folders, folder.id).length;
-      open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.openFolder', { name: folder.name }) } }, art, h('span', { class: 'wm-card-name', text: folder.name, title: folder.name }), h('span', { class: 'wm-card-meta', text: t('panels.dashboard.items', { count }) }));
+      open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.openFolder', { name: folder.name }) } }, art, h('span', { class: 'wm-card-name', title: folder.name }, h('span', { class: 'wm-card-title', text: folder.name })), h('span', { class: 'wm-card-meta', text: t('panels.dashboard.items', { count }) }));
       open.addEventListener('click', () => {
         this.search.value = '';
         this.folderId = folder.id;

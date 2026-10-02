@@ -230,11 +230,12 @@ test.describe('documents', () => {
     await api.dispose();
   });
 
-  test('empty bodies, bad ids and unsupported methods are rejected', async ({ playwright }) => {
+  test('bad ids and unsupported methods are rejected, and an empty document is allowed', async ({ playwright }) => {
     const api = await apiAs(playwright);
     const empty = await api.post('/api/documents', { data: Buffer.alloc(0), headers: ORIGIN });
-    expect(empty.status()).toBe(400);
-    expect(await empty.json()).toEqual({ error: 'empty body' });
+    // An empty file (a ZIP can hold them) is a document of no bytes, not an error.
+    expect(empty.status()).toBe(201);
+    expect((await empty.json()).size).toBe(0);
     expect((await api.get('/api/documents/not-a-uuid')).status()).toBe(404);
     expect((await api.get('/api/documents/00000000-0000-4000-8000-000000000000')).status()).toBe(404);
     // PATCH and DELETE on the collection are the batch move and delete: a body that is not { ids } is a bad request.

@@ -7,6 +7,7 @@
 //   pnpm e2e                    both passes
 //   pnpm e2e e2e/pdf --ui       anything with arguments goes straight to `playwright test` (one pass)
 //   E2E_SKIP_HEAVY=1 pnpm e2e   only the first pass, for a quick check
+//   E2E_WORKERS=4 pnpm e2e      the number of parallel workers (default: a third of the cores)
 //
 // Exits non-zero if either pass failed.
 

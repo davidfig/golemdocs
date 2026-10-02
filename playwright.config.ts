@@ -7,6 +7,7 @@
 //
 // Billing and the assistant (Clip) are deliberately not covered yet.
 
+import os from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 import { API_PORT, CLIENT_PORT, STATE } from './e2e/ports.ts';
 
@@ -19,8 +20,10 @@ export default defineConfig({
   outputDir: 'e2e/.results',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // One retry: a test that only passes on it is reported as flaky, not hidden, and load rarely fails the same test twice.
+  retries: 1,
+  // A third of the cores (Playwright's default is half): each test runs a full WebGL page, and a busier machine is what made tests that pass alone fail in a full run. E2E_WORKERS overrides it.
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : process.env.CI ? 2 : Math.max(2, Math.floor(os.cpus().length / 3)),
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'e2e/.report' }]] : 'list',

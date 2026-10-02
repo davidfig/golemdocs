@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.7.1 - Unreleased
+
+### Fixed
+- Renaming a document from the name in the menu bar now updates the Files sidebar and document list right away, and the new name is kept for the next visit (also for documents shared with you).
+
 ## 0.7.0 - 2026-10-02
 
 ### Added

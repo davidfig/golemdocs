@@ -174,6 +174,15 @@ export function updateFoldersInCatalogue(folders: readonly Folder[]): void {
   });
 }
 
+/** Records a document just saved to the account (renamed, say) in the cached catalogue, so the next head start shows it as it is now. */
+export function putDocInCatalogue(doc: CloudDocument): void {
+  patchCatalogue((cached) => {
+    const replace = (list: CloudDocument[]) => list.map((d) => (d.id === doc.id ? { ...d, ...doc } : d));
+    cached.cloud = replace(cached.cloud);
+    cached.shared = replace(cached.shared);
+  });
+}
+
 /** Records documents just moved to a folder in the account in the cached catalogue. */
 export function moveDocsInCatalogue(ids: readonly string[], folderId: string | null): void {
   patchCatalogue((cached) => {

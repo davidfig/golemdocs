@@ -28,7 +28,7 @@ import {
   type SavedInfo,
 } from './storage/local.ts';
 import { folderOf, folderPath } from './folders.ts';
-import { forgetInCatalogue, hasUnsentChanges, mergeLibrary, type LibraryEntry } from './sync.ts';
+import { forgetInCatalogue, hasUnsentChanges, mergeLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -763,7 +763,9 @@ async function uploadShared(): Promise<void> {
   shared.error = null;
   showSync();
   try {
-    await saveDocument(shared.id, await worker.convert('docx'));
+    putDocInCatalogue(await saveDocument(shared.id, await worker.convert('docx'), fileName()));
+    filesPanel.refreshSoon();
+    dashboard.refreshIfVisible();
   } catch (e) {
     // Refused because the room started saving: the edits are in the room's hands now.
     if (!(e instanceof CloudError && e.status === 423)) {
@@ -974,6 +976,7 @@ async function upload(id: string): Promise<void> {
       }
     }
     cloudDocs = [doc, ...cloudDocs.filter((d) => d.id !== doc.id)];
+    putDocInCatalogue(doc);
     if (conflictCopy) {
       if (id === current.localId) {
         documentName = doc.name;
@@ -1002,6 +1005,8 @@ async function upload(id: string): Promise<void> {
     uploading = null;
     savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
     showSync();
+    filesPanel.refreshSoon();
+    dashboard.refreshIfVisible();
   }
 }
 
@@ -1261,6 +1266,8 @@ function saveInBrowser(): Promise<string | null> {
       // A new document changes what's listed; later saves only its order.
       if (created) void refreshLibrary();
       else savedDocs = ownedBy(await listSaved().catch(() => savedDocs), owner ?? null);
+      filesPanel.refreshSoon();
+      if (!owner) dashboard.refreshIfVisible();
       if (owner) {
         if (doc.room && doc.room.mode !== 'solo') {
           // The server keeps the cloud copy while several people edit. What is saved here is

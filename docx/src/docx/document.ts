@@ -46,6 +46,8 @@ export class WordDocument {
   private commentsPart?: string;
   private commentsExtendedPart?: string;
   private commentsRead?: CommentsPart;
+  /** The comments as last read or written, to leave their parts as they are if unchanged. */
+  private commentsWritten = '[]';
   private corePart?: string;
   private appPart?: string;
   /** The properties as read, to leave the parts alone unless they changed. */
@@ -105,6 +107,7 @@ export class WordDocument {
       doc.commentsExtendedPart = extendedPart;
       doc.commentsRead = readComments(await pkg.xml(doc.commentsPart), extendedPart ? await pkg.xml(extendedPart) : undefined);
       doc.comments = doc.commentsRead.comments.map((c) => structuredClone(c));
+      doc.commentsWritten = JSON.stringify(doc.comments);
     }
 
     const rootRels = await pkg.relationships('');
@@ -225,13 +228,15 @@ export class WordDocument {
       pkg.set(this.numberingPart, numbering, CONTENT_TYPE.numbering);
     }
 
-    if (this.commentsPart || this.comments.length) {
+    // The comments parts, only if the comments were changed (or are new).
+    if ((this.commentsPart || this.comments.length) && !(this.commentsPart && JSON.stringify(this.comments) === this.commentsWritten)) {
       this.commentsPart ??= 'word/comments.xml';
       rels.add(REL.comments, this.commentsPart);
       const { comments, extended } = writeComments(
         {
           comments: this.comments,
           rootAttrs: this.commentsRead?.rootAttrs ?? {},
+          extendedRootAttrs: this.commentsRead?.extendedRootAttrs,
           originals: this.commentsRead?.originals ?? new Map(),
         },
         !!this.commentsExtendedPart,
@@ -241,8 +246,10 @@ export class WordDocument {
       if (extended) {
         this.commentsExtendedPart ??= 'word/commentsExtended.xml';
         rels.add(REL.commentsExtended, this.commentsExtendedPart);
+        declareNamespaces(extended);
         pkg.set(this.commentsExtendedPart, extended, CONTENT_TYPE.commentsExtended);
       }
+      this.commentsWritten = JSON.stringify(this.comments);
     }
 
     // The properties parts, only if the properties were changed.

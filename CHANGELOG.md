@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.7.1 - Unreleased
+## 0.7.1 - 2026-10-02
 
 ### Added
 - Opening a document now shows it in the Files sidebar, with the folders it is in opened and scrolled into view.

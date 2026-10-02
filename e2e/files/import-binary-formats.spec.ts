@@ -40,7 +40,8 @@ for (const [name, start] of LEGACY) {
     await app.goto('?doc=welcome');
     await importFile(app, fixture(name));
     expect(await formatLabel(app.page)).toBe('Word Document');
-    expect(await app.text()).toContain(start);
+    // Select All can land before the imported text has been laid out.
+    await expect.poll(() => app.text()).toContain(start);
   });
 }
 

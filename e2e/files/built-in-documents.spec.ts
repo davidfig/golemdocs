@@ -21,9 +21,9 @@ test('?doc=changelog opens What’s New, at its own address', async ({ app, page
   await app.goto('?doc=changelog');
   await expect(page).toHaveTitle('What’s New in Golem Docs - Golem Docs');
   await expect.poll(() => new URL(page.url()).pathname).toBe('/changelog');
-  const body = await app.text();
-  expect(body).toMatch(/^\s*What’s New in Golem Docs\n/);
-  expect(body).toMatch(/\d+\.\d+\.\d+ - /);
+  // Select All can land before the text has been laid out.
+  await expect.poll(() => app.text()).toMatch(/^\s*What’s New in Golem Docs\n/);
+  expect(await app.text()).toMatch(/\d+\.\d+\.\d+ - /);
 });
 
 test('the /changelog and /welcome paths open those documents directly', async ({ app, page }) => {

@@ -6,7 +6,9 @@
 // Each tool answers with text for the model: what it found or did, or why it couldn't. Paragraphs
 // are numbered from 0 in document order, as `Editor.paragraphs()` has them.
 
-import { mathInline, OBJECT_CHAR, paragraphLength, paragraphText, parseLatex, type DocumentProperties, type Paragraph } from '@golemdocs/docx';
+import { mathInline, OBJECT_CHAR, paragraphLength, paragraphText, parseLatex, type DocumentProperties, type Inline, type Paragraph } from '@golemdocs/docx';
+import { pictureForModel } from '../formats/imageForModel.ts';
+import { sniffImage } from '../formats/images.ts';
 import type { FormatState, Mark, TableOp } from '../ui/actions.ts';
 import type { WireCommand } from './protocol.ts';
 
@@ -21,7 +23,7 @@ export interface AgentEditor {
   sectionPage(): SectionPage;
   /** Every comment and reply, in order. */
   comments(): { id: string; author: string; text: string; parentId?: string; resolved?: boolean }[];
-  doc: { properties: DocumentProperties };
+  doc: { properties: DocumentProperties; /** The bytes of a package part (a picture). */ media(part: string): Promise<Uint8Array> };
 }
 
 export interface SectionPage {
@@ -45,6 +47,8 @@ export interface AgentEnv {
   run(command: WireCommand): Promise<void>;
   /** The formatting at the selection. */
   format(): FormatState;
+  /** Hands the model pictures to look at (data: URIs); they reach it after the tool's answer. */
+  show(images: string[]): void;
 }
 
 /** The most a reading tool returns, in characters, so one call can't fill the conversation. */
@@ -686,6 +690,8 @@ async function addComment(env: AgentEnv, args: Record<string, unknown>): Promise
 
 const TOOLS: Record<string, (env: AgentEnv, args: Record<string, unknown>) => string | Promise<string>> = {
   read_document: readDocument,
+  list_pictures: listPictures,
+  view_picture: viewPicture,
   get_selection: getSelection,
   find_text: findText,
   replace_paragraph: replaceParagraph,
@@ -719,6 +725,44 @@ const TOOLS: Record<string, (env: AgentEnv, args: Record<string, unknown>) => st
   undo: (env) => undoRedo(env, 'undo'),
   redo: (env) => undoRedo(env, 'redo'),
 };
+
+// --- pictures ---------------------------------------------------------------------------------
+
+/** The pictures in the document, in order, each with the paragraph it is in. */
+function documentPictures(paragraphs: Paragraph[]): { part: string; paragraph: number; name: string }[] {
+  const found: { part: string; paragraph: number; name: string }[] = [];
+  const inlines = (list: readonly Inline[], paragraph: number): void => {
+    for (const inline of list) {
+      if (inline.kind === 'run') {
+        for (const item of inline.content) if (item.kind === 'drawing' && item.image) found.push({ part: item.image, paragraph, name: item.description || item.name || '' });
+      } else if (inline.kind === 'hyperlink' || inline.kind === 'wrapper') inlines(inline.children, paragraph);
+    }
+  };
+  paragraphs.forEach((p, i) => inlines(p.children, i));
+  return found;
+}
+
+const MAX_LISTED_PICTURES = 50;
+
+function listPictures(env: AgentEnv): string {
+  const pictures = documentPictures(env.editor.paragraphs());
+  if (!pictures.length) return 'The open document has no pictures.';
+  const lines = pictures.slice(0, MAX_LISTED_PICTURES).map((p, i) => `[${i}] in paragraph ${p.paragraph}${p.name ? `: ${p.name.slice(0, 120)}` : ''}`);
+  return `The open document has ${pictures.length} picture${pictures.length === 1 ? '' : 's'}:\n${lines.join('\n')}${pictures.length > MAX_LISTED_PICTURES ? `\n(${pictures.length - MAX_LISTED_PICTURES} more not listed)` : ''}`;
+}
+
+async function viewPicture(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  if (args.source !== 'document') throw new ToolError('`source` must be "document" or "library"');
+  const pictures = documentPictures(env.editor.paragraphs());
+  const number = int(args, 'number', 0);
+  const picture = pictures[number];
+  if (!picture) throw new ToolError(pictures.length ? `there is no picture ${number}; the document has ${pictures.length} (0 to ${pictures.length - 1})` : 'the document has no pictures');
+  const bytes = await env.editor.doc.media(picture.part).catch(() => new Uint8Array(0));
+  const image = sniffImage(bytes);
+  if (!image) throw new ToolError('that picture is in a format that cannot be shown');
+  env.show([await pictureForModel(bytes).catch(() => { throw new ToolError('that picture could not be prepared to show'); })]);
+  return `Showing picture ${number} (${image.width} by ${image.height} pixels, ${image.type}).`;
+}
 
 /** Runs one tool for the model. `argumentsJson` is what the model wrote. Never throws: problems are the answer. */
 export async function runAgentTool(env: AgentEnv, name: string, argumentsJson: string): Promise<string> {

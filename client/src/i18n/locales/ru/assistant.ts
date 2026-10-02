@@ -35,4 +35,13 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': 'Преобразую документ…',
   'assistant.tool.other': 'Работаю…',
   'assistant.tool.rename': 'Переименование документа…',
+  'assistant.attach': 'Прикрепить изображение',
+  'assistant.removePicture': 'Убрать это изображение',
+  'assistant.dropHint': 'Перетащите изображение, чтобы показать его ИИ',
+  'assistant.pictureAlt': 'Прикреплённое изображение',
+  'assistant.notPicture': 'ИИ может смотреть только изображения (PNG, JPEG, WebP или GIF).',
+  'assistant.tooManyPictures': 'За один раз можно прикрепить не более {count} изображений.',
+  'assistant.pictureFailed': 'Не удалось подготовить это изображение. Попробуйте другое.',
+  'assistant.describePicture': 'Что вы можете рассказать об этом изображении?',
+  'assistant.tool.viewPicture': 'Смотрю на изображение…',
 };

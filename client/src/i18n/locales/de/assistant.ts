@@ -35,4 +35,13 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': 'Dokument wird konvertiert…',
   'assistant.tool.other': 'Wird bearbeitet…',
   'assistant.tool.rename': 'Dokument wird umbenannt…',
+  'assistant.attach': 'Bild anhängen',
+  'assistant.removePicture': 'Dieses Bild entfernen',
+  'assistant.dropHint': 'Bild ablegen, um es der KI zu zeigen',
+  'assistant.pictureAlt': 'Angehängtes Bild',
+  'assistant.notPicture': 'Die KI kann nur Bilder ansehen (PNG, JPEG, WebP oder GIF).',
+  'assistant.tooManyPictures': 'Du kannst höchstens {count} Bilder gleichzeitig anhängen.',
+  'assistant.pictureFailed': 'Dieses Bild konnte nicht vorbereitet werden. Versuch ein anderes.',
+  'assistant.describePicture': 'Was kannst du mir über dieses Bild sagen?',
+  'assistant.tool.viewPicture': 'Bild wird angesehen…',
 };

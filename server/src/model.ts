@@ -4,10 +4,14 @@
 
 import type { AiBinding } from './cf.ts';
 
-export const MODEL = '@cf/openai/gpt-oss-120b';
+/** It reads pictures as well as text, so every request goes to it. */
+export const MODEL = '@cf/zai-org/glm-5.3-flash';
 
 /** Dollars per million tokens, which is also micro-dollars per token. Keep in step with Cloudflare's pricing page. */
-export const PRICE = { input: 0.35, output: 0.75 };
+export const PRICE = { input: 0.15, output: 0.5 };
+
+/** Input tokens a picture is held at before the model has said what it cost (a picture is scaled to fit about this many). */
+export const IMAGE_TOKENS = 2000;
 
 /** The most the model may write in one answer (its reasoning counts). */
 export const MAX_OUTPUT_TOKENS = 1500;
@@ -20,7 +24,7 @@ export interface ToolCall {
 }
 
 export type ChatMessage =
-  | { role: 'user'; content: string }
+  | { role: 'user'; content: string; /** Pictures as `data:image/...;base64,` URIs. */ images?: string[] }
   | { role: 'assistant'; content: string; tool_calls?: ToolCall[] }
   | { role: 'tool'; tool_call_id: string; content: string };
 
@@ -51,12 +55,15 @@ export function buildRequest(system: string, messages: ChatMessage[], tools: Too
       ...messages.map((m) =>
         m.role === 'assistant' && m.tool_calls?.length
           ? { role: 'assistant', content: m.content, tool_calls: m.tool_calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments } })) }
-          : m,
+          : m.role === 'user' && m.images?.length
+            ? { role: 'user', content: [{ type: 'text', text: m.content }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))] }
+            : m,
       ),
     ],
     tools: tools.map((tool) => ({ type: 'function', function: tool })),
     max_tokens: MAX_OUTPUT_TOKENS,
-    reasoning: 'low',
+    // It reasons by default at its highest effort, and reasoning counts toward the output limit.
+    reasoning_effort: 'low',
     temperature: 0.3,
   };
 }

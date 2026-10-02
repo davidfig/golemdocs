@@ -3,20 +3,23 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { MONTHLY_BUDGET_MICRO, periodOf } from '../src/assistant.ts';
+import { MAX_IMAGES, MAX_IMAGES_PER_MESSAGE, MONTHLY_BUDGET_MICRO, periodOf } from '../src/assistant.ts';
 import { SYSTEM_PROMPT, TOOLS } from '../src/assistantTools.ts';
-import { costMicro, estimateTokens, MAX_OUTPUT_TOKENS, parseCompletion } from '../src/model.ts';
+import { buildRequest, costMicro, estimateTokens, IMAGE_TOKENS, MAX_OUTPUT_TOKENS, MODEL, parseCompletion } from '../src/model.ts';
 import { world, type World } from './harness.ts';
 
 let w: World;
 let calls: unknown[];
+let models: string[];
 let answer: () => Promise<unknown>;
 beforeEach(() => {
   w = world();
   calls = [];
+  models = [];
   answer = async () => ({ choices: [{ message: { role: 'assistant', content: 'Hello!' } }], usage: { prompt_tokens: 1000, completion_tokens: 100 } });
   w.env.AI = {
-    async run(_model: string, inputs: unknown) {
+    async run(model: string, inputs: unknown) {
+      models.push(model);
       calls.push(inputs);
       return answer();
     },
@@ -224,4 +227,59 @@ test('malformed conversations are refused before anything is held or called', as
   assert.equal((await ask(email, [{ role: 'user', content: 'a' }, { role: 'tool', tool_call_id: longId, content: 'x' }])).status, 413);
   assert.equal(calls.length, 0);
   assert.equal(usage(id), undefined);
+});
+
+// --- pictures ---------------------------------------------------------------------------------
+
+const PICTURE = 'data:image/png;base64,iVBORw0KGgo=';
+const withPicture = (n = 1) => [{ role: 'user', content: 'what is this?', images: Array<string>(n).fill(PICTURE) }];
+
+test('one model answers everything, with or without a picture, and is asked to reason briefly', async () => {
+  const { email } = await subscriber();
+  await ask(email);
+  await ask(email, withPicture());
+  assert.deepEqual(models, [MODEL, MODEL]);
+  assert.equal((calls[0] as any).reasoning_effort, 'low', 'it thinks at full effort unless told otherwise, and thinking counts toward the answer\'s limit');
+});
+
+test('a picture reaches the model as an image part of the user\'s message', async () => {
+  const { email } = await subscriber();
+  assert.equal((await ask(email, withPicture(2))).status, 200);
+  const user = (calls[0] as any).messages.find((m: any) => m.role === 'user');
+  assert.deepEqual(user.content, [{ type: 'text', text: 'what is this?' }, { type: 'image_url', image_url: { url: PICTURE } }, { type: 'image_url', image_url: { url: PICTURE } }]);
+});
+
+test('each picture is held at a full picture\'s worth of input tokens', async () => {
+  const { id, email } = await subscriber();
+  const prompt = estimateTokens(SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + 'what is this?'.length);
+  const worstCase = costMicro(prompt + IMAGE_TOKENS, MAX_OUTPUT_TOKENS);
+  // Room for one token short of that: a hold that forgot the picture would fit.
+  w.directory.prepare('INSERT INTO assistant_usage (user_id, period, spent_micro) VALUES (?, ?, ?)').run(id, periodOf(), MONTHLY_BUDGET_MICRO - (worstCase - 1));
+  assert.equal((await ask(email, withPicture())).status, 402);
+  assert.equal(calls.length, 0);
+});
+
+test('only a few small picture data URIs get through', async () => {
+  const { id, email } = await subscriber();
+  const bad: unknown[] = [
+    [{ role: 'user', content: 'x', images: PICTURE }],
+    [{ role: 'user', content: 'x', images: [5] }],
+    [{ role: 'user', content: 'x', images: ['https://example.com/cat.png'] }],
+    [{ role: 'user', content: 'x', images: ['data:text/html;base64,PGI+'] }],
+    [{ role: 'user', content: 'x', images: ['data:image/svg+xml;base64,PHN2Zz4='] }],
+    [{ role: 'user', content: 'x', images: [`data:image/png;base64,${'A'.repeat(1_500_000)}`] }],
+    [{ role: 'user', content: 'x', images: Array<string>(MAX_IMAGES_PER_MESSAGE + 1).fill(PICTURE) }],
+  ];
+  for (const messages of bad) assert.equal([400, 413].includes((await ask(email, messages)).status), true, JSON.stringify(messages).slice(0, 80));
+  // Over the whole conversation's limit, each message being under its own.
+  const many = Array.from({ length: MAX_IMAGES / 2 + 1 }, () => [{ role: 'user', content: 'x', images: [PICTURE, PICTURE] }, { role: 'assistant', content: 'y' }]).flat();
+  assert.equal((await ask(email, [...many, { role: 'user', content: 'z' }])).status, 413);
+  assert.equal(calls.length, 0);
+  assert.equal(usage(id), undefined);
+});
+
+test('the request puts a picture message in the shape the model reads, and leaves the others as they were', () => {
+  const request = buildRequest('sys', [{ role: 'user', content: 'plain' }, { role: 'user', content: 'look', images: [PICTURE] }], []) as any;
+  assert.equal(request.messages[1].content, 'plain');
+  assert.equal(request.messages[2].content[1].image_url.url, PICTURE);
 });

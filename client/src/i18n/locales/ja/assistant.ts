@@ -35,4 +35,13 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': 'ドキュメントを変換しています…',
   'assistant.tool.other': '作業中…',
   'assistant.tool.rename': 'ドキュメントの名前を変更しています…',
+  'assistant.attach': '画像を添付',
+  'assistant.removePicture': 'この画像を削除',
+  'assistant.dropHint': 'ここに画像をドロップしてAIに見せる',
+  'assistant.pictureAlt': '添付した画像',
+  'assistant.notPicture': 'AIが見られるのは画像（PNG、JPEG、WebP、GIF）だけです。',
+  'assistant.tooManyPictures': '一度に添付できる画像は {count} 枚までです。',
+  'assistant.pictureFailed': 'この画像を準備できませんでした。別の画像をお試しください。',
+  'assistant.describePicture': 'この画像について教えてください。',
+  'assistant.tool.viewPicture': '画像を見ています…',
 };

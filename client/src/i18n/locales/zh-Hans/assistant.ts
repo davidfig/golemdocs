@@ -35,4 +35,13 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': '正在转换文档…',
   'assistant.tool.other': '正在处理…',
   'assistant.tool.rename': '正在重命名文档…',
+  'assistant.attach': '附加图片',
+  'assistant.removePicture': '移除此图片',
+  'assistant.dropHint': '拖放图片即可让 AI 查看',
+  'assistant.pictureAlt': '已附加的图片',
+  'assistant.notPicture': 'AI 只能查看图片（PNG、JPEG、WebP 或 GIF）。',
+  'assistant.tooManyPictures': '一次最多可附加 {count} 张图片。',
+  'assistant.pictureFailed': '无法处理该图片，请换一张试试。',
+  'assistant.describePicture': '你能告诉我这张图片的内容吗？',
+  'assistant.tool.viewPicture': '正在查看图片…',
 };

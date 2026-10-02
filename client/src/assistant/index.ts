@@ -3,11 +3,12 @@
 // and running the tools it picks (../layout/agentTools.ts). For subscribers only; signed-out and
 // unsubscribed people are told so in the bubble, and out-of-credits ones likewise.
 
+import { pictureForModel } from '../formats/imageForModel.ts';
 import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
 import { askServer, fetchStatus, type Status } from './api.ts';
 import { CLIP_SVG } from './clipArt.ts';
-import { AssistantError, converse, type FailureKind, type Message } from './conversation.ts';
+import { AssistantError, converse, MAX_IMAGES_PER_MESSAGE, type FailureKind, type Message, type ToolResult } from './conversation.ts';
 import './assistant.css';
 
 const HIDDEN_KEY = 'golem.clip.hidden';
@@ -50,6 +51,9 @@ function toolNote(name: string): string {
     case 'change_case':
     case 'format_paragraph':
       return t('assistant.tool.formatText');
+    case 'list_pictures':
+    case 'view_picture':
+      return t('assistant.tool.viewPicture');
     case 'rename_document':
       return t('assistant.tool.rename');
     case 'convert_document':
@@ -75,8 +79,8 @@ function gateMessage(gate: Exclude<Gate, null>): string {
 }
 
 export interface AssistantHost {
-  /** Runs a tool on the open document; answers with what it did or found. */
-  tool(name: string, args: string): Promise<string>;
+  /** Runs a tool on the open document; answers with what it did or found (and any pictures it fetched). */
+  tool(name: string, args: string): Promise<ToolResult>;
   signIn(): void;
   /** Starts a subscription. Absent until there is a way to buy one: then the bubble only says what's needed. */
   subscribe?(): void;
@@ -93,6 +97,11 @@ export class Assistant {
   private readonly input = h('textarea', { class: 'wm-clip-input', attrs: { rows: '1' } });
   private readonly send = h('button', { class: 'wm-clip-button', attrs: { type: 'submit' } });
   private readonly credits = h('p', { class: 'wm-clip-credits' });
+  private readonly tray = h('div', { class: 'wm-clip-tray' });
+  private readonly attach = h('button', { class: 'wm-clip-button wm-clip-attach', text: '＋', attrs: { type: 'button' } });
+  private readonly files = h('input', { attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: '', hidden: '' } });
+  /** Pictures waiting to go with the next message, as the data URIs the model is sent (they preview as they are). */
+  private attached: string[] = [];
 
   private signedIn: boolean | null = null;
   private status: Status | null = null;
@@ -111,9 +120,10 @@ export class Assistant {
     this.body.innerHTML = CLIP_SVG;
     const hide = h('button', { class: 'wm-clip-hide', text: '×', attrs: { type: 'button' } });
     const close = h('button', { class: 'wm-clip-close', text: '×', attrs: { type: 'button' } });
-    const form = h('form', { class: 'wm-clip-form' }, this.input, this.send);
+    const form = h('form', { class: 'wm-clip-form' }, this.attach, this.input, this.send, this.files);
     this.panel.append(h('div', { class: 'wm-clip-head' }, h('span', { text: t('assistant.title') }), close), this.log, this.foot);
-    this.foot.append(form, this.credits);
+    this.tray.hidden = true;
+    this.foot.append(this.tray, form, this.credits);
     this.panel.hidden = true;
     this.el.append(this.panel, this.body, hide);
     this.applyLabels();
@@ -138,6 +148,18 @@ export class Assistant {
       }
     });
     this.input.addEventListener('input', () => this.grow());
+    this.attach.addEventListener('click', () => this.files.click());
+    this.files.addEventListener('change', () => {
+      void this.addPictures([...(this.files.files ?? [])]);
+      this.files.value = '';
+    });
+    this.input.addEventListener('paste', (e) => {
+      const pictures = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+      if (!pictures.length) return;
+      e.preventDefault();
+      void this.addPictures(pictures);
+    });
+    this.watchDrops();
     this.watchPointer();
     parent.append(this.el);
     this.setVisible(!this.storedHidden(), false);
@@ -204,6 +226,8 @@ export class Assistant {
     this.panel.setAttribute('aria-label', t('assistant.label'));
     this.input.placeholder = t('assistant.placeholder');
     this.input.setAttribute('aria-label', t('assistant.placeholder'));
+    this.attach.title = t('assistant.attach');
+    this.attach.setAttribute('aria-label', t('assistant.attach'));
     this.el.querySelector<HTMLElement>('.wm-clip-hide')!.title = t('assistant.hide');
     this.el.querySelector<HTMLElement>('.wm-clip-hide')!.setAttribute('aria-label', t('assistant.hide'));
     this.el.querySelector<HTMLElement>('.wm-clip-close')!.setAttribute('aria-label', t('assistant.close'));
@@ -237,6 +261,7 @@ export class Assistant {
     const form = this.foot.querySelector<HTMLElement>('.wm-clip-form')!;
     this.foot.querySelector('.wm-clip-gate')?.remove();
     form.hidden = gate !== null;
+    this.tray.hidden = !this.attached.length || gate !== null;
     this.credits.hidden = gate !== null || !this.status;
     if (this.status) this.credits.textContent = t('assistant.credits', { percent: this.status.creditsLeft });
     if (gate === null) return;
@@ -250,8 +275,9 @@ export class Assistant {
     this.foot.prepend(box);
   }
 
-  private say(who: 'user' | 'clip' | 'error', text: string): HTMLElement {
+  private say(who: 'user' | 'clip' | 'error', text: string, pictures: string[] = []): HTMLElement {
     const el = h('div', { class: `wm-clip-msg ${who}`, text });
+    if (pictures.length) el.prepend(h('div', { class: 'wm-clip-pictures' }, ...pictures.map((src) => h('img', { attrs: { src, alt: t('assistant.pictureAlt') } }))));
     this.log.append(el);
     this.log.scrollTop = this.log.scrollHeight;
     return el;
@@ -262,6 +288,78 @@ export class Assistant {
     this.log.append(el);
     this.log.scrollTop = this.log.scrollHeight;
     return el;
+  }
+
+  /** The tray of pictures waiting to be sent, each with a button to take it back out. */
+  private showTray(): void {
+    this.tray.replaceChildren(
+      ...this.attached.map((uri, i) => {
+        const remove = h('button', { text: '×', attrs: { type: 'button', title: t('assistant.removePicture'), 'aria-label': t('assistant.removePicture') } });
+        remove.addEventListener('click', () => {
+          this.attached.splice(i, 1);
+          this.showTray();
+        });
+        return h('span', { class: 'wm-clip-thumb' }, h('img', { attrs: { src: uri, alt: t('assistant.pictureAlt') } }), remove);
+      }),
+    );
+    this.tray.hidden = !this.attached.length || this.gate() !== null;
+  }
+
+  /** Scales some picture files to what the model takes and adds them to the next message; says why for any it can't. */
+  private async addPictures(files: File[]): Promise<void> {
+    if (!files.length || this.gate() !== null) return;
+    let skipped: 'type' | 'count' | 'failed' | null = null;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        skipped = 'type';
+        continue;
+      }
+      if (this.attached.length >= MAX_IMAGES_PER_MESSAGE) {
+        skipped = 'count';
+        break;
+      }
+      try {
+        this.attached.push(await pictureForModel(new Uint8Array(await file.arrayBuffer())));
+        this.showTray();
+      } catch {
+        skipped = skipped ?? 'failed';
+      }
+    }
+    if (skipped === 'type') this.note(t('assistant.notPicture'));
+    else if (skipped === 'count') this.note(t('assistant.tooManyPictures', { count: MAX_IMAGES_PER_MESSAGE }));
+    else if (skipped === 'failed') this.note(t('assistant.pictureFailed'));
+    this.input.focus({ preventScroll: true });
+  }
+
+  /** Pictures dropped on the bubble go to the AI instead of opening as a document. */
+  private watchDrops(): void {
+    const carriesFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files') && this.gate() === null;
+    let depth = 0;
+    const clear = () => {
+      depth = 0;
+      delete this.panel.dataset.drop;
+    };
+    this.panel.addEventListener('dragenter', (e) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      this.panel.dataset.drop = t('assistant.dropHint');
+    });
+    this.panel.addEventListener('dragover', (e) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    this.panel.addEventListener('dragleave', () => {
+      if (--depth <= 0) clear();
+    });
+    this.panel.addEventListener('drop', (e) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      clear();
+      void this.addPictures([...(e.dataTransfer?.files ?? [])]);
+    });
   }
 
   private grow(): void {
@@ -276,7 +374,10 @@ export class Assistant {
   }
 
   private async ask(): Promise<void> {
-    const request = this.input.value.trim();
+    const typed = this.input.value.trim();
+    const pictures = this.attached;
+    // A picture alone is a question: what is in it?
+    const request = typed || (pictures.length ? t('assistant.describePicture') : '');
     if (!request) return;
     // Say why instead of ignoring the message (the box is normally hidden in this case).
     const blocked = this.gate();
@@ -286,7 +387,9 @@ export class Assistant {
     }
     this.input.value = '';
     this.grow();
-    this.say('user', request);
+    this.attached = [];
+    this.showTray();
+    this.say('user', request, pictures);
     const controller = (this.running = new AbortController());
     this.send.textContent = t('assistant.stop');
     this.input.disabled = true;
@@ -298,7 +401,7 @@ export class Assistant {
       const outcome = await converse(
         { ask: askServer, tool: (name, args) => this.host.tool(name, args) },
         this.history,
-        request,
+        { text: request, images: pictures },
         controller.signal,
         {
           tool: (name) => {

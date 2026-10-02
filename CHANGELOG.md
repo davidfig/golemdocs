@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.6.0 - Unreleased
+
+### Added
+- The AI assistant can now look at pictures. Drop a picture on its bubble, paste one, or use the ＋ button to attach up to four, then ask about it. It can also look at a picture in the document you have open, or one saved in your library (“what is in the second picture?”). Pictures are scaled down before they are sent.
+
 ## 0.5.1 - 2026-10-01
 
 ### Fixed

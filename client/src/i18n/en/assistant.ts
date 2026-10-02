@@ -34,4 +34,13 @@ export const assistant = {
   'assistant.tool.convert': 'Converting the document…',
   'assistant.tool.other': 'Working…',
   'assistant.tool.rename': 'Renaming the document…',
+  'assistant.attach': 'Attach a picture',
+  'assistant.removePicture': 'Remove this picture',
+  'assistant.dropHint': 'Drop a picture to show it to AI',
+  'assistant.pictureAlt': 'Attached picture',
+  'assistant.notPicture': 'AI can only look at pictures (PNG, JPEG, WebP or GIF).',
+  'assistant.tooManyPictures': 'You can attach up to {count} pictures at a time.',
+  'assistant.pictureFailed': 'That picture couldn’t be prepared. Try another one.',
+  'assistant.describePicture': 'What can you tell me about this picture?',
+  'assistant.tool.viewPicture': 'Looking at a picture…',
 };

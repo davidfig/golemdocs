@@ -35,4 +35,13 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': '문서를 변환하는 중…',
   'assistant.tool.other': '작업하는 중…',
   'assistant.tool.rename': '문서 이름을 바꾸는 중…',
+  'assistant.attach': '그림 첨부',
+  'assistant.removePicture': '이 그림 제거',
+  'assistant.dropHint': '그림을 놓아 AI에게 보여 주세요',
+  'assistant.pictureAlt': '첨부한 그림',
+  'assistant.notPicture': 'AI는 그림(PNG, JPEG, WebP, GIF)만 볼 수 있어요.',
+  'assistant.tooManyPictures': '한 번에 최대 {count}개의 그림을 첨부할 수 있어요.',
+  'assistant.pictureFailed': '그림을 준비하지 못했어요. 다른 그림을 사용해 보세요.',
+  'assistant.describePicture': '이 그림에 대해 알려 주세요.',
+  'assistant.tool.viewPicture': '그림을 보는 중…',
 };

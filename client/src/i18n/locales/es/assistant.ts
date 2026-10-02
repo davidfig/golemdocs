@@ -35,4 +35,13 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.convert': 'Convirtiendo el documento…',
   'assistant.tool.other': 'Trabajando…',
   'assistant.tool.rename': 'Cambiando el nombre del documento…',
+  'assistant.attach': 'Adjuntar una imagen',
+  'assistant.removePicture': 'Quitar esta imagen',
+  'assistant.dropHint': 'Suelta una imagen para mostrársela a la IA',
+  'assistant.pictureAlt': 'Imagen adjunta',
+  'assistant.notPicture': 'La IA solo puede mirar imágenes (PNG, JPEG, WebP o GIF).',
+  'assistant.tooManyPictures': 'Puedes adjuntar hasta {count} imágenes a la vez.',
+  'assistant.pictureFailed': 'No se pudo preparar esa imagen. Prueba con otra.',
+  'assistant.describePicture': '¿Qué puedes decirme sobre esta imagen?',
+  'assistant.tool.viewPicture': 'Mirando una imagen…',
 };

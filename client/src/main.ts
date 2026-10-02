@@ -40,6 +40,8 @@ import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { Assistant } from './assistant/index.ts';
+import type { ToolResult } from './assistant/conversation.ts';
+import { describeLibraryPictures, viewLibraryPicture } from './assistant/libraryPictures.ts';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
@@ -2731,7 +2733,7 @@ const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clea
  * The assistant's tools that act on the app rather than the document's text: what the document is
  * and switching its format (the same switch as File ▸ Convert To). The rest run in the layout worker.
  */
-async function assistantTool(name: string, argumentsJson: string): Promise<string> {
+async function assistantTool(name: string, argumentsJson: string): Promise<ToolResult> {
   const handler = Object.hasOwn(APP_TOOLS, name) ? APP_TOOLS[name] : undefined;
   if (!handler) return worker.agent(name, argumentsJson);
   let args: Record<string, unknown>;
@@ -2762,6 +2764,9 @@ const wholeNumber = (args: Record<string, unknown>, key: string, min: number, ma
   return v;
 };
 
+/** Looks at a picture saved in the library (`view_picture` with source "library"; the open document's pictures are the layout worker's). */
+const viewSavedPicture = (id: unknown): Promise<ToolResult> => viewLibraryPicture(savedDocs, id, async (saved) => (await getSaved(saved))?.bytes ?? null);
+
 const IMAGE_OPS: Record<string, ImageOp> = {
   rotate_left: 'rotateLeft',
   rotate_right: 'rotateRight',
@@ -2778,7 +2783,16 @@ const IMAGE_OPS: Record<string, ImageOp> = {
 const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
 
 /** The assistant's tools that act on the app rather than the document's text. The rest run in the layout worker. */
-const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<string> | string> = {
+const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult> = {
+  async list_pictures() {
+    // The open document's pictures are the layout worker's to find; the library's are listed here.
+    const open = await worker.agent('list_pictures', '{}');
+    return `${typeof open === 'string' ? open : open.text}\n${describeLibraryPictures(savedDocs)}`;
+  },
+  view_picture(args) {
+    if (args.source === 'library') return viewSavedPicture(args.id);
+    return worker.agent('view_picture', JSON.stringify(args));
+  },
   get_document_info: () => `The document is "${documentName}", edited as ${formatLabel(documentKind)}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`,
   rename_document(args) {
     if (typeof args.name !== 'string') return 'Error: `name` must be text.';

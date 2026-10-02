@@ -39,6 +39,15 @@ test('an empty list item has its marker and a space to type after', async () => 
   assert.equal(paragraphToMarkdown(doc, paragraphs[0]), '- ');
 });
 
+test('a list item keeps its style (and so its spacing) while its source shows', async () => {
+  const { doc, paragraphs } = await paragraphsOf('- [ ] one\n- [x] two\n');
+  for (const p of paragraphs) {
+    const view = rawView(doc, p, 2);
+    assert.equal(view?.properties.style, 'ListParagraph');
+    assert.deepEqual(view?.properties.numbering, p.properties.numbering);
+  }
+});
+
 test('the source keeps a heading in its size and the caret in its place in the text', async () => {
   const { doc, paragraphs } = await paragraphsOf('## Hello world\n');
   const view = rawView(doc, paragraphs[0], 5);

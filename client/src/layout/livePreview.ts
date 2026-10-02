@@ -167,9 +167,9 @@ export function rawView(doc: WordDocument, paragraph: Paragraph, caret: number):
   const [, tail] = splitInlines(rest, region.visible.length);
   const content: Inline[] = [...(prefix ? [run(prefix, SYNTAX)] : []), ...head, ...(region.source ? region.runs : []), ...tail];
   const properties = beyondMarkdown(paragraph.properties);
-  // A heading or quote keeps its look, so the line doesn't jump in size as the caret comes and goes.
+  // A heading, quote or list item keeps its look (a list item its tight spacing), so the line doesn't jump as the caret comes and goes.
   const style = paragraph.properties.style;
-  if (style && /^(?:Heading[1-6]|Quote)$/.test(style)) properties.style = style;
+  if (style && /^(?:Heading[1-6]|Quote|ListParagraph)$/.test(style)) properties.style = style;
   // A list item stays in its list (no label is drawn for it while its source shows): the items after it keep their numbers.
   if (paragraph.properties.numbering) properties.numbering = structuredClone(paragraph.properties.numbering);
   const inRegion = caret >= before && caret <= before + region.visible.length;

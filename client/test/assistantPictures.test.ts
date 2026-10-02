@@ -4,8 +4,11 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { converse, MAX_IMAGES, MAX_IMAGES_PER_MESSAGE, withoutImages, type Deps, type Message, type Reply } from '../src/assistant/conversation.ts';
-import { describeLibraryPictures, libraryPictures, viewLibraryPicture } from '../src/assistant/libraryPictures.ts';
+import { OtherDocuments, type StoredDocument } from '../src/assistant/libraryDocs.ts';
 import { fitSize, MODEL_LONGEST_SIDE, pictureForModel } from '../src/formats/imageForModel.ts';
+import { imageToDocument } from '../src/formats/imageDoc.ts';
+import { sniffImage } from '../src/formats/images.ts';
+import { writeWdoc } from '../src/formats/wdoc.ts';
 import { agent, agentResult, bytes, openDoc, startWorker, stopWorker } from './workerHarness.ts';
 
 /** A real 1 by 1 PNG. */
@@ -91,30 +94,69 @@ test('withoutImages leaves messages with no pictures as they were', () => {
 
 // --- the library ------------------------------------------------------------------------------
 
-const docs = [
-  { id: '1', name: 'Report.docx', size: 20_000 },
-  { id: '2', name: 'Cat.png', size: 2048 },
-  { id: '3', name: 'photo.JPG', size: 500 },
-];
+// Stored documents are what the person's library really holds: a .docx in the account, and this
+// browser's own .wdoc around one. A picture file is a one-page document with the picture on it.
 
-test('only the library\'s picture files are listed, with their ids', () => {
-  assert.deepEqual(libraryPictures(docs).map((d) => d.id), ['2', '3']);
-  const text = describeLibraryPictures(docs);
-  assert.match(text, /2 saved picture files/);
-  assert.match(text, /id 2: Cat\.png \(2 KB\)/);
+const toBuffer = (bytes: Uint8Array): ArrayBuffer => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+async function pictureDocx(): Promise<ArrayBuffer> {
+  const image = sniffImage(PNG)!;
+  return toBuffer(await (await imageToDocument(image)).write());
+}
+
+async function pictureWdoc(): Promise<ArrayBuffer> {
+  const document = new Uint8Array(await pictureDocx());
+  return toBuffer(await writeWdoc({ manifest: { version: 1, lens: 'png', origin: 'png', pagesCurrent: true }, document, original: null, extensions: {} }));
+}
+
+const stored = (id: string, name: string, load: () => Promise<ArrayBuffer>, extra: Partial<StoredDocument> = {}): StoredDocument => ({ id, name, updatedAt: Number(id), size: 3000, load, ...extra });
+
+async function library() {
+  const loads: string[] = [];
+  const track = (id: string, bytes: () => Promise<ArrayBuffer>) => () => (loads.push(id), bytes());
+  const text = toBuffer(new TextEncoder().encode('not a document at all'));
+  const documents = [
+    stored('1', 'Report.docx', track('1', pictureDocx)),
+    stored('2', 'Cat.png', track('2', pictureWdoc)),
+    stored('3', 'photo.JPG', track('3', pictureDocx), { place: 'shared by Sam' }),
+    stored('4', 'Broken.png', track('4', async () => text)),
+    stored('5', 'Huge.png', track('5', pictureDocx), { size: 50_000_000 }),
+  ];
+  return { other: new OtherDocuments(async () => documents), loads };
+}
+
+test('the saved picture files are listed by name with their ids, and other documents are left out', async () => {
+  const { other } = await library();
+  const text = await other.describePictureFiles();
+  assert.match(text, /^4 saved picture files/);
+  assert.match(text, /"Cat\.png" \(id 2\)/);
+  assert.match(text, /"photo\.JPG" \(id 3\), shared by Sam/);
   assert.doesNotMatch(text, /Report/);
-  assert.equal(describeLibraryPictures([docs[0]!]), 'The library has no saved picture files.');
+  assert.match(await new OtherDocuments(async () => [stored('1', 'Report.docx', pictureDocx)]).describePictureFiles(), /^No saved picture files/);
 });
 
-test('a saved picture is read and handed over; anything else is an error the model can read', async () => {
-  const read = async (id: string) => (id === '2' ? (PNG.buffer.slice(PNG.byteOffset, PNG.byteOffset + PNG.byteLength) as ArrayBuffer) : id === '3' ? new TextEncoder().encode('not a picture at all').buffer : null);
-  const ok = await viewLibraryPicture(docs, '2', read);
-  assert.deepEqual(ok, { text: 'Showing "Cat.png" (1 by 1 pixels, png).', images: [URI] });
-  assert.match(String(await viewLibraryPicture(docs, '1', read)), /^Error: there is no saved picture with id 1/);
-  assert.match(String(await viewLibraryPicture(docs, '3', read)), /not a picture the assistant can look at/);
-  assert.match(String(await viewLibraryPicture(docs, '9', read)), /^Error: there is no saved picture/);
-  assert.match(String(await viewLibraryPicture(docs, 2, read)), /^Error: `id` must be text/);
-  assert.match(String(await viewLibraryPicture([{ id: '4', name: 'Gone.png', size: 1 }], '4', read)), /could not be opened/);
+test('a picture file saved in this browser (.wdoc) or in the account (.docx) is looked at, by id or by name', async () => {
+  const { other } = await library();
+  const expected = { text: 'Showing picture 0 of "Cat.png" (1 by 1 pixels, png).', images: [URI] };
+  assert.deepEqual(await other.picture('2', 0), expected);
+  assert.deepEqual(await other.picture('Cat.png', 0), expected);
+  assert.deepEqual(await other.picture('cat', 0), expected, 'a name without its extension, in any case');
+  assert.deepEqual(await other.picture('3', 0), { text: 'Showing picture 0 of "photo.JPG" (1 by 1 pixels, png).', images: [URI] });
+});
+
+test('any other document\'s pictures can be looked at too, by number', async () => {
+  const { other } = await library();
+  assert.deepEqual(await other.picture('Report.docx', 0), { text: 'Showing picture 0 of "Report.docx" (1 by 1 pixels, png).', images: [URI] });
+  assert.match(String(await other.picture('Report.docx', 3)), /^Error: "Report\.docx" has 1 picture \(0 to 0\), not 3\./);
+});
+
+test('what cannot be looked at is an error the model can read, and costs nothing it should not', async () => {
+  const { other, loads } = await library();
+  assert.match(String(await other.picture('nothing like it', 0)), /^Error: No document is named/);
+  assert.match(String(await other.picture('Broken.png', 0)), /^Error: could not look at "Broken\.png"/);
+  assert.match(String(await other.picture('Huge.png', 0)), /^Error: "Huge\.png" is too big to read here/);
+  assert.equal(loads.includes('5'), false, 'a document too big is never fetched');
+  assert.equal(loads.includes('1'), false, 'and documents not asked about are not fetched at all');
 });
 
 // --- sizing -----------------------------------------------------------------------------------

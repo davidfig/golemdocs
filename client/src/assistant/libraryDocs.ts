@@ -4,8 +4,11 @@
 // (main.ts knows where a document's bytes are), so this has no network and no storage of its own.
 
 import { WordDocument, paragraphSegments } from '@golemdocs/docx';
+import { pictureForModel } from '../formats/imageForModel.ts';
+import { collectImages } from '../formats/images.ts';
 import { isWdoc, readWdoc } from '../formats/wdoc.ts';
 import type { SearchAnswer } from './api.ts';
+import type { ToolResult } from './conversation.ts';
 import { describeHits, describeList, readSegments, resolveDocument, scoreDocument, termsOf, MAX_SCANNED, type Candidate, type Hit, type Segment } from './otherDocs.ts';
 
 export interface StoredDocument extends Candidate {
@@ -23,13 +26,21 @@ export interface StoredDocument extends Candidate {
 const MAX_BYTES = 6_000_000;
 const CONCURRENCY = 4;
 
+/** The document in a stored document's bytes (a .docx, or this app's .wdoc around one); null when it has none (a PDF not turned into text yet). */
+export async function wordDocumentFromBytes(bytes: ArrayBuffer): Promise<WordDocument | null> {
+  const docx = isWdoc(bytes) ? (await readWdoc(new Uint8Array(bytes))).document : new Uint8Array(bytes);
+  return docx ? WordDocument.read(docx) : null;
+}
+
 /** The paragraphs in a stored document's bytes; null when it has no text to read (a PDF not turned into text yet). */
 export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] | null> {
-  let docx: Uint8Array | null;
-  if (isWdoc(bytes)) docx = (await readWdoc(new Uint8Array(bytes))).document;
-  else docx = new Uint8Array(bytes);
-  return docx ? paragraphSegments(await WordDocument.read(docx)) : null;
+  const doc = await wordDocumentFromBytes(bytes);
+  return doc ? paragraphSegments(doc) : null;
 }
+
+/** Saved documents that are picture files (a picture is saved as a one-page document, named for its type). */
+const PICTURE_NAME = /\.(?:png|jpe?g|webp|gif)$/i;
+const MAX_LISTED_PICTURES = 50;
 
 export class OtherDocuments {
   private readonly cache = new Map<string, Promise<Segment[] | null>>();
@@ -109,6 +120,35 @@ export class OtherDocuments {
       return segments ? { name: doc.name, segments } : `"${doc.name}" has no text to read (it is a PDF that hasn't been turned into text, or a picture).`;
     } catch (e) {
       return `Could not read "${doc.name}": ${(e as Error).message}`;
+    }
+  }
+
+  /** The saved picture files, one per line with the id to view each by. */
+  async describePictureFiles(): Promise<string> {
+    const pictures = (await this.all()).filter((d) => PICTURE_NAME.test(d.name));
+    if (!pictures.length) return 'No saved picture files were found among the other documents.';
+    const lines = pictures.slice(0, MAX_LISTED_PICTURES).map((d) => `- "${d.name.slice(0, 120)}" (id ${d.id})${d.place ? `, ${d.place}` : ''}`);
+    const more = pictures.length > MAX_LISTED_PICTURES ? `\n(${pictures.length - MAX_LISTED_PICTURES} more not listed)` : '';
+    return `${pictures.length} saved picture file${pictures.length === 1 ? '' : 's'} among the other documents (view one with source "library" and its id):\n${lines.join('\n')}${more}`;
+  }
+
+  /**
+   * Looks at a picture in another document: the picture of a picture file, or the `number`th
+   * picture (from 0) in any other document. Its data URI goes with a line about it; a string
+   * says why not.
+   */
+  async picture(ref: string, number: number): Promise<ToolResult> {
+    const doc = resolveDocument(ref, await this.all());
+    if (typeof doc === 'string') return `Error: ${doc}`;
+    if (doc.size > MAX_BYTES) return `Error: "${doc.name}" is too big to read here.`;
+    try {
+      const found = await wordDocumentFromBytes(await doc.load());
+      const pictures = found ? [...(await collectImages(found)).values()] : [];
+      const picture = pictures[number];
+      if (!picture) return `Error: ${pictures.length ? `"${doc.name}" has ${pictures.length} picture${pictures.length === 1 ? '' : 's'} (0 to ${pictures.length - 1}), not ${number}.` : `"${doc.name}" has no pictures.`}`;
+      return { text: `Showing picture ${number} of "${doc.name}" (${picture.width} by ${picture.height} pixels, ${picture.type}).`, images: [await pictureForModel(picture.bytes)] };
+    } catch (e) {
+      return `Error: could not look at "${doc.name}": ${(e as Error).message}`;
     }
   }
 

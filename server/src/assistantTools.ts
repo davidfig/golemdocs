@@ -385,10 +385,14 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'view_picture',
-    description: 'Look at a picture. It is shown to you in the next message. Use source "document" with the number from list_pictures for a picture in the open document, or source "library" with the id from list_pictures for a saved picture file.',
+    description: 'Look at a picture. It is shown to you in the next message. Use source "document" with the number from list_pictures for a picture in the open document. Use source "library" for a picture in one of the person\'s other documents: `document` is its id or name (from list_pictures, list_documents or search_documents); a saved picture file has just one picture, and for any other document `number` picks which of its pictures (from 0; default 0).',
     parameters: {
       type: 'object',
-      properties: { source: { type: 'string', enum: ['document', 'library'] }, number: { type: 'integer', minimum: 0, description: 'For source "document".' }, id: { type: 'string', description: 'For source "library".' } },
+      properties: {
+        source: { type: 'string', enum: ['document', 'library'] },
+        number: { type: 'integer', minimum: 0, description: 'Which picture, from 0.' },
+        document: { type: 'string', description: 'For source "library": the other document\'s id or name.' },
+      },
       required: ['source'],
     },
   },

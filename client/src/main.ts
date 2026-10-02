@@ -47,7 +47,6 @@ import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { Assistant } from './assistant/index.ts';
 import type { ToolResult } from './assistant/conversation.ts';
-import { describeLibraryPictures, viewLibraryPicture } from './assistant/libraryPictures.ts';
 import { searchServer } from './assistant/api.ts';
 import { OtherDocuments, type StoredDocument } from './assistant/libraryDocs.ts';
 import { MAX_COPY } from './assistant/otherDocs.ts';
@@ -2921,9 +2920,6 @@ const wholeNumber = (args: Record<string, unknown>, key: string, min: number, ma
   return v;
 };
 
-/** Looks at a picture saved in the library (`view_picture` with source "library"; the open document's pictures are the layout worker's). */
-const viewSavedPicture = (id: unknown): Promise<ToolResult> => viewLibraryPicture(savedDocs, id, async (saved) => (await getSaved(saved))?.bytes ?? null);
-
 /** Runs one of the layout worker's tools for another tool, and answers with its text (the pictures a tool fetches are only for the model). */
 const workerText = async (name: string, args: string): Promise<string> => {
   const result = await worker.agent(name, args);
@@ -2976,10 +2972,14 @@ const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
 const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult> = {
   async list_pictures() {
     // The open document's pictures are the layout worker's to find; the library's are listed here.
-    return `${await workerText('list_pictures', '{}')}\n${describeLibraryPictures(savedDocs)}`;
+    return `${await workerText('list_pictures', '{}')}\n${await otherDocuments.describePictureFiles()}`;
   },
   view_picture(args) {
-    if (args.source === 'library') return viewSavedPicture(args.id);
+    // The person's other documents (this browser's, the account's and shared ones) are the library's, found and opened the way search_documents does.
+    if (args.source === 'library') {
+      if (typeof args.document !== 'string') return 'Error: `document` must be text: an id or a name.';
+      return otherDocuments.picture(args.document, optionalNumber(args, 'number', 0, 0, 1000));
+    }
     return worker.agent('view_picture', JSON.stringify(args));
   },
   list_documents: (args) => otherDocuments.describeAll(optionalNumber(args, 'start', 0, 0, 100_000), optionalNumber(args, 'count', 30, 1, 100)),

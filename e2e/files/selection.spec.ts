@@ -48,14 +48,16 @@ test('ticked documents and a folder move together; Esc clears the selection befo
   await expect(dashboard(page)).toBeHidden();
 });
 
-test('Delete removes every ticked document after a confirming click', async ({ app, page }) => {
+test('Delete removes every ticked document after confirming in the dialog', async ({ app, page }) => {
   await setup(app);
   await dashboard(page).getByRole('heading').click(); // off the search box, which keeps Ctrl+A for its text
   await page.keyboard.press('Control+a');
   await expect(dashboard(page).getByRole('status').filter({ hasText: 'selected' })).toHaveText('2 selected');
   const del = dashboard(page).locator('.wm-dash-selection').getByRole('button', { name: 'Delete' });
   await del.click();
-  await dashboard(page).locator('.wm-dash-selection').getByRole('button', { name: 'Click again to confirm' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.locator('.wm-delete-list li')).toHaveCount(2);
+  await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(cards(page)).toHaveCount(0);
 });
 

@@ -1,9 +1,27 @@
 # What’s New in Golem Docs
 
-## 0.6.0 - 2026-10-02
+## 0.6.0 - Unreleased
 
 ### Added
+- Markdown task lists (`- [ ]` and `- [x]`) open as items with ☐ and ☑ boxes and are saved back the same way.
+- Each kind of file (Word, Markdown, PDF, HTML, spreadsheet, image and more) has its own small icon before its name on the Documents screen and in the Files Sidebar.
+- Reopening a document puts you back where you left off: the same scroll position, zoom and caret, remembered on this computer.
+- The Documents screen now opens in the folder of the document you have open, instead of at the top level.
+- View › Files Sidebar pulls out a tree of your folders and documents beside the editor, so you can switch documents without the Documents screen. Click a folder to open or close it, and a document to open it; the one you are editing is marked. It stays closed until you choose it, and the choice is remembered.
+- Both the Page Sidebar and the Files Sidebar can be resized by dragging their right edge (or with the arrow keys once it is focused; double-click resets it). The page thumbnails grow and shrink with the Page Sidebar. Widths are remembered.
+- File › Import (or dropping a file on the window) accepts a ZIP: its documents go in the same folders as in the ZIP, making the folders that are missing and reusing the ones you already have. Nothing is overwritten; a document whose name is taken in its folder gets (2), (3) and so on. Imported from inside a folder on the Documents screen, the ZIP's contents go in that folder.
+- Importing a ZIP shows its progress in a card at the bottom right, with a progress bar and a Cancel button. It doesn't block the window, and cancelling keeps what was already imported.
+- The Documents screen has an icon-size slider at the top right. The document icons now start smaller, with less space between rows, and the size you choose is remembered.
+- The action buttons on files and folders in the Documents screen (Share, Move, Rename, Delete, Leave) are now icons; point at one to see its name.
+- The Documents screen no longer shows your account name or the Sign in, Sign out and Subscribe buttons; they are in the menus.
+- The Edit PDF and Fill In panel has a minimize button (a chevron) that rolls it up to just its drag handle and the button; click it again to open it. It stays the way you left it.
 - The AI assistant can now look through all your other documents (the ones in your account, saved in this browser, or shared with you): it can find the ones about a topic, read them, and copy paragraphs from them into the document you are working on, with their headings and lists.
+
+### Changed
+- Opening a document from your account is faster, especially with many files: the server no longer looks the document up over the network on every open, and the lists refresh after the document appears instead of before.
+- Your list of documents and folders in the account loads much faster: the server keeps a copy of it instead of querying your storage each time, and the document, shared and folder lists are now fetched together.
+- Deleting a folder now deletes every file and folder inside it too, and a confirmation dialog lists everything that will be deleted, in a scrollable box. The same dialog now asks before any document or folder is deleted, on the Documents screen and in the Files Sidebar.
+- File › Download All keeps your folders: documents are zipped inside the same folder structure.
 
 ## 0.5.1 - 2026-10-01
 

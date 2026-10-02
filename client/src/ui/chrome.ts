@@ -202,6 +202,8 @@ export class Chrome {
   private shortcut(e: KeyboardEvent): void {
     if (e.defaultPrevented || e.isComposing || this.menuBar.active) return;
     if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
+    // The Documents screen covers the editor and has its own keys (Ctrl/Cmd+A selects its cards).
+    if (document.querySelector('.wm-dashboard:not([hidden])')) return;
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
     for (const command of this.registry.all()) {
       if (!command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;
@@ -268,6 +270,7 @@ export class Chrome {
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
+      a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
@@ -604,6 +607,7 @@ export class Chrome {
           cmd('view.editForm'),
           sep,
           cmd('view.pagesPanel'),
+          cmd('view.filesPanel'),
           cmd('view.footer'),
           cmd('help.clip'),
           cmd('view.grid'),

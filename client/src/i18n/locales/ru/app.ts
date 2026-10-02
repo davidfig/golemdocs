@@ -43,6 +43,13 @@ export const app: Catalog = {
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': 'Все сохранённые документы скачаны',
   'app.downloadFailed': 'Не удалось скачать: {message}',
+  'app.importingZip': 'Импорт {name}…',
+  'app.importZipNone': 'В {name} нет документов, которые можно импортировать',
+  'app.importedZip': 'Импортировано документов: {count}',
+  'app.importedZipSkipped': 'Импортировано документов: {count}. Файлы, которые нельзя открыть, пропущены: {skipped}',
+  'app.importZipFailed': 'Не удалось импортировать: {message}',
+  'app.importProgress': '{done} из {total}',
+  'app.importCancelled': 'Импорт отменён. Импортировано документов: {count}',
 
   // Collaboration
   'app.editingAlone': 'Вы снова редактируете документ одни',

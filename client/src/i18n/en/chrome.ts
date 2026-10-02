@@ -26,6 +26,7 @@ export const chrome = {
   'chrome.view.editForm': '&Edit PDF',
   'chrome.view.grid': 'Page &Grid',
   'chrome.view.pagesPanel': 'Page Side&bar',
+  'chrome.view.filesPanel': 'Fi&les Sidebar',
   'chrome.view.ruler': '&Ruler',
   'chrome.view.footer': 'St&atus Bar',
   'chrome.view.formattingMarks': 'Formatting &Marks',

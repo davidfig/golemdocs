@@ -24,3 +24,10 @@ test('the archive holds every document', async () => {
   assert.equal(await read.entries.get('one (2).txt')!.text(), 'second');
   assert.equal(await read.entries.get('two.docx')!.text(), 'third');
 });
+
+test('documents are stored inside their folders', async () => {
+  assert.deepEqual(archiveNames(['a.txt', 'a.txt', 'a.txt', 'n'], [['Work', 'v1.0'], ['Work', 'v1.0'], undefined, ['x/y']]), ['Work/v1.0/a.txt', 'Work/v1.0/a (2).txt', 'a.txt', 'x_y/n']);
+  const enc = new TextEncoder();
+  const zip = await zipDocuments([{ name: 'a.txt', bytes: enc.encode('in'), folders: ['A', 'B'] }]);
+  assert.deepEqual([...ZipArchive.read(zip).entries.keys()], ['A/B/a.txt']);
+});

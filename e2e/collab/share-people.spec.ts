@@ -4,6 +4,7 @@
 
 import { test, expect, App } from '../fixtures';
 import { cloudPair, makeDocx, newPerson, openCloud, shareWith, uploadDoc, waitSaved } from './helpers';
+import { CLIENT_ORIGIN } from '../ports.ts';
 import type { Browser, Page } from '@playwright/test';
 
 interface Share {
@@ -185,7 +186,7 @@ test.describe('live editing between two accounts', () => {
     await shareWith(owner.page, doc.id, guest.email, 'editor');
     expect((await guest.page.request.get(`/api/documents/${doc.id}`)).status()).toBe(200);
     const [{ userId }] = await sharesOf(owner.page, doc.id);
-    const response = await owner.page.request.delete(`/api/documents/${doc.id}/shares/${userId}`, { headers: { origin: 'http://localhost:5273' } });
+    const response = await owner.page.request.delete(`/api/documents/${doc.id}/shares/${userId}`, { headers: { origin: CLIENT_ORIGIN } });
     expect(response.status()).toBe(204);
     expect((await guest.page.request.get(`/api/documents/${doc.id}`)).status()).toBe(404);
     await owner.context.close();

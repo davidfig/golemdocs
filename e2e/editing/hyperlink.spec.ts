@@ -1,4 +1,5 @@
 import { test, expect, type App } from '../fixtures';
+import { CLIENT_ORIGIN, CLIENT_PORT } from '../ports.ts';
 import { MOD, IS_MAC, caretClient, clickAt, dialog, docxPart, lineGaps, propsFor, runsOf, selectBy, tool, typeAndSelect } from './helpers';
 
 /** document.xml and the relationship targets of a downloaded copy. */
@@ -267,10 +268,10 @@ test.describe('editing and removing a link', () => {
     await app.press(`${MOD}+k`);
     const box = link(app.page);
     await box.getByRole('textbox', { name: 'Text to display' }).fill('home');
-    await box.getByRole('textbox', { name: 'Address' }).fill('http://localhost:5273/?doc=welcome');
+    await box.getByRole('textbox', { name: 'Address' }).fill(`${CLIENT_ORIGIN}/?doc=welcome`);
     await box.getByRole('button', { name: 'OK' }).click();
     await expect(box).toHaveCount(0);
-    await linkApplied(app, 'http://localhost:5273/?doc=welcome');
+    await linkApplied(app, `${CLIENT_ORIGIN}/?doc=welcome`);
     await expect.poll(() => app.text()).toBe('go home');
     const gaps = await lineGaps(app, 'go home'.length);
     const inside = { x: (gaps[3].x + gaps[7].x) / 2, y: gaps[0].y };
@@ -285,7 +286,7 @@ test.describe('editing and removing a link', () => {
     const popup = app.page.context().waitForEvent('page');
     await clickAt(app, inside, { modifiers: [IS_MAC ? 'Meta' : 'Control'] });
     const tab = await popup;
-    await expect.poll(() => tab.url()).toContain('localhost:5273');
+    await expect.poll(() => tab.url()).toContain(`localhost:${CLIENT_PORT}`);
     await tab.close();
   });
 

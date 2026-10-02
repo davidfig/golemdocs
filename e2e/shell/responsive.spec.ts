@@ -20,7 +20,8 @@ test.describe('desktop layout', () => {
   test('the canvas fills the window under the chrome', async ({ app, page }) => {
     await app.goto('?doc=welcome');
     const canvas = (await app.canvas.boundingBox())!;
-    expect(canvas.width).toBeCloseTo(DESKTOP.width, 0);
+    // The Page Sidebar is open by default on a wide window: the canvas fills what is right of it.
+    expect(canvas.x + canvas.width).toBeCloseTo(DESKTOP.width, 0);
     const chrome = (await page.locator('#chrome').boundingBox())!;
     expect(canvas.y).toBeGreaterThanOrEqual(chrome.y + chrome.height - 2);
     expect(canvas.y + canvas.height).toBeLessThanOrEqual(DESKTOP.height + 1);

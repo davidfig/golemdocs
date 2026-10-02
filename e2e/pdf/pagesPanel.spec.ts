@@ -49,12 +49,15 @@ test.describe('Page Sidebar', () => {
 
   test('View ▸ Page Sidebar pulls the panel out beside the document, with a thumbnail per page', async ({ app }) => {
     await openPdf(app, threePages());
-    await expect(panel(app)).toBeHidden();
-    const before = (await app.canvas.boundingBox())!.width;
-    await app.menu('View', 'Page Sidebar');
+    // Open by default when the window has room.
     await expect(panel(app)).toBeVisible();
     await expect(app.page.locator('.wm-pages-item')).toHaveCount(3);
-    expect((await app.canvas.boundingBox())!.width).toBeLessThan(before);
+    const beside = (await app.canvas.boundingBox())!.width;
+    await app.menu('View', 'Page Sidebar');
+    await expect(panel(app)).toBeHidden();
+    expect((await app.canvas.boundingBox())!.width).toBeGreaterThan(beside);
+    await app.menu('View', 'Page Sidebar');
+    await expect(panel(app)).toBeVisible();
     // The thumbnails are drawn (a page is white; text makes some pixels dark).
     await expect
       .poll(() =>
@@ -65,12 +68,16 @@ test.describe('Page Sidebar', () => {
         }),
       )
       .toBe(true);
-    await app.menu('View', 'Page Sidebar');
-    await expect(panel(app)).toBeHidden();
   });
 
   test('the choice is kept, and Alt+P toggles it', async ({ app }) => {
     await openPdf(app, threePages());
+    await expect(panel(app)).toBeVisible();
+    await app.page.keyboard.press('Alt+KeyP');
+    await expect(panel(app)).toBeHidden();
+    await app.page.reload();
+    await app.ready();
+    await expect(panel(app)).toBeHidden();
     await app.page.keyboard.press('Alt+KeyP');
     await expect(panel(app)).toBeVisible();
     await app.page.reload();
@@ -80,9 +87,24 @@ test.describe('Page Sidebar', () => {
     await expect(panel(app)).toBeHidden();
   });
 
+  test('dragging the panel\'s edge resizes it, and the thumbnails with it', async ({ app }) => {
+    await app.goto('?doc=welcome');
+    await expect(panel(app)).toBeVisible();
+    const thumb = app.page.locator('.wm-pages-thumb').first();
+    const before = (await thumb.boundingBox())!.width;
+    const edge = (await panel(app).getByRole('separator').boundingBox())!;
+    await app.page.mouse.move(edge.x + edge.width / 2, edge.y + 100);
+    await app.page.mouse.down();
+    await app.page.mouse.move(edge.x + edge.width / 2 + 100, edge.y + 100, { steps: 4 });
+    await app.page.mouse.up();
+    await expect.poll(async () => Math.round((await thumb.boundingBox())!.width)).toBe(Math.round(before + 100));
+    // Drawn again at the new size, not stretched.
+    await expect.poll(() => thumb.evaluate((c: HTMLCanvasElement) => c.width / devicePixelRatio)).toBeGreaterThan(before + 90);
+  });
+
   test('clicking a page goes to it, and the page in view is marked', async ({ app }) => {
     await openPdf(app, threePages());
-    await app.menu('View', 'Page Sidebar');
+    await expect(panel(app)).toBeVisible(); // open by default
     await expect(item(app, 0)).toHaveClass(/wm-pages-current/);
     await item(app, 2).click();
     await expect(item(app, 2)).toHaveClass(/wm-pages-current/);
@@ -91,7 +113,7 @@ test.describe('Page Sidebar', () => {
 
   test('Fill In mode only looks; Edit PDF mode drags pages into order and deletes them', async ({ app }) => {
     await openPdf(app, threePages());
-    await app.menu('View', 'Page Sidebar');
+    await expect(panel(app)).toBeVisible(); // open by default
     await expect(app.page.locator('.wm-pages-hint')).toBeVisible();
     await expect(item(app, 0)).toHaveAttribute('draggable', 'false');
     await editMode(app.page);
@@ -118,7 +140,7 @@ test.describe('Page Sidebar', () => {
 
   test('the Delete key deletes the focused page, and the last page cannot be deleted', async ({ app }) => {
     await openPdf(app, threePages());
-    await app.menu('View', 'Page Sidebar');
+    await expect(panel(app)).toBeVisible(); // open by default
     await editMode(app.page);
     await item(app, 1).focus();
     await app.page.keyboard.press('Delete');

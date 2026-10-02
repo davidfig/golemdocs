@@ -8,10 +8,8 @@
 // Billing and the assistant (Clip) are deliberately not covered yet.
 
 import { defineConfig, devices } from '@playwright/test';
+import { API_PORT, CLIENT_PORT, STATE } from './e2e/ports.ts';
 
-const CLIENT_PORT = 5273;
-const API_PORT = 3101;
-const STATE = '../e2e/.state';
 // GPU rendering needs a real display stack: a Mac outside CI. E2E_SOFTWARE_GL=1 forces software.
 const GPU = process.platform === 'darwin' && !process.env.CI && !process.env.E2E_SOFTWARE_GL;
 
@@ -51,9 +49,9 @@ export default defineConfig({
     {
       // Fresh database and storage every run, then the Worker (API and collaboration rooms).
       command:
-        `rm -rf e2e/.state && mkdir -p client/dist && cd server && ` +
-        `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ${STATE} && ` +
-        `pnpm exec wrangler dev --env local --port ${API_PORT} --persist-to ${STATE} --var DEV_USER:e2e@example.com ` +
+        `rm -rf ${STATE} && mkdir -p client/dist && cd server && ` +
+        `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ../${STATE} && ` +
+        `pnpm exec wrangler dev --env local --port ${API_PORT} --persist-to ../${STATE} --var DEV_USER:e2e@example.com ` +
         // Fake Google credentials, so the sign-in tests do not depend on a developer's own .dev.vars.
         `--var GOOGLE_CLIENT_ID:e2e-google-client --var GOOGLE_CLIENT_SECRET:e2e-google-secret`,
       url: `http://localhost:${API_PORT}/api/health`,

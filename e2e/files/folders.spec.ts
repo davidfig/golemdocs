@@ -107,7 +107,7 @@ test('folders nest, can be renamed, and cannot be moved into themselves', async 
   await expect(picker).toHaveCount(0);
 });
 
-test('deleting a folder keeps what was in it, moved up a level', async ({ app, page }) => {
+test('deleting a folder deletes what was in it', async ({ app, page }) => {
   await twoDocuments(app);
   await makeFolder(page, 'Reports');
   await card(page, 'alpha.txt').dragTo(folder(page, 'Reports'));
@@ -115,9 +115,12 @@ test('deleting a folder keeps what was in it, moved up a level', async ({ app, p
 
   await folder(page, 'Reports').hover();
   await folder(page, 'Reports').getByRole('button', { name: 'Delete folder' }).click();
-  await folder(page, 'Reports').getByRole('button', { name: 'Click again to confirm' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.locator('.wm-delete-list li')).toHaveText(['Reports/', 'Reports/alpha.txt']);
+  await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(folders(page)).toHaveCount(0);
-  await expectNames(cards(page), ['alpha.txt', 'beta.md']);
+  // What was in the folder went with it.
+  await expectNames(cards(page), ['beta.md']);
 });
 
 test('searching looks in every folder', async ({ app, page }) => {
@@ -140,5 +143,8 @@ test('a document made from inside a folder is filed there', async ({ app, page }
   await app.page.keyboard.type('hello');
   await waitForSaved(page, 'Document1.docx');
   await openDashboard(app);
+  // The Documents screen opens in the folder of the open document.
+  await expectNames(cards(page), ['Document1.docx']);
+  await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
   await expect(folder(page, 'Reports').locator('.wm-card-meta')).toHaveText('1 item');
 });

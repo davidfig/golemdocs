@@ -166,21 +166,57 @@ select.wm-field {
   margin: -8px -8px 2px;
   cursor: move;
   touch-action: none;
-  opacity: 0.55;
 }
 
-.wm-forms-grip::before {
-  content: '';
-  display: block;
-  width: 8px;
-  height: 12px;
-  margin: 6px 0 0 6px;
-  background: radial-gradient(circle, var(--wm-text) 1px, transparent 1.5px) 0 0 / 4px 4px;
+.wm-forms-title {
+  padding: 0 28px 0 8px;
+  font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+}
+.wm-forms-grip {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.wm-forms-grip:hover {
-  opacity: 0.85;
+.wm-forms-palette .wm-forms-minimize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+  background: none;
+  border: none;
+  color: var(--wm-text);
+  cursor: pointer;
 }
+
+/* Minimized: only the title bar stays. */
+.wm-forms-palette-min {
+  width: auto;
+  padding: 0;
+  overflow: hidden;
+}
+
+.wm-forms-palette-min > :not(.wm-forms-grip) {
+  display: none;
+}
+
+.wm-forms-palette-min .wm-forms-grip {
+  height: 22px;
+  margin: 0;
+}
+
+.wm-forms-palette-min .wm-forms-minimize {
+  height: 22px;
+}
+
 
 .wm-forms-modes {
   display: flex;

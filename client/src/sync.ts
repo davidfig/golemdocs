@@ -153,6 +153,9 @@ export async function loadLibrary(user: User | null, identity: User | null = use
     return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };
   }
 
+  // Asked together: each is a round trip, and none depends on another.
+  const sharedRequest = listShared().catch(() => []);
+  const foldersRequest = listFolders().catch(() => null);
   let cloud: CloudDocument[];
   try {
     cloud = await listDocuments();
@@ -166,9 +169,9 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   for (const l of gone) await deleteSaved(l.id).catch(() => {});
   const kept = gone.length ? local.filter((l) => !gone.includes(l)) : local;
   // Not worth failing the dashboard over.
-  const shared = await listShared().catch(() => []);
+  const shared = await sharedRequest;
   // If they can't be listed this time, say so: the documents would otherwise all fall back to the top level.
-  const folders = await listFolders().catch(() => null);
+  const folders = await foldersRequest;
   writeCatalogue(user, cloud, shared, folders ?? readCatalogue(user)?.folders ?? []);
   return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared, folders };
 }

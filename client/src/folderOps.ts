@@ -2,7 +2,7 @@
 // is made there first, so it only happens if it is saved); otherwise they are this browser's.
 
 import { deleteFolder, listFolders, moveDocument, putFolder } from './cloud.ts';
-import { parentsFirst, type Folder } from './folders.ts';
+import { folderContents, parentsFirst, type Folder } from './folders.ts';
 import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder } from './storage/local.ts';
 import type { LibraryEntry } from './sync.ts';
 
@@ -23,11 +23,18 @@ export async function updateFolder(cloud: boolean, folder: Folder, change: { nam
   return next;
 }
 
-/** Deletes a folder, not what is in it: that moves up to where the folder was. */
+/** Deletes a folder record only; what is in it moves up to where the folder was (the caller deletes contents first to remove them). */
 export async function removeFolder(cloud: boolean, folder: Folder): Promise<void> {
   if (cloud) await deleteFolder(folder.id);
   // Copies kept in this browser (those not yet uploaded) follow, in either case.
   await deleteLocalFolder(folder.id, folder.parentId);
+}
+
+/** Deletes a folder with everything in it: its documents (through `deleteEntry`) and its subfolders. */
+export async function removeFolderTree(cloud: boolean, folders: readonly Folder[], entries: readonly LibraryEntry[], folder: Folder, deleteEntry: (entry: LibraryEntry) => Promise<void>): Promise<void> {
+  const inside = folderContents(folders, entries, folder);
+  for (const entry of inside.items) await deleteEntry(entry);
+  for (const f of inside.folders) await removeFolder(cloud, f);
 }
 
 /** Moves a document to a folder (null: the top level). */

@@ -6,7 +6,7 @@ import type { WireCommand } from './layout/protocol.ts';
 import { FORMAT_ACTIONS, TABLE_EDITS, type FormatAction } from './layout/formatting.ts';
 import type { DocumentSource } from './layout/protocol.ts';
 import { WDOC_EXTENSION } from './formats/wdoc.ts';
-import { sourceFromFile } from './formats/source.ts';
+import { isZipName, sourceFromFile } from './formats/source.ts';
 import { toPng } from './formats/imageCodec.ts';
 import { LARGE_TEXT_BYTES, looksLikeText } from './formats/textFiles.ts';
 import { nearestPage, type Bounds } from './document/arrange.ts';
@@ -92,6 +92,8 @@ export interface AppHooks {
   clearLocalData(): Promise<void>;
   /** Download every saved document as one ZIP. */
   downloadAll(): Promise<void>;
+  /** Import the documents in a ZIP, keeping its folders. */
+  importZip(file: File): Promise<void>;
   /** The user's documents (ids are sources: `local:…` or `cloud:…`). */
   saved(): Sample[];
   send(command: WireCommand): void;
@@ -110,6 +112,8 @@ export interface AppHooks {
   toggleGrid(): void;
   /** Pull the pages panel out beside the document, or push it back. */
   togglePagesPanel(): void;
+  /** Pull the files sidebar (the account's folders and documents) out beside the document, or push it back. */
+  toggleFilesPanel(): void;
   /** Show or hide the status bar under the document. */
   toggleFooter(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
@@ -154,6 +158,7 @@ const SUPPORTED = new Set<ActionKind>([
   'zoomBy',
   'toggleGrid',
   'togglePagesPanel',
+  'toggleFilesPanel',
   'toggleFooter',
   'toggleFormattingMarks',
   'insertText',
@@ -206,10 +211,10 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
   };
 
   const pickFile = (): void => {
-    const input = Object.assign(document.createElement('input'), { type: 'file', accept: `${acceptList()},${WDOC_EXTENSION}` });
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: `${acceptList()},${WDOC_EXTENSION},.zip` });
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      if (file) openFile(file);
+      if (file) void (isZipName(file.name) ? app.importZip(file) : openFile(file));
     });
     input.click();
   };
@@ -359,6 +364,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleGrid();
         case 'togglePagesPanel':
           return app.togglePagesPanel();
+        case 'toggleFilesPanel':
+          return app.toggleFilesPanel();
         case 'toggleFooter':
           return app.toggleFooter();
         case 'insertText':

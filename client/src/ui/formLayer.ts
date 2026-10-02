@@ -47,6 +47,9 @@ const newName = (kind: NewKind): string => t(kind === 'text' ? 'panels.forms.new
 /** Smallest box a field can be resized to, points. */
 const MIN_SIZE = 6;
 
+/** localStorage key: whether the palette was left minimized. */
+const MINIMIZED_KEY = 'golemdocs.pdfPaletteMinimized';
+
 export class FormLayer {
   readonly el = h('div', { class: 'wm-forms' });
   private readonly palette: HTMLElement;
@@ -362,10 +365,26 @@ export class FormLayer {
       this.modeBox.append(button);
     }
     const hint = h('p', { class: 'wm-forms-hint wm-forms-edit-only', text: t('panels.forms.dragHint') });
+    const minimize = h('button', { class: 'wm-forms-minimize', attrs: { type: 'button', 'aria-expanded': 'true' } });
+    const label = (small: boolean): void => {
+      minimize.title = minimize.ariaLabel = t(small ? 'panels.forms.restore' : 'panels.forms.minimize');
+      // A chevron that points up to roll the panel up, and down to unroll it.
+      minimize.innerHTML = `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${small ? 'M2.5 4.25L6 7.75l3.5-3.5' : 'M2.5 7.75L6 4.25l3.5 3.5'}"/></svg>`;
+      minimize.setAttribute('aria-expanded', String(!small));
+    };
+    minimize.addEventListener('click', () => {
+      const small = this.palette.classList.toggle('wm-forms-palette-min');
+      try {
+        localStorage.setItem(MINIMIZED_KEY, small ? '1' : '0');
+      } catch {
+        // Not remembered; the panel still works.
+      }
+      label(small);
+    });
     const palette = h(
       'aside',
       { class: 'wm-forms-palette', attrs: { 'aria-label': t('panels.forms.editForm') } },
-      h('div', { class: 'wm-forms-grip', title: t('panels.forms.move') }),
+      h('div', { class: 'wm-forms-grip', title: t('panels.forms.move') }, h('span', { class: 'wm-forms-title', text: t('panels.forms.title') }), minimize),
       this.modeBox,
       this.toolsSlot,
       h('h3', { class: 'wm-forms-edit-only', text: t('panels.forms.fields') }),
@@ -374,6 +393,14 @@ export class FormLayer {
       this.properties,
     );
     makeDraggable(palette, '.wm-forms-grip');
+    let small = false;
+    try {
+      small = localStorage.getItem(MINIMIZED_KEY) === '1';
+    } catch {
+      // Opens full size.
+    }
+    palette.classList.toggle('wm-forms-palette-min', small);
+    label(small);
     return palette;
   }
 

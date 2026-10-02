@@ -3,7 +3,7 @@
 import { expect, test } from '../fixtures';
 import { cloudDocs, makeDocx, newPerson, uploadDoc, waitForCloudDoc } from './helpers';
 
-test('moving documents into a folder keeps them there as the dashboard refreshes, and after a reload', async ({ browser }) => {
+test('moving documents into a folder keeps them there as the dashboard refreshes, and after a reload', { tag: '@heavy' }, async ({ browser }) => {
   const person = await newPerson(browser, 'folders');
   const { page, app } = person;
   const bytes = await makeDocx(browser, ['hello']);

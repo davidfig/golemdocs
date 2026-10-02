@@ -252,7 +252,7 @@ test('opening another document takes the viewer away', { tag: '@heavy' }, async 
   await expect(viewer(page)).toBeHidden();
   expect(await formatLabel(page)).toBe('Word Document');
   await app.type('normal again');
-  expect(await app.text()).toBe('normal again');
+  await expect.poll(() => app.text()).toBe('normal again');
 });
 
 test('a file just under the limit is still a normal document', async ({ app, page }) => {

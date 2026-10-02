@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.6.0 - Unreleased
+## 0.6.0 - 2026-10-02
 
 ### Added
 - Format as you type: typing `# `, `- `, `1. `, `> `, `[ ] ` at the start of a line makes a heading, list, quote or check box list; `**bold**`, `*italic*`, `` `code` ``, `~~strike~~` and `[text](url)` followed by a space become formatted text; `---` or three backticks then Enter make a line or a code block. Backspace right after takes it back. Turn it off under Tools › Autoformat as You Type.

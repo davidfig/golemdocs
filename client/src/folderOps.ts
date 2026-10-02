@@ -4,7 +4,7 @@
 import { listFolders, moveDocuments, putFolders, throwIfFailed, type BatchResult } from './cloud.ts';
 import { folderContents, folderPath, parentsFirst, type Folder } from './folders.ts';
 import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder } from './storage/local.ts';
-import type { LibraryEntry } from './sync.ts';
+import { moveDocsInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
 
 /** Folders that were not saved by a batch call (the cloud's answer for each), as an error naming the first reason. */
 function saved<T extends { id: string }>(result: BatchResult<T>): T[] {
@@ -30,7 +30,11 @@ export async function createFolder(cloud: boolean, name: string, parentId: strin
 export async function updateFolders(cloud: boolean, changes: readonly { folder: Folder; name?: string; parentId?: string | null }[]): Promise<Folder[]> {
   const now = Date.now();
   const next: Folder[] = changes.map(({ folder, ...change }) => ({ ...folder, ...change, updatedAt: now }));
-  if (cloud) return saved(await putFolders(next));
+  if (cloud) {
+    const done = saved(await putFolders(next));
+    updateFoldersInCatalogue(done);
+    return done;
+  }
   for (const folder of next) await putLocalFolder(folder);
   return next;
 }
@@ -74,7 +78,10 @@ export async function removeFolderTree(folders: readonly Folder[], entries: read
 /** Moves documents to a folder (null: the top level); the account's in one request. */
 export async function moveEntries(entries: readonly LibraryEntry[], folderId: string | null): Promise<void> {
   const cloudIds = entries.flatMap((e) => (e.cloud ? [e.cloud.id] : []));
-  if (cloudIds.length) throwIfFailed(await moveDocuments(cloudIds, folderId));
+  if (cloudIds.length) {
+    throwIfFailed(await moveDocuments(cloudIds, folderId));
+    moveDocsInCatalogue(cloudIds, folderId);
+  }
   for (const entry of entries) if (entry.local) await setSavedFolder(entry.local.id, folderId);
 }
 

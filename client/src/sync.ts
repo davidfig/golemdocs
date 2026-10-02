@@ -147,6 +147,34 @@ export function addFoldersToCatalogue(user: User, folders: readonly Folder[]): v
   writeCatalogue(user, cached.cloud, cached.shared, [...cached.folders.filter((f) => !ids.has(f.id)), ...folders]);
 }
 
+/** Edits the cached catalogue, whoever's it is (changes to the account only happen for the one signed in), so a head start from it matches what was just saved. */
+function patchCatalogue(edit: (cached: { cloud: CloudDocument[]; shared: CloudDocument[]; folders: Folder[] }) => void): void {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CATALOGUE_KEY) ?? 'null');
+    if (!saved) return;
+    const cached = { cloud: saved.cloud ?? [], shared: saved.shared ?? [], folders: saved.folders ?? [] };
+    edit(cached);
+    localStorage.setItem(CATALOGUE_KEY, JSON.stringify({ ...saved, ...cached }));
+  } catch {
+    // Only a head start; the next listing fills it in.
+  }
+}
+
+/** Records folders just renamed or moved in the account in the cached catalogue, so the next head start doesn't show them as they were. */
+export function updateFoldersInCatalogue(folders: readonly Folder[]): void {
+  patchCatalogue((cached) => {
+    const next = new Map(folders.map((f) => [f.id, f]));
+    cached.folders = cached.folders.map((f) => next.get(f.id) ?? f);
+  });
+}
+
+/** Records documents just moved to a folder in the account in the cached catalogue. */
+export function moveDocsInCatalogue(ids: readonly string[], folderId: string | null): void {
+  patchCatalogue((cached) => {
+    cached.cloud = cached.cloud.map((d) => (ids.includes(d.id) ? { ...d, folderId } : d));
+  });
+}
+
 /** `user`'s copies in this browser, less those of documents deleted from the account (they are on their way out). */
 function notDeleted(saved: readonly SavedInfo[], user: User | null): SavedInfo[] {
   return ownedBy(saved, user?.id ?? null).filter((l) => !isDeleted(l.cloudId));

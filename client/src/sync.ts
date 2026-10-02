@@ -8,7 +8,7 @@
 // app's job (main.ts), one at a time: this only says which copies have something to send.
 
 import type { User } from './auth.ts';
-import { CloudError, listDocuments, listFolders, listShared, type CloudDocument } from './cloud.ts';
+import { CloudError, isDeleted, listDocuments, listFolders, listShared, type CloudDocument } from './cloud.ts';
 import type { Folder } from './folders.ts';
 import { deleteSaved, listLocalFolders, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
@@ -139,13 +139,19 @@ export function forgetInCatalogue(user: User, cloudIds: readonly string[], folde
   writeCatalogue(user, cached.cloud.filter((d) => !cloudIds.includes(d.id)), cached.shared, cached.folders.filter((f) => !folderIds.includes(f.id)));
 }
 
+/** `user`'s copies in this browser, less those of documents deleted from the account (they are on their way out). */
+function notDeleted(saved: readonly SavedInfo[], user: User | null): SavedInfo[] {
+  return ownedBy(saved, user?.id ?? null).filter((l) => !isDeleted(l.cloudId));
+}
+
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
 export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; shared: CloudDocument[]; folders: Folder[] }> {
   const cached = readCatalogue(user);
-  const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
+  const local = notDeleted(await listSaved().catch(() => []), user);
   // Signed in, the folders are the account's; otherwise they are this browser's.
-  const folders = user ? (cached?.folders ?? []) : await listLocalFolders().catch(() => []);
-  return { entries: mergeLibrary(local, cached?.cloud ?? null), shared: cached?.shared ?? [], folders };
+  const folders = user ? (cached?.folders ?? []).filter((f) => !isDeleted(f.id)) : await listLocalFolders().catch(() => []);
+  const cloud = cached ? cached.cloud.filter((d) => !isDeleted(d.id)) : null;
+  return { entries: mergeLibrary(local, cloud), shared: cached?.shared ?? [], folders };
 }
 
 /**
@@ -154,7 +160,7 @@ export async function loadLocalLibrary(user: User | null): Promise<{ entries: Li
  * `identity` is who is signed in: without sync they still see what subscribers shared with them.
  */
 export async function loadLibrary(user: User | null, identity: User | null = user): Promise<Library> {
-  const local = ownedBy(await listSaved().catch(() => []), user?.id ?? null);
+  const local = notDeleted(await listSaved().catch(() => []), user);
   if (!user) {
     const shared = identity ? await listShared().catch(() => []) : [];
     return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };

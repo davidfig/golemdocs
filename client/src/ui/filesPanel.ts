@@ -269,6 +269,9 @@ export class FilesPanel {
     if (await confirmDelete(deleteTitle(folders, docs, lines), lines)) {
       // Gone from the list at once; if it fails, the list fetched again brings it back with the reason.
       const before = { folders: this.folders, entries: this.entries };
+      // A listing already on its way was asked for before the delete: it would bring these back.
+      this.generation++;
+      clearTimeout(this.timer);
       const left = withoutDeleted(before.folders, before.entries, folders, docs);
       this.folders = left.folders;
       this.entries = left.entries;

@@ -694,6 +694,8 @@ export class Dashboard {
       if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
       // Gone from the screen at once; if it fails, the refresh below brings it back with the reason.
       const before = { folders: this.folders, entries: this.entries };
+      // A listing already on its way was asked for before the delete: it would bring these back.
+      this.generation++;
       const left = withoutDeleted(before.folders, before.entries, folders, docs);
       this.folders = left.folders;
       this.entries = left.entries;

@@ -1342,13 +1342,20 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
     current.unsavedSince = 0;
     current.builtIn = true;
   }
-  const cloudIds = [...new Set(entries.flatMap((entry) => (account ? [entry.cloud?.id ?? entry.local?.cloudId ?? ''] : [])).filter(Boolean))];
+  // An upload under way would make a deleted document again (its cloud copy is gone, so it starts a
+  // new one), or give a new one a cloud copy this delete doesn't know of: none of these start now,
+  // and one that is running finishes first.
+  const localIds = new Set(entries.flatMap((entry) => (entry.local ? [entry.local.id] : [])));
+  for (const id of localIds) dirty.delete(id);
+  if (uploading !== null && localIds.has(uploading)) await flushing;
+  const cloudIdOf = (entry: LibraryEntry) => entry.cloud?.id ?? savedDocs.find((d) => d.id === entry.local?.id)?.cloudId ?? entry.local?.cloudId ?? '';
+  const cloudIds = [...new Set(entries.flatMap((entry) => (account ? [cloudIdOf(entry)] : [])).filter(Boolean))];
   // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
   const refused = new Map<string, string>();
   if (account && (cloudIds.length || folderIds.length)) for (const f of (await deleteDocuments(cloudIds, folderIds)).failed) if (f.error !== 'not found') refused.set(f.id, f.error);
   if (account) forgetInCatalogue(account, cloudIds.filter((id) => !refused.has(id)), folderIds.filter((id) => !refused.has(id)));
   for (const entry of entries) {
-    if (refused.has(entry.cloud?.id ?? entry.local?.cloudId ?? '')) continue;
+    if (refused.has(cloudIdOf(entry))) continue;
     if (!entry.local) continue;
     dirty.delete(entry.local.id);
     failures.delete(entry.local.id);

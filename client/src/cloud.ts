@@ -72,8 +72,19 @@ export async function uploadThumbnail(id: string, image: Blob): Promise<CloudDoc
   return (await check(response)).json();
 }
 
+/**
+ * Documents and folders deleted from the account in this session, or being deleted. A listing asked
+ * for before the delete went through (or answered from a server cache that is behind) can still
+ * have them; they are left out, so what was deleted never pops back.
+ */
+const deleted = new Set<string>();
+
+/** Whether this document or folder was deleted from the account in this session. */
+export const isDeleted = (id: string | null | undefined): boolean => !!id && deleted.has(id);
+
 export async function listDocuments(): Promise<CloudDocument[]> {
-  return (await check(await fetch('/api/documents'))).json();
+  const docs: CloudDocument[] = await (await check(await fetch('/api/documents'))).json();
+  return docs.filter((d) => !deleted.has(d.id));
 }
 
 export async function createDocument(name: string, bytes: Uint8Array, folderId?: string): Promise<CloudDocument> {
@@ -118,8 +129,18 @@ async function batch<T>(method: string, url: string, body: unknown): Promise<Bat
  * Deletes documents and folders, in one request. A folder goes with everything inside it. The
  * caller sees which could not be deleted.
  */
-export function deleteDocuments(ids: readonly string[], folderIds: readonly string[] = []): Promise<BatchResult<string>> {
-  return batch('DELETE', '/api/documents', { ids, folders: folderIds });
+export async function deleteDocuments(ids: readonly string[], folderIds: readonly string[] = []): Promise<BatchResult<string>> {
+  // Left out of listings from now on; those that turn out not to be deleted come back.
+  const all = [...ids, ...folderIds];
+  for (const id of all) deleted.add(id);
+  try {
+    const result = await batch<string>('DELETE', '/api/documents', { ids, folders: folderIds });
+    for (const f of result.failed) if (f.error !== 'not found') deleted.delete(f.id);
+    return result;
+  } catch (error) {
+    for (const id of all) deleted.delete(id);
+    throw error;
+  }
 }
 
 /** Moves documents to a folder (null: the top level), in one request. */
@@ -128,7 +149,8 @@ export function moveDocuments(ids: readonly string[], folderId: string | null): 
 }
 
 export async function listFolders(): Promise<Folder[]> {
-  return (await check(await fetch('/api/folders'))).json();
+  const folders: Folder[] = await (await check(await fetch('/api/folders'))).json();
+  return folders.filter((f) => !deleted.has(f.id));
 }
 
 /**

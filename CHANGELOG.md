@@ -34,7 +34,7 @@
 ### Fixed
 - Right-clicking in the Files Sidebar and choosing New folder now leaves the new folder's name ready to type. It used to lose the name box straight away, as the list refreshed.
 - Deleting several ticked folders or documents on the Documents screen now deletes them, instead of them coming back a moment later.
-- A deleted folder or document no longer flashes back into the Files Sidebar for a moment before disappearing.
+- Deleted folders and documents no longer pop back into the Documents screen or Files Sidebar for a while before disappearing, and a document that was uploading as you deleted it is no longer brought back as a new one.
 
 ## 0.5.1 - 2026-10-01
 

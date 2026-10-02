@@ -1096,6 +1096,9 @@ async function downloadAll(): Promise<void> {
   }
 }
 
+/** How often a ZIP import shows what it has added so far in the dashboard and the Files panel. */
+const IMPORT_REFRESH_MS = 1000;
+
 /**
  * File ▸ Import of a ZIP: its documents go in the folders they were in (made as needed, or the ones
  * here with the same names), and keep to their own names, with " (2)" and so on where one is taken.
@@ -1118,6 +1121,16 @@ async function importZip(file: File): Promise<void> {
     // Not guessed from nothing: a folder list that can't be read would make every folder a duplicate.
     const folders = cloud ? await listFolders() : await listLocalFolders();
     const owner = account?.id;
+    // What has been imported so far shows in the lists as it lands, not all at the end.
+    let shownAt = 0;
+    const showSoFar = (): void => {
+      if (Date.now() - shownAt < IMPORT_REFRESH_MS) return;
+      shownAt = Date.now();
+      void refreshLibrary().then(() => {
+        if (filesPanel.visible) void filesPanel.refresh();
+        dashboard.refreshIfVisible();
+      });
+    };
     const result = await importFiles(files, {
       folders,
       documents: mergeLibrary(savedDocs, cloud ? cloudDocs : null).map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
@@ -1137,7 +1150,12 @@ async function importZip(file: File): Promise<void> {
           }
         }
         const info = await saveSaved({ name: doc.name, bytes: doc.bytes, owner, ...(folderId !== null && { folderId }) });
-        if (owner) scheduleUpload(info.id);
+        if (owner) {
+          // Uploaded now, so the bar counts the upload too (offline, it waits in the queue as usual).
+          dirty.add(info.id);
+          await flushUploads();
+        }
+        showSoFar();
         return true;
       },
     });
@@ -1768,6 +1786,13 @@ async function dropped(file: File, x: number, y: number): Promise<void> {
     if (choice === undefined) return focusInput();
     if (choice === 'insert') return insertPicture(file, { x, y });
   }
+  // Dropped on the document, not a folder: it goes in the top level.
+  dropFile(file, null);
+}
+
+/** Opens a dropped file (a ZIP is imported), filed in `folderId` (null: the top level) when it is first saved. */
+function dropFile(file: File, folderId: string | null): void {
+  newDocumentFolder = folderId;
   if (isZipName(file.name)) return void importZip(file);
   openFile(file);
 }
@@ -2921,6 +2946,7 @@ const dashboard = new Dashboard(document.body, {
     newDocumentFolder = folderId;
     void chromeHost.perform({ kind: 'import' });
   },
+  dropFile,
   delete: deleteEverywhere,
   account: () => account,
   signedIn: () => signedIn,
@@ -3212,6 +3238,7 @@ const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
     newDocumentFolder = folderId;
     void chromeHost.perform({ kind: 'import' });
   },
+  dropFile,
   delete: deleteEverywhere,
   share: (id, name) => showShareDialog({ name, people: { id } }),
   account: accountForFiles,

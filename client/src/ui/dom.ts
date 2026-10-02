@@ -75,6 +75,9 @@ export function isFormField(target: EventTarget | null): boolean {
   );
 }
 
+/** Whether a drag brings files from outside the page (from the desktop, say). */
+export const isFileDrag = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes('Files');
+
 /** Keeps focus where it is when a control is pressed with the mouse (the document keeps the caret). */
 export function keepFocus(el: HTMLElement): void {
   el.addEventListener('mousedown', (e) => e.preventDefault());

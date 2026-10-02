@@ -149,7 +149,7 @@ export async function openPdf(app: App, bytes: Buffer | Uint8Array, name = 'samp
 /** The tools panel starts over the top left of the page, where the text is: put it at the right edge (as a drag by its grip would). */
 export async function movePaletteAside(page: Page): Promise<void> {
   await page.locator('.wm-forms-palette').evaluate((el) => {
-    const parent = el.offsetParent as HTMLElement | null;
+    const parent = (el as HTMLElement).offsetParent as HTMLElement | null;
     const left = Math.max(8, (parent?.clientWidth ?? window.innerWidth) - el.getBoundingClientRect().width - 8);
     (el as HTMLElement).style.inset = `8px auto auto ${left}px`;
   });

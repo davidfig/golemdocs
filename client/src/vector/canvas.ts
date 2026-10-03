@@ -73,6 +73,24 @@ export function resizeCanvas(scene: Scene, width: number, height: number, mode: 
   fitBackground(scene);
 }
 
+/**
+ * Moves the edges of the page: `box` is the area of the drawing's own coordinates the page shows
+ * afterwards. The shapes stay where they are and the same size on the page (a side dragged out
+ * shows more of the drawing, one dragged in crops it); the page's pixels are whole numbers.
+ */
+export function setCanvasBounds(scene: Scene, box: { x: number; y: number; width: number; height: number }): void {
+  const v = scene.viewBox;
+  const unitsPerPixelX = v.width / scene.width;
+  const unitsPerPixelY = v.height / scene.height;
+  const w = Math.min(MAX_SIDE, Math.max(MIN_SIDE, Math.round(box.width / unitsPerPixelX)));
+  const h = Math.min(MAX_SIDE, Math.max(MIN_SIDE, Math.round(box.height / unitsPerPixelY)));
+  scene.viewBox = { x: box.x, y: box.y, width: w * unitsPerPixelX, height: h * unitsPerPixelY };
+  scene.width = w;
+  scene.height = h;
+  delete scene.attrs.preserveAspectRatio;
+  fitBackground(scene);
+}
+
 /** Makes the page just big enough for everything on it, with a margin (in the drawing's units) all round; the shapes stay the same size on the page. Returns false when there is nothing to fit to. */
 export function fitCanvasToArtwork(scene: Scene, margin = 0): boolean {
   const content = scene.children.map((_, i) => i).filter((i) => scene.children[i].attrs[BACKGROUND_ATTR] !== 'true');

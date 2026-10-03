@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': '画布上没有可供适配的内容。',
   'vector.pencil': '铅笔',
   'vector.nudge': '推移',
+  'vector.canvas': '画布',
   'vector.toolOptions': '工具选项',
   'vector.nudge.size': '大小',
   'vector.nudge.strength': '强度',

@@ -151,6 +151,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         case 'guideH':
           return editor.addGuide('h');
         case 'clearGuides':
+        case 'canvas':
           return editor.clearGuides();
         case 'makeMask':
           return editor.makeMask();

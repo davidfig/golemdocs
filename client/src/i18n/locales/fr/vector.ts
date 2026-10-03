@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'Il n’y a rien sur le plan de travail à quoi s’ajuster.',
   'vector.pencil': 'Crayon',
   'vector.nudge': 'Pousser',
+  'vector.canvas': 'Zone de travail',
   'vector.toolOptions': 'Options de l’outil',
   'vector.nudge.size': 'Taille',
   'vector.nudge.strength': 'Force',

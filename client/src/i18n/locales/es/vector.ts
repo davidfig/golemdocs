@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'No hay nada en el lienzo a lo que ajustarse.',
   'vector.pencil': 'Lápiz',
   'vector.nudge': 'Empujar',
+  'vector.canvas': 'Lienzo',
   'vector.toolOptions': 'Opciones de la herramienta',
   'vector.nudge.size': 'Tamaño',
   'vector.nudge.strength': 'Intensidad',

@@ -592,6 +592,25 @@ test.describe('the canvas', () => {
   });
 });
 
+test.describe('the Canvas tool', () => {
+  test('dragging the right edge of the page makes it wider, and the shapes stay where they are', async ({ app }) => {
+    await openDrawing(app);
+    await app.toolbarButton(/^Canvas$/).click();
+    const from = await onPage(app, 1, 0.5);
+    await app.page.mouse.move(from.x, from.y);
+    await app.page.mouse.down();
+    await app.page.mouse.move(from.x + 40, from.y, { steps: 4 });
+    await app.page.mouse.move(from.x + 75, from.y, { steps: 4 });
+    await app.page.mouse.up();
+    await expect.poll(async () => /<svg[^>]* width="(\d+)"/.exec(await currentSvg(app))?.[1] !== '400', { timeout: 15_000 }).toBe(true);
+    const svg = await currentSvg(app);
+    expect(Number(/<svg[^>]* width="(\d+)"/.exec(svg)![1])).toBeGreaterThan(410);
+    expect(svg).toMatch(/<svg[^>]* height="200"/);
+    // The shapes are where they were.
+    expect(svg).toContain('x="20" y="20"');
+  });
+});
+
 test.describe('converting a drawing', () => {
   test('to PDF it becomes a one-page PDF', async ({ app }) => {
     await openDrawing(app);

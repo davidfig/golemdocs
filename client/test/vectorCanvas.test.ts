@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { backgroundOf, fitCanvasToArtwork, resizeCanvas, setBackground, sizeText, BACKGROUND_ATTR } from '../src/vector/canvas.ts';
+import { backgroundOf, fitCanvasToArtwork, resizeCanvas, setBackground, setCanvasBounds, sizeText, BACKGROUND_ATTR } from '../src/vector/canvas.ts';
 import { worldBounds } from '../src/vector/edit.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 import { writeSvg } from '../src/vector/svgWrite.ts';
@@ -75,4 +75,27 @@ test('a background is a rectangle behind everything that follows the page', () =
   assert.equal(s.children.length, 2);
   assert.equal(backgroundOf(s), null);
   assert.equal(sizeText(scene()), '400 × 200');
+});
+
+test('dragging the edges of the page: sides move in whole pixels, and the shapes stay where they are at the same size', () => {
+  const s = scene();
+  // The right side out by 100 and the left side in by 50: a 450 × 200 page that starts at x = 50.
+  setCanvasBounds(s, { x: 50, y: 0, width: 450, height: 200 });
+  assert.deepEqual([s.width, s.height], [450, 200]);
+  assert.deepEqual(s.viewBox, { x: 50, y: 0, width: 450, height: 200 });
+  assert.deepEqual(worldBounds(s, [0]), { x: 100, y: 50, width: 100, height: 50 });
+  // Units per pixel stay the same on a scaled page, and fractions of a pixel are rounded off.
+  const t = scene();
+  resizeCanvas(t, 800, 400, 'keep');
+  resizeCanvas(t, 200, 100, 'scale');
+  setCanvasBounds(t, { x: -10, y: -10, width: t.viewBox.width + 20.4, height: t.viewBox.height });
+  assert.equal(t.width, 200 + Math.round(20.4 / (t.viewBox.width / t.width)));
+});
+
+test('a page dragged to nothing keeps a pixel, and is not made bigger than the most there is', () => {
+  const s = scene();
+  setCanvasBounds(s, { x: 0, y: 0, width: 0, height: -5 });
+  assert.deepEqual([s.width, s.height], [1, 1]);
+  setCanvasBounds(s, { x: 0, y: 0, width: 1e9, height: 1e9 });
+  assert.deepEqual([s.width, s.height], [20000, 20000]);
 });

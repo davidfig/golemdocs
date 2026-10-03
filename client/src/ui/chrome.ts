@@ -488,7 +488,7 @@ export class Chrome {
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
-    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text']] as const) {
+    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text'], ['canvas', 'canvasTool']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, scope: 'vector', shortcut: VECTOR_TOOL_KEYS[tool], checked: (s) => s.vector.tool === tool }));
     }
     const vectorOps = { delete: 'trash', duplicate: 'copy', group: 'group', ungroup: 'ungroup', front: 'toFront', forward: 'forward', backward: 'backward', back: 'toBack' } as const;
@@ -864,6 +864,7 @@ export class Chrome {
           sep,
           cmd('vector.newLayer'),
           cmd('vector.newGroup'),
+          cmd('vector.canvas'),
           sep,
           cmd('vector.group'),
           cmd('vector.ungroup'),
@@ -1684,7 +1685,7 @@ export class Chrome {
 }
 
 /** The vector editor's built-in keys, as in Illustrator (a tool is a bare key; Mod is ⌘ or Ctrl). */
-const VECTOR_TOOL_KEYS: Partial<Record<ChromeState['vector']['tool'], string>> = { select: 'V', rect: 'M', ellipse: 'L', shape: 'S', line: '\\', pen: 'P', pencil: 'N', nudge: 'B', text: 'T' };
+const VECTOR_TOOL_KEYS: Partial<Record<ChromeState['vector']['tool'], string>> = { select: 'V', rect: 'M', ellipse: 'L', shape: 'S', line: '\\', pen: 'P', pencil: 'N', nudge: 'B', text: 'T', canvas: 'C' };
 const VECTOR_KEYS: Partial<Record<string, string>> = {
   duplicate: 'Mod+D',
   group: 'Mod+G',

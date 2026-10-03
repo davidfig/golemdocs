@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'Não há nada na tela para ajustar.',
   'vector.pencil': 'Lápis',
   'vector.nudge': 'Empurrar',
+  'vector.canvas': 'Tela',
   'vector.toolOptions': 'Opções da ferramenta',
   'vector.nudge.size': 'Tamanho',
   'vector.nudge.strength': 'Intensidade',

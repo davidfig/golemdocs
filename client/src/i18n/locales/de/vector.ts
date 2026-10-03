@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'Auf der Zeichenfläche ist nichts, woran sie angepasst werden kann.',
   'vector.pencil': 'Bleistift',
   'vector.nudge': 'Verschieben',
+  'vector.canvas': 'Zeichenfläche',
   'vector.toolOptions': 'Werkzeugoptionen',
   'vector.nudge.size': 'Größe',
   'vector.nudge.strength': 'Stärke',

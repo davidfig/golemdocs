@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'There is nothing on the canvas to fit to.',
   'vector.pencil': 'Pencil',
   'vector.nudge': 'Nudge',
+  'vector.canvas': 'Canvas',
   'vector.toolOptions': 'Tool options',
   'vector.nudge.size': 'Size',
   'vector.nudge.strength': 'Strength',

@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'На холсте нет ничего, по чему можно подогнать размер.',
   'vector.pencil': 'Карандаш',
   'vector.nudge': 'Сдвиг',
+  'vector.canvas': 'Холст',
   'vector.toolOptions': 'Параметры инструмента',
   'vector.nudge.size': 'Размер',
   'vector.nudge.strength': 'Сила',

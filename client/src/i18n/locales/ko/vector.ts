@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': '맞출 대상이 캔버스에 없습니다.',
   'vector.pencil': '연필',
   'vector.nudge': '밀기',
+  'vector.canvas': '캔버스',
   'vector.toolOptions': '도구 옵션',
   'vector.nudge.size': '크기',
   'vector.nudge.strength': '강도',

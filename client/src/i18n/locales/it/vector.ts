@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': 'Non c’è nulla sul canvas a cui adattarsi.',
   'vector.pencil': 'Matita',
   'vector.nudge': 'Spingi',
+  'vector.canvas': 'Tela',
   'vector.toolOptions': 'Opzioni dello strumento',
   'vector.nudge.size': 'Dimensione',
   'vector.nudge.strength': 'Intensità',

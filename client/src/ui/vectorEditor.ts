@@ -9,7 +9,7 @@
 import type { XmlElement } from '@golemdocs/docx';
 import type { Matrix, PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
-import { backgroundOf, fitCanvasToArtwork, resizeCanvas, setBackground } from '../vector/canvas.ts';
+import { backgroundOf, fitCanvasToArtwork, resizeCanvas, setBackground, setCanvasBounds } from '../vector/canvas.ts';
 import type { ResizeMode } from '../vector/canvas.ts';
 import { readGuides, snapBox, snapPoint, snapTargets, writeGuides } from '../vector/snap.ts';
 import type { SnapTargets } from '../vector/snap.ts';
@@ -49,7 +49,7 @@ export interface VectorEditorHost {
   notice?(message: string): void;
 }
 
-export type VectorTool = 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text';
+export type VectorTool = 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas';
 
 /** What new shapes are drawn with, and what the style controls show and change: `null` is none. */
 export interface ShapeStyle {
@@ -95,6 +95,14 @@ const RESIZE_CURSORS: Record<Exclude<Handle, 'rotate'>, string> = { nw: 'nwse-re
 type NodePart = 'anchor' | 'c1' | 'c2';
 
 type Gesture =
+/** The area of the drawing's coordinates a page shows: its left, top, right and bottom. */
+interface PageBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
   | { kind: 'move'; base: Scene; start: [number, number]; moved: boolean; targets?: SnapTargets }
   | { kind: 'resize'; base: Scene; handle: Exclude<Handle, 'rotate'>; box: Bounds; moved: boolean; targets?: SnapTargets }
   | { kind: 'rotate'; base: Scene; center: [number, number]; from: number; moved: boolean }
@@ -106,6 +114,7 @@ type Gesture =
   | { kind: 'guide'; base: Scene; axis: 'v' | 'h'; index: number; moved: boolean }
   | { kind: 'gradient'; base: Scene; part: 0 | 1 | 'stop'; index: number; moved: boolean }
   | { kind: 'node'; base: Scene; part: NodePart; index: number; start: [number, number]; smooth: boolean; moved: boolean };
+  | { kind: 'canvas'; handle: Exclude<Handle, 'rotate'>; from: PageBox; box: PageBox }
 
 /** Editing the points of one path. */
 interface NodeMode {
@@ -171,6 +180,7 @@ export class VectorEditor {
         return RESIZE_CURSORS[g.handle];
       case 'rotate':
         return ROTATE_CURSOR;
+      case 'canvas':
       case 'guide':
         return g.axis === 'v' ? 'ew-resize' : 'ns-resize';
       case 'move':
@@ -203,6 +213,10 @@ export class VectorEditor {
     if (this._tool !== 'select') return 'crosshair';
     // Points and handles of the path being edited.
     if (this.nodes) {
+    if (this._tool === 'canvas') {
+      const edge = this.pageHandleAt(frame, sx, sy);
+      return edge ? RESIZE_CURSORS[edge] : '';
+    }
       if (this.nodeAt(frame, sx, sy)) return 'move';
       const near = nearestSegment(this.nodeCommands(scene, this.nodes.path), this.toLocal(this.nodes.path, at));
       if (near && near.distance * frame.unit <= LINE_REACH * 2) return 'copy';
@@ -1149,6 +1163,77 @@ export class VectorEditor {
   /** The handle of the selection's box under a screen point. */
   private handleAt(frame: VectorFrame, x: number, y: number): Handle | null {
     const box = this.selectionBox();
+  /** The part of the page's edge (a corner or a side) under a screen point, for the Canvas tool. */
+  private pageHandleAt(frame: VectorFrame, x: number, y: number): Exclude<Handle, 'rotate'> | null {
+    const scene = this.scene;
+    if (!scene) return null;
+    const left = frame.left;
+    const top = frame.top;
+    const right = left + scene.width * frame.scale;
+    const bottom = top + scene.height * frame.scale;
+    for (const [name, [fx, fy]] of Object.entries(HANDLE_POSITION) as [Exclude<Handle, 'rotate'>, [number, number]][]) {
+      if (Math.hypot(x - (left + (right - left) * fx), y - (top + (bottom - top) * fy)) <= HANDLE_REACH) return name;
+    }
+    // Anywhere along a side takes hold of it, too.
+    const within = (v: number, a: number, b: number): boolean => v >= a - HANDLE_REACH && v <= b + HANDLE_REACH;
+    if (within(y, top, bottom)) {
+      if (Math.abs(x - left) <= HANDLE_REACH) return 'w';
+      if (Math.abs(x - right) <= HANDLE_REACH) return 'e';
+    }
+    if (within(x, left, right)) {
+      if (Math.abs(y - top) <= HANDLE_REACH) return 'n';
+      if (Math.abs(y - bottom) <= HANDLE_REACH) return 's';
+    }
+    return null;
+  }
+
+  /**
+   * The page after its handle is dragged to a point of the drawing: the sides the handle moves
+   * follow the pointer in whole pixels. Shift keeps the page's proportions on a corner; Alt moves
+   * the opposite side the other way, so the page grows around its centre.
+   */
+  private draggedPage(g: Extract<Gesture, { kind: 'canvas' }>, at: [number, number], keepShape: boolean, fromCenter: boolean): PageBox {
+    const scene = this.scene!;
+    const { from, handle } = g;
+    const upx = (from.x1 - from.x0) / scene.width;
+    const upy = (from.y1 - from.y0) / scene.height;
+    const box = { ...from };
+    // Each side moves in whole pixels, and leaves at least one pixel between it and the other.
+    const snapX = (x: number): number => from.x0 + Math.round((x - from.x0) / upx) * upx;
+    const snapY = (y: number): number => from.y0 + Math.round((y - from.y0) / upy) * upy;
+    const west = handle.includes('w');
+    const east = handle.includes('e');
+    const north = handle.includes('n');
+    const south = handle.includes('s');
+    if (west) box.x0 = Math.min(snapX(at[0]), (fromCenter ? from.x1 : box.x1) - upx);
+    if (east) box.x1 = Math.max(snapX(at[0]), (fromCenter ? from.x0 : box.x0) + upx);
+    if (north) box.y0 = Math.min(snapY(at[1]), (fromCenter ? from.y1 : box.y1) - upy);
+    if (south) box.y1 = Math.max(snapY(at[1]), (fromCenter ? from.y0 : box.y0) + upy);
+    if (keepShape && (west || east) && (north || south)) {
+      // The side that grew more sets the size; the other follows it.
+      const ratio = scene.width / scene.height;
+      const widthPx = (box.x1 - box.x0) / upx;
+      const heightPx = (box.y1 - box.y0) / upy;
+      if (widthPx / heightPx > ratio) {
+        const grown = Math.max(1, Math.round(widthPx / ratio)) * upy;
+        if (north) box.y0 = box.y1 - grown;
+        else box.y1 = box.y0 + grown;
+      } else {
+        const grown = Math.max(1, Math.round(heightPx * ratio)) * upx;
+        if (west) box.x0 = box.x1 - grown;
+        else box.x1 = box.x0 + grown;
+      }
+    }
+    if (fromCenter) {
+      // The opposite side mirrors the one dragged.
+      if (west) box.x1 = from.x1 + (from.x0 - box.x0);
+      if (east) box.x0 = from.x0 - (box.x1 - from.x1);
+      if (north) box.y1 = from.y1 + (from.y0 - box.y0);
+      if (south) box.y0 = from.y0 - (box.y1 - from.y1);
+    }
+    return box;
+  }
+
     if (!box) return null;
     const [rx, ry] = this.rotateHandle(frame, box);
     if (Math.hypot(x - rx, y - ry) <= HANDLE_REACH) return 'rotate';
@@ -1204,6 +1289,15 @@ export class VectorEditor {
       case 'shape':
       case 'line':
         this.gesture = { kind: 'create', tool: this._tool, start: this.snapStart(e, at), to: at, square: false };
+      case 'canvas': {
+        const [sx, sy] = this.screen(e);
+        const handle = this.pageHandleAt(frame, sx, sy);
+        if (!handle) return;
+        const v = scene.viewBox;
+        const from = { x0: v.x, y0: v.y, x1: v.x + v.width, y1: v.y + v.height };
+        this.gesture = { kind: 'canvas', handle, from, box: from };
+        return this.refresh();
+      }
         return;
       case 'text':
         return this.textDown(at, frame);
@@ -1422,6 +1516,10 @@ export class VectorEditor {
       gesture.to = at;
       if (this.snaps(e) && this.scene) {
         const p = snapPoint({ x: at[0], y: at[1] }, snapTargets(this.scene, [], showGuidesOn()), this.reach());
+    if (gesture.kind === 'canvas') {
+      gesture.box = this.draggedPage(gesture, at, e.shiftKey, e.altKey);
+      return this.refresh();
+    }
         gesture.to = [p.x, p.y];
         this.guides = p.guides;
       }
@@ -1581,6 +1679,14 @@ export class VectorEditor {
     this.scene = gesture.base;
     this.commit(result, this._selection);
   }
+    if (gesture.kind === 'canvas') {
+      const { box, from } = gesture;
+      if (box.x0 === from.x0 && box.y0 === from.y0 && box.x1 === from.x1 && box.y1 === from.y1) return this.refresh();
+      return this.edit((scene, selection) => {
+        setCanvasBounds(scene, { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 });
+        return selection;
+      }, false);
+    }
 
   private cancelGesture(): void {
     const gesture = this.gesture;
@@ -1889,7 +1995,8 @@ export class VectorEditor {
         ctx.restore();
       }
     }
-    if (this.nodes) this.decorateNodes(ctx, frame, scene);
+    if (this._tool === 'canvas') this.decoratePage(ctx, frame, scene);
+    else if (this.nodes) this.decorateNodes(ctx, frame, scene);
     else this.decorateSelection(ctx, frame, scene);
     this.decorateGesture(ctx, frame);
     ctx.restore();
@@ -1904,6 +2011,45 @@ export class VectorEditor {
       const [x1, y1] = frame.toScreen(box.x + box.width, box.y + box.height);
       ctx.setLineDash([3, 3]);
       ctx.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0));
+  /** The Canvas tool: handles on the page's edge, and where the page will be while one is dragged, with its size. */
+  private decoratePage(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {
+    const right = frame.left + scene.width * frame.scale;
+    const bottom = frame.top + scene.height * frame.scale;
+    ctx.strokeRect(frame.left + 0.5, frame.top + 0.5, right - frame.left, bottom - frame.top);
+    for (const [fx, fy] of Object.values(HANDLE_POSITION)) {
+      const hx = frame.left + (right - frame.left) * fx;
+      const hy = frame.top + (bottom - frame.top) * fy;
+      ctx.fillRect(hx - 3.5, hy - 3.5, 7, 7);
+      ctx.strokeRect(hx - 3.5, hy - 3.5, 7, 7);
+    }
+    const g = this.gesture;
+    if (g?.kind !== 'canvas') return;
+    const { box } = g;
+    const [x0, y0] = frame.toScreen(box.x0, box.y0);
+    const [x1, y1] = frame.toScreen(box.x1, box.y1);
+    const left = Math.min(x0, x1);
+    const top = Math.min(y0, y1);
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(left + 0.5, top + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0));
+    ctx.restore();
+    const width = Math.round(((box.x1 - box.x0) / (g.from.x1 - g.from.x0)) * scene.width);
+    const height = Math.round(((box.y1 - box.y0) / (g.from.y1 - g.from.y0)) * scene.height);
+    const label = `${width} × ${height}`;
+    ctx.save();
+    ctx.font = '12px system-ui, sans-serif';
+    const textWidth = ctx.measureText(label).width;
+    const lx = left + Math.abs(x1 - x0) / 2 - textWidth / 2 - 6;
+    const ly = top + Math.abs(y1 - y0) + 8;
+    ctx.fillStyle = ACCENT;
+    ctx.fillRect(lx, ly, textWidth + 12, 20);
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, lx + 6, ly + 10);
+    ctx.restore();
+  }
+
     }
     ctx.setLineDash([]);
     const box = this.selectionBox();

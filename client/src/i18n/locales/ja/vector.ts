@@ -152,6 +152,7 @@ export const vector = {
   'vector.canvas.nothing': '合わせる対象がキャンバスにありません。',
   'vector.pencil': '鉛筆',
   'vector.nudge': 'ずらす',
+  'vector.canvas': 'キャンバス',
   'vector.toolOptions': 'ツールオプション',
   'vector.nudge.size': 'サイズ',
   'vector.nudge.strength': '強さ',

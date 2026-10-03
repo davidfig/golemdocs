@@ -186,6 +186,40 @@ test.describe('groups', () => {
   });
 });
 
+test.describe('overlapping shapes', () => {
+  const STACK = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+    <rect id="bottom" x="20" y="20" width="200" height="150" fill="#e53935"/>
+    <rect id="middle" x="60" y="40" width="200" height="120" fill="#43a047"/>
+    <rect id="top" x="100" y="60" width="200" height="100" fill="#1e88e5"/>
+  </svg>`;
+
+  test('Ctrl+Alt+click picks the shape underneath, one at a time, and round to the top again', async ({ app }) => {
+    await app.blank();
+    await importFile(app, { name: 'stack.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(STACK) });
+    await app.menubar.getByRole('menuitem', { name: 'Drawing' }).waitFor({ timeout: 30_000 });
+    const rows = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    await expect(rows).toHaveCount(3, { timeout: 30_000 });
+    const selected = async () => (await rows.evaluateAll((els) => els.filter((e) => e.getAttribute('aria-selected') === 'true').map((e) => e.textContent ?? ''))).map((t) => t.replace(/\s+/g, ' ').trim());
+    const at = await onPage(app, 0.4, 0.6); // inside all three
+    await app.page.mouse.click(at.x, at.y);
+    expect(await selected()).toEqual(['top']);
+    const control = process.platform === 'darwin' ? 'Meta' : 'Control';
+    const underneath = async () => {
+      await app.page.keyboard.down(control);
+      await app.page.keyboard.down('Alt');
+      await app.page.mouse.click(at.x, at.y);
+      await app.page.keyboard.up('Alt');
+      await app.page.keyboard.up(control);
+    };
+    await underneath();
+    await expect.poll(selected).toEqual(['middle']);
+    await underneath();
+    await expect.poll(selected).toEqual(['bottom']);
+    await underneath();
+    await expect.poll(selected).toEqual(['top']);
+  });
+});
+
 test.describe('the canvas', () => {
   test('Canvas Size changes the page, keeping the proportions, and Fit to Artwork shrinks it to the shapes', async ({ app }) => {
     await openDrawing(app);

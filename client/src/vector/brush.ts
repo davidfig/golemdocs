@@ -13,7 +13,7 @@ import { parseColor, parseLength } from './style.ts';
 
 export type Arrow = 'none' | 'triangle' | 'open' | 'circle' | 'diamond' | 'bar';
 
-export type BrushKind = 'plain' | 'profile' | 'calligraphic' | 'rough' | 'pattern' | 'scatter';
+export type BrushKind = 'plain' | 'profile' | 'calligraphic' | 'rough' | 'bristle' | 'pattern' | 'scatter';
 
 export interface Brush {
   /** Which of the stroke list's strokes it came from, for the list to show. */
@@ -21,12 +21,15 @@ export interface Brush {
   kind: BrushKind;
   /** The stroke's full width where nothing makes it narrower, in the drawing's units. */
   width: number;
-  /** `profile` and `rough`: how wide the stroke is along the path, as points of (position 0 to 1, fraction of the width). */
+  /** `profile`, `rough` and `bristle`: how wide the stroke is along the path, as points of (position 0 to 1, fraction of the width). */
   profile?: [number, number][];
   /** `calligraphic`: the nib's angle in degrees, and how round it is (0 is a flat nib, 1 a round pen). */
   angle?: number;
   roundness?: number;
-  /** `rough`, `scatter`: how ragged or random (0 to 1), and the seed that makes the same line come out the same every time. */
+  /** `bristle`: how many streaks make the stroke (about one per unit of width if left out), and how many flecks are left past its end (0 to 1). */
+  strands?: number;
+  speckle?: number;
+  /** `rough`, `bristle`, `scatter`: how ragged or random (0 to 1), and the seed that makes the same line come out the same every time. */
   roughness?: number;
   seed?: number;
   /** `pattern`, `scatter`: the shape, in a box from x 0 to 1 along the path and y -0.5 to 0.5 across it. */
@@ -150,10 +153,10 @@ function curveThrough(points: readonly Pt[]): PathCommand[] {
 /** About this many points per side of a stroke: more would make a heavy file for no visible gain. */
 const MAX_SIDE_POINTS = 90;
 
-function decimate(points: Pt[]): Pt[] {
-  if (points.length <= MAX_SIDE_POINTS) return points;
+function decimate(points: Pt[], max = MAX_SIDE_POINTS): Pt[] {
+  if (points.length <= max) return points;
   const out: Pt[] = [];
-  for (let i = 0; i < MAX_SIDE_POINTS; i++) out.push(points[Math.round((i * (points.length - 1)) / (MAX_SIDE_POINTS - 1))]);
+  for (let i = 0; i < max; i++) out.push(points[Math.round((i * (points.length - 1)) / (max - 1))]);
   return out;
 }
 
@@ -170,7 +173,7 @@ function capPoints(cx: number, cy: number, dx: number, dy: number, nx: number, n
 }
 
 /** The outline of a stroke whose width at each sample is `widths[i]`, as a filled path. */
-function strokeOutline(w: Walk, widths: readonly number[], cap: 'round' | 'butt', jitter?: () => number, amount = 0): PathCommand[] {
+function strokeOutline(w: Walk, widths: readonly number[], cap: 'round' | 'butt', jitter?: () => number, amount = 0, maxPoints = MAX_SIDE_POINTS): PathCommand[] {
   const { samples } = w;
   const left: Pt[] = [];
   const right: Pt[] = [];
@@ -195,8 +198,8 @@ function strokeOutline(w: Walk, widths: readonly number[], cap: 'round' | 'butt'
   const last = samples[samples.length - 1];
   const startCap = cap === 'round' ? capPoints(first.x, first.y, -first.tx, -first.ty, first.nx, first.ny, widths[0] / 2, -1) : [];
   const endCap = cap === 'round' ? capPoints(last.x, last.y, last.tx, last.ty, last.nx, last.ny, widths[widths.length - 1] / 2, 1) : [];
-  const l = decimate(left);
-  const r = decimate([...right].reverse());
+  const l = decimate(left, maxPoints);
+  const r = decimate([...right].reverse(), maxPoints);
   out.push(['M', l[0][0], l[0][1]], ...curveThrough(l));
   for (const [x, y] of endCap) out.push(['L', x, y]);
   out.push(['L', r[0][0], r[0][1]], ...curveThrough(r));
@@ -332,6 +335,61 @@ function scatterAlong(w: Walk, brush: Brush, motif: readonly PathCommand[]): Pat
   return out;
 }
 
+/** A dry brush or a stick of charcoal: many thin streaks side by side that stop short of one another, break, and fray at the ends. */
+function bristleAlong(w: Walk, brush: Brush): PathCommand[] {
+  const rand = random(brush.seed ?? 1);
+  const width = brush.width;
+  const count = Math.max(3, Math.min(16, Math.round(brush.strands ?? width)));
+  const rough = Math.max(0, Math.min(1, brush.roughness ?? 0.5));
+  const profile = brush.profile ?? [[0, 1], [1, 1]];
+  const strand = (width / count) * 1.6;
+  const out: PathCommand[] = [];
+  for (let k = 0; k < count; k++) {
+    const lane = k / (count - 1) - 0.5;
+    const across = lane + ((rand() - 0.5) * 0.5) / count;
+    const outer = 0.4 + Math.abs(lane) * 1.2;
+    const start = rand() * rough * 0.1 * outer;
+    const end = 1 - rand() * rough * 0.4 * outer;
+    const runs: [number, number][] = [[start, end]];
+    if (rand() < rough * 0.6 && end - start > 0.3) {
+      const gap = start + (end - start) * (0.2 + rand() * 0.6);
+      const half = 0.02 + rand() * 0.05;
+      runs.splice(0, 1, [start, gap - half], [gap + half, end]);
+    }
+    for (const [a, b] of runs) {
+      const part = w.samples.filter((p) => p.s >= a * w.length && p.s <= b * w.length);
+      if (part.length < 2) continue;
+      const reach = (b - a) * w.length * 0.25 || 1;
+      const widths: number[] = [];
+      const moved = part.map((p): Sample => {
+        const f = profileAt(profile, p.s / w.length);
+        const ease = Math.min(1, (p.s - a * w.length) / reach, (b * w.length - p.s) / reach);
+        widths.push(strand * f * Math.max(0, ease));
+        const offset = across * width * f;
+        return { ...p, x: p.x + p.nx * offset, y: p.y + p.ny * offset };
+      });
+      out.push(...strokeOutline({ samples: moved, length: w.length, closed: false }, widths, 'butt', rand, strand * 0.12 * rough, 16));
+    }
+  }
+  // Flecks the brush shed beyond the end of the stroke.
+  const last = w.samples[w.samples.length - 1];
+  for (let k = 0, flecks = Math.round((brush.speckle ?? 0) * 8); k < flecks; k++) {
+    const along = last.s - w.length * 0.12 * rand() + w.length * 0.08 * rand() * rand();
+    const p = at(w, Math.min(along, w.length));
+    const beyond = Math.max(0, along - w.length);
+    const cx = p.x + p.tx * beyond + p.nx * (rand() - 0.5) * width * 0.5;
+    const cy = p.y + p.ty * beyond + p.ny * (rand() - 0.5) * width * 0.5;
+    const r = width * (0.03 + rand() * 0.06);
+    for (let i = 0; i < 7; i++) {
+      const a = (Math.PI * 2 * i) / 7;
+      const rr = r * (0.7 + rand() * 0.6);
+      out.push([i === 0 ? 'M' : 'L', cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+    }
+    out.push(['Z']);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------------------------
 // The brush
 
@@ -352,6 +410,8 @@ export function brushOutline(centerline: readonly PathCommand[], brush: Brush): 
     if (brush.kind === 'pattern' || brush.kind === 'scatter') {
       const motif = brush.motif ?? [];
       if (motif.length) out.push(...(brush.kind === 'pattern' ? patternAlong(w, motif, width, brush.spacing ?? 0.2) : scatterAlong(w, brush, motif)));
+    } else if (brush.kind === 'bristle') {
+      if (w.samples.length >= 2) out.push(...bristleAlong(w, brush));
     } else {
       const n = w.samples.length;
       const widths: number[] = [];

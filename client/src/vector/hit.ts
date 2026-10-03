@@ -108,7 +108,7 @@ const paints = (chain: readonly Style[], property: string, fallback?: string): b
 };
 
 /** The node under a point (in the drawing's coordinates): the path to the topmost one, down to the shape inside any groups, or null. `tolerance` is how far from a line still counts, in the same units. */
-export function hitTest(scene: Scene, point: Pt, tolerance = 0): NodePath | null {
+function walkHits(scene: Scene, point: Pt, tolerance: number, all: NodePath[] | null): NodePath | null {
   const visit = (nodes: readonly SceneNode[], parent: readonly Style[], p: Pt, tol: number, prefix: NodePath): NodePath | null => {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const node = nodes[i];
@@ -127,30 +127,56 @@ export function hitTest(scene: Scene, point: Pt, tolerance = 0): NodePath | null
       const path = [...prefix, i];
       if (node.kind === 'group') {
         const inside = visit(node.children, chain, local, ltol, path);
-        if (inside) return inside;
+        if (inside && !all) return inside;
         continue;
       }
       const commands = outline(node);
       if (commands) {
         const lines = flatten(commands);
         // Fill is black unless set; a fill of "none" can't be clicked inside.
-        if (paints(chain, 'fill', 'black') && insideFill(local, lines, inherited(chain, 'fill-rule') === 'evenodd')) return path;
+        if (paints(chain, 'fill', 'black') && insideFill(local, lines, inherited(chain, 'fill-rule') === 'evenodd')) {
+          if (all) all.push(path);
+          else return path;
+        }
         if (paints(chain, 'stroke')) {
           const width = parseLength(inherited(chain, 'stroke-width')) ?? 1;
-          if (distanceToLines(local, lines) <= width / 2 + ltol) return path;
+          if (distanceToLines(local, lines) <= width / 2 + ltol) {
+          if (all) all.push(path);
+          else return path;
+        }
         }
         // A shape that shows nothing can still be reached at its edge.
-        else if (!paints(chain, 'fill', 'black') && distanceToLines(local, lines) <= ltol) return path;
+        else if (!paints(chain, 'fill', 'black') && distanceToLines(local, lines) <= ltol) {
+          if (all) all.push(path);
+          else return path;
+        }
       } else if (node.kind === 'text') {
         const b = textBounds(node, chain);
-        if (local.x >= b.x - ltol && local.x <= b.x + b.width + ltol && local.y >= b.y - ltol && local.y <= b.y + b.height + ltol) return path;
+        if (local.x >= b.x - ltol && local.x <= b.x + b.width + ltol && local.y >= b.y - ltol && local.y <= b.y + b.height + ltol) {
+          if (all) all.push(path);
+          else return path;
+        }
       } else if (node.kind === 'image') {
-        if (local.x >= node.x && local.x <= node.x + node.width && local.y >= node.y && local.y <= node.y + node.height) return path;
+        if (local.x >= node.x && local.x <= node.x + node.width && local.y >= node.y && local.y <= node.y + node.height) {
+          if (all) all.push(path);
+          else return path;
+        }
       }
     }
     return null;
   };
   return visit(scene.children, [scene.style], point, tolerance, []);
+}
+
+export function hitTest(scene: Scene, point: Pt, tolerance = 0): NodePath | null {
+  return walkHits(scene, point, tolerance, null);
+}
+
+/** Every shape under a point, the topmost first (each as the path to the shape itself, down inside any groups). */
+export function hitTestAll(scene: Scene, point: Pt, tolerance = 0): NodePath[] {
+  const all: NodePath[] = [];
+  walkHits(scene, point, tolerance, all);
+  return all;
 }
 
 /** The top-level nodes inside or touched by a box: what a rubber band selects. */

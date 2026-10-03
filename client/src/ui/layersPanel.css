@@ -102,8 +102,31 @@
   background: rgb(0 0 0 / 0.1);
 }
 
+/* Visible and unlocked are the quiet states; hidden and locked stand out in colour. */
+.wm-layers-eye {
+  color: #316ac5;
+}
+
+.wm-layers-row.hidden-node .wm-layers-eye {
+  color: #d64545;
+}
+
+.wm-layers-lock {
+  color: #9aa1b2;
+}
+
 .wm-layers-row.locked-node .wm-layers-lock {
+  color: #e0861a;
   opacity: 1;
+}
+
+.wm-layers-row.locked-node .wm-layers-lock svg {
+  fill: rgb(224 134 26 / 0.3);
+  stroke-width: 1.6;
+}
+
+.wm-layers-row.hidden-node .wm-layers-eye svg {
+  stroke-width: 1.6;
 }
 
 .wm-layers-rename {
@@ -149,4 +172,10 @@
 .wm-layers-row.drop-inside {
   outline: 2px solid #316ac5;
   outline-offset: -2px;
+}
+
+.wm-layers-eye svg,
+.wm-layers-lock svg {
+  width: 15px;
+  height: 15px;
 }

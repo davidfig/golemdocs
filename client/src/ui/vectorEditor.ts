@@ -20,7 +20,7 @@ import { isHidden, isLocked, moveNodeTo, setLocked, setName, setVisible, addNode
 import type { NodePath, Order } from '../vector/edit.ts';
 import { outline } from '../vector/geometry.ts';
 import type { Bounds } from '../vector/geometry.ts';
-import { hitTest, nodesInRect } from '../vector/hit.ts';
+import { hitTest, hitTestAll, nodesInRect } from '../vector/hit.ts';
 import { apply, fmt, invert, multiply, rotation, scaling, translation } from '../vector/matrix.ts';
 import { anchorOf, isSmooth, moveAnchor, moveHandle, nearestSegment, penPath, removeAnchor, splitSegment } from '../vector/pathEdit.ts';
 import type { PenPoint } from '../vector/pathEdit.ts';
@@ -925,7 +925,8 @@ export class VectorEditor {
 
   private down(e: PointerEvent): void {
     const scene = this.scene;
-    if (!scene || e.button !== 0 || e.altKey) return;
+    // Alt alone pans the view; with Ctrl or Cmd it picks what is underneath.
+    if (!scene || e.button !== 0 || (e.altKey && !(e.ctrlKey || e.metaKey))) return;
     const frame = this.host.layer.frame();
     if (!frame) return;
     // A box being typed in is settled by clicking away from it.
@@ -1025,6 +1026,16 @@ export class VectorEditor {
     }
     // Clicking outside the group being worked in leaves it.
     if (this.entered && !(hit && this.within(hit, this.entered))) this.entered = null;
+    if (hit && e.altKey) {
+      // Ctrl+Alt+click picks the shape under the one picked, and on from there, round to the top again.
+      const stack = this.stackAt(scene, at, frame);
+      if (stack.length) {
+        const current = this._selection.length === 1 ? stack.findIndex((p) => p.join() === this._selection[0].join()) : -1;
+        this._selection = [stack[(current + 1) % stack.length]];
+        this.refresh();
+        return;
+      }
+    }
     if (hit) {
       const target = this.pickTarget(hit, e.ctrlKey || e.metaKey);
       const node = nodeAt(scene, target)!;
@@ -1074,6 +1085,17 @@ export class VectorEditor {
     this.entered = null;
     if (group) this._selection = [group];
     this.refresh();
+  }
+
+  /** The shapes under a point from the top down, as a click would pick them (in the group being worked in, its children). */
+  private stackAt(scene: Scene, at: [number, number], frame: VectorFrame): NodePath[] {
+    const out: NodePath[] = [];
+    for (const hit of hitTestAll(scene, { x: at[0], y: at[1] }, LINE_REACH / frame.unit)) {
+      if (this.entered && !this.within(hit, this.entered)) continue;
+      const target = this.pickTarget(hit, false);
+      if (!out.some((p) => p.join() === target.join())) out.push(target);
+    }
+    return out;
   }
 
   /** Whether a path is inside (or is) another. */

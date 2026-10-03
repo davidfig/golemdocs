@@ -164,3 +164,20 @@ test('reshaping a brush path draws the brush along the new line; taking the brus
   applyBrush(node, null);
   assert.equal(node.style.stroke, 'blue');
 });
+
+test('a bristle stroke is made of streaks, tapers at its ends and is the same every time for one seed', () => {
+  for (const id of ['dryInk', 'frayedInk', 'charcoal']) {
+    const brush = presetById(id)!.make(14);
+    const long = parsePath('M0 0 L200 0');
+    const a = brushOutline(long, brush);
+    assert.deepEqual(a, brushOutline(long, brush));
+    assert.notDeepEqual(a, brushOutline(long, { ...brush, seed: 99 }));
+    // Many separate pieces (streaks and flecks), all inside a band about the brush's width.
+    assert.ok(a.filter((c) => c[0] === 'M').length >= 5, id);
+    const b = pathBounds(a)!;
+    assert.ok(b.height > 5 && b.height < 14 * 1.6, `${id} ${b.height}`);
+  }
+  const ink = brushOutline(parsePath('M0 0 L200 0'), presetById('dryInk')!.make(14));
+  assert.ok(heightAt(ink, 60) > heightAt(ink, 4) + 3);
+  assert.ok(heightAt(ink, 60) > heightAt(ink, 196) + 3);
+});

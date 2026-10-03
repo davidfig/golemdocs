@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldBounds, worldMatrix } from '../src/vector/edit.ts';
-import { distanceToSegment, flatten, hitTest, insideFill, nodesInRect } from '../src/vector/hit.ts';
+import { distanceToSegment, flatten, hitTest, hitTestAll, insideFill, nodesInRect } from '../src/vector/hit.ts';
 import { rotation, scaling } from '../src/vector/matrix.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 import { writeSvg } from '../src/vector/svgWrite.ts';
@@ -163,4 +163,16 @@ test('a rubber band takes the top-level nodes it touches or holds', () => {
   assert.deepEqual(nodesInRect(s, { x: 40, y: 40, width: 80, height: 80 }), [[0], [1]]);
   assert.deepEqual(nodesInRect(s, { x: -5, y: -5, width: 60, height: 60 }, 'inside'), [[0]]);
   assert.deepEqual(nodesInRect(s, { x: 0, y: 0, width: 40, height: 40 }, 'inside'), []);
+});
+
+test('every shape under a point is found, topmost first, down inside groups', () => {
+  const s = scene();
+  addNode(s, { kind: 'rect', x: 0, y: 0, width: 100, height: 100, rx: 0, ry: 0, style: { fill: 'black' }, attrs: {} });
+  // The new rectangle, then the one in the first place, both over (25, 25).
+  assert.deepEqual(hitTestAll(s, { x: 25, y: 25 }), [[3], [0]]);
+  // Inside a group, as the path to the shape itself.
+  assert.deepEqual(hitTestAll(s, { x: 110, y: 110 }), [[1, 0]]);
+  assert.deepEqual(hitTestAll(s, { x: 190, y: 10 }), []);
+  // The first of them is what a click finds.
+  assert.deepEqual(hitTest(s, { x: 25, y: 25 }), hitTestAll(s, { x: 25, y: 25 })[0]);
 });

@@ -80,12 +80,7 @@ import { Footer } from './ui/footer.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
-import { VectorLayer } from './ui/vectorLayer.ts';
-import { VectorEditor } from './ui/vectorEditor.ts';
-import { LayersPanel } from './ui/layersPanel.ts';
-import { svgBytes, svgText } from './formats/vectorDoc.ts';
-import { writeSvg } from './vector/svgWrite.ts';
-import type { Scene } from './vector/model.ts';
+import type { VectorSession } from './ui/vectorSession.ts';
 import { askDropChoice } from './ui/dropChoice.ts';
 import { LargeTextView } from './largeText/view.ts';
 import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
@@ -100,7 +95,7 @@ import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
 import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
 import { encodeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
-import { FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -328,7 +323,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   largeView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
-  if (!options.pictureEdit) vectorEditor.close();
+  if (!options.pictureEdit) vector?.editor.close();
   // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
   current = {
@@ -1854,7 +1849,7 @@ async function changePicture(edit: ImageEdit): Promise<void> {
 }
 
 async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
-  if (isDrawing()) return direction === 'undo' ? vectorEditor.undo() : vectorEditor.redo();
+  if (isDrawing()) return direction === 'undo' ? vector?.editor.undo() : vector?.editor.redo();
   const from = direction === 'undo' ? pictureHistory.undo : pictureHistory.redo;
   const to = direction === 'undo' ? pictureHistory.redo : pictureHistory.undo;
   const target = from.pop();
@@ -2316,12 +2311,12 @@ function render(): void {
     filesPanel: filesOpen,
     footer: footerOn,
     format: selectionFormat,
-    canUndo: isDrawing() ? vectorEditor.canUndo : isPicture() ? pictureHistory.undo.length > 0 : canUndo,
-    canRedo: isDrawing() ? vectorEditor.canRedo : isPicture() ? pictureHistory.redo.length > 0 : canRedo,
+    canUndo: isDrawing() ? (vector?.editor.canUndo ?? false) : isPicture() ? pictureHistory.undo.length > 0 : canUndo,
+    canRedo: isDrawing() ? (vector?.editor.canRedo ?? false) : isPicture() ? pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
-    vector: { tool: vectorEditor.tool, hasSelection: vectorEditor.selection.length > 0, multiple: vectorEditor.selection.length > 1, clipped: vectorEditor.clipped, layers: layersOpen, snap: vectorEditor.snapping, ...vectorEditor.currentStyle },
+    vector: vector ? vector.state(layersOpen) : { ...DEFAULT_STATE.vector, layers: layersOpen },
     inTable,
     formattingMarks,
     viewMode: grid ? 'grid' : viewMode,
@@ -2335,9 +2330,7 @@ function render(): void {
   updateFooter();
   cropLayer.position();
   drawLayer.position();
-  vectorLayer.position();
-  layersPanel.setVisible(layersOpen && vectorEditor.active);
-  layersPanel.update();
+  vector?.position(layersOpen);
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
@@ -3021,46 +3014,8 @@ const chromeHost = createChromeHost({
     if (fill !== undefined) drawStyle.fill = fill;
     requestRender();
   },
-  vectorAction: (op) => {
-    switch (op) {
-      case 'select':
-      case 'rect':
-      case 'ellipse':
-      case 'line':
-      case 'pen':
-      case 'text':
-        return vectorEditor.setTool(op);
-      case 'delete':
-        return vectorEditor.delete();
-      case 'duplicate':
-        return vectorEditor.duplicate();
-      case 'group':
-        return vectorEditor.group();
-      case 'ungroup':
-        return vectorEditor.ungroup();
-      case 'front':
-      case 'forward':
-      case 'backward':
-      case 'back':
-        return vectorEditor.order(op);
-      case 'selectAll':
-        return vectorEditor.selectAll();
-      case 'unite':
-      case 'intersect':
-      case 'subtract':
-      case 'exclude':
-        return void vectorEditor.boolean(op);
-      case 'makeClip':
-        return vectorEditor.makeClip();
-      case 'releaseClip':
-        return vectorEditor.releaseClip();
-      case 'layers':
-        return toggleLayers();
-      case 'snap':
-        return vectorEditor.toggleSnap();
-    }
-  },
-  vectorStyle: (change) => vectorEditor.applyStyle(change),
+  vectorAction: (op) => (op === 'layers' ? toggleLayers() : vector?.action(op)),
+  vectorStyle: (change) => vector?.style(change),
   isDrawing,
   pickPicture,
   isPicture: () => isPicture() || isDrawing(),
@@ -3309,38 +3264,46 @@ const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { ca
 const cropLayer = new CropLayer(document.getElementById('viewport')!, { camera, page: () => pages[0] });
 // Text files too big to be documents (see largeText/view.ts).
 const largeView = new LargeTextView(document.getElementById('viewport')!);
-// A vector drawing, painted at the view's zoom (see ui/vectorLayer.ts).
-const vectorLayer = new VectorLayer(document.getElementById('viewport')!, { camera, page: () => pages[0], changed: () => requestRender() });
+// The vector editor (see ui/vectorSession.ts): a chunk of its own, fetched when the first drawing is opened.
+let vector: VectorSession | null = null;
+let vectorLoading: Promise<VectorSession> | null = null;
+
+async function loadVector(): Promise<VectorSession> {
+  vectorLoading ??= import('./ui/vectorSession.ts').then(({ createVectorSession }) => {
+    vector = createVectorSession({
+      camera,
+      canvas,
+      viewport: document.getElementById('viewport')!,
+      workspace: document.getElementById('workspace')!,
+      page: () => pages[0],
+      changed: () => requestRender(),
+      // The editor changed the drawing: its file is opened in place of the open one (the same saved document, the same name), then saved soon.
+      reopen(bytes) {
+        const doc = current;
+        open({ kind: 'svg', name: doc.name, bytes: bytes.slice().buffer }, { grid, localId: doc.localId ?? undefined, pictureEdit: true });
+        documentEdited();
+      },
+      notice: (message) => setStatus(message),
+      focusEditor: focusInput,
+      toggleLayers,
+    });
+    return vector;
+  });
+  return vectorLoading;
+}
 
 /** Starts editing the open drawing: reads its SVG from the document. A drawing that comes back after a change is the editor's already. */
 async function showDrawing(): Promise<void> {
-  if (vectorEditor.active) return;
   const doc = current;
   try {
-    const { scene } = await svgText(await worker.convert(doc.kind as Format));
-    if (doc === current && !vectorEditor.active) vectorEditor.open(scene);
+    const session = await loadVector();
+    if (session.editor.active || doc !== current) return;
+    await session.open(await worker.convert(doc.kind as Format));
   } catch {
     // The page's own picture of the drawing stays.
   }
   requestRender();
 }
-
-/** The editor changed the drawing: it is written and opened in place of the open one (the same saved document, the same name), then saved soon. */
-async function commitDrawing(scene: Scene): Promise<void> {
-  const doc = current;
-  const bytes = await svgBytes(writeSvg(scene), doc.kind === 'svgz');
-  if (doc !== current) return;
-  open({ kind: 'svg', name: doc.name, bytes: bytes.slice().buffer }, { grid, localId: doc.localId ?? undefined, pictureEdit: true });
-  documentEdited();
-}
-
-const vectorEditor = new VectorEditor({
-  canvas,
-  layer: vectorLayer,
-  changed: (scene) => void commitDrawing(scene),
-  stateChanged: () => requestRender(),
-  notice: (message) => setStatus(message),
-});
 
 // The drawing's shapes as a list beside it (see ui/layersPanel.ts).
 const LAYERS_KEY = 'word.layersPanel';
@@ -3360,7 +3323,6 @@ function toggleLayers(): void {
   }
   requestRender();
 }
-const layersPanel = new LayersPanel(document.getElementById('workspace')!, vectorEditor, { close: toggleLayers, focusEditor: focusInput });
 
 // Drawing on a picture (see ui/drawLayer.ts).
 const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });

@@ -341,10 +341,14 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   newDocumentFolder = null;
   const opening = current;
   showSync();
-  for (const page of pagesById.values()) page.dispose(gl!);
-  pagesById.clear();
-  pages = [];
-  pagesPanel.setPages(pages);
+  // A changed drawing keeps showing its old page until the new one is laid out, so nothing flashes in between.
+  keepPages = !!options.pictureEdit && source.kind === 'svg' && pages.length > 0;
+  if (!keepPages) {
+    for (const page of pagesById.values()) page.dispose(gl!);
+    pagesById.clear();
+    pages = [];
+    pagesPanel.setPages(pages);
+  }
   selection.clear();
   commentsPanel.reset();
   comments = [];
@@ -551,7 +555,15 @@ window.addEventListener('pageshow', (event) => {
   if (event.persisted && current.roomRequested) location.reload();
 });
 
+/** The pages of the document before this one are still showing, until the first layout of the new one arrives (see `open`). */
+let keepPages = false;
+
 function applyLayout(update: LayoutUpdate): void {
+  if (keepPages) {
+    keepPages = false;
+    for (const page of pagesById.values()) page.dispose(gl!);
+    pagesById.clear();
+  }
   for (const encoded of update.pages) pagesById.set(encoded.id, new GpuPage(encoded, atlases));
   for (const { page, content } of update.overlays) pagesById.get(page)?.setOverlay(gl!, content);
   for (const id of update.drop) {

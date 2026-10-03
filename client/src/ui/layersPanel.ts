@@ -10,6 +10,8 @@ import type { SceneNode } from '../vector/model.ts';
 import { NAME_ATTR, isHidden, isLocked } from '../vector/edit.ts';
 import type { NodePath } from '../vector/edit.ts';
 import { CLOSE_ICON, h, iconButton } from './dom.ts';
+import { showPopupMenu } from './popupMenu.ts';
+import type { PopupItem } from './popupMenu.ts';
 import type { VectorEditor } from './vectorEditor.ts';
 import './layersPanel.css';
 
@@ -100,6 +102,7 @@ export class LayersPanel {
     row.classList.toggle('selected', selected);
     row.classList.toggle('hidden-node', isHidden(node));
     row.classList.toggle('locked-node', isLocked(node));
+    row.dataset.path = path.join('/');
     row.style.paddingLeft = `${6 + depth * 14}px`;
 
     const expand = h('span', { class: 'wm-layers-expand' });
@@ -136,6 +139,12 @@ export class LayersPanel {
       this.host.focusEditor();
     });
     row.addEventListener('dblclick', () => this.rename(row, name, node, path));
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      // The row under the pointer is what the menu is about, unless it is one of several that are picked.
+      if (!this.editor.selection.some((p) => p.join() === path.join())) this.editor.pick([path], false);
+      this.menu(e.clientX, e.clientY, node, path, () => this.renameAt(path));
+    });
 
     row.addEventListener('dragstart', (e) => {
       this.dragging = path;
@@ -170,6 +179,68 @@ export class LayersPanel {
       else this.editor.moveNode(from, parent, zone === 'above' ? index + 1 : index);
     });
     return row;
+  }
+
+  /** The menu of what can be done to the picked shapes, at a window point. */
+  private menu(x: number, y: number, node: SceneNode, path: NodePath, rename: () => void): void {
+    const editor = this.editor;
+    const picked = editor.selection;
+    const many = picked.length > 1;
+    const item = (label: string, run: () => void, disabled = false): PopupItem => ({ label, run, disabled });
+    const items: PopupItem[] = [
+      item(t('vector.layerRename'), rename, many),
+      item(t(isHidden(node) ? 'vector.layerShow' : 'vector.layerHide'), () => editor.toggleVisible(path)),
+      item(t(isLocked(node) ? 'vector.layerUnlock' : 'vector.layerLock'), () => editor.toggleLocked(path)),
+      'separator',
+      item(t('vector.duplicate'), () => editor.duplicate()),
+      item(t('vector.delete'), () => editor.delete()),
+      'separator',
+      item(t('vector.group'), () => editor.group(), !many),
+      item(t('vector.ungroup'), () => editor.ungroup(), !picked.some((p) => this.isGroup(p))),
+      'separator',
+      item(t('vector.front'), () => editor.order('front')),
+      item(t('vector.forward'), () => editor.order('forward')),
+      item(t('vector.backward'), () => editor.order('backward')),
+      item(t('vector.back'), () => editor.order('back')),
+      'separator',
+      item(t('vector.unite'), () => void editor.boolean('unite'), !many),
+      item(t('vector.intersect'), () => void editor.boolean('intersect'), !many),
+      item(t('vector.subtract'), () => void editor.boolean('subtract'), !many),
+      item(t('vector.exclude'), () => void editor.boolean('exclude'), !many),
+      'separator',
+      editor.clipped ? item(t('vector.releaseClip'), () => editor.releaseClip()) : item(t('vector.makeClip'), () => editor.makeClip(), !many),
+      editor.masked ? item(t('vector.releaseMask'), () => editor.releaseMask()) : item(t('vector.makeMask'), () => editor.makeMask(), !many),
+    ];
+    showPopupMenu(items, x, y, t('vector.layers'), () => this.host.focusEditor());
+  }
+
+  /** Starts renaming the row of a shape: the list may have been drawn again since it was picked, so the row is found afresh. */
+  private renameAt(path: NodePath): void {
+    // After the list has caught up with the change that picked the shape.
+    requestAnimationFrame(() => {
+      this.shown = '';
+      this.update();
+      const row = [...this.list.children].find((r): r is HTMLElement => r instanceof HTMLElement && r.dataset.path === path.join('/'));
+      const label = row?.querySelector<HTMLElement>('.wm-layers-name');
+      const scene = this.editor.drawing;
+      let node: SceneNode | undefined;
+      let list = scene?.children ?? [];
+      for (const i of path) {
+        node = list[i];
+        list = node?.kind === 'group' ? node.children : [];
+      }
+      if (row && label && node) this.rename(row, label, node, path);
+    });
+  }
+
+  private isGroup(path: NodePath): boolean {
+    let list = this.editor.drawing?.children ?? [];
+    let node: SceneNode | undefined;
+    for (const i of path) {
+      node = list[i];
+      list = node?.kind === 'group' ? node.children : [];
+    }
+    return node?.kind === 'group';
   }
 
   /** Where in a row a drag is: the top quarter puts it above, the bottom quarter below, and the middle of a group's row puts it inside. */

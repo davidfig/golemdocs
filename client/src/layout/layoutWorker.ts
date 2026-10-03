@@ -274,6 +274,8 @@ class OpenDocument {
   private clientId = '';
   private readonly people = new Map<string, Person>();
   private backlog: RoomServerMessage[] = [];
+  /** A network room the page asked to join while the document was still being set up. */
+  private lateRoom: Extract<RoomOptions, { kind: 'network' }> | null = null;
   private joined: ((m: Extract<RoomServerMessage, { type: 'joined' }>) => void) | null = null;
   private count = 1;
   private lastPresence = '';
@@ -933,12 +935,15 @@ class OpenDocument {
     }
   }
 
-  /** Handles room messages that arrived while the document was being set up. */
+  /** Handles room messages that arrived while the document was being set up, and joins a room asked for meanwhile. */
   ready(): void {
     const backlog = this.backlog;
     this.backlog = [];
     for (const message of backlog) this.fromRoom(message);
     this.status();
+    const late = this.lateRoom;
+    this.lateRoom = null;
+    if (late) void this.joinLate(late);
   }
 
   private sendPresence(): void {
@@ -969,7 +974,13 @@ class OpenDocument {
    * it carries on unshared and is merged as a separate copy later.
    */
   async joinLate(room: Extract<RoomOptions, { kind: 'network' }>): Promise<void> {
-    if (this.net || this.room || this.format !== 'docx' || !this.replica || !this.editor) return;
+    if (this.net || this.room || this.format !== 'docx') return;
+    // Still being set up (the page heard who is signed in first): joined once it is, as the page
+    // asks only once.
+    if (!this.replica || !this.editor) {
+      this.lateRoom = room;
+      return;
+    }
     const start = await this.joinNetwork(room, this.replica.clientId);
     if (!start || this.closed) return;
     if (start.kind === 'own') this.net!.ready(start);
@@ -2036,7 +2047,7 @@ const now = (): string => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 async function save(doc: number, request: number, lens?: Format): Promise<void> {
   try {
     const open = current;
-    if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
     const resume = await open.flushRaw();
     // A document changed since it was opened records when.
     if (open.document && open.edited) open.document.properties.modified = now();
@@ -2062,7 +2073,7 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
 async function exportAs(doc: number, request: number, to: Format): Promise<void> {
   try {
     const open = current;
-    if (open?.doc !== doc || (!open.document && !open.original)) throw new Error('no document');
+    if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
     const resume = await open.flushRaw();
     let bytes: Uint8Array;
     try {
@@ -2133,6 +2144,13 @@ function setCjkLang(): Promise<void> {
 /** Settles once the page's language is loaded; documents wait for it so their errors are translated. */
 let localeReady: Promise<unknown> = Promise.resolve();
 
+// A failure nothing is waiting on (a layout pass after an edit, say) is still reported: otherwise the
+// pages would just stop changing, with nothing said.
+self.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  console.error(event.reason);
+  if (current && !current.closed) post({ type: 'error', doc: current.doc, message: event.reason instanceof Error ? event.reason.message : String(event.reason) });
+};
+
 self.onmessage = (event: MessageEvent<ToWorker>) => {
   const message = event.data;
   switch (message.type) {
@@ -2146,7 +2164,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
       if (current?.doc === message.doc) current.sendPointer(message.pointer);
       break;
     case 'joinRoom':
-      if (current?.doc === message.doc) void current.joinLate(message.room);
+      // After an open still waiting for the language (at start-up), in the order they were sent.
+      void localeReady.then(() => {
+        if (current?.doc === message.doc) void current.joinLate(message.room);
+      });
       break;
     case 'leave':
       current?.leave();

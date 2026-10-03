@@ -2,6 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const app: Catalog = {
   'app.workerFailed': 'Не удалось запустить механизм вёрстки.',
+  'app.documentNotOpen': 'Документ больше не открыт.',
   // Sample and default document names
   'app.welcomeName': 'Добро пожаловать в Golem Docs',
   'app.fontsName': 'Шрифты',

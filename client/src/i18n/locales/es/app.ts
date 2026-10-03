@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const app: Partial<Messages> = {
   'app.workerFailed': 'No se pudo iniciar el motor de maquetación.',
+  'app.documentNotOpen': 'El documento ya no está abierto.',
   // Sample and default document names
   'app.welcomeName': 'Bienvenido a Golem Docs',
   'app.fontsName': 'Fuentes',

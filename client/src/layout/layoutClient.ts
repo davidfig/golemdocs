@@ -131,7 +131,7 @@ export class LayoutClient {
   private request(message: (request: number) => ToWorker): Promise<ArrayBuffer> {
     const request = this.nextRequest++;
     return new Promise((resolve, reject) => {
-      this.requests.set(request, (bytes, error) => (bytes ? resolve(bytes) : reject(new Error(error ?? 'unavailable'))));
+      this.requests.set(request, (bytes, error) => (bytes ? resolve(bytes) : reject(new Error(error ?? t('app.documentNotOpen')))));
       this.send(message(request));
     });
   }

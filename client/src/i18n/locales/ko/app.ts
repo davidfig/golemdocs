@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const app: Partial<Messages> = {
   'app.workerFailed': '레이아웃 엔진을 시작하지 못했습니다.',
+  'app.documentNotOpen': '문서가 더 이상 열려 있지 않습니다.',
   // Sample and default document names
   'app.welcomeName': 'Golem Docs에 오신 것을 환영합니다',
   'app.fontsName': '글꼴',

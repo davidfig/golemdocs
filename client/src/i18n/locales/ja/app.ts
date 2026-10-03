@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const app: Partial<Messages> = {
   'app.workerFailed': 'レイアウトエンジンを起動できませんでした。',
+  'app.documentNotOpen': 'ドキュメントはもう開かれていません。',
   // Sample and default document names
   'app.welcomeName': 'Golem Docs へようこそ',
   'app.fontsName': 'フォント',

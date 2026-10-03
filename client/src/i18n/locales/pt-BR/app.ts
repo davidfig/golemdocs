@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const app: Partial<Messages> = {
   'app.workerFailed': 'Não foi possível iniciar o mecanismo de layout.',
+  'app.documentNotOpen': 'O documento não está mais aberto.',
   // Sample and default document names
   'app.welcomeName': 'Bem-vindo ao Golem Docs',
   'app.fontsName': 'Fontes',

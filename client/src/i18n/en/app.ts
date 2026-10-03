@@ -2,6 +2,7 @@
 // default document names, confirmations, and the errors a user can read.
 export const app = {
   'app.workerFailed': 'The layout engine failed to start.',
+  'app.documentNotOpen': 'The document isn’t open any more.',
   // Sample and default document names
   'app.welcomeName': 'Welcome to Golem Docs',
   'app.linkTip.ctrl': '{url}\nCtrl+click to follow link',

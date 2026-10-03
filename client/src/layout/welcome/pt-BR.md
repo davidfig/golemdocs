@@ -24,7 +24,7 @@ Quando estiver pronto, escolha Novo no menu Arquivo para um documento em branco,
 
 - **Word, OpenDocument, Rich Text, PDF, HTML, EPUB, Markdown, LaTeX, AsciiDoc, reStructuredText, Org, CSV e texto simples** abrem como documentos que você pode editar.
 - **Paleta de comandos:** pressione Ctrl+Shift+P (Cmd+Shift+P em um Mac) para pesquisar e executar qualquer comando.
-- **Miniaturas de páginas:** Exibir › Barra Lateral de Páginas (Alt+P) mostra uma coluna de páginas para navegar. Em um PDF no modo Editar PDF, você pode arrastá-las para uma nova ordem.
+- **Miniaturas de páginas:** Exibir › Barra Lateral de Páginas (Alt+P) mostra uma coluna de páginas para navegar. Em um PDF, você pode arrastá-las para uma nova ordem ou excluí-las.
 - **Renomear:** clique no nome do documento no meio da barra de menus para digitar um novo.
 - **Links e tabelas:** Ctrl+K (Cmd+K em um Mac) cria um link com a seleção, e o botão Tabela da barra de ferramentas insere uma grade.
 - **Ortografia e gramática:** pressione F7. Localizar e substituir fica no menu Editar.

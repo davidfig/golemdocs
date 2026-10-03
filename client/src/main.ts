@@ -37,7 +37,6 @@ import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary,
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
-import { mnemonicLabel } from './ui/dom.ts';
 import { FilesPanel } from './ui/filesPanel.ts';
 import { PagesPanel } from './ui/pagesPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
@@ -3244,7 +3243,7 @@ function assetLoaded(): void {
 /** A PDF's page `index` is deleted or moved (the editing in progress is put down first). */
 function changePages(index: number, op: { op: 'delete' } | { op: 'move'; to: number }): void {
   const page = pages[index];
-  if (!page || !annotating || formMode !== 'edit') return;
+  if (!page || !annotating) return;
   send({ kind: 'pdfPutDown' });
   send({ kind: 'pdfPageOp', page: page.id, ...op });
 }
@@ -3305,8 +3304,7 @@ function syncPagesPanel(): void {
   const shown = pagesOpen() && !largeView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
   pagesPanel.setVisible(shown);
   if (!shown) return;
-  const editing = annotating && formMode === 'edit';
-  pagesPanel.setEditable(editing, annotating && !editing ? t('panels.pages.hint', { mode: mnemonicLabel(t('chrome.view.editForm')).text }) : null);
+  pagesPanel.setEditable(annotating);
   const view = `${camera.x}/${camera.y}/${camera.zoom}/${pages.length}`;
   if (view === panelCamera) return;
   panelCamera = view;

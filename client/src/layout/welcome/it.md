@@ -24,7 +24,7 @@ Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Sca
 
 - **Word, OpenDocument, Rich Text, PDF, HTML, EPUB, Markdown, LaTeX, AsciiDoc, reStructuredText, Org, CSV e testo normale** si aprono tutti come documenti modificabili.
 - **Riquadro comandi:** premi Ctrl+Maiusc+P (Cmd+Maiusc+P su Mac) per cercare ed eseguire qualsiasi comando.
-- **Miniature delle pagine:** Visualizza › Barra laterale pagine (Alt+P) mostra una colonna di pagine tra cui spostarsi. In un PDF in modalità Modifica PDF puoi trascinarle per riordinarle.
+- **Miniature delle pagine:** Visualizza › Barra laterale pagine (Alt+P) mostra una colonna di pagine tra cui spostarsi. In un PDF puoi trascinarle per riordinarle o eliminarle.
 - **Rinomina:** fai clic sul nome del documento al centro della barra dei menu per digitarne uno nuovo.
 - **Collegamenti e tabelle:** Ctrl+K (Cmd+K su Mac) trasforma la selezione in un collegamento, e il pulsante Tabella della barra degli strumenti inserisce una griglia.
 - **Controllo ortografico e grammaticale:** premi F7. Trova e sostituisci si trova nel menu Modifica.

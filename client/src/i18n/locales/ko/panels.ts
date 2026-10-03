@@ -150,7 +150,6 @@ export const panels: Partial<Messages> = {
   'panels.pages.page': '{number}페이지',
   'panels.pages.delete': '{number}페이지 삭제',
   'panels.pages.close': '닫기',
-  'panels.pages.hint': '페이지를 재정렬하거나 삭제하려면 {mode}(으)로 전환하세요.',
   'panels.files.label': '파일',
   'panels.files.empty': '아직 문서가 없습니다.',
   'panels.files.close': '닫기',

@@ -2,6 +2,9 @@
 
 ## 0.8.1 - Unreleased
 
+### Changed
+- On a PDF, the Page Sidebar lets you drag pages into a new order and delete them in Fill In too, without switching to Edit PDF.
+
 ### Fixed
 - Typing, a picture or a save made the moment a document opens is no longer lost or refused.
 - The Documents screen and the Files sidebar always show the same documents and folders, and a save or upload no longer makes the app ask the account for its list several times over.

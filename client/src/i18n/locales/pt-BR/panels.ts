@@ -150,7 +150,6 @@ export const panels: Partial<Messages> = {
   'panels.pages.page': 'Página {number}',
   'panels.pages.delete': 'Excluir página {number}',
   'panels.pages.close': 'Fechar',
-  'panels.pages.hint': 'Mude para {mode} para reordenar ou excluir páginas.',
   'panels.files.label': 'Arquivos',
   'panels.files.empty': 'Ainda não há documentos.',
   'panels.files.close': 'Fechar',

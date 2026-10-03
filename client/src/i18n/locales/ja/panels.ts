@@ -150,7 +150,6 @@ export const panels: Partial<Messages> = {
   'panels.pages.page': '{number} ページ',
   'panels.pages.delete': '{number} ページを削除',
   'panels.pages.close': '閉じる',
-  'panels.pages.hint': 'ページの並べ替えや削除は「{mode}」に切り替えて行います。',
   'panels.files.label': 'ファイル',
   'panels.files.empty': 'ドキュメントはまだありません。',
   'panels.files.close': '閉じる',

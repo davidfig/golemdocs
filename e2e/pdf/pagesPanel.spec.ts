@@ -134,13 +134,10 @@ test.describe('Page Sidebar', () => {
     await expect(item(app, 0)).not.toHaveClass(/wm-pages-current/);
   });
 
-  test('Fill In mode only looks; Edit PDF mode drags pages into order and deletes them', async ({ app }) => {
+  test('pages are dragged into order and deleted in Fill In mode, and stay so in Edit PDF', async ({ app }) => {
     await openPdf(app, threePages());
     await expect(panel(app)).toBeVisible(); // open by default
-    await expect(app.page.locator('.wm-pages-hint')).toBeVisible();
-    await expect(item(app, 0)).toHaveAttribute('draggable', 'false');
-    await editMode(app.page);
-    await expect(app.page.locator('.wm-pages-hint')).toBeHidden();
+    // A PDF opens in Fill In: the pages can be rearranged without switching modes.
     await expect(item(app, 0)).toHaveAttribute('draggable', 'true');
 
     // Alpha dragged below Charlie.
@@ -161,10 +158,9 @@ test.describe('Page Sidebar', () => {
     await expect(app.page.locator('.wm-pages-item')).toHaveCount(3);
   });
 
-  test('the Delete key deletes the focused page, and the last page cannot be deleted', async ({ app }) => {
+  test('the Delete key deletes the focused page in Fill In mode, and the last page cannot be deleted', async ({ app }) => {
     await openPdf(app, threePages());
     await expect(panel(app)).toBeVisible(); // open by default
-    await editMode(app.page);
     await item(app, 1).focus();
     await app.page.keyboard.press('Delete');
     await expect.poll(() => pageCount(app.page)).toBe(2);

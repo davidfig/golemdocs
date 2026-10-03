@@ -24,7 +24,7 @@ Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document
 
 - **Word, OpenDocument, Rich Text, PDF, HTML, EPUB, Markdown, LaTeX, AsciiDoc, reStructuredText, Org, CSV et texte brut** s'ouvrent tous comme des documents modifiables.
 - **Palette de commandes :** appuyez sur Ctrl+Shift+P (Cmd+Shift+P sur Mac) pour rechercher et exécuter n'importe quelle commande.
-- **Miniatures de pages :** Affichage › Barre latérale des pages (Alt+P) affiche une colonne de pages entre lesquelles passer. Sur un PDF en mode Modifier le PDF, vous pouvez les faire glisser pour les réordonner.
+- **Miniatures de pages :** Affichage › Barre latérale des pages (Alt+P) affiche une colonne de pages entre lesquelles passer. Sur un PDF, vous pouvez les faire glisser pour les réordonner, ou les supprimer.
 - **Renommer :** cliquez sur le nom du document au milieu de la barre de menus pour en saisir un nouveau.
 - **Liens et tableaux :** Ctrl+K (Cmd+K sur Mac) ajoute un lien à la sélection, et le bouton Tableau de la barre d'outils insère une grille.
 - **Orthographe et grammaire :** appuyez sur F7. Rechercher et remplacer se trouve dans le menu Édition.

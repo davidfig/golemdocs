@@ -24,7 +24,7 @@ Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, 
 
 - **Word, OpenDocument, Rich Text, PDF, HTML, EPUB, Markdown, LaTeX, AsciiDoc, reStructuredText, Org, CSV und reiner Text** lassen sich alle als bearbeitbare Dokumente öffnen.
 - **Befehlspalette:** Drücken Sie Strg+Umschalt+P (Cmd+Umschalt+P auf dem Mac), um jeden Befehl zu suchen und auszuführen.
-- **Seitenvorschau:** Ansicht › Seitenleiste (Alt+P) zeigt eine Spalte mit Seiten zum Wechseln. Bei einem PDF im Modus „PDF bearbeiten“ können Sie sie per Ziehen neu anordnen.
+- **Seitenvorschau:** Ansicht › Seitenleiste (Alt+P) zeigt eine Spalte mit Seiten zum Wechseln. Bei einem PDF können Sie sie per Ziehen neu anordnen oder löschen.
 - **Umbenennen:** Klicken Sie in der Mitte der Menüleiste auf den Namen des Dokuments, um einen neuen einzugeben.
 - **Links und Tabellen:** Strg+K (Cmd+K auf dem Mac) versieht die Markierung mit einem Link, und die Schaltfläche Tabelle in der Symbolleiste fügt ein Raster ein.
 - **Rechtschreibung und Grammatik:** F7 drücken. Suchen und Ersetzen finden Sie im Menü Bearbeiten.

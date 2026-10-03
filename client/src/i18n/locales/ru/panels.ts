@@ -164,7 +164,6 @@ export const panels: Catalog = {
   'panels.pages.page': 'Страница {number}',
   'panels.pages.delete': 'Удалить страницу {number}',
   'panels.pages.close': 'Закрыть',
-  'panels.pages.hint': 'Чтобы переставлять или удалять страницы, перейдите в режим «{mode}».',
   'panels.files.label': 'Файлы',
   'panels.files.empty': 'Документов пока нет.',
   'panels.files.close': 'Закрыть',

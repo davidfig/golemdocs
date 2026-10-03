@@ -2,7 +2,7 @@
 
 A PDF opens as its own pages. There are two modes, chosen with the buttons at the top right:
 
-- **Fill In**: the form's fields are inputs. Nothing else on the page changes.
+- **Fill In**: the form's fields are inputs. Nothing else on the page changes, though the Page Sidebar can still reorder and delete pages.
 - **Edit PDF**: everything on the page can change. Text is edited where it sits; pictures, shapes and drawings are moved, resized, restyled and deleted; text, pictures, shapes, white-outs and redactions are added; pages are deleted, turned, moved, copied and added; form fields are moved, added and renamed.
 
 Nothing is written into the file until it is exported. What has been done is a list of **edits** kept with the document (the `.wdoc`'s `pdf` extension, `edits`), next to the annotation and form-field layers. Undo steps through all three together.

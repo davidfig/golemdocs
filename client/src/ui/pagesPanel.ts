@@ -1,8 +1,8 @@
 // The pages panel: a column of thumbnails to the left of the document, one per page, shown beside
 // the editor so the document can be edited while it is open. A click goes to the page, and the page
-// in view is the one marked. On a PDF in Edit PDF mode the pages can also be dragged into a new
-// order and deleted (the buttons on each, or the Delete key); anywhere else the panel is for
-// looking and moving around. Thumbnails are drawn lazily, only for the pages scrolled into view.
+// in view is the one marked. On a PDF the pages can also be dragged into a new order and deleted
+// (the buttons on each, or the Delete key), in Fill In and Edit PDF alike; anywhere else the panel
+// is for looking and moving around. Thumbnails are drawn lazily, only for the pages scrolled into view.
 
 import { t } from '../i18n/index.ts';
 import { h, toggleClass } from './dom.ts';
@@ -50,7 +50,6 @@ const REDRAW_DELAY = 250;
 export class PagesPanel {
   readonly el = h('aside', { class: 'wm-pages', attrs: { 'aria-label': t('panels.pages.label') } });
   private readonly list = h('ol', { class: 'wm-pages-list', attrs: { role: 'listbox', 'aria-label': t('panels.pages.label') } });
-  private readonly hint = h('p', { class: 'wm-pages-hint' });
   private items: Item[] = [];
   private readonly byPage = new Map<PanelPage, Item>();
   private current = -1;
@@ -73,7 +72,7 @@ export class PagesPanel {
     this.el.hidden = true;
     const close = h('button', { class: 'wm-pages-close', text: '×', attrs: { type: 'button', 'aria-label': t('panels.pages.close') }, title: t('panels.pages.close') });
     close.addEventListener('click', () => host.close());
-    this.el.append(h('header', { class: 'wm-pages-bar' }, h('h2', { text: t('panels.pages.label') }), close), this.list, this.hint);
+    this.el.append(h('header', { class: 'wm-pages-bar' }, h('h2', { text: t('panels.pages.label') }), close), this.list);
     // Keys typed here stay here: the document's handlers listen on the window, and would take Delete and the arrows as edits.
     this.el.addEventListener('keydown', (e) => this.key(e));
     this.list.addEventListener('dragover', (e) => this.dragOver(e));
@@ -96,10 +95,8 @@ export class PagesPanel {
     if (visible) this.schedule(0);
   }
 
-  /** Whether the pages can be dragged and deleted, and what to say when they can't (null: nothing). */
-  setEditable(editable: boolean, hint: string | null = null): void {
-    if (this.hint.textContent !== (hint ?? '')) this.hint.textContent = hint ?? '';
-    this.hint.hidden = !hint;
+  /** Whether the pages can be dragged and deleted. */
+  setEditable(editable: boolean): void {
     if (editable === this.editable) return;
     this.editable = editable;
     this.list.classList.toggle('wm-pages-editable', editable);

@@ -24,7 +24,7 @@ When you're ready, choose New from the File menu for a blank document, or Downlo
 
 - **Word, OpenDocument, Rich Text, PDF, HTML, EPUB, Markdown, LaTeX, AsciiDoc, reStructuredText, Org, CSV and plain text** all open as documents you can edit.
 - **Command palette:** press Ctrl+Shift+P (Cmd+Shift+P on a Mac) to search and run any command.
-- **Page thumbnails:** View › Page Sidebar (Alt+P) shows a column of pages to jump between. On a PDF in Edit PDF mode you can drag them into a new order.
+- **Page thumbnails:** View › Page Sidebar (Alt+P) shows a column of pages to jump between. On a PDF you can drag them into a new order or delete them.
 - **Rename:** click the document's name in the middle of the menu bar to type a new one.
 - **Links and tables:** Ctrl+K (Cmd+K on a Mac) links the selection, and the toolbar's Table button inserts a grid.
 - **Spelling and grammar:** press F7. Find and replace is in the Edit menu.

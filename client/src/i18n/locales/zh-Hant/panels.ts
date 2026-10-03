@@ -150,7 +150,6 @@ export const panels: Partial<Messages> = {
   'panels.pages.page': '第 {number} 頁',
   'panels.pages.delete': '刪除第 {number} 頁',
   'panels.pages.close': '關閉',
-  'panels.pages.hint': '切換到「{mode}」後即可重新排列或刪除頁面。',
   'panels.files.label': '檔案',
   'panels.files.empty': '尚無文件。',
   'panels.files.close': '關閉',

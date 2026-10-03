@@ -164,18 +164,6 @@ html[data-pages='dark'] .wm-pages-thumb {
   cursor: grab;
 }
 
-.wm-pages-hint {
-  flex: none;
-  margin: 0;
-  padding: 8px 10px;
-  border-top: 1px solid var(--wm-toolbar-border);
-  color: var(--wm-muted);
-}
-
-.wm-pages-hint[hidden] {
-  display: none;
-}
-
 .wm-pages-single .wm-pages-delete {
   display: none !important;
 }

@@ -15,7 +15,6 @@ export const panels = {
   'panels.pages.page': 'Page {number}',
   'panels.pages.delete': 'Delete page {number}',
   'panels.pages.close': 'Close',
-  'panels.pages.hint': 'Switch to {mode} to reorder or delete pages.',
   'panels.files.label': 'Files',
   'panels.files.empty': 'No documents yet.',
   'panels.files.close': 'Close',

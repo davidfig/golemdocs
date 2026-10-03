@@ -43,6 +43,8 @@ export interface FormatProfile {
   horizontalRule: boolean;
   /** A picture: the picture tools (rotate, crop, resize, adjust) apply, and nothing else edits it. */
   imageTools: boolean;
+  /** A vector drawing: the vector editor's tools apply, and undo and redo are the editor's own. */
+  vectorTools: boolean;
   /** A file too big to be a document, shown in the large-text viewer: search, filter and copy, and nothing that edits, prints or converts. */
   largeText: boolean;
 }
@@ -89,6 +91,7 @@ const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   codeBlocks: false,
   horizontalRule: true,
   imageTools: false,
+  vectorTools: false,
   largeText: false,
 };
 
@@ -118,6 +121,7 @@ const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   codeBlocks: false,
   horizontalRule: false,
   imageTools: false,
+  vectorTools: false,
   largeText: false,
 };
 
@@ -155,7 +159,7 @@ const MARKUP: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
 const LARGE_TEXT: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, largeText: true };
 
 /** A vector drawing: looked at for now; the vector editor's tools come with it (see vector/). */
-const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false };
+const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, vectorTools: true };
 
 /** A picture opened as an image: looked at, and changed with the picture tools. */
 const PICTURE: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, imageTools: true };
@@ -453,7 +457,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       }
       return false;
   }
-  if (profile.imageTools && (action.kind === 'undo' || action.kind === 'redo')) return true;
+  if ((profile.imageTools || profile.vectorTools) && (action.kind === 'undo' || action.kind === 'redo')) return true;
   if (!profile.editable) {
     if (!profile.annotations) return false;
     switch (action.kind) {

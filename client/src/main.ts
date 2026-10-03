@@ -81,7 +81,10 @@ import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
 import { VectorLayer } from './ui/vectorLayer.ts';
-import { svgText } from './formats/vectorDoc.ts';
+import { VectorEditor } from './ui/vectorEditor.ts';
+import { svgBytes, svgText } from './formats/vectorDoc.ts';
+import { writeSvg } from './vector/svgWrite.ts';
+import type { Scene } from './vector/model.ts';
 import { askDropChoice } from './ui/dropChoice.ts';
 import { LargeTextView } from './largeText/view.ts';
 import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
@@ -322,7 +325,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   cropLayer.cancel();
   largeView.close();
   drawLayer.cancel();
-  vectorLayer.show(null);
+  // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
+  if (!options.pictureEdit) vectorEditor.close();
   // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
   current = {
@@ -1840,6 +1844,7 @@ async function changePicture(edit: ImageEdit): Promise<void> {
 }
 
 async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
+  if (isDrawing()) return direction === 'undo' ? vectorEditor.undo() : vectorEditor.redo();
   const from = direction === 'undo' ? pictureHistory.undo : pictureHistory.redo;
   const to = direction === 'undo' ? pictureHistory.redo : pictureHistory.undo;
   const target = from.pop();
@@ -2301,8 +2306,8 @@ function render(): void {
     filesPanel: filesOpen,
     footer: footerOn,
     format: selectionFormat,
-    canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
-    canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
+    canUndo: isDrawing() ? vectorEditor.canUndo : isPicture() ? pictureHistory.undo.length > 0 : canUndo,
+    canRedo: isDrawing() ? vectorEditor.canRedo : isPicture() ? pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
@@ -3004,7 +3009,7 @@ const chromeHost = createChromeHost({
     requestRender();
   },
   pickPicture,
-  isPicture,
+  isPicture: () => isPicture() || isDrawing(),
   stepPicture,
   signIn,
   signOut,
@@ -3253,17 +3258,35 @@ const largeView = new LargeTextView(document.getElementById('viewport')!);
 // A vector drawing, painted at the view's zoom (see ui/vectorLayer.ts).
 const vectorLayer = new VectorLayer(document.getElementById('viewport')!, { camera, page: () => pages[0], changed: () => requestRender() });
 
-/** Shows the open drawing sharply: reads its SVG from the document and paints that. */
+/** Starts editing the open drawing: reads its SVG from the document. A drawing that comes back after a change is the editor's already. */
 async function showDrawing(): Promise<void> {
+  if (vectorEditor.active) return;
   const doc = current;
   try {
     const { scene } = await svgText(await worker.convert(doc.kind as Format));
-    if (doc === current) vectorLayer.show(scene);
+    if (doc === current && !vectorEditor.active) vectorEditor.open(scene);
   } catch {
     // The page's own picture of the drawing stays.
   }
   requestRender();
 }
+
+/** The editor changed the drawing: it is written and opened in place of the open one (the same saved document, the same name), then saved soon. */
+async function commitDrawing(scene: Scene): Promise<void> {
+  const doc = current;
+  const bytes = await svgBytes(writeSvg(scene), doc.kind === 'svgz');
+  if (doc !== current) return;
+  open({ kind: 'svg', name: doc.name, bytes: bytes.slice().buffer }, { grid, localId: doc.localId ?? undefined, pictureEdit: true });
+  documentEdited();
+}
+
+const vectorEditor = new VectorEditor({
+  canvas,
+  layer: vectorLayer,
+  changed: (scene) => void commitDrawing(scene),
+  stateChanged: () => requestRender(),
+  ownsInput: (target) => target === input,
+});
 
 // Drawing on a picture (see ui/drawLayer.ts).
 const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });

@@ -1,15 +1,33 @@
 // A vector drawing shown at the view's zoom: the page of a drawing is a picture of it (see
 // formats/vectorDoc.ts), good for thumbnails and for the moment the drawing is opening, and this
 // layer paints the drawing itself over that page on a canvas, so it stays sharp however far it is
-// zoomed in. Like the other layers, it follows the camera and takes no pointer input.
+// zoomed in. Like the other layers, it follows the camera and takes no pointer input; the editor
+// (vectorEditor.ts) draws what it needs over the drawing through `decorate`.
 
 import { decodeImage } from '../formats/imageCodec.ts';
+import { viewBoxMatrix } from '../vector/geometry.ts';
+import { apply, invert } from '../vector/matrix.ts';
 import type { Scene } from '../vector/model.ts';
 import { loadImages, paintScene } from '../vector/paint.ts';
 import type { ImageCache } from '../vector/paint.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import { h } from './dom.ts';
 import './vectorLayer.css';
+
+/** Where the drawing is on screen, and the conversions between the screen and its coordinates. */
+export interface VectorFrame {
+  /** CSS pixels on screen per pixel of the drawing (its width and height, not its view box). */
+  scale: number;
+  /** The drawing's top-left corner, in CSS pixels from the layer's. */
+  left: number;
+  top: number;
+  /** A point in the drawing's own coordinates (the view box's) as CSS pixels from the layer's top-left. */
+  toScreen(x: number, y: number): [number, number];
+  /** The reverse. */
+  fromScreen(x: number, y: number): [number, number];
+  /** CSS pixels on screen per unit of the drawing's own coordinates. */
+  unit: number;
+}
 
 export interface VectorHost {
   camera: Camera;
@@ -22,12 +40,16 @@ export interface VectorHost {
 export class VectorLayer {
   readonly el = h('div', { class: 'wm-vector', attrs: { hidden: '' } });
   private readonly canvas = h('canvas', { class: 'wm-vector-canvas' });
-  private scene: Scene | null = null;
+  private _scene: Scene | null = null;
   private images: ImageCache = new Map();
   /** What was last painted, so a frame where nothing moved costs nothing. */
   private painted = '';
   /** Counts scenes shown, so pictures that arrive for an earlier one are ignored. */
   private version = 0;
+  /** Painted over the drawing, in CSS pixels of the layer. */
+  decorate: ((ctx: CanvasRenderingContext2D, frame: VectorFrame) => void) | null = null;
+  /** Changes whenever what `decorate` paints does. */
+  decorationVersion = 0;
 
   constructor(
     parent: HTMLElement,
@@ -37,9 +59,13 @@ export class VectorLayer {
     parent.append(this.el);
   }
 
+  get scene(): Scene | null {
+    return this._scene;
+  }
+
   /** The drawing shown; null stops showing one. */
   show(scene: Scene | null): void {
-    this.scene = scene;
+    this._scene = scene;
     this.images = new Map();
     this.painted = '';
     const version = ++this.version;
@@ -53,32 +79,72 @@ export class VectorLayer {
     });
   }
 
+  /** The drawing changed (the editor's own copy of it): painted again, with the pictures it already has. */
+  update(scene: Scene): void {
+    this._scene = scene;
+    this.painted = '';
+    this.host.changed();
+  }
+
+  /** Asks for the layer to be painted again, as it is. */
+  invalidate(): void {
+    this.painted = '';
+    this.host.changed();
+  }
+
+  /** Where the drawing is on screen; null when there is none or no page to put it on. */
+  frame(): VectorFrame | null {
+    const scene = this._scene;
+    const page = this.host.page();
+    if (!scene || !page) return null;
+    const { camera } = this.host;
+    const perPoint = camera.zoom * CSS_PX_PER_POINT;
+    const scale = (page.width * perPoint) / scene.width;
+    const left = (page.x - camera.x) * perPoint;
+    const top = (page.y - camera.y) * perPoint;
+    const vb = viewBoxMatrix(scene);
+    const back = invert(vb) ?? vb;
+    return {
+      scale,
+      left,
+      top,
+      unit: scale * Math.sqrt(Math.abs(vb[0] * vb[3] - vb[1] * vb[2])),
+      toScreen: (x, y) => {
+        const [px, py] = apply(vb, x, y);
+        return [left + px * scale, top + py * scale];
+      },
+      fromScreen: (x, y) => apply(back, (x - left) / scale, (y - top) / scale),
+    };
+  }
+
   /** Paints the drawing where the view has its page (the view moved, or the drawing changed). */
   position(): void {
     const { scene } = this;
+    const frame = this.frame();
     const page = this.host.page();
-    if (!scene || !page) return;
+    if (!scene || !frame || !page) return;
     const { camera } = this.host;
     const ratio = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(this.el.clientWidth * ratio));
     const height = Math.max(1, Math.round(this.el.clientHeight * ratio));
-    const key = [camera.x, camera.y, camera.zoom, width, height, page.x, page.y, page.width].join();
+    const key = [camera.x, camera.y, camera.zoom, width, height, page.x, page.y, page.width, this.decorationVersion].join();
     if (key === this.painted) return;
     this.painted = key;
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
     }
-    const perPoint = camera.zoom * CSS_PX_PER_POINT;
-    // CSS pixels on screen per pixel of the drawing.
-    const scale = (page.width * perPoint) / scene.width;
     const ctx = this.canvas.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    ctx.setTransform(ratio * scale, 0, 0, ratio * scale, ratio * (page.x - camera.x) * perPoint, ratio * (page.y - camera.y) * perPoint);
+    ctx.setTransform(ratio * frame.scale, 0, 0, ratio * frame.scale, ratio * frame.left, ratio * frame.top);
     // The page is white under the drawing, and covers the picture of it.
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, scene.width, scene.height);
     paintScene(ctx, scene, scene.width, scene.height, { images: this.images });
+    if (this.decorate) {
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      this.decorate(ctx, frame);
+    }
   }
 }

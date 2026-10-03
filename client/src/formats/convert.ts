@@ -10,6 +10,9 @@ import type { FontSet } from '@golemdocs/layout';
 import type { Extensions } from './wdoc.ts';
 import txtHandler from './handlers/txt.ts';
 import { csv as csvHandler, tsv as tsvHandler } from './handlers/csv.ts';
+import htmlHandler from './handlers/html.ts';
+import { jpeg as jpegHandler, png as pngHandler, webp as webpHandler } from './handlers/image.ts';
+import mdHandler from './handlers/md.ts';
 
 /** The formats a document can be opened, saved and switched to. */
 export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'pdf' | 'md' | 'txt';
@@ -40,18 +43,19 @@ const docx: FormatHandler = {
 
 /**
  * Each format's code, fetched the first time the format is used (each becomes its own chunk).
- * Word documents (the model's own format) and plain text (a few hundred bytes of code) are always at hand. To add a format: a file
- * in ./handlers, and a line here.
+ * Those too small to be worth a request of their own (Word, the model's own format; plain text,
+ * CSV, HTML, Markdown's glue and pictures, each a few kB or less) are always at hand. To add a
+ * format: a file in ./handlers, and a line here.
  */
 const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   docx: async () => docx,
   odt: async () => (await import('./handlers/odt.ts')).default,
   rtf: async () => (await import('./handlers/rtf.ts')).default,
-  html: async () => (await import('./handlers/html.ts')).default,
+  html: async () => htmlHandler,
   epub: async () => (await import('./handlers/webArchives.ts')).epub,
   mhtml: async () => (await import('./handlers/webArchives.ts')).mhtml,
   pdf: async () => (await import('./handlers/pdf.ts')).default,
-  md: async () => (await import('./handlers/md.ts')).default,
+  md: async () => mdHandler,
   csv: async () => csvHandler,
   tsv: async () => tsvHandler,
   tex: async () => (await import('./handlers/markup.ts')).tex,
@@ -67,9 +71,9 @@ const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   opml: async () => (await import('./handlers/xmlDocuments.ts')).opml,
   eml: async () => (await import('./handlers/webArchives.ts')).eml,
   ipynb: async () => (await import('./handlers/ipynb.ts')).default,
-  png: async () => (await import('./handlers/image.ts')).png,
-  jpeg: async () => (await import('./handlers/image.ts')).jpeg,
-  webp: async () => (await import('./handlers/image.ts')).webp,
+  png: async () => pngHandler,
+  jpeg: async () => jpegHandler,
+  webp: async () => webpHandler,
   txt: async () => txtHandler,
 };
 

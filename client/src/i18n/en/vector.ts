@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'Fit to Artwork',
   'vector.canvas.invalid': 'The size must be from {min} to {max} pixels.',
   'vector.canvas.nothing': 'There is nothing on the canvas to fit to.',
+  'vector.pencil': 'Pencil',
 } as const;

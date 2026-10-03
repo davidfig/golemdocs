@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'An Objekte anpassen',
   'vector.canvas.invalid': 'Die Größe muss zwischen {min} und {max} Pixel liegen.',
   'vector.canvas.nothing': 'Auf der Zeichenfläche ist nichts, woran sie angepasst werden kann.',
+  'vector.pencil': 'Bleistift',
 };

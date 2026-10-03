@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'Ajustar ao conteúdo',
   'vector.canvas.invalid': 'O tamanho deve ser de {min} a {max} pixels.',
   'vector.canvas.nothing': 'Não há nada na tela para ajustar.',
+  'vector.pencil': 'Lápis',
 };

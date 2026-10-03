@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'Ajustar al contenido',
   'vector.canvas.invalid': 'El tamaño debe estar entre {min} y {max} píxeles.',
   'vector.canvas.nothing': 'No hay nada en el lienzo a lo que ajustarse.',
+  'vector.pencil': 'Lápiz',
 };

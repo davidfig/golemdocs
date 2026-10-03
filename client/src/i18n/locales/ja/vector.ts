@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'アートワークに合わせる',
   'vector.canvas.invalid': 'サイズは {min} から {max} ピクセルにしてください。',
   'vector.canvas.nothing': '合わせる対象がキャンバスにありません。',
+  'vector.pencil': '鉛筆',
 };

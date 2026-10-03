@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'Adatta al contenuto',
   'vector.canvas.invalid': 'La dimensione deve essere da {min} a {max} pixel.',
   'vector.canvas.nothing': 'Non c’è nulla sul canvas a cui adattarsi.',
+  'vector.pencil': 'Matita',
 };

@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'По размеру содержимого',
   'vector.canvas.invalid': 'Размер должен быть от {min} до {max} пикселей.',
   'vector.canvas.nothing': 'На холсте нет ничего, по чему можно подогнать размер.',
+  'vector.pencil': 'Карандаш',
 };

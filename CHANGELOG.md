@@ -13,6 +13,7 @@
 - Drawing › Canvas Size sets a vector drawing's page size (in proportion or not), lets the shapes stay or scale with it, adds a background color, and fits the page to the artwork.
 - In the vector editor, Ctrl or Cmd plus a click picks a shape inside a group, double-clicking a group goes into it so that clicks and rubber bands pick its children (Escape comes back out), and the layers list can pick anything.
 - In the vector editor, Ctrl+Alt+click picks the shape underneath the one picked, and again for the next one down, round to the top. In the layers list, hidden shapes show a red eye and locked ones an orange padlock, so they stand out.
+- The vector editor has a Pencil for free drawing: draw with the pointer and it turns the stroke into a smooth path with just a few points, keeps corners sharp, and closes a loop you finish where you began.
 - The import progress card shows an estimate of the time left.
 
 ### Fixed

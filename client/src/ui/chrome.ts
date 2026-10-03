@@ -17,9 +17,10 @@ import {
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h, isFormField } from './dom.ts';
-import { format, getLocale, setLocale, t } from '../i18n/index.ts';
+import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
+import { brushPreview } from './brushPreview.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, VECTOR_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { analyticsPanel } from './analyticsPanel.ts';
@@ -466,7 +467,7 @@ export class Chrome {
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
-    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'pen'], ['text', 'text']] as const) {
+    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'pen'], ['pencil', 'pencil'], ['text', 'text']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, checked: (s) => s.vector.tool === tool }));
     }
     const vectorOps = { delete: 'trash', duplicate: 'copy', group: 'group', ungroup: 'ungroup', front: 'toFront', forward: 'forward', backward: 'backward', back: 'toBack' } as const;
@@ -825,6 +826,7 @@ export class Chrome {
           cmd('vector.ellipse'),
           cmd('vector.line'),
           cmd('vector.pen'),
+          cmd('vector.pencil'),
           cmd('vector.text'),
           sep,
           cmd('vector.group'),
@@ -1050,33 +1052,48 @@ export class Chrome {
     };
   }
 
-  /** The list of ways a line can be drawn: dashes, then the brushes in groups. */
+  /** The list of ways a line can be drawn: dashes, then the brushes in groups, each drawn as a sample. */
   private vectorStrokeStyleBox(): Control {
     const r = this.registry;
     const label = t('vector.strokeStyle');
-    const select = h('select', { class: 'wm-draw-size wm-stroke-style', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
-    const group = (name: string, options: [string, string][]): void => {
-      const g = h('optgroup', { attrs: { label: name } });
-      for (const [value, text] of options) {
-        const option = h('option', { text });
-        option.value = value;
-        g.append(option);
+    const name = (value: string): string => (value.startsWith('dash:') ? t(`vector.dash.${value.slice(5)}` as MessageKey) : t(`vector.brush.${value.slice(6)}` as MessageKey));
+    const text = h('span', { class: 'wm-stroke-name' });
+    const sample = h('span', { class: 'wm-stroke-sample' });
+    const button = h('button', { class: 'wm-draw-size wm-stroke-style', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-stroke-caret' }));
+    let current = 'dash:solid';
+    const groups: [string, string[]][] = [
+      [t('vector.brushGroup.dashes'), DASHES.map((d) => `dash:${d.id}`)],
+      ...BRUSH_GROUPS.map((g): [string, string[]] => [t(`vector.brushGroup.${g}`), BRUSH_PRESETS.filter((p) => p.group === g).map((p) => `brush:${p.id}`)]),
+    ];
+    const open = (): void => {
+      if (popupOpenFor(button)) return closePopup();
+      const list = h('div', { class: 'wm-list wm-stroke-list', attrs: { role: 'listbox', 'aria-label': label } });
+      let chosenRow: HTMLElement | null = null;
+      for (const [heading, values] of groups) {
+        list.append(h('div', { class: 'wm-list-heading', text: heading }));
+        for (const value of values) {
+          const chosen = value === current;
+          const row = h('div', { class: chosen ? 'wm-option wm-stroke-row chosen' : 'wm-option wm-stroke-row', attrs: { role: 'option', 'aria-selected': String(chosen) } }, brushPreview(value), h('span', { text: name(value) }));
+          if (chosen) chosenRow = row;
+          row.addEventListener('click', () => {
+            closePopup();
+            r.perform({ kind: 'vectorStyle', strokeStyle: value }, label);
+            r.focusEditor();
+          });
+          list.append(row);
+        }
       }
-      select.append(g);
+      openPopup(button, list);
+      (chosenRow as HTMLElement | null)?.scrollIntoView({ block: 'center' });
     };
-    group(t('vector.brushGroup.dashes'), DASHES.map((d) => [`dash:${d.id}`, t(`vector.dash.${d.id}`)]));
-    for (const g of BRUSH_GROUPS) {
-      group(t(`vector.brushGroup.${g}`), BRUSH_PRESETS.filter((p) => p.group === g).map((p) => [`brush:${p.id}`, t(`vector.brush.${p.id}`)]));
-    }
-    select.addEventListener('change', () => {
-      r.perform({ kind: 'vectorStyle', strokeStyle: select.value }, label);
-      r.focusEditor();
-    });
+    button.addEventListener('click', open);
     return {
-      el: select,
+      el: button,
       refresh: (state) => {
-        select.value = state.vector.strokeStyle;
-        select.disabled = !r.allows({ kind: 'vectorStyle', strokeStyle: state.vector.strokeStyle });
+        current = state.vector.strokeStyle;
+        text.textContent = name(current);
+        sample.replaceChildren(brushPreview(current));
+        button.disabled = !r.allows({ kind: 'vectorStyle', strokeStyle: current });
       },
     };
   }

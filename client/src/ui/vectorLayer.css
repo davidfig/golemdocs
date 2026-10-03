@@ -35,5 +35,59 @@
 
 /* The stroke style list in the Drawing toolbar. */
 .wm-stroke-style {
-  width: 112px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 150px;
+  padding: 0 4px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  text-align: left;
+}
+
+.wm-stroke-style:disabled {
+  color: var(--wm-disabled);
+}
+
+.wm-stroke-sample .wm-brush-preview {
+  display: block;
+  width: 42px;
+  height: 10px;
+}
+
+.wm-stroke-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-stroke-caret {
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  border-bottom: 0;
+}
+
+.wm-stroke-list {
+  max-height: 360px;
+}
+
+.wm-stroke-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-stroke-row:hover {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-stroke-row.chosen {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+  font-weight: bold;
 }

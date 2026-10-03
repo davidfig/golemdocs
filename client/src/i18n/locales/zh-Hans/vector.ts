@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': '适合图稿',
   'vector.canvas.invalid': '大小必须在 {min} 到 {max} 像素之间。',
   'vector.canvas.nothing': '画布上没有可供适配的内容。',
+  'vector.pencil': '铅笔',
 };

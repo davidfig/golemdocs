@@ -22,6 +22,7 @@ import { outline } from '../vector/geometry.ts';
 import type { Bounds } from '../vector/geometry.ts';
 import { hitTest, hitTestAll, nodesInRect } from '../vector/hit.ts';
 import { apply, fmt, invert, multiply, rotation, scaling, translation } from '../vector/matrix.ts';
+import { freehandPath } from '../vector/freehand.ts';
 import { anchorOf, isSmooth, moveAnchor, moveHandle, nearestSegment, penPath, removeAnchor, splitSegment } from '../vector/pathEdit.ts';
 import type { PenPoint } from '../vector/pathEdit.ts';
 import { colorAt, createGradient, editableGradient, gradientHandles, gradientInLocal, ownGradient, readStops, setGradientPoint, writeStops } from '../vector/gradientEdit.ts';
@@ -44,7 +45,7 @@ export interface VectorEditorHost {
   notice?(message: string): void;
 }
 
-export type VectorTool = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text';
+export type VectorTool = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'pencil' | 'text';
 
 /** What new shapes are drawn with, and what the style controls show and change: `null` is none. */
 export interface ShapeStyle {
@@ -90,6 +91,7 @@ type Gesture =
   | { kind: 'band'; start: [number, number]; to: [number, number]; add: boolean; before: NodePath[] }
   | { kind: 'create'; tool: 'rect' | 'ellipse' | 'line'; start: [number, number]; to: [number, number]; square: boolean }
   | { kind: 'penHandle'; origin: [number, number] }
+  | { kind: 'pencil'; points: [number, number][] }
   | { kind: 'guide'; base: Scene; axis: 'v' | 'h'; index: number; moved: boolean }
   | { kind: 'gradient'; base: Scene; part: 0 | 1 | 'stop'; index: number; moved: boolean }
   | { kind: 'node'; base: Scene; part: NodePart; index: number; start: [number, number]; smooth: boolean; moved: boolean };
@@ -939,6 +941,9 @@ export class VectorEditor {
     switch (this._tool) {
       case 'pen':
         return this.penDown(at, frame, double);
+      case 'pencil':
+        this.gesture = { kind: 'pencil', points: [at] };
+        return;
       case 'rect':
       case 'ellipse':
       case 'line':
@@ -1148,6 +1153,12 @@ export class VectorEditor {
       gesture.square = e.shiftKey;
       return this.refresh();
     }
+    if (gesture.kind === 'pencil') {
+      // Every few pixels the pointer moves is a point of the stroke; they become a smooth path when it is let go.
+      const previous = gesture.points[gesture.points.length - 1];
+      if (Math.hypot(at[0] - previous[0], at[1] - previous[1]) * frame.unit >= 1.5) gesture.points.push(at);
+      return this.refresh();
+    }
     if (gesture.kind === 'penHandle') {
       const last = this.pen?.points[this.pen.points.length - 1];
       if (last && Math.hypot(at[0] - gesture.origin[0], at[1] - gesture.origin[1]) * frame.unit > 3) {
@@ -1286,6 +1297,7 @@ export class VectorEditor {
       return this.refresh();
     }
     if (gesture.kind === 'create') return this.create(gesture);
+    if (gesture.kind === 'pencil') return this.drawn(gesture.points);
     if (!gesture.moved || !this.scene) return;
     // The drawing as moved is the new one; the one before the gesture is what undo comes back to.
     const result = this.scene;
@@ -1314,16 +1326,29 @@ export class VectorEditor {
   }
 
   /** Puts a node on the drawing, selected, and goes back to the select tool. */
-  private place(node: SceneNode): void {
+  private place(node: SceneNode, keepTool = false): void {
     if (!this.scene) return;
     const next = cloneScene(this.scene);
     const path = addNode(next, node);
     // What the line is drawn with: dashes for any shape, a brush for a line.
     const style = this.shape.strokeStyle;
     if (style !== 'dash:solid' && (node.kind === 'path' || style.startsWith('dash:'))) this.styleLine(next, path, style);
-    this._tool = 'select';
-    this.setCursor('');
+    if (!keepTool) {
+      this._tool = 'select';
+      this.setCursor('');
+    }
     this.commit(next, [path]);
+  }
+
+  /** A stroke drawn freehand becomes a smooth path, kept in the pencil tool for the next one. */
+  private drawn(points: readonly [number, number][]): void {
+    const frame = this.host.layer.frame();
+    if (!frame) return this.refresh();
+    // How far the path may stray from the hand, in the drawing's units: a few pixels on screen.
+    const commands = freehandPath(points.map(([x, y]) => ({ x, y })), 2.5 / frame.unit);
+    if (!commands.length) return this.refresh();
+    const closed = commands[commands.length - 1][0] === 'Z';
+    this.place({ kind: 'path', commands, style: this.newStyle(closed), attrs: {} }, true);
   }
 
   private create(g: Extract<Gesture, { kind: 'create' }>): void {
@@ -1725,6 +1750,17 @@ export class VectorEditor {
         ctx.lineTo(sx1, sy1);
       } else if (g.tool === 'rect') ctx.rect(Math.min(sx0, sx1), Math.min(sy0, sy1), Math.abs(sx1 - sx0), Math.abs(sy1 - sy0));
       else ctx.ellipse((sx0 + sx1) / 2, (sy0 + sy1) / 2, Math.abs(sx1 - sx0) / 2, Math.abs(sy1 - sy0) / 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (g?.kind === 'pencil' && g.points.length > 1) {
+      ctx.beginPath();
+      g.points.forEach(([x, y], i) => {
+        const [sx, sy] = frame.toScreen(x, y);
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      });
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.stroke();
     }
     const pen = this.pen;

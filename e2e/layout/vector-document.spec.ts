@@ -62,7 +62,7 @@ test.describe('opening a vector drawing', () => {
     for (const name of ['Select', 'Rectangle', 'Ellipse', 'Line', 'Pen', 'Text', 'Group', 'Ungroup', 'Duplicate', 'Delete']) {
       await expect(app.toolbarButton(new RegExp(`^${name}$`))).toBeVisible();
     }
-    await expect(app.page.getByRole('combobox', { name: 'Stroke Style' })).toBeVisible();
+    await expect(app.page.getByRole('button', { name: 'Stroke Style' })).toBeVisible();
     await expect(app.page.getByRole('combobox', { name: 'Fill Type' })).toBeVisible();
     // The layers panel lists the shapes, the top one first.
     const layers = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
@@ -130,9 +130,16 @@ test.describe('editing a drawing', () => {
     await openDrawing(app);
     const at = await onPage(app, 0.25, 0.4); // the red rectangle
     await app.page.mouse.click(at.x, at.y);
-    await app.page.getByRole('combobox', { name: 'Stroke Style' }).selectOption('dash:dashed');
+    const list = app.page.getByRole('listbox', { name: 'Stroke Style' });
+    await app.page.getByRole('button', { name: 'Stroke Style' }).click();
+    // Each row shows a drawing of its stroke, and the current one is marked.
+    await expect(list.getByRole('option', { name: 'Solid' })).toHaveAttribute('aria-selected', 'true');
+    await expect(list.getByRole('option', { name: 'Frayed Ink' }).locator('svg path')).toHaveCount(1);
+    await list.getByRole('option', { name: 'Dashed', exact: true }).click();
     await expect.poll(async () => (await currentSvg(app)).includes('stroke-dasharray'), { timeout: 15_000 }).toBe(true);
-    await app.page.getByRole('combobox', { name: 'Stroke Style' }).selectOption('dash:solid');
+    await app.page.getByRole('button', { name: 'Stroke Style' }).click();
+    await expect(list.getByRole('option', { name: 'Dashed', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await list.getByRole('option', { name: 'Solid' }).click();
     await expect.poll(async () => (await currentSvg(app)).includes('stroke-dasharray'), { timeout: 15_000 }).toBe(false);
   });
 
@@ -142,6 +149,39 @@ test.describe('editing a drawing', () => {
     await app.page.mouse.click(at.x, at.y);
     await app.page.getByRole('combobox', { name: 'Fill Type' }).selectOption('linear');
     await expect.poll(async () => (await currentSvg(app)).includes('<linearGradient'), { timeout: 15_000 }).toBe(true);
+  });
+});
+
+test.describe('free drawing', () => {
+  test('the Pencil draws a smooth path through the points the pointer went through, and stays picked for the next', async ({ app }) => {
+    await openDrawing(app);
+    await app.toolbarButton(/^Pencil$/).click();
+    const stroke = async (fy: number) => {
+      const start = await onPage(app, 0.1, fy);
+      await app.page.mouse.move(start.x, start.y);
+      await app.page.mouse.down();
+      for (let i = 1; i <= 24; i++) {
+        const p = await onPage(app, 0.1 + i * 0.03, fy + Math.sin(i / 3) * 0.08);
+        await app.page.mouse.move(p.x, p.y);
+      }
+      await app.page.mouse.up();
+    };
+    await stroke(0.85);
+    const layers = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    await expect(layers).toHaveCount(3);
+    await expect
+      .poll(
+        async () => {
+          const d = /<path d="(M[^"]*)"/.exec(await currentSvg(app))?.[1] ?? '';
+          // Dozens of pointer points, a few curves.
+          return /^M[^C]*C/.test(d) && (d.match(/C/g)?.length ?? 0) < 10;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    // Still the pencil: the next stroke is another path, not a click on the first.
+    await stroke(0.7);
+    await expect(layers).toHaveCount(4);
   });
 });
 

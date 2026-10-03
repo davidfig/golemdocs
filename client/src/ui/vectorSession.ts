@@ -92,6 +92,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         case 'ellipse':
         case 'line':
         case 'pen':
+        case 'pencil':
         case 'text':
           return editor.setTool(op);
         case 'delete':

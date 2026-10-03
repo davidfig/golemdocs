@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': '符合圖稿',
   'vector.canvas.invalid': '大小必須介於 {min} 到 {max} 像素之間。',
   'vector.canvas.nothing': '畫布上沒有可供符合的內容。',
+  'vector.pencil': '鉛筆',
 };

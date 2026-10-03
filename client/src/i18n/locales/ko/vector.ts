@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': '아트워크에 맞추기',
   'vector.canvas.invalid': '크기는 {min}에서 {max} 픽셀 사이여야 합니다.',
   'vector.canvas.nothing': '맞출 대상이 캔버스에 없습니다.',
+  'vector.pencil': '연필',
 };

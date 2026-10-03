@@ -115,4 +115,5 @@ export const vector = {
   'vector.canvas.fit': 'Ajuster au contenu',
   'vector.canvas.invalid': 'La taille doit être comprise entre {min} et {max} pixels.',
   'vector.canvas.nothing': 'Il n’y a rien sur le plan de travail à quoi s’ajuster.',
+  'vector.pencil': 'Crayon',
 };

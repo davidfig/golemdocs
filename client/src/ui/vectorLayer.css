@@ -18,3 +18,17 @@
   width: 100%;
   height: 100%;
 }
+
+/* The box a text is typed in, over the drawing where the text goes. */
+.wm-vector-text {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  min-width: 80px;
+  padding: 0 2px;
+  border: 1px solid #316ac5;
+  background: rgb(255 255 255 / 0.9);
+  color: #111;
+  font-family: sans-serif;
+  pointer-events: auto;
+}

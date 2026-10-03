@@ -212,6 +212,13 @@ export const ICONS: Record<string, string> = {
     `<path d="M10 4H6a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 6 20h4" fill="${SKY}"/>` + outlined('M9.5 12h10', RED) + outlined('M16 8l4 4-4 4', RED),
   ),
   move: svg(`<path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5" stroke-width="2"/>`),
+  select: svg(`<path d="M6.5 3.5l11 7.2-5 1.2 2.6 5.6-2.4 1.1-2.6-5.6-3.6 3.6z" fill="${PAPER}"/>`),
+  group: svg(`<rect x="3.5" y="3.5" width="17" height="17" rx="2" stroke-dasharray="2.5 2.5" stroke-width="1.4"/><rect x="7" y="7" width="6.5" height="6.5" fill="${SKY}"/><rect x="10.5" y="10.5" width="6.5" height="6.5" fill="${BLUE}"/>`),
+  ungroup: svg(`<rect x="3.5" y="3.5" width="9" height="9" fill="${SKY}"/><rect x="11.5" y="11.5" width="9" height="9" fill="${BLUE}"/>`),
+  toFront: svg(`<rect x="3.5" y="3.5" width="11" height="11" fill="${MIST}"/><rect x="9.5" y="9.5" width="11" height="11" fill="${BLUE}"/>`),
+  toBack: svg(`<rect x="9.5" y="9.5" width="11" height="11" fill="${MIST}"/><rect x="3.5" y="3.5" width="11" height="11" fill="${BLUE}"/>`),
+  forward: svg(`<rect x="3.5" y="5.5" width="10" height="10" fill="${MIST}"/><rect x="9.5" y="9.5" width="11" height="11" fill="${BLUE}"/><path d="M14 4v5M11.8 6.2L14 4l2.2 2.2" stroke-width="1.6"/>`),
+  backward: svg(`<rect x="9.5" y="9.5" width="11" height="11" fill="${MIST}"/><rect x="3.5" y="3.5" width="11" height="11" fill="${BLUE}"/><path d="M19 4v5M16.8 6.8L19 9l2.2-2.2" stroke-width="1.6"/>`),
   fill: svg(`<rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="${BLUE}" stroke-width="2.2"/>`),
   drawColor: svg(`<path d="M4 17l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 16z" fill="${YELLOW}"/><path d="M4 17l4-1-3-3z" fill="${MIST}"/>` + SWATCH),
   comment: svg(

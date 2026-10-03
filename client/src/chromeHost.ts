@@ -13,7 +13,7 @@ import { nearestPage, type Bounds } from './document/arrange.ts';
 import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
-import { acceptList, type ImageOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, type ImageOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -68,6 +68,12 @@ export interface AppHooks {
   convert(to: DocumentKind): Promise<void>;
   /** A picture tool (rotate, flip, crop, resize, adjust) on the open picture. */
   imageAction(op: ImageOp): Promise<void>;
+  /** A vector editor tool or command (select, draw a shape, group, order...). */
+  vectorAction(op: VectorOp): void;
+  /** The look of the selected shapes and of the next ones. */
+  vectorStyle(change: { fill?: string | null; stroke?: string | null; strokeWidth?: number }): void;
+  /** The open document is a vector drawing. */
+  isDrawing(): boolean;
   /** The Draw tools' colour and thickness step. */
   drawStyle(color?: string, size?: number, fill?: boolean): void;
   /** Insert ▸ Picture: choose a picture file and put it in the document. */
@@ -155,6 +161,8 @@ const SUPPORTED = new Set<ActionKind>([
   'redo',
   'image',
   'drawStyle',
+  'vector',
+  'vectorStyle',
   'insertImage',
   'zoom',
   'zoomBy',
@@ -352,10 +360,14 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.imageAction(action.op);
         case 'drawStyle':
           return app.drawStyle(action.color, action.size, action.fill);
+        case 'vector':
+          return app.vectorAction(action.op);
+        case 'vectorStyle':
+          return app.vectorStyle(action);
         case 'insertImage':
           return app.pickPicture();
         case 'selectAll':
-          return app.send({ kind: 'selectAll' });
+          return app.isDrawing() ? app.vectorAction('selectAll') : app.send({ kind: 'selectAll' });
         case 'zoom':
           if (app.isLargeText()) return app.largeZoom(1, true);
           return zoomTo(action.to);

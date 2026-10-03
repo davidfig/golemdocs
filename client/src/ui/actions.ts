@@ -38,6 +38,9 @@ export type TableOp =
 /** The tools of the Draw toolbar: each picks what the next stroke draws. */
 export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
 
+/** The vector editor's tools and commands (the Drawing menu): the tools pick what a drag draws or does; the rest act on the selection. */
+export type VectorOp = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll';
+
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
 
@@ -158,6 +161,10 @@ export type Action =
   | { kind: 'image'; op: ImageOp }
   /** The colour (CSS) and line thickness step (0 thin to 3 extra thick) the Draw tools use. */
   | { kind: 'drawStyle'; color?: string; size?: number; fill?: boolean }
+  // Drawing (vector)
+  | { kind: 'vector'; op: VectorOp }
+  /** How the selected shapes (and the next ones) look; null is none. */
+  | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number }
   // Tools
   | { kind: 'toggleTrackChanges' };
 
@@ -239,6 +246,8 @@ export interface ChromeState {
   painting: boolean;
   /** The Draw toolbar: the tool picked (if any), its colour and its thickness step. */
   draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
+  /** The vector editor: the tool picked, whether anything is selected, and the look of the selection (or of the next shape). */
+  vector: { tool: 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text'; hasSelection: boolean; fill: string | null; stroke: string | null; strokeWidth: number };
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
@@ -290,6 +299,7 @@ export const DEFAULT_STATE: ChromeState = {
   formMode: null,
   painting: false,
   draw: { tool: null, color: '#e5322d', size: 1, fill: false },
+  vector: { tool: 'select', hasSelection: false, fill: null, stroke: null, strokeWidth: 1 },
   inTable: false,
   sync: { user: null, document: 'guest', error: null },
   subscription: null,

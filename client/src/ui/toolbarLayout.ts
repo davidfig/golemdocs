@@ -85,6 +85,12 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
     visible: true,
     items: ['image.pen', 'image.marker', SEPARATOR, 'image.line', 'image.arrow', 'image.rectangle', 'image.ellipse', 'image.fill', SEPARATOR, 'image.text', 'image.bubble', 'image.step', 'image.pixelate', 'image.eraser', 'image.move', SEPARATOR, 'control.drawColor', 'control.drawSize'],
   },
+  // The vector editor's tools and commands; only there for vector drawings.
+  {
+    name: 'Drawing',
+    visible: true,
+    items: ['vector.select', SEPARATOR, 'vector.rect', 'vector.ellipse', 'vector.line', 'vector.pen', 'vector.text', SEPARATOR, 'control.vectorFill', 'control.vectorStroke', 'control.vectorStrokeWidth', SEPARATOR, 'vector.group', 'vector.ungroup', 'vector.duplicate', 'vector.delete', SEPARATOR, 'vector.front', 'vector.forward', 'vector.backward', 'vector.back'],
+  },
 ];
 
 /**
@@ -109,7 +115,7 @@ export const MOBILE_PRIMARY: readonly string[] = [
 
 /** A toolbar's name as shown (its `name` is an id, kept as saved). */
 export function toolbarTitle(name: string): string {
-  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name === 'Picture' ? t('picture.menu').replace('&', '') : name === 'Draw' ? t('picture.draw.toolbar') : name;
+  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name === 'Picture' ? t('picture.menu').replace('&', '') : name === 'Draw' ? t('picture.draw.toolbar') : name === 'Drawing' ? t('vector.toolbar') : name;
 }
 
 const STORAGE_KEY = 'word.toolbars.v1';

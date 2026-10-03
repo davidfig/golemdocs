@@ -312,6 +312,7 @@ function openTicket(): () => boolean {
 
 function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean } = {}): void {
   openRequests++;
+  keepCamera = !!options.pictureEdit && source.kind === 'svg';
   const start = performance.now();
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   let firstPage = 0;
@@ -611,8 +612,16 @@ const wordView = (): boolean => !reflowing() && !grid && !isPicture() && !isDraw
 /** Gray kept beside a page that was zoomed to fit the screen's width. */
 const PAGE_FIT_MARGIN_PX = 16;
 
+/** A drawing was just changed and opened again: the view stays where it was. */
+let keepCamera = false;
+
 function placeCamera(): void {
   cameraPlaced = true;
+  if (keepCamera) {
+    keepCamera = false;
+    viewRestored = true;
+    return;
+  }
   const saved = pendingView?.camera;
   if (saved && saved.reflow === reflowing() && !grid) {
     camera.zoom = Math.min(Math.max(saved.zoom, camera.minZoom), camera.maxZoom);
@@ -2311,6 +2320,7 @@ function render(): void {
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
+    vector: { tool: vectorEditor.tool, hasSelection: vectorEditor.selection.length > 0, ...vectorEditor.currentStyle },
     inTable,
     formattingMarks,
     viewMode: grid ? 'grid' : viewMode,
@@ -3008,6 +3018,34 @@ const chromeHost = createChromeHost({
     if (fill !== undefined) drawStyle.fill = fill;
     requestRender();
   },
+  vectorAction: (op) => {
+    switch (op) {
+      case 'select':
+      case 'rect':
+      case 'ellipse':
+      case 'line':
+      case 'pen':
+      case 'text':
+        return vectorEditor.setTool(op);
+      case 'delete':
+        return vectorEditor.delete();
+      case 'duplicate':
+        return vectorEditor.duplicate();
+      case 'group':
+        return vectorEditor.group();
+      case 'ungroup':
+        return vectorEditor.ungroup();
+      case 'front':
+      case 'forward':
+      case 'backward':
+      case 'back':
+        return vectorEditor.order(op);
+      case 'selectAll':
+        return vectorEditor.selectAll();
+    }
+  },
+  vectorStyle: (change) => vectorEditor.applyStyle(change),
+  isDrawing,
   pickPicture,
   isPicture: () => isPicture() || isDrawing(),
   stepPicture,
@@ -3285,7 +3323,7 @@ const vectorEditor = new VectorEditor({
   layer: vectorLayer,
   changed: (scene) => void commitDrawing(scene),
   stateChanged: () => requestRender(),
-  ownsInput: (target) => target === input,
+  notice: (message) => setStatus(message),
 });
 
 // Drawing on a picture (see ui/drawLayer.ts).

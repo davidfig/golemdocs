@@ -422,6 +422,9 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'image':
     case 'drawStyle':
       return profile.imageTools;
+    case 'vector':
+    case 'vectorStyle':
+      return profile.vectorTools;
     // A PDF has no text selection to copy or select yet.
     case 'copy':
     case 'selectAll':

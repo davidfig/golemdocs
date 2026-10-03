@@ -464,6 +464,16 @@ export class Chrome {
       r.add(a(`image.${tool}`, t(`picture.draw.${tool}`), { kind: 'image', op: tool }, { icon: tool, checked: (s) => s.draw.tool === tool }));
     }
 
+    // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
+    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'pen'], ['text', 'text']] as const) {
+      r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, checked: (s) => s.vector.tool === tool }));
+    }
+    const vectorOps = { delete: 'trash', duplicate: 'copy', group: 'group', ungroup: 'ungroup', front: 'toFront', forward: 'forward', backward: 'backward', back: 'toBack' } as const;
+    for (const op of ['delete', 'duplicate', 'group', 'ungroup', 'front', 'forward', 'backward', 'back'] as const) {
+      r.add(a(`vector.${op}`, t(`vector.${op}`), { kind: 'vector', op }, { icon: vectorOps[op], enabled: (s) => s.vector.hasSelection }));
+    }
+    r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }));
+
     r.add({ id: 'image.fill', label: t('picture.draw.fill'), icon: 'fill', action: (s) => ({ kind: 'drawStyle', fill: !s.draw.fill }), checked: (s) => s.draw.fill });
 
     // Help
@@ -793,6 +803,29 @@ export class Chrome {
         ],
       },
       {
+        label: t('vector.menu'),
+        items: [
+          cmd('vector.select'),
+          cmd('vector.rect'),
+          cmd('vector.ellipse'),
+          cmd('vector.line'),
+          cmd('vector.pen'),
+          cmd('vector.text'),
+          sep,
+          cmd('vector.group'),
+          cmd('vector.ungroup'),
+          cmd('vector.duplicate'),
+          cmd('vector.delete'),
+          sep,
+          cmd('vector.front'),
+          cmd('vector.forward'),
+          cmd('vector.backward'),
+          cmd('vector.back'),
+          sep,
+          cmd('vector.selectAll'),
+        ],
+      },
+      {
         label: t('chrome.menu.help'),
         items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
       },
@@ -944,7 +977,50 @@ export class Chrome {
         () => profile().imageTools,
       ),
     );
+    define('control.vectorFill', t('vector.fill'), t('vector.toolbar'), 'fill', () =>
+      gated(
+        colorButton({ label: t('vector.fill'), icon: 'fill', noneLabel: t('vector.noFill'), initial: '#5B8DEF', palette: 'full', action: (color) => ({ kind: 'vectorStyle', fill: color }) }, r),
+        () => profile().vectorTools,
+      ),
+    );
+    define('control.vectorStroke', t('vector.stroke'), t('vector.toolbar'), 'drawColor', () =>
+      gated(
+        colorButton({ label: t('vector.stroke'), icon: 'drawColor', noneLabel: t('vector.noStroke'), initial: '#2E3148', palette: 'full', action: (color) => ({ kind: 'vectorStyle', stroke: color }) }, r),
+        () => profile().vectorTools,
+      ),
+    );
+    define('control.vectorStrokeWidth', t('vector.strokeWidth'), t('vector.toolbar'), 'line', () => gated(this.vectorWidthBox(), () => profile().vectorTools));
     define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
+  }
+
+  /** The outline width of the selected shapes: a short list of widths, and the shape's own when it is another. */
+  private vectorWidthBox(): Control {
+    const r = this.registry;
+    const label = t('vector.strokeWidth');
+    const select = h('select', { class: 'wm-draw-size', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
+    const widths = [0.5, 1, 2, 4, 8, 16, 32];
+    const fill = (extra: number | null): void => {
+      select.replaceChildren();
+      for (const w of extra === null || widths.includes(extra) ? widths : [...widths, extra].sort((x, y) => x - y)) {
+        const option = h('option', { text: String(w) });
+        option.value = String(w);
+        select.append(option);
+      }
+    };
+    fill(null);
+    select.addEventListener('change', () => {
+      r.perform({ kind: 'vectorStyle', strokeWidth: Number(select.value) }, label);
+      r.focusEditor();
+    });
+    return {
+      el: select,
+      refresh: (state) => {
+        const width = Math.round(state.vector.strokeWidth * 100) / 100;
+        if (![...select.options].some((o) => Number(o.value) === width)) fill(width);
+        select.value = String(width);
+        select.disabled = !r.allows({ kind: 'vectorStyle', strokeWidth: width });
+      },
+    };
   }
 
   /** The line thickness to draw with: a small list of steps. */

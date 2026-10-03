@@ -17,7 +17,8 @@ import { panels } from './panels.ts';
 import { picture } from './picture.ts';
 import { spelling } from './spelling.ts';
 import { table } from './table.ts';
+import { vector } from './vector.ts';
 import { pageSetup } from './pageSetup.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...app, ...assistant, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Partial<Messages> = { ...app, ...assistant, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

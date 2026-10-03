@@ -18,9 +18,10 @@ import { picture } from './picture.ts';
 import { properties } from './properties.ts';
 import { spelling } from './spelling.ts';
 import { table } from './table.ts';
+import { vector } from './vector.ts';
 import { wordCount } from './wordCount.ts';
 
-export const catalogs = [app, assistant, chrome, columns, dialogs, largeText, link, math, menus, pageSetup, panels, paragraph, pasteSpecial, picture, properties, spelling, table, wordCount] as const;
+export const catalogs = [app, assistant, chrome, columns, dialogs, largeText, link, math, menus, pageSetup, panels, paragraph, pasteSpecial, picture, properties, spelling, table, vector, wordCount] as const;
 
 export const en = Object.assign({}, ...catalogs) as UnionToIntersection<(typeof catalogs)[number]>;
 

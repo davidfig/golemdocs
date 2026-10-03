@@ -43,6 +43,7 @@ export const assistant = {
   'assistant.pictureFailed': 'That picture couldn’t be prepared. Try another one.',
   'assistant.describePicture': 'What can you tell me about this picture?',
   'assistant.tool.viewPicture': 'Looking at a picture…',
+  'assistant.tool.drawing': 'Working on the drawing…',
   'assistant.tool.searchDocuments': 'Looking through your documents…',
   'assistant.tool.readOtherDocument': 'Reading another document…',
   'assistant.tool.insertFromDocument': 'Copying from another document…',

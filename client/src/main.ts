@@ -3251,6 +3251,11 @@ const assistantTools = appTools({
   isPicture,
   pictureBytes,
   changePicture,
+  drawing: async () => {
+    if (!isDrawing()) return null;
+    const session = await loadVector();
+    return session.editor;
+  },
 });
 
 // Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).

@@ -3,6 +3,8 @@
 // edits. The rest run in the layout worker (../layout/agentTools.ts). The app's state comes through
 // the host, so these use the same functions the menus do.
 
+import { describeDrawing, editDrawing } from './drawingTools.ts';
+import type { DrawingEditor } from './drawingTools.ts';
 import type { ImageEdit } from '../formats/imageEdit.ts';
 import { FORMAT_LIST, isFormat } from '../formats/convert.ts';
 import { sniffImage } from '../formats/images.ts';
@@ -46,10 +48,12 @@ export interface AppToolsHost {
   pictureBytes(): Promise<Uint8Array>;
   /** Changes the open picture (one undoable step). */
   changePicture(edit: ImageEdit): Promise<void>;
+  /** The open vector drawing's editor (loaded if need be), or null when the open document is not a drawing. */
+  drawing(): Promise<DrawingEditor | null>;
 }
 
 /** The app's tools that act on the open document (the others are about the library). */
-const OPEN_DOCUMENT_APP_TOOLS = new Set(['view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
+const OPEN_DOCUMENT_APP_TOOLS = new Set(['read_drawing', 'edit_drawing', 'view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
 /** Tools that open another document on purpose: the request goes on with that one. */
 const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document']);
 
@@ -217,6 +221,16 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       }
       if (!done.length) throw new Error('Say what to change: view_mode, zoom, status_bar or formatting_marks.');
       return `Changed the view: ${done.join(', ')}.`;
+    },
+    async read_drawing() {
+      const editor = await host.drawing();
+      if (!editor?.drawing) return 'Error: the open document is not a vector drawing (SVG). Convert it to SVG to edit it as one.';
+      return describeDrawing(editor.drawing);
+    },
+    async edit_drawing(args) {
+      const editor = await host.drawing();
+      if (!editor?.drawing) return 'Error: the open document is not a vector drawing (SVG). Convert it to SVG to edit it as one.';
+      return `${await editDrawing(editor, args)}\n${describeDrawing(editor.drawing)}`;
     },
     async edit_picture(args) {
       if (!host.isPicture()) return 'Error: the open document is not a picture. Convert it to png, jpeg or webp to edit it as one.';

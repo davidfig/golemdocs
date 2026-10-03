@@ -22,7 +22,7 @@ const COS_TILT = Math.cos(TILT);
 const SIN_TILT = Math.sin(TILT);
 
 /** Tools that change the document (the reply reminds the person that Undo takes their changes back). */
-const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'convert_document']);
+const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'edit_drawing', 'convert_document']);
 
 /** What Clip says it is doing while a tool runs. */
 function toolNote(name: string): string {
@@ -76,6 +76,9 @@ function toolNote(name: string): string {
     case 'convert_document':
     case 'edit_picture':
       return t('assistant.tool.convert');
+    case 'read_drawing':
+    case 'edit_drawing':
+      return t('assistant.tool.drawing');
     default:
       return t('assistant.tool.other');
   }

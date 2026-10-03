@@ -4,7 +4,7 @@
 
 import type { ToolDefinition } from './model.ts';
 
-export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), pictures (edit them, and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP). You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
+export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks), pictures (edit them, and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP). You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
 
 Work like this:
 - The document is a numbered list of paragraphs (starting at 0). Read before you edit: use read_document, get_selection or find_text. Never guess what the document says.
@@ -396,6 +396,45 @@ export const TOOLS: ToolDefinition[] = [
         document: { type: 'string', description: 'For source "library": the other document\'s id or name.' },
       },
       required: ['source'],
+    },
+  },
+  {
+    name: 'read_drawing',
+    description: 'When the document is a vector drawing (SVG): its size and its shapes, back to front, numbered from 0, with where each is, its colors and any text. Read before you edit.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'edit_drawing',
+    description:
+      'When the document is a vector drawing (SVG), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others) and release_clip.',
+    parameters: {
+      type: 'object',
+      properties: {
+        op: { type: 'string' },
+        shapes: { type: 'array', items: { type: 'integer' } },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        to_x: { type: 'number' },
+        to_y: { type: 'number' },
+        width: { type: 'number' },
+        height: { type: 'number' },
+        corner_radius: { type: 'number' },
+        d: { type: 'string' },
+        text: { type: 'string' },
+        font_size: { type: 'number' },
+        fill: { type: 'string' },
+        stroke: { type: 'string' },
+        stroke_width: { type: 'number' },
+        dx: { type: 'number' },
+        dy: { type: 'number' },
+        sx: { type: 'number' },
+        sy: { type: 'number' },
+        degrees: { type: 'number' },
+        to: { type: 'string', enum: ['front', 'forward', 'backward', 'back'] },
+        value: { type: 'string' },
+        type: { type: 'string', enum: ['solid', 'linear', 'radial'] },
+      },
+      required: ['op'],
     },
   },
   {

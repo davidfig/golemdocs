@@ -7,7 +7,7 @@
 // phase) while a drawing is open.
 
 import type { XmlElement } from '@golemdocs/docx';
-import type { PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
+import type { Matrix, PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
 import { snapBox, snapPoint, snapTargets } from '../vector/snap.ts';
 import type { SnapTargets } from '../vector/snap.ts';
@@ -374,6 +374,21 @@ export class VectorEditor {
     this.edit((scene, selection) => {
       const released = releaseClippingMask(scene, selection[0]);
       return released.length ? released : selection;
+    });
+  }
+
+  /** Puts a shape on the drawing, on top and selected (the assistant's way of drawing one). */
+  addShape(node: SceneNode): void {
+    if (!this.scene) return;
+    const next = cloneScene(this.scene);
+    this.commit(next, [addNode(next, node)]);
+  }
+
+  /** Moves, scales or turns the selection by a matrix in the drawing's coordinates. */
+  transformSelection(m: Matrix): void {
+    this.edit((scene, selection) => {
+      transformNodes(scene, selection, m);
+      return selection;
     });
   }
 

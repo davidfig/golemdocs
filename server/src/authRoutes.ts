@@ -11,6 +11,7 @@
 import { describeUser, userForProfile } from './accounts.ts';
 import { DEV_SIGNED_OUT, authenticate, userIdFor } from './auth.ts';
 import type { Env } from './cf.ts';
+import { json } from './http.ts';
 import { base64url, constantTimeEqual, fromBase64url, pkceChallenge, randomToken } from './crypto.ts';
 import { AuthError, PROVIDERS, providerFor } from './providers.ts';
 import { clearCookie, cookieName, createSession, destroySession, readCookie, setCookie } from './session.ts';
@@ -26,9 +27,6 @@ interface Flow {
   returnTo: string;
 }
 
-function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
-}
 
 /**
  * Only same-site paths: never an absolute or protocol-relative URL (open redirect). Browsers read

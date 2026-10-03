@@ -5,12 +5,12 @@
 // The Worker authenticates the request and works out the user's role before forwarding it here, so
 // the object trusts the x-* headers (it can only be reached through the Worker's binding).
 
+import { DOCX, docxKey } from './keys.ts';
 import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Transaction } from '@golemdocs/ops';
-import type { DurableObjectState, Env, WebSocketHandle } from './cf.ts';
+import type { DurableObjectState, Env, SqlStorage, WebSocketHandle } from './cf.ts';
 import { DEFAULT_TIMINGS, INITIAL_META, RoomCore, type Peer, type PeerState, type RoomFiles, type RoomMeta, type RoomStore } from './roomCore.ts';
 import { userDb } from './userDb.ts';
 
-const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_MESSAGE_CHARS = 4 * 1024 * 1024;
 
 declare const WebSocketPair: new () => { 0: WebSocketHandle; 1: WebSocketHandle };
@@ -18,34 +18,49 @@ declare const WebSocketPair: new () => { 0: WebSocketHandle; 1: WebSocketHandle 
 class SqlStore implements RoomStore {
   private cached: RoomMeta;
   private count: number;
+  /** False once the storage has been wiped (the document was deleted): the tables are gone until something is written. */
+  private exists = true;
 
   constructor(private readonly ctx: DurableObjectState) {
     const sql = ctx.storage.sql;
-    sql.exec('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
-    sql.exec('CREATE TABLE IF NOT EXISTS log (pos INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, json TEXT NOT NULL)');
+    this.create();
     const row = sql.exec<{ v: string }>("SELECT v FROM kv WHERE k = 'meta'").toArray()[0];
     this.cached = { ...INITIAL_META, ...(row ? (JSON.parse(row.v) as Partial<RoomMeta>) : {}) };
     this.count = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM log').toArray()[0]!.n;
+  }
+
+  private create(): void {
+    this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
+    this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS log (pos INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, json TEXT NOT NULL)');
+    this.exists = true;
+  }
+
+  /** Before a write: a wiped room that is used again (a request racing the delete) gets its tables back. */
+  private writable(): SqlStorage {
+    if (!this.exists) this.create();
+    return this.ctx.storage.sql;
   }
 
   meta = (): RoomMeta => this.cached;
 
   setMeta(patch: Partial<RoomMeta>): void {
     this.cached = { ...this.cached, ...patch };
-    this.ctx.storage.sql.exec("INSERT INTO kv (k, v) VALUES ('meta', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", JSON.stringify(this.cached));
+    this.writable().exec("INSERT INTO kv (k, v) VALUES ('meta', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", JSON.stringify(this.cached));
   }
 
   /** Small values that outlive the object: whose document this is. */
   get(key: string): string | null {
+    if (!this.exists) return null;
     return this.ctx.storage.sql.exec<{ v: string }>('SELECT v FROM kv WHERE k = ?', key).toArray()[0]?.v ?? null;
   }
   set(key: string, value: string): void {
-    this.ctx.storage.sql.exec('INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v', key, value);
+    this.writable().exec('INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v', key, value);
   }
 
   length = (): number => this.count;
 
   slice(from: number): Transaction[] {
+    if (!this.exists) return [];
     return this.ctx.storage.sql
       .exec<{ json: string }>('SELECT json FROM log WHERE pos >= ? ORDER BY pos', from)
       .toArray()
@@ -53,19 +68,32 @@ class SqlStore implements RoomStore {
   }
 
   has(id: string): boolean {
+    if (!this.exists) return false;
     return this.ctx.storage.sql.exec('SELECT 1 FROM log WHERE id = ?', id).toArray().length > 0;
   }
 
   append(transactions: Transaction[]): void {
+    const sql = this.writable();
     // The count moves only once every row is in: a failed insert rolls the whole batch back.
     this.ctx.storage.transactionSync(() => {
-      transactions.forEach((tx, i) => this.ctx.storage.sql.exec('INSERT INTO log (pos, id, json) VALUES (?, ?, ?)', this.count + i, tx.id, JSON.stringify(tx)));
+      transactions.forEach((tx, i) => sql.exec('INSERT INTO log (pos, id, json) VALUES (?, ?, ?)', this.count + i, tx.id, JSON.stringify(tx)));
     });
     this.count += transactions.length;
   }
 
   clear(): void {
-    this.ctx.storage.sql.exec('DELETE FROM log');
+    this.writable().exec('DELETE FROM log');
+    this.count = 0;
+  }
+
+  /**
+   * Deletes everything the object stores. A deleted document's room is never joined again (its id
+   * is never reused, and the Worker refuses it), so nothing needs to outlive it, not even the epoch.
+   */
+  async wipe(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.exists = false;
     this.count = 0;
   }
 }
@@ -78,7 +106,7 @@ export class CloudFiles implements RoomFiles {
     private readonly doc: () => string,
   ) {}
 
-  private key = () => `${this.owner()}/${this.doc()}.docx`;
+  private key = () => docxKey(this.owner(), this.doc());
 
   async read(): Promise<Uint8Array | null> {
     const object = await this.env.FILES.get(this.key());
@@ -191,6 +219,8 @@ export class Room {
     }
     if (url.pathname === '/end') {
       this.core.end();
+      // Otherwise every deleted document would leave its room's rows behind for good.
+      await this.store.wipe();
       return new Response(null, { status: 204 });
     }
     return new Response('not found', { status: 404 });
@@ -215,11 +245,18 @@ export class Room {
   }
 
   async webSocketClose(socket: WebSocketHandle): Promise<void> {
-    await this.core.disconnect(this.peer(socket));
+    await this.forget(socket);
   }
 
   async webSocketError(socket: WebSocketHandle): Promise<void> {
-    await this.core.disconnect(this.peer(socket));
+    await this.forget(socket);
+  }
+
+  /** A connection ended: out of the room, and out of the map (which would otherwise keep every socket the object ever had). */
+  private async forget(socket: WebSocketHandle): Promise<void> {
+    const peer = this.peers.get(socket);
+    this.peers.delete(socket);
+    if (peer) await this.core.disconnect(peer);
   }
 
   async alarm(): Promise<void> {

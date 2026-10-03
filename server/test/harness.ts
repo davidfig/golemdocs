@@ -12,7 +12,7 @@ const realFetch = globalThis.fetch;
 
 function fakeDirectory(): { db: DatabaseSync; binding: any } {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_users.sql', '0002_auth.sql', '0003_sharing.sql', '0004_feedback.sql', '0005_feedback_resolved.sql', '0006_subscriptions.sql', '0007_assistant_usage.sql', '0008_picture.sql', '0009_catalogue_cache.sql', '0010_doc_index.sql']) db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
+  for (const file of ['0001_users.sql', '0002_auth.sql', '0003_sharing.sql', '0004_feedback.sql', '0005_feedback_resolved.sql', '0006_subscriptions.sql', '0007_assistant_usage.sql', '0008_picture.sql', '0009_catalogue_cache.sql', '0010_doc_index.sql', '0011_owners_backfilled.sql', '0012_catalogue_version.sql', '0013_assistant_reserved_at.sql']) db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
   const statement = (sql: string, params: unknown[]): any => ({
     bind: (...values: unknown[]) => statement(sql, values),
     first: async () => (db.prepare(sql).get(...(params as any[])) as any) ?? null,
@@ -42,7 +42,7 @@ export interface World {
   env: Env;
   directory: DatabaseSync;
   /** R2 objects by key. */
-  objects: Map<string, { bytes: ArrayBuffer; contentType?: string }>;
+  objects: Map<string, { bytes: ArrayBuffer; contentType?: string; etag?: string }>;
   /** A request to the worker, signed in as `as` (the DEV_USER identity; null: not signed in). */
   call(as: string | null, method: string, path: string, init?: { body?: BodyInit; type?: string; headers?: Record<string, string> }): Promise<Response>;
   /**
@@ -64,14 +64,24 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
   const background: Promise<unknown>[] = [];
   const objects: World['objects'] = new Map();
   const userDatabases = new Map<string, DatabaseSync>();
+  const databaseNames = new Map<string, string>();
   const directory = fakeDirectory();
+  // Each write gets a new etag, as in R2, so a conditional put can tell whether it is still current.
+  let writes = 0;
   const bucket: any = {
     async get(key: string) {
       const o = objects.get(key);
-      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, httpEtag: '"etag"', httpMetadata: { contentType: o.contentType } };
+      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, httpEtag: `"${o.etag}"`, httpMetadata: { contentType: o.contentType } };
     },
-    async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }) {
-      objects.set(key, { bytes: value, contentType: options?.httpMetadata?.contentType });
+    async head(key: string) {
+      const o = objects.get(key);
+      return o ? { etag: o.etag } : null;
+    },
+    async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; onlyIf?: { etagMatches?: string } }) {
+      const match = options?.onlyIf?.etagMatches;
+      if (match !== undefined && objects.get(key)?.etag !== match) return null;
+      objects.set(key, { bytes: value, contentType: options?.httpMetadata?.contentType, etag: `etag-${++writes}` });
+      return {};
     },
     async delete(keys: string | string[]) {
       for (const key of [keys].flat()) objects.delete(key);
@@ -100,8 +110,15 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
     const body = init?.body ? JSON.parse(init.body) : {};
     const ok = (result: unknown) => new Response(JSON.stringify({ success: true, errors: [], result }));
     if (url.pathname.endsWith('/d1/database')) {
+      // Names are unique, as Cloudflare's are: making one again fails, and it is found by name instead.
+      if (!init?.body) {
+        const name = url.searchParams.get('name');
+        return ok([...databaseNames].filter(([n]) => n === name).map(([n, uuid]) => ({ name: n, uuid })));
+      }
+      if (databaseNames.has(body.name)) return new Response(JSON.stringify({ success: false, errors: [{ code: 7502, message: 'database already exists' }] }), { status: 400 });
       const uuid = `db-${userDatabases.size + 1}`;
       userDatabases.set(uuid, new DatabaseSync(':memory:'));
+      databaseNames.set(body.name, uuid);
       return ok({ uuid });
     }
     const query = /\/d1\/database\/([^/]+)\/query$/.exec(url.pathname);

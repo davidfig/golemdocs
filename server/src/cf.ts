@@ -29,10 +29,13 @@ export interface R2ObjectBody {
 
 export interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
+  /** The object's metadata without its body; null if there is none. */
+  head(key: string): Promise<{ etag: string } | null>;
+  /** With `onlyIf`, answers null (and writes nothing) unless the object's etag still matches. */
   put(
     key: string,
     value: ArrayBuffer | ArrayBufferView | ReadableStream | string,
-    options?: { httpMetadata?: { contentType?: string } },
+    options?: { httpMetadata?: { contentType?: string }; onlyIf?: { etagMatches?: string } },
   ): Promise<unknown>;
   delete(keys: string | string[]): Promise<void>;
 }
@@ -45,6 +48,8 @@ export interface DurableObjectStorage {
   sql: SqlStorage;
   setAlarm(time: number): Promise<void>;
   deleteAlarm(): Promise<void>;
+  /** Deletes everything the object stores, SQL tables included (but not its alarm). */
+  deleteAll(): Promise<void>;
   transactionSync<T>(closure: () => T): T;
 }
 

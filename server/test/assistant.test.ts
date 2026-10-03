@@ -186,6 +186,17 @@ test('a failing model costs nothing and releases its hold', async () => {
   assert.deepEqual({ ...usage(id) }, { spent: 0, reserved: 0 });
 });
 
+test('a hold left by a request that never settled is let go once it is older than any request lasts', async () => {
+  const { id, email } = await subscriber();
+  // Its server stopped part way, an hour ago, holding the whole budget.
+  w.directory.prepare('INSERT INTO assistant_usage (user_id, period, reserved_micro, reserved_at) VALUES (?, ?, ?, ?)').run(id, periodOf(), MONTHLY_BUDGET_MICRO, Date.now() - 60 * 60 * 1000);
+  assert.equal((await ask(email)).status, 200);
+  assert.equal(usage(id)!.reserved, 0);
+  // A recent one still counts.
+  w.directory.prepare('UPDATE assistant_usage SET reserved_micro = ?, reserved_at = ? WHERE user_id = ?').run(MONTHLY_BUDGET_MICRO, Date.now(), id);
+  assert.equal((await ask(email)).status, 402);
+});
+
 test('requests running at once cannot overspend: the second is refused while the first holds its worst case', async () => {
   const { id, email } = await subscriber();
   // Room for one request's worst case, not two (a request's worst case grows with the tools it carries).

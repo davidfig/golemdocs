@@ -174,6 +174,15 @@ test('an id repeated within one submission is logged once; a transaction without
   assert.equal(t.store.length(), 1);
 });
 
+test('an operation that is not one closes the connection, and nothing is logged', async () => {
+  const t = await shared();
+  await t.core.message(t.a, { type: 'submit', epoch: 0, version: 0, transactions: [{ id: 'a:0', client: 'a', ops: [null] } as any] });
+  assert.equal(t.a.closed, ROOM_CLOSE.badMessage);
+  await t.core.message(t.b, { type: 'submit', epoch: 0, version: 0, transactions: [{ id: 'b:0', client: 'b', ops: [{ type: 'explode' }] } as any] });
+  assert.equal(t.b.closed, ROOM_CLOSE.badMessage);
+  assert.equal(t.store.length(), 0);
+});
+
 test('a client whose document is at a version the room does not have is told to start again', async () => {
   const t = await shared();
   const c = await t.join('c');

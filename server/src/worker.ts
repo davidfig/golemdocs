@@ -1,22 +1,22 @@
 import { isAdmin, pictureOf } from './accounts.ts';
+import { DOCX, docxKey, thumbKey } from './keys.ts';
 import { assistantStatus, handleAssistant } from './assistant.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
-import { HttpError } from './http.ts';
+import { cleanName, failure, HttpError, ID, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
+import { checkFolder, handleFolders, type FolderRow } from './folders.ts';
 import { Room } from './room.ts';
 import { handleSearch, removeManyFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError, existingUserDb, userDb, type UserDb } from './userDb.ts';
 
-const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_THUMB_BYTES = 512 * 1024;
 const THUMB_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg']);
-const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 interface DocumentRow {
   id: string;
@@ -29,18 +29,6 @@ interface DocumentRow {
   thumb_at: number | null;
   /** The folder it is in; null at the top level. */
   folder_id: string | null;
-}
-
-interface FolderRow {
-  id: string;
-  name: string;
-  parent_id: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
-function describeFolder(row: FolderRow) {
-  return { id: row.id, name: row.name, parentId: row.parent_id, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 /** What the client sees of a document (the R2 key stays server-side). */
@@ -58,142 +46,39 @@ function describe(row: DocumentRow, role: Role = 'owner') {
   };
 }
 
-const MAX_FOLDER_DEPTH = 32;
-
 /** An owner's documents, newest first, from the catalogue cache when it is current. */
 function listDocuments(env: Env, ownerId: string, db: UserDb): Promise<DocumentRow[]> {
   return db.cachedList('documents', async () => {
     const rows = await db.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
     // Documents from before sharing existed are claimed here, so rooms and shares can find them.
-    await registerOwners(env, rows.map((row) => row.id), ownerId);
+    // Every document made since registers its owner when it is created, so this is needed once per user.
+    if (!(await ownersBackfilled(env, ownerId))) {
+      await registerOwners(env, rows.map((row) => row.id), ownerId);
+      await env.DIRECTORY.prepare('UPDATE users SET owners_backfilled = 1 WHERE user_id = ?').bind(ownerId).run().catch(() => {});
+    }
     return rows;
   });
 }
 
-/**
- * /api/folders[/:id]: the user's folders. Clients make the ids, so a folder made offline can be
- * sent as it is (PUT is create-or-update).
- */
-async function handleFolders(request: Request, id: string | undefined, db: UserDb | null, syncing: boolean): Promise<Response> {
-  if (id === undefined) {
-    // GET /api/folders
-    if (request.method === 'GET') return json(db ? (await db.cachedList('folders', () => db.all<FolderRow>('SELECT * FROM folders ORDER BY name'))).map(describeFolder) : []);
-
-    // PUT /api/folders { folders: [{ id, name, parentId }] }: creates or updates several, in order
-    // (so a folder may go inside one made earlier in the list). Each is reported on its own.
-    if (request.method === 'PUT') {
-      if (!db || !syncing) throw subscriptionRequired();
-      const body = (await request.json().catch(() => null)) as { folders?: unknown } | null;
-      if (!Array.isArray(body?.folders) || body.folders.length > MAX_BATCH) throw new HttpError(400, `expected { folders: [{ id, name, parentId }] } of at most ${MAX_BATCH}`);
-      const ok: ReturnType<typeof describeFolder>[] = [];
-      const failed: Failure[] = [];
-      for (const item of body.folders as { id?: unknown; name?: unknown; parentId?: unknown }[]) {
-        const itemId = typeof item?.id === 'string' ? item.id : '';
-        try {
-          if (!ID.test(itemId)) throw new HttpError(400, 'expected an id');
-          ok.push((await putFolder(db, itemId, item)).folder);
-        } catch (error) {
-          failed.push(failure(itemId, error));
-        }
-      }
-      return json({ ok, failed });
-    }
-
-    // DELETE /api/folders { ids }: removes the folders only; what was in each moves up.
-    if (request.method === 'DELETE') {
-      if (!db) throw new HttpError(404, 'not found');
-      const ids = idList(await request.json().catch(() => null));
-      const ok: string[] = [];
-      const failed: Failure[] = [];
-      for (const folderId of ids) {
-        try {
-          await removeFolder(db, folderId);
-          ok.push(folderId);
-        } catch (error) {
-          failed.push(failure(folderId, error));
-        }
-      }
-      return json({ ok, failed });
-    }
-    throw new HttpError(405, 'method not allowed');
+/** Whether the owner's old documents have been claimed already (see listDocuments). */
+async function ownersBackfilled(env: Env, ownerId: string): Promise<boolean> {
+  try {
+    // Locally there is no users row, so this stays false; there the directory is not rate limited.
+    const row = await env.DIRECTORY.prepare('SELECT owners_backfilled FROM users WHERE user_id = ?').bind(ownerId).first<{ owners_backfilled: number }>();
+    return !!row?.owners_backfilled;
+  } catch {
+    // A directory without the column yet: claim them, as before.
+    return false;
   }
-
-  // PUT /api/folders/:id { name, parentId }: creates it, or renames and moves it.
-  if (request.method === 'PUT') {
-    if (!db || !syncing) throw subscriptionRequired();
-    const { folder, created } = await putFolder(db, id, (await request.json().catch(() => null)) as { name?: unknown; parentId?: unknown } | null);
-    return json(folder, created ? 201 : 200);
-  }
-
-  // DELETE /api/folders/:id: removes the folder only. What was in it moves up to where it was.
-  if (request.method === 'DELETE') {
-    if (!db) throw new HttpError(404, 'not found');
-    await removeFolder(db, id);
-    return new Response(null, { status: 204 });
-  }
-
-  throw new HttpError(405, 'method not allowed');
-}
-
-const MAX_BATCH = 500;
-
-/** One item of a batch that did not go through. */
-interface Failure {
-  id: string;
-  error: string;
-}
-
-const failure = (id: string, error: unknown): Failure => ({ id, error: error instanceof HttpError ? error.message : 'internal error' });
-
-/** The `ids` of a batch request: a list of ids (at most MAX_BATCH), without repeats. */
-function idList(body: unknown, key = 'ids', optional = false): string[] {
-  const ids = (body as Record<string, unknown> | null)?.[key];
-  if (optional && ids === undefined) return [];
-  if (!Array.isArray(ids) || ids.length > MAX_BATCH || !ids.every((id) => typeof id === 'string' && ID.test(id))) throw new HttpError(400, `expected { ${key}: [...] } of at most ${MAX_BATCH} ids`);
-  return [...new Set(ids as string[])];
-}
-
-/** Creates the folder `id`, or renames and moves it. */
-async function putFolder(db: UserDb, id: string, body: { name?: unknown; parentId?: unknown } | null): Promise<{ folder: ReturnType<typeof describeFolder>; created: boolean }> {
-  const name = typeof body?.name === 'string' ? cleanName(body.name) : null;
-  const parentId = body?.parentId ?? null;
-  if (!name || (parentId !== null && typeof parentId !== 'string')) throw new HttpError(400, 'expected { name, parentId }');
-  if (parentId !== null) {
-    // The new parent must exist, and must not be this folder or inside it.
-    let at: string | null = parentId;
-    for (let depth = 0; at !== null; depth++) {
-      if (at === id || depth > MAX_FOLDER_DEPTH) throw new HttpError(400, 'a folder cannot go inside itself');
-      const parent: FolderRow | null = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [at]);
-      if (!parent) throw new HttpError(400, 'no such folder');
-      at = parent.parent_id;
-    }
-  }
-  const now = Date.now();
-  const existing = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
-  if (existing) await db.run('UPDATE folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?', [name, parentId, now, id]);
-  else await db.run('INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, name, parentId, now, now]);
-  return { folder: describeFolder({ id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now }), created: !existing };
-}
-
-/** Deletes the folder only: what was in it moves up to where it was. */
-async function removeFolder(db: UserDb, id: string): Promise<void> {
-  const row = await db.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [id]);
-  if (!row) throw new HttpError(404, 'not found');
-  await db.run('UPDATE folders SET parent_id = ? WHERE parent_id = ?', [row.parent_id, id]);
-  await db.run('UPDATE documents SET folder_id = ? WHERE folder_id = ?', [row.parent_id, id]);
-  await db.run('DELETE FROM folders WHERE id = ?', [id]);
 }
 
 /** Moves the document to a folder (null: the top level); the owner's call. */
 async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Promise<DocumentRow> {
-  if (folderId !== null && typeof folderId !== 'string') throw new HttpError(400, 'expected { folderId }');
-  if (folderId !== null && !(await db.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
-  await db.run('UPDATE documents SET folder_id = ? WHERE id = ?', [folderId, row.id]);
-  return { ...row, folder_id: folderId };
+  const to = await checkFolder(db, folderId);
+  await db.run('UPDATE documents SET folder_id = ? WHERE id = ?', [to, row.id]);
+  return { ...row, folder_id: to };
 }
 
-/** D1 allows 100 bound values in a statement (developers.cloudflare.com/d1/platform/limits). */
-const IDS_PER_QUERY = 90;
 const ROOMS_AT_ONCE = 25;
 
 /**
@@ -201,18 +86,25 @@ const ROOMS_AT_ONCE = 25;
  * rows are what make a document gone, so once they are deleted the rest is cleanup: with `defer`
  * it is handed over to carry on after the response (it cannot fail the request; a failure leaves
  * unreferenced objects, never a row pointing at nothing), otherwise it is done before returning.
+ * `also` goes in the same transaction as the rows (a folder delete's folders, so either both go or neither).
  */
-async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[], defer?: (work: Promise<unknown>) => void): Promise<void> {
+async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[], defer?: (work: Promise<unknown>) => void, also: { sql: string; params: unknown[] }[] = []): Promise<void> {
+  const ids = rows.map((r) => r.id);
   // Many to a statement and all in one request to Cloudflare, which limits how many it takes.
-  const statements: { sql: string; params: unknown[] }[] = [];
-  for (let i = 0; i < rows.length; i += IDS_PER_QUERY) {
-    const chunk = rows.slice(i, i + IDS_PER_QUERY);
-    statements.push({ sql: `DELETE FROM documents WHERE id IN (${chunk.map(() => '?').join(',')})`, params: chunk.map((r) => r.id) });
+  await db.runAll([...perChunk(ids, (marks) => `DELETE FROM documents WHERE id IN (${marks})`), ...also]);
+  // The owner and share rows are what let the bytes be read straight from R2 (see the fast read in
+  // the handler), so they go before answering: deferred work can be cut short, and the files would
+  // stay readable. They are cheap (the directory is a binding, not the rate-limited API).
+  let forgotten = true;
+  try {
+    await forgetDocuments(env, ids);
+  } catch (error) {
+    forgotten = false;
+    console.error('forgetting deleted documents failed; trying again in the cleanup', error);
   }
-  await db.runAll(statements);
   const cleanup = async () => {
-    await forgetDocuments(env, rows.map((r) => r.id));
-    await removeManyFromIndex(env, rows.map((r) => r.id));
+    if (!forgotten) await forgetDocuments(env, ids);
+    await removeManyFromIndex(env, ids);
     // Each room is told in its own request: a few dozen at a time rather than one after another.
     if (env.ROOMS) {
       for (let i = 0; i < rows.length; i += ROOMS_AT_ONCE) {
@@ -220,20 +112,11 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
       }
     }
     // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
-    const keys = rows.flatMap((row) => [row.r2_key, `${ownerId}/${row.id}.thumb`]);
+    const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id)]);
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
   };
   if (defer) defer(cleanup().catch((error) => console.error('delete cleanup failed', error)));
   else await cleanup();
-}
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-}
-
-function cleanName(raw: string | null): string | null {
-  const name = raw?.trim().slice(0, 255);
-  return name ? name : null;
 }
 
 async function readBody(request: Request, limit: number, what: string, allowEmpty = false): Promise<ArrayBuffer> {
@@ -287,8 +170,8 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
   // One query for every folder named, rather than one per document.
   const wanted = [...new Set(items.flatMap((i) => (i.folderId === null ? [] : [i.folderId])))];
   const folders = new Set<string>();
-  for (let i = 0; i < wanted.length; i += 90) {
-    const chunk = wanted.slice(i, i + 90);
+  for (let i = 0; i < wanted.length; i += IDS_PER_QUERY) {
+    const chunk = wanted.slice(i, i + IDS_PER_QUERY);
     for (const row of await db.all<{ id: string }>(`SELECT id FROM folders WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk)) folders.add(row.id);
   }
 
@@ -302,7 +185,7 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
       const id = crypto.randomUUID();
       try {
         // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
-        await env.FILES.put(`${userId}/${id}.docx`, new Uint8Array(body, item.start, item.size), { httpMetadata: { contentType: DOCX } });
+        await env.FILES.put(docxKey(userId, id), new Uint8Array(body, item.start, item.size), { httpMetadata: { contentType: DOCX } });
         saved.push({ id, name: item.name, size: item.size, folderId: item.folderId, index });
       } catch (error) {
         console.error(error);
@@ -316,7 +199,7 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
     const rows = saved.slice(i, i + ROWS_PER_INSERT);
     statements.push({
       sql: `INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES ${rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
-      params: rows.flatMap((r) => [r.id, r.name, r.size, `${userId}/${r.id}.docx`, now, now, r.folderId]),
+      params: rows.flatMap((r) => [r.id, r.name, r.size, docxKey(userId, r.id), now, now, r.folderId]),
     });
   }
   // If this fails part way the objects stay unreferenced and the caller sees a failed request.
@@ -500,7 +383,7 @@ const handler: ExportedHandler = {
         const access = await earlyAccess;
         if (access && (access.ownerId === userId || (await hasSync(env, access.ownerId)))) {
           const thumb = sub === 'thumbnail';
-          const object = await env.FILES.get(`${access.ownerId}/${id}.${thumb ? 'thumb' : 'docx'}`);
+          const object = await env.FILES.get(thumb ? thumbKey(access.ownerId, id) : docxKey(access.ownerId, id));
           if (object) {
             return new Response(object.body, {
               headers: thumb
@@ -509,8 +392,9 @@ const handler: ExportedHandler = {
                     'content-length': String(object.size),
                     etag: object.httpEtag,
                     'cache-control': url.searchParams.has('v') ? 'private, max-age=31536000, immutable' : 'private, no-cache',
+                    'x-content-type-options': 'nosniff',
                   }
-                : { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache' },
+                : { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache', 'x-content-type-options': 'nosniff' },
             });
           }
         }
@@ -519,7 +403,9 @@ const handler: ExportedHandler = {
       // own (so nothing is created for people who only open what a subscriber shares), and what
       // they already have can be read and deleted but not changed.
       const syncing = await hasSync(env, userId);
-      const ownDb = syncing ? await userDb(env, userId) : await existingUserDb(env, userId);
+      // A database is made on the first change, not the first look: a list of nothing needs none, and
+      // each one made counts against the account's limit on databases.
+      const ownDb = syncing && request.method !== 'GET' ? await userDb(env, userId) : await existingUserDb(env, userId);
 
       // GET /api/shared: documents other people shared with this user.
       if (collection === 'shared') {
@@ -565,12 +451,12 @@ const handler: ExportedHandler = {
         if (folderId !== null && !(await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
         const now = Date.now();
         // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
-        await env.FILES.put(`${userId}/${docId}.docx`, bytes, { httpMetadata: { contentType: DOCX } });
+        await env.FILES.put(docxKey(userId, docId), bytes, { httpMetadata: { contentType: DOCX } });
         await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [
           docId,
           name,
           bytes.byteLength,
-          `${userId}/${docId}.docx`,
+          docxKey(userId, docId),
           now,
           now,
           folderId,
@@ -599,6 +485,7 @@ const handler: ExportedHandler = {
             for (const row of await ownDb.all<DocumentRow>(`SELECT * FROM documents WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk)) owned.set(row.id, row);
           }
         }
+        const moving: string[] = [];
         for (const docId of ids) {
           try {
             const own = owned.get(docId) ?? null;
@@ -607,10 +494,22 @@ const handler: ExportedHandler = {
               throw access ? new HttpError(403, `only the owner can ${deleting ? 'delete' : 'move'} this document`) : new HttpError(404, 'not found');
             }
             if (deleting) doomed.push(own);
-            else await moveDocument(ownDb, own, (body as { folderId?: unknown }).folderId);
-            if (!deleting) ok.push(docId);
+            else moving.push(docId);
           } catch (error) {
             failed.push(failure(docId, error));
+          }
+        }
+        // A move is checked once and made in one request to Cloudflare, however many documents.
+        // (It leaves updated_at alone, as a single move does: it is not an edit, and clients compare
+        // updated_at to tell whether a document's contents changed.)
+        if (moving.length && ownDb) {
+          try {
+            const to = await checkFolder(ownDb, (body as { folderId?: unknown }).folderId);
+            await ownDb.runAll(perChunk(moving, (marks) => `UPDATE documents SET folder_id = ? WHERE id IN (${marks})`, [to]));
+            ok.push(...moving);
+          } catch (error) {
+            failed.push(...moving.map((docId) => failure(docId, error)));
+            if (!(error instanceof HttpError)) console.error(error);
           }
         }
         // The folders asked for, and every folder inside them, with the documents in any of them.
@@ -639,14 +538,9 @@ const handler: ExportedHandler = {
         } else for (const folderId of folderIds) failed.push({ id: folderId, error: 'not found' });
         if (ownDb && (doomed.length || asked.length)) {
           try {
-            await deleteDocuments(env, userId, ownDb, doomed, ctx && ((work) => ctx.waitUntil(work)));
-            const gone = [...doomedFolders];
-            await ownDb.runAll(
-              Array.from({ length: Math.ceil(gone.length / IDS_PER_QUERY) }, (_, n) => {
-                const chunk = gone.slice(n * IDS_PER_QUERY, (n + 1) * IDS_PER_QUERY);
-                return { sql: `DELETE FROM folders WHERE id IN (${chunk.map(() => '?').join(',')})`, params: chunk };
-              }),
-            );
+            // The folders go in the same transaction as the documents: a failure leaves both, never documents gone from folders that stay.
+            const folderDeletes = perChunk([...doomedFolders], (marks) => `DELETE FROM folders WHERE id IN (${marks})`);
+            await deleteDocuments(env, userId, ownDb, doomed, ctx && ((work) => ctx.waitUntil(work)), folderDeletes);
             ok.push(...doomed.map((row) => row.id).filter((docId) => ids.includes(docId)), ...asked);
           } catch (error) {
             failed.push(...[...ids.filter((docId) => doomed.some((d) => d.id === docId)), ...asked].map((x) => failure(x, error)));
@@ -671,12 +565,16 @@ const handler: ExportedHandler = {
       };
       const db: UserDb | null = ownerId === userId ? ownDb : await userDb(env, ownerId);
       if (!db) throw new HttpError(404, 'not found');
-      const thumbKeyFor = (docId: string) => `${ownerId}/${docId}.thumb`;
+      const thumbKeyFor = (docId: string) => thumbKey(ownerId, docId);
 
       // Reads take the row from the cached catalogue (one native query) instead of asking the user's
       // own database over the network. Writes always read it afresh: they check what is current.
       const reading = request.method === 'GET' && (sub === undefined || sub === 'thumbnail');
-      const row = (reading ? (await db.peekList<DocumentRow>('documents'))?.find((r) => r.id === id) : undefined) ?? (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [id]));
+      // A save with a base notes the file's version before reading the row (see the PUT below), so a
+      // save that lands in between changes one or the other and this one is refused, not lost.
+      const savedKey = docxKey(ownerId, id);
+      const fileBefore = request.method === 'PUT' && sub === undefined && url.searchParams.has('base') ? await env.FILES.head(savedKey) : undefined;
+      const row =(reading ? (await db.peekList<DocumentRow>('documents'))?.find((r) => r.id === id) : undefined) ?? (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [id]));
       if (!row) throw new HttpError(404, 'not found');
       const requireWrite = () => {
         if (!canWrite(role)) throw new HttpError(403, 'this document is read-only for you');
@@ -726,6 +624,8 @@ const handler: ExportedHandler = {
               'content-length': String(object.size),
               etag: object.httpEtag,
               'cache-control': url.searchParams.has('v') ? 'private, max-age=31536000, immutable' : 'private, no-cache',
+              // The bytes are whatever the client uploaded: never let a browser guess them into HTML.
+              'x-content-type-options': 'nosniff',
             },
           });
         }
@@ -737,7 +637,12 @@ const handler: ExportedHandler = {
           const bytes = await readBody(request, MAX_THUMB_BYTES, 'thumbnail');
           const now = Date.now();
           await env.FILES.put(thumbKeyFor(id), bytes, { httpMetadata: { contentType: type } });
-          await db.run('UPDATE documents SET thumb_at = ? WHERE id = ?', [now, id]);
+          const updated = await db.run('UPDATE documents SET thumb_at = ? WHERE id = ? RETURNING id', [now, id]);
+          if (!updated.length) {
+            // Deleted while the thumbnail was on its way: don't leave its image behind.
+            await env.FILES.delete(thumbKeyFor(id));
+            throw new HttpError(404, 'not found');
+          }
           return json(describe({ ...row, thumb_at: now }, role));
         }
         throw new HttpError(405, 'method not allowed');
@@ -748,7 +653,7 @@ const handler: ExportedHandler = {
         const object = await env.FILES.get(row.r2_key);
         if (!object) throw new HttpError(404, 'document file is missing');
         return new Response(object.body, {
-          headers: { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache' },
+          headers: { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache', 'x-content-type-options': 'nosniff' },
         });
       }
 
@@ -767,20 +672,45 @@ const handler: ExportedHandler = {
         if (base !== null && Number(base) !== row.updated_at) throw new HttpError(409, 'changed elsewhere');
         const bytes = await readDocx(request);
         const name = cleanName(url.searchParams.get('name')) ?? row.name;
-        // Strictly increasing, so two saves in the same millisecond still tell versions apart.
-        const now = Math.max(Date.now(), row.updated_at + 1);
-        await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX } });
-        await db.run('UPDATE documents SET name = ?, size = ?, updated_at = ? WHERE id = ?', [name, bytes.byteLength, now, id]);
-        return json(describe({ ...row, name, size: bytes.byteLength, updated_at: now }, role));
+        // With a base, the bytes go in only if nobody else's did since the row was read: two saves
+        // from the same base both pass the check above, and without this the later one's bytes would
+        // replace the earlier one's while the row still described the earlier one.
+        const current = base === null ? null : row.r2_key === savedKey ? (fileBefore ?? null) : await env.FILES.head(row.r2_key);
+        const written = await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX }, ...(current ? { onlyIf: { etagMatches: current.etag } } : {}) });
+        if (current && written === null) throw new HttpError(409, 'changed elsewhere');
+        // Strictly increasing, so two saves in the same millisecond still tell versions apart. With a
+        // base it also has to be the version the save started from; and the row may be gone (deleted
+        // meanwhile), which RETURNING tells apart from success.
+        const updated = await db.run<{ updated_at: number }>(
+          `UPDATE documents SET name = ?, size = ?, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
+          [name, bytes.byteLength, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
+        );
+        if (!updated[0]) {
+          if (base !== null && (await db.first('SELECT 1 FROM documents WHERE id = ?', [id]))) throw new HttpError(409, 'changed elsewhere');
+          // Deleted while this save was on its way: the bytes just written belong to nothing.
+          await env.FILES.delete(row.r2_key);
+          throw new HttpError(404, 'not found');
+        }
+        return json(describe({ ...row, name, size: bytes.byteLength, updated_at: updated[0].updated_at }, role));
       }
 
-      // PATCH /api/documents/:id { folderId }: moves it to a folder (null: the top level). Only the
-      // owner arranges their documents; this does not count as editing one.
+      // PATCH /api/documents/:id { folderId?, name? }: moves it to a folder (null: the top level),
+      // and/or renames it. Only the owner arranges their documents; neither counts as editing one
+      // (so a save based on the version before still goes through). A rename this way works while
+      // several people are editing it too, when the file itself can't be uploaded.
       if (request.method === 'PATCH') {
         if (role !== 'owner') throw new HttpError(403, 'only the owner can move this document');
         requireStorage();
-        const body = (await request.json().catch(() => null)) as { folderId?: unknown } | null;
-        return json(describe(await moveDocument(db, row, body?.folderId), role));
+        const body = (await request.json().catch(() => null)) as { folderId?: unknown; name?: unknown } | null;
+        let next = row;
+        if (body?.name !== undefined) {
+          const name = typeof body.name === 'string' ? cleanName(body.name) : null;
+          if (!name) throw new HttpError(400, 'expected a name');
+          await db.run('UPDATE documents SET name = ? WHERE id = ?', [name, id]);
+          next = { ...next, name };
+        }
+        if (body?.folderId !== undefined || body?.name === undefined) next = await moveDocument(db, next, body?.folderId);
+        return json(describe(next, role));
       }
 
       // DELETE /api/documents/:id

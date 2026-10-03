@@ -106,3 +106,20 @@ test('documents from before sharing are claimed by their owner when listed', asy
   await w.call(OWNER, 'GET', '/api/documents');
   assert.equal((await share(id, ALICE, 'viewer')).status, 200);
 });
+
+test('a shared document deleted with its folder is gone for the people it was shared with at once, before the cleanup', async () => {
+  w.restore();
+  w = world({ background: true });
+  for (const email of [OWNER, ALICE]) await w.signUp(email, email.split('@')[0]);
+  const folder = crypto.randomUUID();
+  await w.call(OWNER, 'PUT', `/api/folders/${folder}`, { body: JSON.stringify({ name: 'F', parentId: null }), type: 'application/json' });
+  const r = await w.call(OWNER, 'POST', `/api/documents?name=Doc.docx&folder=${folder}`, { body: bytes(1, 2, 3), type: DOCX });
+  const id = ((await r.json()) as any).id;
+  await share(id, ALICE, 'viewer');
+  assert.equal((await w.call(ALICE, 'GET', `/api/documents/${id}`)).status, 200);
+  await w.call(OWNER, 'DELETE', '/api/documents', { body: JSON.stringify({ folders: [folder] }), type: 'application/json' });
+  assert.equal(w.objects.size, 1, 'the file is still in R2 until the cleanup');
+  assert.equal((await w.call(ALICE, 'GET', `/api/documents/${id}`)).status, 404);
+  assert.deepEqual(await (await w.call(ALICE, 'GET', '/api/shared')).json(), []);
+  await Promise.all(w.background);
+});

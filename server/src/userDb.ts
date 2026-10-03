@@ -65,10 +65,14 @@ export class UserDb {
     return result?.results ?? [];
   }
 
-  /** Every change goes through here (reads use `all` and `first`), so it is where cached lists are dropped. */
-  async run(sql: string, params: unknown[] = []): Promise<void> {
-    await this.all(sql, params);
+  /**
+   * Every change goes through here (reads use `all` and `first`), so it is where cached lists are
+   * dropped. Answers the statement's rows, so a write with `RETURNING` can tell whether it changed anything.
+   */
+  async run<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
+    const rows = await this.all<T>(sql, params);
     await this.invalidate();
+    return rows;
   }
 
   /** Several changes in one request to Cloudflare, which D1 runs as a transaction (all or none), dropping the cached lists once. */
@@ -85,7 +89,7 @@ export class UserDb {
   private async invalidate(): Promise<void> {
     try {
       await this.env.DIRECTORY.prepare(
-        "INSERT INTO catalogue_cache (db_key, kind, json, cached_at) VALUES (?, '', '', ?) ON CONFLICT(db_key, kind) DO UPDATE SET cached_at = MAX(cached_at, excluded.cached_at)",
+        "INSERT INTO catalogue_cache (db_key, kind, json, cached_at, version) VALUES (?, '', '', ?, 1) ON CONFLICT(db_key, kind) DO UPDATE SET cached_at = excluded.cached_at, version = version + 1",
       )
         .bind(this.cacheKey, Date.now())
         .run();
@@ -94,38 +98,46 @@ export class UserDb {
     }
   }
 
-  /**
-   * A list from this database (`kind` names it), served from the directory's copy when that is
-   * current. `load` reads it for real; it runs on a miss and its result is kept. The copy is dated
-   * from before `load` started, so a change made while it ran leaves the copy out of date, never wrong.
-   */
-  /** The cached copy of a list if it is current, else null. */
-  async peekList<T>(kind: string): Promise<T[] | null> {
+  /** The cached copy of a list if it is current (else null), and the database's change count now. */
+  private async peek<T>(kind: string): Promise<{ rows: T[] | null; version: number | null }> {
     try {
-      const { results } = await this.env.DIRECTORY.prepare('SELECT kind, json, cached_at FROM catalogue_cache WHERE db_key = ?')
+      const { results } = await this.env.DIRECTORY.prepare('SELECT kind, json, cached_at, version FROM catalogue_cache WHERE db_key = ?')
         .bind(this.cacheKey)
-        .all<{ kind: string; json: string; cached_at: number }>();
-      const changedAt = results.find((r) => r.kind === '')?.cached_at ?? 0;
+        .all<{ kind: string; json: string; cached_at: number; version: number }>();
+      const version = results.find((r) => r.kind === '')?.version ?? 0;
       const hit = results.find((r) => r.kind === kind);
-      if (hit && hit.cached_at > changedAt && Date.now() - hit.cached_at < CACHE_TTL_MS) return JSON.parse(hit.json) as T[];
+      // Read at the count there is now: nothing has changed since. (The time is only for the TTL.)
+      const current = hit && hit.version === version && Date.now() - hit.cached_at < CACHE_TTL_MS;
+      return { rows: current ? (JSON.parse(hit.json) as T[]) : null, version };
     } catch {
       // No cache: the caller reads the database itself.
+      return { rows: null, version: null };
     }
-    return null;
   }
 
+  /** The cached copy of a list if it is current, else null. */
+  async peekList<T>(kind: string): Promise<T[] | null> {
+    return (await this.peek<T>(kind)).rows;
+  }
+
+  /**
+   * A list from this database (`kind` names it), served from the directory's copy when that is
+   * current. `load` reads it for real; it runs on a miss and its result is kept, marked with the
+   * change count from before `load` started: a change made while it ran leaves the copy out of
+   * date, never wrong.
+   */
   async cachedList<T>(kind: string, load: () => Promise<T[]>): Promise<T[]> {
-    const started = Date.now();
-    const directory = this.env.DIRECTORY;
-    const cached = await this.peekList<T>(kind);
+    const { rows: cached, version } = await this.peek<T>(kind);
     if (cached) return cached;
     const rows = await load();
+    if (version === null) return rows;
     try {
       const json = JSON.stringify(rows);
       if (json.length <= CACHE_MAX_JSON) {
-        await directory
-          .prepare('INSERT INTO catalogue_cache (db_key, kind, json, cached_at) VALUES (?, ?, ?, ?) ON CONFLICT(db_key, kind) DO UPDATE SET json = excluded.json, cached_at = excluded.cached_at')
-          .bind(this.cacheKey, kind, json, started)
+        await this.env.DIRECTORY.prepare(
+          'INSERT INTO catalogue_cache (db_key, kind, json, cached_at, version) VALUES (?, ?, ?, ?, ?) ON CONFLICT(db_key, kind) DO UPDATE SET json = excluded.json, cached_at = excluded.cached_at, version = excluded.version',
+        )
+          .bind(this.cacheKey, kind, json, Date.now(), version)
           .run();
       }
     } catch {
@@ -146,8 +158,16 @@ async function migrate(db: UserDb): Promise<number> {
   for (const [index, statements] of USER_MIGRATIONS.entries()) {
     const version = index + 1;
     if (applied.has(version)) continue;
-    for (const statement of statements) await db.run(statement);
-    await db.run('INSERT OR IGNORE INTO _migrations (version) VALUES (?)', [version]);
+    // In one transaction with its version: one stopped half way (a 429, a timeout) would otherwise
+    // be run again from the start, and fail for good on the table it had already made.
+    const record = { sql: 'INSERT INTO _migrations (version) VALUES (?)', params: [version] };
+    try {
+      await db.runAll([...statements.map((sql) => ({ sql, params: [] })), record]);
+    } catch (error) {
+      // A request running at the same time got there first (its batch went through, so this one's didn't).
+      const now = await db.all<{ version: number }>('SELECT version FROM _migrations WHERE version = ?', [version]);
+      if (!now.length) throw error;
+    }
   }
   return USER_MIGRATIONS.length;
 }

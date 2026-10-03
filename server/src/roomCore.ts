@@ -7,7 +7,7 @@
 // transactions (persisted, so it survives the object being evicted) and turns it into .docx files:
 // on a timer while people keep editing, and for good when the epoch ends.
 
-import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomMode, type RoomRole } from '@golemdocs/ops';
+import { isOperation, ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomMode, type RoomRole } from '@golemdocs/ops';
 import type { Transaction } from '@golemdocs/ops';
 import { applyLog } from './snapshot.ts';
 
@@ -231,7 +231,7 @@ export class RoomCore {
     if (!this.canEdit(peer)) return peer.close(ROOM_CLOSE.badMessage, 'read-only');
     if (meta.mode !== 'shared' || message.epoch !== meta.epoch || !peer.state.synced) return;
     if (!Array.isArray(message.transactions) || message.transactions.length > MAX_SUBMIT_TRANSACTIONS) return peer.close(ROOM_CLOSE.badMessage, 'too many transactions');
-    if (!message.transactions.every((tx) => typeof tx?.id === 'string' && Array.isArray(tx.ops))) return peer.close(ROOM_CLOSE.badMessage, 'bad transaction');
+    if (!message.transactions.every((tx) => typeof tx?.id === 'string' && Array.isArray(tx.ops) && tx.ops.every(isOperation))) return peer.close(ROOM_CLOSE.badMessage, 'bad transaction');
     // Made against an old version: the client will get the newer transactions and try again.
     if (message.version !== this.store.length()) return;
     // A resubmission of something already logged (after a reconnect) isn't applied twice, and

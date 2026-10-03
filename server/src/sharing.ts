@@ -45,7 +45,7 @@ export async function registerOwners(env: Env, docIds: readonly string[], ownerI
   }
 }
 
-/** `forgetDocument` for many documents, a batch at a time. */
+/** Forgets deleted documents' owners and everything shared from them, a batch at a time. */
 export async function forgetDocuments(env: Env, docIds: readonly string[]): Promise<void> {
   for (let i = 0; i < docIds.length; i += DIRECTORY_BATCH) {
     await env.DIRECTORY.batch(
@@ -55,12 +55,6 @@ export async function forgetDocuments(env: Env, docIds: readonly string[]): Prom
       ]),
     );
   }
-}
-
-/** Forgets a deleted document's owner and everything shared from it. */
-export async function forgetDocument(env: Env, docId: string): Promise<void> {
-  await env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(docId).run();
-  await env.DIRECTORY.prepare('DELETE FROM document_owners WHERE doc_id = ?').bind(docId).run();
 }
 
 export interface Person {

@@ -18,7 +18,7 @@ const MS_ISSUER = 'https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a
 
 function fakeD1(): any {
   const db = new DatabaseSync(':memory:');
-  for (const file of ['0001_users.sql', '0002_auth.sql', '0008_picture.sql']) {
+  for (const file of ['0001_users.sql', '0002_auth.sql', '0008_picture.sql', '0011_owners_backfilled.sql']) {
     db.exec(readFileSync(new URL(`../migrations/directory/${file}`, import.meta.url), 'utf8'));
   }
   const statement = (sql: string, params: unknown[]): any => ({

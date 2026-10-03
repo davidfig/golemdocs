@@ -16,6 +16,7 @@
 import { WordDocument, paragraphSegments, type Segment } from '@golemdocs/docx';
 import type { AiBinding, Env } from './cf.ts';
 import { HttpError } from './http.ts';
+import { docxKey } from './keys.ts';
 import { subscriptionFor } from './subscriptions.ts';
 import type { UserDb } from './userDb.ts';
 
@@ -117,19 +118,6 @@ export async function indexDocument(env: Env, ownerId: string, doc: IndexedDocum
   await env.DIRECTORY.prepare('INSERT OR REPLACE INTO doc_index (doc_id, owner_id, updated_at, chunks) VALUES (?, ?, ?, ?)').bind(doc.id, ownerId, doc.updatedAt, chunks.length).run();
 }
 
-/** Takes a deleted document out of the index. Never throws: a stray vector is only a wrong search hit. */
-export async function removeFromIndex(env: Env, docId: string): Promise<void> {
-  if (!env.VECTORS) return;
-  try {
-    const row = await env.DIRECTORY.prepare('SELECT chunks FROM doc_index WHERE doc_id = ?').bind(docId).first<{ chunks: number }>();
-    if (!row) return;
-    if (row.chunks) await env.VECTORS.deleteByIds(Array.from({ length: row.chunks }, (_, i) => vectorId(docId, i)));
-    await env.DIRECTORY.prepare('DELETE FROM doc_index WHERE doc_id = ?').bind(docId).run();
-  } catch (e) {
-    console.error('search index removal failed', e);
-  }
-}
-
 export interface SearchHit {
   id: string;
   name: string;
@@ -199,13 +187,13 @@ export async function handleSearch(env: Env, userId: string, query: string, db: 
     text,
     rows.map((r) => ({ id: r.id, name: r.name, updatedAt: r.updated_at })),
     async (id) => {
-      const object = await env.FILES.get(`${userId}/${id}.docx`);
+      const object = await env.FILES.get(docxKey(userId, id));
       return object && object.size <= MAX_BYTES ? new Uint8Array(await new Response(object.body).arrayBuffer()) : null;
     },
   );
 }
 
-/** `removeFromIndex` for many documents: a query and a delete per 50 of them, and the vectors in lists of 100, rather than a round trip each. */
+/** Takes deleted documents out of the index: a query and a delete per 50 of them, and the vectors in lists of 100. Never throws: a stray vector is only a wrong search hit. */
 export async function removeManyFromIndex(env: Env, docIds: readonly string[]): Promise<void> {
   if (!env.VECTORS) return;
   for (let i = 0; i < docIds.length; i += 50) {

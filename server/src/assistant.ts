@@ -90,13 +90,19 @@ async function spentThisMonth(env: Env, userId: string, period: string): Promise
 
 const creditsLeft = (spent: number): number => Math.max(0, Math.round((1 - spent / MONTHLY_BUDGET_MICRO) * 100));
 
+/** Longer than any request runs: holds older than this belong to requests that never settled. */
+const HOLD_LIFETIME_MS = 15 * 60 * 1000;
+
 /** Holds `hold` of the user's budget for a running request; false if there isn't that much left. */
 async function reserve(env: Env, userId: string, period: string, hold: number): Promise<boolean> {
   await env.DIRECTORY.prepare('INSERT OR IGNORE INTO assistant_usage (user_id, period) VALUES (?, ?)').bind(userId, period).run();
+  const now = Date.now();
+  // What is held now: nothing, if no hold was taken for longer than a request lasts.
+  const held = 'CASE WHEN reserved_at < ? THEN 0 ELSE reserved_micro END';
   const result = await env.DIRECTORY.prepare(
-    'UPDATE assistant_usage SET reserved_micro = reserved_micro + ? WHERE user_id = ? AND period = ? AND spent_micro + reserved_micro + ? <= ?',
+    `UPDATE assistant_usage SET reserved_micro = ${held} + ?, reserved_at = ? WHERE user_id = ? AND period = ? AND spent_micro + ${held} + ? <= ?`,
   )
-    .bind(hold, userId, period, hold, MONTHLY_BUDGET_MICRO)
+    .bind(now - HOLD_LIFETIME_MS, hold, now, userId, period, now - HOLD_LIFETIME_MS, hold, MONTHLY_BUDGET_MICRO)
     .run();
   return result.meta.changes === 1;
 }

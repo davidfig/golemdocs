@@ -48,6 +48,9 @@ function fakeState(db = new DatabaseSync(':memory:'), sockets: FakeSocket[] = []
       },
       setAlarm: async (t: number) => void alarms.push(t),
       deleteAlarm: async () => void alarms.push(null),
+      deleteAll: async () => {
+        for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]) db.exec(`DROP TABLE "${name}"`);
+      },
       transactionSync: (fn) => fn(),
     },
     getWebSockets: () => sockets,
@@ -176,18 +179,32 @@ test('/kick closes only that user’s sockets with the revoked code; the others 
   assert.equal(sockets[1]!.closed, null);
 });
 
-test('/end closes everyone, clears the log and starts a new epoch (persisted across an eviction)', async () => {
+test('/end closes everyone and deletes everything the room stored', async () => {
   const s = fakeState();
   s.sockets.push(new FakeSocket(peerState('a')));
   const room = new Room(s.ctx, w.env);
+  await call(room, '/state', { 'x-owner': ownerId, 'x-doc': docId });
   await room.webSocketMessage(s.sockets[0]!, hello('c1'));
   assert.equal((await call(room, '/end')).status, 204);
   assert.equal(s.sockets[0]!.closed?.code, ROOM_CLOSE.revoked);
+  assert.deepEqual(s.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all(), [], 'no tables (and so no rows) are left behind');
+  assert.ok(s.alarms.at(-1) === null, 'ending clears the alarm');
+  // A request racing the delete still works on the same object (its tables come back as needed).
+  assert.equal((await call(room, '/state', { 'x-owner': ownerId, 'x-doc': docId })).status, 200);
   const reborn = new Room(fakeState(s.db, [new FakeSocket(peerState('z'))]).ctx, w.env);
   await reborn.webSocketMessage((reborn as any).ctx.getWebSockets()[0], hello('c9'));
-  const welcome = (reborn as any).ctx.getWebSockets()[0].sent[0];
-  assert.equal(welcome.epoch, 1, 'epoch survived in SQLite and was incremented by /end');
-  assert.ok(s.alarms.at(-1) === null, 'ending clears the alarm');
+  assert.equal((reborn as any).ctx.getWebSockets()[0].sent[0].type, 'welcome');
+});
+
+test('a closed or failed connection is forgotten, not kept in the object for good', async () => {
+  // (Node has no WebSocketPair, so the sockets are handed over as after an eviction.)
+  const s = fakeState(undefined, [new FakeSocket(peerState('a')), new FakeSocket(peerState('b'))]);
+  const room = new Room(s.ctx, w.env);
+  await room.webSocketMessage(s.sockets[0]!, hello('c1'));
+  assert.equal((room as any).peers.size, 2);
+  await room.webSocketClose(s.sockets[0]!);
+  await room.webSocketError(s.sockets[1]!);
+  assert.equal((room as any).peers.size, 0);
 });
 
 test('/document: 404 until the cloud file exists, then the bytes with the epoch and version headers', async () => {

@@ -43,6 +43,22 @@ test('folders are created, renamed, moved and listed', async () => {
   );
 });
 
+test('an update keeps the name or parent it leaves out', async () => {
+  const a = await folder('A');
+  const b = await folder('B');
+  // Moved on one screen, renamed on another that still had the old parent: neither undoes the other.
+  assert.equal((await call('PUT', `/api/folders/${b}`, { parentId: a })).status, 200);
+  assert.equal((await call('PUT', `/api/folders/${b}`, { name: 'Bee' })).status, 200);
+  assert.deepEqual(
+    ((await (await call('GET', '/api/folders')).json()) as any[]).map((f) => [f.name, f.parentId]),
+    [['A', null], ['Bee', a]],
+  );
+  assert.equal((await call('PUT', '/api/folders', { folders: [{ id: b, parentId: null }] })).status, 200);
+  assert.deepEqual(((await (await call('GET', '/api/folders')).json()) as any[]).find((f) => f.id === b).parentId, null);
+  // A new folder still needs its name.
+  assert.equal((await call('PUT', `/api/folders/${id()}`, { parentId: null })).status, 400);
+});
+
 test('a folder cannot go inside itself or its own subfolder, or into a missing folder', async () => {
   const a = await folder('A');
   const b = await folder('B', a);
@@ -138,4 +154,66 @@ test('one delete request removes folders with everything inside them, and docume
   assert.deepEqual(((await (await call('GET', '/api/folders')).json()) as any[]).map((f) => f.id), [other]);
   void inA, inB, b;
   assert.equal((await call('DELETE', '/api/documents', {})).status, 400);
+});
+
+/** Counts the requests to Cloudflare's REST API (each one counts against its rate limit) made by `work`. */
+async function requestsFor(work: () => Promise<unknown>): Promise<number> {
+  const realFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = ((...args: Parameters<typeof fetch>) => (requests++, realFetch(...args))) as typeof fetch;
+  try {
+    await work();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  return requests;
+}
+
+test('a batch of folders, nested inside each other, takes two requests to Cloudflare', async () => {
+  const top = await folder('Top');
+  const ids = Array.from({ length: 20 }, id);
+  // Each inside the one before it (made earlier in the same batch), with one bad item along the way.
+  const items = [...ids.map((fid, i) => ({ id: fid, name: `F${i}`, parentId: i === 0 ? top : ids[i - 1] })), { id: id(), name: 'Lost', parentId: id() }];
+  let result: any;
+  const requests = await requestsFor(async () => (result = await (await call('PUT', '/api/folders', { folders: items })).json()));
+  assert.equal(requests, 2, 'one read of the folders and one write of them all');
+  assert.equal(result.ok.length, 20);
+  assert.deepEqual(result.failed.map((f: any) => f.error), ['no such folder']);
+  const listed = (await (await call('GET', '/api/folders')).json()) as any[];
+  assert.equal(listed.find((f) => f.id === ids[19]).parentId, ids[18]);
+  // A cycle through folders made in the same batch is still refused.
+  const cycle = await (await call('PUT', '/api/folders', { folders: [{ id: top, name: 'Top', parentId: ids[19] }] })).json() as any;
+  assert.deepEqual(cycle.failed.map((f: any) => f.error), ['a folder cannot go inside itself']);
+});
+
+test('moving many documents takes few requests to Cloudflare, and a missing one is reported', async () => {
+  const to = await folder('To');
+  const docs = [];
+  for (let i = 0; i < 5; i++) docs.push((await create()).id);
+  const missing = id();
+  let result: any;
+  const requests = await requestsFor(async () => (result = await (await call('PATCH', '/api/documents', { ids: [...docs, missing], folderId: to })).json()));
+  assert.equal(requests, 3, 'the documents read, the folder checked, and one update for all of them');
+  assert.deepEqual(result.ok, docs);
+  assert.deepEqual(result.failed, [{ id: missing, error: 'not found' }]);
+  const listed = (await (await call('GET', '/api/documents')).json()) as any[];
+  assert.ok(listed.every((d) => d.folderId === to));
+  const bad = (await (await call('PATCH', '/api/documents', { ids: docs, folderId: id() })).json()) as any;
+  assert.deepEqual(bad.failed.map((f: any) => f.error), docs.map(() => 'no such folder'));
+});
+
+test('deleting folders takes two requests to Cloudflare however many, and nested ones move things up twice', async () => {
+  const a = await folder('A');
+  const b = await folder('B', a);
+  const c = await folder('C', b);
+  const doc = (await create(`&folder=${b}`)).id;
+  let result: any;
+  const requests = await requestsFor(async () => (result = await (await call('DELETE', '/api/folders', { ids: [b, a] })).json()));
+  assert.equal(requests, 2);
+  assert.deepEqual(result.ok, [b, a]);
+  const listed = (await (await call('GET', '/api/folders')).json()) as any[];
+  assert.deepEqual(listed.map((f) => [f.id, f.parentId]), [[c, null]]);
+  assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).find((d) => d.id === doc).folderId, null);
+  assert.equal(await requestsFor(async () => assert.equal((await call('DELETE', `/api/folders/${c}`)).status, 204)), 2);
+  assert.equal((await call('DELETE', `/api/folders/${c}`)).status, 404);
 });

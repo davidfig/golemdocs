@@ -24,3 +24,16 @@ test('applying a log to a document gives the same text as the clients would see'
   assert.match(text, /world/);
   assert.match(text, /&gt;&gt;|>> /);
 });
+
+test('a transaction that cannot be applied is left out, so the rest still are', async () => {
+  const doc = await WordDocument.create();
+  doc.body = [{ kind: 'paragraph', properties: {}, children: [{ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'text', text: 'Hello' }] }], attrs: {} }];
+  const base = await doc.write();
+  const loaded = await WordDocument.read(base);
+  const id = new Engine(loaded).index.id(paragraphsIn(loaded.body)[0]);
+  const out = await applyLog(base, [
+    { id: 'a:0', client: 'a', ops: [{ type: 'insertItem', paragraph: id, offset: 0, item: null as never }] },
+    { id: 'b:0', client: 'b', ops: [{ type: 'insertText', paragraph: id, offset: 5, text: ' world' }] },
+  ]);
+  assert.match(JSON.stringify((await WordDocument.read(out)).body), /world/);
+});

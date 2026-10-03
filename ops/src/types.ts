@@ -65,6 +65,37 @@ export type Operation =
   /** Adds, replaces (by id) or, with `comment` null, removes a comment's text and author. Its range is markers in the text. */
   | { type: 'setComment'; id: string; comment: Comment | null };
 
+/** Every operation's `type` (a Record, so adding an operation without listing it here doesn't compile). */
+const OPERATION_TYPES: Record<Operation['type'], true> = {
+  insertText: true,
+  insertItem: true,
+  insertContent: true,
+  delete: true,
+  split: true,
+  merge: true,
+  removeBetween: true,
+  insertBlocks: true,
+  removeBlocks: true,
+  insertRow: true,
+  removeRow: true,
+  insertCell: true,
+  removeCell: true,
+  setTableGrid: true,
+  setDocumentProperties: true,
+  setDocumentSection: true,
+  setCellProperties: true,
+  formatText: true,
+  setParagraphProperties: true,
+  setStyle: true,
+  setList: true,
+  setComment: true,
+};
+
+/** Whether something received (from another client, say) is at least an object naming an operation there is. */
+export function isOperation(op: unknown): op is Operation {
+  return typeof op === 'object' && op !== null && Object.hasOwn(OPERATION_TYPES, (op as { type?: unknown }).type as string);
+}
+
 /** Operations applied together: one edit, one undo step, one unit of collaboration. */
 export interface Transaction {
   /** Unique across clients (client id + counter). */

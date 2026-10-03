@@ -61,3 +61,13 @@ test('admins resolve, reopen and delete feedback; nobody else can', async () => 
   assert.equal((await w.call(ADMIN, 'DELETE', path)).status, 404);
   assert.equal((await patch(ADMIN, true)).status, 404);
 });
+
+test('every /api/admin route refuses non-admins, whatever the method or path', async () => {
+  const paths = ['/api/admin/billing', '/api/admin/analytics', '/api/admin/feedback', '/api/admin/feedback/1', '/api/admin/unknown', '/api/admin'];
+  for (const path of paths) {
+    for (const method of ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']) {
+      assert.equal((await w.call(ALICE, method, path)).status, 403, `${method} ${path} as a user`);
+      assert.equal((await w.call(null, method, path)).status, 401, `${method} ${path} signed out`);
+    }
+  }
+});

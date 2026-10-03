@@ -107,28 +107,30 @@ const handler: ExportedHandler = {
       // GET /api/assistant/search?q=…: which of this user's documents are about something (see search.ts).
       if (path === '/api/assistant/search' && request.method === 'GET') return json(await handleSearch(env, userId, url.searchParams.get('q') ?? '', await existingUserDb(env, userId)));
 
-      // GET /api/admin/billing: what Cloudflare is charging this month. Admins only.
-      if (path === '/api/admin/billing' && request.method === 'GET') {
+      // Everything under /api/admin/ is for admins only. The check is here, once, for the whole prefix, so no
+      // admin route can forget it; the client hiding the menu is a convenience, not the protection.
+      if (path === '/api/admin' || path.startsWith('/api/admin/')) {
         if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
+      }
+
+      // GET /api/admin/billing: what Cloudflare is charging this month.
+      if (path === '/api/admin/billing' && request.method === 'GET') {
         return json(await billingSummary(env));
       }
 
-      // GET /api/admin/analytics: how many users there are and how that grew. Admins only.
+      // GET /api/admin/analytics: how many users there are and how that grew. 
       if (path === '/api/admin/analytics' && request.method === 'GET') {
-        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
         return json(await userAnalytics(env));
       }
 
-      // GET /api/admin/feedback: everything people have sent. Admins only.
+      // GET /api/admin/feedback: everything people have sent. 
       if (path === '/api/admin/feedback' && request.method === 'GET') {
-        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
         return json(await allFeedback(env));
       }
 
-      // PATCH /api/admin/feedback/:id { resolved }, DELETE /api/admin/feedback/:id. Admins only.
+      // PATCH /api/admin/feedback/:id { resolved }, DELETE /api/admin/feedback/:id. 
       const feedbackMatch = /^\/api\/admin\/feedback\/(\d+)$/.exec(path);
       if (feedbackMatch) {
-        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
         const id = Number(feedbackMatch[1]);
         if (request.method === 'DELETE') {
           if (!(await deleteFeedback(env, id))) throw new HttpError(404, 'not found');

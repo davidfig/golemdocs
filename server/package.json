@@ -1,7 +1,7 @@
 {
   "name": "@golemdocs/server",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p ../client/dist && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",

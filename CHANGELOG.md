@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.8.1 - Unreleased
+## 0.9.0 - 2026-10-03
 
 ### Added
 - Admin › Analytics shows how many unique people use Golem Docs, how many are new or signed in recently, how many of them pay, and how the number grew month by month.

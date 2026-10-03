@@ -9,6 +9,8 @@
 import type { XmlElement } from '@golemdocs/docx';
 import type { Matrix, PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
+import { backgroundOf, fitCanvasToArtwork, resizeCanvas, setBackground } from '../vector/canvas.ts';
+import type { ResizeMode } from '../vector/canvas.ts';
 import { readGuides, snapBox, snapPoint, snapTargets, writeGuides } from '../vector/snap.ts';
 import type { SnapTargets } from '../vector/snap.ts';
 import { isClipped, isMasked, makeClippingMask, makeOpacityMask, releaseClippingMask, releaseOpacityMask } from '../vector/clipEdit.ts';
@@ -481,6 +483,33 @@ export class VectorEditor {
     for (let i = 0; i < guides.v.length; i++) if (Math.abs(frame.toScreen(guides.v[i], 0)[0] - sx) <= LINE_REACH) return { axis: 'v', index: i };
     for (let i = 0; i < guides.h.length; i++) if (Math.abs(frame.toScreen(0, guides.h[i])[1] - sy) <= LINE_REACH) return { axis: 'h', index: i };
     return null;
+  }
+
+  /** The size of the page in pixels, and its background colour. */
+  get page(): { width: number; height: number; background: string | null } {
+    const s = this.scene;
+    return { width: s?.width ?? 0, height: s?.height ?? 0, background: s ? backgroundOf(s) : null };
+  }
+
+  /** Gives the page a size (the shapes staying or scaling with it) and a background colour (null: none). */
+  setPage(width: number, height: number, mode: ResizeMode, background: string | null): void {
+    this.edit((scene, selection) => {
+      const had = backgroundOf(scene) !== null;
+      resizeCanvas(scene, width, height, mode);
+      setBackground(scene, background);
+      // The background is the first shape: adding or taking it away moves the numbers of the others.
+      const shift = (backgroundOf(scene) !== null ? 1 : 0) - (had ? 1 : 0);
+      return selection.map((p) => [p[0] + shift, ...p.slice(1)]).filter((p) => p[0] >= 0);
+    }, false);
+  }
+
+  /** Makes the page just fit the shapes, with a margin round them. */
+  fitPage(margin: number, background?: string | null): void {
+    this.edit((scene, selection) => {
+      if (background !== undefined) setBackground(scene, background);
+      if (!fitCanvasToArtwork(scene, margin)) this.host.notice?.(t('vector.canvas.nothing'));
+      return selection;
+    }, false);
   }
 
   /** Whether the one selected node is masked by an opacity mask. */

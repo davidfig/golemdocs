@@ -36,6 +36,9 @@ function recorder() {
     boolean: async (op) => void calls.push(['boolean', op, selection.map((p) => p[0])]),
     makeClip: record('makeClip'),
     releaseClip: record('releaseClip'),
+    page: { width: 200, height: 100, background: null },
+    setPage: (w, h, mode, bg) => void calls.push(['setPage', w, h, mode, bg]),
+    fitPage: (margin) => void calls.push(['fitPage', margin]),
     addGuide: (axis, position) => void calls.push(['addGuide', axis, position]),
     clearGuides: record('clearGuides'),
     makeMask: record('makeMask'),
@@ -103,6 +106,15 @@ test('guides are added and cleared without naming shapes', async () => {
   await editDrawing(editor, { op: 'clear_guides' });
   assert.deepEqual(calls, [['addGuide', 'v', 50], ['addGuide', 'h', 12.5], ['clearGuides', []]]);
   await assert.rejects(editDrawing(editor, { op: 'add_guide', axis: 'diagonal', position: 1 }), /vertical or horizontal/);
+});
+
+test('the canvas is resized, with or without its shapes, and fitted to them', async () => {
+  const { editor, calls } = recorder();
+  assert.match(await editDrawing(editor, { op: 'set_canvas', width: 800, height: 600 }), /800 x 600 pixels, the shapes left/);
+  await editDrawing(editor, { op: 'set_canvas', width: 100, shapes_follow: true, background: '#ffffff' });
+  await editDrawing(editor, { op: 'fit_canvas', margin: 8 });
+  assert.deepEqual(calls, [['setPage', 800, 600, 'keep', null], ['setPage', 100, 100, 'scale', '#ffffff'], ['fitPage', 8]]);
+  await assert.rejects(editDrawing(editor, { op: 'set_canvas', width: 0 }), /from 1 to 20000/);
 });
 
 test('a request that doesn’t make sense is refused, with what to do instead', async () => {

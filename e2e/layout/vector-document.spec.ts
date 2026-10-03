@@ -145,6 +145,24 @@ test.describe('editing a drawing', () => {
   });
 });
 
+test.describe('the canvas', () => {
+  test('Canvas Size changes the page, keeping the proportions, and Fit to Artwork shrinks it to the shapes', async ({ app }) => {
+    await openDrawing(app);
+    await app.menu('Drawing', 'Canvas Size');
+    const dialog = app.page.getByRole('dialog', { name: 'Canvas Size' });
+    await expect(dialog).toContainText('Now 400 × 200 pixels');
+    await dialog.getByRole('spinbutton', { name: 'Width' }).fill('800');
+    await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('400');
+    await dialog.getByRole('button', { name: 'OK' }).click();
+    await expect.poll(async () => (await currentSvg(app)).includes('width="800" height="400"'), { timeout: 15_000 }).toBe(true);
+    expect(await pageBoxes(app.page)).toEqual([{ width: 600, height: 300 }]);
+    await app.menu('Drawing', 'Canvas Size');
+    await app.page.getByRole('dialog', { name: 'Canvas Size' }).getByRole('button', { name: 'Fit to Artwork' }).click();
+    // The shapes span 20 to 360 across and 20 to 160 down (the rectangle’s bottom is 100, the circle’s is 160).
+    await expect.poll(async () => (await currentSvg(app)).includes('viewBox="20 20 340 140"'), { timeout: 15_000 }).toBe(true);
+  });
+});
+
 test.describe('converting a drawing', () => {
   test('to PDF it becomes a one-page PDF', async ({ app }) => {
     await openDrawing(app);

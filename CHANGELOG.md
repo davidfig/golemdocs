@@ -10,6 +10,7 @@
 - Vector drawings have a Layers panel to hide, lock, rename, select and drag shapes into a new order or into groups, and shapes snap to each other and the page with guide lines (Drawing › Snap to Objects).
 - Clip, the assistant, can read and change vector drawings, and a drawing's gradients stay gradients when it is converted to PDF.
 - Vector drawings can have opacity masks (the topmost shape's brightness shows or hides the rest) and guides you add from the Drawing menu, drag into place, and double-click to remove; guides are kept in the file and shapes snap to them.
+- Drawing › Canvas Size sets a vector drawing's page size (in proportion or not), lets the shapes stay or scale with it, adds a background color, and fits the page to the artwork.
 - The import progress card shows an estimate of the time left.
 
 ### Fixed

@@ -481,6 +481,7 @@ export class Chrome {
     r.add(a('vector.releaseClip', t('vector.releaseClip'), { kind: 'vector', op: 'releaseClip' }, { enabled: (s) => s.vector.clipped }));
     r.add(a('vector.makeMask', t('vector.makeMask'), { kind: 'vector', op: 'makeMask' }, { enabled: (s) => s.vector.multiple }));
     r.add(a('vector.releaseMask', t('vector.releaseMask'), { kind: 'vector', op: 'releaseMask' }, { enabled: (s) => s.vector.masked }));
+    r.add(a('vector.canvasSize', t('vector.canvasSize'), { kind: 'vector', op: 'canvasSize' }));
     r.add(a('vector.guideV', t('vector.guideV'), { kind: 'vector', op: 'guideV' }));
     r.add(a('vector.guideH', t('vector.guideH'), { kind: 'vector', op: 'guideH' }));
     r.add(a('vector.clearGuides', t('vector.clearGuides'), { kind: 'vector', op: 'clearGuides' }));
@@ -846,6 +847,7 @@ export class Chrome {
           cmd('vector.makeMask'),
           cmd('vector.releaseMask'),
           sep,
+          cmd('vector.canvasSize'),
           cmd('vector.guideV'),
           cmd('vector.guideH'),
           cmd('vector.clearGuides'),

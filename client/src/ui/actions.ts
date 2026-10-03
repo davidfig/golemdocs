@@ -39,7 +39,7 @@ export type TableOp =
 export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
 
 /** The vector editor's tools and commands (the Drawing menu): the tools pick what a drag draws or does; the rest act on the selection. */
-export type VectorOp = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'makeMask' | 'releaseMask' | 'guideV' | 'guideH' | 'clearGuides' | 'layers' | 'snap';
+export type VectorOp = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'makeMask' | 'releaseMask' | 'canvasSize' | 'guideV' | 'guideH' | 'clearGuides' | 'layers' | 'snap';
 
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;

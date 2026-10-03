@@ -30,6 +30,9 @@ export interface DrawingEditor {
   boolean(op: BooleanOp): Promise<void>;
   makeClip(): void;
   releaseClip(): void;
+  setPage(width: number, height: number, mode: 'keep' | 'scale', background: string | null): void;
+  fitPage(margin: number, background?: string | null): void;
+  readonly page: { width: number; height: number; background: string | null };
   addGuide(axis: 'v' | 'h', position?: number): void;
   clearGuides(): void;
   makeMask(): void;
@@ -142,6 +145,19 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
     }
   }
 
+  if (op === 'set_canvas') {
+    const w = number(args, 'width', scene.width);
+    const h = number(args, 'height', scene.height);
+    if (w < 1 || h < 1 || w > 20000 || h > 20000) throw new Error('`width` and `height` must be from 1 to 20000.');
+    if (args.shapes_follow !== undefined && typeof args.shapes_follow !== 'boolean') throw new Error('`shapes_follow` must be true or false.');
+    const background = paint(args, 'background');
+    editor.setPage(w, h, args.shapes_follow ? 'scale' : 'keep', background === undefined ? editor.page.background : background);
+    return `The canvas is ${w} x ${h} pixels${args.shapes_follow ? ', the shapes scaled with it' : ', the shapes left where they were'}.`;
+  }
+  if (op === 'fit_canvas') {
+    editor.fitPage(Math.max(0, number(args, 'margin', 0)));
+    return 'Fitted the canvas to the shapes.';
+  }
   if (op === 'add_guide') {
     const axis = args.axis === 'vertical' ? 'v' : args.axis === 'horizontal' ? 'h' : null;
     if (!axis) throw new Error('`axis` must be vertical or horizontal.');
@@ -233,6 +249,6 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
         await editor.boolean(op as BooleanOp);
         return `Combined ${these} (${op}).`;
       }
-      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
+      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, set_canvas, fit_canvas, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
   }
 }

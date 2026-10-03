@@ -109,6 +109,15 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
           return editor.makeClip();
         case 'releaseClip':
           return editor.releaseClip();
+        case 'canvasSize':
+          return void import('./canvasDialog.ts').then(({ showCanvasDialog }) =>
+            showCanvasDialog({
+              state: () => editor.page,
+              apply: (w, h, mode, background) => editor.setPage(w, h, mode, background),
+              fit: (margin, background) => editor.fitPage(margin, background),
+              focusEditor: host.focusEditor,
+            }),
+          );
         case 'guideV':
           return editor.addGuide('v');
         case 'guideH':

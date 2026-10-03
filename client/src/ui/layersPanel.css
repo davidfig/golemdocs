@@ -103,10 +103,6 @@
 }
 
 /* Visible and unlocked are the quiet states; hidden and locked stand out in colour. */
-.wm-layers-eye {
-  color: #316ac5;
-}
-
 .wm-layers-row.hidden-node .wm-layers-eye {
   color: #d64545;
 }

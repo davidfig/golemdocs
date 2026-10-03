@@ -21,6 +21,8 @@ import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.
 import { LOCALES } from '../i18n/locales.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
+import { shapePreview } from './shapePreview.ts';
+import { SHAPE_IDS } from '../vector/shapes.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, VECTOR_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { analyticsPanel } from './analyticsPanel.ts';
@@ -29,13 +31,14 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
-import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
+import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
+import { lockGuidesOn, selectAfterPencilOn, setLockGuides, setSelectAfterPencil, setShowGuides, showGuidesOn } from './drawingOptions.ts';
 import { livePreviewOn, setLivePreview } from './livePreview.ts';
 import { SCHEMES, currentAppearance, currentScheme, isDark, pagesDark, setAppearance, setScheme, toggleDark, toggleDarkPages } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
-import { iconElement } from './icons.ts';
+import { ICONS, iconElement } from './icons.ts';
 import { CommandPalette } from './commandPalette.ts';
 import { AccountButton } from './accountButton.ts';
 import { SyncButton } from './syncButton.ts';
@@ -179,7 +182,11 @@ export class Chrome {
     if (!changed) return;
     this.state = { ...this.state, ...partial };
     this.refresh();
+    this.onFillChange?.();
   }
+
+  /** Redraws the Fill popup's gradient editor while it is open. */
+  private onFillChange: (() => void) | null = null;
 
   getState(): ChromeState {
     return this.state;
@@ -230,9 +237,21 @@ export class Chrome {
     if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
     // The Documents screen covers the editor and has its own keys (Ctrl/Cmd+A selects its cards).
     if (document.querySelector('.wm-dashboard:not([hidden])')) return;
+    // The vector editor's own keys come first and may be bare letters (V, P…); they only claim a
+    // key they can act on, so typing elsewhere is never swallowed.
+    if (FORMATS[this.state.kind].vectorTools && !e.repeat) {
+      for (const command of this.registry.all()) {
+        if (command.scope !== 'vector' || !command.shortcutParsed || !matches(command.shortcutParsed, e)) continue;
+        if (!this.registry.isAvailable(command) || !this.registry.isEnabled(command)) continue;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.registry.execute(command);
+        return;
+      }
+    }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
     for (const command of this.registry.all()) {
-      if (!command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;
+      if (command.scope === 'vector' || !command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;
       // The key belongs to the command even when it's disabled: the browser mustn't act on it
       // (Ctrl+B, Ctrl+P…) and neither must the document (Ctrl+Enter isn't a paragraph break).
       e.preventDefault();
@@ -469,30 +488,33 @@ export class Chrome {
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
-    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text']] as const) {
-      r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, checked: (s) => s.vector.tool === tool }));
+    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text']] as const) {
+      r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, scope: 'vector', shortcut: VECTOR_TOOL_KEYS[tool], checked: (s) => s.vector.tool === tool }));
     }
     const vectorOps = { delete: 'trash', duplicate: 'copy', group: 'group', ungroup: 'ungroup', front: 'toFront', forward: 'forward', backward: 'backward', back: 'toBack' } as const;
     for (const op of ['delete', 'duplicate', 'group', 'ungroup', 'front', 'forward', 'backward', 'back'] as const) {
-      r.add(a(`vector.${op}`, t(`vector.${op}`), { kind: 'vector', op }, { icon: vectorOps[op], enabled: (s) => s.vector.hasSelection }));
+      r.add(a(`vector.${op}`, t(`vector.${op}`), { kind: 'vector', op }, { icon: vectorOps[op], scope: 'vector', shortcut: VECTOR_KEYS[op], enabled: (s) => s.vector.hasSelection }));
     }
     const vectorBooleans = { unite: 'unite', intersect: 'intersect', subtract: 'subtract', exclude: 'exclude' } as const;
     for (const op of ['unite', 'intersect', 'subtract', 'exclude'] as const) {
-      r.add(a(`vector.${op}`, t(`vector.${op}`), { kind: 'vector', op }, { icon: vectorBooleans[op], enabled: (s) => s.vector.multiple }));
+      r.add(a(`vector.${op}`, t(`vector.${op}`), { kind: 'vector', op }, { icon: vectorBooleans[op], scope: 'vector', enabled: (s) => s.vector.multiple }));
     }
-    r.add(a('vector.makeClip', t('vector.makeClip'), { kind: 'vector', op: 'makeClip' }, { icon: 'clipMask', enabled: (s) => s.vector.multiple }));
-    r.add(a('vector.releaseClip', t('vector.releaseClip'), { kind: 'vector', op: 'releaseClip' }, { enabled: (s) => s.vector.clipped }));
-    r.add(a('vector.makeMask', t('vector.makeMask'), { kind: 'vector', op: 'makeMask' }, { enabled: (s) => s.vector.multiple }));
-    r.add(a('vector.releaseMask', t('vector.releaseMask'), { kind: 'vector', op: 'releaseMask' }, { enabled: (s) => s.vector.masked }));
-    r.add(a('vector.newLayer', t('vector.newLayer'), { kind: 'vector', op: 'newLayer' }, { icon: 'newLayer' }));
-    r.add(a('vector.newGroup', t('vector.newGroup'), { kind: 'vector', op: 'newGroup' }, { icon: 'newGroup' }));
-    r.add(a('vector.canvasSize', t('vector.canvasSize'), { kind: 'vector', op: 'canvasSize' }));
-    r.add(a('vector.guideV', t('vector.guideV'), { kind: 'vector', op: 'guideV' }));
-    r.add(a('vector.guideH', t('vector.guideH'), { kind: 'vector', op: 'guideH' }));
-    r.add(a('vector.clearGuides', t('vector.clearGuides'), { kind: 'vector', op: 'clearGuides' }));
-    r.add(a('vector.layers', t('vector.layers'), { kind: 'vector', op: 'layers' }, { checked: (s) => s.vector.layers }));
-    r.add(a('vector.snap', t('vector.snap'), { kind: 'vector', op: 'snap' }, { checked: (s) => s.vector.snap }));
-    r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }));
+    r.add(a('vector.makeClip', t('vector.makeClip'), { kind: 'vector', op: 'makeClip' }, { icon: 'clipMask', scope: 'vector', shortcut: 'Mod+7', enabled: (s) => s.vector.multiple }));
+    r.add(a('vector.releaseClip', t('vector.releaseClip'), { kind: 'vector', op: 'releaseClip' }, { scope: 'vector', shortcut: 'Alt+Mod+7', enabled: (s) => s.vector.clipped }));
+    r.add(a('vector.makeMask', t('vector.makeMask'), { kind: 'vector', op: 'makeMask' }, { scope: 'vector', enabled: (s) => s.vector.multiple }));
+    r.add(a('vector.releaseMask', t('vector.releaseMask'), { kind: 'vector', op: 'releaseMask' }, { scope: 'vector', enabled: (s) => s.vector.masked }));
+    r.add(a('vector.newLayer', t('vector.newLayer'), { kind: 'vector', op: 'newLayer' }, { icon: 'newLayer', scope: 'vector' }));
+    r.add(a('vector.newGroup', t('vector.newGroup'), { kind: 'vector', op: 'newGroup' }, { icon: 'newGroup', scope: 'vector' }));
+    r.add(a('vector.canvasSize', t('vector.canvasSize'), { kind: 'vector', op: 'canvasSize' }, { scope: 'vector', shortcut: 'Alt+Mod+P' }));
+    r.add(a('vector.guideV', t('vector.guideV'), { kind: 'vector', op: 'guideV' }, { scope: 'vector' }));
+    r.add(a('vector.guideH', t('vector.guideH'), { kind: 'vector', op: 'guideH' }, { scope: 'vector' }));
+    r.add({ id: 'vector.showGuides', label: t('vector.showGuides'), run: () => setShowGuides(!showGuidesOn()), checked: showGuidesOn, scope: 'vector' });
+    r.add({ id: 'vector.lockGuides', label: t('vector.lockGuides'), run: () => setLockGuides(!lockGuidesOn()), checked: lockGuidesOn, scope: 'vector' });
+    r.add(a('vector.clearGuides', t('vector.clearGuides'), { kind: 'vector', op: 'clearGuides' }, { scope: 'vector' }));
+    r.add(a('vector.layers', t('vector.layers'), { kind: 'vector', op: 'layers' }, { scope: 'vector', shortcut: 'F7', checked: (s) => s.vector.layers }));
+    r.add({ id: 'vector.selectAfterPencil', label: t('vector.selectAfterPencil'), tooltip: t('dialogs.options.selectAfterPencil'), run: () => setSelectAfterPencil(!selectAfterPencilOn()), checked: selectAfterPencilOn, scope: 'vector' });
+    r.add(a('vector.snap', t('vector.snap'), { kind: 'vector', op: 'snap' }, { scope: 'vector', shortcut: 'Mod+U', checked: (s) => s.vector.snap }));
+    r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }, { scope: 'vector', shortcut: 'Mod+A' }));
 
     r.add({ id: 'image.fill', label: t('picture.draw.fill'), icon: 'fill', action: (s) => ({ kind: 'drawStyle', fill: !s.draw.fill }), checked: (s) => s.draw.fill });
 
@@ -833,6 +855,7 @@ export class Chrome {
           cmd('vector.select'),
           cmd('vector.rect'),
           cmd('vector.ellipse'),
+          cmd('vector.shape'),
           cmd('vector.line'),
           cmd('vector.pen'),
           cmd('vector.pencil'),
@@ -866,7 +889,10 @@ export class Chrome {
           cmd('vector.guideV'),
           cmd('vector.guideH'),
           cmd('vector.clearGuides'),
+          cmd('vector.showGuides'),
+          cmd('vector.lockGuides'),
           cmd('vector.snap'),
+          cmd('vector.selectAfterPencil'),
           cmd('vector.layers'),
           sep,
           cmd('vector.selectAll'),
@@ -1026,37 +1052,130 @@ export class Chrome {
     );
     define('control.vectorFill', t('vector.fill'), t('vector.toolbar'), 'fill', () =>
       gated(
-        colorButton({ label: t('vector.fill'), icon: 'fill', noneLabel: t('vector.noFill'), initial: '#5B8DEF', palette: 'full', header: (state, close) => this.fillTypeChoices(state.vector.fillType, close), action: (color) => ({ kind: 'vectorStyle', fill: color }) }, r),
+        colorButton({ label: t('vector.fill'), icon: 'vectorFill', documentColors: (state) => state.vector.documentColors, shown: (state) => ({ color: state.vector.fill, gradient: state.vector.gradient ? [state.vector.gradient.stops[0].color, state.vector.gradient.stops[state.vector.gradient.stops.length - 1].color] : undefined }), noneLabel: t('vector.noFill'), initial: '#5B8DEF', palette: 'full', emptyNone: true, header: (_state, palette) => this.fillHeader(palette), keepOpen: (state) => state.vector.gradient !== null, action: (color) => ({ kind: 'vectorStyle', fill: color }) }, r),
         () => profile().vectorTools,
       ),
     );
     define('control.vectorStroke', t('vector.stroke'), t('vector.toolbar'), 'drawColor', () =>
       gated(
-        colorButton({ label: t('vector.stroke'), icon: 'drawColor', noneLabel: t('vector.noStroke'), initial: '#2E3148', palette: 'full', action: (color) => ({ kind: 'vectorStyle', stroke: color }) }, r),
+        colorButton({ label: t('vector.stroke'), icon: 'vectorStroke', documentColors: (state) => state.vector.documentColors, shown: (state) => ({ color: state.vector.stroke }), noneLabel: t('vector.noStroke'), initial: '#2E3148', palette: 'full', emptyNone: true, action: (color) => ({ kind: 'vectorStyle', stroke: color }) }, r),
         () => profile().vectorTools,
       ),
     );
     define('control.vectorFillType', t('vector.fillType'), t('vector.toolbar'), 'fill', () => gated(this.vectorFillTypeBox(), () => profile().vectorTools));
+    define('control.vectorShape', t('vector.shapes'), t('vector.toolbar'), 'shapes', () => gated(this.vectorShapeBox(), () => profile().vectorTools));
     define('control.vectorStrokeStyle', t('vector.strokeStyle'), t('vector.toolbar'), 'line', () => gated(this.vectorStrokeStyleBox(), () => profile().vectorTools));
     define('control.vectorStrokeWidth', t('vector.strokeWidth'), t('vector.toolbar'), 'line', () => gated(this.vectorWidthBox(), () => profile().vectorTools));
     define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
   }
 
-  /** The fill popup's choice of solid colour, linear gradient or radial gradient, with how to edit a gradient. */
-  private fillTypeChoices(current: 'solid' | 'linear' | 'radial', close: () => void): HTMLElement {
+  /**
+   * The top of the fill popup: Solid, Linear or Radial, and for a gradient its editor: a bar showing
+   * the colours with a marker for each stop (click a marker to pick it, drag it to move it, click the
+   * bar to add one), the stop's position, and buttons to delete a stop or reverse the gradient. The
+   * palette under it colours the picked stop.
+   */
+  private fillHeader(palette: PaletteControl): HTMLElement {
     const r = this.registry;
-    const row = h('div', { class: 'wm-fill-types' });
-    for (const type of ['solid', 'linear', 'radial'] as const) {
-      const button = h('button', { class: type === current ? 'wm-fill-type current' : 'wm-fill-type', text: t(`vector.fillType.${type}`), attrs: { type: 'button', 'aria-pressed': String(type === current) } });
-      button.addEventListener('click', () => {
-        close();
-        r.perform({ kind: 'vectorStyle', fillType: type }, t('vector.fillType'));
-        r.focusEditor();
+    const box = h('div', { class: 'wm-fill-gradient' });
+    const gradient = (change: Extract<Action, { kind: 'vectorGradient' }>) => r.perform(change, t('vector.fillType'));
+    const render = (): void => {
+      const state = this.state.vector;
+      box.replaceChildren();
+      const row = h('div', { class: 'wm-fill-types', attrs: { role: 'group', 'aria-label': t('vector.fillType') } });
+      for (const type of ['solid', 'linear', 'radial'] as const) {
+        const current = type === state.fillType;
+        const button = h('button', { class: current ? 'wm-fill-type current' : 'wm-fill-type', text: t(`vector.fill.${type}`), title: t(`vector.fillType.${type}`), attrs: { type: 'button', 'aria-pressed': String(current) } });
+        button.addEventListener('click', () => {
+          if (current) return;
+          r.perform({ kind: 'vectorStyle', fillType: type }, t('vector.fillType'));
+        });
+        row.append(button);
+      }
+      box.append(row);
+      const g = state.gradient;
+      if (!g) return;
+      palette.setColor(g.stops[g.stop].color);
+      const css = (stops: readonly { offset: number; color: string }[]) => `linear-gradient(to right, ${stops.map((s) => `${s.color} ${s.offset * 100}%`).join(', ')})`;
+      const bar = h('div', { class: 'wm-grad-bar' });
+      bar.style.backgroundImage = css(g.stops);
+      const track = h('div', { class: 'wm-grad-track', attrs: { 'aria-label': t('vector.gradientBar') } });
+      const at = (e: PointerEvent): number => {
+        const box = track.getBoundingClientRect();
+        return Math.max(0, Math.min(1, (e.clientX - box.left) / (box.width || 1)));
+      };
+      g.stops.forEach((stop, index) => {
+        const marker = h('button', { class: index === g.stop ? 'wm-grad-stop current' : 'wm-grad-stop', title: `${Math.round(stop.offset * 100)}%`, attrs: { type: 'button', 'aria-label': t('vector.stopN', { n: index + 1 }), 'aria-pressed': String(index === g.stop) } });
+        marker.style.left = `${stop.offset * 100}%`;
+        marker.style.setProperty('--stop', stop.color);
+        const movable = index > 0 && index < g.stops.length - 1;
+        marker.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          marker.setPointerCapture(e.pointerId);
+          let moved: number | null = null;
+          const drag = (ev: PointerEvent) => {
+            if (!movable) return;
+            moved = Math.max(0.01, Math.min(0.99, at(ev)));
+            marker.style.left = `${moved * 100}%`;
+            bar.style.backgroundImage = css(g.stops.map((s, i) => (i === index ? { ...s, offset: moved! } : s)));
+          };
+          const drop = () => {
+            marker.removeEventListener('pointermove', drag);
+            marker.removeEventListener('pointerup', drop);
+            marker.removeEventListener('pointercancel', drop);
+            // A drag is one change (one undo step); a click only picks the stop.
+            if (moved !== null && Math.abs(moved - stop.offset) > 0.002) gradient({ kind: 'vectorGradient', op: 'move', index, offset: moved });
+            else {
+              gradient({ kind: 'vectorGradient', op: 'select', index });
+              render();
+            }
+          };
+          marker.addEventListener('pointermove', drag);
+          marker.addEventListener('pointerup', drop);
+          marker.addEventListener('pointercancel', drop);
+        });
+        marker.addEventListener('keydown', (e) => {
+          if ((e.key === 'Delete' || e.key === 'Backspace') && movable) {
+            e.preventDefault();
+            gradient({ kind: 'vectorGradient', op: 'remove', index });
+          }
+        });
+        track.append(marker);
       });
-      row.append(button);
-    }
-    const box = h('div', { class: 'wm-fill-gradient' }, row);
-    if (current !== 'solid') box.append(h('div', { class: 'wm-palette-label wm-fill-hint', text: t('vector.gradientHint') }));
+      // A click on the bar or on the empty part of the track adds a stop there.
+      const add = (e: PointerEvent) => {
+        if (e.target !== track && e.target !== bar) return;
+        gradient({ kind: 'vectorGradient', op: 'add', offset: at(e) });
+      };
+      track.addEventListener('pointerdown', add);
+      bar.addEventListener('pointerdown', add);
+      bar.title = t('vector.gradientHint');
+      const stopsBox = h('div', { class: 'wm-fill-stops' }, bar, track);
+
+      const position = h('input', { class: 'wm-grad-position', attrs: { type: 'number', min: '1', max: '99', step: '1', 'aria-label': t('vector.stopPosition') } });
+      position.value = String(Math.round(g.stops[g.stop].offset * 100));
+      const inner = g.stop > 0 && g.stop < g.stops.length - 1;
+      position.disabled = !inner;
+      position.addEventListener('change', () => {
+        const value = Number(position.value);
+        if (Number.isFinite(value)) gradient({ kind: 'vectorGradient', op: 'move', index: g.stop, offset: value / 100 });
+      });
+      const remove = h('button', { class: 'wm-fill-action', text: t('vector.stopRemove'), attrs: { type: 'button' } });
+      remove.disabled = !inner;
+      remove.addEventListener('click', () => {
+        gradient({ kind: 'vectorGradient', op: 'remove', index: g.stop });
+      });
+      const reverse = h('button', { class: 'wm-fill-action', text: t('vector.gradientReverse'), attrs: { type: 'button' } });
+      reverse.addEventListener('click', () => {
+        gradient({ kind: 'vectorGradient', op: 'reverse' });
+      });
+      stopsBox.append(h('div', { class: 'wm-grad-row' }, h('label', { class: 'wm-grad-label' }, t('vector.stopPosition'), position, '%'), remove, reverse));
+      box.append(stopsBox, h('div', { class: 'wm-palette-label', text: t('vector.stopColor') }));
+    };
+    // The state follows the change a frame later: the popup shows it as soon as the chrome does.
+    this.onFillChange = () => (box.isConnected ? render() : (this.onFillChange = null));
+    render();
     return box;
   }
 
@@ -1084,6 +1203,47 @@ export class Chrome {
   }
 
   /** The list of ways a line can be drawn: dashes, then the brushes in groups, each drawn as a sample. */
+  /** The Shapes tool as a split button: the picture picks the tool, drawing the shape last used; the arrow opens the list of shapes. */
+  private vectorShapeBox(): Control {
+    const r = this.registry;
+    const label = t('vector.shapes');
+    const main = h('button', { class: 'wm-tbutton wm-split-main', attrs: { type: 'button', tabindex: '-1', 'aria-label': label } });
+    const caret = h('button', { class: 'wm-tbutton wm-split-arrow', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'listbox' } });
+    caret.innerHTML = ICONS.dropdown;
+    const el = h('span', { class: 'wm-split' }, main, caret);
+    let current: string = SHAPE_IDS[0];
+    main.addEventListener('click', () => {
+      r.perform({ kind: 'vector', op: 'shape' }, label);
+      r.focusEditor();
+    });
+    caret.addEventListener('click', () => {
+      if (popupOpenFor(el)) return closePopup();
+      const list = h('div', { class: 'wm-list wm-shape-list', attrs: { role: 'listbox', 'aria-label': label } });
+      for (const id of SHAPE_IDS) {
+        const chosen = id === current;
+        const name = t(`vector.shape.${id}` as MessageKey);
+        const row = h('div', { class: chosen ? 'wm-option wm-shape-row chosen' : 'wm-option wm-shape-row', title: name, attrs: { role: 'option', 'aria-selected': String(chosen), 'aria-label': name } }, shapePreview(id));
+        row.addEventListener('click', () => {
+          closePopup();
+          r.perform({ kind: 'vector', op: `shape:${id}` }, label);
+          r.focusEditor();
+        });
+        list.append(row);
+      }
+      openPopup(el, list);
+    });
+    return {
+      el,
+      refresh: (state) => {
+        current = state.vector.shape;
+        main.replaceChildren(shapePreview(current as (typeof SHAPE_IDS)[number]));
+        main.title = `${label}: ${t(`vector.shape.${current}` as MessageKey)}`;
+        main.setAttribute('aria-pressed', String(state.vector.tool === 'shape'));
+        main.disabled = caret.disabled = !r.allows({ kind: 'vector', op: 'shape' });
+      },
+    };
+  }
+
   private vectorStrokeStyleBox(): Control {
     const r = this.registry;
     const label = t('vector.strokeStyle');
@@ -1411,8 +1571,18 @@ export class Chrome {
     const render = () => {
       recording = null;
       table.replaceChildren();
-      for (const command of this.registry.all()) {
-        if (!command.shortcutParsed && !command.defaultShortcut) continue;
+      const commands = [...this.registry.all()];
+      const rows = [...commands.filter((c) => c.scope !== 'vector'), ...commands.filter((c) => c.scope === 'vector')];
+      let vectorHeader = false;
+      for (const command of rows) {
+        const vector = command.scope === 'vector';
+        // The vector editor's section lists every command, so any of them can be given a key.
+        if (!vector && !command.shortcutParsed && !command.defaultShortcut) continue;
+        if (vector && !vectorHeader) {
+          vectorHeader = true;
+          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: t('chrome.shortcuts.vector'), attrs: { colspan: '2', scope: 'colgroup' } })));
+          table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t('chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
+        }
         const key = h('button', {
           class: 'wm-shortcut-key',
           attrs: { type: 'button', 'aria-label': t('chrome.shortcuts.change', { label: command.plainLabel }) },
@@ -1445,8 +1615,8 @@ export class Chrome {
             } else {
               shortcut = shortcutFromEvent(e);
               if (!shortcut) return; // a modifier on its own: wait for the rest
-              if (!isUsableShortcut(shortcut)) {
-                status.textContent = t('chrome.shortcuts.needModifier');
+              if (!isUsableShortcut(shortcut, vector)) {
+                status.textContent = t(vector ? 'chrome.shortcuts.needKey' : 'chrome.shortcuts.needModifier');
                 return;
               }
             }
@@ -1483,6 +1653,18 @@ export class Chrome {
     showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
   }
 }
+
+/** The vector editor's built-in keys, as in Illustrator (a tool is a bare key; Mod is ⌘ or Ctrl). */
+const VECTOR_TOOL_KEYS: Partial<Record<ChromeState['vector']['tool'], string>> = { select: 'V', rect: 'M', ellipse: 'L', shape: 'S', line: '\\', pen: 'P', pencil: 'N', nudge: 'B', text: 'T' };
+const VECTOR_KEYS: Partial<Record<string, string>> = {
+  duplicate: 'Mod+D',
+  group: 'Mod+G',
+  ungroup: 'Shift+Mod+G',
+  front: 'Shift+Mod+]',
+  forward: 'Mod+]',
+  backward: 'Mod+[',
+  back: 'Shift+Mod+[',
+};
 
 /** A hint of each style's look in the style list. */
 function styleOptionCss(style: string): string {

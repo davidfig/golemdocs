@@ -55,6 +55,8 @@ export interface AppHooks {
   showPageSetup(): void;
   /** Show the document's word, character, paragraph, line and page counts. */
   showWordCount(): void;
+  /** Show Tools › Options. */
+  showOptions(): void;
   /** Ask for columns of text, then set them. */
   showColumnsDialog(): void;
   showParagraphDialog(): void;
@@ -74,6 +76,8 @@ export interface AppHooks {
   vectorAction(op: VectorOp): void;
   /** The look of the selected shapes and of the next ones. */
   vectorStyle(change: { fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }): void;
+  /** Picks, adds, removes or moves a stop of the selected shape's gradient, or reverses it. */
+  vectorGradient(change: { op: 'select' | 'add' | 'remove' | 'move' | 'reverse'; index?: number; offset?: number }): void;
   /** The open document is a vector drawing. */
   isDrawing(): boolean;
   /** The Draw tools' colour and thickness step. */
@@ -169,6 +173,7 @@ const SUPPORTED = new Set<ActionKind>([
   'drawStyle',
   'vector',
   'vectorStyle',
+  'vectorGradient',
   'insertImage',
   'zoom',
   'zoomBy',
@@ -293,7 +298,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial' || action.name === 'searchAll';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial' || action.name === 'searchAll';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode !== 'flow' || !(app.annotating() || app.isPicture());
@@ -330,6 +335,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (action.name === 'columns') return app.showColumnsDialog();
           if (action.name === 'paragraph') return app.showParagraphDialog();
           if (action.name === 'wordCount') return app.showWordCount();
+          if (action.name === 'options') return app.showOptions();
           if (action.name === 'pageSetup') return app.showPageSetup();
           if (action.name === 'properties') return app.showProperties();
           if (action.name === 'pasteSpecial') return app.showPasteSpecial();
@@ -385,6 +391,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.vectorAction(action.op);
         case 'vectorStyle':
           return app.vectorStyle(action);
+        case 'vectorGradient':
+          return app.vectorGradient(action);
         case 'insertImage':
           return app.pickPicture();
         case 'selectAll':

@@ -49,8 +49,8 @@ export function writeGuides(scene: Scene, guides: Guides): void {
   else scene.attrs[GUIDES_ATTR] = JSON.stringify({ v: guides.v.map((n) => Math.round(n * 1000) / 1000), h: guides.h.map((n) => Math.round(n * 1000) / 1000) });
 }
 
-/** The lines of every top-level shape of the scene (except the ones in `exclude`) and of the page itself: edges and centres. */
-export function snapTargets(scene: Scene, exclude: readonly NodePath[] = []): SnapTargets {
+/** The lines of every top-level shape of the scene (except the ones in `exclude`) and of the page itself: edges and centres, and the guides unless `withGuides` is false (they are hidden). */
+export function snapTargets(scene: Scene, exclude: readonly NodePath[] = [], withGuides = true): SnapTargets {
   const xs: number[] = [];
   const ys: number[] = [];
   const add = (b: Bounds): void => {
@@ -58,9 +58,11 @@ export function snapTargets(scene: Scene, exclude: readonly NodePath[] = []): Sn
     ys.push(b.y, b.y + b.height / 2, b.y + b.height);
   };
   add(scene.viewBox);
-  const guides = readGuides(scene);
-  xs.push(...guides.v);
-  ys.push(...guides.h);
+  if (withGuides) {
+    const guides = readGuides(scene);
+    xs.push(...guides.v);
+    ys.push(...guides.h);
+  }
   scene.children.forEach((node, i) => {
     if (node.kind === 'raw' || node.style.display === 'none') return;
     if (exclude.some((p) => p[0] === i)) return;

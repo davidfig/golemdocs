@@ -102,6 +102,11 @@ test('only keys the global handler acts on are usable shortcuts', () => {
   assert.equal(isUsableShortcut(parsed('F7')), true);
   assert.equal(isUsableShortcut(parsed('Shift+K')), false);
   assert.equal(isUsableShortcut(parsed('K')), false);
+  // The vector editor's own keys may be bare, but only a single character.
+  assert.equal(isUsableShortcut(parsed('K'), true), true);
+  assert.equal(isUsableShortcut(parsed('Shift+K'), true), true);
+  assert.equal(isUsableShortcut(parsed('Enter'), true), false);
+  assert.equal(isUsableShortcut(parsed('ArrowLeft'), true), false);
 });
 
 test('overrides are loaded defensively and saved only when there are some', () => {

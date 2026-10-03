@@ -819,31 +819,123 @@
 
 .wm-fill-types {
   display: flex;
-  gap: 2px;
-  margin-bottom: 4px;
+  margin: 2px 3px 6px;
 }
 
 .wm-fill-type {
   flex: 1;
-  height: 22px;
-  padding: 0 4px;
-  border: 1px solid transparent;
+  height: 24px;
+  padding: 0 8px;
+  margin: 0 0 0 -1px;
+  border: 1px solid var(--wm-muted);
   background: none;
   font: inherit;
   white-space: nowrap;
   cursor: default;
 }
 
-.wm-fill-type:hover,
+.wm-fill-type:first-child {
+  margin-left: 0;
+}
+
+.wm-fill-type:hover {
+  background: var(--wm-hot);
+}
+
 .wm-fill-type.current {
+  position: relative;
   background: var(--wm-hot);
   border-color: var(--wm-hot-border);
 }
 
-.wm-fill-hint {
-  max-width: 160px;
-  padding-bottom: 4px;
-  white-space: normal;
+.wm-fill-gradient {
+  min-width: 190px;
+}
+
+.wm-fill-stops {
+  margin: 0 3px 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--wm-muted);
+}
+
+.wm-chip-none {
+  background: linear-gradient(to top right, transparent calc(50% - 1px), #d03030 calc(50% - 1px), #d03030 calc(50% + 1px), transparent calc(50% + 1px)), #fff;
+}
+
+.wm-fill-palette .wm-palette-wide {
+  justify-content: flex-start;
+  padding: 0 3px;
+}
+
+.wm-grad-bar {
+  height: 20px;
+  cursor: copy;
+  margin: 0 7px;
+  border: 1px solid var(--wm-muted);
+}
+
+.wm-grad-track {
+  position: relative;
+  height: 22px;
+  margin: 0 7px;
+  cursor: copy;
+}
+
+.wm-grad-stop {
+  position: absolute;
+  top: 3px;
+  width: 14px;
+  height: 16px;
+  margin: 0 0 0 -7px;
+  padding: 0;
+  border: 1px solid #555;
+  background: var(--stop);
+  box-shadow: inset 0 0 0 2px #fff;
+  cursor: grab;
+}
+
+.wm-grad-stop.current {
+  border: 2px solid var(--wm-hot-border);
+  z-index: 1;
+}
+
+.wm-grad-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.wm-grad-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  white-space: nowrap;
+}
+
+.wm-grad-position {
+  width: 44px;
+  font: inherit;
+}
+
+.wm-fill-action {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--wm-muted);
+  background: none;
+  font: inherit;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.wm-fill-action:hover:not(:disabled) {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-fill-action:disabled {
+  opacity: 0.45;
 }
 
 .wm-palette-label {
@@ -1011,6 +1103,20 @@
 .wm-shortcuts td:last-child {
   text-align: right;
   white-space: nowrap;
+}
+
+.wm-shortcuts th {
+  padding: 10px 8px 2px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.wm-shortcuts td.wm-shortcuts-note {
+  border-bottom: none;
+  font-size: 11px;
+  opacity: 0.75;
+  text-align: left;
+  white-space: normal;
 }
 
 .wm-shortcut-key {
@@ -1493,6 +1599,30 @@
 
 .wm-debug-panel input {
   margin: 0;
+}
+
+/* --- Tools > Options (see optionsDialog.ts) ----------------------------------------------------- */
+
+.wm-options fieldset {
+  margin: 0;
+  padding: 2px 10px 8px;
+  border: 1px solid var(--wm-etch-dark);
+  border-radius: 3px;
+}
+
+.wm-options label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.wm-options input {
+  margin: 0;
+}
+
+.wm-options select {
+  margin-left: auto;
 }
 
 /* --- Cloudflare billing (see billingPanel.ts) ------------------------------------------------- */

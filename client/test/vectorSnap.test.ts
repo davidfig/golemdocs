@@ -58,3 +58,10 @@ test('guides are kept in the file, are snapped to, and are read back as they wer
   s.attrs[GUIDES_ATTR] = 'not json';
   assert.deepEqual(readGuides(s), { v: [], h: [] });
 });
+
+test('hidden guides are left out of the lines to snap to', () => {
+  const s = scene();
+  writeGuides(s, { v: [77], h: [33] });
+  assert.ok(snapTargets(s).xs.includes(77) && snapTargets(s).ys.includes(33));
+  assert.ok(!snapTargets(s, [], false).xs.includes(77) && !snapTargets(s, [], false).ys.includes(33));
+});

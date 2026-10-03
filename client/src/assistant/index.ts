@@ -78,6 +78,7 @@ function toolNote(name: string): string {
       return t('assistant.tool.convert');
     case 'read_drawing':
     case 'edit_drawing':
+    case 'set_drawing_options':
       return t('assistant.tool.drawing');
     default:
       return t('assistant.tool.other');

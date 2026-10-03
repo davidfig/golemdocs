@@ -149,6 +149,17 @@ test('nudge_lines pushes the lines under the brush, like the Nudge tool', async 
   const { editor, calls } = recorder();
   assert.match(await editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10, dx: 0, dy: 8 }), /Pushed the lines/);
   assert.deepEqual(calls[0], ['pushLines', [50, 10], [0, 8], 40]);
+  await editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10, dx: 10, dy: 20, strength: 50 });
+  assert.deepEqual(calls[1], ['pushLines', [50, 10], [5, 10], 40]);
+  await assert.rejects(editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10, dx: 1, strength: 5 }), /strength/);
   await assert.rejects(editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10 }), /how far/);
   await assert.rejects(editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10, dx: 1, radius: 0 }), /radius/);
+});
+
+test('add_shape draws a ready-made shape into the box, and refuses an unknown one', async () => {
+  const { editor, calls } = recorder();
+  assert.match(await editDrawing(editor, { op: 'add_shape', shape: 'star', x: 10, y: 20, width: 50, height: 40, fill: '#ffcc00' }), /Added a star as shape 4/);
+  const node = calls[0][1] as { kind: string; commands: unknown[]; style: Record<string, string> };
+  assert.deepEqual([node.kind, node.commands.length, node.style.fill], ['path', 11, '#ffcc00']);
+  await assert.rejects(() => editDrawing(editor, { op: 'add_shape', shape: 'blob', x: 0, y: 0, width: 5, height: 5 }), /shape/);
 });

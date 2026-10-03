@@ -2,6 +2,7 @@
 // the same editor commands the menus and toolbar run (so each change is one undoable step). The
 // shapes are addressed by their place in the drawing, back to front, starting at 0.
 
+import { SHAPE_IDS, isShapeId, shapePath } from '../vector/shapes.ts';
 import type { Matrix, Scene, SceneNode } from '../vector/model.ts';
 import { nodeAt, selectionBounds, styleOf, worldBounds } from '../vector/edit.ts';
 import type { NodePath, Order } from '../vector/edit.ts';
@@ -129,6 +130,14 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
       editor.addShape({ kind: 'ellipse', cx: x + w / 2, cy: y + h / 2, rx: w / 2, ry: h / 2, style, attrs: {} });
       return `Added an ellipse as shape ${scene.children.length}.`;
     }
+    case 'add_shape': {
+      const id = args.shape;
+      if (!isShapeId(id)) throw new Error(`\`shape\` must be one of ${SHAPE_IDS.join(', ')}.`);
+      const [x, y, w, h] = [number(args, 'x'), number(args, 'y'), number(args, 'width'), number(args, 'height')];
+      if (w <= 0 || h <= 0) throw new Error('`width` and `height` must be above 0.');
+      editor.addShape({ kind: 'path', commands: shapePath(id, x, y, w, h), style, attrs: {} });
+      return `Added a ${id} as shape ${scene.children.length}.`;
+    }
     case 'add_line': {
       const [x, y, x2, y2] = [number(args, 'x'), number(args, 'y'), number(args, 'to_x'), number(args, 'to_y')];
       editor.addShape({ kind: 'path', commands: [['M', x, y], ['L', x2, y2]], style: { fill: 'none', stroke: stroke === undefined ? '#2e3148' : (stroke ?? '#2e3148'), 'stroke-width': fmt(width ?? 2) }, attrs: {} });
@@ -154,11 +163,13 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
     if (radius <= 0 || radius > 10000) throw new Error('`radius` must be more than 0 and at most 10000.');
     const x = number(args, 'x');
     const y = number(args, 'y');
-    const dx = number(args, 'dx', 0);
-    const dy = number(args, 'dy', 0);
+    const strength = number(args, 'strength', 100);
+    if (strength < 10 || strength > 100) throw new Error('`strength` must be from 10 to 100 (percent).');
+    const dx = number(args, 'dx', 0) * (strength / 100);
+    const dy = number(args, 'dy', 0) * (strength / 100);
     if (!dx && !dy) throw new Error('Say how far to push: `dx` and `dy`.');
     if (!editor.pushLines([x, y], [dx, dy], radius)) return 'No lines are within reach of that point, so nothing moved.';
-    return `Pushed the lines within ${radius} of (${x}, ${y}) by (${dx}, ${dy}); the lines bend most at the middle and not at all at the edge. Shapes that were rectangles or ellipses are paths now.`;
+    return `Pushed the lines within ${radius} of (${x}, ${y}) by (${dx}, ${dy}) at ${strength}% strength; the lines bend most at the middle and not at all at the edge. Shapes that were rectangles or ellipses are paths now.`;
   }
   if (op === 'set_canvas') {
     const w = number(args, 'width', scene.width);
@@ -272,6 +283,6 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
         await editor.boolean(op as BooleanOp);
         return `Combined ${these} (${op}).`;
       }
-      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, set_canvas, fit_canvas, new_layer, new_group, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
+      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_shape, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, set_canvas, fit_canvas, new_layer, new_group, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
   }
 }

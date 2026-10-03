@@ -1,0 +1,40 @@
+/* The tool-options strip (see toolOptions.ts): the settings of the tool in use, floating at the top of the drawing. */
+
+.wm-tool-options {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--wm-border);
+  border-radius: 4px;
+  background: var(--wm-face);
+  color: var(--wm-text);
+  font: 12px/1.4 var(--wm-font);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+}
+
+.wm-tool-options[hidden] {
+  display: none;
+}
+
+.wm-tool-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-tool-field input[type='range'] {
+  width: 110px;
+  margin: 0;
+}
+
+.wm-tool-value {
+  min-width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

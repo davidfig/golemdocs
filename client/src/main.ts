@@ -85,6 +85,7 @@ import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/past
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
+import { showOptions } from './ui/optionsDialog.ts';
 import { Footer } from './ui/footer.ts';
 import { Ruler } from './ui/ruler.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
@@ -3219,6 +3220,7 @@ const chromeHost = createChromeHost({
   showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
   showWordCount: () => wordCountDialog.open(),
+  showOptions: () => showOptions(focusInput),
   paste: async () => {
     const clip = await readClipboard();
     if (clip) pasteClipboard(clip);
@@ -3296,6 +3298,7 @@ const chromeHost = createChromeHost({
   },
   vectorAction: (op) => (op === 'layers' ? toggleLayers() : vector?.action(op)),
   vectorStyle: (change) => vector?.style(change),
+  vectorGradient: (change) => vector?.gradient(change),
   isDrawing,
   pickPicture,
   isPicture: () => isPicture() || isDrawing(),
@@ -3728,7 +3731,8 @@ const footer = new Footer(document.getElementById('footer')!, {
   goTo: () => chrome.registry.execute('edit.goTo'),
   wordCount: () => chrome.registry.execute('tools.wordCount'),
   zoom: (anchor) => chrome.showZoomList(anchor),
-  label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : chrome.registry.get(action === 'goTo' ? 'edit.goTo' : 'tools.wordCount').plainLabel),
+  canvasSize: () => chrome.registry.execute('vector.canvasSize'),
+  label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : action === 'canvasSize' ? chrome.registry.get('vector.canvasSize').plainLabel : chrome.registry.get(action === 'goTo' ? 'edit.goTo' : 'tools.wordCount').plainLabel),
 });
 
 /** Asks the worker for the counts, once the document has been still for a moment. */

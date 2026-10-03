@@ -5,6 +5,8 @@
 // format profile (formats.ts) decides which ones make sense for that kind of document at all.
 // Nothing here knows about .docx XML, the editor's model or the layout worker.
 
+import type { ShapeId } from '../vector/shapes.ts';
+
 export type Mark = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'superscript' | 'subscript' | 'code';
 export type Alignment = 'left' | 'center' | 'right' | 'justify';
 export type ListKind = 'bullet' | 'number' | 'task';
@@ -39,7 +41,7 @@ export type TableOp =
 export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
 
 /** The vector editor's tools and commands (the Drawing menu): the tools pick what a drag draws or does; the rest act on the selection. */
-export type VectorOp = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'makeMask' | 'releaseMask' | 'canvasSize' | 'newLayer' | 'newGroup' | 'guideV' | 'guideH' | 'clearGuides' | 'layers' | 'snap';
+export type VectorOp = 'select' | 'rect' | 'ellipse' | 'shape' | `shape:${ShapeId}` | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'makeMask' | 'releaseMask' | 'canvasSize' | 'newLayer' | 'newGroup' | 'guideV' | 'guideH' | 'clearGuides' | 'layers' | 'snap';
 
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
@@ -168,6 +170,8 @@ export type Action =
   | { kind: 'vector'; op: VectorOp }
   /** How the selected shapes (and the next ones) look; null is none. */
   | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }
+  /** Edits the stops of the selected shape's gradient: pick one, add one at a position (0 to 1), take one away, move one, or turn the gradient around. */
+  | { kind: 'vectorGradient'; op: 'select' | 'add' | 'remove' | 'move' | 'reverse'; index?: number; offset?: number }
   // Tools
   | { kind: 'toggleTrackChanges' };
 
@@ -250,7 +254,7 @@ export interface ChromeState {
   /** The Draw toolbar: the tool picked (if any), its colour and its thickness step. */
   draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
   /** The vector editor: the tool picked, whether anything is selected, and the look of the selection (or of the next shape). */
-  vector: { tool: 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text'; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string };
+  vector: { tool: 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text'; shape: ShapeId; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string; gradient: { stops: { offset: number; color: string }[]; stop: number; type: 'linear' | 'radial' } | null; documentColors: string[] };
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
@@ -302,7 +306,7 @@ export const DEFAULT_STATE: ChromeState = {
   formMode: null,
   painting: false,
   draw: { tool: null, color: '#e5322d', size: 1, fill: false },
-  vector: { tool: 'select', hasSelection: false, multiple: false, clipped: false, masked: false, layers: false, snap: true, fill: null, stroke: null, strokeWidth: 1, fillType: 'solid', strokeStyle: 'dash:solid' },
+  vector: { tool: 'select', shape: 'star', hasSelection: false, multiple: false, clipped: false, masked: false, layers: false, snap: true, fill: null, stroke: null, strokeWidth: 1, fillType: 'solid', strokeStyle: 'dash:solid', gradient: null, documentColors: [] },
   inTable: false,
   sync: { user: null, document: 'guest', error: null },
   subscription: null,

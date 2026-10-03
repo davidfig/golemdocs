@@ -22,6 +22,12 @@ export interface CommandSpec {
    * must reach the hidden textarea as real copy/cut/paste events).
    */
   nativeShortcut?: boolean;
+  /**
+   * 'vector': a key of the vector editor. It only works while a drawing is open (and then wins
+   * over a document command with the same keys), may be a bare letter, and is listed in its own
+   * section of the keyboard shortcuts.
+   */
+  scope?: 'vector';
   /** The action sent to the host. */
   action?: Action | ((state: ChromeState) => Action);
   /** Runs in the chrome instead of sending an action. */
@@ -88,7 +94,7 @@ export class CommandRegistry {
     let taken: string | null = null;
     if (shortcut) {
       for (const other of this.commands.values()) {
-        if (other.id === id || other.nativeShortcut || !sameShortcut(other.shortcutParsed, shortcut)) continue;
+        if (other.id === id || other.nativeShortcut || other.scope !== this.get(id).scope || !sameShortcut(other.shortcutParsed, shortcut)) continue;
         this.assign(other, null);
         taken = other.plainLabel;
       }

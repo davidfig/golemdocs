@@ -360,9 +360,22 @@ export interface ColorSpec {
   palette: 'full' | 'highlight';
   /** Colors the open document already uses, shown under the palette. */
   documentColors?(state: ChromeState): string[];
-  /** A section shown above the palette (the fill's solid or gradient choice); `close` shuts the popup. */
-  header?(state: ChromeState, close: () => void): HTMLElement | null;
+  /** A section shown above the palette (the fill's solid or gradient choice). */
+  header?(state: ChromeState, palette: PaletteControl): HTMLElement | null;
+  /** Whether picking a colour leaves the popup open (a gradient's stops are coloured one after another). */
+  keepOpen?(state: ChromeState): boolean;
+  /** The "none" choice is drawn as an empty (crossed) chip rather than a black one. */
+  emptyNone?: boolean;
+  /** What the button's icon shows for the current state: the selection's own paint (a gradient is its first and last colour) rather than the last colour picked. */
+  shown?(state: ChromeState): { color: string | null; gradient?: [string, string] };
   action(color: string | null): Action;
+}
+
+/** What a popup's header can do with the palette under it. */
+export interface PaletteControl {
+  close(): void;
+  /** Marks a colour as the current one (the stop picked in the header). */
+  setColor(color: string | null): void;
 }
 
 export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control {
@@ -373,7 +386,10 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
   keepFocus(main);
   keepFocus(arrow);
   const el = h('div', { class: 'wm-split' }, main, arrow);
-  const paint = () => main.style.setProperty('--swatch', color ?? 'transparent');
+  // With `shown`, the icon follows the state (refresh) rather than the last colour picked.
+  const paint = () => {
+    if (!spec.shown) main.style.setProperty('--swatch', color ?? 'transparent');
+  };
   paint();
 
   const apply = (c: string | null) => {
@@ -387,11 +403,30 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
   main.addEventListener('click', () => apply(color));
   arrow.addEventListener('click', () => {
     if (popupOpenFor(el)) return closePopup();
-    const panel = h('div', { class: 'wm-palette', attrs: { role: 'dialog', 'aria-label': spec.label } });
-    const header = spec.header?.(registry.state(), closePopup);
+    const panel = h('div', { class: spec.emptyNone ? 'wm-palette wm-fill-palette' : 'wm-palette', attrs: { role: 'dialog', 'aria-label': spec.label } });
+    // The popup opens on the colour the selection really has.
+    if (spec.shown) color = spec.shown(registry.state()).color ?? color;
+    const cells: HTMLElement[] = [];
+    const mark = () => cells.forEach((cell) => toggleClass(cell, 'current', !!color && cell.title.toLowerCase() === color.toLowerCase()));
+    const header = spec.header?.(registry.state(), {
+      close: closePopup,
+      setColor: (c) => {
+        color = c;
+        paint();
+        mark();
+      },
+    });
     if (header) panel.append(header);
-    const none = h('button', { class: 'wm-palette-wide', attrs: { type: 'button' } }, h('span', { class: 'wm-chip', attrs: { style: `background:${spec.palette === 'full' ? '#000' : 'transparent'}` } }), spec.noneLabel);
-    none.addEventListener('click', () => apply(null));
+    // A popup that stays open applies the colour without closing (the header shows the result when the state follows).
+    const choose = (c: string | null) => {
+      if (!spec.keepOpen?.(registry.state())) return apply(c);
+      color = c;
+      paint();
+      mark();
+      registry.perform(spec.action(c), spec.label);
+    };
+    const none = h('button', { class: 'wm-palette-wide', attrs: { type: 'button' } }, h('span', { class: spec.emptyNone ? 'wm-chip wm-chip-none' : 'wm-chip', attrs: spec.emptyNone ? {} : { style: `background:${spec.palette === 'full' ? '#000' : 'transparent'}` } }), spec.noneLabel);
+    none.addEventListener('click', () => choose(null));
     panel.append(none);
     const rows = spec.palette === 'full' ? PALETTE : HIGHLIGHTS;
     const grid = h('div', { class: 'wm-palette-grid' });
@@ -401,7 +436,8 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
         const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
         cell.style.background = c;
         if (color && c.toLowerCase() === color.toLowerCase()) cell.classList.add('current');
-        cell.addEventListener('click', () => apply(c));
+        cell.addEventListener('click', () => choose(c));
+        cells.push(cell);
         grid.append(cell);
       }
     }
@@ -415,7 +451,8 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
         const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
         cell.style.background = c;
         if (color && c.toLowerCase() === color.toLowerCase()) cell.classList.add('current');
-        cell.addEventListener('click', () => apply(c));
+        cell.addEventListener('click', () => choose(c));
+        cells.push(cell);
         usedGrid.append(cell);
       }
       panel.append(usedGrid);
@@ -423,7 +460,7 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
     if (spec.palette === 'full') {
       const picker = h('input', { attrs: { type: 'color', value: color ?? '#000000', tabindex: '-1' } });
       picker.className = 'wm-hidden-picker';
-      picker.addEventListener('change', () => apply(picker.value));
+      picker.addEventListener('change', () => choose(picker.value));
       const more = h('button', { class: 'wm-palette-wide', text: t('menus.palette.more'), attrs: { type: 'button' } });
       more.addEventListener('click', () => picker.click());
       panel.append(more, picker);
@@ -433,7 +470,14 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
 
   return {
     el,
-    refresh() {
+    refresh(state) {
+      if (spec.shown) {
+        const now = spec.shown(state);
+        main.style.setProperty('--swatch', now.gradient ? 'url(#wm-swatch-gradient)' : (now.color ?? 'transparent'));
+        main.style.setProperty('--grad-a', now.gradient?.[0] ?? 'transparent');
+        main.style.setProperty('--grad-b', now.gradient?.[1] ?? 'transparent');
+        main.style.setProperty('--none', now.color === null && !now.gradient ? '1' : '0');
+      }
       const enabled = registry.allows(spec.action(color));
       main.disabled = !enabled;
       arrow.disabled = !enabled;

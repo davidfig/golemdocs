@@ -4,12 +4,15 @@
 
 import type { Camera } from '../view/camera.ts';
 import type { ChromeState, VectorOp } from './actions.ts';
+import { colorText, parseColor } from '../vector/style.ts';
 import { svgBytes, svgText } from '../formats/vectorDoc.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
 import { LayersPanel } from './layersPanel.ts';
+import { ToolOptions } from './toolOptions.ts';
 import { VectorEditor } from './vectorEditor.ts';
 import type { ShapeStyle } from './vectorEditor.ts';
 import { VectorLayer } from './vectorLayer.ts';
+import { isShapeId, type ShapeId } from '../vector/shapes.ts';
 
 export interface VectorSessionHost {
   camera: Camera;
@@ -38,7 +41,14 @@ export interface VectorSession {
   state(layersOpen: boolean): ChromeState['vector'];
   action(op: VectorOp): void;
   style(change: Partial<ShapeStyle>): void;
+  gradient(change: { op: 'select' | 'add' | 'remove' | 'move' | 'reverse'; index?: number; offset?: number }): void;
 }
+
+/** A colour as #rrggbb when it is a plain one (so the palette can mark it), else as it is. */
+const hex = (color: string | null): string | null => {
+  const rgba = color ? parseColor(color) : null;
+  return rgba && rgba[3] === 1 ? colorText(rgba) : color;
+};
 
 export function createVectorSession(host: VectorSessionHost): VectorSession {
   const layer = new VectorLayer(host.viewport, { camera: host.camera, page: host.page, changed: host.changed });
@@ -60,6 +70,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
       }),
     );
   const panel = new LayersPanel(host.workspace, editor, { close: host.toggleLayers, focusEditor: host.focusEditor, canvasSize: openCanvas, fitCanvas: () => editor.fitPage(0) });
+  const options = new ToolOptions(host.viewport, host.focusEditor);
 
   return {
     editor,
@@ -70,26 +81,35 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
     },
     position(layersOpen) {
       layer.position();
+      options.setTool(editor.active ? editor.tool : '');
       panel.setVisible(layersOpen && editor.active);
       panel.update();
     },
     state(layersOpen) {
+      const style = editor.currentStyle;
       return {
         tool: editor.tool,
+        shape: editor.shapeId,
         hasSelection: editor.selection.length > 0,
         multiple: editor.selection.length > 1,
         clipped: editor.clipped,
         masked: editor.masked,
         layers: layersOpen,
         snap: editor.snapping,
-        ...editor.currentStyle,
+        ...style,
+        fill: hex(style.fill),
+        stroke: hex(style.stroke),
+        gradient: editor.gradientStops,
+        documentColors: editor.documentColors,
       };
     },
     action(op) {
+      if (op.startsWith('shape:')) return isShapeId(op.slice(6)) ? editor.setShape(op.slice(6) as ShapeId) : undefined;
       switch (op) {
         case 'select':
         case 'rect':
         case 'ellipse':
+        case 'shape':
         case 'line':
         case 'pen':
         case 'pencil':
@@ -143,5 +163,12 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
       }
     },
     style: (change) => editor.applyStyle(change),
+    gradient({ op, index = 0, offset = 0 }) {
+      if (op === 'select') editor.selectStop(index);
+      else if (op === 'add') editor.addStopAt(offset);
+      else if (op === 'remove') editor.removeStopAt(index);
+      else if (op === 'move') editor.moveStop(index, offset);
+      else editor.reverseGradient();
+    },
   };
 }

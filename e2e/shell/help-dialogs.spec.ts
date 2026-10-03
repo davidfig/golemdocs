@@ -73,6 +73,23 @@ test.describe('Keyboard Shortcuts dialog', () => {
     await expect.poll(async () => JSON.parse((await stored(page, 'wm-shortcuts')) ?? '{}')['view.grid']).toBe('');
   });
 
+  test('the Vector Editor section lists Illustrator’s keys and accepts a bare letter', async ({ app, page }) => {
+    await app.blank();
+    await page.keyboard.press('F1');
+    const dialog = shortcutsDialog(page);
+    await expect(dialog.locator('th', { hasText: 'Vector Editor' })).toBeVisible();
+    const pen = dialog.getByRole('button', { name: 'Change shortcut for Pen', exact: true });
+    await expect(pen).toHaveText('P');
+    await pen.click();
+    await page.keyboard.press('q');
+    await expect(pen).toHaveText('Q');
+    await expect.poll(async () => JSON.parse((await stored(page, 'wm-shortcuts')) ?? '{}')['vector.pen']).toBe('q');
+    // The same letter in the other section is still refused: only vector keys may be bare.
+    await dialog.getByRole('button', { name: 'Change shortcut for Page Grid' }).click();
+    await page.keyboard.press('q');
+    await expect(dialog.getByRole('status')).toContainText('Include Ctrl, Alt or');
+  });
+
   test('giving a command keys another one has takes them away, and Restore Defaults puts everything back', async ({ app, page }) => {
     await app.blank();
     await page.keyboard.press('F1');

@@ -110,7 +110,7 @@ export function dialogTitleBar(title: string, onClose: () => void): HTMLElement 
 
 /** A small modal dialog (About, Keyboard Shortcuts). */
 export function showDialog(title: string, body: Node, onClose?: () => void): void {
-  const dialog = h('dialog', { class: 'wm-dialog' });
+  const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
   const done = () => dialog.close();
   const ok = h('button', { class: 'wm-button', text: t('menus.dialog.ok') });
   dialog.append(dialogTitleBar(title, done), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));

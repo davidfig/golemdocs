@@ -63,7 +63,7 @@ test.describe('opening a vector drawing', () => {
       await expect(app.toolbarButton(new RegExp(`^${name}$`))).toBeVisible();
     }
     await expect(app.page.getByRole('button', { name: 'Stroke Style' })).toBeVisible();
-    await expect(app.page.getByRole('combobox', { name: 'Fill Type' })).toBeVisible();
+    await expect(app.page.getByRole('button', { name: 'Fill Color options' })).toBeVisible();
     // The layers panel lists the shapes, the top one first.
     const layers = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
     await expect(layers.nth(0)).toContainText('green');
@@ -143,12 +143,48 @@ test.describe('editing a drawing', () => {
     await expect.poll(async () => (await currentSvg(app)).includes('stroke-dasharray'), { timeout: 15_000 }).toBe(false);
   });
 
-  test('a linear gradient is made from the Fill Type list', async ({ app }) => {
+  test('the Fill popup lists the colours the drawing uses and marks the picked shape’s own', async ({ app }) => {
+    await openDrawing(app);
+    const at = await onPage(app, 0.75, 0.5); // the green circle
+    await app.page.mouse.click(at.x, at.y);
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    const used = app.page.locator('.wm-palette').getByRole('button', { name: '#e53935' });
+    await expect(used).toHaveCount(1);
+    await expect(app.page.locator('.wm-palette').getByRole('button', { name: '#000000' })).toHaveCount(2); // in the palette and in the drawing
+    await expect(app.page.locator('.wm-swatch.current')).toHaveAttribute('title', '#43a047');
+  });
+
+  test('the Fill popup makes a gradient and edits its stops: pick, add, move, colour, delete, reverse', async ({ app }) => {
     await openDrawing(app);
     const at = await onPage(app, 0.75, 0.5);
     await app.page.mouse.click(at.x, at.y);
-    await app.page.getByRole('combobox', { name: 'Fill Type' }).selectOption('linear');
-    await expect.poll(async () => (await currentSvg(app)).includes('<linearGradient'), { timeout: 15_000 }).toBe(true);
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    const popup = app.page.locator('.wm-palette');
+    await popup.getByRole('button', { name: 'Linear' }).click();
+    // The popup stays open and now shows the gradient's two stops.
+    const stops = popup.locator('.wm-grad-stop');
+    await expect(stops).toHaveCount(2);
+    // A click on the bar adds a stop, and it is the picked one.
+    const bar = await popup.locator('.wm-grad-bar').boundingBox();
+    await app.page.mouse.click(bar!.x + bar!.width / 2, bar!.y + bar!.height / 2);
+    await expect(stops).toHaveCount(3);
+    await expect(popup.getByRole('button', { name: 'Color stop 2' })).toHaveAttribute('aria-pressed', 'true');
+    // Its position is typed, and a colour from the palette is its colour (the popup stays open).
+    await popup.getByLabel('Position').fill('25');
+    await popup.getByLabel('Position').press('Tab');
+    await popup.getByRole('button', { name: '#FF0000' }).click();
+    await expect(stops).toHaveCount(3);
+    await expect(popup.getByLabel('Position')).toHaveValue('25');
+    // Reverse turns the gradient around: the red stop is now at 75%.
+    await popup.getByRole('button', { name: 'Reverse' }).click();
+    await expect(popup.getByLabel('Position')).toHaveValue('75');
+    // An inner stop can be deleted; the ends cannot.
+    await popup.getByRole('button', { name: 'Delete Stop' }).click();
+    await expect(stops).toHaveCount(2);
+    await popup.getByRole('button', { name: 'Color stop 1' }).click();
+    await expect(popup.getByRole('button', { name: 'Delete Stop' })).toBeDisabled();
+    // The file has the gradient with its two stops left.
+    await expect.poll(async () => (await currentSvg(app)).match(/<linearGradient[\s\S]*?<\/linearGradient>/)?.[0].match(/<stop /g)?.length, { timeout: 15_000 }).toBe(2);
   });
 });
 
@@ -191,6 +227,30 @@ test.describe('layers', () => {
 });
 
 test.describe('free drawing', () => {
+  test('the Nudge tool shows a strip with Size and Strength, and [ and ] resize the brush', async ({ app }) => {
+    await openDrawing(app);
+    const strip = app.page.getByRole('toolbar', { name: 'Tool options' });
+    await expect(strip).toBeHidden();
+    await app.toolbarButton(/^Nudge$/).click();
+    await expect(strip).toBeVisible();
+    const size = strip.getByRole('slider', { name: 'Size' });
+    const strength = strip.getByRole('slider', { name: 'Strength' });
+    await expect(size).toHaveValue('36');
+    await expect(strength).toHaveValue('100');
+    // The keys act on the drawing, not on the slider that had the click.
+    const at = await onPage(app, 0.5, 0.5);
+    await app.page.mouse.move(at.x, at.y);
+    await app.page.keyboard.press(']');
+    await expect(size).toHaveValue('43');
+    await app.page.keyboard.press('[');
+    await expect(size).toHaveValue('34');
+    await strength.fill('40');
+    await expect(strength).toHaveValue('40');
+    await app.toolbarButton(/^Select$/).click();
+    await expect(strip).toBeHidden();
+    await app.page.evaluate(() => localStorage.removeItem('vector.nudgeStrength'));
+  });
+
   test('the Pencil draws a smooth path through the points the pointer went through, and stays picked for the next', async ({ app }) => {
     await openDrawing(app);
     await app.toolbarButton(/^Pencil$/).click();
@@ -220,6 +280,70 @@ test.describe('free drawing', () => {
     // Still the pencil: the next stroke is another path, not a click on the first.
     await stroke(0.7);
     await expect(layers).toHaveCount(4);
+  });
+
+  test('Drawing ▸ Lock Guides keeps a guide where it is, and Show Guides hides the guides without removing them', async ({ app }) => {
+    await openDrawing(app);
+    const guides = async () => /data-golem-guides="([^"]*)"/.exec(await currentSvg(app))?.[1] ?? '';
+    await app.menu('Drawing', 'Add Vertical Guide');
+    await expect.poll(guides, { timeout: 15_000 }).not.toBe('');
+    const before = await guides();
+    const drag = async (fx: number, to: number) => {
+      const from = await onPage(app, fx, 0.95);
+      const end = await onPage(app, to, 0.95);
+      await app.page.mouse.move(from.x, from.y);
+      await app.page.mouse.down();
+      await app.page.mouse.move((from.x + end.x) / 2, end.y);
+      await app.page.mouse.move(end.x, end.y);
+      await app.page.mouse.up();
+    };
+    // Locked: the pointer passes through it.
+    await app.menu('Drawing', 'Lock Guides');
+    await drag(0.5, 0.65);
+    await expect(app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem')).toHaveCount(2);
+    expect(await guides()).toBe(before);
+    // Unlocked: it is dragged.
+    await app.menu('Drawing', 'Lock Guides');
+    await drag(0.5, 0.65);
+    await expect.poll(guides, { timeout: 15_000 }).not.toBe(before);
+    // Hidden, the guides stay in the file; the menu shows the state, and adding one shows them again.
+    const moved = await guides();
+    await app.menu('Drawing', 'Show Guides');
+    expect(await guides()).toBe(moved);
+    expect(await app.page.evaluate(() => localStorage.getItem('vector.showGuides'))).toBe('off');
+    await app.menu('Drawing', 'Add Horizontal Guide');
+    await expect.poll(() => app.page.evaluate(() => localStorage.getItem('vector.showGuides'))).toBe('on');
+  });
+
+  test('Tools ▸ Options ▸ Drawing: with "select after pencil" off a finished stroke is not selected, and the setting is kept', async ({ app }) => {
+    await openDrawing(app);
+    await app.menu('Tools', 'Options');
+    const options = app.page.getByRole('dialog', { name: 'Options' });
+    const select = options.getByRole('checkbox', { name: 'Select a pencil stroke when it is finished' });
+    await expect(select).toBeChecked();
+    await expect(options.getByRole('checkbox', { name: /Switch back to the Select tool/ })).toBeChecked();
+    await expect(options.getByRole('combobox', { name: 'Pencil smoothing' })).toHaveValue('medium');
+    await select.uncheck();
+    await options.getByRole('button', { name: 'OK' }).click();
+    await expect(options).toHaveCount(0);
+
+    await app.toolbarButton(/^Pencil$/).click();
+    const start = await onPage(app, 0.1, 0.85);
+    await app.page.mouse.move(start.x, start.y);
+    await app.page.mouse.down();
+    for (let i = 1; i <= 12; i++) {
+      const p = await onPage(app, 0.1 + i * 0.05, 0.85);
+      await app.page.mouse.move(p.x, p.y);
+    }
+    await app.page.mouse.up();
+    const layers = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    await expect(layers).toHaveCount(3);
+    await expect(layers.locator('xpath=self::*[@aria-selected="true"]')).toHaveCount(0);
+    // The choice is stored where the account sync picks it up.
+    expect(await app.page.evaluate(() => localStorage.getItem('vector.selectAfterPencil'))).toBe('off');
+    // The Drawing menu shows it too.
+    await app.menubar.getByRole('menuitem', { name: 'Drawing' }).click();
+    await expect(app.page.getByRole('menu').getByRole('menuitemcheckbox', { name: 'Select After Pencil' })).not.toBeChecked();
   });
 });
 

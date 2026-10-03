@@ -38,16 +38,21 @@ export interface FooterActions {
   goTo(): void;
   wordCount(): void;
   zoom(anchor: HTMLElement): void;
+  canvasSize(): void;
   /** The tooltip of a clickable segment. */
-  label(action: 'goTo' | 'wordCount' | 'zoom'): string;
+  label(action: FooterAction): string;
 }
 
-const SEGMENT_ACTIONS: Partial<Record<MessageKey, 'goTo' | 'wordCount' | 'zoom'>> = {
+type FooterAction = 'goTo' | 'wordCount' | 'zoom' | 'canvasSize';
+
+const SEGMENT_ACTIONS: Partial<Record<MessageKey, FooterAction>> = {
   'panels.footer.page': 'goTo',
   'panels.footer.words': 'wordCount',
   'panels.footer.selection': 'wordCount',
   'panels.footer.zoom': 'zoom',
 };
+/** A drawing's size opens Canvas Size; a picture's is only a fact. */
+const DRAWING_SEGMENT_ACTIONS: Partial<Record<MessageKey, FooterAction>> = { 'panels.footer.pixels': 'canvasSize' };
 
 const VIEW_LABELS = { print: 'chrome.view.print', flow: 'chrome.view.flow', grid: 'chrome.view.grid' } as const satisfies Record<ViewMode, MessageKey>;
 
@@ -117,7 +122,7 @@ export class Footer {
       for (const [name, value] of Object.entries(params ?? {})) shown[name] = numbers.format(value);
       // The plural category comes from the number itself, the text from its formatted copy.
       if (params && 'count' in params) shown.count = params.count;
-      return { text: t(key, { ...shown, n: numbers.format(params?.count ?? 0) }), action: SEGMENT_ACTIONS[key] };
+      return { text: t(key, { ...shown, n: numbers.format(params?.count ?? 0) }), action: (VECTOR_KINDS.includes(info.kind) ? DRAWING_SEGMENT_ACTIONS[key] : undefined) ?? SEGMENT_ACTIONS[key] };
     });
     for (const [view, button] of this.views) {
       setAttr(button, 'aria-pressed', String(view === info.view));
@@ -130,7 +135,7 @@ export class Footer {
     this.items.replaceChildren(...segments.map((s) => this.segment(s.text, s.action)));
   }
 
-  private segment(text: string, action: 'goTo' | 'wordCount' | 'zoom' | undefined): HTMLElement {
+  private segment(text: string, action: FooterAction | undefined): HTMLElement {
     if (!action) return h('span', { class: 'wm-footer-item', text });
     const button = h('button', { class: 'wm-footer-item wm-footer-link', text, attrs: { type: 'button', title: this.actions.label(action) } });
     if (action === 'zoom') {

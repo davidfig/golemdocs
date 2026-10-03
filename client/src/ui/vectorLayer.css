@@ -91,3 +91,26 @@
   border-color: var(--wm-hot-border);
   font-weight: bold;
 }
+
+/* The Shapes tool: a split button (the tool, and a list of shapes), and the list, a grid of small pictures. */
+.wm-shape-list {
+  display: grid;
+  grid-template-columns: repeat(6, auto);
+  gap: 2px;
+  padding: 4px;
+}
+
+.wm-shape-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.wm-shape-row:hover,
+.wm-shape-row.chosen {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}

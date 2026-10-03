@@ -174,8 +174,10 @@ export const ICONS: Record<string, string> = {
   ),
   line: svg(`<path d="M5 19L19 5" stroke-width="2.6"/><circle cx="5" cy="19" r="1.8" fill="${SKY}"/><circle cx="19" cy="5" r="1.8" fill="${SKY}"/>`),
   arrow: svg(`<path d="M5 19L18 6" stroke-width="2.6"/><path d="M11 5.5h8.5V14z" fill="${RED}"/>`),
-  rectangle: svg(`<rect x="3.5" y="6" width="17" height="12" rx="1.5" stroke-width="2.4" fill="${SKY}"/>`),
-  ellipse: svg(`<ellipse cx="12" cy="12" rx="9" ry="6.5" stroke-width="2.4" fill="${SKY}"/>`),
+  rectangle: svg(`<rect x="3.5" y="6" width="17" height="12" rx="1.5" stroke-width="1.6" fill="${SKY}"/>`),
+  // The Shapes tool: a star and a triangle.
+  shapes: svg(`<path d='M8 3l1.700 3.600 3.800.5-2.800 2.700.7 3.800L8 11.700 4.600 13.600l.7-3.800L2.500 7.100l3.800-.5z' stroke-width='1.500' fill='${BUTTER}'/><path d='M17 11l5 10h-10z' stroke-width='1.800' fill='${SKY}'/>`),
+  ellipse: svg(`<ellipse cx="12" cy="12" rx="9" ry="6.5" stroke-width="1.6" fill="${SKY}"/>`),
   text: svg(`<path d="M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6" stroke-width="2.4"/>`),
   bubble: svg(`<path d="M6 4.5h12a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-6.5L6.5 20v-4.6A2.5 2.5 0 0 1 3.5 13V7A2.5 2.5 0 0 1 6 4.5z" fill="${PAPER}" stroke-width="2"/><path d="M8 9h8M8 12h5" stroke-width="1.6"/>`),
   step: svg(`<circle cx="12" cy="12" r="9" fill="${RED}"/><path d="M10.2 9.4L12.4 8v8" stroke="${PAPER}" stroke-width="2.2"/>`),
@@ -232,6 +234,9 @@ export const ICONS: Record<string, string> = {
   forward: svg(`<rect x="3.5" y="5.5" width="10" height="10" fill="${MIST}"/><rect x="9.5" y="9.5" width="11" height="11" fill="${BLUE}"/><path d="M14 4v5M11.8 6.2L14 4l2.2 2.2" stroke-width="1.6"/>`),
   backward: svg(`<rect x="9.5" y="9.5" width="11" height="11" fill="${MIST}"/><rect x="3.5" y="3.5" width="11" height="11" fill="${BLUE}"/><path d="M19 4v5M16.8 6.8L19 9l2.2-2.2" stroke-width="1.6"/>`),
   fill: svg(`<rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="${BLUE}" stroke-width="2.2"/>`),
+  // The vector editor's fill and stroke show the selection's actual paint through --swatch (a color, or a gradient from --grad-a to --grad-b) and --none (1 draws a red slash).
+  vectorFill: svg(`<defs><linearGradient id="wm-swatch-gradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--grad-a,#fff)"/><stop offset="1" style="stop-color:var(--grad-b,#fff)"/></linearGradient></defs><rect x="3" y="5" width="18" height="14" rx="2" fill="var(--swatch, transparent)" stroke-width="1.6"/><path d="M4.5 18.5L19.5 5.5" stroke="#d03030" stroke-width="2" style="opacity:var(--none, 0)"/>`),
+  vectorStroke: svg(`<rect x="4" y="6" width="16" height="12" stroke="var(--swatch, transparent)" stroke-width="3.6"/><rect x="2.2" y="4.2" width="19.6" height="15.6" stroke-width="1"/><rect x="5.8" y="7.8" width="12.4" height="8.4" stroke-width="1"/><path d="M4.5 18.5L19.5 5.5" stroke="#d03030" stroke-width="2" style="opacity:var(--none, 0)"/>`),
   drawColor: svg(`<path d="M4 17l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 16z" fill="${YELLOW}"/><path d="M4 17l4-1-3-3z" fill="${MIST}"/>` + SWATCH),
   comment: svg(
     `<path d="M4.5 3.5h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11.5l-5 4.5v-4.5h-2a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" fill="${BUTTER}"/>` +

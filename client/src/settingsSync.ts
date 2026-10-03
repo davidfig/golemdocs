@@ -26,6 +26,11 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.ruler',
   'word.footer', // status bar
   'wm.largeWrap',
+  'vector.selectAfterPencil', // drawing options (Tools › Options)
+  'vector.returnToSelect',
+  'vector.pencilSmoothing',
+  'vector.nudgeSize', // the Nudge brush (its options strip)
+  'vector.nudgeStrength',
 ];
 
 /** A phone or tablet (a touch screen with nothing to hover with), whose settings are its own. */

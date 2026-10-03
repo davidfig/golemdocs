@@ -4,6 +4,7 @@
 // the host, so these use the same functions the menus do.
 
 import { describeDrawing, editDrawing } from './drawingTools.ts';
+import { SMOOTHING_LEVELS, setLockGuides, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides } from '../ui/drawingOptions.ts';
 import type { DrawingEditor } from './drawingTools.ts';
 import type { ImageEdit } from '../formats/imageEdit.ts';
 import { FORMAT_LIST, isFormat } from '../formats/convert.ts';
@@ -226,6 +227,38 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       }
       if (!done.length) throw new Error('Say what to change: view_mode, zoom, status_bar, ruler or formatting_marks.');
       return `Changed the view: ${done.join(', ')}.`;
+    },
+    set_drawing_options(args) {
+      const done: string[] = [];
+      const pencil = optionalFlag(args, 'select_after_pencil');
+      if (pencil !== undefined) {
+        setSelectAfterPencil(pencil);
+        done.push(`select after pencil ${pencil ? 'on' : 'off'}`);
+      }
+      const back = optionalFlag(args, 'return_to_select');
+      if (back !== undefined) {
+        setReturnToSelect(back);
+        done.push(`return to Select ${back ? 'on' : 'off'}`);
+      }
+      const show = optionalFlag(args, 'show_guides');
+      if (show !== undefined) {
+        setShowGuides(show);
+        done.push(`guides ${show ? 'shown' : 'hidden'}`);
+      }
+      const lock = optionalFlag(args, 'lock_guides');
+      if (lock !== undefined) {
+        setLockGuides(lock);
+        done.push(`guides ${lock ? 'locked' : 'unlocked'}`);
+      }
+      const smoothing = args.pencil_smoothing;
+      if (smoothing !== undefined) {
+        const level = SMOOTHING_LEVELS.find((l) => l === smoothing);
+        if (!level) throw new Error('`pencil_smoothing` must be off, low, medium or high.');
+        setPencilSmoothing(level);
+        done.push(`pencil smoothing ${level}`);
+      }
+      if (!done.length) throw new Error('Say what to change: select_after_pencil, return_to_select, pencil_smoothing, show_guides or lock_guides.');
+      return `Changed the drawing options: ${done.join(', ')}.`;
     },
     async read_drawing() {
       const editor = await host.drawing();

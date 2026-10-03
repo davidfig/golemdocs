@@ -144,9 +144,13 @@ export function sameShortcut(a: Shortcut | null, b: Shortcut | null): boolean {
   return !!a && !!b && a.mod === b.mod && a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt && a.key === b.key;
 }
 
-/** The global key handler only acts on keys with Ctrl, ⌘ or Alt held, and on function keys. */
-export function isUsableShortcut(shortcut: Shortcut): boolean {
-  return shortcut.mod || shortcut.ctrl || shortcut.alt || /^F\d+$/.test(shortcut.key);
+/**
+ * The global key handler only acts on keys with Ctrl, ⌘ or Alt held, and on function keys. The
+ * vector editor's own shortcuts (`bare`) may also be a lone letter, digit or symbol, as in
+ * Illustrator, where V is the selection tool.
+ */
+export function isUsableShortcut(shortcut: Shortcut, bare = false): boolean {
+  return shortcut.mod || shortcut.ctrl || shortcut.alt || /^F\d+$/.test(shortcut.key) || (bare && shortcut.key.length === 1);
 }
 
 // --- Customized shortcuts ----------------------------------------------------------------

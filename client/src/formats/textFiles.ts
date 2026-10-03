@@ -55,6 +55,9 @@ export function encodeText(text: string, encoding: TextEncoding = 'utf-8', bom =
 /** A text file this size or larger opens in the large-text viewer instead of as a document (see docs/large-text-files.md). */
 export const LARGE_TEXT_BYTES = 8 * 1024 * 1024;
 
+/** Whether a file of this kind and size opens in the large-text viewer rather than as a document (a table of 500,000 rows is no better than 500,000 paragraphs). */
+export const opensAsLargeText = (kind: string, size: number): boolean => (kind === 'txt' || kind === 'csv' || kind === 'tsv') && size >= LARGE_TEXT_BYTES;
+
 /** The bytes of a text file as UTF-8, whatever it was in (UTF-16 and Windows-1252 files are converted; UTF-8 is used as it is, less its byte order mark). */
 export function toUtf8(bytes: Uint8Array): Uint8Array {
   if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) return encodeText(decodeText(bytes).text);

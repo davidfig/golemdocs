@@ -82,7 +82,15 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
     batch = [];
     size = 0;
     if (!sending.length) return;
-    const results = await createDocuments(sending.map(({ info, bytes }) => ({ name: info.name, bytes, folderId: info.folderId ?? null })));
+    let results: Awaited<ReturnType<typeof createDocuments>>;
+    try {
+      results = await createDocuments(sending.map(({ info, bytes }) => ({ name: info.name, bytes, folderId: info.folderId ?? null })));
+    } catch (error) {
+      // Refused as a whole: these are left for the ordinary upload, which finds out why, and the
+      // next batch is still sent. Unreachable, or signed out, nothing more would go either.
+      if (error instanceof TypeError || (error instanceof CloudError && error.status === 401)) throw error;
+      return;
+    }
     for (const [i, result] of results.entries()) {
       if ('error' in result) continue;
       const { id, info } = sending[i]!;
@@ -94,6 +102,8 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
     const saved = await getSaved(id);
     if (!saved || saved.info.cloudId) continue;
     const bytes = new Uint8Array(saved.bytes);
+    // Bigger than a batch: sent on its own, the ordinary way (which says if it is too big).
+    if (bytes.byteLength > BATCH_MAX_BYTES) continue;
     if (batch.length >= BATCH_MAX_DOCUMENTS || (batch.length && size + bytes.byteLength > BATCH_MAX_BYTES)) await send();
     batch.push({ id, info: saved.info, bytes });
     size += bytes.byteLength;

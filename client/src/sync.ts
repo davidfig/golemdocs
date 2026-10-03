@@ -8,9 +8,9 @@
 // app's job (main.ts), one at a time: this only says which copies have something to send.
 
 import type { User } from './auth.ts';
-import { CloudError, isDeleted, listDocuments, listFolders, listShared, type CloudDocument } from './cloud.ts';
+import { CloudError, isDeleted, isDeletedDocument, listDocuments, listFolders, listShared, type CloudDocument } from './cloud.ts';
 import type { Folder } from './folders.ts';
-import { deleteSaved, listLocalFolders, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
+import { deleteSavedIfUnchanged, listLocalFolders, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
 
 export type SyncState =
@@ -113,6 +113,12 @@ export interface Library {
 
 const CATALOGUE_KEY = 'wm.catalogue';
 
+/**
+ * Changes made to the cached catalogue in this page (a move, a rename, a delete). A listing asked for
+ * before one of them may answer after it, with the account as it was: it isn't written over them.
+ */
+let catalogueEdits = 0;
+
 /** The account's catalogue as last listed, kept so the dashboard can show it before the network answers. */
 function readCatalogue(user: User | null): { cloud: CloudDocument[]; shared: CloudDocument[]; folders: Folder[] } | null {
   if (!user) return null;
@@ -132,8 +138,19 @@ function writeCatalogue(user: User, cloud: CloudDocument[], shared: CloudDocumen
   }
 }
 
+/** Forgets the cached catalogue (on signing out: it names the account's documents and folders, and the computer may be shared). */
+export function forgetCatalogue(): void {
+  madeFolders.clear();
+  try {
+    localStorage.removeItem(CATALOGUE_KEY);
+  } catch {
+    // Nothing kept, or nothing to remove it from.
+  }
+}
+
 /** Takes deleted documents and folders out of the cached catalogue, so the next head start doesn't show them again. */
 export function forgetInCatalogue(user: User, cloudIds: readonly string[], folderIds: readonly string[]): void {
+  catalogueEdits++;
   const cached = readCatalogue(user);
   if (!cached) return;
   // A deleted folder takes the documents in it along, whether or not they were named.
@@ -142,6 +159,7 @@ export function forgetInCatalogue(user: User, cloudIds: readonly string[], folde
 
 /** Edits the cached catalogue, whoever's it is (changes to the account only happen for the one signed in), so a head start from it matches what was just saved. */
 function patchCatalogue(edit: (cached: { cloud: CloudDocument[]; shared: CloudDocument[]; folders: Folder[] }) => void): void {
+  catalogueEdits++;
   try {
     const saved = JSON.parse(localStorage.getItem(CATALOGUE_KEY) ?? 'null');
     if (!saved) return;
@@ -178,8 +196,19 @@ export function updateFoldersInCatalogue(folders: readonly Folder[]): void {
 export function putDocInCatalogue(doc: CloudDocument): void {
   patchCatalogue((cached) => {
     const replace = (list: CloudDocument[]) => list.map((d) => (d.id === doc.id ? { ...d, ...doc } : d));
+    const known = cached.cloud.some((d) => d.id === doc.id) || cached.shared.some((d) => d.id === doc.id);
     cached.cloud = replace(cached.cloud);
     cached.shared = replace(cached.shared);
+    // One just uploaded for the first time (or a conflicted copy): without it, a head start would
+    // take the account's list for one that no longer has it, and the copy here for deleted elsewhere.
+    if (!known && (doc.role ?? 'owner') === 'owner') cached.cloud = [doc, ...cached.cloud];
+  });
+}
+
+/** Takes a document shared with this user out of the cached catalogue, once they have left it. */
+export function forgetSharedInCatalogue(id: string): void {
+  patchCatalogue((cached) => {
+    cached.shared = cached.shared.filter((d) => d.id !== id);
   });
 }
 
@@ -192,7 +221,7 @@ export function moveDocsInCatalogue(ids: readonly string[], folderId: string | n
 
 /** `user`'s copies in this browser, less those of documents deleted from the account (they are on their way out). */
 function notDeleted(saved: readonly SavedInfo[], user: User | null): SavedInfo[] {
-  return ownedBy(saved, user?.id ?? null).filter((l) => !isDeleted(l.cloudId));
+  return ownedBy(saved, user?.id ?? null).filter((l) => !isDeleted(l.cloudId) && !isDeleted(l.folderId));
 }
 
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
@@ -201,7 +230,7 @@ export async function loadLocalLibrary(user: User | null): Promise<{ entries: Li
   const local = notDeleted(await listSaved().catch(() => []), user);
   // Signed in, the folders are the account's; otherwise they are this browser's.
   const folders = user ? [...(cached?.folders ?? []), ...[...madeFolders.values()].filter((m) => !cached?.folders.some((f) => f.id === m.id))].filter((f) => !isDeleted(f.id)) : await listLocalFolders().catch(() => []);
-  const cloud = cached ? cached.cloud.filter((d) => !isDeleted(d.id)) : null;
+  const cloud = cached ? cached.cloud.filter((d) => !isDeletedDocument(d)) : null;
   return { entries: mergeLibrary(local, cloud), shared: cached?.shared ?? [], folders };
 }
 
@@ -217,6 +246,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
     return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };
   }
 
+  const editsBefore = catalogueEdits;
   // Asked together: each is a round trip, and none depends on another.
   const sharedRequest = listShared().catch(() => []);
   const foldersRequest = listFolders().catch(() => null);
@@ -229,13 +259,15 @@ export async function loadLibrary(user: User | null, identity: User | null = use
     return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut, shared: [], folders: null };
   }
 
-  const gone = deletedElsewhere(local, cloud);
-  for (const l of gone) await deleteSaved(l.id).catch(() => {});
+  // Decided from copies read before the account was asked: one saved to meanwhile is kept.
+  const gone: SavedInfo[] = [];
+  for (const l of deletedElsewhere(local, cloud)) if (await deleteSavedIfUnchanged(l).catch(() => false)) gone.push(l);
   const kept = gone.length ? local.filter((l) => !gone.includes(l)) : local;
   // Not worth failing the dashboard over.
   const shared = await sharedRequest;
   // If they can't be listed this time, say so: the documents would otherwise all fall back to the top level.
   const folders = await foldersRequest;
-  writeCatalogue(user, cloud, shared, folders ?? readCatalogue(user)?.folders ?? []);
+  // Unless the catalogue was changed here meanwhile: this answer may be from before, and the next one writes it.
+  if (catalogueEdits === editsBefore) writeCatalogue(user, cloud, shared, folders ?? readCatalogue(user)?.folders ?? []);
   return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared, folders };
 }

@@ -54,7 +54,8 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
 const { openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
-const { loadLibrary } = await import('../src/sync.ts');
+const sync = await import('../src/sync.ts');
+const { loadLibrary } = sync;
 
 beforeEach(async () => {
   // The module keeps its database open between tests, so empty it instead of replacing it.
@@ -245,6 +246,27 @@ test('an upload marks synced only what it sent, not what was saved while it was 
   assert.ok(info.updatedAt > info.cloudSyncedAt!, 'the later save still needs uploading');
 });
 
+test('a copy deleted from the account elsewhere is removed here, unless it was saved to while the account was asked', async () => {
+  const user = { id: 'u1' } as never;
+  const synced = async () => {
+    const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1), owner: 'u1' });
+    await local.markSynced(doc.id, { cloudId: 'gone', syncedAt: doc.updatedAt, cloudUpdatedAt: 1 });
+    return doc;
+  };
+  const untouched = await synced();
+  await loadLibrary(user);
+  assert.equal(await local.getSaved(untouched.id), null, 'nothing here the account is missing');
+
+  const edited = await synced();
+  const before = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+    if (String(input) === '/api/documents') await local.saveSaved({ id: edited.id, name: 'Doc.docx', bytes: bytes(2), owner: 'u1' }); // typed meanwhile
+    return before(input as string, init);
+  }) as typeof fetch;
+  await loadLibrary(user);
+  assert.deepEqual([...new Uint8Array((await local.getSaved(edited.id))!.bytes)], [2], 'the edit is kept, to be uploaded again');
+});
+
 test('signing in adopts the documents made while signed out; signing out removes that account’s', async () => {
   const guest = await local.saveSaved({ name: 'Mine.docx', bytes: bytes(1) });
   const other = await local.saveSaved({ name: 'Theirs.docx', bytes: bytes(2), owner: 'u2' });
@@ -295,6 +317,19 @@ test('without sync an account\'s copies here become the browser\'s own again, an
   assert.deepEqual(local.ownedBy(await local.listSaved(), 'u1').map((d) => d.id), [mine.id]);
 });
 
+test('another account that signs in takes the copies another account left as new documents, not linked to that account\'s', async () => {
+  const mine = await local.saveSaved({ name: 'Mine.docx', bytes: bytes(1), owner: 'u1' });
+  await local.markSynced(mine.id, { cloudId: 'c-u1', syncedAt: mine.updatedAt });
+  await local.releaseToGuest('u1');
+  assert.equal((await local.getSaved(mine.id))!.info.cloudId, 'c-u1', 'still linked while it is the browser\'s');
+  await local.adoptGuestDocuments('u2');
+  const info = (await local.getSaved(mine.id))!.info;
+  assert.equal(info.owner, 'u2');
+  assert.equal(info.cloudId, undefined);
+  assert.equal(info.releasedFrom, undefined);
+  assert.ok(sync.hasUnsentChanges(info), 'uploaded to the new account');
+});
+
 test('signed in without sync, the library is the browser\'s own documents plus what others shared', async () => {
   const guest = await local.saveSaved({ name: 'Mine.docx', bytes: bytes(1) });
   const user = { id: 'u1', email: 'a@example.com', name: 'A' };
@@ -331,6 +366,27 @@ test('new documents are uploaded in one request, and one the server refused is l
   assert.equal(info.cloudId, 'n0');
   assert.equal(info.cloudUpdatedAt, 5);
   assert.equal((await local.getSaved(b.id))!.info.cloudId, undefined);
+});
+
+test('a batch the server refuses as a whole does not stop the next, and a document bigger than a batch is left out', async () => {
+  const { BATCH_MAX_BYTES } = await import('../src/cloud.ts');
+  const half = new Uint8Array(Math.floor(BATCH_MAX_BYTES / 2) + 1); // two of these don't fit in one batch
+  const a = await local.saveSaved({ name: 'A.md', bytes: half });
+  const b = await local.saveSaved({ name: 'B.md', bytes: half });
+  const huge = await local.saveSaved({ name: 'Huge.md', bytes: new Uint8Array(BATCH_MAX_BYTES + 1) });
+  let requests = 0;
+  globalThis.fetch = (async (_input: unknown, init?: { body?: Uint8Array }) => {
+    requests++;
+    if (requests === 1) return new Response(JSON.stringify({ error: 'too large' }), { status: 413 });
+    const body = init!.body!;
+    const headerLength = new DataView(body.buffer, body.byteOffset).getUint32(0);
+    const { documents } = JSON.parse(new TextDecoder().decode(body.slice(4, 4 + headerLength)));
+    return new Response(JSON.stringify({ results: documents.map((d: { name: string }) => ({ document: { id: `n-${d.name}`, name: d.name, size: 1, createdAt: 1, updatedAt: 5, thumbAt: null } })) }), { status: 201 });
+  }) as typeof fetch;
+  const { uploadNewToCloud } = await import('../src/library.ts');
+  const made = await uploadNewToCloud([a.id, b.id, huge.id]);
+  assert.equal(requests, 2, 'one batch each for A and B; none for the huge one');
+  assert.deepEqual([...made.keys()], [b.id]);
 });
 
 test('a request the server answers with 429 waits as long as it asked, then is sent again', async () => {

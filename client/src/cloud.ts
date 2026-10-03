@@ -100,9 +100,15 @@ const deleted = new Set<string>();
 /** Whether this document or folder was deleted from the account in this session. */
 export const isDeleted = (id: string | null | undefined): boolean => !!id && deleted.has(id);
 
+/**
+ * Whether this document was deleted from the account in this session, by itself or with its folder
+ * (a folder's delete names only the folders, every one inside it included, not their documents).
+ */
+export const isDeletedDocument = (doc: { id: string; folderId?: string | null }): boolean => deleted.has(doc.id) || isDeleted(doc.folderId);
+
 export async function listDocuments(): Promise<CloudDocument[]> {
   const docs: CloudDocument[] = await (await check(await send('/api/documents'))).json();
-  return docs.filter((d) => !deleted.has(d.id));
+  return docs.filter((d) => !isDeletedDocument(d));
 }
 
 export async function createDocument(name: string, bytes: Uint8Array, folderId?: string): Promise<CloudDocument> {
@@ -161,6 +167,11 @@ export async function saveDocument(id: string, bytes: Uint8Array, name?: string,
     body: bytes as Uint8Array<ArrayBuffer>,
   });
   return (await check(response)).json();
+}
+
+/** Renames a document in the account on its own: unlike a save, it works while several people are editing it. */
+export async function renameCloudDocument(id: string, name: string): Promise<CloudDocument> {
+  return (await check(await send(`/api/documents/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) }))).json();
 }
 
 /** What a request on several things did: the ones it did, and each that it could not with why (`status` 404 is "already gone"). */
@@ -227,9 +238,10 @@ export async function listFolders(): Promise<Folder[]> {
 
 /**
  * Creates folders with these ids, or renames and moves the ones that exist, in one request. They
- * are made in order, so a folder may go inside one earlier in the list.
+ * are made in order, so a folder may go inside one earlier in the list. An update may leave out
+ * the name or the parent, to keep it.
  */
-export function putFolders(folders: readonly Pick<Folder, 'id' | 'name' | 'parentId'>[]): Promise<BatchResult<Folder>> {
+export function putFolders(folders: readonly { id: string; name?: string; parentId?: string | null }[]): Promise<BatchResult<Folder>> {
   const wanted = folders.map(({ id, name, parentId }) => ({ id, name, parentId }));
   return chunked(wanted, (chunk) => batch<Folder>('PUT', '/api/folders', { folders: chunk }));
 }

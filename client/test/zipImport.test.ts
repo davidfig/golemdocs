@@ -33,6 +33,46 @@ test('reads documents with their folders, leaving out system files and types tha
   assert.equal(new TextDecoder().decode(files[1].bytes), '# q1');
 });
 
+test('a GIF, BMP or SVG is read under the PNG name it is kept as, so it can not take the name of a PNG beside it', async () => {
+  const zip = await writeZip([
+    { name: 'logo.png', data: enc.encode('p') },
+    { name: 'logo.svg', data: enc.encode('<svg/>') },
+  ]);
+  const { files } = await readZipFiles(zip);
+  assert.deepEqual(files.map((f) => f.name), ['logo.png', 'logo.png']);
+  const { t, saved } = target();
+  await importFiles(files, t);
+  assert.deepEqual(saved.map((s) => s.name), ['logo.png', 'logo (2).png']);
+});
+
+test('a file in the ZIP that cannot be read is skipped, not the reason the rest are not imported', async () => {
+  const zip = await writeZip([
+    { name: 'good.txt', data: enc.encode('g') },
+    { name: 'locked.txt', data: enc.encode('l'), compress: false },
+  ]);
+  // Mark the second entry as encrypted, in its central directory record (flags are 8 bytes in).
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  let central = -1;
+  for (let i = zip.length - 4; i >= 0; i--) if (view.getUint32(i, true) === 0x02014b50 && new TextDecoder().decode(zip.subarray(i + 46, i + 46 + 10)) === 'locked.txt') central = i;
+  view.setUint16(central + 8, view.getUint16(central + 8, true) | 1, true);
+  const { files, skipped } = await readZipFiles(zip);
+  assert.deepEqual(files.map((f) => f.name), ['good.txt']);
+  assert.equal(skipped, 1);
+});
+
+test('names not marked as UTF-8 that are not UTF-8 are read as code page 437, as Windows writes them', async () => {
+  const zip = await writeZip([{ name: 'R?sum?.txt', data: enc.encode('r') }]);
+  // é in code page 437 is 0x82; clear the UTF-8 flag in the central directory.
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  for (let i = zip.length - 4; i >= 0; i--) {
+    if (view.getUint32(i, true) !== 0x02014b50) continue;
+    view.setUint16(i + 8, view.getUint16(i + 8, true) & ~(1 << 11), true);
+    zip[i + 46 + 1] = 0x82;
+    zip[i + 46 + 5] = 0x82;
+  }
+  assert.deepEqual((await readZipFiles(zip)).files.map((f) => f.name), ['R\u00e9sum\u00e9.txt']);
+});
+
 function target(over: Partial<ImportTarget> = {}) {
   const made: Folder[] = [];
   const saved: { name: string; folderId: string | null }[] = [];

@@ -16,6 +16,11 @@ export interface ImageData {
 
 export const MIME: Record<ImageType, string> = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
 
+/** The name a picture called `name` is kept under (see `toPng`): GIF, BMP and SVG open, and are saved, as PNG. */
+export function keptPictureName(name: string): string {
+  return /\.(gif|bmp|svg)$/i.test(name) ? name.replace(/\.[^.]*$/, '.png') : name;
+}
+
 /** The picture a byte string holds: its type by signature, and its pixel size. Null for anything else. */
 export function sniffImage(bytes: Uint8Array): ImageData | null {
   const u16be = (i: number) => (bytes[i] << 8) | bytes[i + 1];

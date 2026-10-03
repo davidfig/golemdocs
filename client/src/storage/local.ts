@@ -19,6 +19,8 @@ export interface SavedInfo {
   cloudUpdatedAt?: number;
   /** The folder it is in (see ../folders.ts); absent at the top level. */
   folderId?: string;
+  /** The account it was a copy for, until that account lost sync (see `releaseToGuest`); its cloud link is that account's. */
+  releasedFrom?: string;
 }
 
 /** A first-page thumbnail, and which save of the document it shows. */
@@ -191,6 +193,22 @@ export async function putLocalFolder(folder: Folder): Promise<void> {
   await finished(tx);
 }
 
+/**
+ * Renames and/or moves a folder kept in this browser, keeping what is stored for whatever `change`
+ * leaves out (a list shown elsewhere may be behind it). Returns the folder as saved, or null if it is gone.
+ */
+export async function updateLocalFolder(id: string, change: { name?: string; parentId?: string | null }, updatedAt: number): Promise<Folder | null> {
+  const db = await openDb();
+  const tx = db.transaction(FOLDERS, 'readwrite');
+  const store = tx.objectStore(FOLDERS);
+  const stored = (await done(store.get(id))) as Folder | undefined;
+  if (!stored) return null;
+  const next: Folder = { ...stored, name: change.name ?? stored.name, parentId: change.parentId === undefined ? stored.parentId : change.parentId, updatedAt };
+  store.put(next);
+  await finished(tx);
+  return next;
+}
+
 /** Forgets a folder record only, leaving the documents and folders that refer to it as they are. */
 export async function removeLocalFolderRecord(id: string): Promise<void> {
   const db = await openDb();
@@ -229,7 +247,14 @@ export async function adoptGuestDocuments(owner: string): Promise<string[]> {
   const tx = db.transaction(META, 'readwrite');
   const store = tx.objectStore(META);
   const guests = ((await done(store.getAll())) as SavedInfo[]).filter((d) => d.owner === undefined);
-  for (const info of guests) store.put({ ...info, owner });
+  for (const { releasedFrom, ...info } of guests) {
+    // A copy of another account's document is a new document for this one: linked to that one, it
+    // would be taken for deleted (it isn't in this account's list) or saved over someone else's.
+    if (releasedFrom !== undefined && releasedFrom !== owner) {
+      const { cloudId: _id, cloudSyncedAt: _synced, cloudUpdatedAt: _updated, folderId: _folder, ...own } = info;
+      store.put({ ...own, owner });
+    } else store.put({ ...info, owner });
+  }
   await finished(tx);
   return guests.map((d) => d.id);
 }
@@ -244,7 +269,7 @@ export async function releaseToGuest(owner: string): Promise<void> {
   const store = tx.objectStore(META);
   for (const info of ownedBy((await done(store.getAll())) as SavedInfo[], owner)) {
     const { owner: _gone, ...rest } = info;
-    store.put(rest);
+    store.put({ ...rest, ...(rest.cloudId !== undefined && { releasedFrom: owner }) });
   }
   await finished(tx);
 }
@@ -261,6 +286,25 @@ export async function deleteSaved(id: string): Promise<void> {
   tx.objectStore(BYTES).delete(id);
   tx.objectStore(THUMBS).delete(id);
   await finished(tx);
+}
+
+/**
+ * Deletes a saved copy only if it is still as `seen` (nothing saved to it since) and holds nothing
+ * the account is missing; returns whether it did. For copies found to be deleted from the account
+ * elsewhere: an edit saved here while the account was being asked keeps it, to be uploaded again.
+ */
+export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
+  const db = await openDb();
+  const tx = db.transaction([META, BYTES, THUMBS], 'readwrite');
+  const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
+  const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
+  if (unchanged) {
+    tx.objectStore(META).delete(seen.id);
+    tx.objectStore(BYTES).delete(seen.id);
+    tx.objectStore(THUMBS).delete(seen.id);
+  }
+  await finished(tx);
+  return unchanged;
 }
 
 /** Keeps the thumbnail for a saved document (replacing any older one). */

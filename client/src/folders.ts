@@ -66,6 +66,18 @@ export function isInside(folders: readonly Folder[], id: string | null, ancestor
   return folderPath(folders, id).some((f) => f.id === ancestorId);
 }
 
+/**
+ * Of the folders and items picked together (ticked, in a search across every folder), those not
+ * inside another picked folder: moving one moves what is in it, so the rest would be pulled out of it.
+ */
+export function outermost<T extends Placed>(folders: readonly Folder[], picked: { folders: readonly Folder[]; items: readonly T[] }): { folders: Folder[]; items: T[] } {
+  const inPicked = (id: string | null, self?: string) => picked.folders.some((f) => f.id !== self && isInside(folders, id, f.id));
+  return {
+    folders: picked.folders.filter((f) => !inPicked(f.parentId, f.id)),
+    items: picked.items.filter((item) => !inPicked(folderOf(item, folders))),
+  };
+}
+
 /** Every folder, as a tree walked depth-first, each with how deep it is: for pickers. */
 export function folderTree(folders: readonly Folder[]): { folder: Folder; depth: number }[] {
   const out: { folder: Folder; depth: number }[] = [];

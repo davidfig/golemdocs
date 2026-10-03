@@ -13,7 +13,12 @@ function stubServer(failed: { id: string; error: string }[] | 'down' = []) {
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
     if (init?.method === 'DELETE') return failed === 'down' ? json({ error: 'down' }, 500) : json({ ok: [], failed });
     const at = { createdAt: 1, updatedAt: 1 };
-    if (url === '/api/documents') return json(['d1', 'd2', 'd3', 'd4'].map((id) => ({ id, name: `${id}.docx`, size: 1, ...at })));
+    if (url === '/api/documents')
+      return json([
+        ...['d1', 'd2', 'd3', 'd4'].map((id) => ({ id, name: `${id}.docx`, size: 1, folderId: null, ...at })),
+        { id: 'd5', name: 'd5.docx', size: 1, folderId: 'f5', ...at },
+        { id: 'd6', name: 'd6.docx', size: 1, folderId: 'f6', ...at },
+      ]);
     if (url === '/api/folders') return json(['f1', 'f2', 'f3'].map((id) => ({ id, name: id, parentId: null, ...at })));
     return json({ error: 'not found' }, 404);
   }) as typeof fetch;
@@ -22,7 +27,7 @@ function stubServer(failed: { id: string; error: string }[] | 'down' = []) {
 test('deleted documents and folders stay out of listings the server answers from before the delete', async () => {
   stubServer();
   await deleteDocuments(['d1'], ['f1', 'f2']);
-  assert.deepEqual((await listDocuments()).map((d) => d.id), ['d2', 'd3', 'd4']);
+  assert.deepEqual((await listDocuments()).map((d) => d.id), ['d2', 'd3', 'd4', 'd5', 'd6']);
   assert.deepEqual((await listFolders()).map((f) => f.id), ['f3']);
   assert.ok(isDeleted('f1') && !isDeleted('f3') && !isDeleted(null));
 });
@@ -40,4 +45,12 @@ test('a delete that fails as a whole hides nothing', async () => {
   await assert.rejects(deleteDocuments(['d4'], ['f3']));
   assert.ok((await listDocuments()).some((d) => d.id === 'd4'));
   assert.ok((await listFolders()).some((f) => f.id === 'f3'));
+});
+
+test('the documents in a deleted folder stay out of listings too, though the delete names only the folder', async () => {
+  stubServer();
+  await deleteDocuments([], ['f5']);
+  const ids = (await listDocuments()).map((d) => d.id);
+  assert.ok(!ids.includes('d5'));
+  assert.ok(ids.includes('d6'));
 });

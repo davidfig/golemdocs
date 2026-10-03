@@ -3,6 +3,7 @@
 // another: one with a name already taken in its folder gets " (2)", " (3)"…
 import { ZipArchive } from '@golemdocs/docx';
 import { cleanDocumentName } from '../documentName.ts';
+import { keptPictureName } from '../formats/images.ts';
 import { sourceFromFile } from '../formats/source.ts';
 import type { Folder } from '../folders.ts';
 import { uniqueName } from './uniqueName.ts';
@@ -23,24 +24,42 @@ export interface ZipContents {
 /** Folder names the system adds to a ZIP, or a name that is hidden: not the user's documents. */
 const isJunk = (segments: readonly string[]): boolean => segments[0] === '__MACOSX' || segments.some((s) => s.startsWith('.'));
 
+/**
+ * Where a file at `path` (in a ZIP, or a folder dropped from the computer) goes: its folders and the
+ * name it is kept under. 'junk' for what the system adds or hides (left out, unmentioned), 'skip' for
+ * a type that doesn't open here (counted).
+ */
+export function placeFile(path: string): { folders: string[]; name: string } | 'junk' | 'skip' {
+  const segments = path.split(/[\\/]/).filter((s) => s !== '' && s !== '.' && s !== '..');
+  if (!segments.length || isJunk(segments)) return 'junk';
+  // Under the name it is kept as (a GIF as a PNG), so " (2)" is added where that one is taken.
+  const name = keptPictureName(cleanDocumentName(segments.pop()!));
+  if (!name || sourceFromFile(name, new ArrayBuffer(0)) === null) return 'skip';
+  return { folders: segments.map(cleanDocumentName).filter(Boolean), name };
+}
+
 /** The documents in a ZIP, with the folders they were in. Hidden files, and files of types that don't open here, are left out. */
 export async function readZipFiles(bytes: Uint8Array, progress: { signal?: AbortSignal; onProgress?(done: number, total: number): void } = {}): Promise<ZipContents> {
-  const archive = ZipArchive.read(bytes);
+  // One file that can't be read (encrypted, say) is skipped, not the reason the rest aren't imported.
+  const archive = ZipArchive.read(bytes, { lenient: true });
   const files: ZipFile[] = [];
-  let skipped = 0;
+  let skipped = archive.unreadable.filter((path) => placeFile(path) !== 'junk').length;
   let done = 0;
   for (const [path, entry] of archive.entries) {
     // An abort rejects with its AbortError; what was read is dropped.
     progress.signal?.throwIfAborted();
     progress.onProgress?.(done++, archive.entries.size);
-    const segments = path.split(/[\\/]/).filter((s) => s !== '' && s !== '.' && s !== '..');
-    if (!segments.length || isJunk(segments)) continue;
-    const name = cleanDocumentName(segments.pop()!);
-    if (!name || sourceFromFile(name, new ArrayBuffer(0)) === null) {
+    const place = placeFile(path);
+    if (place === 'junk') continue;
+    if (place === 'skip') {
       skipped++;
       continue;
     }
-    files.push({ folders: segments.map(cleanDocumentName).filter(Boolean), name, bytes: await entry.read() });
+    try {
+      files.push({ ...place, bytes: await entry.read() });
+    } catch {
+      skipped++; // damaged
+    }
   }
   return { files, skipped };
 }

@@ -5,6 +5,7 @@
 import { t, type MessageKey } from '../i18n/index.ts';
 import type { SpellIssue, WireCommand } from '../layout/protocol.ts';
 import { h, makeDraggable } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 export interface SpellHost {
   send(command: WireCommand): void;
@@ -81,13 +82,11 @@ export class SpellDialog {
     this.changeAll = button(t('spelling.changeAll'), () => this.replace(true));
     this.again = button(t('spelling.checkAgain'), () => this.next('documentStart'), t('spelling.checkAgainTip'));
     this.again.hidden = true;
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('spelling.close') } });
-    close.addEventListener('click', () => this.hide());
 
     this.el = h(
       'dialog',
       { class: 'wm-dialog wm-find wm-spell', attrs: { 'aria-label': t('spelling.title') } },
-      h('div', { class: 'wm-dialog-title' }, h('span', { text: t('spelling.title') }), close),
+      dialogTitleBar(t('spelling.title'), () => this.hide()),
       h(
         'div',
         { class: 'wm-dialog-body wm-find-body' },

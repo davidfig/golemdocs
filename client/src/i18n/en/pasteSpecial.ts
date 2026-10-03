@@ -7,5 +7,4 @@ export const pasteSpecial = {
   'pasteSpecial.unavailable': 'This browser would not let the page read the clipboard. Paste with Ctrl+V or Cmd+V instead.',
   'pasteSpecial.ok': 'OK',
   'pasteSpecial.cancel': 'Cancel',
-  'pasteSpecial.close': 'Close',
 } as const;

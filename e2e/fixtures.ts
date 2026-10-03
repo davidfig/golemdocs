@@ -113,15 +113,26 @@ function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export const test = base.extend<{ app: App; sidebarDefault: boolean }>({
+export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean }>({
   // The page sidebar is open by default in a wide window, where it would cover the PDF tool palette and shift the
   // page. Tests start with it closed (unless the browser already holds a choice); the ones about the default opt in.
   sidebarDefault: [false, { option: true }],
-  page: async ({ page, sidebarDefault }, use) => {
+  // The status bar too is on by default; tests start with it off, so the document has the window's whole height.
+  statusBarDefault: [false, { option: true }],
+  page: async ({ page, sidebarDefault, statusBarDefault }, use) => {
     if (!sidebarDefault) {
       await page.addInitScript(() => {
         try {
           if (localStorage.getItem('word.pagesPanel') === null) localStorage.setItem('word.pagesPanel', 'off');
+        } catch {
+          // No storage: the app falls back to its default.
+        }
+      });
+    }
+    if (!statusBarDefault) {
+      await page.addInitScript(() => {
+        try {
+          if (localStorage.getItem('word.footer') === null) localStorage.setItem('word.footer', 'off');
         } catch {
           // No storage: the app falls back to its default.
         }

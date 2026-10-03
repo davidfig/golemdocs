@@ -15,5 +15,4 @@ export const properties = {
   'properties.lastModifiedBy': 'Last saved by:',
   'properties.ok': 'OK',
   'properties.cancel': 'Cancel',
-  'properties.close': 'Close',
 } as const;

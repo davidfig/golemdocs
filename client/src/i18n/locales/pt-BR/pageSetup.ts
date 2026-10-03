@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const pageSetup: Partial<Messages> = {
   'pageSetup.title': 'Configurar Página',
-  'pageSetup.close': 'Fechar',
   'pageSetup.ok': 'OK',
   'pageSetup.cancel': 'Cancelar',
   'pageSetup.tabMargins': 'Margens',

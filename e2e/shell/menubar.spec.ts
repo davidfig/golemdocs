@@ -115,8 +115,8 @@ test.describe('menu bar with the mouse', () => {
     await openMenu(app, 'View');
     await expect(menuRow(page, 'Print Layout')).toHaveAttribute('role', 'menuitemradio');
     await expect(menuRow(page, 'Print Layout')).toHaveAttribute('aria-checked', 'true');
-    await expect(menuRow(page, 'Normal')).toHaveAttribute('role', 'menuitemradio');
-    await expect(menuRow(page, 'Normal')).toHaveAttribute('aria-checked', 'false');
+    await expect(menuRow(page, 'Flow')).toHaveAttribute('role', 'menuitemradio');
+    await expect(menuRow(page, 'Flow')).toHaveAttribute('aria-checked', 'false');
     await expect(menuRow(page, 'Formatting Marks')).toHaveAttribute('role', 'menuitemcheckbox');
     await expect(menuRow(page, 'Formatting Marks')).toHaveAttribute('aria-checked', 'false');
     await menuRow(page, 'Formatting Marks').click();
@@ -142,6 +142,7 @@ test.describe('menu bar with the mouse', () => {
     await openMenu(app, 'Admin');
     await expect(menuRow(page, 'Debug…')).toHaveCount(0);
     await expect(menuRow(page, 'Cloudflare Billing…')).toHaveCount(0);
+    await expect(menuRow(page, 'Analytics…')).toHaveCount(0);
     await expect(menuRow(page, 'Feedback…')).toHaveCount(0);
   });
 
@@ -259,7 +260,7 @@ test.describe('menu bar with the keyboard', () => {
     await page.keyboard.press('F10');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight'); // View
-    await page.keyboard.press('ArrowDown'); // Normal
+    await page.keyboard.press('ArrowDown'); // Print Layout
     await menuRow(page, 'Zoom').hover();
     await page.keyboard.press('ArrowRight');
     await expect(menuRow(page, 'Page Width')).toBeVisible();

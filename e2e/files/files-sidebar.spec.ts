@@ -76,6 +76,28 @@ test('right click makes a folder, renames it, and deletes it with what is in it'
   await expect(row(page, 'inside')).toHaveCount(0);
 });
 
+test('collapse all closes every folder', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  await panel(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
+  await page.getByRole('menuitem', { name: 'New folder' }).click();
+  await page.locator('.wm-files-rename').fill('Notes');
+  await page.keyboard.press('Enter');
+  const folder = panel(page).locator('.wm-files-folder', { hasText: 'Notes' });
+  await dropFileOn(folder, text('inside.txt', 'kept'));
+  await waitForOpen(app, 'inside.txt');
+  await waitForSaved(page, 'inside.txt');
+  await expect(folder).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'inside')).toHaveCount(1);
+
+  await panel(page).getByRole('button', { name: 'Collapse all' }).click();
+  await expect(folder).toHaveAttribute('aria-expanded', 'false');
+  await expect(row(page, 'inside')).toHaveCount(0);
+  // The open document is in it, but the folder stays closed until another document is opened.
+  await page.waitForTimeout(300);
+  await expect(folder).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('a file dropped from the computer goes in the folder it is dropped on, or the one of the document it is dropped on', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await app.menu('View', 'Files Sidebar');

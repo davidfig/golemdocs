@@ -10,7 +10,7 @@ import { t } from '../i18n/index.ts';
 import type { LibraryStore } from '../libraryStore.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
-import { h, isFileDrag, toggleClass } from './dom.ts';
+import { CLOSE_ICON, h, iconButton, isFileDrag, toggleClass } from './dom.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
@@ -79,9 +79,12 @@ export class FilesPanel {
     } catch {
       // Storage unavailable: the folders start closed.
     }
-    const close = h('button', { class: 'wm-files-close', text: '×', attrs: { type: 'button', 'aria-label': t('panels.files.close') }, title: t('panels.files.close') });
+    // A stacked box with a minus: the usual sign for closing every folder in a tree.
+    const collapse = iconButton('wm-files-close', 'M4 1.5H10.5V8M1.5 4H8V10.5H1.5ZM3.5 7.25H6', t('panels.files.collapseAll'));
+    const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
-    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), close), this.notice, this.tree, this.empty);
+    collapse.addEventListener('click', () => this.collapseAll());
+    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.tree, this.empty);
     this.notice.hidden = true;
     this.el.addEventListener('contextmenu', (e) => {
       if ((e.target as HTMLElement).closest('.wm-files-row')) return;
@@ -171,11 +174,7 @@ export class FilesPanel {
     const closed = opened.filter((id) => !this.expanded.has(id));
     if (closed.length) {
       for (const id of closed) this.expanded.add(id);
-      try {
-        localStorage.setItem(OPEN_KEY, JSON.stringify([...this.expanded]));
-      } catch {
-        // Storage unavailable: they stay open for this session only.
-      }
+      this.saveExpanded();
       this.render();
     }
     this.tree.querySelector<HTMLElement>(`[data-row="d:${CSS.escape(entry.key)}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -440,16 +439,28 @@ export class FilesPanel {
     });
   }
 
+  /** Closes every folder, so only the top level shows. */
+  private collapseAll(): void {
+    if (!this.expanded.size) return;
+    this.expanded.clear();
+    this.saveExpanded();
+    this.render();
+  }
+
   private toggleFolder(id: string, open = !this.expanded.has(id)): void {
     if (open === this.expanded.has(id)) return;
     if (open) this.expanded.add(id);
     else this.expanded.delete(id);
+    this.saveExpanded();
+    this.render();
+  }
+
+  private saveExpanded(): void {
     try {
       localStorage.setItem(OPEN_KEY, JSON.stringify([...this.expanded]));
     } catch {
       // Storage unavailable: they stay open for this session only.
     }
-    this.render();
   }
 
   /** Makes `row` the one Tab reaches in the tree. */

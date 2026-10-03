@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': '이 브라우저에서는 페이지가 클립보드를 읽을 수 없습니다. Ctrl+V 또는 Cmd+V로 붙여넣으세요.',
   'pasteSpecial.ok': '확인',
   'pasteSpecial.cancel': '취소',
-  'pasteSpecial.close': '닫기',
 };

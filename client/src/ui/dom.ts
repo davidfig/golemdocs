@@ -20,6 +20,24 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
   return el;
 }
 
+const SVG = 'http://www.w3.org/2000/svg';
+
+/** A cross, for `iconButton`. */
+export const CLOSE_ICON = 'M3 3L9 9M9 3L3 9';
+
+/** A small button showing `path` (drawn on a 12 × 12 grid) rather than a character, so the icon is centered the same whatever the font does. Style the stroke in CSS. */
+export function iconButton(className: string, path: string, label: string): HTMLButtonElement {
+  const icon = document.createElementNS(SVG, 'svg');
+  icon.setAttribute('viewBox', '0 0 12 12');
+  icon.setAttribute('width', '12');
+  icon.setAttribute('height', '12');
+  icon.setAttribute('aria-hidden', 'true');
+  const shape = document.createElementNS(SVG, 'path');
+  shape.setAttribute('d', path);
+  icon.append(shape);
+  return h('button', { class: className, attrs: { type: 'button', 'aria-label': label }, title: label }, icon as unknown as Node);
+}
+
 /** Sets an attribute only when it changes (refreshes run often). */
 export function setAttr(el: Element, name: string, value: string | null): void {
   if (value === null) {

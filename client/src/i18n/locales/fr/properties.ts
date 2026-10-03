@@ -17,5 +17,4 @@ export const properties: Partial<Messages> = {
   'properties.lastModifiedBy': 'Dernier enregistrement par :',
   'properties.ok': 'OK',
   'properties.cancel': 'Annuler',
-  'properties.close': 'Fermer',
 };

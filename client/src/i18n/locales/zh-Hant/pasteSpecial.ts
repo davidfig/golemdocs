@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': '此瀏覽器不允許網頁讀取剪貼簿。請改用 Ctrl+V 或 Cmd+V 貼上。',
   'pasteSpecial.ok': '確定',
   'pasteSpecial.cancel': '取消',
-  'pasteSpecial.close': '關閉',
 };

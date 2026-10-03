@@ -1,6 +1,5 @@
 export const pageSetup = {
   'pageSetup.title': 'Page Setup',
-  'pageSetup.close': 'Close',
   'pageSetup.ok': 'OK',
   'pageSetup.cancel': 'Cancel',
   'pageSetup.tabMargins': 'Margins',

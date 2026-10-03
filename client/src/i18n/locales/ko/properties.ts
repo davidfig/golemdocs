@@ -17,5 +17,4 @@ export const properties: Partial<Messages> = {
   'properties.lastModifiedBy': '마지막 저장한 사람:',
   'properties.ok': '확인',
   'properties.cancel': '취소',
-  'properties.close': '닫기',
 };

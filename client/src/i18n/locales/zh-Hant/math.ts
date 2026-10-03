@@ -4,7 +4,6 @@ export const math: Partial<Messages> = {
   'math.insert': '公式(&Q)…',
   'math.insert.tip': '插入公式',
   'math.title': '插入公式',
-  'math.close': '關閉',
   'math.latexLabel': 'LaTeX 公式',
   'math.latexField': '公式 (LaTeX)：',
   'math.hint': '像 LaTeX 那樣書寫數學，例如 \\frac{a}{b}, x^2 + \\sqrt{y}, \\sum_{i=1}^{n} i',

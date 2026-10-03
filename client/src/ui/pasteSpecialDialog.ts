@@ -3,6 +3,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 export interface Clipboard {
   html?: string;
@@ -53,19 +54,17 @@ export async function showPasteSpecialDialog(clip: Clipboard | null): Promise<'h
     const ok = h('button', { class: 'wm-button', text: t('pasteSpecial.ok'), attrs: { type: 'submit' } });
     ok.disabled = options.length === 0;
     const cancel = h('button', { class: 'wm-button', text: t('pasteSpecial.cancel'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('pasteSpecial.close') } });
     const form = h(
       'form',
       { attrs: { method: 'dialog' } },
       h('div', { class: 'wm-dialog-body wm-link-body' }, h('label', { text: t('pasteSpecial.as') }), list, preview, message),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),
     );
-    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pastespecial', attrs: { 'aria-label': t('pasteSpecial.title') } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: t('pasteSpecial.title') }), close), form);
+    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pastespecial', attrs: { 'aria-label': t('pasteSpecial.title') } }, dialogTitleBar(t('pasteSpecial.title'), () => dialog.close()), form);
 
     let result: 'html' | 'text' | undefined;
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();

@@ -3,7 +3,6 @@ import type { Catalog } from '../../index.ts';
 export const table: Catalog = {
   'table.title': 'Вставка таблицы',
   'table.splitTitle': 'Разбиение ячеек',
-  'table.close': 'Закрыть',
   'table.columns': 'Число столбцов:',
   'table.rows': 'Число строк:',
   'table.columnsLabel': 'Число столбцов',

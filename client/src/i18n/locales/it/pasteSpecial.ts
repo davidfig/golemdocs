@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'Questo browser non consente alla pagina di leggere gli Appunti. Incolla con Ctrl+V o Cmd+V.',
   'pasteSpecial.ok': 'OK',
   'pasteSpecial.cancel': 'Annulla',
-  'pasteSpecial.close': 'Chiudi',
 };

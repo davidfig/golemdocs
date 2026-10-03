@@ -173,13 +173,13 @@ try {
   // Storage unavailable: it starts closed.
 }
 
-// The status bar (View > Status Bar): off until chosen, then remembered in this browser.
+// The status bar (View > Status Bar): on until turned off, then remembered in this browser.
 const FOOTER_KEY = 'word.footer';
-let footerOn = false;
+let footerOn = true;
 try {
-  footerOn = localStorage.getItem(FOOTER_KEY) === 'on';
+  footerOn = localStorage.getItem(FOOTER_KEY) !== 'off';
 } catch {
-  // Storage unavailable: the bar starts off.
+  // Storage unavailable: the bar starts on.
 }
 
 /** The counts of the whole document and of the selection, as the worker last gave them (null: none, or not asked for yet). */
@@ -190,13 +190,16 @@ let footerTimer = 0;
 const pictureSizes = new WeakMap<object, { width: number; height: number }>();
 const pictureSizing = new WeakSet<object>();
 
-// View: Print layout (pages) or Normal (the text reflowed to the window). Remembered in this browser.
+// View: Print layout (pages) or Flow (the text reflowed to the window). Remembered in this browser. The third
+// view, the page grid, is `grid`: it is left when another document opens, back to this one.
 const VIEW_KEY = 'word.viewMode';
-// With no saved choice, a phone-sized screen starts in Normal (a page shrunk to fit is unreadable there).
-let viewMode: ViewMode = window.matchMedia('(max-width: 720px)').matches ? 'normal' : 'print';
+// With no saved choice, a phone-sized screen starts in Flow (a page shrunk to fit is unreadable there).
+let viewMode: Exclude<ViewMode, 'grid'> = window.matchMedia('(max-width: 720px)').matches ? 'flow' : 'print';
 try {
   const saved = localStorage.getItem(VIEW_KEY);
-  if (saved === 'normal' || saved === 'print') viewMode = saved;
+  // 'normal' is Flow's earlier name.
+  if (saved === 'flow' || saved === 'normal') viewMode = 'flow';
+  else if (saved === 'print') viewMode = saved;
 } catch {
   // Storage unavailable: use the default for this screen.
 }
@@ -567,12 +570,12 @@ function arrange(): void {
   requestRender();
 }
 
-/** Normal view is on, and applies to this document (not a PDF's own pages, a picture or the page grid). */
+/** Flow view is on, and applies to this document (not a PDF's own pages, a picture or the page grid). */
 function reflowing(): boolean {
-  return viewMode === 'normal' && !annotating && !isPicture() && !grid;
+  return viewMode === 'flow' && !annotating && !isPicture() && !grid;
 }
 
-/** Normal view: the width in points the text should fill at the current zoom. */
+/** Flow view: the width in points the text should fill at the current zoom. */
 function reflowTarget(): number | null {
   return reflowing() ? Math.round(canvas.clientWidth / (camera.zoom * CSS_PX_PER_POINT)) : null;
 }
@@ -610,7 +613,7 @@ function placeCamera(): void {
     return;
   }
   if (reflowing()) {
-    // Normal view: the text fills the window from the top, at the zoom the user has.
+    // Flow view: the text fills the window from the top, at the zoom the user has.
     camera.x = bounds.x;
     camera.y = bounds.y;
   } else if (grid) {
@@ -2264,7 +2267,6 @@ function render(): void {
     kind: largeView.active ? 'largetext' : current.kind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
-    grid,
     pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
     filesPanel: filesOpen,
     footer: footerOn,
@@ -2276,7 +2278,7 @@ function render(): void {
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
     inTable,
     formattingMarks,
-    viewMode,
+    viewMode: grid ? 'grid' : viewMode,
   });
   formLayer.position();
   pdfTextLayer.position();
@@ -2725,11 +2727,31 @@ function toggleFooter(): void {
   requestRender();
 }
 
-function toggleGrid(): void {
-  grid = !grid;
+/** Print, Flow or the page grid. Print and Flow are remembered; the grid lasts until another document opens. */
+function setViewMode(mode: ViewMode): void {
+  if (mode === 'grid') {
+    if (grid) return;
+    grid = true;
+  } else {
+    if (!grid && mode === viewMode) return;
+    grid = false;
+    viewMode = mode;
+    try {
+      localStorage.setItem(VIEW_KEY, mode);
+    } catch {
+      // Storage unavailable: the choice lasts for this session only.
+    }
+  }
   cameraPlaced = false;
   userMoved = false;
+  pendingView = null;
+  syncReflow(true);
   arrange();
+}
+
+/** The page grid, or back to the view before it. */
+function toggleGrid(): void {
+  setViewMode(grid ? viewMode : 'grid');
 }
 
 /** View keys: zoom, grid, fit, page scrolling. */
@@ -2971,19 +2993,7 @@ const chromeHost = createChromeHost({
   togglePagesPanel,
   toggleFilesPanel,
   toggleFooter,
-  setViewMode: (mode) => {
-    viewMode = mode;
-    try {
-      localStorage.setItem(VIEW_KEY, mode);
-    } catch {
-      // Storage unavailable: the choice lasts for this session only.
-    }
-    cameraPlaced = false;
-    userMoved = false;
-    pendingView = null;
-    syncReflow(true);
-    arrange();
-  },
+  setViewMode,
   toggleFormattingMarks: () => {
     formattingMarks = !formattingMarks;
     try {
@@ -3192,7 +3202,7 @@ const assistantTools = appTools({
     await ready;
   },
   perform: (action) => chromeHost.perform(action),
-  view: () => ({ grid, statusBar: footerOn, formattingMarks }),
+  view: () => ({ statusBar: footerOn, formattingMarks }),
   isPicture,
   pictureBytes,
   changePicture,
@@ -3252,7 +3262,13 @@ let panelCamera = '';
 
 // --- Status bar ------------------------------------------------------------------------
 
-const footer = new Footer(document.getElementById('footer')!);
+const footer = new Footer(document.getElementById('footer')!, {
+  view: setViewMode,
+  goTo: () => chrome.registry.execute('edit.goTo'),
+  wordCount: () => chrome.registry.execute('tools.wordCount'),
+  zoom: (anchor) => chrome.showZoomList(anchor),
+  label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : chrome.registry.get(action === 'goTo' ? 'edit.goTo' : 'tools.wordCount').plainLabel),
+});
 
 /** Asks the worker for the counts, once the document has been still for a moment. */
 function refreshFooterSoon(): void {
@@ -3295,6 +3311,8 @@ function updateFooter(): void {
     words: footerWords,
     selection: selection.text.length > 0 ? footerSelection : null,
     picture,
+    view: grid ? 'grid' : reflowing() ? 'flow' : 'print',
+    canFlow: !annotating && !isPicture(),
   });
 }
 

@@ -1,4 +1,5 @@
 import { isAdmin, pictureOf } from './accounts.ts';
+import { userAnalytics } from './analytics.ts';
 import { assistantStatus, handleAssistant } from './assistant.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
@@ -110,6 +111,12 @@ const handler: ExportedHandler = {
       if (path === '/api/admin/billing' && request.method === 'GET') {
         if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
         return json(await billingSummary(env));
+      }
+
+      // GET /api/admin/analytics: how many users there are and how that grew. Admins only.
+      if (path === '/api/admin/analytics' && request.method === 'GET') {
+        if (!(await isAdmin(env, userId))) throw new HttpError(403, 'forbidden');
+        return json(await userAnalytics(env));
       }
 
       // GET /api/admin/feedback: everything people have sent. Admins only.

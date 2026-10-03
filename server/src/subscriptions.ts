@@ -132,15 +132,18 @@ export async function handlePolarWebhook(request: Request, env: Env): Promise<Re
   return new Response(null, { status: 202 });
 }
 
+/** Whether a stored subscription entitles its user to sync now: a paid status that has not run out (a missed "period ended" webhook must not leave someone paid for ever). */
+export function isPaid(row: { status: string; current_period_end: number | null }, now = Date.now()): boolean {
+  return PAID.has(row.status) && !(row.current_period_end !== null && row.current_period_end < now - TOLERANCE_MS);
+}
+
 /** The user's subscription, or null if they never had one. */
 export async function subscriptionFor(env: Env, userId: string, now = Date.now()): Promise<Subscription | null> {
   const row = await env.DIRECTORY.prepare('SELECT status, current_period_end, cancel_at_period_end FROM subscriptions WHERE user_id = ?')
     .bind(userId)
     .first<{ status: string; current_period_end: number | null; cancel_at_period_end: number }>();
   if (!row) return null;
-  // A missed "period ended" webhook must not leave someone paid for ever.
-  const lapsed = row.current_period_end !== null && row.current_period_end < now - TOLERANCE_MS;
-  return { status: row.status, active: PAID.has(row.status) && !lapsed, currentPeriodEnd: row.current_period_end, cancelAtPeriodEnd: !!row.cancel_at_period_end };
+  return { status: row.status, active: isPaid({ status: row.status, current_period_end: row.current_period_end }, now), currentPeriodEnd: row.current_period_end, cancelAtPeriodEnd: !!row.cancel_at_period_end };
 }
 
 async function polar<T>(env: Env, path: string, body: unknown): Promise<T> {

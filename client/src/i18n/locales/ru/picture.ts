@@ -41,7 +41,6 @@ export const picture: Catalog = {
   'picture.draw.undo': 'Отменить',
   'picture.ok': 'OK',
   'picture.cancel': 'Отмена',
-  'picture.close': 'Закрыть',
   'picture.resize.title': 'Размер рисунка',
   'picture.resize.width': 'Ширина:',
   'picture.resize.height': 'Высота:',

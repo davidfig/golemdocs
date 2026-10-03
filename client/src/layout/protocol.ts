@@ -224,7 +224,7 @@ export interface RoomState {
  * perhaps), never the one before. Messages for an older document are ignored.
  */
 export type ToWorker =
-  /** Normal view: lay pages out this many points wide, with slim margins (null: the document's own page sizes), and lay the open document out again. */
+  /** Flow view: lay pages out this many points wide, with slim margins (null: the document's own page sizes), and lay the open document out again. */
   | { type: 'reflow'; width: number | null }
   /** Draw formatting marks (¶, dots for spaces, tab arrows) on pages laid out from now on, and lay the open document out again. */
   | { type: 'marks'; on: boolean }

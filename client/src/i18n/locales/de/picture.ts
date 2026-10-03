@@ -39,7 +39,6 @@ export const picture = {
   'picture.draw.undo': 'Rückgängig',
   'picture.ok': 'OK',
   'picture.cancel': 'Abbrechen',
-  'picture.close': 'Schließen',
   'picture.resize.title': 'Bildgröße ändern',
   'picture.resize.width': 'Breite:',
   'picture.resize.height': 'Höhe:',

@@ -6,6 +6,7 @@ import type { DocumentProperties } from '@golemdocs/docx';
 import { getLocale, t, type MessageKey } from '../i18n/index.ts';
 import type { WireCommand, WordStats } from '../layout/protocol.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 const SUMMARY: { key: keyof DocumentProperties; label: MessageKey; multiline?: boolean }[] = [
   { key: 'title', label: 'properties.titleField' },
@@ -93,13 +94,11 @@ export class PropertiesDialog {
     ok.disabled = true;
     this.ok = ok;
     const cancel = h('button', { class: 'wm-button', text: t('properties.cancel'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('properties.close') } });
     const form = h('form', { attrs: { method: 'dialog' } }, tabs, h('div', { class: 'wm-dialog-body wm-link-body' }, summary, statistics), h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)));
-    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup wm-properties', attrs: { 'aria-label': t('properties.title') } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: t('properties.title') }), close), form);
+    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup wm-properties', attrs: { 'aria-label': t('properties.title') } }, dialogTitleBar(t('properties.title'), () => dialog.close()), form);
 
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();

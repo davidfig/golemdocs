@@ -12,8 +12,11 @@ export type ListKind = 'bullet' | 'number' | 'task';
 export type ListChoice = ListKind | 'taskDone';
 export type CaseChange = 'sentence' | 'lower' | 'upper' | 'title' | 'toggle';
 export type BreakKind = 'page' | 'column' | 'line' | 'sectionNextPage' | 'sectionContinuous';
-/** Print: pages as they print. Normal: the text reflowed to the window, without page edges (Word's Web Layout). */
-export type ViewMode = 'print' | 'normal';
+/**
+ * Print: pages as they print. Flow: the text reflowed to the window, without page edges (Word's Web Layout).
+ * Grid: every page side by side, filling the window.
+ */
+export type ViewMode = 'print' | 'flow' | 'grid';
 /** A PDF's form: filling in its fields, or arranging them (moving, adding, renaming, deleting). */
 export type FormMode = 'fill' | 'edit';
 /** A zoom factor (1 = 100%) or a fit mode. */
@@ -218,7 +221,6 @@ export interface ChromeState {
   /** 1 = 100%. */
   zoom: number;
   viewMode: ViewMode;
-  grid: boolean;
   /** The pages panel is pulled out beside the document. */
   pagesPanel: boolean;
   /** The files sidebar is pulled out beside the document. */
@@ -278,7 +280,6 @@ export const DEFAULT_STATE: ChromeState = {
   canRedo: false,
   zoom: 1,
   viewMode: 'print',
-  grid: false,
   pagesPanel: false,
   filesPanel: false,
   rulerVisible: false,

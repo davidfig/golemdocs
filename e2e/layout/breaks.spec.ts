@@ -75,7 +75,7 @@ test.describe('Insert ▸ Break', () => {
   });
 });
 
-test.describe('Normal and Print Layout views', () => {
+test.describe('Print Layout and Flow views', () => {
   test.beforeEach(async ({ app }) => {
     await app.blank();
     await app.type('Some text');
@@ -85,37 +85,37 @@ test.describe('Normal and Print Layout views', () => {
     expect(await pageBoxes(app.page)).toEqual([{ width: 612, height: 792 }]);
     await app.menubar.getByRole('menuitem', { name: /^View$/ }).click();
     await expect(app.page.getByRole('menuitemradio', { name: 'Print Layout' })).toHaveAttribute('aria-checked', 'true');
-    await expect(app.page.getByRole('menuitemradio', { name: 'Normal' })).toHaveAttribute('aria-checked', 'false');
+    await expect(app.page.getByRole('menuitemradio', { name: 'Flow' })).toHaveAttribute('aria-checked', 'false');
     await app.page.keyboard.press('Escape');
   });
 
-  test('Normal view reflows the text to the window instead of the paper, and Print Layout restores the page', async ({ app }) => {
-    await choose(app, 'View', 'Normal');
+  test('Flow view reflows the text to the window instead of the paper, and Print Layout restores the page', async ({ app }) => {
+    await choose(app, 'View', 'Flow');
     await expect.poll(async () => (await pageBoxes(app.page))[0]?.width).not.toBe(612);
     // The text is the same either way.
     await expect.poll(() => app.text()).toBe('Some text');
     await app.menubar.getByRole('menuitem', { name: /^View$/ }).click();
-    await expect(app.page.getByRole('menuitemradio', { name: 'Normal' })).toHaveAttribute('aria-checked', 'true');
+    await expect(app.page.getByRole('menuitemradio', { name: 'Flow' })).toHaveAttribute('aria-checked', 'true');
     await app.page.keyboard.press('Escape');
     await choose(app, 'View', 'Print Layout');
     await expect.poll(() => pageBoxes(app.page)).toEqual([{ width: 612, height: 792 }]);
   });
 
-  test('Normal view has slim margins: the text starts nearer the page edge', async ({ app }) => {
+  test('Flow view has slim margins: the text starts nearer the page edge', async ({ app }) => {
     const before = (await caretOf(app.page))!.x;
     expect(before).toBeGreaterThanOrEqual(72);
-    await choose(app, 'View', 'Normal');
+    await choose(app, 'View', 'Flow');
     await expect.poll(async () => (await caretOf(app.page))?.x).toBeLessThan(before);
   });
 
   test('the chosen view is remembered in this browser across a reload', async ({ app }) => {
-    await choose(app, 'View', 'Normal');
+    await choose(app, 'View', 'Flow');
     await expect.poll(async () => (await pageBoxes(app.page))[0]?.width).not.toBe(612);
     await app.page.reload();
     await app.ready();
     await expect.poll(async () => (await pageBoxes(app.page))[0]?.width).not.toBe(612);
     await app.menubar.getByRole('menuitem', { name: /^View$/ }).click();
-    await expect(app.page.getByRole('menuitemradio', { name: 'Normal' })).toHaveAttribute('aria-checked', 'true');
+    await expect(app.page.getByRole('menuitemradio', { name: 'Flow' })).toHaveAttribute('aria-checked', 'true');
     await app.page.keyboard.press('Escape');
   });
 });

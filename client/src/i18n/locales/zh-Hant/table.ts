@@ -3,7 +3,6 @@ import type { Messages } from '../../index.ts';
 export const table: Partial<Messages> = {
   'table.title': '插入表格',
   'table.splitTitle': '分割儲存格',
-  'table.close': '關閉',
   'table.columns': '欄數：',
   'table.rows': '列數：',
   'table.columnsLabel': '欄數',

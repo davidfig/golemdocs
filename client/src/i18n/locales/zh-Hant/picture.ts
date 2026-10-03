@@ -39,7 +39,6 @@ export const picture = {
   'picture.draw.undo': '復原',
   'picture.ok': '確定',
   'picture.cancel': '取消',
-  'picture.close': '關閉',
   'picture.resize.title': '調整圖片大小',
   'picture.resize.width': '寬度:',
   'picture.resize.height': '高度:',

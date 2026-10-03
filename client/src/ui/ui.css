@@ -1791,6 +1791,59 @@
   color: var(--wm-muted);
 }
 
+/* --- Analytics (see analyticsPanel.ts) -------------------------------------------------------- */
+
+.wm-analytics {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(492px, calc(100vw - 64px));
+  max-height: min(65vh, 560px);
+  overflow-y: auto;
+}
+
+.wm-analytics-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.wm-analytics-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+}
+
+.wm-analytics-stat strong {
+  font-size: 20px;
+}
+
+.wm-analytics-stat.big strong {
+  font-size: 32px;
+}
+
+.wm-analytics h4 {
+  margin: 4px 0 0;
+}
+
+.wm-analytics table {
+  border-collapse: collapse;
+}
+
+.wm-analytics th,
+.wm-analytics td {
+  padding: 3px 0;
+  text-align: left;
+}
+
+.wm-analytics .wm-analytics-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- Feedback (see feedback.ts) --------------------------------------------------------------- */
 
 .wm-feedback-dialog {
@@ -2278,9 +2331,9 @@
 #footer {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 2px 18px;
-  padding: 3px 10px;
+  padding: 1px 6px 1px 10px;
   border-top: 1px solid var(--wm-border);
   background: var(--wm-face);
   color: var(--wm-muted);
@@ -2291,4 +2344,83 @@
 
 #footer[hidden] {
   display: none;
+}
+
+.wm-footer-items {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+/* The page, word count and zoom open Go To, Word Count and the zoom sizes. */
+.wm-footer-link {
+  margin: -2px -5px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.wm-footer-link:hover,
+.wm-footer-link.open {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+  color: var(--wm-text);
+}
+
+.wm-footer-link:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: 1px;
+}
+
+/* Print Layout, Flow and Page Grid, at the bar's right end: the one in use is pressed. */
+.wm-footer-views {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.wm-footer-view {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--wm-muted);
+  cursor: default;
+  transition: background var(--wm-ease), border-color var(--wm-ease);
+}
+
+.wm-footer-view:not(:disabled):hover {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+  color: var(--wm-text);
+}
+
+.wm-footer-view[aria-pressed='true'] {
+  background: var(--wm-checked);
+  border-color: var(--wm-hot-border);
+  color: var(--wm-text);
+}
+
+.wm-footer-view[aria-pressed='true']:not(:disabled):hover {
+  background: var(--wm-checked-hot);
+}
+
+.wm-footer-view:disabled {
+  color: var(--wm-disabled);
+}
+
+.wm-footer-view:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: 1px;
 }

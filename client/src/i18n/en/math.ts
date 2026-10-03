@@ -2,7 +2,6 @@ export const math = {
   'math.insert': '&Equation…',
   'math.insert.tip': 'Insert Equation',
   'math.title': 'Insert Equation',
-  'math.close': 'Close',
   'math.latexLabel': 'Equation in LaTeX',
   'math.latexField': 'Equation (LaTeX):',
   'math.hint': 'Write math as LaTeX does, for example \\frac{a}{b}, x^2 + \\sqrt{y}, \\sum_{i=1}^{n} i or \\alpha \\le \\beta.',

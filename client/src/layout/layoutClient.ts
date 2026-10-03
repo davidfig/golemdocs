@@ -80,7 +80,7 @@ export class LayoutClient {
     this.send({ type: 'marks', on });
   }
 
-  /** Lay pages out `width` points wide (Normal view), or at the document's own sizes (null). */
+  /** Lay pages out `width` points wide (Flow view), or at the document's own sizes (null). */
   setReflow(width: number | null): void {
     this.send({ type: 'reflow', width });
   }

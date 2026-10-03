@@ -41,7 +41,6 @@ export const picture: Partial<Messages> = {
   'picture.draw.undo': 'Desfazer',
   'picture.ok': 'OK',
   'picture.cancel': 'Cancelar',
-  'picture.close': 'Fechar',
   'picture.resize.title': 'Redimensionar Imagem',
   'picture.resize.width': 'Largura:',
   'picture.resize.height': 'Altura:',

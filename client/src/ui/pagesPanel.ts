@@ -5,7 +5,7 @@
 // is for looking and moving around. Thumbnails are drawn lazily, only for the pages scrolled into view.
 
 import { t } from '../i18n/index.ts';
-import { h, toggleClass } from './dom.ts';
+import { CLOSE_ICON, h, iconButton, toggleClass } from './dom.ts';
 import { dropSlot, moveTarget } from './pageOrder.ts';
 import { makeResizable } from './sidebarResize.ts';
 import './pagesPanel.css';
@@ -70,7 +70,7 @@ export class PagesPanel {
 
   constructor(parent: HTMLElement, private readonly host: PagesPanelHost) {
     this.el.hidden = true;
-    const close = h('button', { class: 'wm-pages-close', text: '×', attrs: { type: 'button', 'aria-label': t('panels.pages.close') }, title: t('panels.pages.close') });
+    const close = iconButton('wm-pages-close', CLOSE_ICON, t('panels.pages.close'));
     close.addEventListener('click', () => host.close());
     this.el.append(h('header', { class: 'wm-pages-bar' }, h('h2', { text: t('panels.pages.label') }), close), this.list);
     // Keys typed here stay here: the document's handlers listen on the window, and would take Delete and the arrows as edits.

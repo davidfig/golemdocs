@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'Этот браузер не разрешает странице читать буфер обмена. Вставьте с помощью Ctrl+V или Cmd+V.',
   'pasteSpecial.ok': 'ОК',
   'pasteSpecial.cancel': 'Отмена',
-  'pasteSpecial.close': 'Закрыть',
 };

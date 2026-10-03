@@ -4,7 +4,6 @@ export const math: Partial<Messages> = {
   'math.insert': 'Equa&ção…',
   'math.insert.tip': 'Inserir equação',
   'math.title': 'Inserir equação',
-  'math.close': 'Fechar',
   'math.latexLabel': 'Equação em LaTeX',
   'math.latexField': 'Equação (LaTeX):',
   'math.hint': 'Escreva a matemática como no LaTeX, por exemplo \\frac{a}{b}, x^2 + \\sqrt{y}, \\sum_{i=1}^{n} i.',

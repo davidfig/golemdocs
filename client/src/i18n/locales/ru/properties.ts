@@ -17,5 +17,4 @@ export const properties: Partial<Messages> = {
   'properties.lastModifiedBy': 'Кем сохранён:',
   'properties.ok': 'ОК',
   'properties.cancel': 'Отмена',
-  'properties.close': 'Закрыть',
 };

@@ -32,6 +32,9 @@
 }
 
 .wm-pages-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -39,9 +42,14 @@
   border-radius: 3px;
   background: none;
   color: inherit;
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
+}
+
+.wm-pages-close svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
 }
 
 .wm-pages-close:hover {

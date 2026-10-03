@@ -44,6 +44,14 @@ Every feature a user can do should have an equivalent assistant tool, so the AI 
 
 The welcome documents (`client/src/layout/welcome/*.md`) must show no spelling errors. After you edit the English one, spell check it (F7, or run `pnpm --filter @golemdocs/client test`: a test fails on any misspelled word). Then, for each flagged word, confirm it is actually spelled correctly (a name, a format, a key) and add it to `client/src/spelling/appWords.ts`. Fix real typos in the document instead.
 
+## Consistent UI
+
+The app should look and behave the same everywhere: the same buttons, icons, fonts, sizes, spacing and colors for the same job. Keep UI elements centralized so they cannot drift apart.
+
+- **Reuse before you build.** Before writing a button, title bar, icon or dialog, look for the shared one and use it: `dialogTitleBar`, `showDialog` (`ui/popup.ts`), `iconButton` and `CLOSE_ICON` (`ui/dom.ts`), the `wm-button` class, and the color and font variables (`--wm-*`).
+- **Centralize what you would otherwise copy.** If two places need the same element and no shared one exists, make it shared (a helper in `ui/`, a class in `ui.css`) and move the existing copies onto it in the same change, rather than adding a third.
+- **Draw icons, don't type them.** Use an SVG (`iconButton`) rather than a character such as `×` or `▸`: characters are placed differently by each font, so they don't line up with each other.
+
 ## Localization
 
 Every user-visible string goes through `t('area.key')` (`client/src/i18n`), never an inline literal. Add the English to `client/src/i18n/en/` and call `t()` inside functions, not at module top level. Adding an English key makes the translation-completeness test fail until every language in `client/src/i18n/locales/` has it. See `docs/localization.md` for the conventions and how to add a language.

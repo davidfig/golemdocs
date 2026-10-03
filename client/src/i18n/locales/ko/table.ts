@@ -3,7 +3,6 @@ import type { Messages } from '../../index.ts';
 export const table: Partial<Messages> = {
   'table.title': '표 삽입',
   'table.splitTitle': '셀 나누기',
-  'table.close': '닫기',
   'table.columns': '열 개수:',
   'table.rows': '행 개수:',
   'table.columnsLabel': '열 개수',

@@ -41,7 +41,7 @@ export class PageRenderer {
     this.text = new TextRenderer(gl);
   }
 
-  /** Draw pages edge to edge with no shadow or border (Normal view). */
+  /** Draw pages edge to edge with no shadow or border (Flow view). */
   flat = false;
 
   /** `darkPages`: dark sheets with light letters (View › Color Scheme › Dark Pages); pictures of pages leave it off. */
@@ -78,7 +78,7 @@ export class PageRenderer {
     for (const page of this.visible) {
       const x0 = Math.round((page.x - left) * scale);
       const y0 = Math.round((page.y - top) * scale);
-      // Normal view: the text lags a zoom by a moment, so the sheet meets the window's edge meanwhile.
+      // Flow view: the text lags a zoom by a moment, so the sheet meets the window's edge meanwhile.
       const x1 = this.flat ? Math.max(Math.round((page.x + page.width - left) * scale), camera.width) : Math.round((page.x + page.width - left) * scale);
       const y1 = Math.round((page.y + page.height - top) * scale);
       // A soft drop shadow: a few faint layers, each larger than the last, sinking below the sheet.

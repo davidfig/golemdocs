@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'このブラウザーではページがクリップボードを読み取れません。Ctrl+V または Cmd+V で貼り付けてください。',
   'pasteSpecial.ok': 'OK',
   'pasteSpecial.cancel': 'キャンセル',
-  'pasteSpecial.close': '閉じる',
 };

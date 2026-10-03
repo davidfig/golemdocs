@@ -7,6 +7,7 @@ import { mathInline, parseLatex, toLatex, toMathML, type MathEquation, type Raw 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import { insertKey, PALETTE, PALETTE_TABS, type PaletteId } from './mathPalette.ts';
+import { dialogTitleBar } from './popup.ts';
 
 /**
  * Asks for an equation. `current` is the equation being changed. Resolves with the inline to put in, or `undefined` on Cancel.
@@ -22,7 +23,6 @@ export function showMathDialog(current: MathEquation | null = null): Promise<Raw
     const ok = h('button', { class: 'wm-button', text: current ? t('math.update') : t('math.ok'), attrs: { type: 'submit' } });
     const cancel = h('button', { class: 'wm-button', text: t('math.cancel'), attrs: { type: 'button' } });
     const title = current ? t('math.editTitle') : t('math.title');
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('math.close') } });
 
     // The keys: a row of tabs, and the keys of the one showing.
     const keys = h('div', { class: 'wm-math-keys', attrs: { role: 'group' } });
@@ -71,7 +71,7 @@ export function showMathDialog(current: MathEquation | null = null): Promise<Raw
       ),
       h('div', { class: 'wm-dialog-buttons' }, ok, cancel),
     );
-    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-math', attrs: { 'aria-label': title } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close), form);
+    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-math', attrs: { 'aria-label': title } }, dialogTitleBar(title, () => dialog.close()), form);
 
     let result: Raw | undefined;
     // What the parser can't read is reported as it is typed; it stays in the equation as typed.
@@ -83,7 +83,6 @@ export function showMathDialog(current: MathEquation | null = null): Promise<Raw
     };
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     source.addEventListener('input', update);
     display.addEventListener('change', update);

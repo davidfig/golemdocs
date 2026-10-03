@@ -58,51 +58,51 @@ test.describe('formatting marks', () => {
   });
 });
 
-test.describe('Normal and Print Layout views', () => {
-  test('Print Layout is the default on a desktop window and Normal can be chosen', async ({ app, page }) => {
+test.describe('Print Layout and Flow views', () => {
+  test('Print Layout is the default on a desktop window and Flow can be chosen', async ({ app, page }) => {
     await app.goto('?doc=welcome');
     await openMenu(app, 'View');
     expect(await isChecked(page, 'Print Layout')).toBe(true);
-    expect(await isChecked(page, 'Normal')).toBe(false);
-    await menuRow(page, 'Normal').click();
+    expect(await isChecked(page, 'Flow')).toBe(false);
+    await menuRow(page, 'Flow').click();
     await openMenu(app, 'View');
-    expect(await isChecked(page, 'Normal')).toBe(true);
+    expect(await isChecked(page, 'Flow')).toBe(true);
     expect(await isChecked(page, 'Print Layout')).toBe(false);
   });
 
   test('the choice is remembered in this browser', async ({ app, page }) => {
     await app.goto('?doc=welcome');
-    await choose(app, 'View', 'Normal');
-    await expect.poll(() => stored(page, 'word.viewMode')).toBe('normal');
+    await choose(app, 'View', 'Flow');
+    await expect.poll(() => stored(page, 'word.viewMode')).toBe('flow');
     await page.reload();
     await app.ready();
     await openMenu(app, 'View');
-    expect(await isChecked(page, 'Normal')).toBe(true);
+    expect(await isChecked(page, 'Flow')).toBe(true);
     await menuRow(page, 'Print Layout').click();
     await expect.poll(() => stored(page, 'word.viewMode')).toBe('print');
   });
 
-  test('Normal view reflows the text to the window width; Print Layout keeps the page size', async ({ app, page }) => {
+  test('Flow view reflows the text to the window width; Print Layout keeps the page size', async ({ app, page }) => {
     await app.blank();
     await app.type('Some text to lay out.');
     const print = await pagesInfo(page);
-    await choose(app, 'View', 'Normal');
+    await choose(app, 'View', 'Flow');
     await expect
       .poll(async () => {
         const n = await pagesInfo(page);
         return Math.abs(n.pages[0].width - n.canvasWidth / (await page.evaluate(() => (window as unknown as { camera: { zoom: number } }).camera.zoom)) / (96 / 72)) < 2;
       })
       .toBe(true);
-    const normal = await pagesInfo(page);
-    expect(normal.pages[0].width).not.toBeCloseTo(print.pages[0].width, 0);
+    const flow = await pagesInfo(page);
+    expect(flow.pages[0].width).not.toBeCloseTo(print.pages[0].width, 0);
     await choose(app, 'View', 'Print Layout');
     await expect.poll(async () => (await pagesInfo(page)).pages[0].width).toBeCloseTo(print.pages[0].width, 0);
   });
 
-  test('resizing the window reflows a Normal view document', async ({ app, page }) => {
+  test('resizing the window reflows a Flow view document', async ({ app, page }) => {
     await app.blank();
     await app.type('Reflow me when the window changes size.');
-    await choose(app, 'View', 'Normal');
+    await choose(app, 'View', 'Flow');
     // The text fills the window: the page is as wide (in points) as the canvas at the current zoom.
     const fills = async () => {
       const n = await pagesInfo(page);
@@ -120,12 +120,12 @@ test.describe('Normal and Print Layout views', () => {
     expect((await pagesInfo(page)).pages[0].width).toBeGreaterThan(narrow + 100);
   });
 
-  test('a phone-sized window starts in Normal view when nothing is saved', async ({ app, page }) => {
+  test('a phone-sized window starts in Flow view when nothing is saved', async ({ app, page }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await app.goto('?doc=welcome');
     await page.getByRole('button', { name: 'Menu' }).click();
     const drawer = page.getByRole('dialog', { name: 'Menu' });
-    await expect(drawer.getByRole('menuitemradio', { name: /^Normal/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(drawer.getByRole('menuitemradio', { name: /^Flow/ })).toHaveAttribute('aria-checked', 'true');
     await expect(drawer.getByRole('menuitemradio', { name: /^Print Layout/ })).toHaveAttribute('aria-checked', 'false');
   });
 });

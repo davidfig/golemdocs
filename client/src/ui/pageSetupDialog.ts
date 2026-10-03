@@ -4,6 +4,7 @@
 
 import { getLocale, t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 /** Twips, and how the page is oriented, as the editor keeps them. */
 export interface PageState {
@@ -140,7 +141,6 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
 
     const ok = h('button', { class: 'wm-button', text: t('pageSetup.ok'), attrs: { type: 'submit' } });
     const cancel = h('button', { class: 'wm-button', text: t('pageSetup.cancel'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('pageSetup.close') } });
     const form = h(
       'form',
       { attrs: { method: 'dialog' } },
@@ -148,12 +148,11 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
       h('div', { class: 'wm-dialog-body wm-link-body' }, marginsTab, paperTab, h('label', { text: t('pageSetup.apply') }), scope, message),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),
     );
-    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup', attrs: { 'aria-label': t('pageSetup.title') } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: t('pageSetup.title') }), close), form);
+    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup', attrs: { 'aria-label': t('pageSetup.title') } }, dialogTitleBar(t('pageSetup.title'), () => dialog.close()), form);
 
     let result: PageChoice | undefined;
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();

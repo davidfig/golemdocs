@@ -41,7 +41,6 @@ export const picture: Partial<Messages> = {
   'picture.draw.undo': '실행 취소',
   'picture.ok': '확인',
   'picture.cancel': '취소',
-  'picture.close': '닫기',
   'picture.resize.title': '그림 크기 조정',
   'picture.resize.width': '너비:',
   'picture.resize.height': '높이:',

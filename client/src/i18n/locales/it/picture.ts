@@ -41,7 +41,6 @@ export const picture: Partial<Messages> = {
   'picture.draw.undo': 'Annulla',
   'picture.ok': 'OK',
   'picture.cancel': 'Annulla',
-  'picture.close': 'Chiudi',
   'picture.resize.title': 'Ridimensiona immagine',
   'picture.resize.width': 'Larghezza:',
   'picture.resize.height': 'Altezza:',

@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'Dieser Browser erlaubt der Seite nicht, die Zwischenablage zu lesen. Fügen Sie stattdessen mit Strg+V oder Cmd+V ein.',
   'pasteSpecial.ok': 'OK',
   'pasteSpecial.cancel': 'Abbrechen',
-  'pasteSpecial.close': 'Schließen',
 };

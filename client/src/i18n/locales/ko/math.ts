@@ -4,7 +4,6 @@ export const math: Partial<Messages> = {
   'math.insert': '수식(&Q)…',
   'math.insert.tip': '수식 삽입',
   'math.title': '수식 삽입',
-  'math.close': '닫기',
   'math.latexLabel': 'LaTeX 수식',
   'math.latexField': '수식(LaTeX):',
   'math.hint': 'LaTeX처럼 수식을 입력하세요. 예: \\frac{a}{b}, x^2 + \\sqrt{y}, \\sum_{i=1}^{n} i',

@@ -4,7 +4,8 @@
 .wm-clip {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  /* Above the status bar when it is shown (see ui/footer.ts). */
+  bottom: calc(16px + var(--wm-footer-height, 0px));
   z-index: 15;
   width: 85px;
   height: 93px;

@@ -21,10 +21,11 @@ import { format, getLocale, setLocale, t } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
+import { analyticsPanel } from './analyticsPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
-import { closePopup, setPopupLayer, showConfirm, showDialog } from './popup.ts';
+import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
@@ -182,6 +183,27 @@ export class Chrome {
     return this.state;
   }
 
+  /** The zoom box's list of sizes, shown by `owner` (the status bar's zoom); a second click closes it. */
+  showZoomList(owner: HTMLElement): void {
+    if (popupOpenFor(owner)) return closePopup();
+    const current = `${Math.round(this.state.zoom * 100)}%`;
+    const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': t('chrome.control.zoom') } });
+    for (const preset of zoomPresets()) {
+      const chosen = preset.label === current;
+      const row = h('div', { class: chosen ? 'wm-option active' : 'wm-option', text: preset.label, attrs: { role: 'option', 'aria-selected': String(chosen) } });
+      row.addEventListener('pointerenter', () => {
+        for (const other of list.children) other.classList.toggle('active', other === row);
+      });
+      row.addEventListener('click', () => {
+        closePopup();
+        this.registry.perform({ kind: 'zoom', to: preset.to }, t('chrome.perform.zoom'));
+        this.options.host.focusEditor();
+      });
+      list.append(row);
+    }
+    openPopup(owner, list);
+  }
+
   /** Who is signed in changed: the Admin menu appears or goes. */
   accountChanged(): void {
     this.menuBar.refresh();
@@ -267,13 +289,14 @@ export class Chrome {
     const mode = (id: string, label: string, m: ChromeState['viewMode']) =>
       a(id, label, { kind: 'viewMode', mode: m }, { checked: (s) => s.viewMode === m, radio: true });
     r.add(
-      mode('view.normal', t('chrome.view.normal'), 'normal'),
       mode('view.print', t('chrome.view.print'), 'print'),
+      mode('view.flow', t('chrome.view.flow'), 'flow'),
+      // A radio with the others, but a toggle: choosing it again (or Alt+G) goes back to the view before it.
+      a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.viewMode === 'grid', radio: true }),
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
       a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
-      a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.grid }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
@@ -519,8 +542,9 @@ export class Chrome {
       cmd('insert.pageBreak'),
       cmd('insert.horizontalRule'),
       heading(t('chrome.menu.view')),
-      cmd('view.normal'),
       cmd('view.print'),
+      cmd('view.flow'),
+      cmd('view.grid'),
       cmd('view.formattingMarks'),
       cmd('view.pageWidth'),
       cmd('view.darkMode'),
@@ -607,8 +631,9 @@ export class Chrome {
       {
         label: t('chrome.menu.view'),
         items: [
-          cmd('view.normal'),
           cmd('view.print'),
+          cmd('view.flow'),
+          cmd('view.grid'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
@@ -622,7 +647,6 @@ export class Chrome {
           cmd('view.filesPanel'),
           cmd('view.footer'),
           cmd('help.clip'),
-          cmd('view.grid'),
           cmd('view.fullScreen'),
           sub(
             t('chrome.view.zoom'),
@@ -778,6 +802,7 @@ export class Chrome {
         items: [
           { type: 'item', label: t('chrome.admin.debug'), run: () => this.showDebug(), available: isAdmin },
           { type: 'item', label: t('chrome.admin.billing'), run: () => this.showBilling(), available: isAdmin },
+          { type: 'item', label: t('chrome.admin.analytics'), run: () => this.showAnalytics(), available: isAdmin },
           { type: 'item', label: t('chrome.admin.feedback'), run: () => this.showFeedback(), available: isAdmin },
           sub(t('chrome.file.openSample'), () => {
             const samples = host.samples?.() ?? [];
@@ -1140,6 +1165,12 @@ export class Chrome {
     this.menuBar.close(false);
     closePopup();
     showDialog(t('chrome.billing.title'), billingPanel(), () => this.options.host.focusEditor());
+  }
+
+  private showAnalytics(): void {
+    this.menuBar.close(false);
+    closePopup();
+    showDialog(t('chrome.analytics.title'), analyticsPanel(), () => this.options.host.focusEditor());
   }
 
   private showFeedback(): void {

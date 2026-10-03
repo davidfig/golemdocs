@@ -7,15 +7,14 @@ import type { Adjustments } from '../formats/imagePixels.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import './pictureTools.css';
+import { dialogTitleBar } from './popup.ts';
 
 function dialogShell(title: string, body: HTMLElement, ok: HTMLElement, extra: HTMLElement[] = []): { dialog: HTMLDialogElement; form: HTMLFormElement; cancel: HTMLButtonElement } {
   const cancel = h('button', { class: 'wm-button', text: t('picture.cancel'), attrs: { type: 'button' } });
-  const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('picture.close') } });
   const form = h('form', { attrs: { method: 'dialog' } }, body, h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ...extra, ok, cancel)));
-  const dialog = h('dialog', { class: 'wm-dialog wm-link wm-picture-dialog', attrs: { 'aria-label': title } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close), form);
+  const dialog = h('dialog', { class: 'wm-dialog wm-link wm-picture-dialog', attrs: { 'aria-label': title } }, dialogTitleBar(title, () => dialog.close()), form);
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
-  close.addEventListener('click', () => dialog.close());
   cancel.addEventListener('click', () => dialog.close());
   return { dialog, form, cancel };
 }

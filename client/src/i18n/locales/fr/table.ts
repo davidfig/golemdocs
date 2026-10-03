@@ -3,7 +3,6 @@ import type { Messages } from '../../index.ts';
 export const table: Partial<Messages> = {
   'table.title': 'Insérer un tableau',
   'table.splitTitle': 'Fractionner les cellules',
-  'table.close': 'Fermer',
   'table.columns': 'Nombre de colonnes :',
   'table.rows': 'Nombre de lignes :',
   'table.columnsLabel': 'Nombre de colonnes',

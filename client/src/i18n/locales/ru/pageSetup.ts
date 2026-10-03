@@ -2,7 +2,6 @@ import type { Catalog } from '../../index.ts';
 
 export const pageSetup: Catalog = {
   'pageSetup.title': 'Параметры страницы',
-  'pageSetup.close': 'Закрыть',
   'pageSetup.ok': 'OK',
   'pageSetup.cancel': 'Отмена',
   'pageSetup.tabMargins': 'Поля',

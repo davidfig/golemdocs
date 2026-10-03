@@ -10,7 +10,7 @@ export interface SavedCamera {
   x: number;
   y: number;
   zoom: number;
-  /** Normal (reflowed) or Print layout: a position in one means nothing in the other. */
+  /** Flow (reflowed) or Print layout: a position in one means nothing in the other. */
   reflow: boolean;
 }
 

@@ -1,7 +1,6 @@
 export const table = {
   'table.title': 'Insert Table',
   'table.splitTitle': 'Split Cells',
-  'table.close': 'Close',
   'table.columns': 'Number of columns:',
   'table.rows': 'Number of rows:',
   'table.columnsLabel': 'Number of columns',

@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'Este navegador no permite que la página lea el Portapapeles. Pegue con Ctrl+V o Cmd+V.',
   'pasteSpecial.ok': 'Aceptar',
   'pasteSpecial.cancel': 'Cancelar',
-  'pasteSpecial.close': 'Cerrar',
 };

@@ -39,7 +39,6 @@ export const picture = {
   'picture.draw.undo': '元に戻す',
   'picture.ok': 'OK',
   'picture.cancel': 'キャンセル',
-  'picture.close': '閉じる',
   'picture.resize.title': '画像のサイズ変更',
   'picture.resize.width': '幅:',
   'picture.resize.height': '高さ:',

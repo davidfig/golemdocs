@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'Este navegador não permitiu que a página lesse a área de transferência. Cole com Ctrl+V ou Cmd+V.',
   'pasteSpecial.ok': 'OK',
   'pasteSpecial.cancel': 'Cancelar',
-  'pasteSpecial.close': 'Fechar',
 };

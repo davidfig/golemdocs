@@ -120,7 +120,7 @@ export interface AppHooks {
   toggleFooter(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
-  /** Print layout (pages) or Normal (the text reflowed to the window). */
+  /** Print layout (pages), Flow (the text reflowed to the window) or the page grid. */
   setViewMode(mode: ViewMode): void;
   /** The camera moved: stop auto-placing it, and redraw. */
   viewChanged(): void;
@@ -270,7 +270,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
-      if (action.kind === 'viewMode') return action.mode === 'print' || !(app.annotating() || app.isPicture());
+      if (action.kind === 'viewMode') return action.mode !== 'flow' || !(app.annotating() || app.isPicture());
       return SUPPORTED.has(action.kind);
     },
 

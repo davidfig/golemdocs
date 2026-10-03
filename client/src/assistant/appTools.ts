@@ -40,7 +40,7 @@ export interface AppToolsHost {
   newDocument(folderId: string | null): Promise<void>;
   /** Does what a menu or toolbar does. */
   perform(action: Action): Promise<void> | void;
-  view(): { grid: boolean; statusBar: boolean; formattingMarks: boolean };
+  view(): { statusBar: boolean; formattingMarks: boolean };
   isPicture(): boolean;
   /** The open picture as a file of its type. */
   pictureBytes(): Promise<Uint8Array>;
@@ -194,7 +194,7 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       const done: string[] = [];
       const mode = args.view_mode;
       if (mode !== undefined) {
-        if (mode !== 'print' && mode !== 'normal') throw new Error('`view_mode` must be print or normal.');
+        if (mode !== 'print' && mode !== 'flow' && mode !== 'grid') throw new Error('`view_mode` must be print, flow or grid.');
         void host.perform({ kind: 'viewMode', mode });
         done.push(`view ${mode}`);
       }
@@ -204,11 +204,6 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         else if (typeof zoom === 'number' && zoom >= 10 && zoom <= 500) void host.perform({ kind: 'zoom', to: zoom / 100 });
         else throw new Error('`zoom` must be a percentage from 10 to 500, or page_width, whole_page or all_pages.');
         done.push(`zoom ${String(zoom)}`);
-      }
-      const showGrid = optionalFlag(args, 'grid');
-      if (showGrid !== undefined && showGrid !== host.view().grid) {
-        void host.perform({ kind: 'toggleGrid' });
-        done.push(`grid ${showGrid ? 'on' : 'off'}`);
       }
       const bar = optionalFlag(args, 'status_bar');
       if (bar !== undefined && bar !== host.view().statusBar) {
@@ -220,7 +215,7 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         void host.perform({ kind: 'toggleFormattingMarks' });
         done.push(`formatting marks ${marks ? 'on' : 'off'}`);
       }
-      if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid, status_bar or formatting_marks.');
+      if (!done.length) throw new Error('Say what to change: view_mode, zoom, status_bar or formatting_marks.');
       return `Changed the view: ${done.join(', ')}.`;
     },
     async edit_picture(args) {

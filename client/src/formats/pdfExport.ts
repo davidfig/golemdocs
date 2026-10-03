@@ -1,14 +1,16 @@
 // Document -> PDF. Lays the document out afresh and writes one PDF page per laid-out page,
 // with every glyph at its laid-out pen position.
 //
-// Fonts: the browser only has MSDF atlases, not the TTF files, so text uses the PDF
-// standard-14 fonts (serif -> Times, monospace -> Courier, everything else -> Helvetica, with
-// bold/italic variants). Their widths differ from the substituted face, so each glyph is
-// placed with its own TJ adjustment: positions match layout exactly, text stays real,
-// selectable text. Characters are WinAnsi encoded; anything else becomes '?' (or a close
-// ASCII equivalent, see ASCII_FALLBACKS). That includes all CJK text: the standard-14 fonts have
-// no such glyphs and embedding a font would mean shipping multi-MB font files, so each CJK
-// character exports as a visible '?' in its laid-out position and a warning is logged once.
+// Fonts: a face whose font file ships with the app (Calibri's Carlito, Arial's Liberation Sans...)
+// is embedded, subset to the glyphs used, so the PDF looks as the page does. The file is fetched
+// only when a document is exported. Faces without a file (the CJK pages) and styles layout
+// fakes (synthetic bold or italic) use the PDF standard-14 fonts (serif -> Times, monospace ->
+// Courier, everything else -> Helvetica, with bold/italic variants). Their widths differ from the
+// substituted face, so each glyph is placed with its own TJ adjustment: positions match layout
+// exactly, and the text stays real, selectable text. Text in a standard font is WinAnsi encoded;
+// anything else becomes '?' (or a close ASCII equivalent, see ASCII_FALLBACKS). That includes all
+// CJK text: embedding those fonts would mean shipping multi-MB files, so each CJK character
+// exports as a visible '?' in its laid-out position and a warning is logged once.
 
 import type { WordDocument } from '@golemdocs/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@golemdocs/layout';
@@ -38,6 +40,9 @@ function standardName(font: ResolvedFont): string {
       return bold ? (italic ? 'Helvetica-BoldOblique' : 'Helvetica-Bold') : italic ? 'Helvetica-Oblique' : 'Helvetica';
   }
 }
+
+/** Whether a font is drawn from its own file: it has one, and isn't one layout fakes a style of (a standard font shows those better). */
+const embeddable = (font: ResolvedFont): boolean => !!font.face.font && !font.syntheticBold && !font.syntheticItalic;
 
 /** Layout's packed little-endian RGBA8 to a PDF color and alpha. */
 function unpack(packed: number): { color: [number, number, number]; alpha: number } {
@@ -89,7 +94,10 @@ function charOf(metrics: FaceMetrics, glyph: number): string {
   return c.text;
 }
 
-function collect(page: PageLayout, math: boolean): PlacedGlyph[] {
+/** The embedded font that draws a laid-out font, if it has a file to embed. */
+type EmbeddedFor = (font: ResolvedFont) => EmbeddedFont | undefined;
+
+function collect(page: PageLayout, math: boolean, embeddedFor: EmbeddedFor): PlacedGlyph[] {
   const out: PlacedGlyph[] = [];
   for (const list of page.glyphs.values() as Iterable<GlyphList>) {
     const isMath = list.font.family.math !== undefined;
@@ -99,12 +107,16 @@ function collect(page: PageLayout, math: boolean): PlacedGlyph[] {
       const g = list.glyph(i);
       const size = list.size(i);
       const entry = list.metrics.layout.glyphs[g];
+      const embedded = isMath ? undefined : embeddedFor(list.font);
+      const code = entry?.unicode;
+      // An embedded font shows its own characters (any, not just WinAnsi) where it has them.
+      const own = embedded && code !== undefined && embedded.hasChar(code) ? String.fromCodePoint(code) : undefined;
       out.push({
         x: list.x(i),
         y: list.y(i),
         size,
         // Equation glyphs stand for their character (for copying), where they have one.
-        char: isMath ? (entry?.unicode === undefined ? '' : String.fromCodePoint(entry.unicode)) : charOf(list.metrics, g),
+        char: isMath ? (entry?.unicode === undefined ? '' : String.fromCodePoint(entry.unicode)) : (own ?? charOf(list.metrics, g)),
         advance: list.metrics.advance(g) * size,
         color: list.color(i),
         font: list.font,
@@ -268,9 +280,30 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     if (file) mathFont = pdf.embedFont(file);
     else console.warn('PDF export: the math font file could not be loaded, so equations were left out.');
   }
+  // Text faces with a font file are embedded too, each once however often it is used.
+  const faceFonts = new Map<string, EmbeddedFont>();
+  const files = new Set<string>();
+  for (const page of layout.pages) {
+    for (const list of page.glyphs.values() as Iterable<GlyphList>) {
+      const { font } = list;
+      if (!font.family.math && embeddable(font)) files.add(font.face.font!);
+    }
+  }
+  for (const path of files) {
+    const file = await fonts.fontFile(path);
+    if (!file) continue;
+    try {
+      faceFonts.set(path, pdf.embedFont(file));
+    } catch (e) {
+      console.warn(`PDF export: ${path} could not be embedded, so a standard font stands in (${(e as Error).message}).`);
+    }
+  }
+  const embeddedFor: EmbeddedFor = (font) => (embeddable(font) ? faceFonts.get(font.face.font!) : undefined);
   const pdfFonts = new Map<string, PdfFont>();
   const fontFor = (font: ResolvedFont): PdfFont => {
     if (font.family.math && mathFont) return mathFont;
+    const face = embeddedFor(font);
+    if (face) return face;
     const name = standardName(font);
     let f = pdfFonts.get(name);
     if (!f) pdfFonts.set(name, (f = pdf.standardFont(name)));
@@ -305,7 +338,7 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     };
     await drawImages(true);
 
-    for (const line of readingOrder(laid, collect(laid, mathFont !== undefined))) {
+    for (const line of readingOrder(laid, collect(laid, mathFont !== undefined, embeddedFor))) {
       for (const run of lineRuns(line)) {
         const { color } = unpack(run.first.color);
         d.textRun(run.pieces, run.first.x, run.first.y, { font: fontFor(run.first.font), size: run.first.size, color });

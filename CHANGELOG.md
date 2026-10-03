@@ -2,10 +2,21 @@
 
 ## 0.8.1 - Unreleased
 
+### Added
+- Admin › Analytics shows how many unique people use Golem Docs, how many are new or signed in recently, how many of them pay, and how the number grew month by month.
+- A Collapse All button at the top of the Files sidebar closes every folder at once.
+- Buttons at the right end of the status bar switch between Print Layout, Flow and Page Grid, the one in use shown pressed.
+- In the status bar, clicking the page opens Go To, the word count opens Word Count, and the zoom opens the list of zoom sizes.
+
 ### Changed
+- The status bar is shown from the start; View › Status Bar still hides it, and that choice is remembered.
+- Page Grid is now a view of its own beside Print Layout and Flow (View › Page Grid, or Alt+G to go back to the view before it), and Normal view is renamed Flow.
 - On a PDF, the Page Sidebar lets you drag pages into a new order and delete them in Fill In too, without switching to Edit PDF.
+- The close buttons of the sidebars and of every dialog look the same and line up.
 
 ### Fixed
+- Print, Print Preview and PDF downloads use the document's own fonts (Calibri, Arial, Times New Roman and the rest) instead of plain Helvetica, Times or Courier, and keep characters such as curly quotes, dashes and accented letters.
+- Clip, the assistant, sits above the status bar instead of covering it.
 - Typing, a picture or a save made the moment a document opens is no longer lost or refused.
 - The Documents screen and the Files sidebar always show the same documents and folders, and a save or upload no longer makes the app ask the account for its list several times over.
 

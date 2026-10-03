@@ -9,5 +9,4 @@ export const pasteSpecial: Partial<Messages> = {
   'pasteSpecial.unavailable': 'Ce navigateur ne permet pas à la page de lire le Presse-papiers. Collez avec Ctrl+V ou Cmd+V.',
   'pasteSpecial.ok': 'OK',
   'pasteSpecial.cancel': 'Annuler',
-  'pasteSpecial.close': 'Fermer',
 };

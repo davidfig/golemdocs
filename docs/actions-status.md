@@ -25,10 +25,9 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **View**
 - Zoom (box, In, Out, Actual Size, Page Width, Whole Page, All Pages)
-- Page Grid
-- Page Sidebar (Alt+P; open by default in a window at least 900px wide until the user chooses): thumbnails of every page left of the document, drawn lazily with the editor's own renderer, the page in view marked. A click goes to the page. For a PDF's pages (in Fill In and Edit PDF alike) they can also be dragged into order and deleted (the same page operations as the Edit PDF palette, as `pdfPageOp`, with `move` to an index). Reflowed documents (Word and the rest) are view-and-navigate only: a page there is only where the layout breaks, so there is nothing sound to delete or reorder. Hidden in Normal view and for large text files
+- Page Sidebar (Alt+P; open by default in a window at least 900px wide until the user chooses): thumbnails of every page left of the document, drawn lazily with the editor's own renderer, the page in view marked. A click goes to the page. For a PDF's pages (in Fill In and Edit PDF alike) they can also be dragged into order and deleted (the same page operations as the Edit PDF palette, as `pdfPageOp`, with `move` to an index). Reflowed documents (Word and the rest) are view-and-navigate only: a page there is only where the layout breaks, so there is nothing sound to delete or reorder. Hidden in Flow view and for large text files
 - Formatting Marks (¶ button, Cmd/Ctrl+Shift+8): a ¶ at each paragraph end (also in table cells and headers/footers), a dot for each space, an arrow for each tab and a ¬ for each line break, drawn in the text's font in a blue-gray. Nothing moves; the choice is kept in this browser. Turning it on or off lays the pages out again
-- Normal and Print Layout views (Word's Web Layout and Print Layout): Normal lays the text out to the window's width (and zoom) with slim margins, no headers or footers, one column, and no page edges, and reflows as the window or zoom changes; not for a PDF's own pages or a picture. The choice is kept in this browser. There is no Outline or separate Web view
+- Views, one of three (View menu, or the buttons at the right of the status bar): Print Layout, Flow and Page Grid. Flow (Word's Web Layout) lays the text out to the window's width (and zoom) with slim margins, no headers or footers, one column, and no page edges, and reflows as the window or zoom changes; not for a PDF's own pages or a picture. Print Layout or Flow is kept in this browser. Page Grid (Alt+G, which toggles back to the view before it) lays every page side by side to fill the window, for any document; it lasts until another document opens. There is no Outline or separate Web view
 - Fill In Form / Edit Form (PDF)
 - Toolbars on/off, Customize Toolbars, themes, Dark Mode, Full Screen, Debug (chrome only)
 - Keyboard Shortcuts, About (chrome only)
@@ -73,7 +72,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **View**
 - Formatting Marks: no page-break or section-break line ("Page Break" between dots), no hidden-text or object-anchor marks, and no separate choice per kind (Word's Options ▸ View)
-- Normal view: explicit page breaks still start a new piece; headers, footers, columns and page numbers are hidden rather than shown as Word's draft view would
+- Flow view: explicit page breaks still start a new piece; headers, footers, columns and page numbers are hidden rather than shown as Word's draft view would
 - Ruler
 
 **Insert**

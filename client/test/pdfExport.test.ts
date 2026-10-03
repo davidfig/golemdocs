@@ -14,6 +14,13 @@ const hasFonts = existsSync(path.join(FONT_DIR, 'manifest.json'));
 const skip = hasFonts ? {} : { skip: 'run `pnpm fonts` first' };
 const fonts = hasFonts ? await FontSet.load(async (p) => JSON.parse(readFileSync(path.join(FONT_DIR, p), 'utf8'))) : null;
 
+const withFiles = hasFonts
+  ? await FontSet.load(
+      async (p) => JSON.parse(readFileSync(path.join(FONT_DIR, p), 'utf8')),
+      async (p) => new Uint8Array(readFileSync(path.join(FONT_DIR, p))),
+    )
+  : null;
+
 const run = (text: string, properties: Run['properties'] = {}): Run => ({ kind: 'run', properties, content: [{ kind: 'text', text }], attrs: {} });
 const paragraph = (children: Paragraph['children'], properties: Paragraph['properties'] = {}): Paragraph => ({ kind: 'paragraph', properties, children, attrs: {} });
 
@@ -120,4 +127,23 @@ test('comments export as notes and import back with replies and resolved state',
   assert.equal(byText('Fine').resolved, true);
   assert.equal(check.resolved, undefined);
   assert.equal(back.comments.length, 3);
+});
+
+test('fonts with a file are embedded, so the PDF is not set in Helvetica', skip, async () => {
+  const doc = await WordDocument.create();
+  doc.body = [paragraph([run('Hello “world” — Łódź', { fonts: { ascii: 'Calibri', hAnsi: 'Calibri' } }), run(' mono', { fonts: { ascii: 'Courier New', hAnsi: 'Courier New' } })])];
+  const back = PdfDocument.load(await documentToPdf(doc, withFiles!));
+  const items = back.pages[0].extractText().items;
+  const names = items.map((i) => i.fontName);
+  assert.ok(names.every((n) => !/^(Helvetica|Courier|Times)/.test(n)), names.join());
+  assert.ok(names.some((n) => /Carlito/.test(n)), names.join());
+  // Characters WinAnsi lacks come through, not '?'.
+  assert.equal(norm(items.map((i) => i.text).join('')), 'Hello “world” — Łódź mono');
+});
+
+test('a style layout fakes keeps its standard bold font', skip, async () => {
+  const doc = await WordDocument.create();
+  doc.body = [paragraph([run('Fake bold', { bold: true, fonts: { ascii: 'Comic Sans MS', hAnsi: 'Comic Sans MS' } })])];
+  const back = PdfDocument.load(await documentToPdf(doc, withFiles!));
+  assert.equal(norm(back.pages[0].extractText().items.map((i) => i.text).join('')), 'Fake bold');
 });

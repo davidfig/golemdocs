@@ -32,14 +32,20 @@ export abstract class EditorLinks extends EditorEditing {
     return found;
   }
 
-  /** The address of the link whose text is under the page point (x, y), or null when the point is not over one. */
-  linkUnder(page: PageLayout, x: number, y: number): string | null {
+  /** The character under a page point: its paragraph and offset (null when the point is not over a line). */
+  charUnder(page: PageLayout, x: number, y: number): { paragraph: Paragraph; offset: number } | null {
     const line = page.lines.find((l) => y >= l.y && y <= l.y + l.height && x >= l.x && x <= l.x + l.width);
     if (!line) return null;
     // The character the point is over: the last caret stop at or before it (the final stop is the line's end, not a character).
     let k = 0;
     for (let i = 0; i < line.stops.length - 1; i++) if (line.column + line.stops[i] <= x) k = i;
-    const at = this.linkAt(line.paragraph, toModel(line.spans, line.start + k), false);
+    return { paragraph: line.paragraph, offset: toModel(line.spans, line.start + k) };
+  }
+
+  /** The address of the link whose text is under the page point (x, y), or null when the point is not over one. */
+  linkUnder(page: PageLayout, x: number, y: number): string | null {
+    const under = this.charUnder(page, x, y);
+    const at = under && this.linkAt(under.paragraph, under.offset, false);
     return at ? (at.link.url ?? (at.link.anchor ? `#${at.link.anchor}` : '')) : null;
   }
 

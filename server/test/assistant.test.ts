@@ -11,14 +11,17 @@ import { world, type World } from './harness.ts';
 let w: World;
 let calls: unknown[];
 let models: string[];
+let headers: (Record<string, string> | undefined)[];
 let answer: () => Promise<unknown>;
 beforeEach(() => {
   w = world();
   calls = [];
   models = [];
+  headers = [];
   answer = async () => ({ choices: [{ message: { role: 'assistant', content: 'Hello!' } }], usage: { prompt_tokens: 1000, completion_tokens: 100 } });
   w.env.AI = {
-    async run(model: string, inputs: unknown) {
+    async run(model: string, inputs: unknown, options?: { extraHeaders?: Record<string, string> }) {
+      headers.push(options?.extraHeaders);
       models.push(model);
       calls.push(inputs);
       return answer();
@@ -108,7 +111,28 @@ test('the assistant is off where there is no AI binding', async () => {
   assert.equal((await ask(email)).status, 503);
 });
 
+test('cached input is read from the usage and costs less', () => {
+  const c = parseCompletion({ choices: [{ message: { content: 'x' } }], usage: { prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 800 } } });
+  assert.deepEqual(c.usage, { input: 1000, output: 10, cached: 800 });
+  assert.ok(costMicro(1000, 10, 800) < costMicro(1000, 10));
+  assert.equal(costMicro(1000, 10, 5000), costMicro(1000, 10, 1000), 'cached tokens are capped at the input');
+});
+
 // --- answering and charging -------------------------------------------------------------------
+
+test('each request is pinned to the user so the model reuses the cached prompt and tools', async () => {
+  const { id, email } = await subscriber();
+  await ask(email);
+  await ask(email);
+  assert.deepEqual(headers, [{ 'x-session-affinity': `assistant-${id}` }, { 'x-session-affinity': `assistant-${id}` }]);
+});
+
+test('cached tokens are charged at the cached rate', async () => {
+  const { id, email } = await subscriber();
+  answer = async () => ({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 900 } } });
+  await ask(email);
+  assert.equal(usage(id)!.spent, costMicro(1000, 100, 900));
+});
 
 test('a subscriber gets the answer, is charged what it cost, and sees their credits fall', async () => {
   const { id, email } = await subscriber();

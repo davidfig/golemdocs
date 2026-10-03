@@ -4,6 +4,8 @@
 //
 // No DOM and no network here (both are passed in), so this is what the tests exercise.
 
+import { expandTool } from './toolGroups.ts';
+
 export interface ToolCall {
   id: string;
   name: string;
@@ -114,8 +116,9 @@ export async function converse(deps: Deps, history: Message[], request: Request,
     const fetched: string[] = [];
     for (const call of tool_calls) {
       if (signal.aborted) throw new DOMException('Stopped', 'AbortError');
-      progress.tool?.(call.name);
-      const result = await deps.tool(call.name, call.arguments);
+      const expanded = expandTool(call.name, call.arguments);
+      if ('name' in expanded) progress.tool?.(expanded.name);
+      const result = 'name' in expanded ? await deps.tool(expanded.name, expanded.arguments) : `Error: ${expanded.error}`;
       let text = typeof result === 'string' ? result : result.text;
       const images = typeof result === 'string' ? [] : (result.images ?? []);
       // The server takes only so many pictures: past that, say so instead of sending ones it would refuse.

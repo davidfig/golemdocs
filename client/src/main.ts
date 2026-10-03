@@ -5,14 +5,14 @@ import { deskColor, onThemeChange, pagesDark } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocuments, documentUrl, downloadDocument, listDocuments, listFolders, listShared, renameCloudDocument, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, renameCloudDocument, saveDocument, type CloudDocument } from './cloud.ts';
 import { zipDocuments } from './storage/archive.ts';
-import { takeDropped, type Dropped } from './storage/droppedFiles.ts';
+import { pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
 import { importFiles, readZipFiles, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { appTools } from './assistant/appTools.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
-import { adoptGuestFolders, createFolder } from './folderOps.ts';
+import { adoptGuestFolders, createFolder, setLinkKeeper } from './folderOps.ts';
 import { openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -27,6 +27,9 @@ import {
   markSynced,
   saveSaved,
   saveThumbnail,
+  deleteSearchIndexes,
+  listSearchIndexes,
+  putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
 import { folderOf, folderPath, type Folder } from './folders.ts';
@@ -53,6 +56,11 @@ import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { Assistant } from './assistant/index.ts';
 import { searchServer } from './assistant/api.ts';
 import { OtherDocuments, type StoredDocument } from './assistant/libraryDocs.ts';
+import { IndexWorker } from './search/indexClient.ts';
+import { SearchLibrary, type SearchHit } from './search/searchLibrary.ts';
+import { searchableDocuments, type SourceDeps } from './search/sources.ts';
+import { SearchPanel } from './ui/searchPanel.ts';
+import { parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
@@ -92,7 +100,9 @@ import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
-import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
+import { findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
+import { rewriteDocumentLinks } from './formats/docLinks.ts';
+import { afterChange, anyMoved, placedDocs, retargets, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
 import { encodeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { FORMATS, PICTURE_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
@@ -415,6 +425,11 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
       loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: times.read, fonts: times.fonts, body: times.body, headers: times.headers };
       setStatus(t('app.ready', { name }));
+      if (pendingJump) {
+        const jump = pendingJump;
+        pendingJump = null;
+        if (jump.source === viewDocKey) goToHit(jump);
+      }
       if (pendingNotice) {
         setStatus(pendingNotice);
         pendingNotice = null;
@@ -809,6 +824,8 @@ function saveNow(): Promise<string | null> {
 
 /** Shown when the current document finishes loading, which would otherwise replace it. */
 let pendingNotice: string | null = null;
+/** Where to go in the document being opened, once it is: the paragraph a search found it by (see openSearchHit). */
+let pendingJump: { source: string; paragraph?: number; find: string } | null = null;
 
 /** Who is signed in; null signed out. Offline, whoever was last time (see auth.ts). */
 let signedIn: User | null = null;
@@ -1164,6 +1181,8 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
   // Saved here but not sent yet: if the import stops part way, these go the ordinary way.
   let waiting: string[] = [];
   let waitingBytes = 0;
+  // The card was left to close itself after showing the end.
+  let finished = false;
   // Reading the ZIP is the first 10% of the bar (it is quick), saving what is in it the rest.
   const READ_SHARE = 10;
   try {
@@ -1230,13 +1249,17 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
     await flushUploads();
     await refreshLibrary();
     const left = skipped + result.skipped;
+    if (!result.cancelled) {
+      progress.finish();
+      finished = true;
+    }
     if (result.cancelled) return setStatus(t('app.importCancelled', { count: result.imported }));
     setStatus(left ? t('app.importedZipSkipped', { count: result.imported, skipped: left }) : t('app.importedZip', { count: result.imported }));
   } catch (e) {
     if (progress.signal.aborted) return setStatus(t('app.importCancelled', { count: 0 }));
     reportError(t('app.importZipFailed', { message: (e as Error).message }));
   } finally {
-    progress.close();
+    if (!finished) progress.close();
     if (waiting.length) {
       uploads.release(waiting);
       void flushUploads();
@@ -1294,7 +1317,11 @@ function saveInBrowser(): Promise<string | null> {
     try {
       const owner = account?.id;
       const folderId = created ? (doc.newFolder ?? undefined) : undefined;
+      // A renamed document breaks the links to it, unless they are written again once it is saved.
+      const was = created ? undefined : library.entries.find((e) => e.local?.id === doc.localId);
+      const linksAfter = was && was.name !== name ? keepLinks({ kind: 'rename', key: was.key, name }) : null;
       const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
+      linksAfter?.();
       doc.localId = info.id;
       if (doc === current) {
         await makeThumbnail(info);
@@ -1530,8 +1557,10 @@ async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readon
       removed.add(entry.local.id);
       progress?.update(++done, total);
     }
-  } finally {
+    progress?.finish();
+  } catch (e) {
     progress?.close();
+    throw e;
   }
   await refreshLibrary();
   return { removed, refused };
@@ -1575,6 +1604,7 @@ async function clearLocalData(): Promise<void> {
   try {
     await saving.catch(() => {}); // a save still writing would otherwise land after the wipe
     await clearAllSaved();
+    searchLibrary.reset();
     try {
       localStorage.clear();
     } catch {
@@ -1619,6 +1649,88 @@ async function openLocal(id: string): Promise<void> {
     });
   }
 }
+
+/** Where documents are, so a link can name a folder (`[[Notes/Plan]]`), and the open document's folder, for plain titles and `../`. */
+function linkPlaces(): LinkPlaces<LibraryEntry> {
+  const names = (e: LibraryEntry) => folderPath(library.folders, folderOf(e, library.folders)).map((f) => f.name);
+  const here = library.entries.find((e) => e.key === current.localId);
+  return { folderNames: names, from: here ? names(here) : [] };
+}
+
+// --- Keeping links working -------------------------------------------------------------------
+// Renaming or moving a document or folder can leave the links to it (`[[Plan]]`, `[[Notes/Plan]]`) naming nothing. So
+// the documents that link to a moved one are found from their search indexes (which list their links) and the links are
+// written again (see linkRename.ts, formats/docLinks.ts). Done after the change, in the background, one change at a time.
+
+function librarySnapshot(): LibrarySnapshot {
+  return { docs: library.entries.map((e) => ({ key: e.key, name: e.name, folderId: folderOf(e, library.folders) })), folders: library.folders };
+}
+
+let linkUpdates: Promise<void> = Promise.resolve();
+
+/** Call before `change` is made; call what it returns once it is, to update the links it broke. */
+function keepLinks(change: LibraryChange): () => void {
+  const before = librarySnapshot();
+  const after = afterChange(before, change);
+  if (!anyMoved(placedDocs(before), placedDocs(after))) return () => {};
+  return () => {
+    linkUpdates = linkUpdates
+      .then(() => updateLinks(placedDocs(before), placedDocs(after)))
+      .catch((e: Error) => reportError(t('app.linksUpdateFailed', { message: e.message })));
+  };
+}
+
+async function updateLinks(before: ReturnType<typeof placedDocs>, after: ReturnType<typeof placedDocs>): Promise<void> {
+  await saving; // the open document's links are in its saved copy
+  const own = searchableDocuments(library.entries, [], searchSources);
+  await searchLibrary.sync(own);
+  const plan = retargets(before, after, await searchLibrary.links(own));
+  let updated = 0;
+  let skipped = 0;
+  for (const [key, renames] of plan) {
+    const entry = library.entries.find((e) => e.key === key);
+    const result = entry && entry.state !== 'conflict' ? await updateLinksIn(entry, renames) : 'skipped';
+    if (result === 'updated') updated++;
+    else if (result === 'skipped') skipped++;
+  }
+  if (updated) setStatus(t('app.linksUpdated', { count: updated }));
+  if (skipped) reportError(t('app.linksSkipped', { count: skipped }));
+}
+
+/** Writes `renames` into one stored document; whether it was changed, left as it was, or could not be changed now. */
+async function updateLinksIn(entry: LibraryEntry, renames: ReadonlyMap<string, string>): Promise<'updated' | 'unchanged' | 'skipped'> {
+  const isOpen = entry.local !== null && entry.local.id === current.localId;
+  if (isOpen) {
+    await saveNow();
+    // Others are editing it: the server keeps its copy.
+    if (current.room && current.room.mode !== 'solo') return 'skipped';
+  }
+  const found = entry.cloud && opensFromCloud(entry) ? await openFromCloud(entry.cloud, account?.id) : await getSaved(entry.local!.id);
+  if (!found) return 'skipped';
+  const { bytes } = await rewriteDocumentLinks(found.bytes, renames);
+  if (!bytes) return 'unchanged';
+  // Edited while this was being worked out: the next save would put the old links back.
+  if (isOpen && current.unsavedSince > 0) return 'skipped';
+  const info = await saveSaved({ id: found.info.id, name: found.info.name, bytes, owner: account?.id });
+  library.putLocal(info);
+  if (account) scheduleUpload(info.id);
+  if (isOpen) openSource(`local:${info.id}`, false, 'replace');
+  return 'updated';
+}
+
+setLinkKeeper(keepLinks);
+
+// A Markdown document that embeds a picture or a note (`![[map.png]]`) has the layout worker ask for it by title: this browser's copy or the account's.
+worker.embeds = async (title) => {
+  const found = findByTitle(title, library.entries.filter((e) => e.key !== current.localId && !(current.shared && e.cloud?.id === current.shared.id)), linkPlaces());
+  if (!found) return null;
+  try {
+    const bytes = (found.local && !opensFromCloud(found) ? (await getSaved(found.local.id))?.bytes : null) ?? (found.cloud ? await downloadDocument(found.cloud.id) : null);
+    return bytes ? { name: found.name, bytes: bytes.slice(0) } : null;
+  } catch {
+    return null;
+  }
+};
 
 /** Documents other people shared with this user, as last listed (the dashboard hands them over). */
 const sharedDocs = new Map<string, CloudDocument>();
@@ -1958,14 +2070,42 @@ function openLarge(name: string, bytes: Uint8Array): void {
 /** The formats a new, empty document can be made in from nothing: the text ones. */
 const EMPTY_TEXT = new Set<DocumentKind>(['md', 'txt', 'mediawiki', 'textile', 'tex', 'typst', 'adoc', 'rst', 'org', 'html']);
 
+/** Ctrl/Cmd+click on a link: opens a built-in page, a web address in a new tab, or the document a link names. */
+function followLink(url: string): void {
+  const page = builtInPageAt(url);
+  if (page) openSource(page);
+  else if (opensLink(url)) window.open(url, '_blank', 'noopener,noreferrer');
+  else if (parseDocAddress(url)) void openDocumentLink(parseDocAddress(url)!.title);
+  else if (parseTagAddress(url)) searchPanel.show(`#${parseTagAddress(url)}`);
+}
+
 async function openDocumentLink(title: string): Promise<void> {
   await saving;
-  const found = findByTitle(title, library.entries);
+  const found = findByTitle(title, library.entries, linkPlaces());
   if (found) return openSource(sourceOf(found));
-  if (!window.confirm(t('app.createLinkedDocument', { title }))) return;
+  const ask = document.createElement('p');
+  ask.textContent = t('app.createLinkedDocument', { title });
+  if (!(await showConfirm(t('app.createLinkedTitle'), ask, t('app.createLinkedAction')))) {
+    focusInput();
+    return;
+  }
+  const target = splitLink(title, linkPlaces().from);
+  if (!target.name) return;
+  // `[[Notes/Plan]]` makes the folder Notes (and any inside it) as well as the document, unless they are there already.
+  let parent: string | null = target.folders.length ? null : newDocumentFolder;
+  const cloud = accountForFiles() !== null;
+  for (const name of target.folders) {
+    let folder = library.folders.find((f) => f.parentId === parent && normalizeTitle(f.name) === normalizeTitle(name));
+    if (!folder) {
+      folder = await createFolder(cloud, name, parent);
+      library.update({ folders: [...library.folders, folder] });
+    }
+    parent = folder.id;
+  }
+  newDocumentFolder = parent;
   const extension = FORMATS[current.kind].extensions[0] ?? '.docx';
-  const text = EMPTY_TEXT.has(current.kind) ? sourceFromFile(`${title}${extension}`, new ArrayBuffer(0)) : null;
-  open(text ?? { kind: 'blank', name: `${title}.docx` });
+  const text = EMPTY_TEXT.has(current.kind) ? sourceFromFile(`${target.name}${extension}`, new ArrayBuffer(0)) : null;
+  open(text ?? { kind: 'blank', name: `${target.name}.docx` });
   // Saved at once, so that the link finds it next time.
   documentEdited();
 }
@@ -2054,8 +2194,6 @@ let link: SelectionUpdate['link'] = null;
 let math: SelectionUpdate['math'] = null;
 /** The last click was a double click: change the equation it lands on, once the selection says which. */
 let editMathUntil = 0;
-/** Ctrl/Cmd was down for the last click: open the link it lands on, once the selection says which. */
-let followLinkUntil = 0;
 /** The document's comments, in order (for Go To). */
 let comments: SelectionUpdate['comments'] = [];
 let canUndo = false;
@@ -2078,13 +2216,6 @@ function applySelection(update: SelectionUpdate): void {
   if (editMathUntil > performance.now()) {
     editMathUntil = 0;
     if (math) chromeHost.perform({ kind: 'insertMath' });
-  }
-  if (followLinkUntil > performance.now()) {
-    followLinkUntil = 0;
-    const page = link && builtInPageAt(link.url);
-    if (page) openSource(page);
-    else if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
-    else if (link && parseDocAddress(link.url)) void openDocumentLink(parseDocAddress(link.url)!.title);
   }
   updateCursor();
   if (update.search) findDialog.report(update.search);
@@ -2319,6 +2450,7 @@ function render(): void {
     pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
     filesPanel: filesOpen,
     footer: footerOn,
+    rulerVisible: rulerOn,
     format: selectionFormat,
     canUndo: isPicture() ? pictureHistory.undo.length > 0 : canUndo,
     canRedo: isPicture() ? pictureHistory.redo.length > 0 : canRedo,
@@ -2336,6 +2468,7 @@ function render(): void {
   commentsPanel.position();
   syncPagesPanel();
   updateFooter();
+  updateRuler();
   cropLayer.position();
   drawLayer.position();
   updateDebug();
@@ -2345,7 +2478,6 @@ function render(): void {
   if (caret && page) {
     const scale = camera.zoom * CSS_PX_PER_POINT;
     input.style.left = `${(page.x + caret.x - camera.x) * scale}px`;
-    rulerVisible: rulerOn,
     input.style.top = `${(page.y + caret.y - camera.y) * scale}px`;
     input.style.height = `${caret.height * scale}px`;
   }
@@ -2363,7 +2495,6 @@ if (visual) {
     document.documentElement.style.setProperty('--app-height', covered ? `${visual.height}px` : '100%');
     if (covered && (window.scrollY || visual.offsetTop)) window.scrollTo(0, 0);
   };
-  updateRuler();
   visual.addEventListener('resize', fitVisual);
   visual.addEventListener('scroll', fitVisual);
 }
@@ -2444,7 +2575,8 @@ function press(e: Press): void {
     return;
   }
   if (!hit) return;
-  if (e.metaKey || e.ctrlKey) followLinkUntil = performance.now() + 1000;
+  // The link is read where the pointer is, before the click moves the caret: with Markdown at the caret on, the caret's paragraph turns into its source and the link is no longer there to find.
+  if (e.metaKey || e.ctrlKey) void worker.linkAt(hit.page.id, hit.x, hit.y).then((found) => found.url && followLink(found.url));
   const clicks = clickCount(e);
   const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   if (clicks === 2) editMathUntil = performance.now() + 1000;
@@ -2778,6 +2910,17 @@ function toggleFooter(): void {
   requestRender();
 }
 
+function toggleRuler(): void {
+  rulerOn = !rulerOn;
+  try {
+    localStorage.setItem(RULER_KEY, rulerOn ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  // The strip takes room from the document: the canvas is resized by its observer, and the view is placed again.
+  requestRender();
+}
+
 /** Print, Flow or the page grid. Print and Flow are remembered; the grid lasts until another document opens. */
 function setViewMode(mode: ViewMode): void {
   if (mode === 'grid') {
@@ -2803,17 +2946,6 @@ function setViewMode(mode: ViewMode): void {
 /** The page grid, or back to the view before it. */
 function toggleGrid(): void {
   setViewMode(grid ? viewMode : 'grid');
-}
-
-function toggleRuler(): void {
-  rulerOn = !rulerOn;
-  try {
-    localStorage.setItem(RULER_KEY, rulerOn ? 'on' : 'off');
-  } catch {
-    // Storage unavailable: the choice lasts for this session only.
-  }
-  // The strip takes room from the document: the canvas is resized by its observer, and the view is placed again.
-  requestRender();
 }
 
 /** View keys: zoom, grid, fit, page scrolling. */
@@ -2954,8 +3086,10 @@ const chromeHost = createChromeHost({
   download,
   downloadAll,
   importZip,
+  importPicked: (files) => importDropped(pickedFolder(files)),
   toggleClip: () => assistant.setVisible(!assistant.visible),
   print,
+  showSearchAll: () => searchPanel.show(),
   showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
   showWordCount: () => wordCountDialog.open(),
@@ -3055,6 +3189,7 @@ const chromeHost = createChromeHost({
   togglePagesPanel,
   toggleFilesPanel,
   toggleFooter,
+  toggleRuler,
   setViewMode,
   toggleFormattingMarks: () => {
     formattingMarks = !formattingMarks;
@@ -3083,7 +3218,6 @@ const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHos
 const findDialog = new FindDialog(document.body, {
   find: (text, matchCase, backward) => send({ kind: 'find', text, matchCase, backward }),
   replace: (text, replacement, matchCase) => {
-  toggleRuler,
     const selected = selection.text;
     if (matchCase ? selected === text : selected.toLowerCase() === text.toLowerCase()) {
       send(replacement ? { kind: 'insertText', text: replacement } : { kind: 'delete', direction: 'backward' });
@@ -3183,6 +3317,7 @@ const libraryHost = {
     void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
   },
   importFile: (folderId: string | null) => void chromeHost.perform({ kind: 'import', folderId }),
+  importFolder: (folderId: string | null) => void chromeHost.perform({ kind: 'importFolder', folderId }),
   dropFile,
   delete: deleteEverywhere,
   share: (id: string, name: string) => showShareDialog({ name, people: { id } }),
@@ -3205,6 +3340,12 @@ const dashboard = new Dashboard(document.body, {
     openSource(`shared:${doc.id}`);
   },
   closed: focusInput,
+  contentMatches: async (query) => {
+    const docs = await searchableNow();
+    // Copies kept here are indexed in the background a few seconds after a change; a search doesn't wait for that.
+    await searchLibrary.sync(docs, { remote: false }).catch(() => {});
+    return new Set((await searchLibrary.search(query, docs)).hits.map((h) => h.key));
+  },
 }, library);
 
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
@@ -3229,7 +3370,68 @@ const otherDocuments = new OtherDocuments(async () => {
     ? (await listShared().catch(() => [])).filter((d) => d.id !== current.shared?.id).map((d) => ({ id: d.id, name: d.name, updatedAt: d.updatedAt, size: d.size, place: `shared by ${d.owner?.name ?? d.owner?.email ?? 'someone'}`, load: () => downloadDocument(d.id) }))
     : [];
   return [...own, ...shared];
-}, searchServer);
+}, searchServer, async (query) => {
+  const docs = await searchableNow();
+  await searchLibrary.sync(docs);
+  return searchLibrary.search(query, docs);
+});
+
+// --- Searching every document ------------------------------------------------------------------
+// Each document has an index kept in this browser (see search/searchLibrary.ts); the panel searches
+// those. Copies kept here are indexed in the background; the rest (documents only the account has,
+// and what others shared) when someone searches.
+
+// Documents are opened and tokenized in a worker of their own, never on the page.
+const indexWorker = new IndexWorker(() => new Worker(new URL('./search/indexWorker.ts', import.meta.url), { type: 'module', name: 'search-index' }));
+const searchLibrary = new SearchLibrary({ list: listSearchIndexes, put: putSearchIndex, remove: deleteSearchIndexes }, (bytes) => indexWorker.build(bytes));
+const searchSources: SourceDeps = { local: async (id) => (await getSaved(id))?.bytes, download: downloadDocument, index: downloadIndex };
+const searchableNow = () => searchableDocuments(library.entries, signedIn ? library.shared : [], searchSources);
+
+/** How long after the library changes the background indexing starts (editing usually goes on). */
+const SEARCH_INDEX_DELAY_MS = 5000;
+let searchIndexTimer: number | undefined;
+library.subscribe(() => {
+  window.clearTimeout(searchIndexTimer);
+  searchIndexTimer = window.setTimeout(() => void searchLibrary.sync(searchableNow(), { remote: false }).catch((e) => console.error('indexing failed', e)), SEARCH_INDEX_DELAY_MS);
+});
+
+/** Selects the start of `jump.paragraph` in the open document and finds `jump.find` from there. */
+function goToHit(jump: { paragraph?: number; find: string }): void {
+  if (jump.paragraph === undefined) return;
+  send({ kind: 'select', paragraph: jump.paragraph, from: 0, to: 0 });
+  if (jump.find) send({ kind: 'find', text: jump.find, matchCase: false });
+}
+
+/** Opens the document a search result is for, at the paragraph that matched. */
+function openSearchHit(hit: SearchHit, find: string): void {
+  const entry = library.entries.find((e) => e.key === hit.key);
+  const shared = entry ? undefined : library.shared.find((d) => d.id === hit.key);
+  const source = entry ? sourceOf(entry) : shared ? `shared:${shared.id}` : null;
+  if (!source) return;
+  const jump = { source, ...(hit.paragraph !== undefined && { paragraph: hit.paragraph }), find };
+  if (source === viewDocKey && loaded) {
+    goToHit(jump);
+    focusInput();
+    return;
+  }
+  pendingJump = jump;
+  if (entry) libraryHost.open(entry);
+  else if (shared) {
+    sharedDocs.set(shared.id, shared);
+    showLoading(shared.name);
+    openSource(source);
+  }
+}
+
+const searchPanel = new SearchPanel({
+  documents: async () => searchableNow(),
+  search: (text, docs) => searchLibrary.search(text, docs),
+  tags: (docs) => searchLibrary.tags(docs),
+  sync: (docs) => searchLibrary.sync(docs),
+  onProgress: (listener) => searchLibrary.subscribe(listener),
+  open: openSearchHit,
+  focusEditor: focusInput,
+});
 
 /** The folders documents are kept in: the account's, or this browser's. */
 const listFoldersHere = async (): Promise<Folder[]> => (account ? await listFolders() : await listLocalFolders());
@@ -3346,35 +3548,6 @@ function refreshFooter(): void {
   else footerSelection = null;
 }
 
-/** Shows or hides the bar and says what it says, for the kind of document open. */
-function updateFooter(): void {
-  const visible = footerOn && !largeView.active;
-  footer.setVisible(visible);
-  if (!visible) return;
-  let picture = null;
-  if (isPicture()) {
-    picture = pictureSizes.get(current) ?? null;
-    if (!picture && !pictureSizing.has(current)) {
-      const doc = current;
-      pictureSizing.add(doc);
-      void pictureBytes().then((bytes) => {
-        const size = sniffImage(bytes);
-        if (!size) return;
-        pictureSizes.set(doc, { width: size.width, height: size.height });
-        requestRender();
-      });
-    }
-  }
-  const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
-  const here = reflowing() ? null : nearestPage(pages, center.x, center.y);
-  footer.update({
-    kind: current.kind,
-    page: here ? { current: pages.indexOf(here) + 1, count: pages.length } : null,
-    zoom: camera.zoom,
-    words: footerWords,
-    selection: selection.text.length > 0 ? footerSelection : null,
-    picture,
-    view: grid ? 'grid' : reflowing() ? 'flow' : 'print',
 /** Dragging a margin on a ruler: the selection's section gets the new margins (points in, twips out). */
 function setMargins(margins: Partial<Record<'left' | 'right' | 'top' | 'bottom', number>>): void {
   if (!sectionPage) return;
@@ -3438,6 +3611,35 @@ function updateRuler(): void {
   );
 }
 
+/** Shows or hides the bar and says what it says, for the kind of document open. */
+function updateFooter(): void {
+  const visible = footerOn && !largeView.active;
+  footer.setVisible(visible);
+  if (!visible) return;
+  let picture = null;
+  if (isPicture()) {
+    picture = pictureSizes.get(current) ?? null;
+    if (!picture && !pictureSizing.has(current)) {
+      const doc = current;
+      pictureSizing.add(doc);
+      void pictureBytes().then((bytes) => {
+        const size = sniffImage(bytes);
+        if (!size) return;
+        pictureSizes.set(doc, { width: size.width, height: size.height });
+        requestRender();
+      });
+    }
+  }
+  const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  const here = reflowing() ? null : nearestPage(pages, center.x, center.y);
+  footer.update({
+    kind: current.kind,
+    page: here ? { current: pages.indexOf(here) + 1, count: pages.length } : null,
+    zoom: camera.zoom,
+    words: footerWords,
+    selection: selection.text.length > 0 ? footerSelection : null,
+    picture,
+    view: grid ? 'grid' : reflowing() ? 'flow' : 'print',
     canFlow: !annotating && !isPicture(),
   });
 }

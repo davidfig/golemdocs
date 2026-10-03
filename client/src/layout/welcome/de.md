@@ -1,6 +1,6 @@
 # Willkommen bei Golem Docs
 
-Ein Dokumenteditor, der in Ihrem Browser läuft und jede Art von Dokument öffnen soll: Word, PDF, Markdown, Webseiten, sogar eine CSV-Datei, und mehr. Sie können in der Form weiterarbeiten, die Sie gerade brauchen. Diese Seite ist ein Dokument wie jedes andere: Klicken Sie irgendwo hinein und tippen Sie los.
+Ich habe Golem Docs gebaut, weil ich einen Editor wollte, der jede Art von Dokument öffnet: Word, PDF, Markdown, Webseiten, sogar eine CSV-Datei, und mehr, und in dem ich in der Form weiterarbeiten kann, die ich gerade brauche. Er läuft in Ihrem Browser. Diese Seite ist ein Dokument wie jedes andere: Klicken Sie irgendwo hinein und tippen Sie los.
 
 ## Was es kann
 
@@ -8,8 +8,8 @@ Ein Dokumenteditor, der in Ihrem Browser läuft und jede Art von Dokument öffne
 - **Die Form wechseln, ohne etwas zu verlieren.** Mit Konvertieren in, im Menü Datei, ändern Sie, als was ein Dokument bearbeitet wird. Beim Zurückwechseln ist Ihre Formatierung wieder da.
 - **PDFs kommentieren.** Markieren, unterstreichen, durchstreichen und Notizen hinterlassen, direkt auf den Seiten eines PDFs.
 - **PDFs bearbeiten.** Mit „PDF bearbeiten“ ändern Sie den Text einer Seite an Ort und Stelle, verschieben, ergänzen oder löschen Bilder und Formen, schwärzen vertrauliche Angaben und ordnen Seiten neu an. „Formular ausfüllen“ trägt Text in die Felder eines Formulars ein.
-- **Zusammenarbeiten.** Freigeben, im Menü Datei, gibt Ihnen einen Link. Alle, die ihn öffnen, bearbeiten dasselbe Dokument, und Änderungen erscheinen live. Sie können auch für bestimmte Personen freigeben. Das Freigeben gehört zum Abonnement; allein zu bearbeiten ist kostenlos.
-- **Die KI fragen.** Der KI-Assistent in der Ecke kann Ihr Dokument lesen, Absätze umschreiben oder ergänzen, Text formatieren, Kommentare hinterlassen, Formulare ausfüllen und in ein anderes Format konvertieren, und mit Rückgängig nehmen Sie seine Änderungen zurück. Er gehört zum Abonnement. Ansicht › KI-Assistent zeigt ihn an oder blendet ihn aus.
+- **Zusammenarbeiten.** Freigeben, im Menü Datei, gibt Ihnen einen Link. Alle, die ihn öffnen, bearbeiten dasselbe Dokument, und Änderungen erscheinen live. Sie können auch für bestimmte Personen freigeben. Das Freigeben braucht meinen Server und gehört deshalb zum Abonnement; allein zu bearbeiten ist kostenlos.
+- **Die KI fragen.** Der KI-Assistent in der Ecke kann Ihr Dokument lesen, Absätze umschreiben oder ergänzen, Text formatieren, Kommentare hinterlassen, Formulare ausfüllen und in ein anderes Format konvertieren, und mit Rückgängig nehmen Sie seine Änderungen zurück. Er gehört zum Abonnement, weil mich jede Anfrage Geld kostet. Ansicht › KI-Assistent zeigt ihn an oder blendet ihn aus.
 
 ## Ausprobieren
 
@@ -28,6 +28,7 @@ Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, 
 - **Umbenennen:** Klicken Sie in der Mitte der Menüleiste auf den Namen des Dokuments, um einen neuen einzugeben.
 - **Links und Tabellen:** Strg+K (Cmd+K auf dem Mac) versieht die Markierung mit einem Link, und die Schaltfläche Tabelle in der Symbolleiste fügt ein Raster ein.
 - **Rechtschreibung und Grammatik:** F7 drücken. Suchen und Ersetzen finden Sie im Menü Bearbeiten.
+- **Alle Dokumente durchsuchen:** Bearbeiten › Alle Dokumente durchsuchen (Strg+Umschalt+F, Cmd+Umschalt+F auf dem Mac) findet Wörter und #Tags in allen Ihren Dokumenten. Tippen Sie #projekt und ein Leerzeichen, um einen Tag zu erstellen, und klicken Sie mit Strg darauf, um alle Dokumente damit zu finden.
 - **Kommentare:** Text markieren und im Menü Einfügen den Befehl Kommentar wählen. Andere können antworten, und Sie können einen Kommentar als erledigt markieren, wenn er geklärt ist.
 - **Farbschemata, Dunkelmodus und Symbolleisten** finden Sie im Menü Ansicht, und im Menü Extras ändern Sie die Sprache.
 
@@ -35,13 +36,13 @@ Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, 
 
 Es gibt keine Schaltfläche zum Speichern. Jede Änderung wird kurz nach dem Vornehmen in diesem Browser gesichert, und Sie brauchen kein Konto. Datei › Öffnen zeigt alle Ihre Dokumente, und Herunterladen gibt Ihnen jederzeit eine Datei. Das Speichern im Browser und das Herunterladen sind kostenlos, ein Abonnement ist dafür nicht nötig.
 
-Ein Abonnement ergänzt Synchronisierung, Freigabe und den integrierten KI-Assistenten:
+Alles oben, was in Ihrem Browser läuft, kostet mich nichts und ist deshalb kostenlos. Ein Abonnement kostet 5 $ im Monat und bezahlt die Teile, deren Betrieb mich Geld kostet:
 
-- **Synchronisieren** speichert Ihre Dokumente in Ihrem Konto, sodass Sie sie auf jedem Gerät öffnen können.
+- **Synchronisieren** speichert Ihre Dokumente auf meinem Server, sodass Sie sie auf jedem Gerät öffnen können.
 - **Freigeben und gemeinsam bearbeiten** per Link oder mit bestimmten Personen.
-- **KI** ist integriert, ohne dass Sie etwas einrichten müssen.
+- **KI** ist integriert, ohne dass Sie etwas einrichten müssen. Jede ihrer Anfragen bezahle ich.
 
-Mit einem Abonnement unterstützen Sie außerdem die Entwicklung von Golem Docs. Wenn ein Abonnement endet, bleiben Ihre Dokumente in diesem Browser, und Sie können weiterhin Dokumente öffnen, die ein Abonnent mit Ihnen teilt. Die Kosten finden Sie unter [Preise](https://golemdocs.com/home/#pricing), oder wählen Sie Datei › Abonnieren…, um loszulegen.
+Was übrig bleibt, lässt mich weiter an Golem Docs arbeiten. Wenn ein Abonnement endet, bleiben Ihre Dokumente in diesem Browser, und Sie können weiterhin Dokumente öffnen, die ein Abonnent mit Ihnen teilt. Die Kosten finden Sie unter [Preise](https://golemdocs.com/home/#pricing), oder wählen Sie Datei › Abonnieren…, um loszulegen.
 
 ## Zum Namen
 
@@ -55,6 +56,6 @@ Lesen Sie die [Datenschutzerklärung](/privacy) und die [Nutzungsbedingungen](/t
 
 ## Über den Entwickler
 
-Golem Docs wurde von David Figatner entwickelt, mit viel Unterstützung von Claude, einer KI von Anthropic, die einen großen Teil des Codes an seiner Seite geschrieben hat.
+Ich bin [David Figatner](https://yopeyopey.com/about/) und [Claude](https://claude.ai/). Golem Docs begann als Ersatz für zwei Dinge, die ich jeden Tag benutze: Obsidian, das mein Leben organisiert, und die Programme, nach denen ich ständig suchte, um PDFs zu konvertieren oder zu bearbeiten. ZIP-Dateien machten es noch interessanter, denn ein Archiv kann alles enthalten, also muss ein Editor, der eines öffnet, auch alles öffnen, was darin steckt. Dann fand ich die Idee schön, dass er jede Art von Dokument öffnen könnte, und daran baue ich noch immer. Einen großen Teil des Codes habe ich mit Claude geschrieben, ich habe die Richtung vorgegeben (ich schwöre, ich hätte es auch allein programmieren können, aber es hätte Jahre gedauert).
 
-Die App begann als Ersatz für zwei Dinge, die David jeden Tag benutzt: Obsidian, womit er sein Leben organisiert, und ein Programm zum Ansehen von Word- und PDF-Dateien. Dann fand er die Idee reizvoll, dass sie jede Art von Dokument öffnen könnte. Daran wächst sie weiter.
+Wenn etwas nicht so aufgeht, wie es sollte, oder Sie sich wünschen, es könnte etwas, das es nicht kann, schreiben Sie mir an [david@golemdocs.com](mailto:david@golemdocs.com).

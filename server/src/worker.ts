@@ -166,7 +166,7 @@ const handler: ExportedHandler = {
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).
-      const match = /^\/api\/(documents|shared|folders)(?:\/([^/]+)(?:\/(thumbnail|shares)(?:\/([^/]+))?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders)(?:\/([^/]+)(?:\/(thumbnail|index|shares)(?:\/([^/]+))?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub, granteeId] = match;
       const batchUpload = collection === 'documents' && id === 'batch' && sub === undefined;

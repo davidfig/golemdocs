@@ -7,6 +7,9 @@ import { h } from './dom.ts';
 import { estimateSeconds, formatDuration } from './timeLeft.ts';
 import './progressToast.css';
 
+/** How long a finished card stays, so it is seen at 100%. */
+const FINISH_HOLD_MS = 600;
+
 export interface Progress {
   /** Aborts when Cancel is pressed. */
   readonly signal: AbortSignal;
@@ -16,6 +19,8 @@ export interface Progress {
   startTimer(): void;
   /** Takes the card away. */
   close(): void;
+  /** Fills the bar, then takes the card away after a moment, so a quick finish is seen as one. */
+  finish(): void;
 }
 
 /** Shows the card with `title` and returns what drives it. A second card stacks above the first. Work that can't be stopped half way passes `cancellable: false`, which leaves out the button. */
@@ -40,6 +45,7 @@ export function showProgress(title: string, cancellable = true): Progress {
   stack.append(card);
   const track = bar.parentElement!;
   let furthest = 0;
+  let lastTotal = 0;
   let timer: { at: number; fraction: number } | null = null;
   const update = (done: number, total: number, text?: string): void => {
     // Never moves back: the bar only goes forward, whatever order the steps report in.
@@ -48,20 +54,26 @@ export function showProgress(title: string, cancellable = true): Progress {
     const percent = Math.round(fraction * 100);
     bar.style.width = `${percent}%`;
     track.setAttribute('aria-valuenow', String(percent));
+    lastTotal = total || lastTotal;
     const base = text ?? t('app.importProgress', { done, total });
     const seconds = timer ? estimateSeconds(fraction, timer.fraction, performance.now() - timer.at) : null;
     detail.textContent = seconds === null || !base ? base : `${base} · ${t('app.timeLeft', { time: formatDuration(seconds) })}`;
   };
   update(0, 0, '');
+  const close = (): void => {
+    card.remove();
+    if (!stack.firstChild) stack.remove();
+  };
   return {
     signal: abort.signal,
     update,
     startTimer: () => {
       timer = { at: performance.now(), fraction: furthest };
     },
-    close: () => {
-      card.remove();
-      if (!stack.firstChild) stack.remove();
+    close,
+    finish: () => {
+      update(1, 1, t('app.importProgress', { done: lastTotal, total: lastTotal }));
+      setTimeout(close, FINISH_HOLD_MS);
     },
   };
 }

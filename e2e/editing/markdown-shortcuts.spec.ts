@@ -2,7 +2,7 @@
 
 import { expect, test } from '../fixtures';
 import { convertTo, importFile, text } from '../files/helpers';
-import { caretClient, waitCaretSettled } from './helpers';
+import { caretClient, docxPart, waitCaretSettled } from './helpers';
 
 test.describe('Markdown shortcuts as you type', () => {
   test('headings, check boxes, marks and rules are made as they are typed', async ({ app }) => {
@@ -22,6 +22,40 @@ test.describe('Markdown shortcuts as you type', () => {
     await app.type('After');
     const file = await app.download(() => app.menu('File', 'Download'));
     expect(file.text.trim()).toBe('# Title\n\n- [ ] todo\n- [ ] more\n\nSome **bold** and *it* and `code` and [a link](https://example.com/) end\n\n---\n\nAfter');
+  });
+
+  test('an Obsidian link typed before a space becomes a link to the document, and is saved the same way', async ({ app }) => {
+    await app.blank();
+    await convertTo(app, 'Markdown (.md)', 'Markdown');
+    await app.focus();
+    await app.type('see [[Project Plan]] and [[Project Plan#Budget|the budget]] ok');
+    await expect.poll(() => app.text()).toBe('see Project Plan and the budget ok');
+    const file = await app.download(() => app.menu('File', 'Download'));
+    expect(file.text.trim()).toBe('see [[Project Plan]] and [[Project Plan#Budget|the budget]] ok');
+  });
+
+  test('a space after a #tag makes it a tag link, in Markdown and in Word', async ({ app }) => {
+    await app.blank();
+    await app.type('Plan #project/q3 and C# now');
+    await expect.poll(() => app.text()).toBe('Plan #project/q3 and C# now');
+    const word = await app.download(() => app.menu('File', 'Download'));
+    expect(docxPart(word.bytes, 'word/_rels/document.xml.rels')).toContain('Target="tag:project/q3"');
+    expect(docxPart(word.bytes, 'word/document.xml').match(/<w:hyperlink/g)).toHaveLength(1);
+    await convertTo(app, 'Markdown (.md)', 'Markdown');
+    await app.focus();
+    const md = await app.download(() => app.menu('File', 'Download'));
+    expect(md.text.trim()).toBe('Plan #project/q3 and C# now');
+  });
+
+  test('a #tag is also finished by punctuation or Enter, but not by a full stop inside it', async ({ app }) => {
+    await app.blank();
+    await app.type('Tags #a1, #b2) and #v1.2 then #end');
+    await app.press('Enter');
+    await app.type('next');
+    await expect.poll(() => app.text()).toBe('Tags #a1, #b2) and #v1.2 then #end\nnext');
+    const word = await app.download(() => app.menu('File', 'Download'));
+    const targets = [...docxPart(word.bytes, 'word/_rels/document.xml.rels').matchAll(/Target="(tag:[^"]*)"/g)].map((m) => m[1]);
+    expect(targets.sort()).toEqual(['tag:a1', 'tag:b2', 'tag:end']);
   });
 
   test('Backspace right after a conversion gives back what was typed', async ({ app }) => {

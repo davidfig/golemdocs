@@ -1,14 +1,14 @@
 // The "Show Markdown at the Caret" setting: in a Markdown document, the paragraph the caret is in shows its
-// Markdown source (see layout/livePreview.ts). Off unless chosen; kept on this device. The layout worker is
+// Markdown source (see layout/livePreview.ts). On unless turned off; kept on this device. The layout worker is
 // told on every change and on each document opened.
 
 const KEY = 'word.livePreview';
 
-let on = false;
+let on = true;
 try {
-  on = localStorage.getItem(KEY) === 'on';
+  on = localStorage.getItem(KEY) !== 'off';
 } catch {
-  // Storage unavailable: off, for this session.
+  // Storage unavailable: on, for this session.
 }
 
 const listeners = new Set<(on: boolean) => void>();

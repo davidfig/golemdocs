@@ -1,6 +1,6 @@
 # Welcome to Golem Docs
 
-A document editor that lives in your browser, built to open every kind of document: Word, PDF, Markdown, web pages, even a CSV file, and more. It lets you keep working in whichever shape you need. This page is a document like any other: click anywhere and start typing.
+I built Golem Docs because I wanted one editor that opens every kind of document: Word, PDF, Markdown, web pages, even a CSV file, and more, and lets me keep working in whichever shape I need. It lives in your browser. This page is a document like any other: click anywhere and start typing.
 
 ## What it does
 
@@ -8,8 +8,8 @@ A document editor that lives in your browser, built to open every kind of docume
 - **Change shape without losing anything.** Convert To, in the File menu, switches what a document is edited as, and going back gives you your formatting again.
 - **Mark up PDFs.** Highlight, underline, strike out and leave notes on a PDF's own pages.
 - **Edit PDFs.** Switch to Edit PDF to change a page's text where it sits, move, add or delete pictures and shapes, black out private details, and rearrange pages. Fill In types into a form's fields.
-- **Work together.** Share, in the File menu, gives you a link. Everyone who opens it edits the same document, and changes show up live. You can also share with specific people. Sharing is part of the subscription; editing on your own is free.
-- **Ask the AI.** The AI assistant in the corner can read your document, rewrite or add paragraphs, format text, leave comments, fill in forms and convert to another format, and Undo takes its changes back. It is part of the subscription. View › AI Assistant shows or hides it.
+- **Work together.** Share, in the File menu, gives you a link. Everyone who opens it edits the same document, and changes show up live. You can also share with specific people. Sharing needs my server, so it is part of the subscription; editing on your own is free.
+- **Ask the AI.** The AI assistant in the corner can read your document, rewrite or add paragraphs, format text, leave comments, fill in forms and convert to another format, and Undo takes its changes back. It is part of the subscription, because every request costs me money. View › AI Assistant shows or hides it.
 
 ## Try this
 
@@ -28,6 +28,7 @@ When you're ready, choose New from the File menu for a blank document, or Downlo
 - **Rename:** click the document's name in the middle of the menu bar to type a new one.
 - **Links and tables:** Ctrl+K (Cmd+K on a Mac) links the selection, and the toolbar's Table button inserts a grid.
 - **Spelling and grammar:** press F7. Find and replace is in the Edit menu.
+- **Search all documents:** Edit › Search All Documents (Ctrl+Shift+F, Cmd+Shift+F on a Mac) finds words and #tags in every document you have. Type #project and a space to make a tag, then Ctrl+click it to find every document with it.
 - **Comments:** select text and choose Comment from the Insert menu. Others can reply, and you can resolve a comment when it is dealt with.
 - **Themes, Dark Mode and toolbars** are in the View menu, and the Tools menu changes the language.
 
@@ -35,13 +36,13 @@ When you're ready, choose New from the File menu for a blank document, or Downlo
 
 There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. File › Open shows all your documents, and Download gives you a file whenever you want one. Saving in your browser and downloading are free, with no subscription needed.
 
-A subscription adds syncing, sharing and the built-in AI assistant:
+Everything above that runs in your browser costs me nothing, so it is free. A subscription is $5 a month and pays for the parts that cost me money to run:
 
-- **Sync** saves your documents to your account, so you can open them on any device.
+- **Sync** keeps your documents on my server, so you can open them on any device.
 - **Share and edit together** with a link or with specific people.
-- **AI** is built in, with nothing to set up.
+- **AI** is built in, with nothing to set up. I pay for every request it makes.
 
-Subscribing is also how you support the development of Golem Docs. If a subscription ends, your documents stay in this browser, and you can still open documents that a subscriber shares with you. See the [pricing](https://golemdocs.com/home/#pricing) for the cost, or choose File › Subscribe… to get started.
+What is left over lets me keep working on Golem Docs. If a subscription ends, your documents stay in this browser, and you can still open documents that a subscriber shares with you. See the [pricing](https://golemdocs.com/home/#pricing) for the cost, or choose File › Subscribe… to get started.
 
 ## About the name
 
@@ -55,6 +56,6 @@ Read the [Privacy Policy](/privacy) and the [Terms of Service](/terms), both in 
 
 ## About the developer
 
-Golem Docs is made by David Figatner, with a lot of help from Claude, an AI made by Anthropic, which wrote much of the code alongside him.
+I'm [David Figatner](https://yopeyopey.com/about/) and [Claude](https://claude.ai/). Golem Docs began as a replacement for two things I use every day: Obsidian, which runs my life, and the tools I kept hunting for to convert or edit PDFs. ZIP files made it more interesting, because an archive can hold anything, so an editor that opens one has to open whatever is inside. Then I thought it would be fun if it could open every kind of document there is, and I'm still building toward that. Much of the code was written with Claude, with me steering (I promise I could have coded it myself, but it would have taken years).
 
-The app began as a replacement for two things David uses every day: Obsidian, which runs his life, and a viewer for Word and PDF files. Then he thought it would be fun if it could open every kind of document there is. It is still growing toward that.
+If something won't open the way it should, or you wish it did something it doesn't, email me at [david@golemdocs.com](mailto:david@golemdocs.com).

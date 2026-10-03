@@ -1,6 +1,7 @@
 // Documents saved in this browser (IndexedDB). Signed out, these are the user's documents and
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
+import type { DocIndex } from '@golemdocs/docx';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 
@@ -35,13 +36,14 @@ const META = 'meta';
 const BYTES = 'bytes';
 const THUMBS = 'thumbs';
 const FOLDERS = 'folders';
+const SEARCH = 'search';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 3);
+      const request = indexedDB.open(DB_NAME, 4);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -50,6 +52,7 @@ function openDb(): Promise<IDBDatabase> {
         }
         if (from < 2) request.result.createObjectStore(THUMBS);
         if (from < 3) request.result.createObjectStore(FOLDERS, { keyPath: 'id' });
+        if (from < 4) request.result.createObjectStore(SEARCH);
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -281,10 +284,11 @@ export async function deleteOwnedBy(owner: string): Promise<void> {
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH], 'readwrite');
   tx.objectStore(META).delete(id);
   tx.objectStore(BYTES).delete(id);
   tx.objectStore(THUMBS).delete(id);
+  tx.objectStore(SEARCH).delete(id);
   await finished(tx);
 }
 
@@ -295,13 +299,14 @@ export async function deleteSaved(id: string): Promise<void> {
  */
 export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH], 'readwrite');
   const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
   const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
   if (unchanged) {
     tx.objectStore(META).delete(seen.id);
     tx.objectStore(BYTES).delete(seen.id);
     tx.objectStore(THUMBS).delete(seen.id);
+    tx.objectStore(SEARCH).delete(seen.id);
   }
   await finished(tx);
   return unchanged;
@@ -319,6 +324,43 @@ export async function saveThumbnail(id: string, blob: Blob, forUpdatedAt: number
 export async function getThumbnail(id: string): Promise<Thumbnail | null> {
   const db = await openDb();
   return ((await done(db.transaction(THUMBS).objectStore(THUMBS).get(id))) as Thumbnail | undefined) ?? null;
+}
+
+/** A document's search index, and which version of the document it was made from. */
+export interface StoredIndex {
+  /** The version of the document it describes (see ../search/searchLibrary.ts). */
+  stamp: string;
+  index: DocIndex;
+}
+
+/** The search index kept for a document (null if none): `key` is the library entry's. */
+export async function getSearchIndex(key: string): Promise<StoredIndex | null> {
+  const db = await openDb();
+  return ((await done(db.transaction(SEARCH).objectStore(SEARCH).get(key))) as StoredIndex | undefined) ?? null;
+}
+
+/** Every kept index with its stamp, to see which documents need indexing again. */
+export async function listSearchIndexes(): Promise<Map<string, StoredIndex>> {
+  const db = await openDb();
+  const store = db.transaction(SEARCH).objectStore(SEARCH);
+  const [keys, values] = await Promise.all([done(store.getAllKeys() as IDBRequest<IDBValidKey[]>), done(store.getAll() as IDBRequest<StoredIndex[]>)]);
+  return new Map(keys.map((k, i) => [String(k), values[i]!]));
+}
+
+export async function putSearchIndex(key: string, stored: StoredIndex): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(SEARCH, 'readwrite');
+  tx.objectStore(SEARCH).put(stored, key);
+  await finished(tx);
+}
+
+/** Forgets the indexes of documents that are gone. */
+export async function deleteSearchIndexes(keys: readonly string[]): Promise<void> {
+  if (!keys.length) return;
+  const db = await openDb();
+  const tx = db.transaction(SEARCH, 'readwrite');
+  for (const key of keys) tx.objectStore(SEARCH).delete(key);
+  await finished(tx);
 }
 
 /** Deletes every saved document and thumbnail in this browser. Cloud copies are untouched. */

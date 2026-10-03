@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut } from '../src/layout/autoformat.ts';
+import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut } from '../src/layout/autoformat.ts';
 
 const plain = { styled: false, listed: false };
 
@@ -61,4 +61,29 @@ test('[text](url) is converted when ")" is typed', () => {
   assert.deepEqual(linkShortcut('see [the docs](https://x.example/a)'), { start: 4, text: 'the docs', url: 'https://x.example/a' });
   assert.equal(linkShortcut('![alt](pic.png)'), null);
   assert.equal(linkShortcut('[text](two words)'), null);
+});
+
+test('an Obsidian link typed before a space is a link to the document', () => {
+  assert.deepEqual(wikiLinkShortcut('see [[Project Plan]]'), { start: 4, text: 'Project Plan', url: 'doc:Project Plan' });
+  assert.deepEqual(wikiLinkShortcut('[[Plan#Budget]]'), { start: 0, text: 'Plan#Budget', url: 'doc:Plan#Budget' });
+  assert.deepEqual(wikiLinkShortcut('go [[Plan|the plan]]'), { start: 3, text: 'the plan', url: 'doc:Plan' });
+  assert.deepEqual(wikiLinkShortcut('![[Diagram.png]]'), { start: 0, text: 'Diagram.png', url: 'doc:Diagram.png' });
+  assert.equal(wikiLinkShortcut('[[]]'), null);
+  assert.equal(wikiLinkShortcut('\\[[Plan]]'), null);
+  assert.equal(wikiLinkShortcut('[[a]] and [[b'), null);
+});
+
+test('a space after a #tag makes it a link that searches for the tag', () => {
+  assert.deepEqual(tagShortcut('#project'), { start: 0, text: '#project', url: 'tag:project' });
+  assert.deepEqual(tagShortcut('see #Work/plans'), { start: 4, text: '#Work/plans', url: 'tag:Work/plans' });
+  assert.deepEqual(tagShortcut('(#año'), { start: 1, text: '#año', url: 'tag:año' });
+  assert.equal(tagShortcut('C#'), null);
+  assert.equal(tagShortcut('a#b'), null);
+  assert.equal(tagShortcut('#1'), null);
+  assert.equal(tagShortcut('#'), null);
+  assert.equal(tagShortcut('##x'), null);
+  assert.equal(tagShortcut('#plan-'), null);
+  assert.equal(tagShortcut('see #plan now'), null);
+  assert.equal(tagShortcut('http://x/#top'), null);
+  assert.equal(tagShortcut('see [the plan](#budget'), null);
 });

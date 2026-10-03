@@ -11,6 +11,8 @@ const FEATURES = [
   { name: 'documents', heading: 'Write and edit Word documents' },
   { name: 'collaborate', heading: 'Work on documents together, live' },
   { name: 'customize', heading: 'Make Golem Docs look and feel the way you want' },
+  { name: 'import', heading: 'Import files, folders, and ZIP archives' },
+  { name: 'obsidian', heading: 'Import an Obsidian vault' },
   { name: 'large-files', heading: 'Open huge text and log files' },
 ] as const;
 
@@ -125,7 +127,7 @@ test.describe('feature pages', () => {
     });
   }
 
-  test('each page lists the other six features and not itself', async ({ page }) => {
+  test('each page lists the other eight features and not itself', async ({ page }) => {
     await page.goto('/home/convert');
     const more = page.locator('.more');
     await expect(more.getByRole('heading', { name: 'More you can do' })).toBeVisible();

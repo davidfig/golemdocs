@@ -49,6 +49,14 @@
         --brand-ink: #fff;
         --tint: #e9eef8;
         --shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 8px 28px rgba(0, 0, 0, 0.1);
+        /* The app's field and pop-up colors (Golem scheme). */
+        --field-border: #a8a09a;
+        --field-bg: #fff;
+        --menu-bg: #fcfcfb;
+        --menu-border: #8b8a88;
+        --hot: #f8d9c3;
+        --hot-border: #d9601f;
+        --pop-shadow: rgb(0 0 0 / 0.22);
       }
       html[data-theme='dark'] {
         --bg: #1c1d20;
@@ -60,6 +68,13 @@
         --brand-ink: #1c1d20;
         --tint: #262a35;
         --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.4);
+        --field-border: #585858;
+        --field-bg: #212121;
+        --menu-bg: #303030;
+        --menu-border: #585858;
+        --hot: #6a3f26;
+        --hot-border: #f08040;
+        --pop-shadow: rgb(0 0 0 / 0.5);
       }
       * { box-sizing: border-box; }
       html { background: var(--bg); scroll-behavior: smooth; }
@@ -67,18 +82,18 @@
       a { color: var(--brand); }
       .wrap { width: min(70rem, 100% - 32px); margin: 0 auto; }
 
-      header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+      header.top { position: sticky; top: 0; z-index: 10; background: var(--brand); color: var(--brand-ink); }
       header.top .wrap { display: flex; align-items: center; gap: 20px; height: 60px; }
-      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: var(--ink); text-decoration: none; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: var(--brand-ink); text-decoration: none; }
       .brand img { width: 28px; height: 28px; }
       nav { display: flex; gap: 22px; margin-left: auto; align-items: center; }
-      nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
-      nav a:hover { color: var(--ink); }
+      nav a { color: var(--brand-ink); opacity: 0.85; text-decoration: none; font-size: 0.95rem; }
+      nav a:hover { opacity: 1; }
       .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; background: var(--brand); color: var(--brand-ink); font-weight: 600; text-decoration: none; border: 1px solid var(--brand); }
       .btn:hover { filter: brightness(1.08); }
       .btn.ghost { background: transparent; color: var(--brand); }
-      nav .btn { padding: 7px 16px; font-size: 0.95rem; color: var(--brand-ink); }
-      nav .btn:hover { color: var(--brand-ink); }
+      nav .btn { padding: 7px 16px; font-size: 0.95rem; opacity: 1; background: var(--brand-ink); color: var(--brand); border-color: var(--brand-ink); }
+      nav .btn:hover { color: var(--brand); }
 
       .hero { padding: 72px 0 56px; }
       .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; }
@@ -97,13 +112,14 @@
       .sheet ul { margin: 0 0 9px; padding-left: 22px; }
       .caret { display: inline-block; width: 2px; height: 1.05em; background: #000; vertical-align: -0.15em; animation: blink 1.1s steps(1) infinite; }
       @keyframes blink { 50% { opacity: 0; } }
-      .cursor-tag { position: absolute; right: 26px; top: 116px; padding: 2px 8px; border-radius: 3px 3px 3px 0; background: #d0542f; color: #fff; font: 600 12px system-ui, sans-serif; }
-      .cursor-tag::after { content: ''; position: absolute; left: 0; top: 100%; width: 2px; height: 20px; background: #d0542f; }
+      .sam { position: relative; display: inline-block; width: 2px; height: 1.05em; background: #d0542f; vertical-align: -0.15em; }
+      .cursor-tag { position: absolute; left: 0; bottom: 100%; padding: 2px 8px; border-radius: 3px 3px 3px 0; background: #d0542f; color: #fff; font: 600 12px/1.3 system-ui, sans-serif; white-space: nowrap; }
       .float { position: absolute; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 0.85rem; font-weight: 600; }
       .float.a { left: -18px; bottom: -18px; }
       .float.b { right: -14px; top: -14px; }
 
       section { padding: 64px 0; }
+      section[id] { scroll-margin-top: 60px; }
       section.alt { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
@@ -133,14 +149,28 @@
       .checks b { display: block; }
       .checks span { color: var(--muted); font-size: 0.97rem; }
 
+      #performance .split { grid-template-columns: 1fr 1.6fr; align-items: center; }
+      .demo { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
       .closing { text-align: center; }
       .closing .cta { justify-content: center; }
       .closing .sub { margin-inline: auto; }
 
       footer { padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.92rem; }
-      footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
-      footer .langs { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
-      footer .langs [aria-current] { color: var(--ink); font-weight: 600; text-decoration: none; }
+      /* The right edge stays clear of Clip, the assistant, which floats there (85px wide, 16px from the edge). */
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; padding-right: 112px; }
+      /* The language picker is drawn like the app's combo boxes and pop-up lists (ui.css: .wm-combo, .wm-popup, .wm-option). */
+      footer .langs { position: relative; font: 13px system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif; color: var(--ink); }
+      footer .langs summary { display: inline-flex; height: 22px; border: 1px solid var(--field-border); border-radius: 4px; overflow: hidden; background: var(--field-bg); list-style: none; cursor: default; user-select: none; }
+      footer .langs summary::-webkit-details-marker { display: none; }
+      footer .langs summary:focus-visible { outline: 2px solid var(--hot-border); outline-offset: 1px; }
+      footer .langs .current { align-self: center; padding: 0 6px 0 4px; }
+      footer .langs .arrow { display: flex; align-items: center; justify-content: center; width: 14px; border-left: 1px solid transparent; }
+      footer .langs summary:hover .arrow, footer .langs[open] .arrow { background: var(--hot); border-left-color: var(--hot-border); }
+      footer .langs .pop { position: absolute; right: 0; bottom: calc(100% + 2px); z-index: 20; box-sizing: border-box; min-width: 100%; max-height: 320px; margin: 0; padding: 1px 0; overflow-y: auto; list-style: none; background: var(--menu-bg); border: 1px solid var(--menu-border); border-radius: 4px; box-shadow: 0 4px 14px var(--pop-shadow), 0 1px 3px var(--pop-shadow); }
+      footer .langs .pop a { display: block; padding: 3px 8px; white-space: nowrap; border: 1px solid transparent; color: var(--ink); text-decoration: none; }
+      footer .langs .pop a:hover, footer .langs .pop a:focus-visible { background: var(--hot); border-color: var(--hot-border); outline: none; }
+      footer .langs .pop a[aria-current] { font-weight: 600; }
+      .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       footer .links { display: flex; gap: 22px; margin-left: auto; }
       footer a { color: var(--muted); }
       footer a:hover { color: var(--ink); }
@@ -148,6 +178,7 @@
       @media (max-width: 52rem) {
         .hero { padding-top: 40px; }
         .hero .wrap, .split { grid-template-columns: 1fr; gap: 40px; }
+        #performance .split { grid-template-columns: 1fr; }
         nav a:not(.btn) { display: none; }
         .float.a { left: 0; }
         .float.b { right: 0; }
@@ -174,26 +205,25 @@
       <div class="hero">
         <div class="wrap">
           <div>
-            <h1>Ogni tipo di documento, <em>un solo editor</em>, direttamente nel tuo browser.</h1>
-            <p class="lede">Apri un file Word, un PDF, una nota Markdown o una pagina web e inizia subito a modificare, in un editor che ha la sensazione di Word 2003 e l’aspetto che preferisci. Passa un documento da un formato all’altro senza perdere ciò che hai scritto e lavoraci insieme ad altre persone, dal vivo.</p>
+            <h1>Volevo <em>un solo editor</em> per tutto.</h1>
+            <p class="lede">Trascina un file Word, un PDF, una nota Markdown, un CSV, un SVG o quasi qualsiasi altro documento e inizia a modificare, in un editor che ha la sensazione di Word 2003. L’ho costruito perché lo volevo.</p>
             <div class="cta">
-              <a class="btn" href="/">Inizia a scrivere, è gratis</a>
+              <a class="btn" href="/">Provalo, è gratis</a>
               <a class="btn ghost" href="#features">Scopri cosa fa</a>
             </div>
-            <p class="fine">Gratis nel browser: nessun account, nessuna installazione, nessuna pubblicità. Un abbonamento aggiunge sincronizzazione, condivisione e un assistente IA.</p>
+            <p class="fine">Gratis nel browser, senza account e senza pubblicità. Sincronizzazione, condivisione e IA costano 5 $ al mese.</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
-              <h2>Note trimestrali</h2>
-              <p>Scritto in Word, rivisto in Markdown, inviato come PDF. È lo stesso documento dall’inizio alla fine<span class="caret"></span></p>
-              <h3>Cosa è cambiato</h3>
+              <h2>La lasagna della nonna</h2>
+              <p>Scritta in Word, conservata in Markdown tra i miei appunti, stampata come PDF per il frigo. È la stessa ricetta dall’inizio alla fine<span class="caret"></span></p>
+              <h3>Le nostre modifiche</h3>
               <ul>
-                <li>Titoli, tabelle e commenti vengono mantenuti</li>
-                <li>Due persone hanno modificato contemporaneamente</li>
-                <li>Niente è stato riscritto</li>
+                <li>Il doppio del formaggio</li>
+                <li>Temperatura del forno cambiata a 350<span class="sam"><span class="cursor-tag">Sam</span></span></li>
+                <li>Cuocere 40 minuti, non 30</li>
               </ul>
               <p>Golem Docs disegna la pagina da sé, così appare come verrà stampata.</p>
-              <span class="cursor-tag">Sam</span>
             </div>
             <span class="float a">Converti in ▸ Markdown</span>
             <span class="float b">Condividi ▸ Ottieni collegamento</span>
@@ -201,10 +231,18 @@
         </div>
       </div>
 
-      <section id="features" class="alt">
+      <section id="story" class="alt">
         <div class="wrap">
-          <h2 class="title">Fatto per aprire tutto.</h2>
-          <p class="sub">La maggior parte degli editor gestisce bene un solo formato. Golem Docs li modifica tutti.</p>
+          <h2 class="title">Perché l’ho costruito</h2>
+          <p class="sub" style="margin-bottom: 16px">Sono David. Obsidian regola la mia vita, ma i PDF continuavano a mettersi di mezzo: cercavo sempre uno strumento per convertirne o modificarne uno. Con gli ZIP la cosa si è fatta più interessante, perché un archivio può contenere qualsiasi cosa, quindi un editor che ne apre uno deve aprire tutto ciò che c’è dentro. Ho pensato che sarebbe stato divertente se potesse aprire ogni tipo di documento esistente, e da allora ci sto lavorando.</p>
+          <p class="sub" style="margin-bottom: 0">Buona parte del codice l’ho scritta con Claude, io al volante (giuro che avrei potuto programmarlo da solo, ma ci sarebbero voluti anni). Golem Docs continua a crescere, quindi se un file non si apre come dovrebbe, scrivimi e finisce nella lista.</p>
+        </div>
+      </section>
+
+      <section id="features">
+        <div class="wrap">
+          <h2 class="title">Fatto per aprire tutto quello che gli butto addosso.</h2>
+          <p class="sub">La maggior parte degli editor gestisce bene un solo formato. Io ne volevo uno che li gestisse tutti.</p>
           <div class="grid">
             <div class="card">
               <div class="ico" aria-hidden="true">⇄</div>
@@ -233,13 +271,13 @@
             <div class="card">
               <div class="ico" aria-hidden="true">👥</div>
               <h3>Lavorate insieme, dal vivo</h3>
-              <p>Condividi un collegamento e modificate lo stesso documento insieme, con modifiche e cursori in tempo reale. La condivisione fa parte dell’abbonamento; modificare da soli è gratis.</p>
+              <p>Condividi un collegamento e modificate lo stesso documento insieme, con modifiche e cursori in tempo reale. La condivisione richiede il mio server, quindi fa parte dell’abbonamento; modificare da soli è gratis.</p>
               <a class="more-link" href="/home/collaborate">Come funziona la condivisione →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">✨</div>
               <h3>Un assistente IA</h3>
-              <p>L’assistente IA legge il tuo documento, riscrive o aggiunge paragrafi, cambia gli stili e lascia commenti. Annulla ripristina qualsiasi modifica. Fa parte dell’abbonamento.</p>
+              <p>L’assistente IA legge il tuo documento, riscrive o aggiunge paragrafi, cambia gli stili e lascia commenti. Annulla ripristina qualsiasi modifica. Fa parte dell’abbonamento perché ogni richiesta mi costa dei soldi.</p>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">💾</div>
@@ -249,7 +287,7 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
-              <h3>Il Word che ricordi</h3>
+              <h3>Il Word che ricordo</h3>
               <p>Menu, barre degli strumenti e finestre di dialogo di Word 2003. Nessuna barra multifunzione in cui cercare.</p>
               <a class="more-link" href="/home/customize">Lo stile di Word 2003 →</a>
             </div>
@@ -265,7 +303,34 @@
               <p>Apri un log da 50 MB e scorri, cerca e filtra senza blocchi.</p>
               <a class="more-link" href="/home/large-files">File di testo di grandi dimensioni →</a>
             </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">📥</div>
+              <h3>Porta i tuoi file</h3>
+              <p>Importa un file, un'intera cartella o uno ZIP e mantieni le sue cartelle. Vieni da Obsidian? Importa il tuo vault.</p>
+              <a class="more-link" href="/home/import">Importa file e cartelle →</a>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">🔍</div>
+              <h3>Cerca in tutti i documenti</h3>
+              <p>Trova parole e #tag in tutti i tuoi documenti; i risultati si aprono sul paragrafo corrispondente. Funziona anche offline grazie all'indice del tuo browser.</p>
+            </div>
+            <div class="card">
+              <div class="ico" aria-hidden="true">🔮</div>
+              <h3>Arrivi da Obsidian</h3>
+              <p>Il tuo vault è una cartella di note Markdown. Importalo e le note arrivano nelle loro cartelle.</p>
+              <a class="more-link" href="/home/obsidian">Importa un vault di Obsidian →</a>
+            </div>
           </div>
+        </div>
+      </section>
+
+      <section id="performance" class="alt">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">Veloce, anche con Guerra e pace.</h2>
+            <p class="sub" style="margin-bottom: 0">Ecco tutte le sue 1.006 pagine in Griglia pagina, con lo zoom dall’intero libro fino a un singolo paragrafo e ritorno. L’editor disegna ogni pagina da sé sulla tua scheda grafica, così i documenti grandi restano reattivi.</p>
+          </div>
+          <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="Una registrazione dello schermo di Guerra e pace, tutte le 1.006 pagine, con lo zoom dalla vista Griglia pagina fino al testo leggibile e ritorno."></video>
         </div>
       </section>
 
@@ -333,14 +398,14 @@
       <section id="pricing">
         <div class="wrap split">
           <div>
-            <h2 class="title">Gratis da usare. Abbonati per sincronizzazione, condivisione e IA.</h2>
-            <p class="sub" style="margin-bottom: 0">Golem Docs funziona completamente senza un account. Sincronizzare i documenti tra dispositivi, condividerli e usare l’assistente IA richiedono un abbonamento: 5 $ al mese. Annulli quando vuoi.</p>
+            <h2 class="title">Gratis da usare. Abbonarsi copre i costi del mio server e dell’IA.</h2>
+            <p class="sub" style="margin-bottom: 0">La modifica avviene nel tuo browser, quindi regalarla non mi costa nulla, e Golem Docs funziona completamente senza un account. Sincronizzazione e condivisione richiedono un server e spazio di archiviazione, e l’assistente IA costa soldi ogni volta che risponde. L’abbonamento è di 5 $ al mese: paga tutto questo, e quello che avanza mi permette di continuare a lavorare su Golem Docs. Annulli quando vuoi.</p>
           </div>
           <ul class="checks">
-            <li><b>Gratis, senza account</b><span>Modifica, converti e scarica quanto vuoi. I documenti vengono salvati nel tuo browser e non ci vengono mai inviati.</span></li>
-            <li><b>Con un abbonamento</b><span>I tuoi documenti ti seguono su qualsiasi dispositivo. Condividi un collegamento o invita altre persone a modificare insieme, dal vivo. Usa l’assistente IA per leggere e modificare il tuo documento. Accedi con Google, Microsoft, GitHub o Apple per abbonarti.</span></li>
+            <li><b>Gratis, senza account</b><span>Modifica, converti e scarica quanto vuoi. I documenti vengono salvati nel tuo browser e non vengono mai inviati a me.</span></li>
+            <li><b>Cosa pagano i 5 $</b><span>La sincronizzazione tiene i tuoi documenti sul mio server, così ti seguono su qualsiasi dispositivo. La condivisione permette di modificare insieme, dal vivo. L’assistente IA lo pago io a ogni richiesta. Accedi con Google, Microsoft, GitHub o Apple per abbonarti.</span></li>
             <li><b>Aprire ciò che altri condividono è gratis</b><span>Se un abbonato condivide un documento con te, devi solo accedere per aprirlo, e per modificarlo se te lo consente.</span></li>
-            <li><b>Se annulli</b><span>I tuoi documenti restano nel tuo browser e scaricare un file non richiede mai un account né un abbonamento.</span></li>
+            <li><b>Se annulli</b><span>I tuoi documenti restano nel tuo browser, e scaricare un file, o tutti i tuoi file in uno ZIP, non richiede mai un account né un abbonamento.</span></li>
           </ul>
         </div>
       </section>
@@ -349,10 +414,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">I tuoi documenti sono tuoi.</h2>
-            <p class="sub" style="margin-bottom: 0">Abbiamo scritto l’informativa sulla privacy perché venga letta. È breve e dice cosa raccogliamo e perché.</p>
+            <p class="sub" style="margin-bottom: 0">L’informativa sulla privacy l’ho scritta perché venga letta. È breve e dice cosa raccolgo e perché.</p>
           </div>
           <ul class="checks">
-            <li><b>Niente pubblicità, niente vendita di dati</b><span>Non vendiamo i tuoi dati e non mostriamo pubblicità.</span></li>
+            <li><b>Niente pubblicità, niente vendita di dati</b><span>Non vendo i tuoi dati e non mostro pubblicità.</span></li>
             <li><b>Nessun tracciamento</b><span>Nessuna analisi e nessun tracker pubblicitario.</span></li>
             <li><b>I tuoi file, portali via tutti</b><span>Ogni documento è un vero file che ti appartiene. File ▸ Scarica tutto (ZIP) salva tutto ciò che hai conservato in un unico ZIP, in qualsiasi momento e senza account.</span></li>
             <li><b>Leggila tu stesso</b><span><a href="/home/privacy">Informativa sulla privacy</a> · <a href="/home/terms">Termini di servizio</a></span></li>
@@ -363,7 +428,7 @@
       <section class="closing">
         <div class="wrap">
           <h2 class="title">Apri un documento e giudica.</h2>
-          <p class="sub">Funziona nel tuo browser, quindi il modo più rapido per giudicarlo è usarlo.</p>
+          <p class="sub">Funziona nel tuo browser, quindi il modo più rapido per giudicarlo è usarlo. Se qualcosa non funziona o manca, scrivimi.</p>
           <div class="cta"><a class="btn" href="/">Apri Golem Docs</a></div>
         </div>
       </section>
@@ -371,26 +436,58 @@
 
     <footer>
       <div class="wrap">
-        <span>© Golem Docs di <a href="mailto:david@golemdocs.com">David Figatner</a></span>
+        <span>© Golem Docs di <a href="https://yopeyopey.com/about/">David Figatner</a> e <a href="https://claude.ai/">Claude</a></span>
         <span class="links">
           <a href="/home/privacy">Informativa sulla privacy</a>
           <a href="/home/terms">Termini di servizio</a>
           <a href="/">Apri l’app</a>
         </span>
-        <ul class="langs" aria-label="Lingua">
-          <li><a href="/home" lang="en" hreflang="en" onclick="try{localStorage.setItem('wm.locale','en')}catch(e){}">English</a></li>
-          <li><a href="/home/es" lang="es" hreflang="es" onclick="try{localStorage.setItem('wm.locale','es')}catch(e){}">Español</a></li>
-          <li><a href="/home/ru" lang="ru" hreflang="ru" onclick="try{localStorage.setItem('wm.locale','ru')}catch(e){}">Русский</a></li>
-          <li><a href="/home/de" lang="de" hreflang="de" onclick="try{localStorage.setItem('wm.locale','de')}catch(e){}">Deutsch</a></li>
-          <li><a href="/home/fr" lang="fr" hreflang="fr" onclick="try{localStorage.setItem('wm.locale','fr')}catch(e){}">Français</a></li>
-          <li><a href="/home/ja" lang="ja" hreflang="ja" onclick="try{localStorage.setItem('wm.locale','ja')}catch(e){}">日本語</a></li>
-          <li><a href="/home/pt-BR" lang="pt-BR" hreflang="pt-BR" onclick="try{localStorage.setItem('wm.locale','pt-BR')}catch(e){}">Português (Brasil)</a></li>
-          <li><a href="/home/zh-Hant" lang="zh-Hant" hreflang="zh-Hant" onclick="try{localStorage.setItem('wm.locale','zh-Hant')}catch(e){}">繁體中文</a></li>
-          <li><a href="/home/zh-Hans" lang="zh-Hans" hreflang="zh-Hans" onclick="try{localStorage.setItem('wm.locale','zh-Hans')}catch(e){}">简体中文</a></li>
-          <li><a href="/home/it" lang="it" hreflang="it" aria-current="page" onclick="try{localStorage.setItem('wm.locale','it')}catch(e){}">Italiano</a></li>
-          <li><a href="/home/ko" lang="ko" hreflang="ko" onclick="try{localStorage.setItem('wm.locale','ko')}catch(e){}">한국어</a></li>
-        </ul>
+        <details class="langs">
+          <summary><span class="sr">Lingua: </span><span class="current">Italiano</span><span class="arrow" aria-hidden="true"><svg viewBox="0 0 8 5" width="8" height="5"><path d="M1 1h6L4 4z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" /></svg></span></summary>
+          <ul class="pop" aria-label="Lingua">
+            <li><a href="/home" lang="en" hreflang="en" onclick="try{localStorage.setItem('wm.locale','en')}catch(e){}">English</a></li>
+            <li><a href="/home/es" lang="es" hreflang="es" onclick="try{localStorage.setItem('wm.locale','es')}catch(e){}">Español</a></li>
+            <li><a href="/home/ru" lang="ru" hreflang="ru" onclick="try{localStorage.setItem('wm.locale','ru')}catch(e){}">Русский</a></li>
+            <li><a href="/home/de" lang="de" hreflang="de" onclick="try{localStorage.setItem('wm.locale','de')}catch(e){}">Deutsch</a></li>
+            <li><a href="/home/fr" lang="fr" hreflang="fr" onclick="try{localStorage.setItem('wm.locale','fr')}catch(e){}">Français</a></li>
+            <li><a href="/home/ja" lang="ja" hreflang="ja" onclick="try{localStorage.setItem('wm.locale','ja')}catch(e){}">日本語</a></li>
+            <li><a href="/home/pt-BR" lang="pt-BR" hreflang="pt-BR" onclick="try{localStorage.setItem('wm.locale','pt-BR')}catch(e){}">Português (Brasil)</a></li>
+            <li><a href="/home/zh-Hant" lang="zh-Hant" hreflang="zh-Hant" onclick="try{localStorage.setItem('wm.locale','zh-Hant')}catch(e){}">繁體中文</a></li>
+            <li><a href="/home/zh-Hans" lang="zh-Hans" hreflang="zh-Hans" onclick="try{localStorage.setItem('wm.locale','zh-Hans')}catch(e){}">简体中文</a></li>
+            <li><a href="/home/it" lang="it" hreflang="it" aria-current="true" onclick="try{localStorage.setItem('wm.locale','it')}catch(e){}">Italiano</a></li>
+            <li><a href="/home/ko" lang="ko" hreflang="ko" onclick="try{localStorage.setItem('wm.locale','ko')}catch(e){}">한국어</a></li>
+          </ul>
+        </details>
       </div>
     </footer>
+    <script>
+      // The clip loads and plays only when it is near the screen, and stays still for visitors who ask for less motion.
+      (function () {
+        var video = document.querySelector('video.demo');
+        if (!video) return;
+        var calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function load() {
+          video.src = video.dataset.src;
+          if (calm) video.controls = true;
+          else video.play().catch(function () { video.controls = true; });
+        }
+        if ('IntersectionObserver' in window) {
+          new IntersectionObserver(function (entries, observer) {
+            if (entries[0].isIntersecting) { observer.disconnect(); load(); }
+          }, { rootMargin: '200px' }).observe(video);
+        } else load();
+      })();
+    </script>
+    <script>
+      // The language list closes on a click elsewhere or Escape.
+      (function () {
+        var langs = document.querySelector('details.langs');
+        if (!langs) return;
+        document.addEventListener('click', function (e) { if (langs.open && !langs.contains(e.target)) langs.open = false; });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && langs.open) { langs.open = false; langs.querySelector('summary').focus(); }
+        });
+      })();
+    </script>
   </body>
 </html>

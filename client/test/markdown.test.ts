@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { StyleResolver, WordDocument, paragraphText } from '@golemdocs/docx';
 import type { Block, Hyperlink, Inline, Paragraph, Run, Table } from '@golemdocs/docx';
 import { documentToMarkdown, markdownToDocument } from '../src/formats/markdown.ts';
+import { linkInSource } from '../src/formats/wikiLinks.ts';
 
 // --- Helpers --------------------------------------------------------------------------------------
 
@@ -735,4 +736,40 @@ test('task list items get a checkbox bullet and round trip', async () => {
   const bullets = doc.numbering.abstracts.map((a) => a.levels[0].text);
   assert.ok(bullets.includes('\u2610') && bullets.includes('\u2611'));
   assert.equal(documentToMarkdown(doc), '- [ ] todo\n- [x] done\n- [x] caps\n');
+});
+
+// --- Obsidian links ---------------------------------------------------------------------------------
+
+test('[[Note]] links read as links to the stored document and write back the same', async () => {
+  const doc = await markdownToDocument('See [[Project Plan]], [[Project Plan#Budget]] and [[Project Plan|the plan]]. Also ![[Diagram.png]].\n');
+  const links = runs(paragraphs(doc)[0].children).filter((r) => r.kind === 'run');
+  const hyper = paragraphs(doc)[0].children.filter((i): i is Hyperlink => i.kind === 'hyperlink');
+  assert.deepEqual(hyper.map((h) => h.url), ['doc:Project Plan', 'doc:Project Plan#Budget', 'doc:Project Plan', 'doc:Diagram.png']);
+  assert.deepEqual(hyper.map((h) => runs(h.children).map((r) => r.content.map((c) => ('text' in c ? c.text : '')).join('')).join('')), ['Project Plan', 'Project Plan#Budget', 'the plan', 'Diagram.png']);
+  assert.ok(links.length > 0);
+  assert.equal(documentToMarkdown(doc).trim(), 'See [[Project Plan]], [[Project Plan#Budget]] and [[Project Plan|the plan]]. Also ![[Diagram.png]].');
+});
+
+test('[[ ]] that is not a link stays text', async () => {
+  for (const src of ['[[]]', '[[1]](https://example.com)', '[[#Heading]]', 'a [[unclosed', '`[[Code]]`']) {
+    const doc = await markdownToDocument(`${src}\n`);
+    assert.equal(paragraphs(doc)[0].children.some((i) => i.kind === 'hyperlink' && i.url?.startsWith('doc:')), false, src);
+  }
+});
+
+test('a Markdown link to a document is written as an Obsidian link when it can be', async () => {
+  assert.equal((await roundTrip('[plan](<doc:Project Plan>)\n')).trim(), '[[Project Plan|plan]]');
+  // Formatted link text can't go inside [[ ]], so that link is written as a Markdown link (which is still a link to the document).
+  assert.equal((await roundTrip('**[[Plan]]**\n')).trim(), '[**Plan**](doc:Plan)');
+});
+
+test('the link a paragraph showing its Markdown has at a character', () => {
+  const src = 'See [[Plan#Budget|the plan]], [site](https://example.com/a) and ![[pic.png]].';
+  assert.equal(linkInSource(src, 0), null);
+  assert.equal(linkInSource(src, 6), 'doc:Plan#Budget');
+  assert.equal(linkInSource(src, src.indexOf(']]')), 'doc:Plan#Budget');
+  assert.equal(linkInSource(src, src.indexOf(',')), null);
+  assert.equal(linkInSource(src, src.indexOf('site')), 'https://example.com/a');
+  assert.equal(linkInSource(src, src.indexOf('pic')), 'doc:pic.png');
+  assert.equal(linkInSource(src, src.length - 1), null);
 });

@@ -150,4 +150,9 @@ export const app: Partial<Messages> = {
   'app.storageAborted': '저장소 트랜잭션이 중단되었습니다.',
   'app.storageClearFailed': '브라우저 저장소를 지울 수 없습니다.',
   'app.createLinkedDocument': '“{title}”라는 문서가 없습니다. 만드시겠습니까?',
+  'app.linksUpdated': '이름을 바꾸거나 옮긴 항목으로 가는 링크를 업데이트했습니다.',
+  'app.linksSkipped': '이름을 바꾸거나 옮긴 항목으로 가는 일부 링크를 업데이트하지 못했습니다. 해당 문서를 다른 사람이 편집 중이거나 충돌 상태입니다.',
+  'app.linksUpdateFailed': '이름을 바꾸거나 옮긴 항목으로 가는 링크를 업데이트하지 못했습니다: {message}',
+  'app.createLinkedTitle': '문서를 찾을 수 없음',
+  'app.createLinkedAction': '만들기',
 };

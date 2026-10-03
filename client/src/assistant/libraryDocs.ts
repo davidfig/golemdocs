@@ -3,13 +3,19 @@
 // them and kept for the session, so a second look at one costs nothing. Fetching is passed in
 // (main.ts knows where a document's bytes are), so this has no network and no storage of its own.
 
-import { WordDocument, paragraphSegments } from '@golemdocs/docx';
 import { pictureForModel } from '../formats/imageForModel.ts';
 import { collectImages } from '../formats/images.ts';
-import { isWdoc, readWdoc } from '../formats/wdoc.ts';
+import { segmentsFromBytes, wordDocumentFromBytes } from '../formats/docBytes.ts';
 import type { SearchAnswer } from './api.ts';
 import type { ToolResult } from './conversation.ts';
 import { describeHits, describeList, readSegments, resolveDocument, scoreDocument, termsOf, MAX_SCANNED, type Candidate, type Hit, type Segment } from './otherDocs.ts';
+
+/** What a search of the documents' indexes found. */
+export interface IndexedAnswer {
+  hits: { key: string; name: string; score: number; paragraph?: number; text?: string }[];
+  /** Documents whose index isn't made yet. */
+  pending: number;
+}
 
 export interface StoredDocument extends Candidate {
   updatedAt: number;
@@ -26,18 +32,6 @@ export interface StoredDocument extends Candidate {
 const MAX_BYTES = 6_000_000;
 const CONCURRENCY = 4;
 
-/** The document in a stored document's bytes (a .docx, or this app's .wdoc around one); null when it has none (a PDF not turned into text yet). */
-export async function wordDocumentFromBytes(bytes: ArrayBuffer): Promise<WordDocument | null> {
-  const docx = isWdoc(bytes) ? (await readWdoc(new Uint8Array(bytes))).document : new Uint8Array(bytes);
-  return docx ? WordDocument.read(docx) : null;
-}
-
-/** The paragraphs in a stored document's bytes; null when it has no text to read (a PDF not turned into text yet). */
-export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] | null> {
-  const doc = await wordDocumentFromBytes(bytes);
-  return doc ? paragraphSegments(doc) : null;
-}
-
 /** Saved documents that are picture files (a picture is saved as a one-page document, named for its type). */
 const PICTURE_NAME = /\.(?:png|jpe?g|webp|gif)$/i;
 const MAX_LISTED_PICTURES = 50;
@@ -53,6 +47,8 @@ export class OtherDocuments {
   constructor(
     private readonly list: () => Promise<StoredDocument[]>,
     private readonly remote: (query: string) => Promise<SearchAnswer | null> = async () => null,
+    /** Searches the words and #tags in every document (the index the Search All Documents panel uses); null when it can't. */
+    private readonly indexed: (query: string) => Promise<IndexedAnswer | null> = async () => null,
   ) {}
 
   private async all(): Promise<StoredDocument[]> {
@@ -83,9 +79,19 @@ export class OtherDocuments {
   }
 
   async search(query: string): Promise<string> {
+    const tagged = /#[\p{L}\p{N}_/-]*\p{L}/u.test(query);
     const terms = termsOf(query);
-    if (!terms.length) return 'Give some words to search for.';
+    if (!terms.length && !tagged) return 'Give some words to search for.';
     const docs = await this.all();
+    // The words and tags in the documents, exactly: what the person's own search finds.
+    const exact = await this.indexed(query).catch(() => null);
+    if (exact) {
+      const known = new Set(docs.map((d) => d.id));
+      const hits: Hit[] = exact.hits.filter((h) => known.has(h.key)).map((h) => ({ id: h.key, name: h.name, score: h.score, ...(h.text !== undefined && h.paragraph !== undefined && { where: { paragraph: h.paragraph, text: h.text } }) }));
+      const waiting = exact.pending ? ` ${exact.pending} of the documents are still being prepared for searching, so search again in a moment if this misses one.` : '';
+      if (hits.length || tagged) return describeHits(query, hits, docs.length, docs.length) + waiting;
+    }
+    if (!terms.length) return 'Give some words to search for.';
     const answer = await this.remote(query);
     const byCloudId = new Map(docs.filter((d) => d.cloudId).map((d) => [d.cloudId!, d]));
     // What the server covers is taken from its answer; everything else is read here.

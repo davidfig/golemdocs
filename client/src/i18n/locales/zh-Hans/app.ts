@@ -144,6 +144,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': '当前以 {label} 编辑。另存为文件时会压缩，因此会丢失少许细节。',
 
   'app.createLinkedDocument': '没有名为“{title}”的文档。要创建吗？',
+  'app.linksUpdated': '已更新指向你重命名或移动内容的链接。',
+  'app.linksSkipped': '部分指向你重命名或移动内容的链接无法更新：这些文档正由他人编辑或存在冲突。',
+  'app.linksUpdateFailed': '无法更新指向你重命名或移动内容的链接：{message}',
+  'app.createLinkedTitle': '未找到文档',
+  'app.createLinkedAction': '创建',
 
   // Browser storage
   'app.storageOpenFailed': '无法打开浏览器存储。',

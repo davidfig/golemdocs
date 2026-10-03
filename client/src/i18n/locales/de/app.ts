@@ -154,6 +154,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': 'Wird jetzt als {label} bearbeitet. Beim Speichern als Datei wird komprimiert, dabei geht ein wenig Detail verloren.',
 
   'app.createLinkedDocument': 'Es gibt kein Dokument mit dem Namen „{title}“. Soll es erstellt werden?',
+  'app.linksUpdated': 'Die Links auf umbenannte oder verschobene Elemente wurden aktualisiert.',
+  'app.linksSkipped': 'Einige Links auf umbenannte oder verschobene Elemente konnten nicht aktualisiert werden: Die Dokumente werden gerade von anderen bearbeitet oder sind im Konflikt.',
+  'app.linksUpdateFailed': 'Die Links auf umbenannte oder verschobene Elemente konnten nicht aktualisiert werden: {message}',
+  'app.createLinkedTitle': 'Dokument nicht gefunden',
+  'app.createLinkedAction': 'Erstellen',
 
   // Browser storage
   'app.storageOpenFailed': 'Der Browserspeicher konnte nicht geöffnet werden.',

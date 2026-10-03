@@ -1,6 +1,6 @@
 // Builds the marketing home page in every language the app supports. `template.html` holds the page
 // with `{{key}}` slots; `locales/<id>.json` holds each language's text (English is the source).
-// Run `pnpm home` after editing either; it writes `public/home/index.html` (English) and
+// Run `pnpm build:home` after editing either; it writes `public/home/index.html` (English) and
 // `public/home/<id>/index.html`. See docs/localization.md ("The marketing site").
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -65,8 +65,8 @@ export function renderPage(id: string, template = readTemplate(), strings = read
   ].join('\n');
   const languages = Object.entries(LOCALES)
     .map(([other, info]) => {
-      const current = other === id ? ' aria-current="page"' : '';
-      return `          <li><a href="${pagePath(other)}" lang="${other}" hreflang="${other}"${current} onclick="try{localStorage.setItem('wm.locale','${other}')}catch(e){}">${text(info.name)}</a></li>`;
+      const current = other === id ? ' aria-current="true"' : '';
+      return `            <li><a href="${pagePath(other)}" lang="${other}" hreflang="${other}"${current} onclick="try{localStorage.setItem('wm.locale','${other}')}catch(e){}">${text(info.name)}</a></li>`;
     })
     .join('\n');
   const slots: Record<string, string> = {
@@ -76,6 +76,7 @@ export function renderPage(id: string, template = readTemplate(), strings = read
     home: pagePath(id),
     alternates,
     languages,
+    languageName: text(LOCALES[id].name),
     redirect: id === SOURCE ? redirectScript() : '',
   };
   const attrKeys = new Set(['meta.description', 'meta.ogDescription', 'meta.title', 'nav.main', 'footer.language']);

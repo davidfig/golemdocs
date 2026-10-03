@@ -1,6 +1,7 @@
 {
   "name": "@golemdocs/odt",
   "private": true,
+  "description": "OpenDocument Text (.odt) import and export (private workspace package, not on npm)",
   "version": "0.9.0",
   "type": "module",
   "exports": {

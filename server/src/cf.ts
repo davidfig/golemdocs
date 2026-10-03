@@ -25,6 +25,7 @@ export interface R2ObjectBody {
   size: number;
   httpEtag: string;
   httpMetadata?: { contentType?: string };
+  customMetadata?: Record<string, string>;
 }
 
 export interface R2Bucket {
@@ -35,7 +36,7 @@ export interface R2Bucket {
   put(
     key: string,
     value: ArrayBuffer | ArrayBufferView | ReadableStream | string,
-    options?: { httpMetadata?: { contentType?: string }; onlyIf?: { etagMatches?: string } },
+    options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string>; onlyIf?: { etagMatches?: string } },
   ): Promise<unknown>;
   delete(keys: string | string[]): Promise<void>;
 }
@@ -79,7 +80,7 @@ export interface DurableObjectNamespace {
 
 /** Workers AI. */
 export interface AiBinding {
-  run(model: string, inputs: unknown): Promise<unknown>;
+  run(model: string, inputs: unknown, options?: { extraHeaders?: Record<string, string> }): Promise<unknown>;
 }
 
 /** A Vectorize index (see search.ts). */

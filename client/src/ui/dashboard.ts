@@ -41,6 +41,7 @@ export interface DashboardHost {
   warm(entry: LibraryEntry): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
+  importFolder(folderId: string | null): void;
   /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved; imports several, or a folder, there. */
   dropFile(drop: Dropped, folderId: string | null): void;
   /** Deletes the document everywhere: from the account and from this browser. */
@@ -55,6 +56,8 @@ export interface DashboardHost {
   openShared(doc: CloudDocument): void;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
   closed(): void;
+  /** The keys of the documents (library entries, and shared documents by id) with the search's words or #tags in them. */
+  contentMatches?(query: string): Promise<ReadonlySet<string>>;
 }
 
 /** What is being dragged to a folder. */
@@ -66,6 +69,9 @@ type Listed = { folders: Folder[]; entries: LibraryEntry[] };
 export class Dashboard {
   private readonly root: HTMLElement;
   private readonly search: HTMLInputElement;
+  private contentKeys: ReadonlySet<string> = new Set();
+  private contentFor = '';
+  private contentTimer: number | undefined;
   private readonly notice: HTMLElement;
   private readonly grid: HTMLElement;
   private readonly sharedTitle: HTMLElement;
@@ -126,6 +132,7 @@ export class Dashboard {
     });
     // Stays up behind the file picker: hiding it would show the last open document.
     const importButton = action('import', t('panels.dashboard.import'), t('panels.dashboard.importLabel'), () => this.host.importFile(this.folderId));
+    const importFolderButton = action('import', t('panels.dashboard.importFolder'), t('panels.dashboard.importFolderLabel'), () => this.host.importFolder(this.folderId));
     this.newFolderButton = action('newFolder', t('panels.dashboard.newFolder'), t('panels.dashboard.newFolderLabel'), () => {
       // Not listed again afterwards: that would rebuild the name being typed.
       void this.run(async () => {
@@ -140,7 +147,7 @@ export class Dashboard {
     this.selectionCount = h('span', { class: 'wm-dash-selected', attrs: { role: 'status' } });
     this.selectionBar = h('div', { class: 'wm-dash-selection' }, this.selectionCount, moveSelected, deleteSelected, clearSelection);
     this.selectionBar.hidden = true;
-    const actions = h('div', { class: 'wm-dash-actions' }, blank, importButton, this.newFolderButton, this.selectionBar);
+    const actions = h('div', { class: 'wm-dash-actions' }, blank, importButton, importFolderButton, this.newFolderButton, this.selectionBar);
     const size = this.sizeSlider();
     this.root = h(
       'section',
@@ -153,7 +160,10 @@ export class Dashboard {
     this.takeFiles(this.root);
     parent.append(this.root);
 
-    this.search.addEventListener('input', () => this.render());
+    this.search.addEventListener('input', () => {
+      this.render();
+      this.searchContent();
+    });
     // On the document, so Escape closes it whatever has the focus; the folder name field and the
     // "move to" list handle (and stop) their own Escape first.
     document.addEventListener('keydown', (e) => {
@@ -270,6 +280,27 @@ export class Dashboard {
     return this.library.shared;
   }
 
+  /** Asks the host which documents have the typed words or tags in them, and shows those too (after the typing stops). */
+  private searchContent(): void {
+    window.clearTimeout(this.contentTimer);
+    const query = this.search.value.trim();
+    if (!query || !this.host.contentMatches) {
+      this.contentKeys = new Set();
+      return;
+    }
+    this.contentTimer = window.setTimeout(() => {
+      void this.host.contentMatches!(query).then(
+        (keys) => {
+          if (this.search.value.trim() !== query) return;
+          this.contentKeys = new Set(keys);
+          this.contentFor = query;
+          if (this.visible) this.render();
+        },
+        () => {},
+      );
+    }, 200);
+  }
+
   // --- Rendering ---------------------------------------------------------------------------
 
   private render(): void {
@@ -282,7 +313,9 @@ export class Dashboard {
     // Searching looks in every folder at once; otherwise this folder's own folders and documents.
     const searching = this.search.value.trim() !== '';
     if (this.folderId !== null && !this.folders.some((f) => f.id === this.folderId)) this.folderId = null;
-    const shown = searching ? this.entries.filter((e) => matchesSearch(e, this.search.value)) : itemsIn(this.entries, this.folders, this.folderId);
+    // What is in the documents is found a moment after the names are: `contentKeys` is for the text it was asked for.
+    const inContent = (key: string) => this.contentFor === this.search.value.trim() && this.contentKeys.has(key);
+    const shown = searching ? this.entries.filter((e) => matchesSearch(e, this.search.value) || inContent(e.key)) : itemsIn(this.entries, this.folders, this.folderId);
     const shownFolders = searching ? this.folders.filter((f) => matchesSearch(f, this.search.value)) : childFolders(this.folders, this.folderId);
     this.renderCrumbs(searching);
 
@@ -305,7 +338,7 @@ export class Dashboard {
       else renameField.select();
     }
 
-    const sharedShown = this.shared.filter((d) => matchesSearch(d, this.search.value));
+    const sharedShown = this.shared.filter((d) => matchesSearch(d, this.search.value) || inContent(d.id));
     this.sharedTitle.hidden = this.sharedGrid.hidden = sharedShown.length === 0;
     this.sharedGrid.replaceChildren(...sharedShown.map((d) => this.sharedCard(d)));
 
@@ -373,7 +406,7 @@ export class Dashboard {
     return card;
   }
 
-  /** A folder: open it, rename it, move it, or delete it (what is in it moves up). */
+  /** A folder: open it, rename it, move it, or delete it (with what is in it). */
   private folderCard(folder: Folder): HTMLElement {
     // The folder's first few documents show through it as small pages.
     const minis = itemsIn(this.entries, this.folders, folder.id)

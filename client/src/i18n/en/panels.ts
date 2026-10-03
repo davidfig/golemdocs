@@ -18,6 +18,8 @@ export const panels = {
   'panels.files.label': 'Files',
   'panels.files.empty': 'No documents yet.',
   'panels.files.close': 'Close',
+  'panels.files.dismissTip': 'Dismiss tip',
+  'panels.files.dropTip': 'Drop files or folders here from your computer to import them. A folder or ZIP keeps its folders.',
   'panels.files.collapseAll': 'Collapse all',
   'panels.files.openItem': 'Open',
   'panels.files.openFolder': 'Open folder',
@@ -55,6 +57,21 @@ export const panels = {
   'panels.comments.replies.one': '{count} reply',
   'panels.comments.replies': '{count} replies',
 
+  // Search all documents (Edit > Search All Documents)
+  'panels.search.title': 'Search all documents',
+  'panels.search.placeholder': 'Search words or #tags in every document',
+  'panels.search.preparing': 'Getting your documents…',
+  'panels.search.indexing': 'Indexing your documents: {done} of {total}',
+  'panels.search.pending.one': '{count} document isn’t searchable yet. Results fill in as it is ready.',
+  'panels.search.pending': '{count} documents aren’t searchable yet. Results fill in as they are ready.',
+  'panels.search.found.one': '{count} document',
+  'panels.search.found': '{count} documents',
+  'panels.search.none': 'No document matches.',
+  'panels.search.hint': 'Type words to find, or a #tag to find the documents tagged with it. Write #something in a document to tag it.',
+  'panels.search.tags': 'Tags',
+  'panels.search.tagDocuments.one': 'In {count} document',
+  'panels.search.tagDocuments': 'In {count} documents',
+
   // Dashboard
   'panels.dashboard.title': 'Documents',
   'panels.dashboard.search': 'Search documents',
@@ -64,7 +81,9 @@ export const panels = {
   'panels.dashboard.newBlankLabel': 'New document',
   'panels.dashboard.newBlank': 'New document',
   'panels.dashboard.importLabel': 'Import a file from this computer',
+  'panels.dashboard.importFolderLabel': 'Import a folder from this computer',
   'panels.dashboard.import': 'Import file',
+  'panels.dashboard.importFolder': 'Import folder',
   'panels.dashboard.noMatches': 'No documents match your search.',
   'panels.dashboard.empty': 'Documents you save will show up here.',
   'panels.dashboard.from': 'From {name}',
@@ -178,9 +197,9 @@ export const panels = {
   'panels.analytics.formerlyPaid': 'Used to pay',
   'panels.analytics.payingActive30': 'Paying, signed in last 30 days',
   'panels.analytics.payingCol': 'Paying now',
-} as const;
   'panels.ruler.firstLine': 'First-line indent',
   'panels.ruler.hanging': 'Hanging indent',
   'panels.ruler.left': 'Left indent',
   'panels.ruler.right': 'Right indent',
   'panels.ruler.margin': 'Drag to change the margin',
+} as const;

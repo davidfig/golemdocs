@@ -54,6 +54,7 @@ export type DialogName =
   | 'find'
   | 'replace'
   | 'goTo'
+  | 'searchAll'
   | 'pasteSpecial'
   | 'spelling'
   | 'wordCount'
@@ -69,6 +70,8 @@ export type Action =
   | { kind: 'open' }
   /** `folderId`: where the file goes (null: the top level); a ZIP's top level goes there. */
   | { kind: 'import'; folderId?: string | null }
+  /** Pick a folder from the computer and import its documents like a ZIP's, in the same folders. */
+  | { kind: 'importFolder'; folderId?: string | null }
   | { kind: 'openSample'; id: string }
   /** One of the user's documents (File ▸ Open Recent); `id` is its source, `local:…` or `cloud:…`. */
   | { kind: 'openSaved'; id: string }

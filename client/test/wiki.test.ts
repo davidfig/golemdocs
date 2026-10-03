@@ -8,7 +8,7 @@ import { parseMediaWiki } from '../src/formats/mediawiki.ts';
 import { documentToOutline, outlineToDocument } from '../src/formats/outline.ts';
 import { parseTextile } from '../src/formats/textile.ts';
 import type { Node, Span } from '../src/formats/outline.ts';
-import { docAddress, findByTitle, normalizeTitle, parseDocAddress, titleOfName } from '../src/formats/wikiLinks.ts';
+import { docAddress, findByTitle, splitLink, normalizeTitle, parseDocAddress, titleOfName } from '../src/formats/wikiLinks.ts';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 const str = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -34,6 +34,44 @@ test('a title finds the stored document, ignoring case, underscores and the exte
   assert.equal(findByTitle('budget', docs)?.name, 'Budget.xlsx');
   assert.equal(findByTitle('Project Plan.md', docs)?.name, 'project plan.md');
   assert.equal(findByTitle('Missing', docs), undefined);
+});
+
+test('a link can name folders, as in Obsidian', () => {
+  const docs = [
+    { name: 'Plan.md', path: ['Work'] },
+    { name: 'Plan.md', path: ['Home', 'Notes'] },
+    { name: 'Plan.md', path: [] },
+    { name: 'Idea.md', path: ['Home', 'Notes'] },
+  ];
+  const places = (from: string[]) => ({ folderNames: (d: (typeof docs)[number]) => d.path, from });
+  const at = (title: string, from: string[] = []) => {
+    const d = findByTitle(title, docs, places(from));
+    return d && [...d.path, d.name].join('/');
+  };
+  assert.equal(at('Plan'), 'Plan.md', 'nearest the top when none is beside the link');
+  assert.equal(at('Plan', ['Work']), 'Work/Plan.md', 'the one beside the link first');
+  assert.equal(at('Notes/Plan'), 'Home/Notes/Plan.md', 'a path ending in the folders');
+  assert.equal(at('home/notes/plan'), 'Home/Notes/Plan.md');
+  assert.equal(at('Home/Plan'), undefined, 'folders must be directly above it');
+  assert.equal(at('/Work/Plan'), 'Work/Plan.md', 'from the top level');
+  assert.equal(at('/Plan'), 'Plan.md');
+  assert.equal(at('/Notes/Plan'), undefined);
+  assert.equal(at('./Idea', ['Home', 'Notes']), 'Home/Notes/Idea.md');
+  assert.equal(at('../Work/Plan', ['Home']), 'Work/Plan.md');
+  assert.equal(at('../Notes/Idea', ['Home', 'Notes']), 'Home/Notes/Idea.md');
+  assert.equal(at('../Idea', ['Home', 'Notes']), undefined);
+  assert.equal(at('./Notes/Idea', ['Home']), 'Home/Notes/Idea.md');
+  assert.equal(at('../../Work/Plan', ['Home', 'Notes']), 'Work/Plan.md');
+});
+
+test('a link title splits into the folders and the name, for making what is missing', () => {
+  assert.deepEqual(splitLink('Plan'), { name: 'Plan', folders: [], exact: false });
+  assert.deepEqual(splitLink('Notes/Sub/Plan'), { name: 'Plan', folders: ['Notes', 'Sub'], exact: false });
+  assert.deepEqual(splitLink('/Notes/Plan'), { name: 'Plan', folders: ['Notes'], exact: true });
+  assert.deepEqual(splitLink('./Plan', ['A', 'B']), { name: 'Plan', folders: ['A', 'B'], exact: true });
+  assert.deepEqual(splitLink('../New/Plan', ['A', 'B']), { name: 'Plan', folders: ['A', 'New'], exact: true });
+  assert.deepEqual(splitLink('Notes//Plan').folders, ['Notes']);
+  assert.equal(splitLink('Notes/').name, '');
 });
 
 test('MediaWiki: reads a typical page', () => {

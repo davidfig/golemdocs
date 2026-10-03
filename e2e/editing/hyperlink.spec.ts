@@ -290,6 +290,31 @@ test.describe('editing and removing a link', () => {
     await tab.close();
   });
 
+  test('following a link to a document that does not exist asks, in the app\'s own dialog, whether to create it', async ({ app }) => {
+    await app.blank();
+    await app.type('go ');
+    await app.press(`${MOD}+k`);
+    const box = link(app.page);
+    await box.getByRole('textbox', { name: 'Text to display' }).fill('there');
+    await box.getByRole('textbox', { name: 'Address' }).fill('[[Missing Note]]');
+    await box.getByRole('button', { name: 'OK' }).click();
+    await expect(box).toHaveCount(0);
+    await expect.poll(() => app.text()).toBe('go there');
+    const gaps = await lineGaps(app, 'go there'.length);
+    const inside = { x: (gaps[3].x + gaps[7].x) / 2, y: gaps[0].y };
+    // No browser dialog: one would stop the test here.
+    app.page.on('dialog', () => expect.soft(false, 'a browser dialog opened').toBe(true));
+    await clickAt(app, inside, { modifiers: [IS_MAC ? 'Meta' : 'Control'] });
+    const ask = app.page.locator('dialog.wm-dialog', { hasText: 'Document not found' });
+    await expect(ask).toContainText('There is no document called “Missing Note”. Create it?');
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+    await expect(ask).toHaveCount(0);
+    await expect.poll(() => app.text()).toBe('go there');
+    await clickAt(app, inside, { modifiers: [IS_MAC ? 'Meta' : 'Control'] });
+    await app.page.locator('dialog.wm-dialog', { hasText: 'Document not found' }).getByRole('button', { name: 'Create' }).click();
+    await expect.poll(() => app.text()).toBe('');
+  });
+
   void caretClient;
   void selectBy;
 });

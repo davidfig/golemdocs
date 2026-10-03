@@ -148,6 +148,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': '{label} として編集中です。ファイルとして保存するときに圧縮されるため、細部がわずかに失われます。',
 
   'app.createLinkedDocument': '「{title}」という文書はありません。作成しますか?',
+  'app.linksUpdated': '名前を変更または移動したものへのリンクを更新しました。',
+  'app.linksSkipped': '名前を変更または移動したものへの一部のリンクを更新できませんでした。それらの文書は他の人が編集中か、競合しています。',
+  'app.linksUpdateFailed': '名前を変更または移動したものへのリンクを更新できませんでした：{message}',
+  'app.createLinkedTitle': '文書が見つかりません',
+  'app.createLinkedAction': '作成',
 
   // Browser storage
   'app.storageOpenFailed': 'ブラウザーのストレージを開けませんでした。',

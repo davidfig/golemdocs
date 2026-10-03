@@ -357,3 +357,23 @@ test('a floating text box is drawn at its place on the page, apart from the text
   }
   assert.equal(boxed, 5);
 });
+
+test('a tag (a link to tag:name) is drawn in the tag colour without the link underline, whichever way it was made', skip, async () => {
+  const link = { underline: { val: 'single' }, color: { val: '0563C1' } };
+  const first = async (children: Paragraph['children']) => {
+    const doc = await WordDocument.create();
+    doc.body = [paragraph(children)];
+    const page = (await layoutDocument(doc, fonts!)).pages[0];
+    const list = [...page.glyphs.values()][0];
+    return { color: list.color(0), underlines: page.foreground.count };
+  };
+  const hyperlink = (url: string) => ({ kind: 'hyperlink' as const, url, children: [run('plan', link)], attrs: {} });
+  const web = await first([hyperlink('https://example.com/')]);
+  const tag = await first([hyperlink('tag:plan')]);
+  const plainTag = await first([run('plan', { color: { val: '0F766E' } })]);
+  assert.notEqual(tag.color, web.color);
+  assert.equal(tag.color, plainTag.color, 'the tag colour');
+  assert.equal(tag.underlines, 0, 'no underline');
+  assert.equal(plainTag.underlines, 0);
+  assert.ok(web.underlines > 0, 'a web link is underlined');
+});

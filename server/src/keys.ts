@@ -9,3 +9,6 @@ export const docxKey = (ownerId: string, docId: string): string => `${ownerId}/$
 
 /** The picture of its first page. */
 export const thumbKey = (ownerId: string, docId: string): string => `${ownerId}/${docId}.thumb`;
+
+/** Its full-text search index (see docIndex.ts). */
+export const indexKey = (ownerId: string, docId: string): string => `${ownerId}/${docId}.idx`;

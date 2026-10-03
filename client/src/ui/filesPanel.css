@@ -138,3 +138,25 @@
 .wm-files-tree.wm-drop {
   background: var(--wm-hot);
 }
+
+.wm-files-tip {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 6px 4px 6px 8px;
+  border: 1px solid var(--wm-border);
+  border-radius: 4px;
+  color: var(--wm-text);
+  font-size: 12px;
+}
+
+.wm-files-tip[hidden] {
+  display: none;
+}
+
+.wm-files-tip p {
+  flex: 1;
+  margin: 0;
+}

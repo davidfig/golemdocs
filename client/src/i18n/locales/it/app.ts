@@ -156,4 +156,9 @@ export const app: Partial<Messages> = {
   'app.storageAborted': 'La transazione di archiviazione è stata interrotta.',
   'app.storageClearFailed': 'Impossibile cancellare l’archivio del browser.',
   'app.createLinkedDocument': 'Non esiste alcun documento chiamato “{title}”. Crearlo?',
+  'app.linksUpdated': 'Collegamenti aggiornati a ciò che hai rinominato o spostato.',
+  'app.linksSkipped': 'Alcuni collegamenti a ciò che hai rinominato o spostato non sono stati aggiornati: quei documenti sono in modifica da altri o in conflitto.',
+  'app.linksUpdateFailed': 'Impossibile aggiornare i collegamenti a ciò che hai rinominato o spostato: {message}',
+  'app.createLinkedTitle': 'Documento non trovato',
+  'app.createLinkedAction': 'Crea',
 };

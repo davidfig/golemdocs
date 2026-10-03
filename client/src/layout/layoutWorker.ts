@@ -70,12 +70,15 @@ import { FormatReader } from './selectionFormat.ts';
 import { runAgentTool } from './agentTools.ts';
 import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
-import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, type LineContext } from './autoformat.ts';
+import { linkInSource } from '../formats/wikiLinks.ts';
+import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
 import { FORMATS, formatAllows } from '../ui/formats.ts';
 import type { Action, DocumentKind, Mark } from '../ui/actions.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText, tableShape } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
+import { resolveEmbeds, type Embedded } from '../formats/embeds.ts';
+import { sourceFromFile } from '../formats/source.ts';
 import { APP_WORDS } from '../spelling/appWords.ts';
 import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../spelling/dictionary.ts';
 import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLanguage, type Unchecked } from '../spelling/languages.ts';
@@ -115,6 +118,51 @@ async function fetchOk(url: string): Promise<Response> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   return response;
+}
+
+// --- Embeds ----------------------------------------------------------------------------------------
+// A Markdown document that embeds a picture or a note (`![[map.png]]`, `![[Note]]`) shows them in place. What they are is stored
+// on the page, not here, so each is asked for by title (the `embed` message) and read as the stored document it is.
+
+const embedAnswers = new Map<number, (file: { name: string; bytes: ArrayBuffer } | null) => void>();
+let nextEmbed = 1;
+/** How long an embedded document may take to come (one in the cloud is downloaded), and a document's embeds all together. */
+const EMBED_ASK_MS = 8000;
+const EMBEDS_MS = 15000;
+
+function askEmbed(title: string): Promise<{ name: string; bytes: ArrayBuffer } | null> {
+  const request = nextEmbed++;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => finish(null), EMBED_ASK_MS);
+    const finish = (file: { name: string; bytes: ArrayBuffer } | null): void => {
+      clearTimeout(timer);
+      embedAnswers.delete(request);
+      resolve(file);
+    };
+    embedAnswers.set(request, finish);
+    post({ type: 'embed', request, title });
+  });
+}
+
+/** The stored document a title names: a picture's bytes, or any other document read into the model. Null if there is none (or it can't be read). */
+async function embedded(title: string, fonts: FontSet): Promise<Embedded | null> {
+  const file = await askEmbed(title);
+  if (!file) return null;
+  const bytes = new Uint8Array(file.bytes);
+  if (sniffImage(bytes)) return { kind: 'image', bytes };
+  const source = sourceFromFile(file.name, file.bytes);
+  if (!source || source.kind === 'pdf' || source.kind === 'image') return null;
+  const { document } = await load(source, fonts);
+  return document ? { kind: 'document', document } : null;
+}
+
+/** Puts the pictures and notes a Markdown document embeds in place. Whatever isn't found in time stays a link. */
+async function showEmbeds(document: WordDocument, fonts: FontSet): Promise<void> {
+  try {
+    await Promise.race([resolveEmbeds(document, (title) => embedded(title, fonts)), new Promise<void>((resolve) => setTimeout(resolve, EMBEDS_MS))]);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 /** A document as read from its source: the universal document (see ../formats/wdoc.ts). */
@@ -1366,7 +1414,13 @@ class OpenDocument {
     if (!this.editor || !page || this.closed || this.annotator) return { url: null, checkbox: false };
     const profile = FORMATS[this.format as DocumentKind];
     const checkbox = !this.readOnly && !!profile?.editable && profile.lists && !!this.editor.checkboxUnder(page, x, y);
-    return { url: this.editor.linkUnder(page, x, y), checkbox };
+    let url = this.editor.linkUnder(page, x, y);
+    // The paragraph showing its Markdown holds the links it shows as characters.
+    if (url === null && this.raw) {
+      const under = this.editor.charUnder(page, x, y);
+      if (under && this.editor.paragraphId(under.paragraph) === this.raw.id) url = linkInSource(paragraphText(under.paragraph), under.offset);
+    }
+    return { url, checkbox };
   }
 
   /** Right click: selects the mistake under the point and reports it for the menu (nothing, if there is none). */
@@ -1525,6 +1579,8 @@ class OpenDocument {
         command = { ...wire, page };
       } else command = wire;
       const rule = command.kind === 'insertParagraph' ? this.lineShortcut(editor) : command.kind === 'pointer' ? this.checkboxClick(editor, command) : null;
+      // A #tag at the end of the line is finished by Enter too.
+      if (!rule && command.kind === 'insertParagraph') this.tagBeforeEnter(editor);
       if (rule) {
         edited = true;
         after = rule;
@@ -1762,9 +1818,20 @@ class OpenDocument {
     const end = before.length;
     const allows = (actions: Action[]) => actions.every((a) => formatAllows(profile, a));
     const select = (from: number, to: number) => editor.apply({ kind: 'select', paragraph: index, from, to });
+    // A #tag is also finished by the punctuation after it (not a full stop: "#v1.2" goes on).
+    if (TAG_ENDINGS.includes(typed) && !code) {
+      const link = tagShortcut(before.slice(0, -1));
+      if (link && allows([{ kind: 'insertLink' } as Action])) {
+        select(link.start, end - 1);
+        editor.apply({ kind: 'setLink', url: link.url, text: link.text });
+        select(link.start + link.text.length + 1, link.start + link.text.length + 1);
+        this.converted = { steps: 1, paragraph: index, offset: end };
+      }
+      return;
+    }
     if (typed === ' ') {
-      // A link is made by the space after it: the text typed next then goes after the link, not into it.
-      const link = code ? null : linkShortcut(before.slice(0, -1));
+      // A link (or a #tag) is made by the space after it: the text typed next then goes after the link, not into it.
+      const link = code ? null : linkShortcut(before.slice(0, -1)) ?? wikiLinkShortcut(before.slice(0, -1)) ?? tagShortcut(before.slice(0, -1));
       if (link && allows([{ kind: 'insertLink' } as Action])) {
         select(link.start, end - 1);
         editor.apply({ kind: 'setLink', url: link.url, text: link.text });
@@ -1811,6 +1878,20 @@ class OpenDocument {
     return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]);
   }
 
+  /** Enter right after a #tag (not yet a link) makes it one, then the paragraph is split as usual. */
+  private tagBeforeEnter(editor: Editor): void {
+    const context = this.shortcutContext(editor);
+    if (!context || context.code) return;
+    const link = tagShortcut(context.before);
+    if (!link || !formatAllows(context.profile, { kind: 'insertLink' } as Action)) return;
+    const [at] = editor.ordered();
+    if (editor.linkAt(at.paragraph, link.start + 1, false)) return; // already a link
+    const end = context.before.length;
+    editor.apply({ kind: 'select', paragraph: context.index, from: link.start, to: end });
+    editor.apply({ kind: 'setLink', url: link.url, text: link.text });
+    editor.apply({ kind: 'select', paragraph: context.index, from: end, to: end });
+  }
+
   /** Enter on a line of "---" or "```": a horizontal rule or a code block instead of a new paragraph. */
   private lineShortcut(editor: Editor): Promise<void> | null {
     const context = this.shortcutContext(editor);
@@ -1832,6 +1913,9 @@ class OpenDocument {
     });
   }
 }
+
+/** What finishes a #tag besides a space. */
+const TAG_ENDINGS = ',;:!?)]}';
 
 /** The change that takes a mark off what is typed next. */
 function unmark(mark: Mark): RunFormat {
@@ -1963,6 +2047,11 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     const t0 = performance.now();
     const loaded = await load(source, fonts);
     if (entry.closed) return;
+    // Not in a room: the others would have no bytes for a picture.
+    if (loaded.document && loaded.lens === 'md' && !requestedRoom) {
+      await showEmbeds(loaded.document, fonts);
+      if (entry.closed) return;
+    }
     entry.format = loaded.lens;
     entry.origin = loaded.origin;
     entry.extensions = loaded.extensions;
@@ -2275,6 +2364,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'media':
       void media(message.doc, message.request, message.part);
+      break;
+    case 'embedFile':
+      embedAnswers.get(message.request)?.(message.file);
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, checkbox: false }) });

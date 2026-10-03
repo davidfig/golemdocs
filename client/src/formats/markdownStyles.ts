@@ -114,6 +114,14 @@ export function styleFor(id: string): Style | undefined {
         runProperties: { color: { val: '0563C1', themeColor: 'hyperlink' }, underline: { val: 'single' } },
         attrs: {},
       };
+    case 'EmbedLink':
+      return {
+        type: 'character',
+        id,
+        name: 'Embed Link',
+        basedOn: 'Hyperlink',
+        attrs: {},
+      };
     case 'TableGrid':
       return {
         type: 'table',

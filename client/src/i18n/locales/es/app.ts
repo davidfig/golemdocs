@@ -150,6 +150,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': 'Ahora se edita como {label}. Se comprime al guardarla como archivo, por lo que se pierde algo de detalle.',
 
   'app.createLinkedDocument': 'No hay ningún documento llamado «{title}». ¿Crearlo?',
+  'app.linksUpdated': 'Se actualizaron los enlaces a lo que renombraste o moviste.',
+  'app.linksSkipped': 'No se pudieron actualizar algunos enlaces a lo que renombraste o moviste: otras personas están editando esos documentos o tienen un conflicto.',
+  'app.linksUpdateFailed': 'No se pudieron actualizar los enlaces a lo que renombraste o moviste: {message}',
+  'app.createLinkedTitle': 'Documento no encontrado',
+  'app.createLinkedAction': 'Crear',
 
   // Browser storage
   'app.storageOpenFailed': 'No se pudo abrir el almacenamiento del navegador.',

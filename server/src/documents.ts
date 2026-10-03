@@ -3,7 +3,8 @@
 // is a row in its owner's own database, its bytes and thumbnail are objects in R2 (see keys.ts), and
 // who else may open it is kept in the directory (see sharing.ts).
 
-import { DOCX, docxKey, thumbKey } from './keys.ts';
+import { documentIndex } from './docIndex.ts';
+import { DOCX, docxKey, indexKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkFolder, type FolderRow } from './folders.ts';
@@ -110,7 +111,7 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
       }
     }
     // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
-    const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id)]);
+    const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
   };
   if (defer) defer(cleanup().catch((error) => console.error('delete cleanup failed', error)));
@@ -232,7 +233,7 @@ export interface DocumentRoute {
   collection: 'documents' | 'shared';
   /** The document, or `batch` for the batch upload; undefined for the collection itself. */
   id?: string;
-  sub?: 'thumbnail' | 'shares';
+  sub?: 'thumbnail' | 'index' | 'shares';
   /** Whose share a DELETE /api/documents/:id/shares/:userId removes. */
   granteeId?: string;
 }
@@ -485,6 +486,13 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       return new Response(null, { status: 204 });
     }
     throw new HttpError(405, 'method not allowed');
+  }
+
+  // GET /api/documents/:id/index: the search index, made on demand (docIndex.ts). The row is read
+  // afresh (not from the cached catalogue) because its `updatedAt` is what the index is stamped with.
+  if (sub === 'index') {
+    if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+    return documentIndex(env, ownerId, row);
   }
 
   // GET/PUT /api/documents/:id/thumbnail: a small image of the first page, made by the client.

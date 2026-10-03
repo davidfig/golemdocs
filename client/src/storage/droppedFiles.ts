@@ -29,6 +29,12 @@ export function takeDropped(data: DataTransfer | null): Dropped {
   };
 }
 
+/** A folder picked with the file picker (`webkitdirectory`): its files, each with its path from the picked folder's parent. */
+export function pickedFolder(files: FileList): Extract<Dropped, { kind: 'import' }> {
+  const list = [...files].map((file) => ({ path: file.webkitRelativePath || file.name, file: () => Promise.resolve(file) }));
+  return { kind: 'import', name: list[0]?.path.split('/')[0] ?? '', read: () => readFiles(list) };
+}
+
 /** The dropped things' names, for the progress card: the first few. */
 function names(all: string[]): string {
   return all.length <= 3 ? all.join(', ') : `${all.slice(0, 3).join(', ')}…`;

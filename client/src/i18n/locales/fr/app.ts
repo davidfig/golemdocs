@@ -150,6 +150,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': 'Modification au format {label}. L’image est compressée lors de l’enregistrement en fichier, ce qui fait perdre un peu de détail.',
 
   'app.createLinkedDocument': 'Il n’existe aucun document nommé « {title} ». Le créer ?',
+  'app.linksUpdated': 'Les liens vers ce que vous avez renommé ou déplacé ont été mis à jour.',
+  'app.linksSkipped': 'Certains liens vers ce que vous avez renommé ou déplacé n’ont pas pu être mis à jour : ces documents sont en cours de modification par d’autres personnes ou en conflit.',
+  'app.linksUpdateFailed': 'Impossible de mettre à jour les liens vers ce que vous avez renommé ou déplacé : {message}',
+  'app.createLinkedTitle': 'Document introuvable',
+  'app.createLinkedAction': 'Créer',
 
   // Browser storage
   'app.storageOpenFailed': 'Impossible d’ouvrir le stockage du navigateur.',

@@ -79,6 +79,15 @@ function equationOf(inline: Inline & { kind: 'raw' }): MathEquation {
   return equation;
 }
 
+/** A tag (a link to `tag:name`, see @golemdocs/docx search/tags.ts) is drawn in its own colour and without the link's underline, whichever way it was made. */
+const TAG_COLOR = '0F766E';
+const tagged = new WeakMap<RunProperties, RunProperties>();
+function asTag(direct: RunProperties): RunProperties {
+  let found = tagged.get(direct);
+  if (!found) tagged.set(direct, (found = { ...direct, color: { val: TAG_COLOR }, underline: { val: 'none' } }));
+  return found;
+}
+
 export class TextCollector {
   private readonly chunks: string[] = [];
   private readonly chunkStyles: number[] = [];
@@ -93,6 +102,8 @@ export class TextCollector {
   readonly spans: SourceSpan[] = [];
   /** Model offset of the next content item (see @golemdocs/docx edit/text.ts). */
   private model = 0;
+  /** The runs being collected are the text of a tag. */
+  private inTag = false;
 
   constructor(
     private readonly ctx: LayoutContext,
@@ -101,7 +112,7 @@ export class TextCollector {
 
   /** Index of a run's style, from its direct formatting (resolved through styles, cached). */
   style(direct: RunProperties): number {
-    return this.indexOf(cachedRunStyle(this.ctx, this.paragraphStyle, direct));
+    return this.indexOf(cachedRunStyle(this.ctx, this.paragraphStyle, this.inTag ? asTag(direct) : direct));
   }
 
   /** Index of a style from already-resolved properties (paragraph mark, list label). */
@@ -157,9 +168,13 @@ export class TextCollector {
         case 'run':
           this.run(inline);
           break;
-        case 'hyperlink':
+        case 'hyperlink': {
+          const was = this.inTag;
+          this.inTag = /^tag:/i.test(inline.url ?? '');
           this.inlines(inline.children);
+          this.inTag = was;
           break;
+        }
         case 'wrapper': {
           const name = inline.shell.name;
           // Tracked deletions and moved-away text aren't shown (final view).

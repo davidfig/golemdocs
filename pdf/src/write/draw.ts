@@ -271,6 +271,29 @@ export class PageDrawing {
     return this.op(evenOdd ? 'W*' : 'W').op('n');
   }
 
+  /**
+   * Fills the current path with a gradient (and ends the path). `coords` is a linear gradient's line
+   * [x0, y0, x1, y1] or a radial one's circles [x0, y0, r0, x1, y1, r1], in the current user space
+   * (with this drawing's y convention); the colours of the stops are RGB, 0..1, and the ends are
+   * extended beyond the first and last stop. It clips to the path, so draw it between `save()` and `restore()`.
+   */
+  gradient(spec: { type: 'linear' | 'radial'; coords: number[]; stops: { offset: number; color: [number, number, number] }[] }, evenOdd = false): this {
+    const stops = [...spec.stops].sort((a, b) => a.offset - b.offset);
+    if (stops.length < 2) return this.fill(evenOdd);
+    const between = (a: { color: number[] }, b: { color: number[] }) => new PdfDict({ FunctionType: 2, Domain: [0, 1], C0: a.color, C1: b.color, N: 1 });
+    const pieces = stops.slice(1).map((s, i) => between(stops[i], s));
+    const fn =
+      pieces.length === 1
+        ? pieces[0]
+        : new PdfDict({ FunctionType: 3, Domain: [0, 1], Functions: pieces, Bounds: stops.slice(1, -1).map((s) => s.offset), Encode: pieces.flatMap(() => [0, 1]) });
+    const c = spec.coords;
+    const coords = spec.type === 'linear' ? [c[0], this.y(c[1]), c[2], this.y(c[3])] : [c[0], this.y(c[1]), c[2], c[3], this.y(c[4]), c[5]];
+    const shading = new PdfDict({ ShadingType: spec.type === 'linear' ? 2 : 3, ColorSpace: N('DeviceRGB'), Coords: coords, Function: fn, Extend: [true, true] });
+    const name = this.page.addResource('Shading', shading, 'Sh');
+    // The caller has saved the state (q) before building the path, and restores it after.
+    return this.clip(evenOdd).op('sh', N(name));
+  }
+
   // --- shapes --------------------------------------------------------------------------------
 
   /** A straight line. */

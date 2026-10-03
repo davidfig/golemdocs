@@ -1,13 +1,15 @@
 // A scene as a PDF page that stays vector: paths, curves, strokes, dashes, clips and opacity are
 // PDF's own, so the drawing is as sharp as the file it came from. Text is set in the PDF standard
 // fonts (the family's closest of Times, Courier and Helvetica, characters they lack become "?"),
-// and a gradient is a flat colour (its stops averaged): PDF shadings are not written yet.
+// and a gradient is a PDF shading (linear or radial, any number of stops).
 
 import { PdfDocument } from '@golemdocs/pdf';
 import type { PageDrawing, PdfFont, PdfImage } from '@golemdocs/pdf';
 import { readClip } from './clip.ts';
 import { fontSizeOf, findNode, localBounds, outline, viewBoxMatrix } from './geometry.ts';
 import { averageColor, readGradient } from './gradients.ts';
+import { gradientInLocal } from './gradientEdit.ts';
+import { apply } from './matrix.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style } from './model.ts';
 import { inherited, parseColor, parseLength, parseNumbers, urlReference } from './style.ts';
 import type { Rgba } from './style.ts';
@@ -48,6 +50,26 @@ function colorOf(out: Out, value: string | undefined, chain: readonly Style[]): 
   return value === 'currentColor' ? parseColor(inherited(chain, 'color') ?? 'black') : parseColor(value);
 }
 
+/** A gradient fill as what the PDF writer takes, in the shape's own coordinates; null when the fill is not one the PDF can do (or is not a gradient). */
+function gradientSpec(out: Out, value: string, node: SceneNode): { type: 'linear' | 'radial'; coords: number[]; stops: { offset: number; color: [number, number, number] }[] } | null {
+  const id = urlReference(value);
+  const read = id ? readGradient(out.scene, id) : null;
+  const box = localBounds(node, out.scene);
+  if (!read || !box || read.stops.length < 2) return null;
+  const g = gradientInLocal(read, box);
+  const m = g.transform;
+  const at = (x: number, y: number): [number, number] => apply(m, x, y);
+  const stops = g.stops.map((s) => ({ offset: s.offset, color: [s.color[0] / 255, s.color[1] / 255, s.color[2] / 255] as [number, number, number] }));
+  if (g.type === 'linear') {
+    const [x0, y0] = at(g.x1, g.y1);
+    const [x1, y1] = at(g.x2, g.y2);
+    return { type: 'linear', coords: [x0, y0, x1, y1], stops };
+  }
+  const [cx, cy] = at(g.cx, g.cy);
+  const [fx, fy] = at(g.fx, g.fy);
+  return { type: 'radial', coords: [fx, fy, 0, cx, cy, g.r * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]))], stops };
+}
+
 const unitColor = (c: Rgba): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
 
 function trace(d: PageDrawing, commands: readonly PathCommand[]): void {
@@ -64,10 +86,12 @@ const num = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(v) ? v : fallback;
 };
 
-function paintShape(out: Out, chain: readonly Style[], commands: readonly PathCommand[], opacity: number): void {
+function paintShape(out: Out, node: SceneNode, chain: readonly Style[], commands: readonly PathCommand[], opacity: number): void {
   const { d } = out;
-  const fill = colorOf(out, inherited(chain, 'fill') ?? 'black', chain);
+  const fillValue = inherited(chain, 'fill') ?? 'black';
+  const fill = colorOf(out, fillValue, chain);
   const stroke = colorOf(out, inherited(chain, 'stroke'), chain);
+  const shading = gradientSpec(out, fillValue, node);
   const width = parseLength(inherited(chain, 'stroke-width')) ?? 1;
   const strokes = !!stroke && width > 0;
   if (!fill && !strokes) return;
@@ -75,7 +99,7 @@ function paintShape(out: Out, chain: readonly Style[], commands: readonly PathCo
   const strokeAlpha = stroke ? stroke[3] * num(inherited(chain, 'stroke-opacity'), 1) * opacity : 1;
   d.save();
   d.opacity(Math.max(0, Math.min(1, fillAlpha)), Math.max(0, Math.min(1, strokeAlpha)));
-  if (fill) d.fillColor(unitColor(fill));
+  if (fill && !shading) d.fillColor(unitColor(fill));
   if (strokes) {
     d.strokeColor(unitColor(stroke!));
     d.lineWidth(width);
@@ -87,11 +111,21 @@ function paintShape(out: Out, chain: readonly Style[], commands: readonly PathCo
     const list = dashes && dashes !== 'none' ? parseNumbers(dashes) : [];
     if (list.length && list.some((v) => v > 0)) d.dash(list.length % 2 ? [...list, ...list] : list, parseLength(inherited(chain, 'stroke-dashoffset')) ?? 0);
   }
-  trace(d, commands);
   const evenOdd = inherited(chain, 'fill-rule') === 'evenodd';
-  if (fill && strokes) d.fillAndStroke(evenOdd);
-  else if (fill) d.fill(evenOdd);
-  else d.stroke();
+  if (fill && shading) {
+    // A gradient is painted through the shape's outline as a clip, then the outline is stroked on its own.
+    trace(d, commands);
+    d.gradient(shading, evenOdd);
+    if (strokes) {
+      trace(d, commands);
+      d.stroke();
+    }
+  } else {
+    trace(d, commands);
+    if (fill && strokes) d.fillAndStroke(evenOdd);
+    else if (fill) d.fill(evenOdd);
+    else d.stroke();
+  }
   d.restore();
 }
 
@@ -166,7 +200,7 @@ function paintNode(out: Out, node: SceneNode, parentChain: readonly Style[], par
     case 'path':
     case 'rect':
     case 'ellipse':
-      if (node.kind !== 'rect' || (node.width > 0 && node.height > 0)) paintShape(out, chain, outline(node)!, opacity);
+      if (node.kind !== 'rect' || (node.width > 0 && node.height > 0)) paintShape(out, node, chain, outline(node)!, opacity);
       break;
     case 'text':
       paintText(out, node, chain, opacity);

@@ -160,3 +160,20 @@ test('a document becomes vector graphics: pages as groups, text as text at the l
   assert.equal(readSvg(text).children.length, 1);
   assert.match(text, /font-family="'Calibri', 'Carlito', sans-serif"/);
 });
+
+test('a gradient fill is a PDF shading drawn through the shape, with its stroke on top', async () => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f00"/><stop offset=".5" stop-color="#0f0"/><stop offset="1" stop-color="#00f"/></linearGradient>
+    <radialGradient id="r"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient></defs>
+    <rect x="10" y="10" width="40" height="40" fill="url(#g)" stroke="#000"/>
+    <circle cx="70" cy="70" r="20" fill="url(#r)"/></svg>`;
+  const bytes = await sceneToPdf(readSvg(svg));
+  const ops = PdfDocument.load(bytes).pages[0].operations().map((o) => o.op);
+  assert.equal(ops.filter((o) => o === 'sh').length, 2);
+  assert.ok(ops.includes('S'), 'the rectangle’s outline');
+  // Stroked after the shading, which is clipped to the shape.
+  assert.ok(ops.indexOf('sh') < ops.indexOf('S'));
+  const page = PdfDocument.load(bytes).pages[0];
+  const shadings = page.resources.get('Shading') as unknown as Map<string, unknown>;
+  assert.equal([...shadings].length, 2);
+});

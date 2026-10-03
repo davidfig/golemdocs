@@ -51,6 +51,7 @@ export const app: Catalog = {
   'app.importedZipSkipped': 'Импортировано документов: {count}. Файлы, которые нельзя открыть, пропущены: {skipped}',
   'app.importZipFailed': 'Не удалось импортировать: {message}',
   'app.importProgress': '{done} из {total}',
+  'app.timeLeft': 'осталось {time}',
   'app.importCancelled': 'Импорт отменён. Импортировано документов: {count}',
 
   // Collaboration

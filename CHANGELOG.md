@@ -1,5 +1,13 @@
 # What’s New in Golem Docs
 
+## 0.9.1 - Unreleased
+
+### Added
+- The import progress card shows an estimate of the time left.
+
+### Fixed
+- Importing a ZIP no longer starts with the progress bar a quarter full; it fills steadily and never moves back.
+
 ## 0.9.0 - 2026-10-03
 
 ### Added

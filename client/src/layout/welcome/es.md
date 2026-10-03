@@ -52,3 +52,9 @@ Un documento es muy parecido: algo sin forma al que las palabras dan vida. Golem
 ## Privacidad, términos y más
 
 Lee la [Política de privacidad](/privacy) y los [Términos del servicio](/terms), ambos en el menú Ayuda. Para saber más sobre Golem Docs, visita el [sitio web de Golem Docs](https://golemdocs.com/home/).
+
+## Sobre el desarrollador
+
+Golem Docs lo crea David Figatner, con mucha ayuda de Claude, una IA de Anthropic que escribió gran parte del código junto a él.
+
+La aplicación nació como sustituto de dos cosas que David usa a diario: Obsidian, con el que organiza su vida, y un visor de archivos de Word y PDF. Después pensó que sería divertido que pudiera abrir todo tipo de documentos. Sigue creciendo hacia ese objetivo.

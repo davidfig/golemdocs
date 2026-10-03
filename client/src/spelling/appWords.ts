@@ -8,7 +8,7 @@
 import type { SpellLanguage } from './languages.ts';
 
 /** The product, format and key names every language's welcome document uses as they are. */
-const NAMES = ['Docs', 'Golem', 'Word', 'Markdown', 'OpenDocument', 'Rich', 'Text', 'LaTeX', 'AsciiDoc', 'reStructuredText', 'Org', 'Ctrl', 'Cmd', 'Shift', 'Alt', 'Mac', 'Judah', 'Loew', 'Löw', 'Vltava', 'emet', 'met'];
+const NAMES = ['Docs', 'Golem', 'Word', 'Markdown', 'OpenDocument', 'Rich', 'Text', 'LaTeX', 'AsciiDoc', 'reStructuredText', 'Org', 'Ctrl', 'Cmd', 'Shift', 'Alt', 'Mac', 'Judah', 'Loew', 'Löw', 'Vltava', 'emet', 'met', 'David', 'Figatner', 'Claude', 'Anthropic', 'Obsidian'];
 
 export const APP_WORDS: Record<SpellLanguage, readonly string[]> = {
   en: [...NAMES, "pdf's"],

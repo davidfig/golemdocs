@@ -4,6 +4,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { estimateSeconds, formatDuration } from './timeLeft.ts';
 import './progressToast.css';
 
 export interface Progress {
@@ -11,6 +12,8 @@ export interface Progress {
   readonly signal: AbortSignal;
   /** Moves the bar to `done` of `total`, with `detail` (or "done of total") under the title. */
   update(done: number, total: number, detail?: string): void;
+  /** Starts the clock the time left is worked out from: call it when the slow part begins, so a quick first part doesn't skew it. */
+  startTimer(): void;
   /** Takes the card away. */
   close(): void;
 }
@@ -36,16 +39,26 @@ export function showProgress(title: string, cancellable = true): Progress {
   const stack = (document.querySelector('.wm-progress-stack') as HTMLElement | null) ?? document.body.appendChild(h('div', { class: 'wm-progress-stack' }));
   stack.append(card);
   const track = bar.parentElement!;
+  let furthest = 0;
+  let timer: { at: number; fraction: number } | null = null;
   const update = (done: number, total: number, text?: string): void => {
-    const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    // Never moves back: the bar only goes forward, whatever order the steps report in.
+    const fraction = Math.max(furthest, total > 0 ? Math.min(1, done / total) : 0);
+    furthest = fraction;
+    const percent = Math.round(fraction * 100);
     bar.style.width = `${percent}%`;
     track.setAttribute('aria-valuenow', String(percent));
-    detail.textContent = text ?? t('app.importProgress', { done, total });
+    const base = text ?? t('app.importProgress', { done, total });
+    const seconds = timer ? estimateSeconds(fraction, timer.fraction, performance.now() - timer.at) : null;
+    detail.textContent = seconds === null || !base ? base : `${base} · ${t('app.timeLeft', { time: formatDuration(seconds) })}`;
   };
   update(0, 0, '');
   return {
     signal: abort.signal,
     update,
+    startTimer: () => {
+      timer = { at: performance.now(), fraction: furthest };
+    },
     close: () => {
       card.remove();
       if (!stack.firstChild) stack.remove();

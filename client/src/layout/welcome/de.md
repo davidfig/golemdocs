@@ -52,3 +52,9 @@ Ein Dokument ist ganz ähnlich: etwas Gestaltloses, das Worte zum Leben erwecken
 ## Datenschutz, Bedingungen und mehr
 
 Lesen Sie die [Datenschutzerklärung](/privacy) und die [Nutzungsbedingungen](/terms), beide im Menü Hilfe. Mehr über Golem Docs erfahren Sie auf der [Golem-Docs-Website](https://golemdocs.com/home/).
+
+## Über den Entwickler
+
+Golem Docs wurde von David Figatner entwickelt, mit viel Unterstützung von Claude, einer KI von Anthropic, die einen großen Teil des Codes an seiner Seite geschrieben hat.
+
+Die App begann als Ersatz für zwei Dinge, die David jeden Tag benutzt: Obsidian, womit er sein Leben organisiert, und ein Programm zum Ansehen von Word- und PDF-Dateien. Dann fand er die Idee reizvoll, dass sie jede Art von Dokument öffnen könnte. Daran wächst sie weiter.

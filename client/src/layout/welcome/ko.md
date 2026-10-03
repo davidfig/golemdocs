@@ -52,3 +52,9 @@
 ## 개인정보, 약관 및 기타
 
 도움말 메뉴에 있는 [개인정보 처리방침](/privacy)과 [이용 약관](/terms)을 읽어 보십시오. Golem Docs에 대해 더 알아보려면 [Golem Docs 웹사이트](https://golemdocs.com/home/)를 방문하십시오.
+
+## 개발자 소개
+
+Golem Docs는 David Figatner가 만들었으며, Anthropic의 AI인 Claude가 함께 코드의 상당 부분을 작성하며 큰 도움을 주었습니다.
+
+이 앱은 David가 매일 쓰는 두 가지를 대체하려고 시작되었습니다. 그의 삶을 이끄는 Obsidian, 그리고 Word와 PDF 파일 뷰어입니다. 그러다 모든 종류의 문서를 열 수 있다면 재미있겠다고 생각했습니다. 지금도 그 방향으로 계속 성장하고 있습니다.

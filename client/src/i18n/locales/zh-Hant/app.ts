@@ -48,6 +48,7 @@ export const app: Partial<Messages> = {
   'app.importedZipSkipped': '已匯入的文件：{count}。已略過無法開啟的檔案：{skipped}',
   'app.importZipFailed': '匯入失敗：{message}',
   'app.importProgress': '{done} / {total}',
+  'app.timeLeft': '剩餘 {time}',
   'app.importCancelled': '已取消匯入。已匯入的文件：{count}',
 
   // Collaboration

@@ -1143,8 +1143,8 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
   // Saved here but not sent yet: if the import stops part way, these go the ordinary way.
   let waiting: string[] = [];
   let waitingBytes = 0;
-  // Reading the ZIP is the first 30% of the bar, saving what is in it the rest.
-  const READ_SHARE = 30;
+  // Reading the ZIP is the first 10% of the bar (it is quick), saving what is in it the rest.
+  const READ_SHARE = 10;
   try {
     setStatus(t('app.importingZip', { name }));
     const { files, skipped } = await read(progress.signal, (done, total) => progress.update((done / total) * READ_SHARE, 100, t('app.importProgress', { done, total })));
@@ -1172,6 +1172,7 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
       await library.reloadLocal();
       showSync();
     };
+    progress.startTimer();
     const result = await importFiles(files, {
       folders,
       documents: library.entries.map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),

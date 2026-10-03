@@ -52,3 +52,9 @@
 ## 隱私權、條款與其他
 
 請閱讀[隱私權政策](/privacy)和[服務條款](/terms)，兩者都在「說明」功能表中。若想進一步了解 Golem Docs，請造訪 [Golem Docs 網站](https://golemdocs.com/home/)。
+
+## 關於開發者
+
+Golem Docs 由 David Figatner 開發，並得到 Claude 的大力協助。Claude 是 Anthropic 開發的 AI，與他一起撰寫了大部分程式碼。
+
+這個應用程式最初是為了取代 David 每天使用的兩樣東西：打理他生活的 Obsidian，以及檢視 Word 和 PDF 檔案的軟體。後來他覺得，如果它能開啟各種類型的文件，那就更有趣了。它仍在朝著這個方向持續成長。

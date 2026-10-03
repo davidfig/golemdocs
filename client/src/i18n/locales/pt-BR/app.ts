@@ -49,6 +49,7 @@ export const app: Partial<Messages> = {
   'app.importedZipSkipped': 'Documentos importados: {count}. Arquivos que não podem ser abertos foram ignorados: {skipped}',
   'app.importZipFailed': 'Falha ao importar: {message}',
   'app.importProgress': '{done} de {total}',
+  'app.timeLeft': '{time} restantes',
   'app.importCancelled': 'Importação cancelada. Documentos importados: {count}',
 
   // Collaboration

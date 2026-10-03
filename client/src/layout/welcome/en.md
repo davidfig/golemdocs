@@ -52,3 +52,9 @@ A document is much the same: a shapeless thing that words bring to life. Golem D
 ## Privacy, terms and more
 
 Read the [Privacy Policy](/privacy) and the [Terms of Service](/terms), both in the Help menu. To learn more about Golem Docs, visit the [Golem Docs website](https://golemdocs.com/home/).
+
+## About the developer
+
+Golem Docs is made by David Figatner, with a lot of help from Claude, an AI made by Anthropic, which wrote much of the code alongside him.
+
+The app began as a replacement for two things David uses every day: Obsidian, which runs his life, and a viewer for Word and PDF files. Then he thought it would be fun if it could open every kind of document there is. It is still growing toward that.

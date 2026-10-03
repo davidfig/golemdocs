@@ -785,7 +785,13 @@ export class VectorEditor {
       return Math.hypot(sx - x, sy - y) <= HANDLE_REACH;
     };
     const { points, stops } = gradientHandles(g.gradient);
-    for (let i = 0; i < stops.length; i++) if (stops[i].offset > 0 && stops[i].offset < 1 && near(stops[i].at)) return { part: 'stop', stop: i };
+    // A radial gradient's inner stops are rings: grabbed anywhere on the ring, not just at the dot.
+    const ring = (stop: { at: { x: number; y: number } }): boolean => {
+      const [cx, cy] = frame.toScreen(...apply(world, points[0].x, points[0].y));
+      const [x, y] = frame.toScreen(...apply(world, stop.at.x, stop.at.y));
+      return Math.abs(Math.hypot(sx - cx, sy - cy) - Math.hypot(x - cx, y - cy)) <= HANDLE_REACH;
+    };
+    for (let i = 0; i < stops.length; i++) if (stops[i].offset > 0 && stops[i].offset < 1 && (near(stops[i].at) || (g.gradient.type === 'radial' && ring(stops[i])))) return { part: 'stop', stop: i };
     for (const [part, p] of [[0, points[0]], [1, points[1]]] as const) {
       if (near(p)) return { part, stop: part === 0 ? 0 : stops.length - 1 };
     }
@@ -811,19 +817,18 @@ export class VectorEditor {
     let added = 0;
     this.editGradient(next, g.path, (element) => {
       const stops = readStops(element);
-      stops.push({ offset: t, color: colorAt(stops, t, parseColor) });
-      writeStops(element, stops);
-      added = readStops(element).findIndex((x) => Math.abs(x.offset - t) < 1e-9);
+      const stop = { offset: t, color: colorAt(stops, t, parseColor) };
+      added = writeStops(element, [...stops, stop]).indexOf(stop);
     });
     this.stop = added;
     this.commit(next, this._selection);
   }
 
-  /** Takes the picked stop away, if it is one that can go (not an end, and at least two stay). */
+  /** Takes the picked stop away, if at least two stay. */
   private removeStop(index: number | null = this.stop): boolean {
     const scene = this.scene;
     const g = scene ? this.gradientOfSelection(scene) : null;
-    if (!scene || !g || index === null || index <= 0 || index >= g.gradient.stops.length - 1) return false;
+    if (!scene || !g || index === null || index < 0 || index >= g.gradient.stops.length || g.gradient.stops.length <= 2) return false;
     const next = cloneScene(scene);
     this.editGradient(next, g.path, (element) => writeStops(element, readStops(element).filter((_, i) => i !== index)));
     this.stop = null;
@@ -836,7 +841,7 @@ export class VectorEditor {
     const g = this.scene ? this.gradientOfSelection(this.scene) : null;
     if (!g) return null;
     const stops = g.gradient.stops.map((s) => ({ offset: s.offset, color: colorText(s.color) }));
-    return { stops, stop: Math.min(this.stop ?? 0, stops.length - 1), type: g.gradient.type };
+    return { stops, stop: Math.max(0, Math.min(this.stop ?? 0, stops.length - 1)), type: g.gradient.type };
   }
 
   /** Picks a stop of the gradient (its colour is then the one the fill colours change). */
@@ -851,24 +856,23 @@ export class VectorEditor {
     if (g) this.addStop(g, Math.max(0.01, Math.min(0.99, offset)));
   }
 
-  /** Takes a stop away (the ends stay). */
+  /** Takes a stop away (two always stay). */
   removeStopAt(index: number): void {
     this.removeStop(index);
   }
 
-  /** Moves an inner stop along the gradient; it stays picked. */
+  /** Moves a stop along the gradient (past its neighbours, too); it stays picked. */
   moveStop(index: number, offset: number): void {
     const scene = this.scene;
     const g = scene ? this.gradientOfSelection(scene) : null;
-    if (!scene || !g || index <= 0 || index >= g.gradient.stops.length - 1) return;
+    if (!scene || !g || index < 0 || index >= g.gradient.stops.length) return;
     const next = cloneScene(scene);
     let at = index;
     this.editGradient(next, g.path, (element) => {
       const stops = readStops(element);
       const target = stops[index];
-      target.offset = Math.max(0.01, Math.min(0.99, offset));
-      writeStops(element, stops);
-      at = readStops(element).findIndex((x) => x.offset === Math.max(0, Math.min(1, target.offset)));
+      target.offset = Math.max(0, Math.min(1, offset));
+      at = writeStops(element, stops).indexOf(target);
     });
     this.stop = Math.max(at, 0);
     this.commit(next, this._selection);
@@ -1402,7 +1406,8 @@ export class VectorEditor {
         const g = readGradient(next, element.attrs.id)!;
         const [a, b] = gradientHandles(gradientInLocal(g, localBounds(nodeAt(next, path)!, next)!)).points;
         const length = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
-        const t = ((local.x - a.x) * (b.x - a.x) + (local.y - a.y) * (b.y - a.y)) / length;
+        // A radial stop goes by its distance from the centre, wherever around it the pointer is.
+        const t = g.type === 'radial' ? Math.hypot(local.x - a.x, local.y - a.y) / Math.sqrt(length) : ((local.x - a.x) * (b.x - a.x) + (local.y - a.y) * (b.y - a.y)) / length;
         // Between its neighbours, so that the stops stay in order.
         const low = stops[gesture.index - 1]?.offset ?? 0;
         const high = stops[gesture.index + 1]?.offset ?? 1;
@@ -1870,13 +1875,34 @@ export class VectorEditor {
     ctx.strokeStyle = ACCENT;
     ctx.lineWidth = 1;
     ctx.stroke();
+    // A radial gradient's stops are rings around its centre.
+    if (g.gradient.type === 'radial') {
+      stops.forEach((stop, i) => {
+        const [x, y] = screen(stop.at);
+        const radius = Math.hypot(x - ax, y - ay);
+        ctx.beginPath();
+        ctx.arc(ax, ay, radius, 0, Math.PI * 2);
+        ctx.setLineDash(i === this.stop ? [] : [4, 3]);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.stroke();
+        ctx.lineWidth = i === this.stop ? 1.5 : 1;
+        ctx.strokeStyle = i === this.stop ? ACCENT : '#2e3148';
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+    // Each stop is a dot in its own colour, outlined dark and light so it shows on any colour.
     stops.forEach((stop, i) => {
       const [x, y] = screen(stop.at);
       ctx.beginPath();
-      ctx.arc(x, y, i === this.stop ? 6 : 5, 0, Math.PI * 2);
+      ctx.arc(x, y, i === this.stop ? 7 : 6, 0, Math.PI * 2);
       ctx.fillStyle = colorText(g.gradient.stops[i].color);
       ctx.fill();
-      ctx.lineWidth = i === this.stop ? 2.5 : 1.5;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#2e3148';
+      ctx.stroke();
+      ctx.lineWidth = i === this.stop ? 2.5 : 2;
       ctx.strokeStyle = i === this.stop ? ACCENT : '#fff';
       ctx.stroke();
     });

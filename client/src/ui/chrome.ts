@@ -1079,6 +1079,8 @@ export class Chrome {
     const r = this.registry;
     const box = h('div', { class: 'wm-fill-gradient' });
     const gradient = (change: Extract<Action, { kind: 'vectorGradient' }>) => r.perform(change, t('vector.fillType'));
+    // While a marker is dragged the header is not redrawn (that would take the marker from under the pointer).
+    let dragging = false;
     const render = (): void => {
       const state = this.state.vector;
       box.replaceChildren();
@@ -1108,35 +1110,38 @@ export class Chrome {
         const marker = h('button', { class: index === g.stop ? 'wm-grad-stop current' : 'wm-grad-stop', title: `${Math.round(stop.offset * 100)}%`, attrs: { type: 'button', 'aria-label': t('vector.stopN', { n: index + 1 }), 'aria-pressed': String(index === g.stop) } });
         marker.style.left = `${stop.offset * 100}%`;
         marker.style.setProperty('--stop', stop.color);
-        const movable = index > 0 && index < g.stops.length - 1;
+        const removable = g.stops.length > 2;
         marker.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
           e.preventDefault();
           e.stopPropagation();
           marker.setPointerCapture(e.pointerId);
+          dragging = true;
+          const start = e.clientX;
           let moved: number | null = null;
           const drag = (ev: PointerEvent) => {
-            if (!movable) return;
-            moved = Math.max(0.01, Math.min(0.99, at(ev)));
+            // A few pixels before it is a drag, so that a click is never a move.
+            if (moved === null && Math.abs(ev.clientX - start) < 3) return;
+            moved = at(ev);
             marker.style.left = `${moved * 100}%`;
-            bar.style.backgroundImage = css(g.stops.map((s, i) => (i === index ? { ...s, offset: moved! } : s)));
+            bar.style.backgroundImage = css(g.stops.map((s, i) => (i === index ? { ...s, offset: moved! } : s)).sort((a, b) => a.offset - b.offset));
           };
           const drop = () => {
             marker.removeEventListener('pointermove', drag);
             marker.removeEventListener('pointerup', drop);
             marker.removeEventListener('pointercancel', drop);
+            dragging = false;
             // A drag is one change (one undo step); a click only picks the stop.
             if (moved !== null && Math.abs(moved - stop.offset) > 0.002) gradient({ kind: 'vectorGradient', op: 'move', index, offset: moved });
-            else {
-              gradient({ kind: 'vectorGradient', op: 'select', index });
-              render();
-            }
+            else if (index !== g.stop) gradient({ kind: 'vectorGradient', op: 'select', index });
+            else render();
           };
           marker.addEventListener('pointermove', drag);
           marker.addEventListener('pointerup', drop);
           marker.addEventListener('pointercancel', drop);
         });
         marker.addEventListener('keydown', (e) => {
-          if ((e.key === 'Delete' || e.key === 'Backspace') && movable) {
+          if ((e.key === 'Delete' || e.key === 'Backspace') && removable) {
             e.preventDefault();
             gradient({ kind: 'vectorGradient', op: 'remove', index });
           }
@@ -1153,16 +1158,14 @@ export class Chrome {
       bar.title = t('vector.gradientHint');
       const stopsBox = h('div', { class: 'wm-fill-stops' }, bar, track);
 
-      const position = h('input', { class: 'wm-grad-position', attrs: { type: 'number', min: '1', max: '99', step: '1', 'aria-label': t('vector.stopPosition') } });
+      const position = h('input', { class: 'wm-grad-position', attrs: { type: 'number', min: '0', max: '100', step: '1', 'aria-label': t('vector.stopPosition') } });
       position.value = String(Math.round(g.stops[g.stop].offset * 100));
-      const inner = g.stop > 0 && g.stop < g.stops.length - 1;
-      position.disabled = !inner;
       position.addEventListener('change', () => {
         const value = Number(position.value);
         if (Number.isFinite(value)) gradient({ kind: 'vectorGradient', op: 'move', index: g.stop, offset: value / 100 });
       });
       const remove = h('button', { class: 'wm-fill-action', text: t('vector.stopRemove'), attrs: { type: 'button' } });
-      remove.disabled = !inner;
+      remove.disabled = g.stops.length <= 2;
       remove.addEventListener('click', () => {
         gradient({ kind: 'vectorGradient', op: 'remove', index: g.stop });
       });
@@ -1174,7 +1177,7 @@ export class Chrome {
       box.append(stopsBox, h('div', { class: 'wm-palette-label', text: t('vector.stopColor') }));
     };
     // The state follows the change a frame later: the popup shows it as soon as the chrome does.
-    this.onFillChange = () => (box.isConnected ? render() : (this.onFillChange = null));
+    this.onFillChange = () => (!box.isConnected ? (this.onFillChange = null) : dragging ? undefined : render());
     render();
     return box;
   }
@@ -1289,32 +1292,51 @@ export class Chrome {
     };
   }
 
-  /** The outline width of the selected shapes: a short list of widths, and the shape's own when it is another. */
+  /** The outline width of the selected shapes: a list of widths, each drawn as a line (the same list as the stroke style's), and the shape's own when it is another. */
   private vectorWidthBox(): Control {
     const r = this.registry;
     const label = t('vector.strokeWidth');
-    const select = h('select', { class: 'wm-draw-size', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
     const widths = [0.5, 1, 2, 4, 8, 16, 32];
-    const fill = (extra: number | null): void => {
-      select.replaceChildren();
-      for (const w of extra === null || widths.includes(extra) ? widths : [...widths, extra].sort((x, y) => x - y)) {
-        const option = h('option', { text: String(w) });
-        option.value = String(w);
-        select.append(option);
-      }
+    // A line as thick as the width, up to what fits in the sample.
+    const sample = (width: number): SVGSVGElement => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 42 10');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.classList.add('wm-brush-preview');
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      line.setAttribute('d', 'M2 5H40');
+      line.setAttribute('stroke', 'currentColor');
+      line.setAttribute('stroke-width', String(Math.min(width, 10)));
+      svg.append(line);
+      return svg;
     };
-    fill(null);
-    select.addEventListener('change', () => {
-      r.perform({ kind: 'vectorStyle', strokeWidth: Number(select.value) }, label);
-      r.focusEditor();
-    });
+    const text = h('span', { class: 'wm-stroke-name' });
+    const preview = h('span', { class: 'wm-stroke-sample' });
+    const button = h('button', { class: 'wm-draw-size wm-stroke-style wm-stroke-width', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, preview, text, h('span', { class: 'wm-stroke-caret' }));
+    let current = 1;
+    const open = (): void => {
+      if (popupOpenFor(button)) return closePopup();
+      const list = h('div', { class: 'wm-list wm-stroke-list', attrs: { role: 'listbox', 'aria-label': label } });
+      for (const width of widths.includes(current) ? widths : [...widths, current].sort((x, y) => x - y)) {
+        const chosen = width === current;
+        const row = h('div', { class: chosen ? 'wm-option wm-stroke-row chosen' : 'wm-option wm-stroke-row', attrs: { role: 'option', 'aria-selected': String(chosen) } }, h('span', { class: 'wm-stroke-sample' }, sample(width)), h('span', { text: String(width) }));
+        row.addEventListener('click', () => {
+          closePopup();
+          r.perform({ kind: 'vectorStyle', strokeWidth: width }, label);
+          r.focusEditor();
+        });
+        list.append(row);
+      }
+      openPopup(button, list);
+    };
+    button.addEventListener('click', open);
     return {
-      el: select,
+      el: button,
       refresh: (state) => {
-        const width = Math.round(state.vector.strokeWidth * 100) / 100;
-        if (![...select.options].some((o) => Number(o.value) === width)) fill(width);
-        select.value = String(width);
-        select.disabled = !r.allows({ kind: 'vectorStyle', strokeWidth: width });
+        current = Math.round(state.vector.strokeWidth * 100) / 100;
+        text.textContent = String(current);
+        preview.replaceChildren(sample(current));
+        button.disabled = !r.allows({ kind: 'vectorStyle', strokeWidth: current });
       },
     };
   }

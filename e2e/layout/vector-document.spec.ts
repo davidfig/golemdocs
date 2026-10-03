@@ -143,6 +143,47 @@ test.describe('editing a drawing', () => {
     await expect.poll(async () => (await currentSvg(app)).includes('stroke-dasharray'), { timeout: 15_000 }).toBe(false);
   });
 
+  test('the stroke width is a list like the stroke style’s, each width drawn as a line', async ({ app }) => {
+    await openDrawing(app);
+    const at = await onPage(app, 0.25, 0.4); // the red rectangle, 4 wide
+    await app.page.mouse.click(at.x, at.y);
+    const button = app.page.getByRole('button', { name: 'Outline Width' });
+    await expect(button).toContainText('4');
+    await button.click();
+    const list = app.page.getByRole('listbox', { name: 'Outline Width' });
+    await expect(list.getByRole('option', { name: '4', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(list.locator('svg')).toHaveCount(7);
+    await list.getByRole('option', { name: '8', exact: true }).click();
+    await expect(button).toContainText('8');
+    await expect.poll(async () => /<rect[^>]*stroke-width="8"/.test(await currentSvg(app)), { timeout: 15_000 }).toBe(true);
+  });
+
+  test('a radial gradient’s stops are rings on the shape: drag one to move it, click one to pick it and colour it alone', async ({ app }) => {
+    await openDrawing(app);
+    const centre = await onPage(app, 0.75, 0.5); // the green circle, 60 across from its centre to its edge
+    const scale = (await onPage(app, 1, 0.5)).x - (await onPage(app, 0, 0.5)).x;
+    const px = scale / 400;
+    await app.page.mouse.click(centre.x, centre.y);
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    const popup = app.page.locator('.wm-palette');
+    await popup.getByRole('button', { name: 'Radial' }).click();
+    const bar = await popup.locator('.wm-grad-bar').boundingBox();
+    await app.page.mouse.click(bar!.x + bar!.width / 2, bar!.y + bar!.height / 2); // a stop halfway out
+    await expect(popup.locator('.wm-grad-stop')).toHaveCount(3);
+    await app.page.keyboard.press('Escape');
+    // The ring is grabbed above the centre line, not only at its dot, and dragged outwards.
+    await app.page.mouse.move(centre.x, centre.y - 30 * px);
+    await app.page.mouse.down();
+    await app.page.mouse.move(centre.x, centre.y - 45 * px, { steps: 4 });
+    await app.page.mouse.up();
+    await expect.poll(async () => /offset="0\.7[0-9]*"/.test((await currentSvg(app)).match(/<radialGradient[\s\S]*?<\/radialGradient>/)?.[0] ?? ''), { timeout: 15_000 }).toBe(true);
+    // The ring stays picked: a palette colour changes that stop only.
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    await expect(popup.getByLabel('Position')).toHaveValue('75');
+    await popup.getByRole('button', { name: '#0000FF' }).click();
+    await expect.poll(async () => /offset="0\.75[0-9]*"[^>]*stop-color="#0000FF"/i.test(await currentSvg(app)), { timeout: 15_000 }).toBe(true);
+  });
+
   test('the Fill popup lists the colours the drawing uses and marks the picked shape’s own', async ({ app }) => {
     await openDrawing(app);
     const at = await onPage(app, 0.75, 0.5); // the green circle
@@ -185,6 +226,40 @@ test.describe('editing a drawing', () => {
     await expect(popup.getByRole('button', { name: 'Delete Stop' })).toBeDisabled();
     // The file has the gradient with its two stops left.
     await expect.poll(async () => (await currentSvg(app)).match(/<linearGradient[\s\S]*?<\/linearGradient>/)?.[0].match(/<stop /g)?.length, { timeout: 15_000 }).toBe(2);
+  });
+
+  test('the Fill popup’s stop markers: one added off centre is picked, a drag moves it, a click picks another, Delete Stop takes any', async ({ app }) => {
+    await openDrawing(app);
+    const at = await onPage(app, 0.75, 0.5);
+    await app.page.mouse.click(at.x, at.y);
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    const popup = app.page.locator('.wm-palette');
+    await popup.getByRole('button', { name: 'Linear' }).click();
+    const stops = popup.locator('.wm-grad-stop');
+    await expect(stops).toHaveCount(2);
+    // A stop added anywhere on the bar (not just its middle) is the picked one.
+    const bar = (await popup.locator('.wm-grad-bar').boundingBox())!;
+    await app.page.mouse.click(bar.x + bar.width * 0.3, bar.y + bar.height / 2);
+    await expect(stops).toHaveCount(3);
+    await expect(popup.getByRole('button', { name: 'Color stop 2' })).toHaveAttribute('aria-pressed', 'true');
+    // Its marker is dragged along the bar, and it stays picked.
+    const marker = (await popup.getByRole('button', { name: 'Color stop 2' }).boundingBox())!;
+    await app.page.mouse.move(marker.x + marker.width / 2, marker.y + marker.height / 2);
+    await app.page.mouse.down();
+    await app.page.mouse.move(bar.x + bar.width * 0.7, marker.y + marker.height / 2, { steps: 6 });
+    await app.page.mouse.up();
+    await expect(popup.getByLabel('Position')).toHaveValue('70');
+    await expect(popup.getByRole('button', { name: 'Color stop 2' })).toHaveAttribute('aria-pressed', 'true');
+    // A click on the first marker picks it, and a palette colour colours that stop.
+    await popup.getByRole('button', { name: 'Color stop 1' }).click();
+    await expect(popup.getByRole('button', { name: 'Color stop 1' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(popup.getByLabel('Position')).toHaveValue('0');
+    await popup.getByRole('button', { name: '#0000FF' }).click();
+    await expect.poll(async () => /offset="0"[^>]*stop-color="#0000FF"/i.test(await currentSvg(app)), { timeout: 15_000 }).toBe(true);
+    // With three stops, even an end can be deleted; two always stay.
+    await popup.getByRole('button', { name: 'Delete Stop' }).click();
+    await expect(stops).toHaveCount(2);
+    await expect(popup.getByRole('button', { name: 'Delete Stop' })).toBeDisabled();
   });
 });
 

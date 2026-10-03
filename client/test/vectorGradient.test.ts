@@ -85,3 +85,17 @@ test('stops are read, replaced in order, and a new one takes the colour between 
   assert.deepEqual(readStops(element).map((x) => x.offset), [0, 0.5, 1]);
   assert.equal(colorAt([{ offset: 0, color: '#f00' }, { offset: 1, color: '#f00' }], 0.2, parseColor), '#ff0000');
 });
+
+test('writing stops tells where each one went, even when its offset is rounded or it passes a neighbour', () => {
+  const { element } = editableGradient(scene(), 'g', BOX)!;
+  const stops = readStops(element);
+  const added = { offset: 0.123456789, color: '#0f0' };
+  assert.equal(writeStops(element, [...stops, added]).indexOf(added), 1);
+  assert.equal(readStops(element)[1].offset, 0.1235);
+  // The first stop dragged past the others ends up last.
+  const moved = readStops(element);
+  const first = moved[0];
+  first.offset = 0.9;
+  assert.equal(writeStops(element, moved).indexOf(first), 1);
+  assert.deepEqual(readStops(element).map((x) => x.color), ['#0f0', '#f00', '#00f']);
+});

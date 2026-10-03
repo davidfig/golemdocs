@@ -36,6 +36,7 @@
 /* The stroke style list in the Drawing toolbar. */
 .wm-stroke-style {
   display: inline-flex;
+  margin: 0 4px;
   align-items: center;
   gap: 4px;
   box-sizing: border-box;
@@ -113,4 +114,8 @@
 .wm-shape-row.chosen {
   background: var(--wm-hot);
   border-color: var(--wm-hot-border);
+}
+
+.wm-stroke-width {
+  width: 96px;
 }

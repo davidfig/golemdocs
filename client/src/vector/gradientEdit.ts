@@ -143,10 +143,11 @@ export function readStops(element: XmlElement): GradientStop[] {
   return stopsOf(element).map((s) => ({ offset: Number(s.attrs.offset) || 0, color: s.attrs['stop-color'] ?? 'black' }));
 }
 
-/** Replaces the stops (at least two, in order). */
-export function writeStops(element: XmlElement, stops: readonly GradientStop[]): void {
+/** Replaces the stops (at least two), putting them in order; returns the given stops in that order, so a caller can find where one went. */
+export function writeStops(element: XmlElement, stops: readonly GradientStop[]): GradientStop[] {
   const sorted = [...stops].sort((a, b) => a.offset - b.offset);
   element.children = sorted.map((s) => el('stop', { offset: fmt(Math.max(0, Math.min(1, s.offset))), 'stop-color': s.color }));
+  return sorted;
 }
 
 /** The colour between two stops' colours at a position, for a stop added there. */

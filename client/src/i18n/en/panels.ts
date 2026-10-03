@@ -179,3 +179,8 @@ export const panels = {
   'panels.analytics.payingActive30': 'Paying, signed in last 30 days',
   'panels.analytics.payingCol': 'Paying now',
 } as const;
+  'panels.ruler.firstLine': 'First-line indent',
+  'panels.ruler.hanging': 'Hanging indent',
+  'panels.ruler.left': 'Left indent',
+  'panels.ruler.right': 'Right indent',
+  'panels.ruler.margin': 'Drag to change the margin',

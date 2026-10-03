@@ -120,6 +120,7 @@ export interface AppHooks {
   toggleFooter(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
+  toggleRuler(): void;
   /** Print layout (pages), Flow (the text reflowed to the window) or the page grid. */
   setViewMode(mode: ViewMode): void;
   /** The camera moved: stop auto-placing it, and redraw. */
@@ -165,6 +166,7 @@ const SUPPORTED = new Set<ActionKind>([
   'toggleFormattingMarks',
   'insertText',
   'convert',
+  'toggleRuler',
   'insertComment',
   'insertLink',
   'insertMath',
@@ -392,6 +394,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.notify(t('app.notAvailable', { name: action.mark }));
         case 'setFont':
         case 'setFontSize':
+        case 'toggleRuler':
+          return app.toggleRuler();
         case 'growFont':
         case 'shrinkFont':
         case 'setColor':

@@ -2327,6 +2327,33 @@
   border-color: var(--wm-field-border) !important;
 }
 
+/* The ruler (View > Ruler, see ui/ruler.ts): a strip above the document. */
+#ruler {
+  flex: none;
+  border-bottom: 1px solid var(--wm-border);
+  background: var(--wm-face);
+  overflow: hidden;
+  user-select: none;
+}
+
+#vruler {
+  flex: none;
+  border-right: 1px solid var(--wm-border);
+  background: var(--wm-face);
+  overflow: hidden;
+  user-select: none;
+}
+
+#ruler[hidden],
+#vruler[hidden] {
+  display: none;
+}
+
+#ruler canvas,
+#vruler canvas {
+  display: block;
+}
+
 /* The status bar (View > Status Bar, see ui/footer.ts): a strip under the document. */
 #footer {
   display: flex;

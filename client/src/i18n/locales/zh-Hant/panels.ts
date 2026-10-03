@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': '付費,最近 30 天登入',
   'panels.analytics.payingCol': '目前付費',
 };
+  'panels.ruler.firstLine': '第一行縮排',
+  'panels.ruler.hanging': '懸掛縮排',
+  'panels.ruler.left': '左縮排',
+  'panels.ruler.right': '右縮排',
+  'panels.ruler.margin': '拖曳以變更邊界',

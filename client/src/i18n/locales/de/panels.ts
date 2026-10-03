@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': 'Zahlend, angemeldet in den letzten 30 Tagen',
   'panels.analytics.payingCol': 'Jetzt zahlend',
 };
+  'panels.ruler.firstLine': 'Erstzeileneinzug',
+  'panels.ruler.hanging': 'Hängender Einzug',
+  'panels.ruler.left': 'Linker Einzug',
+  'panels.ruler.right': 'Rechter Einzug',
+  'panels.ruler.margin': 'Ziehen, um den Seitenrand zu ändern',

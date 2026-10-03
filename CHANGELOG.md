@@ -3,6 +3,7 @@
 ## 0.9.1 - Unreleased
 
 ### Added
+- View › Ruler shows a ruler above and beside the page in view, in inches (centimetres in other languages), with the margins marked; the assistant can turn it on and off. Drag a margin’s edge on either ruler, or the indent markers on the top one (first line, hanging, left, right), to change them.
 - The import progress card shows an estimate of the time left.
 
 ### Fixed

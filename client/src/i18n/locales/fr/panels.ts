@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': 'Payants, connectés ces 30 derniers jours',
   'panels.analytics.payingCol': 'Payants aujourd’hui',
 };
+  'panels.ruler.firstLine': 'Retrait de première ligne',
+  'panels.ruler.hanging': 'Retrait suspendu',
+  'panels.ruler.left': 'Retrait à gauche',
+  'panels.ruler.right': 'Retrait à droite',
+  'panels.ruler.margin': 'Faites glisser pour changer la marge',

@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': '付费,最近 30 天登录',
   'panels.analytics.payingCol': '当前付费',
 };
+  'panels.ruler.firstLine': '首行缩进',
+  'panels.ruler.hanging': '悬挂缩进',
+  'panels.ruler.left': '左缩进',
+  'panels.ruler.right': '右缩进',
+  'panels.ruler.margin': '拖动以更改页边距',

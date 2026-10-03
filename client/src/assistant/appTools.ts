@@ -40,7 +40,7 @@ export interface AppToolsHost {
   newDocument(folderId: string | null): Promise<void>;
   /** Does what a menu or toolbar does. */
   perform(action: Action): Promise<void> | void;
-  view(): { statusBar: boolean; formattingMarks: boolean };
+  view(): { statusBar: boolean; ruler: boolean; formattingMarks: boolean };
   isPicture(): boolean;
   /** The open picture as a file of its type. */
   pictureBytes(): Promise<Uint8Array>;
@@ -210,12 +210,17 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         void host.perform({ kind: 'toggleFooter' });
         done.push(`status bar ${bar ? 'on' : 'off'}`);
       }
+      const ruler = optionalFlag(args, 'ruler');
+      if (ruler !== undefined && ruler !== host.view().ruler) {
+        void host.perform({ kind: 'toggleRuler' });
+        done.push(`ruler ${ruler ? 'on' : 'off'}`);
+      }
       const marks = optionalFlag(args, 'formatting_marks');
       if (marks !== undefined && marks !== host.view().formattingMarks) {
         void host.perform({ kind: 'toggleFormattingMarks' });
         done.push(`formatting marks ${marks ? 'on' : 'off'}`);
       }
-      if (!done.length) throw new Error('Say what to change: view_mode, zoom, status_bar or formatting_marks.');
+      if (!done.length) throw new Error('Say what to change: view_mode, zoom, status_bar, ruler or formatting_marks.');
       return `Changed the view: ${done.join(', ')}.`;
     },
     async edit_picture(args) {

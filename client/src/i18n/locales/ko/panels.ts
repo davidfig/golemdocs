@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': '유료, 최근 30일 로그인',
   'panels.analytics.payingCol': '현재 유료',
 };
+  'panels.ruler.firstLine': '첫 줄 들여쓰기',
+  'panels.ruler.hanging': '내어쓰기',
+  'panels.ruler.left': '왼쪽 들여쓰기',
+  'panels.ruler.right': '오른쪽 들여쓰기',
+  'panels.ruler.margin': '끌어서 여백 변경',

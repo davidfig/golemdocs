@@ -193,3 +193,8 @@ export const panels: Catalog = {
   'panels.analytics.payingActive30': 'Платящие, входили за последние 30 дней',
   'panels.analytics.payingCol': 'Платят сейчас',
 };
+  'panels.ruler.firstLine': 'Отступ первой строки',
+  'panels.ruler.hanging': 'Выступ',
+  'panels.ruler.left': 'Отступ слева',
+  'panels.ruler.right': 'Отступ справа',
+  'panels.ruler.margin': 'Перетащите, чтобы изменить поле',

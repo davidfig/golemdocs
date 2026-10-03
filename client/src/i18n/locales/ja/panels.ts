@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': '有料、過去 30 日間にサインイン',
   'panels.analytics.payingCol': '現在の有料',
 };
+  'panels.ruler.firstLine': '1 行目のインデント',
+  'panels.ruler.hanging': 'ぶら下げインデント',
+  'panels.ruler.left': '左インデント',
+  'panels.ruler.right': '右インデント',
+  'panels.ruler.margin': 'ドラッグして余白を変更',

@@ -77,6 +77,7 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
 import { Footer } from './ui/footer.ts';
+import { Ruler } from './ui/ruler.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
@@ -180,6 +181,15 @@ try {
   footerOn = localStorage.getItem(FOOTER_KEY) !== 'off';
 } catch {
   // Storage unavailable: the bar starts on.
+}
+
+// The ruler (View > Ruler): off until turned on, then remembered in this browser.
+const RULER_KEY = 'word.ruler';
+let rulerOn = false;
+try {
+  rulerOn = localStorage.getItem(RULER_KEY) === 'on';
+} catch {
+  // Storage unavailable: the ruler starts off.
 }
 
 /** The counts of the whole document and of the selection, as the worker last gave them (null: none, or not asked for yet). */
@@ -2297,6 +2307,7 @@ function render(): void {
   if (caret && page) {
     const scale = camera.zoom * CSS_PX_PER_POINT;
     input.style.left = `${(page.x + caret.x - camera.x) * scale}px`;
+    rulerVisible: rulerOn,
     input.style.top = `${(page.y + caret.y - camera.y) * scale}px`;
     input.style.height = `${caret.height * scale}px`;
   }
@@ -2314,6 +2325,7 @@ if (visual) {
     document.documentElement.style.setProperty('--app-height', covered ? `${visual.height}px` : '100%');
     if (covered && (window.scrollY || visual.offsetTop)) window.scrollTo(0, 0);
   };
+  updateRuler();
   visual.addEventListener('resize', fitVisual);
   visual.addEventListener('scroll', fitVisual);
 }
@@ -2755,6 +2767,17 @@ function toggleGrid(): void {
   setViewMode(grid ? viewMode : 'grid');
 }
 
+function toggleRuler(): void {
+  rulerOn = !rulerOn;
+  try {
+    localStorage.setItem(RULER_KEY, rulerOn ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  // The strip takes room from the document: the canvas is resized by its observer, and the view is placed again.
+  requestRender();
+}
+
 /** View keys: zoom, grid, fit, page scrolling. */
 function viewKey(e: KeyboardEvent): boolean {
   const mod = e.metaKey || e.ctrlKey;
@@ -3022,6 +3045,7 @@ const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHos
 const findDialog = new FindDialog(document.body, {
   find: (text, matchCase, backward) => send({ kind: 'find', text, matchCase, backward }),
   replace: (text, replacement, matchCase) => {
+  toggleRuler,
     const selected = selection.text;
     if (matchCase ? selected === text : selected.toLowerCase() === text.toLowerCase()) {
       send(replacement ? { kind: 'insertText', text: replacement } : { kind: 'delete', direction: 'backward' });
@@ -3203,7 +3227,7 @@ const assistantTools = appTools({
     await ready;
   },
   perform: (action) => chromeHost.perform(action),
-  view: () => ({ statusBar: footerOn, formattingMarks }),
+  view: () => ({ statusBar: footerOn, ruler: rulerOn, formattingMarks }),
   isPicture,
   pictureBytes,
   changePicture,
@@ -3313,6 +3337,69 @@ function updateFooter(): void {
     selection: selection.text.length > 0 ? footerSelection : null,
     picture,
     view: grid ? 'grid' : reflowing() ? 'flow' : 'print',
+/** Dragging a margin on a ruler: the selection's section gets the new margins (points in, twips out). */
+function setMargins(margins: Partial<Record<'left' | 'right' | 'top' | 'bottom', number>>): void {
+  if (!sectionPage) return;
+  const twips = Object.fromEntries(Object.entries(margins).map(([side, points]) => [side, Math.round(points * 20)]));
+  send({ kind: 'setPage', ...sectionPage, ...twips, scope: 'section' });
+  focusInput();
+}
+
+const ruler = new Ruler(document.getElementById('ruler')!, false, {
+  margins: (near, far) => setMargins({ left: near, right: far }),
+  indents: ({ left, right, firstLine }) => {
+    const by = Math.round(Math.abs(firstLine - left) * 20);
+    const special = by === 0 ? 'none' : firstLine > left ? 'firstLine' : 'hanging';
+    send({ kind: 'format', action: { kind: 'setParagraph', left: Math.round(left * 20), right: Math.round(right * 20), special, by } });
+    focusInput();
+  },
+});
+const verticalRuler = new Ruler(document.getElementById('vruler')!, true, {
+  margins: (near, far) => setMargins({ top: near, bottom: far }),
+});
+
+/** The indents of the selected paragraphs, in points (what the ruler's markers show). */
+function rulerIndents(): { left: number; right: number; firstLine: number } {
+  const { left = 0, right = 0, special, by = 0 } = selectionFormat.paragraph ?? {};
+  const first = special === 'firstLine' ? by : special === 'hanging' ? -by : 0;
+  return { left: left / 20, right: right / 20, firstLine: (left + first) / 20 };
+}
+
+/** The rulers measure the page in view, so they are shown for pages that print: not in Flow, the page grid, a PDF or a picture. */
+function updateRuler(): void {
+  const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  const page = rulerOn && !largeView.active && !reflowing() && !grid && !annotating && !isPicture() ? nearestPage(pages, center.x, center.y) : null;
+  ruler.setVisible(page !== null);
+  verticalRuler.setVisible(page !== null);
+  if (!page) return;
+  // The margins are the selection's section's: they apply to the page in view when it has the same size.
+  const setup = sectionPage;
+  const same = setup && [setup.width, setup.height].some((twips) => Math.abs(twips / 20 - page.width) < 1);
+  const pxPerPoint = camera.zoom * CSS_PX_PER_POINT;
+  const box = canvas.getBoundingClientRect();
+  ruler.draw(
+    {
+      length: canvas.clientWidth,
+      pxPerPoint,
+      start: camera.x,
+      page: { start: page.x, length: page.width },
+      margins: same ? { near: setup.left / 20, far: setup.right / 20 } : null,
+      indents: rulerIndents(),
+    },
+    box.left,
+  );
+  verticalRuler.draw(
+    {
+      length: canvas.clientHeight,
+      pxPerPoint,
+      start: camera.y,
+      page: { start: page.y, length: page.height },
+      margins: same ? { near: setup.top / 20, far: setup.bottom / 20 } : null,
+    },
+    0,
+  );
+}
+
     canFlow: !annotating && !isPicture(),
   });
 }

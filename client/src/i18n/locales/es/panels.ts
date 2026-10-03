@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': 'De pago, con sesión en los últimos 30 días',
   'panels.analytics.payingCol': 'De pago ahora',
 };
+  'panels.ruler.firstLine': 'Sangría de primera línea',
+  'panels.ruler.hanging': 'Sangría francesa',
+  'panels.ruler.left': 'Sangría izquierda',
+  'panels.ruler.right': 'Sangría derecha',
+  'panels.ruler.margin': 'Arrastre para cambiar el margen',

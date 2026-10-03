@@ -179,3 +179,8 @@ export const panels: Partial<Messages> = {
   'panels.analytics.payingActive30': 'Pagantes, conectados nos últimos 30 dias',
   'panels.analytics.payingCol': 'Pagantes agora',
 };
+  'panels.ruler.firstLine': 'Recuo da primeira linha',
+  'panels.ruler.hanging': 'Recuo deslocado',
+  'panels.ruler.left': 'Recuo à esquerda',
+  'panels.ruler.right': 'Recuo à direita',
+  'panels.ruler.margin': 'Arraste para alterar a margem',

@@ -79,6 +79,12 @@ const ROTATE_CURSOR = (() => {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='white' stroke-width='4.2' fill='white'>${arrow}</g><g stroke='black' stroke-width='1.8' fill='black'>${arrow}</g></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, grab`;
 })();
+/** A pencil, as a cursor, with its point (the bottom left) where the line is drawn. */
+const PENCIL_CURSOR = (() => {
+  const body = "<path d='M3 21l1.200-4.200L16 5a2.100 2.100 0 0 1 3 3L7.200 19.800z'/><path d='M14 7l3 3'/>";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='white' stroke-width='4' stroke-linejoin='round' fill='white'>${body}</g><g stroke='black' stroke-width='1.600' stroke-linejoin='round' fill='#ffd66b'>${body}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 3 21, crosshair`;
+})();
 /** The cursor over each handle of the selection's box. */
 const RESIZE_CURSORS: Record<Exclude<Handle, 'rotate'>, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
 
@@ -140,6 +146,8 @@ export class VectorEditor {
     switch (this._tool) {
       case 'text':
         return 'text';
+      case 'pencil':
+        return PENCIL_CURSOR;
       case 'select':
         return '';
       default:
@@ -160,6 +168,8 @@ export class VectorEditor {
       case 'node':
       case 'gradient':
         return 'move';
+      case 'pencil':
+        return PENCIL_CURSOR;
       default:
         return 'crosshair';
     }
@@ -180,6 +190,7 @@ export class VectorEditor {
       return 'crosshair';
     }
     if (this._tool === 'text') return 'text';
+    if (this._tool === 'pencil') return PENCIL_CURSOR;
     if (this._tool !== 'select') return 'crosshair';
     // Points and handles of the path being edited.
     if (this.nodes) {

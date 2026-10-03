@@ -467,7 +467,7 @@ export class Chrome {
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
-    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'pen'], ['pencil', 'pencil'], ['text', 'text']] as const) {
+    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['text', 'text']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, checked: (s) => s.vector.tool === tool }));
     }
     const vectorOps = { delete: 'trash', duplicate: 'copy', group: 'group', ungroup: 'ungroup', front: 'toFront', forward: 'forward', backward: 'backward', back: 'toBack' } as const;

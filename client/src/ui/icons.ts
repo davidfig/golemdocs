@@ -217,6 +217,8 @@ export const ICONS: Record<string, string> = {
   subtract: svg(`<rect x="3.5" y="3.5" width="12" height="12" fill="${BLUE}"/><rect x="8.5" y="8.5" width="12" height="12" fill="${PAPER}" stroke-dasharray="2.5 2.5" stroke-width="1.4"/>`),
   exclude: svg(`<rect x="3.5" y="3.5" width="12" height="12" fill="${BLUE}"/><rect x="8.5" y="8.5" width="12" height="12" fill="${BLUE}"/><rect x="8.5" y="8.5" width="7" height="7" fill="${PAPER}" stroke-width="1.2"/>`),
   clipMask: svg(`<rect x="3.5" y="3.5" width="17" height="17" rx="1.5" fill="${MIST}" stroke-dasharray="2.5 2.5" stroke-width="1.4"/><circle cx="12" cy="12" r="5.5" fill="${BLUE}"/>`),
+  // The pen: a nib over a curve with anchor points, as the Bézier pen of drawing programs is shown.
+  penTool: svg(`<path d='M3.5 19.500C6 11 10 8 14 12.500' fill='none' stroke-width='1.5'/><rect x='2' y='18' width='3.600' height='3.600' rx='.6' fill='${PAPER}' stroke-width='1.2'/><path d='M13.500 3.500l7 7-3.300 1.600-5.300-5.300z' fill='${YELLOW}'/><path d='M12 7.500l-.7 5.200 5.200-1.700' fill='${BUTTER}'/><circle cx='12.600' cy='12.600' r='1.200' fill='${PAPER}' stroke-width='1.100'/>`),
   pencil: svg(`<path d='M4 19.5l1.2-4.2L16.6 4a2.1 2.1 0 0 1 3 3L8.2 18.3z' fill='${PINK}'/><path d='M14.8 5.8l3.4 3.4M4 19.5l4.2-1.2-3-3z' fill='${MIST}'/><path d='M3.5 21.5c2-1.5 3 .5 5-.5s3-1 4.500-.2' fill='none' stroke-width='1.3'/>`),
   select: svg(`<path d="M6.5 3.5l11 7.2-5 1.2 2.6 5.6-2.4 1.1-2.6-5.6-3.6 3.6z" fill="${PAPER}"/>`),
   group: svg(`<rect x="3.5" y="3.5" width="17" height="17" rx="2" stroke-dasharray="2.5 2.5" stroke-width="1.4"/><rect x="7" y="7" width="6.5" height="6.5" fill="${SKY}"/><rect x="10.5" y="10.5" width="6.5" height="6.5" fill="${BLUE}"/>`),

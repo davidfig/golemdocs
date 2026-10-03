@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': 'Offener Pfeil',
   'vector.brush.dotEnds': 'Punkte an den Enden',
   'vector.brush.diamondEnd': 'Raute am Ende',
+  'vector.fillType': 'Füllart',
+  'vector.fillType.solid': 'Volltonfarbe',
+  'vector.fillType.linear': 'Linearer Verlauf',
+  'vector.fillType.radial': 'Radialer Verlauf',
 };

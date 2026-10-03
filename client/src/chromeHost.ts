@@ -71,7 +71,7 @@ export interface AppHooks {
   /** A vector editor tool or command (select, draw a shape, group, order...). */
   vectorAction(op: VectorOp): void;
   /** The look of the selected shapes and of the next ones. */
-  vectorStyle(change: { fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string }): void;
+  vectorStyle(change: { fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }): void;
   /** The open document is a vector drawing. */
   isDrawing(): boolean;
   /** The Draw tools' colour and thickness step. */

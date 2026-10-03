@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': 'Flecha abierta',
   'vector.brush.dotEnds': 'Extremos con punto',
   'vector.brush.diamondEnd': 'Rombo al final',
+  'vector.fillType': 'Tipo de relleno',
+  'vector.fillType.solid': 'Color sólido',
+  'vector.fillType.linear': 'Degradado lineal',
+  'vector.fillType.radial': 'Degradado radial',
 };

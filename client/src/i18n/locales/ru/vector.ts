@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': 'Открытая стрелка',
   'vector.brush.dotEnds': 'Точки на концах',
   'vector.brush.diamondEnd': 'Ромб на конце',
+  'vector.fillType': 'Тип заливки',
+  'vector.fillType.solid': 'Сплошной цвет',
+  'vector.fillType.linear': 'Линейный градиент',
+  'vector.fillType.radial': 'Радиальный градиент',
 };

@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': 'Open Arrow',
   'vector.brush.dotEnds': 'Dot Ends',
   'vector.brush.diamondEnd': 'Diamond End',
+  'vector.fillType': 'Fill Type',
+  'vector.fillType.solid': 'Solid Color',
+  'vector.fillType.linear': 'Linear Gradient',
+  'vector.fillType.radial': 'Radial Gradient',
 } as const;

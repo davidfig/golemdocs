@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': '열린 화살표',
   'vector.brush.dotEnds': '양끝에 점',
   'vector.brush.diamondEnd': '끝에 마름모',
+  'vector.fillType': '채우기 종류',
+  'vector.fillType.solid': '단색',
+  'vector.fillType.linear': '선형 그라디언트',
+  'vector.fillType.radial': '원형 그라디언트',
 };

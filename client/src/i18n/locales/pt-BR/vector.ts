@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': 'Seta aberta',
   'vector.brush.dotEnds': 'Pontas com ponto',
   'vector.brush.diamondEnd': 'Losango no fim',
+  'vector.fillType': 'Tipo de preenchimento',
+  'vector.fillType.solid': 'Cor sólida',
+  'vector.fillType.linear': 'Gradiente linear',
+  'vector.fillType.radial': 'Gradiente radial',
 };

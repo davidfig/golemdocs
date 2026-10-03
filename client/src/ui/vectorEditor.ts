@@ -6,6 +6,7 @@
 // drawing. Like the draw layer, it takes the pointer from the view's own handlers (in the capture
 // phase) while a drawing is open.
 
+import type { XmlElement } from '@golemdocs/docx';
 import type { PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import { applyBrush, brushOf, editableCommands, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
 import { DASHES, presetById } from '../vector/brushPresets.ts';
@@ -17,7 +18,11 @@ import { hitTest, nodesInRect } from '../vector/hit.ts';
 import { apply, fmt, invert, multiply, rotation, scaling, translation } from '../vector/matrix.ts';
 import { anchorOf, isSmooth, moveAnchor, moveHandle, nearestSegment, penPath, removeAnchor, splitSegment } from '../vector/pathEdit.ts';
 import type { PenPoint } from '../vector/pathEdit.ts';
-import { parseLength } from '../vector/style.ts';
+import { colorAt, createGradient, editableGradient, gradientHandles, gradientInLocal, ownGradient, readStops, setGradientPoint, writeStops } from '../vector/gradientEdit.ts';
+import { readGradient } from '../vector/gradients.ts';
+import type { Gradient } from '../vector/gradients.ts';
+import { localBounds } from '../vector/geometry.ts';
+import { parseColor, parseLength, colorText, urlReference } from '../vector/style.ts';
 import { t } from '../i18n/index.ts';
 import { isFormField } from './dom.ts';
 import type { VectorFrame, VectorLayer } from './vectorLayer.ts';
@@ -40,6 +45,8 @@ export interface ShapeStyle {
   fill: string | null;
   stroke: string | null;
   strokeWidth: number;
+  /** What the fill is: a colour or a gradient. */
+  fillType: 'solid' | 'linear' | 'radial';
   /** How the line is drawn: `dash:<id>` (see brushPresets.ts DASHES) or `brush:<id>` (BRUSH_PRESETS). */
   strokeStyle: string;
 }
@@ -56,7 +63,7 @@ const ROTATE_OFFSET = 24;
 const ACCENT = '#316ac5';
 /** Two clicks this close in time and place are a double click. */
 const DOUBLE_CLICK_MS = 400;
-const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2, strokeStyle: 'dash:solid' };
+const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2, fillType: 'solid', strokeStyle: 'dash:solid' };
 const DEFAULT_FONT_SIZE = 24;
 
 type NodePart = 'anchor' | 'c1' | 'c2';
@@ -68,6 +75,7 @@ type Gesture =
   | { kind: 'band'; start: [number, number]; to: [number, number]; add: boolean; before: NodePath[] }
   | { kind: 'create'; tool: 'rect' | 'ellipse' | 'line'; start: [number, number]; to: [number, number]; square: boolean }
   | { kind: 'penHandle'; origin: [number, number] }
+  | { kind: 'gradient'; base: Scene; part: 0 | 1 | 'stop'; index: number; moved: boolean }
   | { kind: 'node'; base: Scene; part: NodePart; index: number; start: [number, number]; smooth: boolean; moved: boolean };
 
 /** Editing the points of one path. */
@@ -101,6 +109,8 @@ export class VectorEditor {
   private nodes: NodeMode | null = null;
   private lastClick: { time: number; x: number; y: number } | null = null;
   private typing: HTMLInputElement | null = null;
+  /** The gradient stop picked on a selected shape (an interior one can be removed). */
+  private stop: number | null = null;
 
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.scene || isFormField(e.target)) return;
@@ -154,8 +164,12 @@ export class VectorEditor {
     const node = nodeAt(scene, first);
     const brush = node?.kind === 'path' ? brushOf(node) : null;
     // A brush stroke is a filled outline: its colour is its fill.
-    if (brush && node?.kind === 'path') return { fill: null, stroke: paint('fill', '#000000'), strokeWidth: strokeWidthOf(node), strokeStyle: `brush:${brush.preset ?? 'plain'}` };
-    return { fill: paint('fill', '#000000'), stroke: paint('stroke', null), strokeWidth: parseLength(styleOf(scene, first, 'stroke-width')) ?? 1, strokeStyle: dashOf(styleOf(scene, first, 'stroke-dasharray'), parseLength(styleOf(scene, first, 'stroke-width')) ?? 1) };
+    if (brush && node?.kind === 'path') return { fill: null, stroke: paint('fill', '#000000'), strokeWidth: strokeWidthOf(node), fillType: 'solid', strokeStyle: `brush:${brush.preset ?? 'plain'}` };
+    // A gradient shows its first stop's colour.
+    const fillPaint = paint('fill', '#000000');
+    const gradient = fillPaint && urlReference(fillPaint) ? readGradient(scene, urlReference(fillPaint)!) : null;
+    const stopColor = gradient?.stops.length ? colorText(gradient.stops[Math.min(this.stop ?? 0, gradient.stops.length - 1)].color) : null;
+    return { fill: gradient ? stopColor : fillPaint, fillType: gradient ? gradient.type : 'solid', stroke: paint('stroke', null), strokeWidth: parseLength(styleOf(scene, first, 'stroke-width')) ?? 1, strokeStyle: dashOf(styleOf(scene, first, 'stroke-dasharray'), parseLength(styleOf(scene, first, 'stroke-width')) ?? 1) };
   }
 
   /** Starts editing a drawing that has just been opened: no selection, no history. */
@@ -295,13 +309,16 @@ export class VectorEditor {
 
   /** Changes how the selection (and what is drawn next) looks. */
   applyStyle(change: Partial<ShapeStyle>): void {
-    const { strokeStyle, ...rest } = change;
+    const { strokeStyle, fillType, ...rest } = change;
     this.shape = { ...this.shape, ...rest };
     const props: Record<string, string | null> = {};
     if ('fill' in rest) props.fill = rest.fill ?? 'none';
     if ('stroke' in rest) props.stroke = rest.stroke ?? 'none';
     if ('strokeWidth' in rest) props['stroke-width'] = fmt(rest.strokeWidth ?? 1);
     if (strokeStyle !== undefined) return this.applyStrokeStyle(strokeStyle);
+    if (fillType !== undefined) return this.applyFillType(fillType);
+    // On a shape with a gradient, the fill colour is the colour of the picked stop.
+    if (rest.fill && this.scene && this.gradientOfSelection(this.scene)) return this.setStopColor(rest.fill);
     if (this._selection.length && this.scene) {
       this.edit((scene, selection) => {
         for (const path of outermost(selection)) {
@@ -324,6 +341,123 @@ export class VectorEditor {
         return selection;
       });
     } else this.refresh();
+  }
+
+  /** Fills the selected shapes with a colour or a gradient. */
+  applyFillType(type: 'solid' | 'linear' | 'radial'): void {
+    this.shape = { ...this.shape, fillType: type };
+    this.edit((scene, selection) => {
+      for (const path of outermost(selection)) {
+        const node = nodeAt(scene, path);
+        if (!node || node.kind === 'group' || node.kind === 'raw' || node.kind === 'text' || node.kind === 'image' || node.kind === 'use') continue;
+        const box = localBounds(node, scene);
+        const id = urlReference(node.style.fill);
+        const gradient = id ? readGradient(scene, id) : null;
+        const first = gradient?.stops.length ? colorText(gradient.stops[0].color) : node.style.fill && node.style.fill !== 'none' && !id ? node.style.fill : '#000000';
+        if (type === 'solid') {
+          node.style.fill = first;
+        } else if (box) {
+          const last = gradient?.stops.length ? colorText(gradient.stops[gradient.stops.length - 1].color) : '#ffffff';
+          node.style.fill = `url(#${createGradient(scene, type, box, first, last)})`;
+        }
+      }
+      return selection;
+    });
+  }
+
+  /** The gradient of the one selected shape, in the shape's own coordinates. */
+  private gradientOfSelection(scene: Scene): { path: NodePath; id: string; gradient: Gradient; box: Bounds } | null {
+    if (this._selection.length !== 1) return null;
+    const path = this._selection[0];
+    const node = nodeAt(scene, path);
+    if (!node || node.kind === 'group' || node.kind === 'raw' || node.kind === 'text' || node.kind === 'image' || node.kind === 'use') return null;
+    const id = urlReference(node.style.fill);
+    const read = id ? readGradient(scene, id) : null;
+    const box = localBounds(node, scene);
+    if (!id || !read || !box || !read.stops.length) return null;
+    return { path, id, gradient: gradientInLocal(read, box), box };
+  }
+
+  /** Changes the gradient of a shape in a copy of the scene (making it the shape's own first), its points in the shape's own coordinates. */
+  private editGradient(scene: Scene, path: NodePath, change: (element: XmlElement) => void): void {
+    const node = nodeAt(scene, path);
+    const id = node ? urlReference(node.style.fill) : null;
+    const box = node ? localBounds(node, scene) : null;
+    if (!node || !id || !box) return;
+    const own = ownGradient(scene, id);
+    node.style.fill = `url(#${own})`;
+    const editable = editableGradient(scene, own, box);
+    if (editable) change(editable.element);
+  }
+
+  /** The point or stop of the selected shape's gradient under a screen point. */
+  private gradientHandleAt(frame: VectorFrame, g: { path: NodePath; gradient: Gradient }, sx: number, sy: number): { part: 0 | 1 | 'stop'; stop: number | null } | null {
+    const world = worldMatrix(this.scene!, g.path);
+    const near = (p: { x: number; y: number }): boolean => {
+      const [x, y] = frame.toScreen(...apply(world, p.x, p.y));
+      return Math.hypot(sx - x, sy - y) <= HANDLE_REACH;
+    };
+    const { points, stops } = gradientHandles(g.gradient);
+    for (let i = 0; i < stops.length; i++) if (stops[i].offset > 0 && stops[i].offset < 1 && near(stops[i].at)) return { part: 'stop', stop: i };
+    for (const [part, p] of [[0, points[0]], [1, points[1]]] as const) {
+      if (near(p)) return { part, stop: part === 0 ? 0 : stops.length - 1 };
+    }
+    return null;
+  }
+
+  /** How far along its line (0 to 1) a screen point is, when it is on the line. */
+  private gradientParameter(frame: VectorFrame, g: { path: NodePath; gradient: Gradient }, sx: number, sy: number): number | null {
+    const world = worldMatrix(this.scene!, g.path);
+    const [a, b] = gradientHandles(g.gradient).points.map((p) => frame.toScreen(...apply(world, p.x, p.y)));
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const length = dx * dx + dy * dy;
+    if (!length) return null;
+    const t = ((sx - a[0]) * dx + (sy - a[1]) * dy) / length;
+    const distance = Math.hypot(sx - (a[0] + t * dx), sy - (a[1] + t * dy));
+    return t > 0.02 && t < 0.98 && distance <= LINE_REACH * 2 ? t : null;
+  }
+
+  private addStop(g: { path: NodePath; gradient: Gradient }, t: number): void {
+    if (!this.scene) return;
+    const next = cloneScene(this.scene);
+    let added = 0;
+    this.editGradient(next, g.path, (element) => {
+      const stops = readStops(element);
+      stops.push({ offset: t, color: colorAt(stops, t, parseColor) });
+      writeStops(element, stops);
+      added = readStops(element).findIndex((x) => Math.abs(x.offset - t) < 1e-9);
+    });
+    this.stop = added;
+    this.commit(next, this._selection);
+  }
+
+  /** Takes the picked stop away, if it is one that can go (not an end, and at least two stay). */
+  private removeStop(): boolean {
+    const scene = this.scene;
+    const index = this.stop;
+    const g = scene ? this.gradientOfSelection(scene) : null;
+    if (!scene || !g || index === null || index <= 0 || index >= g.gradient.stops.length - 1) return false;
+    const next = cloneScene(scene);
+    this.editGradient(next, g.path, (element) => writeStops(element, readStops(element).filter((_, i) => i !== index)));
+    this.stop = null;
+    this.commit(next, this._selection);
+    return true;
+  }
+
+  /** Gives the picked stop (the first when none is) a colour. */
+  private setStopColor(color: string): void {
+    const scene = this.scene;
+    const g = scene ? this.gradientOfSelection(scene) : null;
+    if (!scene || !g) return;
+    const index = Math.min(this.stop ?? 0, g.gradient.stops.length - 1);
+    const next = cloneScene(scene);
+    this.editGradient(next, g.path, (element) => {
+      const stops = readStops(element);
+      stops[index].color = color;
+      writeStops(element, stops);
+    });
+    this.commit(next, this._selection);
   }
 
   /** Draws the selected lines (and the next ones) as dashes or with a brush; a rectangle or ellipse takes dashes only. */
@@ -380,6 +514,7 @@ export class VectorEditor {
 
   select(paths: NodePath[]): void {
     this._selection = paths;
+    this.stop = null;
     if (this.nodes && !(paths.length === 1 && paths[0].join() === this.nodes.path.join())) this.nodes = null;
     this.refresh();
   }
@@ -411,6 +546,7 @@ export class VectorEditor {
     if (e.key === 'Escape' && this._tool !== 'select') return this.setTool('select'), true;
     if (mod && k === 'a') return this.selectAll(), true;
     if (!this._selection.length) return false;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.removeStop()) return true;
     if (mod && k === 'd') return this.duplicate(), true;
     if (mod && k === 'g') return e.shiftKey ? (this.ungroup(), true) : (this.group(), true);
     if (e.key === 'Delete' || e.key === 'Backspace') return this.delete(), true;
@@ -520,6 +656,20 @@ export class VectorEditor {
       this.nodes = null;
       this.refresh();
     }
+    const gradient = this.gradientOfSelection(scene);
+    if (gradient) {
+      const picked = this.gradientHandleAt(frame, gradient, sx, sy);
+      if (picked) {
+        this.stop = picked.stop;
+        this.gesture = { kind: 'gradient', base: cloneScene(scene), part: picked.part, index: picked.stop ?? 0, moved: false };
+        return this.refresh();
+      }
+      if (double) {
+        // A double click on the gradient's line adds a stop there.
+        const t = this.gradientParameter(frame, gradient, sx, sy);
+        if (t !== null) return this.addStop(gradient, t);
+      }
+    }
     const handle = this.handleAt(frame, sx, sy);
     const box = this.selectionBox();
     if (handle === 'rotate' && box) {
@@ -602,6 +752,23 @@ export class VectorEditor {
       const dy = to.y - from.y;
       const commands = editableCommands(node);
       setEditableCommands(node, gesture.part === 'anchor' ? moveAnchor(commands, gesture.index, dx, dy) : moveHandle(commands, gesture.index, gesture.part, dx, dy, gesture.smooth && !e.altKey));
+    } else if (gesture.kind === 'gradient') {
+      const path = paths[0];
+      const local = this.toLocal(path, at);
+      gesture.moved = true;
+      this.editGradient(next, path, (element) => {
+        if (gesture.part !== 'stop') return setGradientPoint(element, gesture.part, local);
+        const stops = readStops(element);
+        const g = readGradient(next, element.attrs.id)!;
+        const [a, b] = gradientHandles(gradientInLocal(g, localBounds(nodeAt(next, path)!, next)!)).points;
+        const length = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1;
+        const t = ((local.x - a.x) * (b.x - a.x) + (local.y - a.y) * (b.y - a.y)) / length;
+        // Between its neighbours, so that the stops stay in order.
+        const low = stops[gesture.index - 1]?.offset ?? 0;
+        const high = stops[gesture.index + 1]?.offset ?? 1;
+        stops[gesture.index].offset = Math.max(low, Math.min(high, t));
+        writeStops(element, stops);
+      });
     } else if (gesture.kind === 'move') {
       let dx = at[0] - gesture.start[0];
       let dy = at[1] - gesture.start[1];
@@ -677,7 +844,7 @@ export class VectorEditor {
     const gesture = this.gesture;
     this.gesture = null;
     if (!gesture) return;
-    if (gesture.kind === 'move' || gesture.kind === 'resize' || gesture.kind === 'rotate' || gesture.kind === 'node') {
+    if (gesture.kind === 'move' || gesture.kind === 'resize' || gesture.kind === 'rotate' || gesture.kind === 'node' || gesture.kind === 'gradient') {
       this.scene = gesture.base;
       this.host.layer.update(gesture.base);
     }
@@ -956,6 +1123,39 @@ export class VectorEditor {
       ctx.fillRect(hx - 3.5, hy - 3.5, 7, 7);
       ctx.strokeRect(hx - 3.5, hy - 3.5, 7, 7);
     }
+    this.decorateGradient(ctx, frame, scene);
+  }
+
+  /** The line a gradient runs along, and its stops, over the shape. */
+  private decorateGradient(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {
+    const g = this.gradientOfSelection(scene);
+    if (!g) return;
+    const world = worldMatrix(scene, g.path);
+    const screen = (p: { x: number; y: number }): [number, number] => frame.toScreen(...apply(world, p.x, p.y));
+    const { points, stops } = gradientHandles(g.gradient);
+    const [ax, ay] = screen(points[0]);
+    const [bx, by] = screen(points[1]);
+    ctx.save();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    stops.forEach((stop, i) => {
+      const [x, y] = screen(stop.at);
+      ctx.beginPath();
+      ctx.arc(x, y, i === this.stop ? 6 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = colorText(g.gradient.stops[i].color);
+      ctx.fill();
+      ctx.lineWidth = i === this.stop ? 2.5 : 1.5;
+      ctx.strokeStyle = i === this.stop ? ACCENT : '#fff';
+      ctx.stroke();
+    });
+    ctx.restore();
   }
 
   private decorateNodes(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {

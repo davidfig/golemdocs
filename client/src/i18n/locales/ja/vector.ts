@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': '開いた矢印',
   'vector.brush.dotEnds': '両端にドット',
   'vector.brush.diamondEnd': '終点にひし形',
+  'vector.fillType': '塗りの種類',
+  'vector.fillType.solid': '単色',
+  'vector.fillType.linear': '線形グラデーション',
+  'vector.fillType.radial': '円形グラデーション',
 };

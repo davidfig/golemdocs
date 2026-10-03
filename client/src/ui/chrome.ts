@@ -990,9 +990,33 @@ export class Chrome {
         () => profile().vectorTools,
       ),
     );
+    define('control.vectorFillType', t('vector.fillType'), t('vector.toolbar'), 'fill', () => gated(this.vectorFillTypeBox(), () => profile().vectorTools));
     define('control.vectorStrokeStyle', t('vector.strokeStyle'), t('vector.toolbar'), 'line', () => gated(this.vectorStrokeStyleBox(), () => profile().vectorTools));
     define('control.vectorStrokeWidth', t('vector.strokeWidth'), t('vector.toolbar'), 'line', () => gated(this.vectorWidthBox(), () => profile().vectorTools));
     define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
+  }
+
+  /** Solid colour, or a linear or radial gradient. */
+  private vectorFillTypeBox(): Control {
+    const r = this.registry;
+    const label = t('vector.fillType');
+    const select = h('select', { class: 'wm-draw-size', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
+    for (const type of ['solid', 'linear', 'radial'] as const) {
+      const option = h('option', { text: t(`vector.fillType.${type}`) });
+      option.value = type;
+      select.append(option);
+    }
+    select.addEventListener('change', () => {
+      r.perform({ kind: 'vectorStyle', fillType: select.value as 'solid' | 'linear' | 'radial' }, label);
+      r.focusEditor();
+    });
+    return {
+      el: select,
+      refresh: (state) => {
+        select.value = state.vector.fillType;
+        select.disabled = !r.allows({ kind: 'vectorStyle', fillType: state.vector.fillType });
+      },
+    };
   }
 
   /** The list of ways a line can be drawn: dashes, then the brushes in groups. */

@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': 'Freccia aperta',
   'vector.brush.dotEnds': 'Estremità a punto',
   'vector.brush.diamondEnd': 'Rombo alla fine',
+  'vector.fillType': 'Tipo di riempimento',
+  'vector.fillType.solid': 'Tinta unita',
+  'vector.fillType.linear': 'Sfumatura lineare',
+  'vector.fillType.radial': 'Sfumatura radiale',
 };

@@ -58,4 +58,8 @@ export const vector = {
   'vector.brush.arrowOpen': '開放箭頭',
   'vector.brush.dotEnds': '兩端圓點',
   'vector.brush.diamondEnd': '終點菱形',
+  'vector.fillType': '填滿類型',
+  'vector.fillType.solid': '純色',
+  'vector.fillType.linear': '線性漸層',
+  'vector.fillType.radial': '放射狀漸層',
 };

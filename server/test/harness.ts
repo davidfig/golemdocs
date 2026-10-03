@@ -84,6 +84,9 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
       return {};
     },
     async delete(keys: string | string[]) {
+      // A real delete is a request to R2, so work deferred past the response (background) finishes
+      // after the response is seen, not within the same few microtasks.
+      if (options.background) await new Promise((resolve) => setTimeout(resolve, 0));
       for (const key of [keys].flat()) objects.delete(key);
     },
   };

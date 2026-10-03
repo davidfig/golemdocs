@@ -202,8 +202,12 @@ class LocalUserDb extends UserDb {
   }
 }
 
-/** Local users whose tables are known to be current, per simulated directory database. */
-const migratedLocally = new WeakMap<object, Set<string>>();
+/**
+ * Local users' migrations, per simulated directory database: one per user and process, shared by
+ * requests that arrive together (locally a migration's statements run one at a time, not as one
+ * transaction, so two at once would both make the same tables).
+ */
+const migratedLocally = new WeakMap<object, Map<string, Promise<number>>>();
 
 async function createDatabase(env: Env, userId: string): Promise<string> {
   // Dev databases live in the same account but can never be mistaken for (or collide with) production's.
@@ -238,12 +242,16 @@ export async function userDb(env: Env, userId: string): Promise<UserDb> {
   if (env.ENVIRONMENT === 'local') {
     const local = new LocalUserDb(env.DIRECTORY, userId, env);
     // Once per process: migrating on every request cost several queries (and dropped the cached lists each time).
-    const done = migratedLocally.get(env.DIRECTORY) ?? new Set<string>();
-    migratedLocally.set(env.DIRECTORY, done);
-    if (!done.has(userId)) {
-      await migrate(local);
-      done.add(userId);
+    const started = migratedLocally.get(env.DIRECTORY) ?? new Map<string, Promise<number>>();
+    migratedLocally.set(env.DIRECTORY, started);
+    let migrating = started.get(userId);
+    if (!migrating) {
+      migrating = migrate(local);
+      started.set(userId, migrating);
+      // One that failed is tried again by the next request.
+      migrating.catch(() => started.delete(userId));
     }
+    await migrating;
     return local;
   }
   const lookup = () =>

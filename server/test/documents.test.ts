@@ -136,7 +136,7 @@ test('a listing still works when the cache table is missing', async () => {
   assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).length, 2);
 });
 
-/** The body of POST /api/documents/batch (see uploadBatch in worker.ts). */
+/** The body of POST /api/documents/batch (see uploadBatch in documents.ts). */
 function batchBody(documents: { name: string; bytes: number[]; folderId?: string | null }[]): Uint8Array {
   const header = new TextEncoder().encode(JSON.stringify({ documents: documents.map((d) => ({ name: d.name, size: d.bytes.length, folderId: d.folderId ?? null })) }));
   const body = new Uint8Array(4 + header.length + documents.reduce((n, d) => n + d.bytes.length, 0));

@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': 'Simbolo',
   'vector.name.raw': 'Altro',
   'vector.snap': 'Aggancia agli oggetti',
+  'vector.makeMask': 'Crea maschera di opacità',
+  'vector.releaseMask': 'Rilascia maschera di opacità',
+  'vector.maskFailed': 'Una maschera di opacità richiede una forma sopra almeno un altro oggetto, tutti nello stesso gruppo.',
+  'vector.guideV': 'Aggiungi guida verticale',
+  'vector.guideH': 'Aggiungi guida orizzontale',
+  'vector.clearGuides': 'Cancella guide',
 };

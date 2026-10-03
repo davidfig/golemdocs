@@ -4,7 +4,11 @@
 // from its parents. Painting is best effort for what a canvas can't do (filters, masks,
 // per-group opacity): those parts of a file are left unpainted rather than wrongly painted.
 
+import { elements } from '@golemdocs/docx';
+import { makeCanvas } from '../formats/imageCodec.ts';
 import { readClip } from './clip.ts';
+import { findDefinition } from './gradients.ts';
+import { readFragment } from './svgRead.ts';
 import { readGradient } from './gradients.ts';
 import { fontSizeOf, findNode, localBounds, outline, viewBoxMatrix } from './geometry.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style, TextNode } from './model.ts';
@@ -194,6 +198,26 @@ function paintNode(walk: Walk, node: SceneNode, parentChain: readonly Style[]): 
     tracePath(ctx, cut.commands);
     ctx.clip(cut.evenOdd ? 'evenodd' : 'nonzero');
   }
+  const maskId = urlReference(node.style.mask);
+  const mask = maskId ? maskLayer(walk, maskId, localBounds(node, scene, chain)) : null;
+  if (mask) {
+    // The node is drawn on a layer of its own, which is then cut by the mask's brightness and put on the drawing.
+    const layer = makeCanvas(mask.canvas.width, mask.canvas.height);
+    layer.context.setTransform(ctx.getTransform());
+    drawContent({ ...walk, ctx: layer.context }, node, chain);
+    layer.context.globalCompositeOperation = 'destination-in';
+    layer.context.setTransform(1, 0, 0, 1, 0, 0);
+    layer.context.drawImage(mask.canvas as CanvasImageSource, 0, 0);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(layer.canvas as CanvasImageSource, 0, 0);
+    ctx.restore();
+  } else drawContent(walk, node, chain);
+  ctx.restore();
+}
+
+function drawContent(walk: Walk, node: SceneNode, chain: readonly Style[]): void {
+  const { ctx, scene, options } = walk;
   switch (node.kind) {
     case 'group':
       for (const child of node.children) paintNode(walk, child, chain);
@@ -220,7 +244,46 @@ function paintNode(walk: Walk, node: SceneNode, parentChain: readonly Style[]): 
       break;
     }
   }
-  ctx.restore();
+}
+
+/**
+ * What a `mask` lets through, as a canvas the size of the one being painted: transparent where the
+ * mask is black or empty, opaque where it is white. Null when there is no such mask, or the canvas
+ * can't be read back (a mask is then ignored, and what it covers is painted as it is).
+ */
+function maskLayer(walk: Walk, id: string, box: Bounds | null): ReturnType<typeof makeCanvas> | null {
+  const element = findDefinition(walk.scene, id);
+  if (!element || element.name !== 'mask' || walk.depth > 8) return null;
+  const { ctx, scene } = walk;
+  const canvas = ctx.canvas;
+  if (!canvas.width || !canvas.height) return null;
+  let layer: ReturnType<typeof makeCanvas>;
+  try {
+    layer = makeCanvas(canvas.width, canvas.height);
+  } catch {
+    return null;
+  }
+  const mc = layer.context;
+  if (typeof mc.getImageData !== 'function') return null;
+  mc.setTransform(ctx.getTransform());
+  // Content in the shape's own box units, when the mask says so.
+  if (element.attrs.maskContentUnits === 'objectBoundingBox') {
+    if (!box) return null;
+    mc.transform(box.width, 0, 0, box.height, box.x, box.y);
+  }
+  const nodes = readFragment([...elements(element)], scene.viewBox.width, scene.viewBox.height);
+  for (const node of nodes) paintNode({ ...walk, ctx: mc, depth: walk.depth + 1 }, node, [scene.style]);
+  // Brightness becomes opacity: white is let through, black is not.
+  const image = mc.getImageData(0, 0, layer.canvas.width, layer.canvas.height);
+  const d = image.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const luminance = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+    d[i + 3] = Math.round(luminance * d[i + 3]);
+    d[i] = d[i + 1] = d[i + 2] = 0;
+  }
+  mc.setTransform(1, 0, 0, 1, 0, 0);
+  mc.putImageData(image, 0, 0);
+  return layer;
 }
 
 /**

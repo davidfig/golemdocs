@@ -244,6 +244,17 @@ function stylesheets(e: XmlElement, out: string[] = []): string[] {
   return out;
 }
 
+/** Elements (the content of a mask, say) as nodes, without any stylesheet; `width` and `height` are what percentages mean. */
+export function readFragment(elements: readonly XmlElement[], width: number, height: number): SceneNode[] {
+  const context: Context = { rules: [], width, height, defs: [] };
+  const out: SceneNode[] = [];
+  for (const e of elements) {
+    const node = convert(e, context, undefined);
+    if (node) out.push(node);
+  }
+  return out;
+}
+
 /** Reads an SVG document. Throws SvgError when the text is not one. */
 export function readSvg(source: string): Scene {
   let root: XmlElement;

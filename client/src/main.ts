@@ -2331,6 +2331,12 @@ function render(): void {
   cropLayer.position();
   drawLayer.position();
   vector?.position(layersOpen);
+  // The layers panel takes room from the view: a drawing still fitted to the window is fitted again.
+  const layersShown = layersOpen && !!vector?.editor.active;
+  if (layersShown !== layersWereShown) {
+    layersWereShown = layersShown;
+    if (isDrawing() && loaded && !userMoved) placeCamera();
+  }
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
@@ -3312,6 +3318,7 @@ async function showDrawing(): Promise<void> {
 
 // The drawing's shapes as a list beside it (see ui/layersPanel.ts).
 const LAYERS_KEY = 'word.layersPanel';
+let layersWereShown = false;
 let layersOpen = (() => {
   try {
     return localStorage.getItem(LAYERS_KEY) !== 'off';

@@ -23,6 +23,32 @@ export interface Snap {
 
 const unique = (values: number[]): number[] => [...new Set(values.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
 
+/** The attribute of the drawing's root that keeps its guides: JSON, `{"v": [x...], "h": [y...]}`. */
+export const GUIDES_ATTR = 'data-golem-guides';
+
+export interface Guides {
+  /** Vertical guides (their x) and horizontal ones (their y). */
+  v: number[];
+  h: number[];
+}
+
+/** The guides a drawing has. */
+export function readGuides(scene: Scene): Guides {
+  try {
+    const g = JSON.parse(scene.attrs[GUIDES_ATTR] ?? '{}') as Partial<Guides>;
+    const numbers = (list: unknown): number[] => (Array.isArray(list) ? list.filter((n): n is number => typeof n === 'number' && Number.isFinite(n)) : []);
+    return { v: numbers(g.v), h: numbers(g.h) };
+  } catch {
+    return { v: [], h: [] };
+  }
+}
+
+/** Keeps guides in the drawing (none at all takes the attribute away). */
+export function writeGuides(scene: Scene, guides: Guides): void {
+  if (!guides.v.length && !guides.h.length) delete scene.attrs[GUIDES_ATTR];
+  else scene.attrs[GUIDES_ATTR] = JSON.stringify({ v: guides.v.map((n) => Math.round(n * 1000) / 1000), h: guides.h.map((n) => Math.round(n * 1000) / 1000) });
+}
+
 /** The lines of every top-level shape of the scene (except the ones in `exclude`) and of the page itself: edges and centres. */
 export function snapTargets(scene: Scene, exclude: readonly NodePath[] = []): SnapTargets {
   const xs: number[] = [];
@@ -32,6 +58,9 @@ export function snapTargets(scene: Scene, exclude: readonly NodePath[] = []): Sn
     ys.push(b.y, b.y + b.height / 2, b.y + b.height);
   };
   add(scene.viewBox);
+  const guides = readGuides(scene);
+  xs.push(...guides.v);
+  ys.push(...guides.h);
   scene.children.forEach((node, i) => {
     if (node.kind === 'raw' || node.style.display === 'none') return;
     if (exclude.some((p) => p[0] === i)) return;

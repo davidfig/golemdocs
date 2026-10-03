@@ -35,6 +35,8 @@ test('Convert To lists every format in groups, with the current one disabled', a
     'PNG Image (.png)',
     'JPEG Image (.jpg)',
     'WebP Image (.webp)',
+    'SVG Drawing (.svg)',
+    'Compressed SVG Drawing (.svgz)',
     'Email Message (.eml)',
     'Jupyter Notebook (.ipynb)',
   ].filter((l) => labels.includes(l)));
@@ -111,7 +113,7 @@ test('a picture converts to other picture types and to Word and PDF, and offers 
   await app.menubar.getByRole('menuitem', { name: /^File$/ }).click();
   await app.page.getByRole('menu').getByRole('menuitem', { name: /^Convert To/ }).click();
   const labels = (await app.page.getByRole('menu').last().getByRole('menuitem').allTextContents()).map((s) => s.trim());
-  expect(labels).toEqual(['PNG Image (.png)', 'JPEG Image (.jpg)', 'WebP Image (.webp)', 'Word Document (.docx)', 'PDF (.pdf)']);
+  expect(labels).toEqual(['PNG Image (.png)', 'JPEG Image (.jpg)', 'WebP Image (.webp)', 'Word Document (.docx)', 'PDF (.pdf)', 'SVG Drawing (.svg)', 'Compressed SVG Drawing (.svgz)']);
   await app.page.keyboard.press('Escape');
   await app.page.keyboard.press('Escape');
   await convertTo(app, 'JPEG Image (.jpg)', 'JPEG Image');

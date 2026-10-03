@@ -406,7 +406,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: 'edit_drawing',
     description:
-      'When the document is a vector drawing (SVG), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others) and release_clip.',
+      'When the document is a vector drawing (SVG), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, add_guide (axis: vertical or horizontal; position: where; shapes snap to it) and clear_guides (these two need no shapes).',
     parameters: {
       type: 'object',
       properties: {
@@ -430,6 +430,8 @@ export const TOOLS: ToolDefinition[] = [
         sx: { type: 'number' },
         sy: { type: 'number' },
         degrees: { type: 'number' },
+        axis: { type: 'string', enum: ['vertical', 'horizontal'] },
+        position: { type: 'number' },
         to: { type: 'string', enum: ['front', 'forward', 'backward', 'back'] },
         value: { type: 'string' },
         type: { type: 'string', enum: ['solid', 'linear', 'radial'] },

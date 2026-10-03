@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { snapBox, snapPoint, snapTargets, snapValue } from '../src/vector/snap.ts';
+import { GUIDES_ATTR, readGuides, snapBox, snapPoint, snapTargets, snapValue, writeGuides } from '../src/vector/snap.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 
 const scene = () =>
@@ -42,4 +42,19 @@ test('a point is pulled on each axis', () => {
   const p = snapPoint({ x: 102, y: 33 }, t, 4);
   assert.deepEqual([p.x, p.y], [100, 33]);
   assert.deepEqual(p.guides, { xs: [100], ys: [] });
+});
+
+test('guides are kept in the file, are snapped to, and are read back as they were', () => {
+  const s = scene();
+  assert.deepEqual(readGuides(s), { v: [], h: [] });
+  writeGuides(s, { v: [75.12345], h: [33] });
+  assert.equal(s.attrs[GUIDES_ATTR], '{"v":[75.123],"h":[33]}');
+  assert.deepEqual(readGuides(s), { v: [75.123], h: [33] });
+  const t = snapTargets(s);
+  assert.ok(t.xs.includes(75.123) && t.ys.includes(33));
+  assert.deepEqual(snapPoint({ x: 77, y: 90 }, t, 4).guides, { xs: [75.123], ys: [] });
+  writeGuides(s, { v: [], h: [] });
+  assert.equal(s.attrs[GUIDES_ATTR], undefined);
+  s.attrs[GUIDES_ATTR] = 'not json';
+  assert.deepEqual(readGuides(s), { v: [], h: [] });
 });

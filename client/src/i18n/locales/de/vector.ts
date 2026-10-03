@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': 'Symbol',
   'vector.name.raw': 'Sonstiges',
   'vector.snap': 'An Objekten einrasten',
+  'vector.makeMask': 'Deckkraftmaske erstellen',
+  'vector.releaseMask': 'Deckkraftmaske aufheben',
+  'vector.maskFailed': 'Eine Deckkraftmaske braucht eine Form über mindestens einem weiteren Objekt, alle in derselben Gruppe.',
+  'vector.guideV': 'Vertikale Hilfslinie hinzufügen',
+  'vector.guideH': 'Horizontale Hilfslinie hinzufügen',
+  'vector.clearGuides': 'Hilfslinien entfernen',
 };

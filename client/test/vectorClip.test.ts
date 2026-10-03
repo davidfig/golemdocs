@@ -53,3 +53,28 @@ test('it needs a shape on top and at least one other, in one group', () => {
   assert.equal(makeClippingMask(t, [[0], [1]]), null, 'text on top');
   assert.equal(t.defs.length, 0);
 });
+
+test('opacity masks: the topmost node, kept as a mask, shows or hides the rest; releasing gives it back', async () => {
+  const { isMasked, makeOpacityMask, releaseOpacityMask } = await import('../src/vector/clipEdit.ts');
+  const s = readSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <rect id="a" width="100" height="100" fill="red"/>
+    <circle id="m" cx="50" cy="50" r="30" fill="#fff" transform="translate(5 0)"/>
+  </svg>`);
+  const at = makeOpacityMask(s, [[0], [1]])!;
+  assert.deepEqual(at, [0]);
+  const group = nodeAt(s, at) as GroupNode;
+  assert.ok(isMasked(s, group));
+  assert.deepEqual(group.children.map((c) => c.id), ['a']);
+  const text = writeSvg(s);
+  assert.match(text, /<mask id="mask1" maskUnits="userSpaceOnUse"/);
+  assert.match(text, /<circle [^>]*id="m"[^>]*transform="translate\(5\)"/);
+  // The mask is read back from the file.
+  const again = readSvg(text);
+  assert.ok(isMasked(again, again.children[0]));
+  const released = releaseOpacityMask(s, at);
+  assert.deepEqual(released, [[0], [1]]);
+  assert.equal((nodeAt(s, [1]) as { id?: string }).id, 'm');
+  assert.ok(!isMasked(s, nodeAt(s, [0])));
+  assert.equal(s.defs.length, 0);
+  assert.equal(makeOpacityMask(s, [[0]]), null);
+});

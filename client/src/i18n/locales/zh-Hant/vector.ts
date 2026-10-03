@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': '符號',
   'vector.name.raw': '其他',
   'vector.snap': '貼齊物件',
+  'vector.makeMask': '建立不透明度遮色片',
+  'vector.releaseMask': '釋放不透明度遮色片',
+  'vector.maskFailed': '不透明度遮色片需要一個位於至少另一個物件之上的形狀，且都在同一群組中。',
+  'vector.guideV': '新增垂直參考線',
+  'vector.guideH': '新增水平參考線',
+  'vector.clearGuides': '清除參考線',
 };

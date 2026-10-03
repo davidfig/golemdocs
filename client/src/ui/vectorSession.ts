@@ -70,6 +70,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         hasSelection: editor.selection.length > 0,
         multiple: editor.selection.length > 1,
         clipped: editor.clipped,
+        masked: editor.masked,
         layers: layersOpen,
         snap: editor.snapping,
         ...editor.currentStyle,
@@ -108,6 +109,16 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
           return editor.makeClip();
         case 'releaseClip':
           return editor.releaseClip();
+        case 'guideV':
+          return editor.addGuide('v');
+        case 'guideH':
+          return editor.addGuide('h');
+        case 'clearGuides':
+          return editor.clearGuides();
+        case 'makeMask':
+          return editor.makeMask();
+        case 'releaseMask':
+          return editor.releaseMask();
         case 'snap':
           return editor.toggleSnap();
         case 'layers':

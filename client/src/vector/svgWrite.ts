@@ -90,6 +90,11 @@ function writeNode(node: SceneNode, options: Options, depth: number): XmlElement
   }
 }
 
+/** Nodes as XML elements (to put in a mask's definition). */
+export function writeFragment(nodes: readonly SceneNode[]): XmlElement[] {
+  return nodes.map((n) => writeNode(n, { inlineStyle: false, xlink: false }, 1));
+}
+
 /** The scene as an SVG document. */
 export function writeSvg(scene: Scene): string {
   const options: Options = { inlineStyle: scene.stylesheet, xlink: 'xmlns:xlink' in scene.attrs };

@@ -479,6 +479,11 @@ export class Chrome {
     }
     r.add(a('vector.makeClip', t('vector.makeClip'), { kind: 'vector', op: 'makeClip' }, { icon: 'clipMask', enabled: (s) => s.vector.multiple }));
     r.add(a('vector.releaseClip', t('vector.releaseClip'), { kind: 'vector', op: 'releaseClip' }, { enabled: (s) => s.vector.clipped }));
+    r.add(a('vector.makeMask', t('vector.makeMask'), { kind: 'vector', op: 'makeMask' }, { enabled: (s) => s.vector.multiple }));
+    r.add(a('vector.releaseMask', t('vector.releaseMask'), { kind: 'vector', op: 'releaseMask' }, { enabled: (s) => s.vector.masked }));
+    r.add(a('vector.guideV', t('vector.guideV'), { kind: 'vector', op: 'guideV' }));
+    r.add(a('vector.guideH', t('vector.guideH'), { kind: 'vector', op: 'guideH' }));
+    r.add(a('vector.clearGuides', t('vector.clearGuides'), { kind: 'vector', op: 'clearGuides' }));
     r.add(a('vector.layers', t('vector.layers'), { kind: 'vector', op: 'layers' }, { checked: (s) => s.vector.layers }));
     r.add(a('vector.snap', t('vector.snap'), { kind: 'vector', op: 'snap' }, { checked: (s) => s.vector.snap }));
     r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }));
@@ -838,7 +843,12 @@ export class Chrome {
           sep,
           cmd('vector.makeClip'),
           cmd('vector.releaseClip'),
+          cmd('vector.makeMask'),
+          cmd('vector.releaseMask'),
           sep,
+          cmd('vector.guideV'),
+          cmd('vector.guideH'),
+          cmd('vector.clearGuides'),
           cmd('vector.snap'),
           cmd('vector.layers'),
           sep,

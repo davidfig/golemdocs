@@ -123,8 +123,9 @@ test('an SVG dropped on a document is offered the same choice', async ({ app, pa
   await dropFile(page, { name: 'dot.svg', buffer: Buffer.from(svg), mimeType: 'image/svg+xml' });
   await expect(choice(page, 'dot.svg')).toBeVisible();
   await choice(page, 'dot.svg').getByRole('button', { name: 'Open as a picture' }).click();
-  await waitForOpen(app, 'dot.png');
-  expect(await formatLabel(page)).toBe('PNG Image');
+  // An SVG opens as a vector drawing of its own kind, not as a picture.
+  await waitForOpen(app, 'dot.svg');
+  expect(await formatLabel(page)).toBe('SVG Drawing');
 });
 
 test('dropping a file of a type that cannot be opened says so and keeps the document', async ({ app, page }) => {

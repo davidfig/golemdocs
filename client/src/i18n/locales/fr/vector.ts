@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': 'Symbole',
   'vector.name.raw': 'Autre',
   'vector.snap': 'Magnétisme des objets',
+  'vector.makeMask': 'Créer un masque d’opacité',
+  'vector.releaseMask': 'Libérer le masque d’opacité',
+  'vector.maskFailed': 'Un masque d’opacité demande une forme au-dessus d’au moins un autre objet, tous dans le même groupe.',
+  'vector.guideV': 'Ajouter un repère vertical',
+  'vector.guideH': 'Ajouter un repère horizontal',
+  'vector.clearGuides': 'Effacer les repères',
 };

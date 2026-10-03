@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': '심볼',
   'vector.name.raw': '기타',
   'vector.snap': '개체에 맞추기',
+  'vector.makeMask': '불투명도 마스크 만들기',
+  'vector.releaseMask': '불투명도 마스크 해제',
+  'vector.maskFailed': '불투명도 마스크에는 같은 그룹 안에서 다른 개체 위에 있는 도형이 필요합니다.',
+  'vector.guideV': '세로 안내선 추가',
+  'vector.guideH': '가로 안내선 추가',
+  'vector.clearGuides': '안내선 지우기',
 };

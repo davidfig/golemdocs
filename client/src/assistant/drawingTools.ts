@@ -30,6 +30,10 @@ export interface DrawingEditor {
   boolean(op: BooleanOp): Promise<void>;
   makeClip(): void;
   releaseClip(): void;
+  addGuide(axis: 'v' | 'h', position?: number): void;
+  clearGuides(): void;
+  makeMask(): void;
+  releaseMask(): void;
   addShape(node: SceneNode): void;
 }
 
@@ -138,6 +142,17 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
     }
   }
 
+  if (op === 'add_guide') {
+    const axis = args.axis === 'vertical' ? 'v' : args.axis === 'horizontal' ? 'h' : null;
+    if (!axis) throw new Error('`axis` must be vertical or horizontal.');
+    editor.addGuide(axis, number(args, 'position'));
+    return `Added a ${args.axis} guide at ${number(args, 'position')}; shapes snap to it.`;
+  }
+  if (op === 'clear_guides') {
+    editor.clearGuides();
+    return 'Removed the guides.';
+  }
+
   const paths = pick(scene, args);
   editor.select(paths);
   const count = paths.length;
@@ -202,6 +217,13 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
       if (count < 2) throw new Error('A clipping mask needs at least two shapes: the topmost cuts the others.');
       editor.makeClip();
       return `Cut ${these} to the outline of the topmost.`;
+    case 'make_mask':
+      if (count < 2) throw new Error('An opacity mask needs at least two shapes: the topmost, by its brightness, shows the others.');
+      editor.makeMask();
+      return `Masked ${these} by the brightness of the topmost.`;
+    case 'release_mask':
+      editor.releaseMask();
+      return `Released the opacity mask of ${these}.`;
     case 'release_clip':
       editor.releaseClip();
       return `Released the clipping mask of ${these}.`;
@@ -211,6 +233,6 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
         await editor.boolean(op as BooleanOp);
         return `Combined ${these} (${op}).`;
       }
-      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, ${BOOLEANS.join(', ')}.`);
+      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
   }
 }

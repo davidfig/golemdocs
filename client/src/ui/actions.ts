@@ -39,7 +39,7 @@ export type TableOp =
 export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
 
 /** The vector editor's tools and commands (the Drawing menu): the tools pick what a drag draws or does; the rest act on the selection. */
-export type VectorOp = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'layers' | 'snap';
+export type VectorOp = 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'makeMask' | 'releaseMask' | 'guideV' | 'guideH' | 'clearGuides' | 'layers' | 'snap';
 
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
@@ -247,7 +247,7 @@ export interface ChromeState {
   /** The Draw toolbar: the tool picked (if any), its colour and its thickness step. */
   draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
   /** The vector editor: the tool picked, whether anything is selected, and the look of the selection (or of the next shape). */
-  vector: { tool: 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text'; hasSelection: boolean; multiple: boolean; clipped: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string };
+  vector: { tool: 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text'; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string };
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
@@ -299,7 +299,7 @@ export const DEFAULT_STATE: ChromeState = {
   formMode: null,
   painting: false,
   draw: { tool: null, color: '#e5322d', size: 1, fill: false },
-  vector: { tool: 'select', hasSelection: false, multiple: false, clipped: false, layers: false, snap: true, fill: null, stroke: null, strokeWidth: 1, fillType: 'solid', strokeStyle: 'dash:solid' },
+  vector: { tool: 'select', hasSelection: false, multiple: false, clipped: false, masked: false, layers: false, snap: true, fill: null, stroke: null, strokeWidth: 1, fillType: 'solid', strokeStyle: 'dash:solid' },
   inTable: false,
   sync: { user: null, document: 'guest', error: null },
   subscription: null,

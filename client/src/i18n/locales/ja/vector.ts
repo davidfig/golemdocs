@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': 'シンボル',
   'vector.name.raw': 'その他',
   'vector.snap': 'オブジェクトにスナップ',
+  'vector.makeMask': '不透明マスクを作成',
+  'vector.releaseMask': '不透明マスクを解除',
+  'vector.maskFailed': '不透明マスクには、同じグループ内の、ほかのオブジェクトの上にある図形が必要です。',
+  'vector.guideV': '垂直ガイドを追加',
+  'vector.guideH': '水平ガイドを追加',
+  'vector.clearGuides': 'ガイドを消去',
 };

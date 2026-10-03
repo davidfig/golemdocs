@@ -9,9 +9,9 @@
 import type { XmlElement } from '@golemdocs/docx';
 import type { Matrix, PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
-import { snapBox, snapPoint, snapTargets } from '../vector/snap.ts';
+import { readGuides, snapBox, snapPoint, snapTargets, writeGuides } from '../vector/snap.ts';
 import type { SnapTargets } from '../vector/snap.ts';
-import { isClipped, makeClippingMask, releaseClippingMask } from '../vector/clipEdit.ts';
+import { isClipped, isMasked, makeClippingMask, makeOpacityMask, releaseClippingMask, releaseOpacityMask } from '../vector/clipEdit.ts';
 import { applyBrush, brushOf, editableCommands, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
 import { DASHES, presetById } from '../vector/brushPresets.ts';
 import { isHidden, isLocked, moveNodeTo, setLocked, setName, setVisible, addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
@@ -79,6 +79,7 @@ type Gesture =
   | { kind: 'band'; start: [number, number]; to: [number, number]; add: boolean; before: NodePath[] }
   | { kind: 'create'; tool: 'rect' | 'ellipse' | 'line'; start: [number, number]; to: [number, number]; square: boolean }
   | { kind: 'penHandle'; origin: [number, number] }
+  | { kind: 'guide'; base: Scene; axis: 'v' | 'h'; index: number; moved: boolean }
   | { kind: 'gradient'; base: Scene; part: 0 | 1 | 'stop'; index: number; moved: boolean }
   | { kind: 'node'; base: Scene; part: NodePart; index: number; start: [number, number]; smooth: boolean; moved: boolean };
 
@@ -367,6 +368,57 @@ export class VectorEditor {
     const at = makeClippingMask(next, this._selection);
     if (!at) return this.host.notice?.(t('vector.clipFailed'));
     this.commit(next, [at]);
+  }
+
+  /** Adds a guide: a line things snap to, kept in the file. Vertical at `x`, or horizontal at `y`; with no position, in the middle of the selection (or of the page). */
+  addGuide(axis: 'v' | 'h', position?: number): void {
+    if (!this.scene) return;
+    const scene = this.scene;
+    const box = this._selection.length ? selectionBounds(scene, this._selection) : null;
+    const at = position ?? (axis === 'v' ? (box ? box.x + box.width / 2 : scene.viewBox.x + scene.viewBox.width / 2) : box ? box.y + box.height / 2 : scene.viewBox.y + scene.viewBox.height / 2);
+    const next = cloneScene(scene);
+    const guides = readGuides(next);
+    guides[axis].push(at);
+    writeGuides(next, guides);
+    this.commit(next, this._selection);
+  }
+
+  clearGuides(): void {
+    if (!this.scene || (!readGuides(this.scene).v.length && !readGuides(this.scene).h.length)) return;
+    const next = cloneScene(this.scene);
+    writeGuides(next, { v: [], h: [] });
+    this.commit(next, this._selection);
+  }
+
+  /** The guide under a screen point. */
+  private guideAt(frame: VectorFrame, sx: number, sy: number): { axis: 'v' | 'h'; index: number } | null {
+    if (!this.scene) return null;
+    const guides = readGuides(this.scene);
+    for (let i = 0; i < guides.v.length; i++) if (Math.abs(frame.toScreen(guides.v[i], 0)[0] - sx) <= LINE_REACH) return { axis: 'v', index: i };
+    for (let i = 0; i < guides.h.length; i++) if (Math.abs(frame.toScreen(0, guides.h[i])[1] - sy) <= LINE_REACH) return { axis: 'h', index: i };
+    return null;
+  }
+
+  /** Whether the one selected node is masked by an opacity mask. */
+  get masked(): boolean {
+    return !!this.scene && this._selection.length === 1 && isMasked(this.scene, nodeAt(this.scene, this._selection[0]));
+  }
+
+  /** The topmost selected shape becomes an opacity mask for the others (white shows, black hides). */
+  makeMask(): void {
+    if (!this.scene || this._selection.length < 2) return;
+    const next = cloneScene(this.scene);
+    const at = makeOpacityMask(next, this._selection);
+    if (!at) return this.host.notice?.(t('vector.maskFailed'));
+    this.commit(next, [at]);
+  }
+
+  /** Takes the opacity mask off the selected group. */
+  releaseMask(): void {
+    this.edit((scene, selection) => {
+      const released = releaseOpacityMask(scene, selection[0]);
+      return released.length ? released : selection;
+    });
   }
 
   /** Takes the clip off the selected group. */
@@ -831,6 +883,19 @@ export class VectorEditor {
       return;
     }
     const hit = hitTest(scene, { x: at[0], y: at[1] }, LINE_REACH / frame.unit);
+    const guide = hit ? null : this.guideAt(frame, sx, sy);
+    if (guide) {
+      if (double) {
+        // A double click on a guide takes it away.
+        const next = cloneScene(scene);
+        const guides = readGuides(next);
+        guides[guide.axis].splice(guide.index, 1);
+        writeGuides(next, guides);
+        return this.commit(next, this._selection);
+      }
+      this.gesture = { kind: 'guide', base: cloneScene(scene), axis: guide.axis, index: guide.index, moved: false };
+      return;
+    }
     if (hit && double) {
       const node = nodeAt(scene, hit)!;
       if (node.kind === 'text') return this.editText(hit, frame);
@@ -907,6 +972,18 @@ export class VectorEditor {
       const dy = to.y - from.y;
       const commands = editableCommands(node);
       setEditableCommands(node, gesture.part === 'anchor' ? moveAnchor(commands, gesture.index, dx, dy) : moveHandle(commands, gesture.index, gesture.part, dx, dy, gesture.smooth && !e.altKey));
+    } else if (gesture.kind === 'guide') {
+      gesture.moved = true;
+      const guides = readGuides(next);
+      const list = guides[gesture.axis];
+      const v = gesture.base.viewBox;
+      const value = gesture.axis === 'v' ? at[0] : at[1];
+      const [low, high] = gesture.axis === 'v' ? [v.x, v.x + v.width] : [v.y, v.y + v.height];
+      const margin = 20 / (frame.unit || 1);
+      // Dragged well off the drawing, a guide is dropped.
+      if (value < low - margin || value > high + margin) list.splice(gesture.index, 1);
+      else list[gesture.index] = value;
+      writeGuides(next, guides);
     } else if (gesture.kind === 'gradient') {
       const path = paths[0];
       const local = this.toLocal(path, at);
@@ -1023,7 +1100,7 @@ export class VectorEditor {
     this.gesture = null;
     this.guides = { xs: [], ys: [] };
     if (!gesture) return;
-    if (gesture.kind === 'move' || gesture.kind === 'resize' || gesture.kind === 'rotate' || gesture.kind === 'node' || gesture.kind === 'gradient') {
+    if (gesture.kind === 'move' || gesture.kind === 'resize' || gesture.kind === 'rotate' || gesture.kind === 'node' || gesture.kind === 'gradient' || gesture.kind === 'guide') {
       this.scene = gesture.base;
       this.host.layer.update(gesture.base);
     }
@@ -1261,6 +1338,25 @@ export class VectorEditor {
     const scene = this.scene;
     if (!scene) return;
     ctx.save();
+    // The guides, across the whole view.
+    const guides = readGuides(scene);
+    if (guides.v.length || guides.h.length) {
+      const view = this.host.canvas.getBoundingClientRect();
+      ctx.strokeStyle = '#00a6e0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const x of guides.v) {
+        const sx = Math.round(frame.toScreen(x, 0)[0]) + 0.5;
+        ctx.moveTo(sx, 0);
+        ctx.lineTo(sx, view.height);
+      }
+      for (const y of guides.h) {
+        const sy = Math.round(frame.toScreen(0, y)[1]) + 0.5;
+        ctx.moveTo(0, sy);
+        ctx.lineTo(view.width, sy);
+      }
+      ctx.stroke();
+    }
     ctx.lineWidth = 1;
     ctx.strokeStyle = ACCENT;
     ctx.fillStyle = '#fff';

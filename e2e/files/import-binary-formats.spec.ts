@@ -57,12 +57,12 @@ test('a PNG opens as a picture document with picture tools and no text formattin
   expect(hasItem(await menuContents(app, 'Insert'), 'Picture')).toBe(false);
 });
 
-test('an SVG opens as a PNG picture', async ({ app }) => {
+test('an SVG opens as a vector drawing', async ({ app }) => {
   await app.goto('?doc=welcome');
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="50" height="30"><rect width="50" height="30" fill="#2a8"/></svg>';
   await importFile(app, text('shape.svg', svg));
-  expect(await formatLabel(app.page)).toBe('PNG Image');
-  await expect(app.page).toHaveTitle('shape.png - Golem Docs');
+  expect(await formatLabel(app.page)).toBe('SVG Drawing');
+  await expect(app.page).toHaveTitle('shape.svg - Golem Docs');
 });
 
 test('a picture that is not a picture is refused', async ({ app }) => {

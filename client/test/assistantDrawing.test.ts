@@ -20,7 +20,7 @@ function recorder() {
   const s = scene();
   const calls: unknown[][] = [];
   let selection: NodePath[] = [];
-  const record = (name: string) => (...args: unknown[]) => void calls.push([name, ...args, ...(['delete', 'duplicate', 'group', 'ungroup', 'order', 'transformSelection', 'applyStyle', 'applyStrokeStyle', 'applyFillType', 'makeClip', 'releaseClip'].includes(name) ? [selection.map((p) => p[0])] : [])]);
+  const record = (name: string) => (...args: unknown[]) => void calls.push([name, ...args, ...(['delete', 'duplicate', 'group', 'ungroup', 'order', 'transformSelection', 'applyStyle', 'applyStrokeStyle', 'applyFillType', 'makeClip', 'releaseClip', 'makeMask', 'releaseMask', 'clearGuides'].includes(name) ? [selection.map((p) => p[0])] : [])]);
   const editor: DrawingEditor = {
     drawing: s,
     select: (paths) => void (selection = paths),
@@ -36,6 +36,10 @@ function recorder() {
     boolean: async (op) => void calls.push(['boolean', op, selection.map((p) => p[0])]),
     makeClip: record('makeClip'),
     releaseClip: record('releaseClip'),
+    addGuide: (axis, position) => void calls.push(['addGuide', axis, position]),
+    clearGuides: record('clearGuides'),
+    makeMask: record('makeMask'),
+    releaseMask: record('releaseMask'),
     addShape: record('addShape'),
   };
   return { editor, calls };
@@ -90,6 +94,15 @@ test('changes act on the shapes named, with the same commands as the toolbar', a
   assert.deepEqual([...(calls[3][1] as number[])], [2, 0, 0, 2, -10, -10]);
   assert.deepEqual(calls[5][1], { fill: '#00ff00', strokeWidth: 6 });
   assert.deepEqual(calls[6].slice(1), ['brush:taperBoth', [1]]);
+});
+
+test('guides are added and cleared without naming shapes', async () => {
+  const { editor, calls } = recorder();
+  assert.match(await editDrawing(editor, { op: 'add_guide', axis: 'vertical', position: 50 }), /vertical guide at 50/);
+  await editDrawing(editor, { op: 'add_guide', axis: 'horizontal', position: 12.5 });
+  await editDrawing(editor, { op: 'clear_guides' });
+  assert.deepEqual(calls, [['addGuide', 'v', 50], ['addGuide', 'h', 12.5], ['clearGuides', []]]);
+  await assert.rejects(editDrawing(editor, { op: 'add_guide', axis: 'diagonal', position: 1 }), /vertical or horizontal/);
 });
 
 test('a request that doesn’t make sense is refused, with what to do instead', async () => {

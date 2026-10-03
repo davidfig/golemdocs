@@ -84,4 +84,10 @@ export const vector = {
   'vector.name.use': '符号',
   'vector.name.raw': '其他',
   'vector.snap': '吸附到对象',
+  'vector.makeMask': '建立不透明蒙版',
+  'vector.releaseMask': '释放不透明蒙版',
+  'vector.maskFailed': '不透明蒙版需要一个位于至少另一个对象之上的形状，且都在同一组中。',
+  'vector.guideV': '添加垂直参考线',
+  'vector.guideH': '添加水平参考线',
+  'vector.clearGuides': '清除参考线',
 };

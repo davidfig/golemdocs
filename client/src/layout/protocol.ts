@@ -218,6 +218,11 @@ export interface RoomState {
   unconfirmed: number;
 }
 
+/**
+ * Messages from the page to the worker. The worker handles them in the order they were sent: one
+ * for a document sent straight after asking to open it finds that document (still being set up,
+ * perhaps), never the one before. Messages for an older document are ignored.
+ */
 export type ToWorker =
   /** Normal view: lay pages out this many points wide, with slim margins (null: the document's own page sizes), and lay the open document out again. */
   | { type: 'reflow'; width: number | null }

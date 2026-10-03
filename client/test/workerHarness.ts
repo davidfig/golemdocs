@@ -86,11 +86,20 @@ export async function stopWorker(): Promise<void> {
 
 /** Opens a document under a fresh id and waits for its first full layout (or its error). */
 export async function openDoc(source: DocumentSource): Promise<number> {
-  const doc = nextDoc++;
-  send({ type: 'open', doc, source });
+  const doc = sendOpen(source);
   await Promise.race([waitFor('done', (m) => m.doc === doc), waitFor('error', (m) => m.doc === doc).then((e) => Promise.reject(new Error(e.message)))]);
   return doc;
 }
+
+/** Asks to open a document under a fresh id and returns the id at once, without waiting for it to load. */
+export function sendOpen(source: DocumentSource): number {
+  const doc = nextDoc++;
+  send({ type: 'open', doc, source });
+  return doc;
+}
+
+/** A fresh request id, for messages sent by hand. */
+export const newRequest = (): number => nextRequest++;
 
 export const openMarkdown = (text: string, name = 'Test.md') => openDoc({ kind: 'md', name, bytes: bytes(text) });
 export const openBlank = () => openDoc({ kind: 'blank', name: 'Blank.docx' });

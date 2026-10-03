@@ -227,6 +227,8 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
   }
 }
 
+/** Commands that change the editor's settings rather than the document (they work with none open). */
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellCheck', 'autoFormat', 'livePreview']);
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
 const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
 
@@ -304,7 +306,29 @@ class OpenDocument {
   /** Formatting the Format Painter has picked up: the paragraph's only when a whole paragraph was copied. */
   private painter: { run: RunProperties; paragraph: ParagraphProperties | null } | null = null;
 
-  constructor(readonly doc: number) {}
+  /**
+   * Settles once the document can be worked on, or never will be (it failed to open, or another was
+   * opened). Messages for it can arrive while it is still loading: what needs the document waits for this.
+   */
+  readonly setUp: Promise<void>;
+  /** `setUp` has settled. */
+  isSetUp = false;
+  private settleSetUp!: () => void;
+
+  constructor(readonly doc: number) {
+    this.setUp = new Promise((resolve) => {
+      this.settleSetUp = () => {
+        this.isSetUp = true;
+        resolve();
+      };
+    });
+    this.controller.signal.addEventListener('abort', () => this.setUpDone());
+  }
+
+  /** The document can be worked on now, or never will be: what was waiting for it goes ahead. */
+  setUpDone(): void {
+    this.settleSetUp();
+  }
 
   get closed(): boolean {
     return this.controller.signal.aborted;
@@ -937,6 +961,7 @@ class OpenDocument {
 
   /** Handles room messages that arrived while the document was being set up, and joins a room asked for meanwhile. */
   ready(): void {
+    this.setUpDone();
     const backlog = this.backlog;
     this.backlog = [];
     for (const message of backlog) this.fromRoom(message);
@@ -1108,6 +1133,8 @@ class OpenDocument {
 
   /** A picture at the caret, no wider than the page's text. Not in a room: the others would have no bytes for it. */
   insertImage(bytes: Uint8Array, ext: string, width: number, height: number, description?: string): void {
+    // Asked for while the document is still loading: once it has, in turn with the commands.
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.insertImage(bytes, ext, width, height, description)));
     const document = this.document;
     if (!document || this.readOnly || this.room || this.net || this.pdf) return;
     const { pageSize, margins } = document.section;
@@ -1121,7 +1148,7 @@ class OpenDocument {
   }
 
   /** Commands waiting for fonts a formatting command needs; later ones queue behind it. */
-  private waiting: Promise<void> | null = null;
+  waiting: Promise<void> | null = null;
 
   command(wire: WireCommand): void {
     if (this.waiting) return this.later(() => this.runCommand(wire));
@@ -1131,6 +1158,8 @@ class OpenDocument {
 
   /** One of the assistant's tools, run on this document (see agentTools.ts). Settles with its answer once its edits have taken effect. */
   async agent(name: string, args: string, show: (images: string[]) => void = () => {}): Promise<string> {
+    // Asked for while the document is still loading: once it has, and the commands sent before have run.
+    if (!this.isSetUp) await this.turn();
     if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
     const editor = this.editor;
     if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
@@ -1391,6 +1420,16 @@ class OpenDocument {
     this.sendSelection();
   }
 
+  /**
+   * For a request that has to see the document as the page left it when asking: null when it can be
+   * answered now, otherwise what settles once the document has loaded and the commands sent before
+   * the request have run. Call it as the request arrives, so later commands queue behind it.
+   */
+  turn(): Promise<void> | null {
+    if (this.isSetUp && !this.waiting) return null;
+    return new Promise((resolve) => this.later(() => this.setUp.then(resolve)));
+  }
+
   private later(task: () => void | Promise<void>): void {
     const next = (this.waiting ?? Promise.resolve()).then(task).catch((e: unknown) => console.error(e));
     this.waiting = next;
@@ -1413,6 +1452,9 @@ class OpenDocument {
   }
 
   private runCommand(wire: WireCommand, cjkReady = false, mathReady = false): void | Promise<void> {
+    // Sent while the document is still loading: run once it has (later commands queue behind it).
+    // Settings that aren't the document's take effect at once, as the first layout uses them.
+    if (!this.isSetUp && !SETTINGS_COMMANDS.has(wire.kind)) return this.setUp.then(() => this.runCommand(wire, cjkReady, mathReady));
     // Formatting and pasting work on the formatted paragraph: its source is put away first, and shown again after.
     if (this.raw && (wire.kind === 'format' || wire.kind === 'pasteHtml' || wire.kind === 'applyPainter')) {
       return this.leaveRaw().then(() => Promise.resolve(this.runCommand(wire)).then(() => this.syncRaw()).then(() => this.finishRaw()));
@@ -1907,6 +1949,10 @@ async function acceptSpelling(words: string[], rules: string[]): Promise<void> {
 
 let current: OpenDocument | null = null;
 
+/**
+ * Opens a document. Everything up to the first `await` happens at once, as the message is handled:
+ * `current` is the new document from then on, so the messages sent after this one find it.
+ */
 async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions): Promise<void> {
   current?.leave();
   current?.controller.abort();
@@ -1933,6 +1979,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       entry.document = loaded.document; // kept as it is, for saving
       entry.pdf = { view, bytes: loaded.original };
       entry.annotator = new PdfAnnotator(view, undefined, loaded.original);
+      entry.setUpDone();
       post({ type: 'opened', doc, name, format: 'pdf', annotating: true, outdated: !!loaded.document && !loaded.pagesCurrent });
       const bodyMs = await entry.pumpPdf();
       if (entry.closed) return;
@@ -1982,14 +2029,21 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     if (entry.closed) return;
     console.error(e);
     post({ type: 'error', doc, message: (e as Error).message });
+  } finally {
+    // Failed, or stopped for another: what waits on it is answered as for no document.
+    entry.setUpDone();
   }
 }
 
 async function media(doc: number, request: number, part: string): Promise<void> {
   let bytes: ArrayBuffer | null = null;
   try {
-    if (current?.doc === doc && current.pdf) bytes = (await current.pdf.view.media(part))?.slice().buffer ?? null;
-    else if (current?.doc === doc && current.document) bytes = (await current.document.media(part)).slice().buffer;
+    const open = current?.doc === doc ? current : null;
+    // After the document has loaded and the commands sent before (a picture just put in) have run.
+    const turn = open?.turn();
+    if (turn) await turn;
+    if (open?.pdf) bytes = (await open.pdf.view.media(part))?.slice().buffer ?? null;
+    else if (open?.document) bytes = (await open.document.media(part)).slice().buffer;
   } catch {
     bytes = null;
   }
@@ -2047,6 +2101,9 @@ const now = (): string => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 async function save(doc: number, request: number, lens?: Format): Promise<void> {
   try {
     const open = current;
+    // Asked for while the document was loading, or with commands still to run: once they have.
+    const turn = open?.doc === doc ? open.turn() : null;
+    if (turn) await turn;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
     const resume = await open.flushRaw();
     // A document changed since it was opened records when.
@@ -2073,6 +2130,9 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
 async function exportAs(doc: number, request: number, to: Format): Promise<void> {
   try {
     const open = current;
+    // Asked for while the document was loading, or with commands still to run: once they have.
+    const turn = open?.doc === doc ? open.turn() : null;
+    if (turn) await turn;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
     const resume = await open.flushRaw();
     let bytes: Uint8Array;
@@ -2151,23 +2211,56 @@ self.onunhandledrejection = (event: PromiseRejectionEvent) => {
   if (current && !current.closed) post({ type: 'error', doc: current.doc, message: event.reason instanceof Error ? event.reason.message : String(event.reason) });
 };
 
+/** Messages from the page not handled yet, in the order they were sent. */
+const inbox: ToWorker[] = [];
+/** An `open` is waiting for the page's language: the messages after it wait with it. */
+let held = false;
+
 self.onmessage = (event: MessageEvent<ToWorker>) => {
-  const message = event.data;
+  inbox.push(event.data);
+  if (!held) handleInbox();
+};
+
+/**
+ * Handles the page's messages strictly in the order they were sent. Only the start of an `open`
+ * holds the others up (see `open`): its loading and layout go on while later messages are handled,
+ * and those for the new document find it, waiting for it to load where they need it.
+ */
+function handleInbox(): void {
+  while (!held && inbox.length) {
+    const message = inbox.shift()!;
+    if (message.type === 'open') {
+      // After the language (at start-up), so the document's errors and name are in it. A language
+      // that failed to load leaves English, rather than the document never opening.
+      held = true;
+      void localeReady
+        .catch(() => {})
+        .then(() => {
+          held = false;
+          void open(message.doc, message.source, message.room);
+          handleInbox();
+        });
+    } else {
+      try {
+        handle(message);
+      } catch (e) {
+        // One message going wrong mustn't stop the ones after it.
+        console.error(e);
+      }
+    }
+  }
+}
+
+function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
   switch (message.type) {
     case 'locale':
       localeReady = loadLocale(message.locale).then(setCjkLang);
-      break;
-    case 'open':
-      void localeReady.then(() => open(message.doc, message.source, message.room));
       break;
     case 'pointer':
       if (current?.doc === message.doc) current.sendPointer(message.pointer);
       break;
     case 'joinRoom':
-      // After an open still waiting for the language (at start-up), in the order they were sent.
-      void localeReady.then(() => {
-        if (current?.doc === message.doc) void current.joinLate(message.room);
-      });
+      if (current?.doc === message.doc) void current.joinLate(message.room);
       break;
     case 'leave':
       current?.leave();
@@ -2218,7 +2311,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
         .then((result) => post({ type: 'agentResult', request: message.request, result, ...(shown.length && { images: shown }) }));
       break;
   }
-};
+}
 
 /** #rrggbb as RGB 0–1. */
 function parseHex(css: string): [number, number, number] | undefined {

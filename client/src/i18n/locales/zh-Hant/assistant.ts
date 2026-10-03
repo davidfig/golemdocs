@@ -48,4 +48,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.readOtherDocument': '正在閱讀另一個文件…',
   'assistant.tool.insertFromDocument': '正在從另一個文件複製…',
   'assistant.tool.files': '正在處理你的檔案…',
+  'assistant.tool.openDocument': '正在開啟文件…',
 };

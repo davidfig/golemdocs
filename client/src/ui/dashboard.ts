@@ -7,16 +7,17 @@
 // rest of the account's documents once the catalogue arrives, and each thumbnail is fetched only
 // when its card scrolls into view.
 
-import { removeShare, thumbnailUrl, type CloudDocument } from '../cloud.ts';
-import { createFolder, moveEntries, removeFolderTree, updateFolders, withoutDeleted } from '../folderOps.ts';
-import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, type Folder } from '../folders.ts';
+import { removeShare, type CloudDocument } from '../cloud.ts';
+import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
+import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, outermost, type Folder } from '../folders.ts';
 import { warmOnHover } from './warmOnHover.ts';
-import { getThumbnail } from '../storage/local.ts';
-import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
+import { forgetSharedInCatalogue, loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
+import { Thumbnails } from './dashboardThumbnails.ts';
 import { h, isFileDrag } from './dom.ts';
+import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
@@ -39,8 +40,10 @@ export interface DashboardHost {
   warm(entry: LibraryEntry): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
-  /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved. */
-  dropFile(file: File, folderId: string | null): void;
+  /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved; imports several, or a folder, there. */
+  dropFile(drop: Dropped, folderId: string | null): void;
+  /** Folders or documents were changed here (made, renamed, moved or deleted): other views of them catch up. */
+  changed?(): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Whose cloud documents are shown: who is signed in, if they have sync (null: nobody, or no sync). */
@@ -56,8 +59,6 @@ export interface DashboardHost {
 }
 
 /** What is being dragged to a folder. */
-type Dragged = { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: Folder };
-
 // --- The screen -----------------------------------------------------------------------------
 
 /** The folders and documents as listed before a delete took its items off the screen, which is what finding what is inside a folder needs. */
@@ -72,8 +73,7 @@ export class Dashboard {
   private readonly sharedGrid: HTMLElement;
   private shared: CloudDocument[] = [];
   private readonly scroller: HTMLElement;
-  private observer: IntersectionObserver | null = null;
-  private objectUrls: string[] = [];
+  private thumbnails!: Thumbnails;
   private entries: LibraryEntry[] = [];
   private readonly newFolderButton: HTMLButtonElement;
   /** Documents (`doc:<key>`) and folders (`folder:<id>`) ticked for a bulk Move or Delete. */
@@ -87,6 +87,8 @@ export class Dashboard {
   private folderId: string | null = null;
   /** The folder whose name is being typed in place (just made, or being renamed). */
   private renaming: string | null = null;
+  /** What has been typed in the folder name field so far (and where the caret is), kept when the cards are rebuilt under it. */
+  private renameDraft: { folder: string; value: string; start: number; end: number } | null = null;
   private dragged: Dragged | null = null;
   /** While the cards are being replaced: the rename field losing its place isn't the user leaving it. */
   private rebuilding = false;
@@ -109,6 +111,7 @@ export class Dashboard {
     this.sharedTitle = h('h2', { class: 'wm-dash-section', text: t('panels.dashboard.sharedWithMe') });
     this.sharedGrid = h('div', { class: 'wm-dash-grid' });
     this.scroller = h('div', { class: 'wm-dash-scroll' }, this.notice, this.crumbs, this.grid, this.sharedTitle, this.sharedGrid);
+    this.thumbnails = new Thumbnails(this.scroller);
     const action = (icon: string, label: string, aria: string, onClick: () => void): HTMLButtonElement => {
       const button = h('button', { class: 'wm-dash-action', attrs: { type: 'button', 'aria-label': aria } });
       this.setLabel(button, label, icon);
@@ -241,7 +244,7 @@ export class Dashboard {
   hide(): void {
     this.generation++;
     this.root.hidden = true;
-    this.releaseThumbnails();
+    this.thumbnails.release();
   }
 
   /** Lists the documents again (after the sign-in or an upload changed them), if it's showing. */
@@ -264,17 +267,11 @@ export class Dashboard {
 
   // --- Rendering ---------------------------------------------------------------------------
 
-  private releaseThumbnails(): void {
-    this.observer?.disconnect();
-    this.observer = null;
-    for (const url of this.objectUrls) URL.revokeObjectURL(url);
-    this.objectUrls = [];
-    this.loaded.clear();
-  }
-
   private render(): void {
-    this.observer?.disconnect();
-    this.observer = null;
+    const field = this.grid.querySelector<HTMLInputElement>('.wm-folder-name-input');
+    this.renameDraft =
+      field && this.renaming ? { folder: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
+    this.thumbnails.pause();
     // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
     this.resetConfirm();
     // Searching looks in every folder at once; otherwise this folder's own folders and documents.
@@ -298,31 +295,21 @@ export class Dashboard {
     const renameField = this.grid.querySelector<HTMLInputElement>('.wm-folder-name-input');
     if (renameField) {
       renameField.focus({ preventScroll: false });
-      renameField.select();
+      const draft = this.renameDraft?.folder === this.renaming ? this.renameDraft : null;
+      if (draft) renameField.setSelectionRange(draft.start, draft.end);
+      else renameField.select();
     }
 
     const sharedShown = this.shared.filter((d) => matchesSearch(d, this.search.value));
     this.sharedTitle.hidden = this.sharedGrid.hidden = sharedShown.length === 0;
     this.sharedGrid.replaceChildren(...sharedShown.map((d) => this.sharedCard(d)));
 
-    this.observer = new IntersectionObserver(
-      (records) => {
-        for (const record of records) {
-          if (!record.isIntersecting) continue;
-          this.observer?.unobserve(record.target);
-          void this.loadThumbnail(record.target as HTMLElement);
-        }
-      },
-      { root: this.scroller, rootMargin: '200px' },
-    );
-    for (const el of this.scroller.querySelectorAll<HTMLElement>('.wm-thumb')) this.observer.observe(el);
+    this.thumbnails.watch();
   }
 
   /** A document someone else shared: open it, or leave it. */
   private sharedCard(doc: CloudDocument): HTMLElement {
-    const thumb = h('div', { class: 'wm-thumb' }, h('div', { class: 'wm-thumb-empty', attrs: { 'aria-hidden': 'true' } }));
-    this.sharedThumbs.set(thumb, doc);
-    this.reuseThumbnail(thumb, `shared:${doc.id}`, thumbnailUrl(doc) ?? '');
+    const thumb = this.thumbnails.forShared(doc);
     const by = doc.owner?.name ?? doc.owner?.email;
     const meta = [by ? t('panels.dashboard.from', { name: by }) : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', title: doc.name }, fileIcon(doc.name), setFileName(h('span', { class: 'wm-card-title' }), doc.name)), h('span', { class: 'wm-card-meta', text: meta }));
@@ -340,6 +327,7 @@ export class Dashboard {
           t('panels.dashboard.leave'),
           async () => {
             await removeShare(doc.id, userId);
+            forgetSharedInCatalogue(doc.id);
           },
           'leave',
           undefined,
@@ -351,9 +339,7 @@ export class Dashboard {
   }
 
   private card(entry: LibraryEntry): HTMLElement {
-    const thumb = h('div', { class: 'wm-thumb' }, h('div', { class: 'wm-thumb-empty', attrs: { 'aria-hidden': 'true' } }));
-    this.entryFor.set(thumb, entry);
-    this.reuseThumbnail(thumb, entry.key, this.thumbSignature(entry));
+    const thumb = this.thumbnails.forEntry(entry);
 
     const meta = [relativeTime(entry.updatedAt), formatSize(entry.size)].join(' · ');
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', title: entry.name }, fileIcon(entry.name), setFileName(h('span', { class: 'wm-card-title' }), entry.name)), h('span', { class: 'wm-card-meta', text: meta }));
@@ -387,16 +373,12 @@ export class Dashboard {
     // The folder's first few documents show through it as small pages.
     const minis = itemsIn(this.entries, this.folders, folder.id)
       .slice(0, 4)
-      .map((entry) => {
-        const mini = h('div', { class: 'wm-thumb wm-folder-mini' }, h('div', { class: 'wm-thumb-empty' }));
-        this.entryFor.set(mini, entry);
-        this.reuseThumbnail(mini, `mini:${entry.key}`, this.thumbSignature(entry));
-        return mini;
-      });
+      .map((entry) => this.thumbnails.forEntry(entry, `mini:${entry.key}`, 'wm-thumb wm-folder-mini'));
     const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }, ...minis));
     let open: HTMLElement;
     if (this.renaming === folder.id) {
-      const input = h('input', { class: 'wm-folder-name-input', attrs: { type: 'text', value: folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
+      const draft = this.renameDraft?.folder === folder.id ? this.renameDraft.value : null;
+      const input = h('input', { class: 'wm-folder-name-input', attrs: { type: 'text', value: draft ?? folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
       let finished = false;
       const finish = (save: boolean) => {
         if (finished) return;
@@ -522,8 +504,10 @@ export class Dashboard {
   }
 
   private moveSelection(): void {
-    const { docs, folders } = this.selectedItems();
-    const count = docs.length + folders.length;
+    const selected = this.selectedItems();
+    const count = selected.docs.length + selected.folders.length;
+    // What is inside a ticked folder goes with it, rather than being taken out of it.
+    const { folders, items: docs } = outermost(this.folders, { folders: selected.folders, items: selected.docs });
     if (!count) return;
     // A folder can't go into itself or anything inside it.
     const excluded = (id: string) => folders.some((f) => isInside(this.folders, id, f.id));
@@ -584,6 +568,8 @@ export class Dashboard {
     }
     // Shown at once from what is known (a folder just made is typed in), then as the account has it.
     this.render();
+    // The Files Sidebar shows the same folders and documents.
+    this.host.changed?.();
     if (reload) await this.refresh();
   }
 
@@ -595,13 +581,7 @@ export class Dashboard {
 
   private async relocateEntries(entries: LibraryEntry[], to: string | null): Promise<void> {
     // Shown in their new place at once; if saving fails, the lists fetched again put them back.
-    for (const entry of entries) {
-      if (entry.cloud) entry.cloud.folderId = to;
-      if (entry.local) {
-        if (to === null) delete entry.local.folderId;
-        else entry.local.folderId = to;
-      }
-    }
+    this.entries = withMoved(this.entries, entries, to);
     this.render();
     await moveEntries(entries, to);
   }
@@ -618,8 +598,7 @@ export class Dashboard {
 
   /** Whether the thing being dragged may go in `to` (null: the top level): somewhere new, and never into itself. */
   private canDrop(item: Dragged, to: string | null): boolean {
-    if (item.kind === 'doc') return folderOf(item.entry, this.folders) !== to;
-    return item.folder.parentId !== to && to !== item.folder.id && !isInside(this.folders, to, item.folder.id);
+    return canDrop(this.folders, item, to);
   }
 
   private makeDraggable(el: HTMLElement, item: Dragged): void {
@@ -677,10 +656,10 @@ export class Dashboard {
     });
   }
 
-  /** Opens a file dropped from the computer, as dropping it on a document does, and files it in `folderId`. */
+  /** Opens a file dropped from the computer, as dropping it on a document does, and files it in `folderId` (several, or a folder, are imported there). */
   private dropFiles(e: DragEvent, folderId: string | null): void {
-    const file = e.dataTransfer?.files[0];
-    if (file) this.host.dropFile(file, folderId);
+    const drop = takeDropped(e.dataTransfer);
+    if (drop) this.host.dropFile(drop, folderId);
   }
 
   private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
@@ -765,70 +744,5 @@ export class Dashboard {
     clearTimeout(this.confirming.timer);
     this.setLabel(this.confirming.button, this.confirming.label, this.confirming.icon, this.confirming.iconOnly);
     this.confirming = null;
-  }
-
-  // --- Thumbnails --------------------------------------------------------------------------
-
-  private readonly entryFor = new WeakMap<HTMLElement, LibraryEntry>();
-  private readonly sharedThumbs = new WeakMap<HTMLElement, CloudDocument>();
-
-  /** Thumbnails already on screen, so a re-render (the cloud catalogue arriving) doesn't reload them. */
-  private readonly loaded = new Map<string, { signature: string; img: HTMLImageElement }>();
-
-  /** What decides which image a card shows; when it is unchanged the loaded image is still right. */
-  private thumbSignature(entry: LibraryEntry): string {
-    const cloudUrl = entry.cloud ? thumbnailUrl(entry.cloud) : null;
-    const preferCloud = !entry.local || entry.state === 'cloud-ahead';
-    return `${preferCloud ? 'cloud' : 'local'}|${cloudUrl}|${entry.local?.id}|${entry.local?.updatedAt}`;
-  }
-
-  /** Puts back the image a previous render already loaded for this card, if it is still current. */
-  private reuseThumbnail(thumb: HTMLElement, key: string, signature: string): void {
-    thumb.dataset.thumbKey = key;
-    thumb.dataset.thumbSignature = signature;
-    const cached = this.loaded.get(key);
-    if (cached?.signature === signature) {
-      thumb.replaceChildren(cached.img);
-      thumb.dataset.thumbDone = '1';
-    }
-  }
-
-  /** Fills a card's thumbnail: this device's when it has the current one, else the cloud's. */
-  private async loadThumbnail(thumb: HTMLElement): Promise<void> {
-    if (thumb.dataset.thumbDone) return;
-    const shared = this.sharedThumbs.get(thumb);
-    if (shared) return this.showThumbnail(thumb, thumbnailUrl(shared));
-    const entry = this.entryFor.get(thumb);
-    if (!entry) return;
-    const generation = this.generation;
-    const cloudUrl = entry.cloud ? thumbnailUrl(entry.cloud) : null;
-    const preferCloud = !entry.local || entry.state === 'cloud-ahead';
-
-    let src: string | null = preferCloud ? cloudUrl : null;
-    if (!src && entry.local) {
-      const local = await getThumbnail(entry.local.id).catch(() => null);
-      if (generation !== this.generation) return;
-      if (local) {
-        src = URL.createObjectURL(local.blob);
-        this.objectUrls.push(src);
-      }
-    }
-    this.showThumbnail(thumb, src ?? cloudUrl);
-  }
-
-  private showThumbnail(thumb: HTMLElement, src: string | null): void {
-    if (!src) return;
-    const img = h('img', { attrs: { alt: '', decoding: 'async', draggable: 'false' } });
-    img.addEventListener(
-      'load',
-      () => {
-        thumb.replaceChildren(img);
-        thumb.dataset.thumbDone = '1';
-        const { thumbKey, thumbSignature } = thumb.dataset;
-        if (thumbKey && thumbSignature !== undefined) this.loaded.set(thumbKey, { signature: thumbSignature, img });
-      },
-      { once: true },
-    );
-    img.src = src; // on failure the placeholder stays
   }
 }

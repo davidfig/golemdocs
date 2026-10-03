@@ -8,7 +8,7 @@ import type { DocumentSource } from './layout/protocol.ts';
 import { WDOC_EXTENSION } from './formats/wdoc.ts';
 import { isZipName, sourceFromFile } from './formats/source.ts';
 import { toPng } from './formats/imageCodec.ts';
-import { LARGE_TEXT_BYTES, looksLikeText } from './formats/textFiles.ts';
+import { LARGE_TEXT_BYTES, looksLikeText, opensAsLargeText } from './formats/textFiles.ts';
 import { nearestPage, type Bounds } from './document/arrange.ts';
 import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
@@ -182,6 +182,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
   /** Takes the loading screen away and says the file can't be opened. */
   const unsupported = (file: File): void => {
     const dot = file.name.lastIndexOf('.');
+    // Nothing opens, so nothing is filed: the folder it was to go in isn't left for the next document.
+    void app.prepareNew(null);
     app.loading(null);
     app.notify(t('app.unsupportedOpen', { kind: dot >= 0 ? file.name.slice(dot + 1).toUpperCase() : '?', name: file.name }));
   };
@@ -198,8 +200,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return bytes.byteLength >= LARGE_TEXT_BYTES ? app.openLarge(file.name, new Uint8Array(bytes)) : app.open({ kind: 'txt', name: file.name, bytes });
         }
         const source = sourceFromFile(file.name, bytes)!;
-        // Text too big to be a document opens in the viewer instead (a table of 500,000 rows is no better than 500,000 paragraphs).
-        if ((source.kind === 'txt' || source.kind === 'csv' || source.kind === 'tsv') && bytes.byteLength >= LARGE_TEXT_BYTES) return app.openLarge(file.name, new Uint8Array(bytes));
+        // Text too big to be a document opens in the viewer instead.
+        if (opensAsLargeText(source.kind, bytes.byteLength)) return app.openLarge(file.name, new Uint8Array(bytes));
         if (source.kind !== 'image') return app.open(source);
         // GIF, BMP and SVG open as PNG (a GIF as its first frame); PNG, JPEG and WebP as they are.
         const picture = await toPng(source.name, new Uint8Array(bytes));
@@ -212,11 +214,14 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       });
   };
 
-  const pickFile = (): void => {
+  const pickFile = (folderId: string | null): void => {
     const input = Object.assign(document.createElement('input'), { type: 'file', accept: `${acceptList()},${WDOC_EXTENSION},.zip` });
-    input.addEventListener('change', () => {
+    input.addEventListener('change', async () => {
       const file = input.files?.[0];
-      if (file) void (isZipName(file.name) ? app.importZip(file) : openFile(file));
+      if (!file) return;
+      // Only once a file is picked: cancelled, nothing is waiting to be filed in the folder.
+      await app.prepareNew(folderId);
+      void (isZipName(file.name) ? app.importZip(file) : openFile(file));
     });
     input.click();
   };
@@ -281,7 +286,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'open':
           return app.dashboard();
         case 'import':
-          return pickFile();
+          return pickFile(action.folderId ?? null);
         case 'openSample':
           return app.openSample(action.id);
         case 'openSaved':

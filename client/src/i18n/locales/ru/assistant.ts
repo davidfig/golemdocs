@@ -48,4 +48,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.readOtherDocument': 'Читаю другой документ…',
   'assistant.tool.insertFromDocument': 'Копирую из другого документа…',
   'assistant.tool.files': 'Работа с вашими файлами…',
+  'assistant.tool.openDocument': 'Открываю документ…',
 };

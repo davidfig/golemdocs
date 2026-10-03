@@ -68,7 +68,11 @@ function toolNote(name: string): string {
     case 'rename_folders':
     case 'move_files':
     case 'delete_files':
+    case 'download_all':
       return t('assistant.tool.files');
+    case 'open_file':
+    case 'new_document':
+      return t('assistant.tool.openDocument');
     case 'convert_document':
     case 'edit_picture':
       return t('assistant.tool.convert');
@@ -92,8 +96,13 @@ function gateMessage(gate: Exclude<Gate, null>): string {
 }
 
 export interface AssistantHost {
-  /** Runs a tool on the open document; answers with what it did or found (and any pictures it fetched). */
-  tool(name: string, args: string): Promise<ToolResult>;
+  /**
+   * Runs a tool on the open document; answers with what it did or found (and any pictures it fetched).
+   * `run` is the request it is for (the same for every tool of one request, and given to `begin` first).
+   */
+  tool(name: string, args: string, run: AbortSignal): Promise<ToolResult>;
+  /** A request starts: the document open now is the one it is about. */
+  begin?(run: AbortSignal): void;
   signIn(): void;
   /** Starts a subscription. Absent until there is a way to buy one: then the bubble only says what's needed. */
   subscribe?(): void;
@@ -404,6 +413,7 @@ export class Assistant {
     this.showTray();
     this.say('user', request, pictures);
     const controller = (this.running = new AbortController());
+    this.host.begin?.(controller.signal);
     this.send.textContent = t('assistant.stop');
     this.input.disabled = true;
     this.mood('thinking');
@@ -412,7 +422,7 @@ export class Assistant {
     let edited = false;
     try {
       const outcome = await converse(
-        { ask: askServer, tool: (name, args) => this.host.tool(name, args) },
+        { ask: askServer, tool: (name, args) => this.host.tool(name, args, controller.signal) },
         this.history,
         { text: request, images: pictures },
         controller.signal,

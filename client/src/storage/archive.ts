@@ -1,4 +1,4 @@
-// File ▸ Download All: every saved document, zipped. Only ever `import()`ed (it pulls in the ZIP writer).
+// File ▸ Download All: every saved document, zipped.
 import { writeZip } from '@golemdocs/docx';
 import { uniqueName } from './uniqueName.ts';
 

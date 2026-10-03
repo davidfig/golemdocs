@@ -5,8 +5,10 @@ import { deskColor, onThemeChange } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocuments, documentUrl, downloadDocument, listDocuments, listFolders, listShared, saveDocument, type CloudDocument } from './cloud.ts';
-import { importFiles, readZipFiles } from './storage/zipImport.ts';
+import { CloudError, deleteDocuments, documentUrl, downloadDocument, listDocuments, listFolders, listShared, renameCloudDocument, saveDocument, type CloudDocument } from './cloud.ts';
+import { zipDocuments } from './storage/archive.ts';
+import { takeDropped, type Dropped } from './storage/droppedFiles.ts';
+import { importFiles, readZipFiles, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { fileTools } from './assistant/fileTools.ts';
 import { adoptGuestFolders, createFolder } from './folderOps.ts';
@@ -27,8 +29,9 @@ import {
   saveThumbnail,
   type SavedInfo,
 } from './storage/local.ts';
-import { folderOf, folderPath } from './folders.ts';
-import { forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, mergeLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
+import { folderOf, folderPath, type Folder } from './folders.ts';
+import { UploadQueue } from './uploadQueue.ts';
+import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, mergeLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -88,7 +91,7 @@ import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { FORMAT_LIST, isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
-import { hasExtension, toUtf8 } from './formats/textFiles.ts';
+import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
 import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
 import { encodeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
@@ -264,8 +267,8 @@ let annotating = false;
 /** A PDF's pages: filling in its form, or editing the form itself. */
 let formMode: FormMode = 'fill';
 let status = '';
-/** Collaboration status, when the document is open in a room. */
-let room: { id: string; people: number; version: number; unsent: number } | null = null;
+/** Collaboration status in a development room (the SharedWorker one, `?room=`); a cloud room is `current.room`. */
+let devRoom: { id: string; people: number; version: number; unsent: number } | null = null;
 /** Latest edit round trip (command sent to its selection update), ms. */
 let editTimes: { total: number; worker: number } | null = null;
 /** How long the current document took to open, ms. */
@@ -325,7 +328,17 @@ function reportError(text: string): void {
   showToast(text);
 }
 
+/** Opens, and opens asked for: one that waits for something first (a download, say) doesn't replace a document opened since. */
+let openRequests = 0;
+
+/** For an open that waits for something first: says whether it is still the latest one asked for. */
+function openTicket(): () => boolean {
+  const ticket = ++openRequests;
+  return () => ticket === openRequests;
+}
+
 function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean } = {}): void {
+  openRequests++;
   const start = performance.now();
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   let firstPage = 0;
@@ -348,7 +361,10 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     room: null,
     roomRequested: false,
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
+    newFolder: options.localId ? null : newDocumentFolder,
   };
+  // Meant for this document only: a later one isn't filed there by mistake.
+  newDocumentFolder = null;
   const opening = current;
   showSync();
   for (const page of pagesById.values()) page.dispose(gl!);
@@ -377,7 +393,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   cameraPlaced = false;
   userMoved = false;
   editTimes = null;
-  room = null;
+  devRoom = null;
   loadTimes = null;
   pendingNotice = null;
   documentName = name;
@@ -407,6 +423,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
     done(count, times) {
       loaded = true;
+      documentReady();
       loadingScreen.hide();
       arrange();
       if (pendingView) {
@@ -444,10 +461,13 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       if (text !== lastRoomText) notify(text || t('app.editingAlone'));
       lastRoomText = text;
       // The server saves while several people are editing: an upload from here would be refused.
-      if (state.mode !== 'solo' && doc.localId) dirty.delete(doc.localId);
+      if (state.mode !== 'solo' && doc.localId) void uploads.forget([doc.localId]);
       // Back to saving from here: the server's last version is what this copy now continues from.
       if (was && was.mode !== 'solo' && state.mode === 'solo') void resumeAfterRoom(doc);
-      if (state.mode === 'offline') notify(t('app.roomLost'));
+      if (state.mode === 'offline') {
+        notify(t('app.roomLost'));
+        if (was?.mode !== 'offline') rejoinWhenBack(doc);
+      }
       showSync();
       requestRender();
     },
@@ -459,11 +479,12 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       documentEdited();
     },
     room(people, version, unconfirmed) {
-      room = { id: new URLSearchParams(location.search).get('room') ?? '', people, version, unsent: unconfirmed };
+      devRoom = { id: new URLSearchParams(location.search).get('room') ?? '', people, version, unsent: unconfirmed };
       requestRender();
     },
     error(message) {
       loaded = true;
+      documentReady();
       reportError(t('app.documentError', { name, message }));
     },
   }, requestedRoom);
@@ -550,6 +571,11 @@ window.addEventListener('pagehide', () => {
   rememberView();
   saveIfEdited();
   worker.leave();
+});
+// Back from the back/forward cache: the room was left on the way out (above), so edits here would
+// reach no one. Reloading joins it again, at the view and with the edits saved on the way out.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted && current.roomRequested) location.reload();
 });
 
 function applyLayout(update: LayoutUpdate): void {
@@ -712,10 +738,17 @@ interface OpenDocument {
    * and edits go to the cloud directly (or through the room), never to a copy of it here.
    */
   shared: { id: string; role: 'editor' | 'viewer'; dirty: boolean; uploading: boolean; error: string | null } | null;
+  /** The folder a new document goes in when it is first saved (null: the top level). */
+  newFolder: string | null;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, shared: null };
+let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, shared: null, newFolder: null };
+/**
+ * The folder the next document to open goes in once first saved (null: the top level): set just
+ * before it opens (New, Import or a file dropped on a folder), and taken over by open().
+ */
+let newDocumentFolder: string | null = null;
 let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
@@ -763,7 +796,9 @@ async function uploadShared(): Promise<void> {
   shared.error = null;
   showSync();
   try {
-    putDocInCatalogue(await saveDocument(shared.id, await worker.convert('docx'), fileName()));
+    // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
+    // being opened, and always ends in .docx).
+    putDocInCatalogue(await saveDocument(shared.id, await worker.convert('docx')));
     filesPanel.refreshSoon();
     dashboard.refreshIfVisible();
   } catch (e) {
@@ -821,8 +856,9 @@ let cloudDocs: CloudDocument[] = [];
 
 /** The first `connect()`, on load: opening a document in the account waits for it, to know who is signed in. */
 let firstConnect: Promise<void> = Promise.resolve();
-/** Who is signed in is known: enough to decide whether a document joins its room. */
-let accountKnown: Promise<void> = Promise.resolve();
+/** Whether the account syncs is known (`account` is settled): enough to decide whether a document joins its room. */
+let markAccountKnown = (): void => {};
+const accountKnown = new Promise<void>((resolve) => (markAccountKnown = resolve));
 
 /**
  * Finds out who is signed in and gets going: signed in, any documents made here while signed out
@@ -836,6 +872,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   // An unknown plan (offline) or a server that doesn't say leaves sync on; the server refuses what isn't allowed.
   account = signedIn && plan?.sync !== false ? signedIn : null;
   accountResolved = true;
+  markAccountKnown();
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
   sharedDeviceNotice.update({ signedIn: signedIn !== null });
@@ -848,7 +885,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   }
   await refreshLibrary();
   if (account) {
-    for (const info of savedDocs) if (hasUnsentChanges(info)) dirty.add(info.id);
+    uploads.add(...savedDocs.filter(hasUnsentChanges).map((info) => info.id));
     void flushUploads();
   }
   if ((account?.id ?? null) !== drawnFor) dashboard.refreshIfVisible();
@@ -861,9 +898,9 @@ async function refreshLibrary(): Promise<void> {
   if (account) {
     try {
       cloudDocs = await listDocuments();
-      signedOutRemotely = false;
+      uploads.signedOut = false;
     } catch (e) {
-      if (e instanceof CloudError && e.status === 401) signedOutRemotely = true;
+      if (e instanceof CloudError && e.status === 401) uploads.signedOut = true;
       else if (e instanceof TypeError) wentOffline();
     }
   } else {
@@ -875,31 +912,57 @@ async function refreshLibrary(): Promise<void> {
 }
 
 /** Where to open a listed document from: the account only when this browser's copy is missing or older. */
+/** Waiting for a document other than `before` to finish opening (its first layout done, or failed). */
+const readyWaiters: { before: OpenDocument; resolve: () => void }[] = [];
+
+function documentReady(): void {
+  for (const waiter of readyWaiters.filter((w) => w.before !== current)) {
+    readyWaiters.splice(readyWaiters.indexOf(waiter), 1);
+    waiter.resolve();
+  }
+}
+
+/** Resolves once a document other than the one open now has opened (or `ms` have passed, for one that never does). */
+function nextDocumentReady(ms = 30_000): Promise<void> {
+  const before = current;
+  return new Promise((resolve) => {
+    const waiter = { before, resolve };
+    readyWaiters.push(waiter);
+    window.setTimeout(() => {
+      const at = readyWaiters.indexOf(waiter);
+      if (at >= 0) readyWaiters.splice(at, 1);
+      resolve();
+    }, ms);
+  });
+}
+
 function sourceOf(entry: LibraryEntry): string {
   return entry.local && !opensFromCloud(entry) ? `local:${entry.local.id}` : `cloud:${entry.cloud!.id}`;
 }
 
 // --- Uploading ------------------------------------------------------------------------------
-// Signed in, each save schedules an upload of that document for a moment after editing pauses.
-// Uploads go one at a time. Offline, or once the session has ended, they wait (the button at the
-// top right says so) and go when the connection or the sign-in is back.
+// Signed in, each save schedules an upload of that document (see uploadQueue.ts, which keeps track
+// of what is waiting, offline or signed out); what an upload changes here is below.
 
+/** How long after a save its upload starts (editing usually goes on). */
 const UPLOAD_DELAY_MS = 2000;
 /** How often to try again while offline (the browser's "online" event isn't always reliable). */
 const OFFLINE_RETRY_MS = 30_000;
-/** Browser copies with changes the account doesn't have, to upload. */
-const dirty = new Set<string>();
-let uploadTimer = 0;
-let flushing: Promise<void> | null = null;
-/** The browser copy being uploaded now, if any. */
-let uploading: string | null = null;
-/** Uploads failed because the account couldn't be reached. */
-let offline = false;
-let offlineRetryTimer = 0;
-/** The session ended (signed out elsewhere, or it expired): uploads wait for the user to sign in again. */
-let signedOutRemotely = false;
-/** Why a browser copy's last upload failed, by id (cleared by the next that works). */
-const failures = new Map<string, string>();
+
+const uploads = new UploadQueue({
+  enabled: () => account !== null,
+  send: (id) => upload(id),
+  settled: async () => {
+    savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
+    showSync();
+    filesPanel.refreshSoon();
+    dashboard.refreshIfVisible();
+  },
+  // No subscription (it ended, or this page hadn't heard): carry on as someone without sync.
+  noSync: () => void connect(Promise.resolve(signedIn)),
+  retry: backOnline,
+  changed: () => showSync(),
+}, { delayMs: UPLOAD_DELAY_MS, offlineRetryMs: OFFLINE_RETRY_MS });
 
 function syncStatus(): SyncStatus {
   if (!account) {
@@ -910,7 +973,7 @@ function syncStatus(): SyncStatus {
   const user = account.email ?? account.name ?? null;
   const id = current.localId;
   const info = savedDocs.find((d) => d.id === id);
-  const unsent = current.unsavedSince > 0 || (id !== null && uploading === id) || (info !== undefined && hasUnsentChanges(info));
+  const unsent = current.unsavedSince > 0 || (id !== null && uploads.uploading === id) || (info !== undefined && hasUnsentChanges(info));
   let document: DocumentSync;
   const shared = current.shared;
   if (shared) {
@@ -921,14 +984,14 @@ function syncStatus(): SyncStatus {
     else state = shared.uploading || shared.dirty ? 'saving' : 'saved';
     return { user, picture: account.picture, document: state, error: state === 'failed' ? shared.error : null };
   }
-  if (id && failures.has(id)) document = 'failed';
+  if (id && uploads.failures.has(id)) document = 'failed';
   else if (current.room?.mode === 'shared') document = current.room.unconfirmed ? 'saving' : 'saved';
   else if (!unsent) document = 'saved';
-  else if (signedOutRemotely) document = 'signedOut';
-  else if (offline) document = 'offline';
+  else if (uploads.signedOut) document = 'signedOut';
+  else if (uploads.offline) document = 'offline';
   else document = 'saving';
   const savedAt = document === 'saved' ? (info?.cloudSyncedAt ?? null) : null;
-  return { user, document, error: document === 'failed' ? failures.get(id!)! : null, savedAt };
+  return { user, document, error: document === 'failed' ? uploads.failures.get(id!)! : null, savedAt };
 }
 
 function showSync(): void {
@@ -937,89 +1000,46 @@ function showSync(): void {
 }
 
 /** Uploads a browser copy once editing has paused. */
-function scheduleUpload(id: string, delay = UPLOAD_DELAY_MS): void {
-  dirty.add(id);
-  clearTimeout(uploadTimer);
-  uploadTimer = window.setTimeout(() => void flushUploads(), delay);
+function scheduleUpload(id: string, delay?: number): void {
+  uploads.schedule(id, delay);
 }
 
 /** Uploads everything waiting, now. Resolves once they have all gone (or can't, for now). */
 function flushUploads(): Promise<void> {
-  clearTimeout(uploadTimer);
-  // Cleared asynchronously, so an empty queue can't clear it before it's set.
-  flushing ??= drainUploads().finally(() => (flushing = null));
-  return flushing;
+  return uploads.flush();
 }
 
-async function drainUploads(): Promise<void> {
-  // Copies saved during an upload join the set, and are visited too.
-  for (const id of dirty) {
-    if (!account || offline || signedOutRemotely) break;
-    dirty.delete(id);
-    await upload(id);
-  }
-}
-
+/** One upload: the queue says when (and handles what failing means); here is what it changes on screen. */
 async function upload(id: string): Promise<void> {
-  uploading = id;
-  showSync();
   const before = savedDocs.find((d) => d.id === id)?.name;
-  try {
-    const { doc, conflictCopy } = await uploadToCloud(id);
-    failures.delete(id);
-    // A document made in this session gets its room once it is in the account.
-    if (id === current.localId && !current.roomRequested && !conflictCopy) {
-      const room = networkRoom(doc.id);
-      if (room) {
-        current.roomRequested = true;
-        worker.joinRoom(room);
-      }
+  const { doc, conflictCopy } = await uploadToCloud(id);
+  // A document made in this session gets its room once it is in the account.
+  if (id === current.localId && !current.roomRequested && !conflictCopy) {
+    const room = networkRoom(doc.id);
+    if (room) {
+      current.roomRequested = true;
+      worker.joinRoom(room);
     }
-    cloudDocs = [doc, ...cloudDocs.filter((d) => d.id !== doc.id)];
-    putDocInCatalogue(doc);
-    if (conflictCopy) {
-      if (id === current.localId) {
-        documentName = doc.name;
-        chrome.update({ documentName });
-      }
-      notify(t('app.conflictNotice', { before: before ?? t('app.thisDocument'), name: doc.name }));
+  }
+  cloudDocs = [doc, ...cloudDocs.filter((d) => d.id !== doc.id)];
+  putDocInCatalogue(doc);
+  if (conflictCopy) {
+    if (id === current.localId) {
+      documentName = doc.name;
+      chrome.update({ documentName });
     }
-  } catch (e) {
-    if (e instanceof CloudError && e.status === 401) {
-      signedOutRemotely = true;
-      dirty.add(id);
-    } else if (e instanceof TypeError) {
-      // fetch couldn't reach the server.
-      dirty.add(id);
-      wentOffline();
-    } else if (e instanceof CloudError && e.status === 402) {
-      // No subscription (it ended, or this page hadn't heard): carry on as someone without sync.
-      void connect(Promise.resolve(signedIn));
-    } else if (e instanceof CloudError && e.status === 423) {
-      // Several people are editing it and the server is saving it: nothing to send from here.
-    } else if (e instanceof CloudError) {
-      failures.set(id, e.message);
-    }
-    // Anything else: the copy was deleted meanwhile, so there's nothing to send.
-  } finally {
-    uploading = null;
-    savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
-    showSync();
-    filesPanel.refreshSoon();
-    dashboard.refreshIfVisible();
+    notify(t('app.conflictNotice', { before: before ?? t('app.thisDocument'), name: doc.name }));
   }
 }
 
 /** The account can't be reached: uploads wait, and are tried again every so often. */
 function wentOffline(): void {
-  offline = true;
-  clearTimeout(offlineRetryTimer);
-  offlineRetryTimer = window.setTimeout(backOnline, OFFLINE_RETRY_MS);
+  uploads.wentOffline();
 }
 
 function backOnline(): void {
   if (!account) return;
-  offline = false;
+  uploads.backOnline();
   void connect();
 }
 
@@ -1029,9 +1049,9 @@ window.addEventListener('online', backOnline);
 async function syncNow(): Promise<void> {
   saveIfEdited();
   await saving;
-  failures.clear();
-  offline = false;
-  for (const info of savedDocs) if (hasUnsentChanges(info)) dirty.add(info.id);
+  uploads.failures.clear();
+  uploads.backOnline();
+  uploads.add(...savedDocs.filter(hasUnsentChanges).map((info) => info.id));
   showSync();
   await flushUploads();
 }
@@ -1040,6 +1060,30 @@ async function syncNow(): Promise<void> {
 function notify(message: string): void {
   if (loaded) setStatus(message);
   else pendingNotice = message;
+}
+
+/** How often a document whose room was lost tries to open again (as well as when the browser is back online). */
+const ROOM_RETRY_MS = 30_000;
+
+/**
+ * A cloud document whose room connection is lost for good (a laptop asleep, say) can no longer be
+ * edited. Once the connection seems back, it is opened again from its copy here, which joins the
+ * room again (or, if the room still can't be reached, edits it on its own until it can).
+ */
+function rejoinWhenBack(doc: OpenDocument): void {
+  const stop = (): void => {
+    clearInterval(timer);
+    window.removeEventListener('online', retry);
+  };
+  const retry = (): void => {
+    if (current !== doc || doc.room?.mode !== 'offline' || !doc.localId) return stop();
+    if (!navigator.onLine) return;
+    stop();
+    rememberView();
+    openSource(`local:${doc.localId}`, true, 'none');
+  };
+  const timer = window.setInterval(retry, ROOM_RETRY_MS);
+  window.addEventListener('online', retry);
 }
 
 /** Makes reloading the page reopen this document (not inside a collaboration room, where the room decides). */
@@ -1083,7 +1127,6 @@ async function downloadAll(): Promise<void> {
     // Folder ids are unique, so the account's folders and this browser's can be looked up together.
     const folders = [...(account ? await listFolders().catch(() => []) : []), ...(await listLocalFolders().catch(() => []))];
     const placed = new Map(mergeLibrary(savedDocs, account ? cloudDocs : null).filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
-    const { zipDocuments } = await import('./storage/archive.ts');
     const bytes = await zipDocuments(
       docs.map((d) => ({
         name: d.info.name,
@@ -1115,18 +1158,31 @@ const IMPORT_UPLOAD_BYTES = 8 * 1024 * 1024;
  * From the dashboard, the ZIP's top level goes in the folder being looked at.
  */
 async function importZip(file: File): Promise<void> {
+  await importDocuments(file.name, async (signal, onProgress) => readZipFiles(new Uint8Array(await file.arrayBuffer()), { signal, onProgress }));
+}
+
+/** Several files or a folder dropped from the computer: imported as a ZIP is (see storage/droppedFiles.ts). */
+function importDropped(drop: Extract<Dropped, { kind: 'import' }>): Promise<void> {
+  return importDocuments(drop.name, () => drop.read());
+}
+
+/**
+ * Imports documents (a ZIP's, or files dropped together) into their folders, made as needed, or the
+ * ones here with the same names; `name` is what they came in, for the progress card.
+ */
+async function importDocuments(name: string, read: (signal: AbortSignal, onProgress: (done: number, total: number) => void) => Promise<ZipContents>): Promise<void> {
   const root = newDocumentFolder;
   newDocumentFolder = null;
-  const progress = showProgress(t('app.importingZip', { name: file.name }));
+  const progress = showProgress(t('app.importingZip', { name }));
+  // Saved here but not sent yet: if the import stops part way, these go the ordinary way.
+  let waiting: string[] = [];
+  let waitingBytes = 0;
   // Reading the ZIP is the first 30% of the bar, saving what is in it the rest.
   const READ_SHARE = 30;
   try {
-    setStatus(t('app.importingZip', { name: file.name }));
-    const { files, skipped } = await readZipFiles(new Uint8Array(await file.arrayBuffer()), {
-      signal: progress.signal,
-      onProgress: (done, total) => progress.update((done / total) * READ_SHARE, 100, t('app.importProgress', { done, total })),
-    });
-    if (!files.length) return setStatus(t('app.importZipNone', { name: file.name }));
+    setStatus(t('app.importingZip', { name }));
+    const { files, skipped } = await read(progress.signal, (done, total) => progress.update((done / total) * READ_SHARE, 100, t('app.importProgress', { done, total })));
+    if (!files.length) return setStatus(t('app.importZipNone', { name }));
     const cloud = account !== null;
     // Not guessed from nothing: a folder list that can't be read would make every folder a duplicate.
     const folders = cloud ? await listFolders() : await listLocalFolders();
@@ -1141,22 +1197,16 @@ async function importZip(file: File): Promise<void> {
         dashboard.refreshIfVisible();
       });
     };
-    let waiting: string[] = [];
-    let waitingBytes = 0;
     const sendWaiting = async (): Promise<void> => {
       const ids = waiting;
       waiting = [];
       waitingBytes = 0;
-      if (!ids.length || !account || offline || signedOutRemotely) return;
-      try {
-        const made = await uploadNewToCloud(ids);
-        for (const id of made.keys()) dirty.delete(id);
+      await uploads.sendBatch(ids, async (still) => {
+        const made = await uploadNewToCloud(still);
         const added = new Set([...made.values()].map((d) => d.id));
         cloudDocs = [...made.values(), ...cloudDocs.filter((d) => !added.has(d.id))];
-      } catch (e) {
-        // Left in the queue: each is sent on its own, which also finds out what is wrong with it.
-        if (e instanceof TypeError) wentOffline();
-      }
+        return made.keys();
+      });
       savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
       showSync();
     };
@@ -1183,7 +1233,7 @@ async function importZip(file: File): Promise<void> {
         const info = await saveSaved({ name: doc.name, bytes: doc.bytes, owner, ...(folderId !== null && { folderId }) });
         if (owner) {
           // Sent in batches (and left in the queue meanwhile, so whatever a batch doesn't take goes the ordinary way, offline too).
-          dirty.add(info.id);
+          uploads.hold(info.id);
           waiting.push(info.id);
           waitingBytes += doc.bytes.byteLength;
           if (waiting.length >= IMPORT_UPLOAD_COUNT || waitingBytes >= IMPORT_UPLOAD_BYTES) await sendWaiting();
@@ -1204,6 +1254,10 @@ async function importZip(file: File): Promise<void> {
     reportError(t('app.importZipFailed', { message: (e as Error).message }));
   } finally {
     progress.close();
+    if (waiting.length) {
+      uploads.release(waiting);
+      void flushUploads();
+    }
   }
 }
 
@@ -1226,12 +1280,15 @@ async function makeThumbnail(info: SavedInfo): Promise<void> {
 
 /** Documents saved before thumbnails existed get one when first opened again (once their images have arrived). */
 function backfillThumbnail(id: string): void {
+  const doc = current;
   window.setTimeout(async () => {
-    if (current.localId !== id) return; // another document was opened meanwhile
+    if (current !== doc || doc.localId !== id) return; // another document was opened meanwhile
     const info = (await listSaved().catch(() => [])).find((d) => d.id === id);
     if (!info) return;
     const existing = await getThumbnail(id).catch(() => null);
     if (existing?.forUpdatedAt === info.updatedAt) return;
+    // The thumbnail is drawn from what is on screen: still this document?
+    if (current !== doc) return;
     await makeThumbnail(info);
   }, 1500);
 }
@@ -1253,9 +1310,8 @@ function saveInBrowser(): Promise<string | null> {
     const created = !doc.localId;
     try {
       const owner = account?.id;
-      const folderId = created ? (newDocumentFolder ?? undefined) : undefined;
+      const folderId = created ? (doc.newFolder ?? undefined) : undefined;
       const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
-      if (created) newDocumentFolder = null;
       doc.localId = info.id;
       if (doc === current) {
         await makeThumbnail(info);
@@ -1276,6 +1332,16 @@ function saveInBrowser(): Promise<string | null> {
           if (doc.room.mode === 'shared' && doc.room.unconfirmed === 0 && info.cloudId) {
             await markSynced(info.id, { cloudId: info.cloudId, syncedAt: info.updatedAt });
             savedDocs = ownedBy(await listSaved().catch(() => savedDocs), owner);
+          }
+          // The room saves the contents, never the name: a rename goes to the account on its own.
+          const cloudId = info.cloudId;
+          const cloud = cloudId ? cloudDocs.find((d) => d.id === cloudId) : undefined;
+          if (cloudId && cloud && cloud.name !== info.name) {
+            const renamed = await renameCloudDocument(cloudId, info.name).catch(() => null); // tried again at the next save
+            if (renamed) {
+              cloudDocs = cloudDocs.map((d) => (d.id === renamed.id ? renamed : d));
+              putDocInCatalogue(renamed);
+            }
           }
         } else scheduleUpload(info.id);
       }
@@ -1357,11 +1423,11 @@ async function signOut(): Promise<void> {
   if (!user) return;
   saveIfEdited();
   await saving;
-  offline = false;
+  uploads.backOnline();
   await flushUploads();
   const unsent = ownedBy(await listSaved().catch(() => []), user.id).filter(hasUnsentChanges);
   if (unsent.length) {
-    const key = offline ? 'app.signOutLossOffline' : signedOutRemotely ? 'app.signOutLossExpired' : 'app.signOutLoss';
+    const key = uploads.offline ? 'app.signOutLossOffline' : uploads.signedOut ? 'app.signOutLossExpired' : 'app.signOutLoss';
     const body = document.createElement('p');
     body.textContent = t(key, { count: unsent.length, name: unsent[0]!.name });
     if (!(await showConfirm(t('app.signOutTitle'), body, t('app.signOutAnyway')))) {
@@ -1377,15 +1443,29 @@ async function signOut(): Promise<void> {
   }
   cleared = true; // nothing more is saved for this account here
   clearTimeout(autosaveTimer);
-  clearTimeout(uploadTimer);
-  dirty.clear();
+  uploads.clear();
   await saving.catch(() => {});
   await deleteOwnedBy(user.id).catch(() => {});
+  forgetCatalogue();
+  try {
+    localStorage.setItem(SIGNED_OUT_KEY, String(Date.now())); // tells this page's other tabs
+  } catch {}
   location.replace(location.pathname);
 }
 
-/** The folder (chosen on the dashboard) the document being started goes in once it is first saved. */
-let newDocumentFolder: string | null = null;
+/** Set when signing out, so the app's other tabs hear of it (a `storage` event). */
+const SIGNED_OUT_KEY = 'wm.signedOut';
+
+window.addEventListener('storage', (event) => {
+  if (event.key !== SIGNED_OUT_KEY || !signedIn) return;
+  // Signed out in another tab, which removed the account's copies here: a save or upload from this
+  // one would bring them back (and send them with whoever signs in next), so it starts again signed out.
+  cleared = true;
+  clearTimeout(autosaveTimer);
+  uploads.clear();
+  location.replace(location.pathname);
+});
+
 
 /** A delete of more than this many documents and folders shows a progress card. */
 const DELETE_PROGRESS_FROM = 200;
@@ -1393,21 +1473,46 @@ const DELETE_PROGRESS_FROM = 200;
 /** Deletes documents (from the dashboard, or the assistant): from the account in one request, and this browser's copies. */
 async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: readonly string[] = []): Promise<void> {
   const deletingOpen = entries.some((entry) => entry.local && entry.local.id === current.localId);
+  const open = current;
+  const openId = open.localId;
   if (deletingOpen) {
     // The open document: its next autosave (or one under way) would write it back, and upload it
     // again as a new cloud document. It is replaced by the Welcome document once it is gone.
     clearTimeout(autosaveTimer);
     await saving;
-    current.localId = null;
-    current.unsavedSince = 0;
-    current.builtIn = true;
+    open.localId = null;
+    open.unsavedSince = 0;
+    open.builtIn = true;
   }
+  // Not deleted after all (offline, or refused): it stays open as it was, rather than carrying on
+  // unsaved and being saved again later as a second copy of itself.
+  const keepOpen = (): void => {
+    if (!deletingOpen || current !== open || open.localId !== null) return;
+    open.localId = openId;
+    open.builtIn = false;
+    showSync();
+  };
+  let result: { removed: Set<string>; refused: Map<string, string> };
+  try {
+    result = await deleteEntries(entries, folderIds);
+  } catch (e) {
+    keepOpen();
+    throw e;
+  }
+  if (deletingOpen) {
+    if (openId !== null && result.removed.has(openId)) openSource('welcome', true, 'replace');
+    else keepOpen();
+  }
+  if (result.refused.size) throw new Error([...result.refused.values()][0]);
+}
+
+/** The work of `deleteEverywhere`. Returns the browser copies removed, and why the account refused to delete the documents and folders it did not. */
+async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readonly string[]): Promise<{ removed: Set<string>; refused: Map<string, string> }> {
   // An upload under way would make a deleted document again (its cloud copy is gone, so it starts a
   // new one), or give a new one a cloud copy this delete doesn't know of: none of these start now,
   // and one that is running finishes first.
   const localIds = new Set(entries.flatMap((entry) => (entry.local ? [entry.local.id] : [])));
-  for (const id of localIds) dirty.delete(id);
-  if (uploading !== null && localIds.has(uploading)) await flushing;
+  await uploads.forget(localIds);
   const cloudIdOf = (entry: LibraryEntry) => entry.cloud?.id ?? savedDocs.find((d) => d.id === entry.local?.id)?.cloudId ?? entry.local?.cloudId ?? '';
   // The server deletes a folder's documents with it, so those are not named (a big folder is then one id, not thousands).
   const inDeleted = new Set(folderIds);
@@ -1418,6 +1523,7 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
   ];
   // Already gone is fine; otherwise keep it, rather than have it come back from the account later.
   const refused = new Map<string, string>();
+  const removed = new Set<string>();
   // A big delete takes several requests and as many removals here: say how far it is. Stopping half way would leave a folder part deleted, so there is no Cancel.
   const cloudWork = account ? cloudIds.length + folderIds.length : 0;
   const total = cloudWork + localIds.size;
@@ -1429,21 +1535,19 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
       for (const f of result.failed) if (f.error !== 'not found') refused.set(f.id, f.error);
     }
     if (account) forgetInCatalogue(account, cloudIds.filter((id) => !refused.has(id)), folderIds.filter((id) => !refused.has(id)));
-    let removed = cloudWork;
+    let done = cloudWork;
     for (const entry of entries) {
       if (refused.has(cloudIdOf(entry)) || (entry.cloud?.folderId && refused.has(entry.cloud.folderId))) continue;
       if (!entry.local) continue;
-      dirty.delete(entry.local.id);
-      failures.delete(entry.local.id);
       await deleteSaved(entry.local.id);
-      progress?.update(++removed, total);
+      removed.add(entry.local.id);
+      progress?.update(++done, total);
     }
   } finally {
     progress?.close();
   }
   await refreshLibrary();
-  if (deletingOpen) openSource('welcome', true, 'replace');
-  if (refused.size) throw new Error([...refused.values()][0]);
+  return { removed, refused };
 }
 
 /**
@@ -1480,7 +1584,12 @@ async function clearLocalData(): Promise<void> {
 async function openLocal(id: string): Promise<void> {
   const early = earlySaved?.id === id ? earlySaved.saved : null;
   earlySaved = null;
+  const latest = openTicket();
+  // Reopened straight after leaving it (Back, say), its last edits may still be on their way to this
+  // browser's copy: reading the copy before they land would open, and then save, the older one.
+  if (!early) await saving;
   const saved = await (early ?? getSaved(id).catch(() => null));
+  if (!latest()) return;
   if (!saved) {
     open({ kind: 'blank', name: t('app.newDocumentName') });
     pendingNotice = t('app.localGone');
@@ -1489,7 +1598,10 @@ async function openLocal(id: string): Promise<void> {
   // Shown at once. Whether it joins its room depends on who is signed in, so if that isn't known
   // yet the room is joined once it is (the room's own copy replaces this one only if untouched).
   const cloudId = saved.info.cloudId;
-  open(sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes }, { localId: id, cloudId });
+  const source = sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes };
+  // A huge text file (imported in a ZIP, say) opens in the viewer, as it does from the computer.
+  if (opensAsLargeText(source.kind, saved.bytes.byteLength)) return openLarge(saved.info.name, new Uint8Array(saved.bytes));
+  open(source, { localId: id, cloudId });
   const doc = current;
   if (cloudId && !doc.roomRequested) {
     void accountKnown.then(() => {
@@ -1506,6 +1618,7 @@ const sharedDocs = new Map<string, CloudDocument>();
 
 /** Opens a document someone shared with this user, straight from the cloud. */
 async function openShared(id: string): Promise<void> {
+  const latest = openTicket();
   await firstConnect;
   try {
     let doc = sharedDocs.get(id);
@@ -1513,6 +1626,7 @@ async function openShared(id: string): Promise<void> {
       for (const d of await listShared()) sharedDocs.set(d.id, d);
       doc = sharedDocs.get(id);
     }
+    if (!latest()) return;
     if (!doc) {
       open({ kind: 'blank', name: t('app.newDocumentName') });
       pendingNotice = t('app.sharedGone');
@@ -1527,7 +1641,11 @@ async function openShared(id: string): Promise<void> {
 }
 
 /** File ▸ Share: a link that lets anyone edit the open document with you, and the people it is shared with. */
-function share(): void {
+async function share(): Promise<void> {
+  // Who may share depends on the account's plan: asked just after the page opened, wait for it
+  // (otherwise the dialog would say to sign in, or to subscribe, to someone who has).
+  await accountKnown;
+  if (current.localId && !savedDocs.some((d) => d.id === current.localId)) savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
   const inRoom = new URLSearchParams(location.search).has('room');
   const room = documentKind !== 'docx' ? { unavailable: t('app.collabNeedsWord') } : inRoom ? { link: location.href } : { create: enterRoom };
   const info = savedDocs.find((d) => d.id === current.localId);
@@ -1544,13 +1662,21 @@ function share(): void {
 }
 
 async function openCloud(id: string): Promise<void> {
+  const latest = openTicket();
+  // The copy made here is the account's: who that is (and whether they have sync) must be known first.
+  await accountKnown;
   try {
     if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary(); // only for an address opened before the list arrived
     const cloud = cloudDocs.find((d) => d.id === id);
     const name = cloud?.name ?? t('app.cloudDocumentName');
     setStatus(t('app.opening', { name }));
-    // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest.
+    // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest. So
+    // whatever is still being saved to it lands first.
+    await saving;
     const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
+    // Listed at once: what asks about the open document's copy (File › Share, say) finds it.
+    if ((info.owner ?? null) === (account?.id ?? null)) savedDocs = [info, ...savedDocs.filter((d) => d.id !== info.id)];
+    if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
     open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id, cloudId: info.cloudId });
     rememberInUrl(`local:${info.id}`);
     // Only the lists need the new browser copy, so they catch up after the document is on screen.
@@ -1566,9 +1692,11 @@ async function download(): Promise<void> {
   try {
     // The large-text viewer holds the file as it was, and gives it back as it was.
     const large = largeView.active ? largeView.bytes : null;
-    const bytes = large ?? (await worker.convert(documentKind as Format));
+    // Named now: another document may be open by the time the bytes come back.
     const name = large ? largeView.fileName : fileName();
-    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: large ? 'text/plain' : FORMATS[documentKind].mime }));
+    const type = large ? 'text/plain' : FORMATS[documentKind].mime;
+    const bytes = large ?? (await worker.convert(documentKind as Format));
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
     const link = Object.assign(document.createElement('a'), { href: url, download: name });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -1636,6 +1764,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
     return;
   }
   setStatus(t('app.switching', { label: FORMATS[to].label }));
+  const latest = openTicket();
   // Saved now, as the format to edit it as, in place of the document's last save.
   clearTimeout(autosaveTimer);
   const doc = current;
@@ -1653,6 +1782,10 @@ async function convertTo(to: DocumentKind): Promise<void> {
     throw e;
   }
   doc.localId = info.id;
+  void refreshLibrary();
+  if (account) scheduleUpload(info.id, 0);
+  // Another document opened meanwhile: the converted one is saved, in the library, but not opened over it.
+  if (!latest()) return;
   const source = sourceFromFile(name, (await bytes).slice().buffer);
   if (!source) throw new Error(t('app.cannotOpenFormat', { label: FORMATS[to].label }));
   setUrl(new URLSearchParams());
@@ -1660,8 +1793,6 @@ async function convertTo(to: DocumentKind): Promise<void> {
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName, kind: documentKind });
   pendingNotice = switchedNotice(to);
-  void refreshLibrary();
-  if (account) scheduleUpload(info.id, 0);
 }
 
 /**
@@ -1675,8 +1806,10 @@ async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
     const layout = pictureLayout(pages.map((p) => ({ width: p.width, height: p.height })), { side: MAX_SIDE, pixels: MAX_PIXELS });
     const canvas = drawPages(gl, renderer, pages, layout);
     if (!canvas) throw new Error(t('app.imageTooBig'));
-    const bytes = await encodeCanvas(canvas, to);
     const name = stem(documentName) + FORMATS[to].extensions[0];
+    const latest = openTicket();
+    const bytes = await encodeCanvas(canvas, to);
+    if (!latest()) return;
     open({ kind: 'image', name, bytes: bytes.slice().buffer });
     documentEdited(); // saved, so it is there in the library next to the document it was made from
     pendingNotice = layout.count < pages.length ? t('app.pictureShortened', { name, count: layout.count }) : t('app.convertedToPicture', { name });
@@ -1840,21 +1973,26 @@ const isPictureFile = (file: File): boolean => PICTURE_FILE.test(file.name) || (
 /** Whether a picture can go into the open document now. */
 const canInsertPicture = (): boolean => loaded && !isPicture() && !annotating && !dashboard.visible && FORMATS[documentKind].images;
 
-async function dropped(file: File, x: number, y: number): Promise<void> {
-  if (isPictureFile(file) && canInsertPicture()) {
-    const choice = await askDropChoice(file.name, x, y);
+async function dropped(drop: Dropped, x: number, y: number): Promise<void> {
+  if (drop?.kind === 'file' && isPictureFile(drop.file) && canInsertPicture()) {
+    const choice = await askDropChoice(drop.file.name, x, y);
     if (choice === undefined) return focusInput();
-    if (choice === 'insert') return insertPicture(file, { x, y });
+    if (choice === 'insert') return insertPicture(drop.file, { x, y });
   }
   // Dropped on the document, not a folder: it goes in the top level.
-  dropFile(file, null);
+  dropFile(drop, null);
 }
 
-/** Opens a dropped file (a ZIP is imported), filed in `folderId` (null: the top level) when it is first saved. */
-function dropFile(file: File, folderId: string | null): void {
+/**
+ * Opens a dropped file (a ZIP is imported), filed in `folderId` (null: the top level) when it is
+ * first saved; several files, or a folder, are imported there.
+ */
+function dropFile(drop: Dropped, folderId: string | null): void {
+  if (!drop) return;
   newDocumentFolder = folderId;
-  if (isZipName(file.name)) return void importZip(file);
-  openFile(file);
+  if (drop.kind === 'import') return void importDropped(drop);
+  if (isZipName(drop.file.name)) return void importZip(drop.file);
+  openFile(drop.file);
 }
 
 /** Puts a picture file in the document, at `at` (a point on the screen) or else the caret. */
@@ -2094,13 +2232,13 @@ function updateDebug(): void {
   const panels: HTMLElement[] = [];
   if (flags.status) {
     panels.push(debugPanel('Document', [['status', status], ...(loadTimes ? ([['pages', loadTimes.pages.toLocaleString()], ['glyphs', loadTimes.glyphs.toLocaleString()]] as DebugRow[]) : [])], true));
-    if (room) {
+    if (devRoom) {
       panels.push(
         debugPanel('Room', [
-          ['id', room.id],
-          ['people', String(room.people)],
-          ['version', `v${room.version}`],
-          ['unsent', String(room.unsent)],
+          ['id', devRoom.id],
+          ['people', String(devRoom.people)],
+          ['version', `v${devRoom.version}`],
+          ['unsent', String(devRoom.unsent)],
         ]),
       );
     }
@@ -2752,9 +2890,12 @@ const chromeHost = createChromeHost({
       newDocumentFolder = folderId;
       return;
     }
-    // A document not saved yet keeps the folder it is waiting to be filed in.
+    // A document not saved yet: the new one goes where it was going to be filed.
     const localId = current.localId;
-    if (!localId) return;
+    if (!localId) {
+      newDocumentFolder = current.newFolder;
+      return;
+    }
     const { entries, folders } = await loadLocalLibrary(accountForFiles());
     const here = entries.find((e) => e.local?.id === localId);
     newDocumentFolder = here ? folderOf(here, folders) : null;
@@ -3000,28 +3141,38 @@ canvas.addEventListener('contextmenu', (e) => {
 
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
 // same paths as File ▸ Open Recent.
-const dashboard = new Dashboard(document.body, {
-  currentDocument: () => ({ localId: current.localId, cloudId: current.shared?.id ?? null }),
-  newDocument: (folderId) => {
-    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
-  },
-  open: (entry) => {
+/** What the Documents screen and the Files Sidebar both ask of the app: one copy, so the two can't drift apart. */
+const libraryHost = {
+  open: (entry: LibraryEntry) => {
     newDocumentFolder = null;
     showLoading(entry.name);
     openSource(sourceOf(entry));
   },
-  warm: (entry) => {
+  warm: (entry: LibraryEntry) => {
     if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });
   },
-  importFile: (folderId) => {
-    newDocumentFolder = folderId;
-    void chromeHost.perform({ kind: 'import' });
+  newDocument: (folderId: string | null) => {
+    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
   },
+  importFile: (folderId: string | null) => void chromeHost.perform({ kind: 'import', folderId }),
   dropFile,
   delete: deleteEverywhere,
-  account: () => account,
+  share: (id: string, name: string) => showShareDialog({ name, people: { id } }),
+  // Whose documents to list: before the plan is known, the account last signed in here (a head start).
+  account: accountForFiles,
   signedIn: () => signedIn,
-  share: (id, name) => showShareDialog({ name, people: { id } }),
+};
+
+/** The open document's ids: in this browser, and in the account (its own copy's, or one shared with this user). */
+const openDocumentIds = (): { localId: string | null; cloudId: string | null } => ({
+  localId: current.localId,
+  cloudId: current.shared?.id ?? savedDocs.find((d) => d.id === current.localId)?.cloudId ?? null,
+});
+
+const dashboard = new Dashboard(document.body, {
+  ...libraryHost,
+  currentDocument: openDocumentIds,
+  changed: () => filesPanel.refreshSoon(),
   openShared: (doc) => {
     sharedDocs.set(doc.id, doc);
     openSource(`shared:${doc.id}`);
@@ -3036,8 +3187,21 @@ const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clea
  * The assistant's tools that act on the app rather than the document's text: what the document is
  * and switching its format (the same switch as File ▸ Convert To). The rest run in the layout worker.
  */
-async function assistantTool(name: string, argumentsJson: string): Promise<ToolResult> {
+/** The document open when each of the assistant's requests started: its edits are for that one. */
+const assistantDocs = new WeakMap<AbortSignal, OpenDocument>();
+
+/** The app's tools that act on the open document (the others are about the library). */
+const OPEN_DOCUMENT_APP_TOOLS = new Set(['view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
+/** Tools that open another document on purpose: the request goes on with that one. */
+const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document']);
+
+async function assistantTool(name: string, argumentsJson: string, run: AbortSignal): Promise<ToolResult> {
   const handler = Object.hasOwn(APP_TOOLS, name) ? APP_TOOLS[name] : undefined;
+  // Another document was opened since the request started (by the person, or a file tool): these
+  // tools would read and change that one instead, without anyone meaning them to.
+  if ((!handler || OPEN_DOCUMENT_APP_TOOLS.has(name)) && assistantDocs.get(run) !== current) {
+    return `Error: the document this request was about is no longer open (now open: "${documentName}"). Nothing was done; tell the user, and ask before working on this one.`;
+  }
   if (!handler) return worker.agent(name, argumentsJson);
   let args: Record<string, unknown>;
   try {
@@ -3051,6 +3215,8 @@ async function assistantTool(name: string, argumentsJson: string): Promise<ToolR
     return await handler(args);
   } catch (e) {
     return `Error: ${(e as Error).message}`;
+  } finally {
+    if (OPENING_TOOLS.has(name)) assistantDocs.set(run, current);
   }
 }
 
@@ -3116,11 +3282,14 @@ const IMAGE_OPS: Record<string, ImageOp> = {
 const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
 
 /** The assistant's tools that act on the app rather than the document's text. The rest run in the layout worker. */
+/** The folders documents are kept in: the account's, or this browser's. */
+const listFoldersHere = async (): Promise<Folder[]> => (account ? await listFolders() : await listLocalFolders());
+
 const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult> = {
   ...fileTools({
     cloud: () => account !== null,
     entries: () => mergeLibrary(savedDocs, account ? cloudDocs : null),
-    folders: async () => (account ? await listFolders() : await listLocalFolders()),
+    folders: listFoldersHere,
     deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
     changed: async () => {
       await refreshLibrary();
@@ -3186,6 +3355,30 @@ const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<ToolR
     return documentKind === to
       ? `Converted: the document is now edited as ${formatLabel(to)}. It is the same document, so switching back restores anything ${formatLabel(to)} could not hold. Paragraph numbers may differ now; read the document again before editing.`
       : 'Error: the document could not be converted.';
+  },
+  async open_file(args) {
+    const entry = mergeLibrary(savedDocs, account ? cloudDocs : null).find((e) => e.key === args.file);
+    if (!entry) return `Error: there is no document ${String(args.file)}; list_files gives the ids.`;
+    const ready = nextDocumentReady();
+    newDocumentFolder = null;
+    showLoading(entry.name);
+    openSource(sourceOf(entry));
+    await ready;
+    return `Opened "${entry.name}". The tools now work on it; read it before editing.`;
+  },
+  async new_document(args) {
+    const folder = args.folder;
+    if (folder !== undefined && folder !== null && (typeof folder !== 'string' || !(await listFoldersHere()).some((f) => f.id === folder))) return `Error: there is no folder ${String(folder)}.`;
+    if (args.name !== undefined && typeof args.name !== 'string') return 'Error: `name` must be text.';
+    const ready = nextDocumentReady();
+    await chromeHost.perform({ kind: 'new', folderId: (folder as string | null | undefined) ?? null });
+    await ready;
+    const named = typeof args.name === 'string' ? renameDocument(args.name) : null;
+    return `Opened a new blank document${named ? ` named "${displayDocumentName(named, documentKind)}"` : ''}; it is saved once something is written in it. The tools now work on it.`;
+  },
+  download_all() {
+    void chromeHost.perform({ kind: 'downloadAll' });
+    return 'Started downloading all the documents as one ZIP file.';
   },
   download_document() {
     void chromeHost.perform({ kind: 'download' });
@@ -3267,7 +3460,7 @@ const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<ToolR
 };
 
 // Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).
-const assistant = new Assistant(document.body, { tool: assistantTool, signIn: () => void signIn(), subscribe: () => void subscribe() });
+const assistant = new Assistant(document.body, { tool: assistantTool, begin: (run) => assistantDocs.set(run, current), signIn: () => void signIn(), subscribe: () => void subscribe() });
 assistant.onVisibility = (clip) => chrome.update({ clip });
 chrome.update({ clip: assistant.visible });
 
@@ -3293,27 +3486,9 @@ document.getElementById('workspace')!.prepend(pagesPanel.el);
 
 // The account's folders and documents as a tree, left of everything else (see ui/filesPanel.ts).
 const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
-  open: (entry) => {
-    newDocumentFolder = null;
-    showLoading(entry.name);
-    openSource(sourceOf(entry));
-  },
-  warm: (entry) => {
-    if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });
-  },
-  newDocument: (folderId) => {
-    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
-  },
-  importFile: (folderId) => {
-    newDocumentFolder = folderId;
-    void chromeHost.perform({ kind: 'import' });
-  },
-  dropFile,
-  delete: deleteEverywhere,
-  share: (id, name) => showShareDialog({ name, people: { id } }),
-  account: accountForFiles,
-  signedIn: () => signedIn,
-  current: () => ({ localId: current.localId, cloudId: savedDocs.find((d) => d.id === current.localId)?.cloudId ?? null }),
+  ...libraryHost,
+  current: openDocumentIds,
+  changed: () => dashboard.refreshIfVisible(),
   close: toggleFilesPanel,
   focusEditor: focusInput,
 });
@@ -3479,9 +3654,8 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => {
   e.preventDefault();
-  const file = e.dataTransfer?.files[0];
-  if (!file) return;
-  void dropped(file, e.clientX, e.clientY);
+  const drop = takeDropped(e.dataTransfer);
+  if (drop) void dropped(drop, e.clientX, e.clientY);
 });
 
 // Debug/automation hooks.
@@ -3497,7 +3671,7 @@ Object.defineProperties(window, {
 window.addEventListener('popstate', () => {
   const params = new URLSearchParams(location.search);
   // A collaboration room is joined from the address, so changing to or from one starts the page over.
-  if (params.get('room') || room) return location.reload();
+  if (params.get('room') || devRoom) return location.reload();
   const doc = wantedDoc(params);
   if (doc && doc !== urlDoc) {
     const name = savedDocs.find((d) => `local:${d.id}` === doc)?.name;
@@ -3518,10 +3692,10 @@ window.addEventListener('popstate', () => {
     setUrl(params);
     void dashboard.show();
   }
-  accountKnown = accountLookup.then((user) => {
+  // Who is signed in shows at once; whether they have sync (and so the account's documents and
+  // rooms) waits for their plan, in connect().
+  void accountLookup.then((user) => {
     signedIn = user;
-    account = user;
-    drawnFor = user?.id ?? null;
     chrome.accountChanged();
   });
   firstConnect = connect(accountLookup);

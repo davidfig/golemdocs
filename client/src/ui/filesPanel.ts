@@ -2,8 +2,9 @@
 // left of the document, so another document is one click away without the dashboard. Folders open
 // and close; a document opens in the editor. It lists what the dashboard does (see sync.ts).
 
+import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { warmOnHover } from './warmOnHover.ts';
-import { createFolder, moveEntries, removeFolderTree, updateFolder, withoutDeleted } from '../folderOps.ts';
+import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolder, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
 import { deletionList, folderOf, isInside, treeRows, type Folder, type TreeRow } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
@@ -25,7 +26,10 @@ export interface FilesPanelHost {
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
   /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved. */
-  dropFile(file: File, folderId: string | null): void;
+  /** Opens a dropped file, or imports several (or a folder), filed in `folderId`. */
+  dropFile(drop: Dropped, folderId: string | null): void;
+  /** Folders or documents were changed here (made, renamed, moved or deleted): other views of them catch up. */
+  changed?(): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
@@ -41,8 +45,6 @@ export interface FilesPanelHost {
 /** How long to wait after a change before listing again, so a run of saves is one listing. */
 const REFRESH_DELAY = 3000;
 /** What is being dragged onto a folder. */
-type Dragged = { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: Folder };
-
 /** Folders left open, kept in this browser. */
 const OPEN_KEY = 'word.filesOpen';
 
@@ -53,6 +55,8 @@ export class FilesPanel {
   private readonly notice = h('p', { class: 'wm-files-notice', attrs: { role: 'status' } });
   /** The folder being renamed in place. */
   private renaming: string | null = null;
+  /** What has been typed in the folder name field so far (and where the caret is), kept when the rows are rebuilt under it. */
+  private renameDraft: { folder: string; value: string; start: number; end: number } | null = null;
   private dragged: Dragged | null = null;
   private entries: LibraryEntry[] = [];
   private folders: Folder[] = [];
@@ -61,6 +65,8 @@ export class FilesPanel {
   private timer = 0;
   /** The open document the tree was last opened up to, so a folder closed afterwards stays closed. */
   private revealed = '';
+  /** The row Tab goes to in the tree (one row at a time is in the tab order): the last one focused. */
+  private tabStop: string | null = null;
 
   constructor(parent: HTMLElement, private readonly host: FilesPanelHost) {
     this.el.hidden = true;
@@ -81,6 +87,10 @@ export class FilesPanel {
     this.makeDropTarget(this.tree, null);
     // Keys typed here stay here: the document's handlers listen on the window.
     this.el.addEventListener('keydown', (e) => this.key(e));
+    this.tree.addEventListener('focusin', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.wm-files-row');
+      if (row?.dataset.row) this.setTabStop(row);
+    });
     parent.append(this.el);
     makeResizable(this.el, { key: 'word.filesWidth', min: 140, max: 480, initial: 200 });
   }
@@ -128,12 +138,19 @@ export class FilesPanel {
   mark(): void {
     if (!this.visible) return;
     const here = this.host.current();
-    for (const el of this.tree.querySelectorAll<HTMLElement>('.wm-files-file')) {
-      const entry = this.entries.find((e) => `d:${e.key}` === el.dataset.row);
-      const on = !!entry && ((here.localId !== null && entry.local?.id === here.localId) || (here.cloudId !== null && entry.cloud?.id === here.cloudId));
-      toggleClass(el, 'wm-files-current', on);
-      if (on) el.setAttribute('aria-current', 'true');
-      else el.removeAttribute('aria-current');
+    // Found once, not once per row: this runs whenever saving's progress changes, and a big import
+    // makes for thousands of rows.
+    const entry = this.entries.find((e) => (here.localId !== null && e.local?.id === here.localId) || (here.cloudId !== null && e.cloud?.id === here.cloudId));
+    const row = entry ? `d:${entry.key}` : null;
+    for (const el of this.tree.querySelectorAll<HTMLElement>('.wm-files-current')) {
+      if (el.dataset.row === row) continue;
+      el.classList.remove('wm-files-current');
+      el.removeAttribute('aria-current');
+    }
+    const el = row ? this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(row)}"]`) : null;
+    if (el) {
+      toggleClass(el, 'wm-files-current', true);
+      el.setAttribute('aria-current', 'true');
     }
     this.reveal();
   }
@@ -162,11 +179,19 @@ export class FilesPanel {
   }
 
   private render(): void {
+    const field = this.tree.querySelector<HTMLInputElement>('input.wm-files-rename');
+    this.renameDraft =
+      field && this.renaming ? { folder: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
     const focused = this.el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.row : undefined;
     const here = this.host.current();
     const rows = treeRows(this.folders, this.entries, this.expanded);
     this.tree.replaceChildren(...rows.map((row) => this.row(row, here)));
     this.empty.hidden = rows.length > 0;
+    const stop =
+      (this.tabStop && this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(this.tabStop)}"]`)) ??
+      this.tree.querySelector<HTMLElement>('.wm-files-current') ??
+      this.tree.querySelector<HTMLElement>('.wm-files-row');
+    if (stop) stop.tabIndex = 0;
     if (focused) this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
   }
 
@@ -187,10 +212,12 @@ export class FilesPanel {
     if (renaming) {
       el.style.paddingLeft = `${6 + row.depth * 18}px`;
       el.setAttribute('aria-expanded', String(row.open));
+      const draft = this.renameDraft?.folder === row.folder.id ? this.renameDraft : null;
       queueMicrotask(() => {
         const input = el.querySelector('input');
         input?.focus();
-        input?.select();
+        if (draft) input?.setSelectionRange(draft.start, draft.end);
+        else input?.select();
       });
       return el;
     }
@@ -227,7 +254,8 @@ export class FilesPanel {
   }
 
   private renameInput(folder: Folder): HTMLInputElement {
-    const input = h('input', { class: 'wm-files-rename', attrs: { type: 'text', value: folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
+    const draft = this.renameDraft?.folder === folder.id ? this.renameDraft.value : null;
+    const input = h('input', { class: 'wm-files-rename', attrs: { type: 'text', value: draft ?? folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
     let finished = false;
     const finish = (save: boolean) => {
       if (finished) return;
@@ -324,6 +352,8 @@ export class FilesPanel {
       this.notice.hidden = false;
     }
     this.render();
+    // The Documents screen shows the same folders and documents.
+    this.host.changed?.();
     await this.refresh();
   }
 
@@ -354,11 +384,7 @@ export class FilesPanel {
     return this.run(async () => {
       if (item.kind === 'folder') await this.changeFolder(item.folder, { parentId: to });
       else {
-        if (item.entry.cloud) item.entry.cloud.folderId = to;
-        if (item.entry.local) {
-          if (to === null) delete item.entry.local.folderId;
-          else item.entry.local.folderId = to;
-        }
+        this.entries = withMoved(this.entries, [item.entry], to);
         this.render();
         await moveEntries([item.entry], to);
       }
@@ -367,8 +393,7 @@ export class FilesPanel {
   }
 
   private canDrop(item: Dragged, to: string | null): boolean {
-    if (item.kind === 'doc') return folderOf(item.entry, this.folders) !== to;
-    return item.folder.parentId !== to && to !== item.folder.id && !isInside(this.folders, to, item.folder.id);
+    return canDrop(this.folders, item, to);
   }
 
   private makeDraggable(el: HTMLElement, item: Dragged): void {
@@ -411,10 +436,10 @@ export class FilesPanel {
       const item = this.dragged;
       this.dragged = null;
       if (item) return void this.relocate(item, folderId);
-      const file = e.dataTransfer?.files[0];
-      if (!file) return;
+      const drop = takeDropped(e.dataTransfer);
+      if (!drop) return;
       if (folderId !== null) this.toggleFolder(folderId, true);
-      this.host.dropFile(file, folderId);
+      this.host.dropFile(drop, folderId);
     });
   }
 
@@ -428,6 +453,13 @@ export class FilesPanel {
       // Storage unavailable: they stay open for this session only.
     }
     this.render();
+  }
+
+  /** Makes `row` the one Tab reaches in the tree. */
+  private setTabStop(row: HTMLElement): void {
+    for (const el of this.tree.querySelectorAll<HTMLElement>('.wm-files-row[tabindex="0"]')) if (el !== row) el.tabIndex = -1;
+    row.tabIndex = 0;
+    this.tabStop = row.dataset.row ?? null;
   }
 
   private key(e: KeyboardEvent): void {
@@ -462,6 +494,13 @@ export class FilesPanel {
       case 'ArrowLeft': {
         const id = folderOf(rows[at]);
         if (id && this.expanded.has(id)) this.toggleFolder(id, false);
+        else {
+          // To the folder it is in: the nearest row above that is less deep.
+          const level = Number(rows[at]?.getAttribute('aria-level') ?? 1);
+          let parent = at - 1;
+          while (parent >= 0 && Number(rows[parent]!.getAttribute('aria-level')) >= level) parent--;
+          if (parent >= 0) moveTo(parent);
+        }
         break;
       }
       default:

@@ -135,7 +135,7 @@ test('dropping a file of a type that cannot be opened says so and keeps the docu
   expect(await app.text()).toBe('Keep me');
 });
 
-test('only the first of several dropped files is opened', async ({ app, page }) => {
+test('several files dropped together are all imported, and the open document stays', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await page.evaluate(() => {
     const dt = new DataTransfer();
@@ -143,8 +143,12 @@ test('only the first of several dropped files is opened', async ({ app, page }) 
     dt.items.add(new File(['second file'], 'b.txt'));
     window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, clientX: 300, clientY: 300, bubbles: true, cancelable: true }));
   });
-  await waitForOpen(app, 'a.txt');
-  expect(await app.text()).toBe('first file');
+  await expect.poll(() => status(page)).toContain('Imported documents: 2');
+  expect(await page.title()).toMatch(/^Welcome/);
+  await app.menu('File', 'Open Recent');
+  const recent = page.getByRole('menu').last();
+  await expect(recent.getByRole('menuitem', { name: /a\.txt/ })).toBeVisible();
+  await expect(recent.getByRole('menuitem', { name: /b\.txt/ })).toBeVisible();
 });
 
 test('dropping something that is not a file (dragged text) does nothing', async ({ app, page }) => {

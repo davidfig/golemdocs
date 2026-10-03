@@ -1,7 +1,8 @@
 // Color schemes: Golem (the default, orange like the favicon) and Office 2003's Silver, Blue,
 // Olive Green and Grayscale, each with a dark counterpart shared by all of them. A scheme is only a set of --wm-* colors in ui.css, chosen by
 // data-theme on the root element. Two choices make it: the scheme, and the appearance, which is
-// automatic (dark when the system prefers dark), always light, or always dark. Both belong to this
+// automatic (dark when the system prefers dark), always light, or always dark. A third, Dark Pages,
+// also turns the pages dark with light letters while the dark colors show. All belong to this
 // browser (kept in localStorage), not the document.
 
 import { t } from '../i18n/index.ts';
@@ -19,6 +20,7 @@ export type Appearance = 'auto' | 'light' | 'dark';
 
 const SCHEME_KEY = 'golem.theme';
 const APPEARANCE_KEY = 'golem.appearance';
+const PAGES_KEY = 'golem.darkPages';
 
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
@@ -43,6 +45,7 @@ const isAppearance = (value: unknown): value is Appearance => value === 'auto' |
 
 let scheme: SchemeId = 'golem';
 let appearance: Appearance = 'auto';
+let darkPages = read(PAGES_KEY) === 'on';
 {
   const savedScheme = read(SCHEME_KEY);
   const savedAppearance = read(APPEARANCE_KEY);
@@ -69,10 +72,22 @@ export function isDark(): boolean {
   return appearance === 'auto' ? darkQuery.matches : appearance === 'dark';
 }
 
+/** Whether the pages are dark with light letters now: Dark Pages is on and the dark colors are showing. */
+export function pagesDark(): boolean {
+  return darkPages && isDark();
+}
+
+function setRootData(): void {
+  const root = document.documentElement;
+  root.dataset.theme = isDark() ? 'dark' : scheme;
+  root.dataset.scheme = scheme;
+  if (pagesDark()) root.dataset.pages = 'dark';
+  else delete root.dataset.pages;
+}
+
 function apply(): void {
   desk = null;
-  document.documentElement.dataset.theme = isDark() ? 'dark' : scheme;
-  document.documentElement.dataset.scheme = scheme;
+  setRootData();
   for (const listener of listeners) listener();
 }
 
@@ -95,6 +110,20 @@ export function toggleDark(): void {
   setAppearance(isDark() ? 'light' : 'dark');
 }
 
+/**
+ * Turns Dark Pages on or off. Turning it on also turns the dark colors on, since dark pages only
+ * show with them; turning it off leaves the rest dark.
+ */
+export function toggleDarkPages(): void {
+  darkPages = !pagesDark();
+  write(PAGES_KEY, darkPages ? 'on' : 'off');
+  if (darkPages && !isDark()) {
+    appearance = 'dark';
+    write(APPEARANCE_KEY, appearance);
+  }
+  apply();
+}
+
 /** Calls `listener` whenever the colors change, including when the system flips under automatic. Returns the way to stop. */
 export function onThemeChange(listener: () => void): () => void {
   listeners.add(listener);
@@ -105,8 +134,7 @@ darkQuery.addEventListener('change', () => {
   if (appearance === 'auto') apply();
 });
 
-document.documentElement.dataset.theme = isDark() ? 'dark' : scheme;
-document.documentElement.dataset.scheme = scheme;
+setRootData();
 
 /** The color behind the pages, 0-1 per channel, as the scheme's --wm-desk. */
 export function deskColor(): readonly [number, number, number] {

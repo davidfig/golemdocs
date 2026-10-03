@@ -1,5 +1,48 @@
 # What’s New in Golem Docs
 
+## 0.7.2 - Unreleased
+
+### Added
+- Dropping several files, or a folder, from your computer imports them all, each in the folder it was in (a ZIP among them goes in a folder of its own name). One file still opens as before.
+- The Files sidebar can be reached with Tab, and Left Arrow on a document moves to the folder it is in.
+- A collaborative document whose connection was lost rejoins by itself once you are back online.
+- The AI assistant can open one of your documents, start a new blank one (in a folder, with a name), and download all your documents as a ZIP.
+
+### Fixed
+- Two devices saving the same document at the same moment no longer lose one of the saves, and a save that arrives just after the document was deleted no longer leaves its file behind.
+- A document deleted with its folder can no longer be downloaded afterwards, by you or by the people it was shared with.
+- Moving many documents, or importing a ZIP with many folders, no longer pauses your account (and others) for minutes on the server's request limit.
+- Renaming a document while editing it with others now reaches your account.
+- A ZIP with one password-protected, damaged or unusually compressed file now imports everything else instead of failing; names made by Windows' own ZIP folders keep their accents.
+- A large text file imported in a ZIP opens in the large-file viewer instead of freezing the tab.
+- One part of a ZIP import that the server refuses no longer sends the rest of the import the slow way.
+- The name you are typing for a new folder (in the Files sidebar or on the Documents screen) is no longer reset when the list refreshes.
+- Moving ticked items while searching no longer pulls folders and documents out of a ticked folder they are in.
+- Opening one document and then quickly another no longer lets the first replace the second when it finishes loading, and Download names the file after the document it came from.
+- The assistant no longer carries on editing a different document if you open one while it works: it stops and says so.
+- An editing error in the layout engine is now reported instead of the pages silently no longer updating.
+- A document deleted from your account on another device is no longer removed here if you edited it while the list was loading.
+- Documents shown before your account's list loads now include ones you just uploaded, and a shared document you left no longer reappears.
+- Signing in with a different account no longer mixes in links to the previous account's documents.
+- A change made on the Documents screen now shows in the Files sidebar too, and the other way round.
+- A move or rename made while your document list was loading is no longer undone in the list shown the next time the app starts.
+- Signed in without a subscription, a document no longer tries to join a shared editing session it can't be part of.
+- Two rare error messages are now in your language instead of English.
+- The Files sidebar stays quick after importing thousands of documents.
+- Importing a ZIP into your account no longer makes some documents twice when you switch to another tab, go back online or edit while it runs.
+- Editing a document someone shared with you no longer renames their copy (to the name of the next document you open, or with a .docx ending).
+- Renaming a folder in one place and moving it in another (the Files sidebar and the Documents screen) no longer undoes the first change.
+- Deleting the open document while offline no longer leaves it to be saved again later as a second copy.
+- The documents in a folder you just deleted no longer come back at the top level of your lists.
+- Going back to a document you just left no longer opens it without your last few edits.
+- Signing out now removes the list of your account's documents and folders kept in the browser, and signs out the app's other open tabs too.
+- A new document, import or dropped file no longer lands in a folder you chose earlier for something else (after cancelling Import, say).
+- In a ZIP, a file with a very long name is no longer skipped as unsupported, an accented name made on a Mac no longer makes a second folder beside the one you have, and a GIF, BMP or SVG no longer gets the same name as a PNG beside it.
+- A document in your account now joins its collaboration room even when it takes a while to open, so edits made at the same time as others aren't saved as a separate copy.
+- A collaborative document you return to with Back or Forward rejoins its room instead of quietly no longer sharing your edits.
+- A malformed edit sent to a shared document can no longer stop the document from ever saving again.
+- Your account no longer becomes unusable when an update to its storage is interrupted part way.
+
 ## 0.7.1 - 2026-10-02
 
 ### Added

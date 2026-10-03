@@ -213,6 +213,22 @@ export async function dropFileOn(target: Locator, file: Upload): Promise<void> {
   );
 }
 
+/** Drags several files from the desktop over `target` together and drops them there. */
+export async function dropFilesOn(target: Locator, files: Upload[]): Promise<void> {
+  await target.evaluate(
+    (el, list) => {
+      const dt = new DataTransfer();
+      for (const { name, base64, mimeType } of list) dt.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: mimeType }));
+      const box = el.getBoundingClientRect();
+      const at = { clientX: box.x + box.width / 2, clientY: box.y + Math.min(box.height / 2, 10), bubbles: true, cancelable: true, dataTransfer: dt };
+      el.dispatchEvent(new DragEvent('dragenter', at));
+      el.dispatchEvent(new DragEvent('dragover', at));
+      el.dispatchEvent(new DragEvent('drop', at));
+    },
+    files.map((file) => ({ name: file.name, base64: file.buffer.toString('base64'), mimeType: file.mimeType ?? '' })),
+  );
+}
+
 /** The app's status line (the window hook main.ts exposes). */
 export async function status(page: Page): Promise<string> {
   return page.evaluate(() => (window as unknown as { status: string }).status);

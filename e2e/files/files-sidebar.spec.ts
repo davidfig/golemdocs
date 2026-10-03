@@ -1,7 +1,7 @@
 // View > Files Sidebar: the documents as a tree beside the editor.
 
 import { expect, test } from './fixtures';
-import { dropFileOn, importFile, text, waitForOpen, waitForSaved } from './helpers';
+import { dropFileOn, dropFilesOn, importFile, status, text, waitForOpen, waitForSaved } from './helpers';
 
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
 const row = (page: import('@playwright/test').Page, name: string) => panel(page).locator('.wm-files-file', { hasText: name });
@@ -104,4 +104,45 @@ test('a file dropped from the computer goes in the folder it is dropped on, or t
   await waitForOpen(app, 'third.txt');
   await waitForSaved(page, 'third.txt');
   await expect(row(page, 'third')).toHaveAttribute('aria-level', '1');
+});
+
+test('several files dropped on a folder together are imported into it, without opening any', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  await panel(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
+  await page.getByRole('menuitem', { name: 'New folder' }).click();
+  await page.locator('.wm-files-rename').fill('Inbox');
+  await page.keyboard.press('Enter');
+  const folder = panel(page).locator('.wm-files-folder', { hasText: 'Inbox' });
+  await expect(folder).toHaveCount(1);
+
+  await dropFilesOn(folder, [text('one.txt', '1'), text('two.md', '# 2'), text('tool.exe', 'x')]);
+  await expect.poll(() => status(page)).toContain('Imported documents: 2');
+  await expect(folder).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'one')).toHaveAttribute('aria-level', '2');
+  await expect(row(page, 'two')).toHaveAttribute('aria-level', '2');
+  expect(await app.page.title()).toMatch(/^Welcome/);
+});
+
+test('one row of the tree is in the tab order, it follows the focus, and Left goes to the folder a row is in', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  await panel(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
+  await page.getByRole('menuitem', { name: 'New folder' }).click();
+  await page.locator('.wm-files-rename').fill('Box');
+  await page.keyboard.press('Enter');
+  const folder = panel(page).locator('.wm-files-folder', { hasText: 'Box' });
+  await dropFileOn(folder, text('inside.txt', 'in'));
+  await waitForOpen(app, 'inside.txt');
+  await waitForSaved(page, 'inside.txt');
+
+  // One row at a time is in the tab order (the last one focused), and it moves with the focus.
+  await expect(panel(page).locator('.wm-files-row[tabindex="0"]')).toHaveCount(1);
+  await row(page, 'inside').focus();
+  await expect(row(page, 'inside')).toHaveAttribute('tabindex', '0');
+  // Left from inside a folder goes to the folder.
+  await page.keyboard.press('ArrowLeft');
+  await expect(folder).toBeFocused();
+  await expect(folder).toHaveAttribute('tabindex', '0');
+  await expect(row(page, 'inside')).toHaveAttribute('tabindex', '-1');
 });

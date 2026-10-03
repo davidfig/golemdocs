@@ -64,7 +64,8 @@ export type Action =
   /** A blank document. `folderId` is where it is filed (null: the top level); left out, the folder of the open document. */
   | { kind: 'new'; folderId?: string | null }
   | { kind: 'open' }
-  | { kind: 'import' }
+  /** `folderId`: where the file goes (null: the top level); a ZIP's top level goes there. */
+  | { kind: 'import'; folderId?: string | null }
   | { kind: 'openSample'; id: string }
   /** One of the user's documents (File ▸ Open Recent); `id` is its source, `local:…` or `cloud:…`. */
   | { kind: 'openSaved'; id: string }

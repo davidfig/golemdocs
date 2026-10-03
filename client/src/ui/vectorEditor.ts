@@ -69,6 +69,8 @@ const ACCENT = '#316ac5';
 const DOUBLE_CLICK_MS = 400;
 const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2, fillType: 'solid', strokeStyle: 'dash:solid' };
 const DEFAULT_FONT_SIZE = 24;
+/** The cursor over each handle of the selection's box. */
+const RESIZE_CURSORS: Record<Exclude<Handle, 'rotate'>, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
 
 type NodePart = 'anchor' | 'c1' | 'c2';
 
@@ -114,6 +116,81 @@ export class VectorEditor {
   private nodes: NodeMode | null = null;
   private lastClick: { time: number; x: number; y: number } | null = null;
   private typing: HTMLInputElement | null = null;
+  private cursor = '';
+
+  private setCursor(cursor: string): void {
+    if (cursor === this.cursor) return;
+    this.cursor = cursor;
+    this.host.canvas.style.cursor = cursor;
+  }
+
+  /** The cursor a tool has where there is nothing special under the pointer. */
+  private toolCursor(): string {
+    switch (this._tool) {
+      case 'text':
+        return 'text';
+      case 'select':
+        return '';
+      default:
+        return 'crosshair';
+    }
+  }
+
+  /** The cursor while a gesture is going on. */
+  private dragCursor(g: Gesture): string {
+    switch (g.kind) {
+      case 'resize':
+        return RESIZE_CURSORS[g.handle];
+      case 'rotate':
+        return 'grabbing';
+      case 'guide':
+        return g.axis === 'v' ? 'ew-resize' : 'ns-resize';
+      case 'move':
+      case 'node':
+      case 'gradient':
+        return 'move';
+      default:
+        return 'crosshair';
+    }
+  }
+
+  /** The cursor that says what a click at a screen point would do. */
+  private hoverCursor(frame: VectorFrame, sx: number, sy: number): string {
+    const scene = this.scene;
+    if (!scene || this.typing) return '';
+    const at = frame.fromScreen(sx, sy);
+    if (this._tool === 'pen') {
+      const first = this.pen?.points[0];
+      if (first && this.pen!.points.length >= 3) {
+        const [fx, fy] = frame.toScreen(first.x, first.y);
+        // Closing the path.
+        if (Math.hypot(fx - sx, fy - sy) <= HANDLE_REACH) return 'pointer';
+      }
+      return 'crosshair';
+    }
+    if (this._tool === 'text') return 'text';
+    if (this._tool !== 'select') return 'crosshair';
+    // Points and handles of the path being edited.
+    if (this.nodes) {
+      if (this.nodeAt(frame, sx, sy)) return 'move';
+      const near = nearestSegment(this.nodeCommands(scene, this.nodes.path), this.toLocal(this.nodes.path, at));
+      if (near && near.distance * frame.unit <= LINE_REACH * 2) return 'copy';
+      return '';
+    }
+    // The points and stops of a gradient.
+    const gradient = this.gradientOfSelection(scene);
+    if (gradient && this.gradientHandleAt(frame, gradient, sx, sy)) return 'move';
+    // The handles around the selection.
+    const handle = this.handleAt(frame, sx, sy);
+    if (handle === 'rotate') return 'grab';
+    if (handle) return RESIZE_CURSORS[handle];
+    const hit = hitTest(scene, { x: at[0], y: at[1] }, LINE_REACH / frame.unit);
+    if (hit) return this._selection.some((p) => p[0] === hit[0]) ? 'move' : 'pointer';
+    const guide = this.guideAt(frame, sx, sy);
+    if (guide) return guide.axis === 'v' ? 'ew-resize' : 'ns-resize';
+    return '';
+  }
+
   /** Whether things snap to the other shapes and the page, and the lines they have caught just now. */
   private snapOn = true;
   private guides: SnapTargets = { xs: [], ys: [] };
@@ -244,7 +321,7 @@ export class VectorEditor {
     this.lastClick = null;
     this.closeText();
     this._tool = 'select';
-    this.host.canvas.style.cursor = '';
+    this.setCursor('');
   }
 
   private refresh(): void {
@@ -308,7 +385,7 @@ export class VectorEditor {
     this.closeText();
     this.nodes = null;
     this._tool = tool;
-    this.host.canvas.style.cursor = tool === 'select' ? '' : 'crosshair';
+    this.setCursor(this.toolCursor());
     this.refresh();
   }
 
@@ -926,6 +1003,8 @@ export class VectorEditor {
     if (!frame) return;
     const gesture = this.gesture;
     if (!gesture) {
+      const [sx, sy] = this.screen(e);
+      this.setCursor(this.hoverCursor(frame, sx, sy) || this.toolCursor());
       // The pen shows where the next segment would go.
       if (this.pen) {
         this.pen.hover = this.point(e, frame);
@@ -935,6 +1014,7 @@ export class VectorEditor {
     }
     e.stopImmediatePropagation();
     const at = this.point(e, frame);
+    this.setCursor(this.dragCursor(gesture));
     if (gesture.kind === 'band') {
       gesture.to = at;
       return this.refresh();
@@ -1124,7 +1204,7 @@ export class VectorEditor {
     const style = this.shape.strokeStyle;
     if (style !== 'dash:solid' && (node.kind === 'path' || style.startsWith('dash:'))) this.styleLine(next, path, style);
     this._tool = 'select';
-    this.host.canvas.style.cursor = '';
+    this.setCursor('');
     this.commit(next, [path]);
   }
 

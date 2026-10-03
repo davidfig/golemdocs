@@ -2599,6 +2599,8 @@ let overLink = false;
 let overCheckbox = false;
 let linkKeyDown = false;
 function updateCursor(): void {
+  // The vector editor sets the cursor itself, from what is under the pointer.
+  if (isDrawing() && vector?.editor.active) return;
   const cursor = painting ? 'copy' : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
   if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
 }

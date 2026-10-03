@@ -101,8 +101,14 @@ export function deletedElsewhere(local: readonly SavedInfo[], cloud: readonly Cl
 
 export interface Library {
   entries: LibraryEntry[];
+  /** This browser's copies the entries were made from (the user's own, less those on their way out). */
+  local: SavedInfo[];
+  /** The account's documents they were made from; null when not known (signed out, or unreachable). */
+  cloud: CloudDocument[] | null;
   /** Why the account's documents aren't all listed (offline, say); the browser's copies still are. */
   cloudProblem: string | null;
+  /** The account couldn't be reached at all (rather than refusing). */
+  offline: boolean;
   /** The session ended: the account needs signing in to again. */
   signedOut: boolean;
   /** Documents other people shared with the user. */
@@ -219,19 +225,25 @@ export function moveDocsInCatalogue(ids: readonly string[], folderId: string | n
   });
 }
 
+/** `user`'s copies in this browser, as `notDeleted` has them; null if they can't be read. */
+export async function localCopies(user: User | null): Promise<SavedInfo[] | null> {
+  const saved = await listSaved().catch(() => null);
+  return saved && notDeleted(saved, user);
+}
+
 /** `user`'s copies in this browser, less those of documents deleted from the account (they are on their way out). */
 function notDeleted(saved: readonly SavedInfo[], user: User | null): SavedInfo[] {
   return ownedBy(saved, user?.id ?? null).filter((l) => !isDeleted(l.cloudId) && !isDeleted(l.folderId));
 }
 
 /** What this browser has for `user` (null: signed out): instant, and all there is offline. */
-export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; shared: CloudDocument[]; folders: Folder[] }> {
+export async function loadLocalLibrary(user: User | null): Promise<{ entries: LibraryEntry[]; local: SavedInfo[]; cloud: CloudDocument[] | null; shared: CloudDocument[]; folders: Folder[] }> {
   const cached = readCatalogue(user);
   const local = notDeleted(await listSaved().catch(() => []), user);
   // Signed in, the folders are the account's; otherwise they are this browser's.
   const folders = user ? [...(cached?.folders ?? []), ...[...madeFolders.values()].filter((m) => !cached?.folders.some((f) => f.id === m.id))].filter((f) => !isDeleted(f.id)) : await listLocalFolders().catch(() => []);
   const cloud = cached ? cached.cloud.filter((d) => !isDeletedDocument(d)) : null;
-  return { entries: mergeLibrary(local, cloud), shared: cached?.shared ?? [], folders };
+  return { entries: mergeLibrary(local, cloud), local, cloud, shared: cached?.shared ?? [], folders };
 }
 
 /**
@@ -243,7 +255,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   const local = notDeleted(await listSaved().catch(() => []), user);
   if (!user) {
     const shared = identity ? await listShared().catch(() => []) : [];
-    return { entries: mergeLibrary(local, null), cloudProblem: null, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };
+    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: null, offline: false, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };
   }
 
   const editsBefore = catalogueEdits;
@@ -256,7 +268,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   } catch (error) {
     const signedOut = error instanceof CloudError && error.status === 401;
     const problem = signedOut ? t('app.signedOutProblem') : t('app.cloudUnreachable', { message: (error as Error).message });
-    return { entries: mergeLibrary(local, null), cloudProblem: problem, signedOut, shared: [], folders: null };
+    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: problem, offline: error instanceof TypeError, signedOut, shared: [], folders: null };
   }
 
   // Decided from copies read before the account was asked: one saved to meanwhile is kept.
@@ -269,5 +281,5 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   const folders = await foldersRequest;
   // Unless the catalogue was changed here meanwhile: this answer may be from before, and the next one writes it.
   if (catalogueEdits === editsBefore) writeCatalogue(user, cloud, shared, folders ?? readCatalogue(user)?.folders ?? []);
-  return { entries: mergeLibrary(kept, cloud), cloudProblem: null, signedOut: false, shared, folders };
+  return { entries: mergeLibrary(kept, cloud), local: kept, cloud, cloudProblem: null, offline: false, signedOut: false, shared, folders };
 }

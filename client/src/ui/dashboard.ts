@@ -11,7 +11,8 @@ import { removeShare, type CloudDocument } from '../cloud.ts';
 import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
 import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, outermost, type Folder } from '../folders.ts';
 import { warmOnHover } from './warmOnHover.ts';
-import { forgetSharedInCatalogue, loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
+import type { LibraryStore } from '../libraryStore.ts';
+import { forgetSharedInCatalogue, type LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
@@ -42,8 +43,6 @@ export interface DashboardHost {
   importFile(folderId: string | null): void;
   /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved; imports several, or a folder, there. */
   dropFile(drop: Dropped, folderId: string | null): void;
-  /** Folders or documents were changed here (made, renamed, moved or deleted): other views of them catch up. */
-  changed?(): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Whose cloud documents are shown: who is signed in, if they have sync (null: nobody, or no sync). */
@@ -71,10 +70,8 @@ export class Dashboard {
   private readonly grid: HTMLElement;
   private readonly sharedTitle: HTMLElement;
   private readonly sharedGrid: HTMLElement;
-  private shared: CloudDocument[] = [];
   private readonly scroller: HTMLElement;
   private thumbnails!: Thumbnails;
-  private entries: LibraryEntry[] = [];
   private readonly newFolderButton: HTMLButtonElement;
   /** Documents (`doc:<key>`) and folders (`folder:<id>`) ticked for a bulk Move or Delete. */
   private readonly selected = new Set<string>();
@@ -82,7 +79,6 @@ export class Dashboard {
   private anchor: string | null = null;
   private readonly selectionBar: HTMLElement;
   private readonly selectionCount: HTMLElement;
-  private folders: Folder[] = [];
   /** The folder being looked at (null: the top level). */
   private folderId: string | null = null;
   /** The folder whose name is being typed in place (just made, or being renamed). */
@@ -93,15 +89,20 @@ export class Dashboard {
   /** While the cards are being replaced: the rename field losing its place isn't the user leaving it. */
   private rebuilding = false;
   private readonly crumbs: HTMLElement;
-  /** Bumped on every show and refresh, so a slow answer never replaces a newer one. */
-  private generation = 0;
   /** Cards showing a "click again to confirm" button, and the timer that resets them. */
   private confirming: { button: HTMLButtonElement; label: string; icon?: string; iconOnly: boolean; timer: number } | null = null;
 
+  /** `library`: the documents and folders, the same copy the Files Sidebar shows. */
   constructor(
     parent: HTMLElement,
     private readonly host: DashboardHost,
+    private readonly library: LibraryStore,
   ) {
+    library.subscribe(() => {
+      if (!this.visible) return;
+      this.notice.textContent = library.problem ?? '';
+      this.render();
+    });
     this.search = h('input', { class: 'wm-dash-search', attrs: { type: 'search', placeholder: t('panels.dashboard.search'), 'aria-label': t('panels.dashboard.search') } });
     this.notice = h('p', { class: 'wm-dash-notice', attrs: { role: 'status' } });
     this.grid = h('div', { class: 'wm-dash-grid' });
@@ -213,17 +214,15 @@ export class Dashboard {
     this.folderId = null;
     this.renaming = null;
     this.selected.clear();
-    const generation = ++this.generation;
-    const start = await loadLocalLibrary(this.host.account());
-    if (generation !== this.generation) return;
-    this.entries = start.entries;
-    this.folders = start.folders;
-    this.shared = start.shared;
+    // What the library has shows at once; the listing brings it up to date.
     this.folderId = this.currentFolder();
-    this.notice.textContent = '';
+    this.notice.textContent = this.library.problem ?? '';
     this.render();
-    this.search.focus({ preventScroll: true });
-    await this.refresh(generation);
+    // Once the menu or key that opened it is done with the focus (it hands it back as it closes).
+    setTimeout(() => {
+      if (this.visible) this.search.focus({ preventScroll: true });
+    }, 0);
+    await this.refresh();
   }
 
   /** The folder the open document is in (null: the top level, or it isn't saved yet), so Open starts where it is. */
@@ -242,27 +241,33 @@ export class Dashboard {
   }
 
   hide(): void {
-    this.generation++;
     this.root.hidden = true;
     this.thumbnails.release();
   }
 
-  /** Lists the documents again (after the sign-in or an upload changed them), if it's showing. */
-  refreshIfVisible(): void {
-    if (this.visible) void this.refresh();
+  private refresh(): Promise<void> {
+    return this.library.refresh();
   }
 
-  private async refresh(generation = ++this.generation): Promise<void> {
-    const user = this.host.account();
-    const identity = this.host.signedIn();
-    const library = await loadLibrary(user, identity);
-    if (generation !== this.generation) return;
-    this.entries = library.entries;
-    // Unless they couldn't be listed: what is on screen is better than none.
-    if (library.folders) this.folders = library.folders;
-    this.shared = library.shared;
-    this.notice.textContent = library.cloudProblem ?? '';
-    this.render();
+  /** The documents, folders and what others shared, as the library has them; a change set here shows wherever the library does. */
+  private get entries(): LibraryEntry[] {
+    return this.library.entries;
+  }
+
+  private set entries(entries: LibraryEntry[]) {
+    this.library.update({ entries });
+  }
+
+  private get folders(): Folder[] {
+    return this.library.folders;
+  }
+
+  private set folders(folders: Folder[]) {
+    this.library.update({ folders });
+  }
+
+  private get shared(): CloudDocument[] {
+    return this.library.shared;
   }
 
   // --- Rendering ---------------------------------------------------------------------------
@@ -568,8 +573,6 @@ export class Dashboard {
     }
     // Shown at once from what is known (a folder just made is typed in), then as the account has it.
     this.render();
-    // The Files Sidebar shows the same folders and documents.
-    this.host.changed?.();
     if (reload) await this.refresh();
   }
 
@@ -702,12 +705,9 @@ export class Dashboard {
       if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
       // Gone from the screen at once; if it fails, the refresh below brings it back with the reason.
       const before = { folders: this.folders, entries: this.entries };
-      // A listing already on its way was asked for before the delete: it would bring these back.
-      this.generation++;
+      // (A listing already on its way was asked for before the delete: the library drops it.)
       const left = withoutDeleted(before.folders, before.entries, folders, docs);
-      this.folders = left.folders;
-      this.entries = left.entries;
-      this.render();
+      this.library.update({ folders: left.folders, entries: left.entries });
       run(before, { docs, folders }).then(
         () => this.refresh(),
         (error) => {

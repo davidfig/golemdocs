@@ -10,7 +10,8 @@ import { zipDocuments } from './storage/archive.ts';
 import { takeDropped, type Dropped } from './storage/droppedFiles.ts';
 import { importFiles, readZipFiles, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
-import { fileTools } from './assistant/fileTools.ts';
+import { appTools } from './assistant/appTools.ts';
+import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder } from './folderOps.ts';
 import { openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
 import {
@@ -31,7 +32,8 @@ import {
 } from './storage/local.ts';
 import { folderOf, folderPath, type Folder } from './folders.ts';
 import { UploadQueue } from './uploadQueue.ts';
-import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, mergeLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
+import { LibraryStore } from './libraryStore.ts';
+import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -50,10 +52,8 @@ import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { Assistant } from './assistant/index.ts';
-import type { ToolResult } from './assistant/conversation.ts';
 import { searchServer } from './assistant/api.ts';
 import { OtherDocuments, type StoredDocument } from './assistant/libraryDocs.ts';
-import { MAX_COPY } from './assistant/otherDocs.ts';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
@@ -74,7 +74,7 @@ import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
 import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/pasteSpecialDialog.ts';
-import { cleanDocumentName, displayDocumentName } from './documentName.ts';
+import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
 import { Footer } from './ui/footer.ts';
@@ -88,7 +88,7 @@ import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
-import { FORMAT_LIST, isFormat, type Format } from './formats/convert.ts';
+import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
@@ -202,38 +202,6 @@ try {
   // Storage unavailable: use the default for this screen.
 }
 
-// The document to carry on with is read from this browser while the rest of the page is built.
-const LAST_DOC_KEY = 'golemdocs.lastDoc';
-function lastDoc(): string | null {
-  try {
-    return localStorage.getItem(LAST_DOC_KEY);
-  } catch {
-    return null;
-  }
-}
-/** The built-in documents with an address of their own (the welcome text and changelog); the app is at `/` for everything else. (`/privacy` and `/terms` redirect to the plain pages under `/home`, see public/_redirects.) */
-const PAGE_PATHS: Record<string, string> = { welcome: '/welcome', changelog: '/changelog' };
-/** The document the address asks for: `?doc=…`, or a page's path. */
-const wantedDoc = (params: URLSearchParams): string | null => params.get('doc') ?? Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === location.pathname) ?? null;
-/** The document the address names now (`?doc=…` or a page's path), so Back knows whether a step in history changes it. */
-let urlDoc: string | null = null;
-/**
- * Sets the address to `params` at the app's root, or at a page's path when it holds only that built-in document.
- * `push` makes it a step Back returns from (opening another document); otherwise it only corrects the current one.
- * Leaving the Documents screen to open something replaces its history entry, so Back doesn't land on it.
- */
-function setUrl(params: URLSearchParams, push = false): void {
-  const doc = params.get('doc');
-  const path = doc ? PAGE_PATHS[doc] : undefined;
-  if (path) params.delete('doc');
-  const url = `${path ?? '/'}${params.size ? `?${params}` : ''}`;
-  urlDoc = doc;
-  const changed = url !== location.pathname + location.search;
-  if (push && history.state?.dashboard) history.replaceState(null, '', url);
-  else if (push && changed) history.pushState(null, '', url);
-  else history.replaceState(history.state, '', url);
-}
-
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
 {
   const params = new URLSearchParams(location.search);
@@ -259,9 +227,6 @@ let pages: GpuPage[] = [];
 const pagesById = new Map<number, GpuPage>();
 let bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 };
 let grid = false;
-let documentName = '';
-/** What the open document is: Word, PDF, Markdown or text. It decides which tools are on offer. */
-let documentKind: DocumentKind = 'docx';
 /** A PDF is shown as its own pages, which take markup annotations. */
 let annotating = false;
 /** A PDF's pages: filling in its form, or editing the form itself. */
@@ -362,6 +327,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     roomRequested: false,
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
     newFolder: options.localId ? null : newDocumentFolder,
+    name,
+    kind: kindOfSource(source),
   };
   // Meant for this document only: a later one isn't filed there by mistake.
   newDocumentFolder = null;
@@ -396,8 +363,6 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   devRoom = null;
   loadTimes = null;
   pendingNotice = null;
-  documentName = name;
-  documentKind = kindOfSource(source);
   annotating = false;
   sharedDeviceNotice.update({ welcome: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' });
   setStatus(t('app.loading', { name }));
@@ -406,8 +371,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   current.roomRequested = requestedRoom !== undefined;
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
-      name = documentName = docName;
-      documentKind = format;
+      name = opening.name = docName;
+      opening.kind = format;
       annotating = fixedPages;
       if (outdated) pendingNotice = outdatedPages();
       spellDialog.sendLive();
@@ -523,12 +488,12 @@ let lastRoomText = '';
 async function resumeAfterRoom(doc: OpenDocument): Promise<void> {
   try {
     await saving;
-    const info = savedDocs.find((d) => d.id === doc.localId);
+    const info = library.local.find((d) => d.id === doc.localId);
     const cloud = info?.cloudId ? (await listDocuments()).find((d) => d.id === info.cloudId) : undefined;
     if (doc === current && info?.cloudId && cloud) {
       // Only the version it continues from changes; edits made since still count as unsent.
       await markSynced(info.id, { cloudId: info.cloudId, syncedAt: info.cloudSyncedAt ?? 0, cloudUpdatedAt: cloud.updatedAt });
-      cloudDocs = [cloud, ...cloudDocs.filter((d) => d.id !== cloud.id)];
+      library.putCloud(cloud);
     }
   } catch {
     // Offline: the next upload sorts itself out as any other.
@@ -552,7 +517,7 @@ function describeRoom(state: RoomState): string {
  */
 async function enterRoom(): Promise<string> {
   const params = new URLSearchParams(location.search);
-  if (documentKind !== 'docx') throw new Error(t('app.collabNeedsWord'));
+  if (current.kind !== 'docx') throw new Error(t('app.collabNeedsWord'));
   if (!params.get('room')) {
     let bytes: Uint8Array;
     try {
@@ -561,7 +526,7 @@ async function enterRoom(): Promise<string> {
       throw new Error(t('app.collabFailed', { message: (e as Error).message }));
     }
     // Others join with just the room: its first member's copy is the document.
-    const name = documentName.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
+    const name = current.name.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
     setUrl(new URLSearchParams({ room: Math.random().toString(36).slice(2, 8), name }));
     open({ kind: 'docx', name, bytes: bytes.slice().buffer });
   }
@@ -630,7 +595,7 @@ function syncReflow(immediate = false): void {
 }
 
 /** Word's page view (not reflowed text, a grid or a picture). */
-const wordView = (): boolean => !reflowing() && !grid && !PICTURE_KINDS.includes(documentKind);
+const wordView = (): boolean => !reflowing() && !grid && !PICTURE_KINDS.includes(current.kind);
 
 /** Gray kept beside a page that was zoomed to fit the screen's width. */
 const PAGE_FIT_MARGIN_PX = 16;
@@ -651,7 +616,7 @@ function placeCamera(): void {
     camera.y = bounds.y;
   } else if (grid) {
     camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
-  } else if (PICTURE_KINDS.includes(documentKind)) {
+  } else if (PICTURE_KINDS.includes(current.kind)) {
     // A picture: the whole page in view.
     camera.fit(bounds, canvas.clientWidth, canvas.clientHeight, 32);
   } else {
@@ -687,7 +652,7 @@ function openSource(source: string, keepRoom = false, step: 'push' | 'replace' |
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
   if (!keepRoom) params.delete('room');
-  if (step === 'none') urlDoc = source;
+  if (step === 'none') noteAddressDoc(source);
   else setUrl(params, step === 'push');
   if (source === 'war-and-peace') {
     open({ kind: 'text-url', name: t('app.warAndPeaceName'), url: warAndPeaceUrl });
@@ -740,10 +705,14 @@ interface OpenDocument {
   shared: { id: string; role: 'editor' | 'viewer'; dirty: boolean; uploading: boolean; error: string | null } | null;
   /** The folder a new document goes in when it is first saved (null: the top level). */
   newFolder: string | null;
+  /** Its name, as the title shows it and it is saved under. */
+  name: string;
+  /** What it is edited as: Word, PDF, Markdown, text… It decides which tools are on offer. */
+  kind: DocumentKind;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, shared: null, newFolder: null };
+let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, shared: null, newFolder: null, name: '', kind: 'docx' };
 /**
  * The folder the next document to open goes in once first saved (null: the top level): set just
  * before it opens (New, Import or a file dropped on a folder), and taken over by open().
@@ -799,8 +768,7 @@ async function uploadShared(): Promise<void> {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened, and always ends in .docx).
     putDocInCatalogue(await saveDocument(shared.id, await worker.convert('docx')));
-    filesPanel.refreshSoon();
-    dashboard.refreshIfVisible();
+    library.refreshSoon();
   } catch (e) {
     // Refused because the room started saving: the edits are in the room's hands now.
     if (!(e instanceof CloudError && e.status === 423)) {
@@ -847,12 +815,24 @@ let accountResolved = false;
 function accountForFiles(): User | null {
   return accountResolved ? account : (remembered() ?? account);
 }
-/** Whose cloud documents the screens last drew: when it changes, the dashboard draws again. */
+/** Whose documents the library last listed: when it changes, it starts again from theirs. */
 let drawnFor: string | null = null;
-/** This browser's copies of the documents in view: the account's, or signed out, the browser's own. */
-let savedDocs: SavedInfo[] = [];
-/** The account's documents, as last listed (empty signed out or offline). */
-let cloudDocs: CloudDocument[] = [];
+/**
+ * The library (see libraryStore.ts): this browser's copies of the documents in view (the account's,
+ * or signed out, the browser's own), the account's documents as last listed, and their folders.
+ * The Documents screen and the Files Sidebar show this same copy.
+ */
+const library = new LibraryStore({
+  account: () => accountForFiles(),
+  signedIn: () => signedIn,
+  listed: ({ signedOut, offline }) => {
+    if (!account) return;
+    uploads.signedOut = signedOut;
+    if (offline) wentOffline();
+    // A listing of its own (not only refreshLibrary's) may be what finds out: the button says so.
+    showSync();
+  },
+});
 
 /** The first `connect()`, on load: opening a document in the account waits for it, to know who is signed in. */
 let firstConnect: Promise<void> = Promise.resolve();
@@ -883,32 +863,21 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
     const adopted = await adoptGuestDocuments(account.id).catch(() => []);
     if (adopted.length) notify(t('app.adopted', { count: adopted.length }));
   }
+  // Someone else's documents (or none, signed out): the library starts again from theirs.
+  if ((account?.id ?? null) !== drawnFor) library.reset();
+  drawnFor = account?.id ?? null;
   await refreshLibrary();
   if (account) {
-    uploads.add(...savedDocs.filter(hasUnsentChanges).map((info) => info.id));
+    uploads.add(...library.local.filter(hasUnsentChanges).map((info) => info.id));
     void flushUploads();
   }
-  if ((account?.id ?? null) !== drawnFor) dashboard.refreshIfVisible();
-  drawnFor = account?.id ?? null;
   showSync();
 }
 
 /** Refreshes what File ▸ Open Recent lists. */
 async function refreshLibrary(): Promise<void> {
-  if (account) {
-    try {
-      cloudDocs = await listDocuments();
-      uploads.signedOut = false;
-    } catch (e) {
-      if (e instanceof CloudError && e.status === 401) uploads.signedOut = true;
-      else if (e instanceof TypeError) wentOffline();
-    }
-  } else {
-    cloudDocs = [];
-  }
-  savedDocs = ownedBy(await listSaved().catch(() => []), account?.id ?? null);
+  await library.refresh();
   showSync();
-  filesPanel.refreshSoon();
 }
 
 /** Where to open a listed document from: the account only when this browser's copy is missing or older. */
@@ -953,10 +922,9 @@ const uploads = new UploadQueue({
   enabled: () => account !== null,
   send: (id) => upload(id),
   settled: async () => {
-    savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
+    await library.reloadLocal();
     showSync();
-    filesPanel.refreshSoon();
-    dashboard.refreshIfVisible();
+    library.refreshSoon();
   },
   // No subscription (it ended, or this page hadn't heard): carry on as someone without sync.
   noSync: () => void connect(Promise.resolve(signedIn)),
@@ -966,13 +934,13 @@ const uploads = new UploadQueue({
 
 function syncStatus(): SyncStatus {
   if (!account) {
-    const info = savedDocs.find((d) => d.id === current.localId);
+    const info = library.local.find((d) => d.id === current.localId);
     const local = { error: null, savedAt: info?.updatedAt ?? null, localSaved: current.unsavedSince === 0 && info !== undefined };
     return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, picture: signedIn.picture, document: 'unsubscribed', ...local } : { user: null, document: 'guest', ...local };
   }
   const user = account.email ?? account.name ?? null;
   const id = current.localId;
-  const info = savedDocs.find((d) => d.id === id);
+  const info = library.local.find((d) => d.id === id);
   const unsent = current.unsavedSince > 0 || (id !== null && uploads.uploading === id) || (info !== undefined && hasUnsentChanges(info));
   let document: DocumentSync;
   const shared = current.shared;
@@ -1011,7 +979,7 @@ function flushUploads(): Promise<void> {
 
 /** One upload: the queue says when (and handles what failing means); here is what it changes on screen. */
 async function upload(id: string): Promise<void> {
-  const before = savedDocs.find((d) => d.id === id)?.name;
+  const before = library.local.find((d) => d.id === id)?.name;
   const { doc, conflictCopy } = await uploadToCloud(id);
   // A document made in this session gets its room once it is in the account.
   if (id === current.localId && !current.roomRequested && !conflictCopy) {
@@ -1021,12 +989,12 @@ async function upload(id: string): Promise<void> {
       worker.joinRoom(room);
     }
   }
-  cloudDocs = [doc, ...cloudDocs.filter((d) => d.id !== doc.id)];
+  library.putCloud(doc);
   putDocInCatalogue(doc);
   if (conflictCopy) {
     if (id === current.localId) {
-      documentName = doc.name;
-      chrome.update({ documentName });
+      current.name = doc.name;
+      chrome.update({ documentName: doc.name });
     }
     notify(t('app.conflictNotice', { before: before ?? t('app.thisDocument'), name: doc.name }));
   }
@@ -1051,7 +1019,7 @@ async function syncNow(): Promise<void> {
   await saving;
   uploads.failures.clear();
   uploads.backOnline();
-  uploads.add(...savedDocs.filter(hasUnsentChanges).map((info) => info.id));
+  uploads.add(...library.local.filter(hasUnsentChanges).map((info) => info.id));
   showSync();
   await flushUploads();
 }
@@ -1093,11 +1061,7 @@ function rememberInUrl(doc: string): void {
   params.set('doc', doc);
   setUrl(params);
   viewDocKey ??= doc; // a new document, saved for the first time
-  if (doc.startsWith('local:')) {
-    try {
-      localStorage.setItem(LAST_DOC_KEY, doc);
-    } catch {}
-  }
+  if (doc.startsWith('local:')) rememberLastDoc(doc);
 }
 
 /** Whether the open document can be renamed: not one of the built-in pages, nor one shared by someone else. */
@@ -1108,25 +1072,25 @@ const renamable = () => !current.builtIn && !current.shared;
 function renameDocument(input: string): string | null {
   const name = cleanDocumentName(input);
   if (!name || !renamable()) return null;
-  if (name === documentName) return name;
-  documentName = name;
-  chrome.update({ documentName });
+  if (name === current.name) return name;
+  current.name = name;
+  chrome.update({ documentName: name });
   documentEdited(); // saved under the new name, which goes on to the account too
-  return documentName;
+  return current.name;
 }
 
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
-const fileName = () => (documentKind === 'txt' && hasExtension(documentName) ? documentName : stem(documentName) + FORMATS[documentKind].extensions[0]);
+const fileName = () => (current.kind === 'txt' && hasExtension(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
 async function downloadAll(): Promise<void> {
   try {
-    const docs = (await Promise.all(savedDocs.map((d) => getSaved(d.id)))).filter((d) => d !== null);
+    const docs = (await Promise.all(library.local.map((d) => getSaved(d.id)))).filter((d) => d !== null);
     if (docs.length === 0) return setStatus(t('app.downloadAllNone'));
     // Folder ids are unique, so the account's folders and this browser's can be looked up together.
     const folders = [...(account ? await listFolders().catch(() => []) : []), ...(await listLocalFolders().catch(() => []))];
-    const placed = new Map(mergeLibrary(savedDocs, account ? cloudDocs : null).filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
+    const placed = new Map(library.entries.filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
     const bytes = await zipDocuments(
       docs.map((d) => ({
         name: d.info.name,
@@ -1192,10 +1156,7 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
     const showSoFar = (): void => {
       if (Date.now() - shownAt < (cloud ? IMPORT_CLOUD_REFRESH_MS : IMPORT_REFRESH_MS)) return;
       shownAt = Date.now();
-      void refreshLibrary().then(() => {
-        if (filesPanel.visible) void filesPanel.refresh();
-        dashboard.refreshIfVisible();
-      });
+      void refreshLibrary();
     };
     const sendWaiting = async (): Promise<void> => {
       const ids = waiting;
@@ -1203,16 +1164,15 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
       waitingBytes = 0;
       await uploads.sendBatch(ids, async (still) => {
         const made = await uploadNewToCloud(still);
-        const added = new Set([...made.values()].map((d) => d.id));
-        cloudDocs = [...made.values(), ...cloudDocs.filter((d) => !added.has(d.id))];
+        library.putCloud(...made.values());
         return made.keys();
       });
-      savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
+      await library.reloadLocal();
       showSync();
     };
     const result = await importFiles(files, {
       folders,
-      documents: mergeLibrary(savedDocs, cloud ? cloudDocs : null).map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
+      documents: library.entries.map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
       root: root !== null && folders.some((f) => f.id === root) ? root : null,
       signal: progress.signal,
       onProgress: (done, total) => progress.update(READ_SHARE + (done / total) * (100 - READ_SHARE), 100, t('app.importProgress', { done, total })),
@@ -1245,7 +1205,6 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
     await sendWaiting();
     await flushUploads();
     await refreshLibrary();
-    dashboard.refreshIfVisible();
     const left = skipped + result.skipped;
     if (result.cancelled) return setStatus(t('app.importCancelled', { count: result.imported }));
     setStatus(left ? t('app.importedZipSkipped', { count: result.imported, skipped: left }) : t('app.importedZip', { count: result.imported }));
@@ -1319,11 +1278,8 @@ function saveInBrowser(): Promise<string | null> {
         // Signed in, the button at the top right says how saving is going.
         if (!owner) setStatus(t('app.savedInBrowser', { name: info.name }));
       }
-      // A new document changes what's listed; later saves only its order.
-      if (created) void refreshLibrary();
-      else savedDocs = ownedBy(await listSaved().catch(() => savedDocs), owner ?? null);
-      filesPanel.refreshSoon();
-      if (!owner) dashboard.refreshIfVisible();
+      // Shown at once wherever the library is (a new document, or a later save's new order).
+      library.putLocal(info);
       if (owner) {
         if (doc.room && doc.room.mode !== 'solo') {
           // The server keeps the cloud copy while several people edit. What is saved here is
@@ -1331,15 +1287,15 @@ function saveInBrowser(): Promise<string | null> {
           // on, so opening it later fetches the cloud's) unless some edits didn't reach the server.
           if (doc.room.mode === 'shared' && doc.room.unconfirmed === 0 && info.cloudId) {
             await markSynced(info.id, { cloudId: info.cloudId, syncedAt: info.updatedAt });
-            savedDocs = ownedBy(await listSaved().catch(() => savedDocs), owner);
+            await library.reloadLocal();
           }
           // The room saves the contents, never the name: a rename goes to the account on its own.
           const cloudId = info.cloudId;
-          const cloud = cloudId ? cloudDocs.find((d) => d.id === cloudId) : undefined;
+          const cloud = cloudId ? library.cloud.find((d) => d.id === cloudId) : undefined;
           if (cloudId && cloud && cloud.name !== info.name) {
             const renamed = await renameCloudDocument(cloudId, info.name).catch(() => null); // tried again at the next save
             if (renamed) {
-              cloudDocs = cloudDocs.map((d) => (d.id === renamed.id ? renamed : d));
+              library.putCloud(renamed);
               putDocInCatalogue(renamed);
             }
           }
@@ -1513,7 +1469,7 @@ async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readon
   // and one that is running finishes first.
   const localIds = new Set(entries.flatMap((entry) => (entry.local ? [entry.local.id] : [])));
   await uploads.forget(localIds);
-  const cloudIdOf = (entry: LibraryEntry) => entry.cloud?.id ?? savedDocs.find((d) => d.id === entry.local?.id)?.cloudId ?? entry.local?.cloudId ?? '';
+  const cloudIdOf = (entry: LibraryEntry) => entry.cloud?.id ?? library.local.find((d) => d.id === entry.local?.id)?.cloudId ?? entry.local?.cloudId ?? '';
   // The server deletes a folder's documents with it, so those are not named (a big folder is then one id, not thousands).
   const inDeleted = new Set(folderIds);
   const cloudIds = [
@@ -1555,7 +1511,7 @@ async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readon
  * then starts afresh (with the welcome document). The account's documents and the sign-in stay.
  */
 async function clearLocalData(): Promise<void> {
-  const count = savedDocs.length;
+  const count = library.local.length;
   const body = document.createElement('p');
   const which = count === 0 ? 'None' : count === 1 ? 'One' : 'Many';
   body.textContent = t(`app.clearBody${which}${account ? 'Account' : ''}` as MessageKey, { count });
@@ -1645,10 +1601,10 @@ async function share(): Promise<void> {
   // Who may share depends on the account's plan: asked just after the page opened, wait for it
   // (otherwise the dialog would say to sign in, or to subscribe, to someone who has).
   await accountKnown;
-  if (current.localId && !savedDocs.some((d) => d.id === current.localId)) savedDocs = ownedBy(await listSaved().catch(() => savedDocs), account?.id ?? null);
+  if (current.localId && !library.local.some((d) => d.id === current.localId)) await library.reloadLocal();
   const inRoom = new URLSearchParams(location.search).has('room');
-  const room = documentKind !== 'docx' ? { unavailable: t('app.collabNeedsWord') } : inRoom ? { link: location.href } : { create: enterRoom };
-  const info = savedDocs.find((d) => d.id === current.localId);
+  const room = current.kind !== 'docx' ? { unavailable: t('app.collabNeedsWord') } : inRoom ? { link: location.href } : { create: enterRoom };
+  const info = library.local.find((d) => d.id === current.localId);
   const people = !account
     ? { unavailable: signedIn ? t('app.subscribeToShare') : t('app.signInToShare') }
     : current.shared
@@ -1658,7 +1614,7 @@ async function share(): Promise<void> {
         : !info.cloudId
           ? { unavailable: t('app.notInAccountYet') }
           : { id: info.cloudId };
-  showShareDialog({ name: info?.name ?? documentName, room, people });
+  showShareDialog({ name: info?.name ?? current.name, room, people });
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -1666,8 +1622,8 @@ async function openCloud(id: string): Promise<void> {
   // The copy made here is the account's: who that is (and whether they have sync) must be known first.
   await accountKnown;
   try {
-    if (!cloudDocs.some((d) => d.id === id)) await refreshLibrary(); // only for an address opened before the list arrived
-    const cloud = cloudDocs.find((d) => d.id === id);
+    if (!library.cloud.some((d) => d.id === id)) await refreshLibrary(); // only for an address opened before the list arrived
+    const cloud = library.cloud.find((d) => d.id === id);
     const name = cloud?.name ?? t('app.cloudDocumentName');
     setStatus(t('app.opening', { name }));
     // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest. So
@@ -1675,7 +1631,7 @@ async function openCloud(id: string): Promise<void> {
     await saving;
     const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
     // Listed at once: what asks about the open document's copy (File › Share, say) finds it.
-    if ((info.owner ?? null) === (account?.id ?? null)) savedDocs = [info, ...savedDocs.filter((d) => d.id !== info.id)];
+    if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
     if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
     open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id, cloudId: info.cloudId });
     rememberInUrl(`local:${info.id}`);
@@ -1694,8 +1650,8 @@ async function download(): Promise<void> {
     const large = largeView.active ? largeView.bytes : null;
     // Named now: another document may be open by the time the bytes come back.
     const name = large ? largeView.fileName : fileName();
-    const type = large ? 'text/plain' : FORMATS[documentKind].mime;
-    const bytes = large ?? (await worker.convert(documentKind as Format));
+    const type = large ? 'text/plain' : FORMATS[current.kind].mime;
+    const bytes = large ?? (await worker.convert(current.kind as Format));
     const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
     const link = Object.assign(document.createElement('a'), { href: url, download: name });
     link.click();
@@ -1755,7 +1711,7 @@ function switchedNotice(to: Format): string {
  * the original pages are kept, and shown again as PDF (with a warning once the text is edited).
  */
 async function convertTo(to: DocumentKind): Promise<void> {
-  const from = documentKind;
+  const from = current.kind;
   if (to === from) return;
   if (PICTURE_KINDS.includes(to) && !PICTURE_KINDS.includes(from)) return convertToPicture(to as 'png' | 'jpeg' | 'webp');
   if (!isFormat(to) || !isFormat(from)) throw new Error(t('app.unsupportedFormat', { label: FORMATS[isFormat(to) ? from : to].label }));
@@ -1769,7 +1725,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   clearTimeout(autosaveTimer);
   const doc = current;
   doc.unsavedSince = 0;
-  const name = stem(documentName) + FORMATS[to].extensions[0];
+  const name = stem(current.name) + FORMATS[to].extensions[0];
   const bytes = worker.save(to);
   bytes.catch(() => {});
   const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner: account?.id }));
@@ -1791,7 +1747,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   setUrl(new URLSearchParams());
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
-  chrome.update({ documentName, kind: documentKind });
+  chrome.update({ documentName: current.name, kind: current.kind });
   pendingNotice = switchedNotice(to);
 }
 
@@ -1806,7 +1762,7 @@ async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
     const layout = pictureLayout(pages.map((p) => ({ width: p.width, height: p.height })), { side: MAX_SIDE, pixels: MAX_PIXELS });
     const canvas = drawPages(gl, renderer, pages, layout);
     if (!canvas) throw new Error(t('app.imageTooBig'));
-    const name = stem(documentName) + FORMATS[to].extensions[0];
+    const name = stem(current.name) + FORMATS[to].extensions[0];
     const latest = openTicket();
     const bytes = await encodeCanvas(canvas, to);
     if (!latest()) return;
@@ -1825,14 +1781,14 @@ async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
 
 const PICTURE_HISTORY = 12;
 let pictureHistory: { undo: Uint8Array[]; redo: Uint8Array[] } = { undo: [], redo: [] };
-const isPicture = (): boolean => PICTURE_KINDS.includes(documentKind);
+const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
 
 /** The open picture as a file, of the type it is edited as. */
-const pictureBytes = (): Promise<Uint8Array> => worker.convert(documentKind as Format);
+const pictureBytes = (): Promise<Uint8Array> => worker.convert(current.kind as Format);
 
 /** Opens a picture in place of the open one, and saves it soon. */
 function showPicture(bytes: Uint8Array): void {
-  open({ kind: 'image', name: documentName, bytes: bytes.slice().buffer }, { grid, localId: current.localId ?? undefined, pictureEdit: true });
+  open({ kind: 'image', name: current.name, bytes: bytes.slice().buffer }, { grid, localId: current.localId ?? undefined, pictureEdit: true });
   documentEdited();
 }
 
@@ -1938,7 +1894,7 @@ async function pictureAction(op: ImageOp): Promise<void> {
 function openLarge(name: string, bytes: Uint8Array): void {
   open({ kind: 'blank', name });
   largeView.open(name, toUtf8(bytes));
-  documentName = name;
+  current.name = name;
   pendingNotice = t('largeText.notice', { name, size: `${(bytes.length / (1 << 20)).toFixed(bytes.length < 10 << 20 ? 1 : 0)} MB` });
   focusInput();
 }
@@ -1953,11 +1909,11 @@ const EMPTY_TEXT = new Set<DocumentKind>(['md', 'txt', 'mediawiki', 'textile', '
 
 async function openDocumentLink(title: string): Promise<void> {
   await saving;
-  const found = findByTitle(title, mergeLibrary(savedDocs, account ? cloudDocs : null));
+  const found = findByTitle(title, library.entries);
   if (found) return openSource(sourceOf(found));
   if (!window.confirm(t('app.createLinkedDocument', { title }))) return;
-  const extension = FORMATS[documentKind].extensions[0] ?? '.docx';
-  const text = EMPTY_TEXT.has(documentKind) ? sourceFromFile(`${title}${extension}`, new ArrayBuffer(0)) : null;
+  const extension = FORMATS[current.kind].extensions[0] ?? '.docx';
+  const text = EMPTY_TEXT.has(current.kind) ? sourceFromFile(`${title}${extension}`, new ArrayBuffer(0)) : null;
   open(text ?? { kind: 'blank', name: `${title}.docx` });
   // Saved at once, so that the link finds it next time.
   documentEdited();
@@ -1971,7 +1927,7 @@ const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
 const isPictureFile = (file: File): boolean => PICTURE_FILE.test(file.name) || (file.type.startsWith('image/') && file.type !== 'image/tiff');
 
 /** Whether a picture can go into the open document now. */
-const canInsertPicture = (): boolean => loaded && !isPicture() && !annotating && !dashboard.visible && FORMATS[documentKind].images;
+const canInsertPicture = (): boolean => loaded && !isPicture() && !annotating && !dashboard.visible && FORMATS[current.kind].images;
 
 async function dropped(drop: Dropped, x: number, y: number): Promise<void> {
   if (drop?.kind === 'file' && isPictureFile(drop.file) && canInsertPicture()) {
@@ -2074,7 +2030,7 @@ function applySelection(update: SelectionUpdate): void {
   }
   if (followLinkUntil > performance.now()) {
     followLinkUntil = 0;
-    const page = link && Object.keys(PAGE_PATHS).find((id) => PAGE_PATHS[id] === link!.url);
+    const page = link && builtInPageAt(link.url);
     if (page) openSource(page);
     else if (link && opensLink(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer');
     else if (link && parseDocAddress(link.url)) void openDocumentLink(parseDocAddress(link.url)!.title);
@@ -2153,7 +2109,7 @@ function send(command: WireCommand): void {
   commandsSent++;
   if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
-    if (FORMATS[documentKind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
+    if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
   worker.command(command);
 }
@@ -2303,10 +2259,10 @@ function render(): void {
     if (debugFlags().fps) flashRenderLight();
   }
   chrome.update({
-    documentName,
+    documentName: current.name,
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
-    kind: largeView.active ? 'largetext' : documentKind,
+    kind: largeView.active ? 'largetext' : current.kind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
     grid,
@@ -2863,7 +2819,7 @@ const MAX_PASTED_HTML = 2_000_000;
 
 /** Pastes what came from the clipboard: formatted if it has formatting and the document can hold it. */
 function pasteClipboard(clip: Clipboard, form: 'auto' | 'html' | 'text' = 'auto'): void {
-  const formatted = FORMATS[documentKind].marks.length > 0;
+  const formatted = FORMATS[current.kind].marks.length > 0;
   if (clip.html && form !== 'text' && formatted && clip.html.length <= MAX_PASTED_HTML) send({ kind: 'pasteHtml', html: clip.html, text: clip.text ?? '' });
   else if (clip.text) send({ kind: 'insertText', text: clip.text });
 }
@@ -3003,7 +2959,7 @@ const chromeHost = createChromeHost({
   subscribe,
   manageSubscription,
   clearLocalData,
-  saved: () => mergeLibrary(savedDocs, account ? cloudDocs : null).map((e) => ({ id: sourceOf(e), label: e.name.replace(/&/g, '&&') })),
+  saved: () => library.entries.map((e) => ({ id: sourceOf(e), label: e.name.replace(/&/g, '&&') })),
   send,
   annotating: () => annotating,
   setFormMode,
@@ -3166,85 +3122,28 @@ const libraryHost = {
 /** The open document's ids: in this browser, and in the account (its own copy's, or one shared with this user). */
 const openDocumentIds = (): { localId: string | null; cloudId: string | null } => ({
   localId: current.localId,
-  cloudId: current.shared?.id ?? savedDocs.find((d) => d.id === current.localId)?.cloudId ?? null,
+  cloudId: current.shared?.id ?? library.local.find((d) => d.id === current.localId)?.cloudId ?? null,
 });
 
 const dashboard = new Dashboard(document.body, {
   ...libraryHost,
   currentDocument: openDocumentIds,
-  changed: () => filesPanel.refreshSoon(),
   openShared: (doc) => {
     sharedDocs.set(doc.id, doc);
     openSource(`shared:${doc.id}`);
   },
   closed: focusInput,
-});
+}, library);
 
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
-
-/**
- * The assistant's tools that act on the app rather than the document's text: what the document is
- * and switching its format (the same switch as File ▸ Convert To). The rest run in the layout worker.
- */
-/** The document open when each of the assistant's requests started: its edits are for that one. */
-const assistantDocs = new WeakMap<AbortSignal, OpenDocument>();
-
-/** The app's tools that act on the open document (the others are about the library). */
-const OPEN_DOCUMENT_APP_TOOLS = new Set(['view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
-/** Tools that open another document on purpose: the request goes on with that one. */
-const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document']);
-
-async function assistantTool(name: string, argumentsJson: string, run: AbortSignal): Promise<ToolResult> {
-  const handler = Object.hasOwn(APP_TOOLS, name) ? APP_TOOLS[name] : undefined;
-  // Another document was opened since the request started (by the person, or a file tool): these
-  // tools would read and change that one instead, without anyone meaning them to.
-  if ((!handler || OPEN_DOCUMENT_APP_TOOLS.has(name)) && assistantDocs.get(run) !== current) {
-    return `Error: the document this request was about is no longer open (now open: "${documentName}"). Nothing was done; tell the user, and ask before working on this one.`;
-  }
-  if (!handler) return worker.agent(name, argumentsJson);
-  let args: Record<string, unknown>;
-  try {
-    const parsed: unknown = argumentsJson.trim() ? JSON.parse(argumentsJson) : {};
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return 'Error: the arguments must be an object.';
-    args = parsed as Record<string, unknown>;
-  } catch {
-    return 'Error: the arguments were not valid JSON.';
-  }
-  try {
-    return await handler(args);
-  } catch (e) {
-    return `Error: ${(e as Error).message}`;
-  } finally {
-    if (OPENING_TOOLS.has(name)) assistantDocs.set(run, current);
-  }
-}
-
-const formatLabel = (kind: string): string => (isFormat(kind) ? `${FORMATS[kind].label} (${FORMATS[kind].extensions[0]})` : kind);
-const optionalFlag = (args: Record<string, unknown>, key: string): boolean | undefined => {
-  const v = args[key];
-  if (v === undefined) return undefined;
-  if (typeof v !== 'boolean') throw new Error(`\`${key}\` must be true or false.`);
-  return v;
-};
-const wholeNumber = (args: Record<string, unknown>, key: string, min: number, max: number): number => {
-  const v = args[key];
-  if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) throw new Error(`\`${key}\` must be a whole number from ${min} to ${max}.`);
-  return v;
-};
-
-/** Runs one of the layout worker's tools for another tool, and answers with its text (the pictures a tool fetches are only for the model). */
-const workerText = async (name: string, args: string): Promise<string> => {
-  const result = await worker.agent(name, args);
-  return typeof result === 'string' ? result : result.text;
-};
 
 /**
  * The person's other documents, for the assistant: this browser's copies and the account's, and
  * what others shared with them. Everything but the open document.
  */
 const otherDocuments = new OtherDocuments(async () => {
-  const own: StoredDocument[] = mergeLibrary(savedDocs, account ? cloudDocs : null)
+  const own: StoredDocument[] = library.entries
     .filter((e) => e.key !== current.localId && e.cloud?.id !== current.shared?.id)
     .map((e) => ({
       id: e.key,
@@ -3260,207 +3159,48 @@ const otherDocuments = new OtherDocuments(async () => {
   return [...own, ...shared];
 }, searchServer);
 
-/** A whole number argument that may be left out. */
-const optionalNumber = (args: Record<string, unknown>, key: string, fallback: number, min: number, max: number): number => {
-  if (args[key] === undefined) return fallback;
-  return wholeNumber(args, key, min, max);
-};
-
-const IMAGE_OPS: Record<string, ImageOp> = {
-  rotate_left: 'rotateLeft',
-  rotate_right: 'rotateRight',
-  rotate_180: 'rotate180',
-  flip_horizontal: 'flipHorizontal',
-  flip_vertical: 'flipVertical',
-  grayscale: 'grayscale',
-  sepia: 'sepia',
-  invert: 'invert',
-  blur: 'blur',
-  sharpen: 'sharpen',
-  auto_levels: 'autoLevels',
-};
-const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
-
-/** The assistant's tools that act on the app rather than the document's text. The rest run in the layout worker. */
 /** The folders documents are kept in: the account's, or this browser's. */
 const listFoldersHere = async (): Promise<Folder[]> => (account ? await listFolders() : await listLocalFolders());
 
-const APP_TOOLS: Record<string, (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult> = {
-  ...fileTools({
+// The assistant's tools that act on the app rather than the document's text (see assistant/appTools.ts).
+const assistantTools = appTools({
+  current: () => current,
+  documentName: () => current.name,
+  documentKind: () => current.kind,
+  agent: (name, args) => worker.agent(name, args),
+  files: {
     cloud: () => account !== null,
-    entries: () => mergeLibrary(savedDocs, account ? cloudDocs : null),
+    entries: () => library.entries,
     folders: listFoldersHere,
     deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
-    changed: async () => {
-      await refreshLibrary();
-      dashboard.refreshIfVisible();
-    },
-  }),
-  async list_pictures() {
-    // The open document's pictures are the layout worker's to find; the library's are listed here.
-    return `${await workerText('list_pictures', '{}')}\n${await otherDocuments.describePictureFiles()}`;
+    changed: () => refreshLibrary(),
   },
-  view_picture(args) {
-    // The person's other documents (this browser's, the account's and shared ones) are the library's, found and opened the way search_documents does.
-    if (args.source === 'library') {
-      if (typeof args.document !== 'string') return 'Error: `document` must be text: an id or a name.';
-      return otherDocuments.picture(args.document, optionalNumber(args, 'number', 0, 0, 1000));
-    }
-    return worker.agent('view_picture', JSON.stringify(args));
-  },
-  list_documents: (args) => otherDocuments.describeAll(optionalNumber(args, 'start', 0, 0, 100_000), optionalNumber(args, 'count', 30, 1, 100)),
-  search_documents(args) {
-    if (typeof args.query !== 'string') return 'Error: `query` must be text.';
-    return otherDocuments.search(args.query);
-  },
-  read_other_document(args) {
-    if (typeof args.document !== 'string') return 'Error: `document` must be text: an id or a name.';
-    return otherDocuments.read(args.document, optionalNumber(args, 'start', 0, 0, 1_000_000), optionalNumber(args, 'count', 40, 1, 100));
-  },
-  async insert_from_document(args) {
-    if (typeof args.document !== 'string') return 'Error: `document` must be text: an id or a name.';
-    const found = await otherDocuments.paragraphs(args.document);
-    if (typeof found === 'string') return found;
-    const { name, segments } = found;
-    if (!segments.length) return `Error: "${name}" has no text to copy.`;
-    const first = wholeNumber(args, 'start', 0, Math.max(0, segments.length - 1));
-    const last = optionalNumber(args, 'end', first, first, Math.max(first, segments.length - 1));
-    if (last - first + 1 > MAX_COPY) return `Error: copy at most ${MAX_COPY} paragraphs at a time.`;
-    const after = wholeNumber(args, 'after', -1, 1_000_000);
-    // Put in one paragraph at a time with the tools the model has itself, so each is an ordinary, undoable edit.
-    for (let k = first; k <= last; k++) {
-      const seg = segments[k]!;
-      const at = after + (k - first);
-      const added = await workerText('insert_paragraph', JSON.stringify({ after: at, text: seg.text, style: seg.style ?? 'Normal' }));
-      if (added.startsWith('Error:')) return `${added} Copied ${k - first} of ${last - first + 1} paragraphs from "${name}" before stopping.`;
-      if (seg.list) await workerText('format_paragraph', JSON.stringify({ paragraph: at + 1, list: seg.list }));
-    }
-    const count = last - first + 1;
-    return `Copied ${count === 1 ? `paragraph ${first}` : `paragraphs ${first} to ${last}`} of "${name}" into this document as paragraphs ${after + 1} to ${after + count}. Pictures and tables in them are not carried over, only their text; undo steps back.`;
-  },
-  get_document_info: () => `The document is "${documentName}", edited as ${formatLabel(documentKind)}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`,
-  rename_document(args) {
-    if (typeof args.name !== 'string') return 'Error: `name` must be text.';
-    if (!renamable()) return 'Error: this document cannot be renamed.';
-    const kept = renameDocument(args.name);
-    return kept === null ? 'Error: that is not a usable name.' : `The document is now named "${displayDocumentName(kept, documentKind)}".`;
-  },
-  async convert_document(args) {
-    const to = args.to;
-    const from = documentKind;
-    if (typeof to !== 'string' || !isFormat(to)) return `Error: \`to\` must be one of ${FORMAT_LIST.join(', ')}.`;
-    if (to === from) return `The document is already ${formatLabel(from)}.`;
-    if (new URLSearchParams(location.search).get('room')) return 'Error: a document being edited together with other people cannot be converted.';
-    await convertTo(to);
-    return documentKind === to
-      ? `Converted: the document is now edited as ${formatLabel(to)}. It is the same document, so switching back restores anything ${formatLabel(to)} could not hold. Paragraph numbers may differ now; read the document again before editing.`
-      : 'Error: the document could not be converted.';
-  },
-  async open_file(args) {
-    const entry = mergeLibrary(savedDocs, account ? cloudDocs : null).find((e) => e.key === args.file);
-    if (!entry) return `Error: there is no document ${String(args.file)}; list_files gives the ids.`;
+  otherDocuments,
+  renamable,
+  renameDocument,
+  convertTo,
+  inRoom: () => new URLSearchParams(location.search).get('room') !== null,
+  openEntry: async (entry) => {
     const ready = nextDocumentReady();
     newDocumentFolder = null;
     showLoading(entry.name);
     openSource(sourceOf(entry));
     await ready;
-    return `Opened "${entry.name}". The tools now work on it; read it before editing.`;
   },
-  async new_document(args) {
-    const folder = args.folder;
-    if (folder !== undefined && folder !== null && (typeof folder !== 'string' || !(await listFoldersHere()).some((f) => f.id === folder))) return `Error: there is no folder ${String(folder)}.`;
-    if (args.name !== undefined && typeof args.name !== 'string') return 'Error: `name` must be text.';
+  newDocument: async (folderId) => {
     const ready = nextDocumentReady();
-    await chromeHost.perform({ kind: 'new', folderId: (folder as string | null | undefined) ?? null });
+    await chromeHost.perform({ kind: 'new', folderId });
     await ready;
-    const named = typeof args.name === 'string' ? renameDocument(args.name) : null;
-    return `Opened a new blank document${named ? ` named "${displayDocumentName(named, documentKind)}"` : ''}; it is saved once something is written in it. The tools now work on it.`;
   },
-  download_all() {
-    void chromeHost.perform({ kind: 'downloadAll' });
-    return 'Started downloading all the documents as one ZIP file.';
-  },
-  download_document() {
-    void chromeHost.perform({ kind: 'download' });
-    return `Started the download of a copy as ${formatLabel(documentKind)}.`;
-  },
-  print_document(args) {
-    const preview = optionalFlag(args, 'preview') ?? false;
-    void chromeHost.perform({ kind: preview ? 'printPreview' : 'print' });
-    return preview ? 'Opened the print preview.' : 'Opened printing.';
-  },
-  set_view(args) {
-    const done: string[] = [];
-    const mode = args.view_mode;
-    if (mode !== undefined) {
-      if (mode !== 'print' && mode !== 'normal') throw new Error('`view_mode` must be print or normal.');
-      void chromeHost.perform({ kind: 'viewMode', mode });
-      done.push(`view ${mode}`);
-    }
-    const zoom = args.zoom;
-    if (zoom !== undefined) {
-      if (zoom === 'page_width' || zoom === 'whole_page' || zoom === 'all_pages') void chromeHost.perform({ kind: 'zoom', to: zoom === 'page_width' ? 'pageWidth' : zoom === 'whole_page' ? 'wholePage' : 'allPages' });
-      else if (typeof zoom === 'number' && zoom >= 10 && zoom <= 500) void chromeHost.perform({ kind: 'zoom', to: zoom / 100 });
-      else throw new Error('`zoom` must be a percentage from 10 to 500, or page_width, whole_page or all_pages.');
-      done.push(`zoom ${String(zoom)}`);
-    }
-    const showGrid = optionalFlag(args, 'grid');
-    if (showGrid !== undefined && showGrid !== grid) {
-      void chromeHost.perform({ kind: 'toggleGrid' });
-      done.push(`grid ${showGrid ? 'on' : 'off'}`);
-    }
-    const bar = optionalFlag(args, 'status_bar');
-    if (bar !== undefined && bar !== footerOn) {
-      void chromeHost.perform({ kind: 'toggleFooter' });
-      done.push(`status bar ${bar ? 'on' : 'off'}`);
-    }
-    const marks = optionalFlag(args, 'formatting_marks');
-    if (marks !== undefined && marks !== formattingMarks) {
-      void chromeHost.perform({ kind: 'toggleFormattingMarks' });
-      done.push(`formatting marks ${marks ? 'on' : 'off'}`);
-    }
-    if (!done.length) throw new Error('Say what to change: view_mode, zoom, grid, status_bar or formatting_marks.');
-    return `Changed the view: ${done.join(', ')}.`;
-  },
-  async edit_picture(args) {
-    if (!isPicture()) return 'Error: the open document is not a picture. Convert it to png, jpeg or webp to edit it as one.';
-    const op = args.op;
-    if (typeof op !== 'string') throw new Error('`op` must be text.');
-    const size = sniffImage(await pictureBytes());
-    if (!size) throw new Error('the picture could not be read');
-    let edit: ImageEdit;
-    if (Object.hasOwn(IMAGE_OPS, op)) {
-      const name = IMAGE_OPS[op]!;
-      edit = name === 'rotateLeft' ? { op: 'rotate', turns: 3 } : name === 'rotateRight' ? { op: 'rotate', turns: 1 } : name === 'rotate180' ? { op: 'rotate', turns: 2 } : name === 'flipHorizontal' ? { op: 'flip', axis: 'horizontal' } : name === 'flipVertical' ? { op: 'flip', axis: 'vertical' } : { op: 'effect', effect: name as 'grayscale' };
-    } else if (op === 'crop') {
-      const x = wholeNumber(args, 'x', 0, size.width - 1);
-      const y = wholeNumber(args, 'y', 0, size.height - 1);
-      edit = { op: 'crop', x, y, width: wholeNumber(args, 'width', 1, size.width - x), height: wholeNumber(args, 'height', 1, size.height - y) };
-    } else if (op === 'resize') {
-      edit = { op: 'resize', width: wholeNumber(args, 'width', 1, MAX_SIDE), height: wholeNumber(args, 'height', 1, MAX_SIDE) };
-    } else if (op === 'adjust') {
-      const part = (key: string) => (args[key] === undefined ? 0 : wholeNumber(args, key, -100, 100));
-      edit = { op: 'adjust', brightness: part('brightness'), contrast: part('contrast'), saturation: part('saturation') };
-    } else if (op === 'draw') {
-      const tool = args.tool;
-      if (typeof tool !== 'string' || !(DRAWN as readonly string[]).includes(tool)) throw new Error(`\`tool\` must be one of ${DRAWN.join(', ')}.`);
-      const color = typeof args.color === 'string' && /^#[0-9a-f]{6}$/i.test(args.color) ? args.color : args.color === undefined ? '#e53935' : null;
-      if (!color) throw new Error('`color` must be like #e53935.');
-      const at = (px: string, py: string) => ({ x: wholeNumber(args, px, 0, size.width), y: wholeNumber(args, py, 0, size.height) });
-      const points = tool === 'text' ? [at('x', 'y')] : [at('x', 'y'), at('to_x', 'to_y')];
-      if (tool === 'text' && (typeof args.text !== 'string' || !args.text)) throw new Error('`text` is what to write.');
-      const width = args.width === undefined ? Math.max(2, Math.round(Math.max(size.width, size.height) / 150)) : wholeNumber(args, 'width', 1, 200);
-      edit = { op: 'draw', shapes: [{ tool: tool as 'line', color, width, points, ...(optionalFlag(args, 'fill') && { fill: true }), ...(tool === 'text' && { text: args.text as string }) }] };
-    } else {
-      throw new Error(`\`op\` must be one of ${[...Object.keys(IMAGE_OPS), 'crop', 'resize', 'adjust', 'draw'].join(', ')}.`);
-    }
-    await changePicture(edit);
-    return `Done: ${op.replaceAll('_', ' ')} (the picture is ${size.width} x ${size.height} before the change; undo steps back).`;
-  },
-};
+  perform: (action) => chromeHost.perform(action),
+  view: () => ({ grid, statusBar: footerOn, formattingMarks }),
+  isPicture,
+  pictureBytes,
+  changePicture,
+});
 
 // Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).
-const assistant = new Assistant(document.body, { tool: assistantTool, begin: (run) => assistantDocs.set(run, current), signIn: () => void signIn(), subscribe: () => void subscribe() });
+const assistant = new Assistant(document.body, { tool: assistantTools.run, begin: assistantTools.begin, signIn: () => void signIn(), subscribe: () => void subscribe() });
 assistant.onVisibility = (clip) => chrome.update({ clip });
 chrome.update({ clip: assistant.visible });
 
@@ -3489,10 +3229,9 @@ onThemeChange(() => pagesPanel.recolor()); // the thumbnails turn dark or light 
 const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
   ...libraryHost,
   current: openDocumentIds,
-  changed: () => dashboard.refreshIfVisible(),
   close: toggleFilesPanel,
   focusEditor: focusInput,
-});
+}, library);
 document.getElementById('workspace')!.prepend(filesPanel.el);
 filesPanel.setVisible(filesOpen);
 
@@ -3551,7 +3290,7 @@ function updateFooter(): void {
   const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
   const here = reflowing() ? null : nearestPage(pages, center.x, center.y);
   footer.update({
-    kind: documentKind,
+    kind: current.kind,
     page: here ? { current: pages.indexOf(here) + 1, count: pages.length } : null,
     zoom: camera.zoom,
     words: footerWords,
@@ -3675,8 +3414,8 @@ window.addEventListener('popstate', () => {
   // A collaboration room is joined from the address, so changing to or from one starts the page over.
   if (params.get('room') || devRoom) return location.reload();
   const doc = wantedDoc(params);
-  if (doc && doc !== urlDoc) {
-    const name = savedDocs.find((d) => `local:${d.id}` === doc)?.name;
+  if (doc && doc !== addressDoc()) {
+    const name = library.local.find((d) => `local:${d.id}` === doc)?.name;
     if (name) showLoading(name);
     openSource(doc, true, 'none');
   }

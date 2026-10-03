@@ -7,7 +7,8 @@ import { warmOnHover } from './warmOnHover.ts';
 import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolder, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
 import { deletionList, folderOf, isInside, treeRows, type Folder, type TreeRow } from '../folders.ts';
 import { t } from '../i18n/index.ts';
-import { loadLibrary, loadLocalLibrary, type LibraryEntry } from '../sync.ts';
+import type { LibraryStore } from '../libraryStore.ts';
+import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { h, isFileDrag, toggleClass } from './dom.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
@@ -28,8 +29,6 @@ export interface FilesPanelHost {
   /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved. */
   /** Opens a dropped file, or imports several (or a folder), filed in `folderId`. */
   dropFile(drop: Dropped, folderId: string | null): void;
-  /** Folders or documents were changed here (made, renamed, moved or deleted): other views of them catch up. */
-  changed?(): void;
   /** Deletes the document everywhere: from the account and from this browser. */
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
@@ -43,7 +42,6 @@ export interface FilesPanelHost {
 }
 
 /** How long to wait after a change before listing again, so a run of saves is one listing. */
-const REFRESH_DELAY = 3000;
 /** What is being dragged onto a folder. */
 /** Folders left open, kept in this browser. */
 const OPEN_KEY = 'word.filesOpen';
@@ -58,17 +56,23 @@ export class FilesPanel {
   /** What has been typed in the folder name field so far (and where the caret is), kept when the rows are rebuilt under it. */
   private renameDraft: { folder: string; value: string; start: number; end: number } | null = null;
   private dragged: Dragged | null = null;
-  private entries: LibraryEntry[] = [];
-  private folders: Folder[] = [];
   private readonly expanded = new Set<string>();
-  private generation = 0;
-  private timer = 0;
   /** The open document the tree was last opened up to, so a folder closed afterwards stays closed. */
   private revealed = '';
   /** The row Tab goes to in the tree (one row at a time is in the tab order): the last one focused. */
   private tabStop: string | null = null;
 
-  constructor(parent: HTMLElement, private readonly host: FilesPanelHost) {
+  /** `library`: the documents and folders, the same copy the Documents screen shows. */
+  constructor(
+    parent: HTMLElement,
+    private readonly host: FilesPanelHost,
+    private readonly library: LibraryStore,
+  ) {
+    library.subscribe(() => {
+      if (!this.visible) return;
+      this.render();
+      this.reveal();
+    });
     this.el.hidden = true;
     try {
       for (const id of JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]')) if (typeof id === 'string') this.expanded.add(id);
@@ -104,34 +108,33 @@ export class FilesPanel {
     this.el.hidden = !visible;
     if (visible) {
       this.revealed = '';
+      // What the library has shows at once; the listing brings it up to date.
+      this.render();
+      this.reveal();
       void this.refresh();
-    } else this.generation++;
+    }
   }
 
-  /** Lists again soon, if it's showing (something was saved, uploaded or moved). */
-  refreshSoon(): void {
-    if (!this.visible) return;
-    clearTimeout(this.timer);
-    this.timer = window.setTimeout(() => void this.refresh(), REFRESH_DELAY);
+  /** Lists everything again. */
+  refresh(): Promise<void> {
+    return this.library.refresh();
   }
 
-  /** Lists what this browser has at once, then the account's. */
-  async refresh(): Promise<void> {
-    clearTimeout(this.timer);
-    const generation = ++this.generation;
-    const start = await loadLocalLibrary(this.host.account());
-    if (generation !== this.generation) return;
-    this.entries = start.entries;
-    this.folders = start.folders;
-    this.render();
-    this.reveal();
-    const library = await loadLibrary(this.host.account(), this.host.signedIn());
-    if (generation !== this.generation) return;
-    this.entries = library.entries;
-    // Unless they couldn't be listed: what is on screen is better than none.
-    if (library.folders) this.folders = library.folders;
-    this.render();
-    this.reveal();
+  /** The documents and folders, as the library has them; a change set here shows wherever the library does. */
+  private get entries(): LibraryEntry[] {
+    return this.library.entries;
+  }
+
+  private set entries(entries: LibraryEntry[]) {
+    this.library.update({ entries });
+  }
+
+  private get folders(): Folder[] {
+    return this.library.folders;
+  }
+
+  private set folders(folders: Folder[]) {
+    this.library.update({ folders });
   }
 
   /** Marks the open document again (another was opened, or it was just saved for the first time). */
@@ -330,13 +333,9 @@ export class FilesPanel {
     if (await confirmDelete(deleteTitle(folders, docs, lines), lines)) {
       // Gone from the list at once; if it fails, the list fetched again brings it back with the reason.
       const before = { folders: this.folders, entries: this.entries };
-      // A listing already on its way was asked for before the delete: it would bring these back.
-      this.generation++;
-      clearTimeout(this.timer);
+      // (A listing already on its way was asked for before the delete: the library drops it.)
       const left = withoutDeleted(before.folders, before.entries, folders, docs);
-      this.folders = left.folders;
-      this.entries = left.entries;
-      this.render();
+      this.library.update({ folders: left.folders, entries: left.entries });
       await this.run(() => remove(before));
     }
     else this.host.focusEditor();
@@ -352,8 +351,6 @@ export class FilesPanel {
       this.notice.hidden = false;
     }
     this.render();
-    // The Documents screen shows the same folders and documents.
-    this.host.changed?.();
     await this.refresh();
   }
 

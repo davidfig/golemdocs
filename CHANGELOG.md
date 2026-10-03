@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.8.1 - Unreleased
+
+### Fixed
+- Typing, a picture or a save made the moment a document opens is no longer lost or refused.
+- The Documents screen and the Files sidebar always show the same documents and folders, and a save or upload no longer makes the app ask the account for its list several times over.
+
 ## 0.8.0 - 2026-10-02
 
 ### Added

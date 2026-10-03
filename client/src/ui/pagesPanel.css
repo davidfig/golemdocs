@@ -83,6 +83,11 @@
   box-shadow: 0 1px 3px var(--wm-shadow-strong);
 }
 
+/* Dark Pages: a thumbnail not drawn yet is the dark sheet's color (DARK_PAGE_RGB in webgl/program.ts), not white. */
+html[data-pages='dark'] .wm-pages-thumb {
+  background: #28292d;
+}
+
 .wm-pages-number {
   padding: 0 8px;
   border-radius: 8px;

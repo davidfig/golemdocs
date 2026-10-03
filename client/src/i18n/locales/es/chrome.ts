@@ -146,6 +146,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': '&Depurar…',
   'chrome.view.fullScreen': 'Pan&talla completa',
   'chrome.view.darkMode': '&Modo oscuro',
+  'chrome.view.darkPages': 'Páginas &oscuras',
   'chrome.view.matchSystem': '&Seguir al sistema',
   'chrome.view.customizeToolbars': 'Personali&zar…',
   'chrome.help.shortcuts': '&Métodos abreviados de teclado',

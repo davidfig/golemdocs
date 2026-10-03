@@ -206,10 +206,12 @@ test.describe('loading screen', () => {
   test('covers the editor with the file name while an imported file opens, and is gone when it is ready', async ({ app, page }) => {
     await app.goto('?doc=welcome');
     await page.evaluate(() => {
-      const w = window as unknown as { __loading: string[] };
+      const w = window as unknown as { __loading: string[]; __boxAtShow: string | null };
       w.__loading = [];
+      w.__boxAtShow = null;
       new MutationObserver(() => {
         const el = document.querySelector<HTMLElement>('.wm-loading');
+        if (el && !el.hidden && w.__boxAtShow === null) w.__boxAtShow = getComputedStyle(el.querySelector('.wm-loading-box')!).visibility;
         if (el && !el.hidden) w.__loading.push(`${el.getAttribute('role')}|${el.querySelector('.wm-loading-name')?.textContent}|${el.querySelector('.wm-loading-detail')?.textContent}`);
       }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
     });
@@ -221,6 +223,8 @@ test.describe('loading screen', () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen[0]).toMatch(/^status\|notes\.md\|/);
     expect(seen.some((line) => line.includes('Loading notes.md'))).toBe(true);
+    // The box (name, progress) waits a moment before showing, so a quick load doesn't flash it.
+    expect(await page.evaluate(() => (window as unknown as { __boxAtShow: string | null }).__boxAtShow)).toBe('hidden');
     await expect(page.locator('.wm-loading')).toBeHidden();
   });
 });

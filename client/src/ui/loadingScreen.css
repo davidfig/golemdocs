@@ -1,4 +1,7 @@
-/* The loading screen (see loadingScreen.ts): over the editor and the dashboard, opaque. */
+/* The loading screen (see loadingScreen.ts): over the editor and the dashboard, opaque. The desk's
+   color, which the editor shows around the pages, so the background doesn't change when it lifts.
+   It hides the document that was open at once, but its box (name, progress) only shows once a load
+   has taken a moment: a quick load just looks like the new document arriving. */
 
 .wm-loading {
   position: absolute;
@@ -7,7 +10,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--wm-gutter, #eeeeea);
+  background: var(--wm-desk, #e5e5e5);
   color: var(--wm-text, #000);
   font: 13px/1.4 var(--wm-font, system-ui, sans-serif);
 }
@@ -28,6 +31,19 @@
   background: var(--wm-face, #f0f0f0);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
   text-align: center;
+  /* Starts over each time the screen is shown, as display: none ends it. */
+  animation: wm-loading-appear 0.15s ease-out 400ms both;
+}
+
+@keyframes wm-loading-appear {
+  from {
+    opacity: 0;
+    visibility: hidden;
+  }
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
 }
 
 .wm-loading-name {

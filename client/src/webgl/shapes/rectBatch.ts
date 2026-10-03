@@ -1,5 +1,5 @@
 import { RECT_INSTANCE_BYTES as INSTANCE_BYTES } from '@golemdocs/layout';
-import { createProgram, uniforms } from '../program.ts';
+import { DARK_PAGES_GLSL, createProgram, uniforms } from '../program.ts';
 import type { Camera } from '../../view/camera.ts';
 
 // Retained rectangles in document space (a page's shading, underlines, borders), uploaded
@@ -13,6 +13,7 @@ uniform vec2 u_translate;             // batch origin on screen, device px
 uniform float u_scale;                // device px per point
 uniform vec2 u_viewport;
 flat out vec4 v_color;
+${DARK_PAGES_GLSL}
 void main() {
   vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
   vec2 size = a_rect.zw * u_scale;
@@ -21,7 +22,7 @@ void main() {
   vec2 origin = a_rect.xy * u_scale + u_translate - grow * 0.5;
   vec2 screen = origin + corner * (size + grow);
   gl_Position = vec4(screen / u_viewport * vec2(2.0, -2.0) + vec2(-1.0, 1.0), 0.0, 1.0);
-  v_color = vec4(a_color.rgb * a_color.a, a_color.a);
+  v_color = vec4(pageColor(a_color.rgb) * a_color.a, a_color.a);
 }
 `;
 
@@ -84,11 +85,13 @@ export class RectBatch {
 
 export class RectBatchRenderer {
   private readonly program: WebGLProgram;
-  private readonly u: Record<'u_translate' | 'u_scale' | 'u_viewport', WebGLUniformLocation>;
+  private readonly u: Record<'u_translate' | 'u_scale' | 'u_viewport' | 'u_darkPages', WebGLUniformLocation>;
+  /** Draw colors as they show on a dark page (Dark Pages). */
+  darkPages = false;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = createProgram(gl, VERTEX, FRAGMENT);
-    this.u = uniforms(gl, this.program, ['u_translate', 'u_scale', 'u_viewport'] as const);
+    this.u = uniforms(gl, this.program, ['u_translate', 'u_scale', 'u_viewport', 'u_darkPages'] as const);
   }
 
   render(camera: Camera, batches: Iterable<RectBatch>): number {
@@ -99,6 +102,7 @@ export class RectBatchRenderer {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(this.u.u_scale, scale);
     gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
+    gl.uniform1f(this.u.u_darkPages, this.darkPages ? 1 : 0);
     let draws = 0;
     for (const batch of batches) {
       const vao = batch.prepare(gl);

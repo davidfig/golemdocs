@@ -13,6 +13,8 @@ const threePages = () =>
     ],
   });
 
+const threePagesFile = () => ({ name: 'three.pdf', mimeType: 'application/pdf', buffer: Buffer.from(threePages()) });
+
 /** The text of each page, read by selecting across it in Fill In mode (where a drag selects text; from the far corner, as the palette sits over the near one). */
 async function pageTexts(app: App): Promise<string[]> {
   await modeButton(app.page, 'Fill In').click();
@@ -87,6 +89,25 @@ test.describe('Page Sidebar', () => {
     await expect(panel(app)).toBeVisible();
     await panel(app).getByRole('button', { name: 'Close' }).click();
     await expect(panel(app)).toBeHidden();
+  });
+
+  test('opening another document keeps the panel open, emptied, instead of closing and reopening it', async ({ app }) => {
+    await app.goto('?doc=welcome');
+    await expect(panel(app)).toBeVisible();
+    await expect(app.page.locator('.wm-pages-item')).not.toHaveCount(0);
+    await app.page.evaluate(() => {
+      const w = window as unknown as { __panelHidden: boolean };
+      w.__panelHidden = false;
+      const el = document.querySelector<HTMLElement>('.wm-pages')!;
+      new MutationObserver(() => {
+        if (el.hidden) w.__panelHidden = true;
+      }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+    });
+    const chooser = app.page.waitForEvent('filechooser');
+    await app.menu('File', 'Import…');
+    await (await chooser).setFiles(threePagesFile());
+    await expect(app.page.locator('.wm-pages-item')).toHaveCount(3, { timeout: 30_000 });
+    expect(await app.page.evaluate(() => (window as unknown as { __panelHidden: boolean }).__panelHidden)).toBe(false);
   });
 
   test('dragging the panel\'s edge resizes it, and the thumbnails with it', async ({ app }) => {

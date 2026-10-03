@@ -1,6 +1,7 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { choose, isChecked, openMenu, seedStorage, stored } from './helpers';
+import { pngPixels } from '../layout/helpers';
 
 const theme = (page: Page) => page.evaluate(() => ({ theme: document.documentElement.dataset.theme, scheme: document.documentElement.dataset.scheme }));
 const cssVar = (page: Page, name: string) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
@@ -166,6 +167,20 @@ test.describe('dark mode', () => {
     await expect(app.canvas).toBeVisible();
   });
 
+  test('the loading screen is the desk color, so nothing flashes when it lifts', async ({ app, page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await app.goto('?doc=welcome');
+    const colors = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.background = 'var(--wm-desk)';
+      document.body.append(probe);
+      const desk = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { desk, loading: getComputedStyle(document.querySelector('.wm-loading')!).backgroundColor };
+    });
+    expect(colors.loading).toBe(colors.desk);
+  });
+
   test('Dark Mode is one tap in the phone menu', async ({ app, page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.setViewportSize({ width: 390, height: 780 });
@@ -173,6 +188,108 @@ test.describe('dark mode', () => {
     await page.getByRole('button', { name: 'Menu' }).click();
     await page.getByRole('dialog', { name: 'Menu' }).getByRole('menuitemcheckbox', { name: /^Dark Mode/ }).click();
     expect((await theme(page)).theme).toBe('dark');
+  });
+});
+
+test.describe('dark pages', () => {
+  const pagesAttr = (page: Page) => page.evaluate(() => document.documentElement.dataset.pages ?? null);
+
+  /** Most pixels across the middle of the canvas, where the first page is: light (> 128) or dark. */
+  async function pageIsLight(canvas: Locator): Promise<boolean> {
+    const img = pngPixels(await canvas.screenshot());
+    let light = 0;
+    let total = 0;
+    const y = Math.floor(img.height / 2);
+    for (let x = Math.floor(img.width * 0.3); x < img.width * 0.7; x++) {
+      const i = (y * img.width + x) * 4;
+      if ((img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3 > 128) light++;
+      total++;
+    }
+    return light > total / 2;
+  }
+
+  test('Dark Pages turns the pages dark along with the rest, and is remembered', async ({ app, page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await app.goto('?doc=welcome');
+    expect(await pageIsLight(app.canvas)).toBe(true);
+    await choose(app, 'View', 'Color Scheme', 'Dark Pages');
+    expect(await theme(page)).toEqual({ theme: 'dark', scheme: 'golem' });
+    expect(await pagesAttr(page)).toBe('dark');
+    await expect.poll(() => pageIsLight(app.canvas)).toBe(false);
+    await expect.poll(() => stored(page, 'golem.darkPages')).toBe('on');
+    await expect.poll(() => stored(page, 'golem.appearance')).toBe('dark');
+    await page.reload();
+    await app.ready();
+    expect(await pagesAttr(page)).toBe('dark');
+    await openMenu(app, 'View');
+    await page.locator('.wm-menu .wm-item', { hasText: 'Color Scheme' }).hover();
+    expect(await isChecked(page, 'Dark Pages')).toBe(true);
+    expect(await isChecked(page, 'Dark Mode')).toBe(true);
+  });
+
+  test('turning Dark Pages off keeps dark mode with white pages', async ({ app, page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await seedStorage(page, { 'golem.appearance': 'dark', 'golem.darkPages': 'on' });
+    await app.goto('?doc=welcome');
+    expect(await pagesAttr(page)).toBe('dark');
+    await choose(app, 'View', 'Color Scheme', 'Dark Pages');
+    expect(await pagesAttr(page)).toBeNull();
+    expect((await theme(page)).theme).toBe('dark');
+    await expect.poll(() => pageIsLight(app.canvas)).toBe(true);
+    await expect.poll(() => stored(page, 'golem.darkPages')).toBe('off');
+  });
+
+  test('Dark Mode off shows white pages, and back on brings the dark pages back', async ({ app, page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await seedStorage(page, { 'golem.appearance': 'dark', 'golem.darkPages': 'on' });
+    await app.goto('?doc=welcome');
+    await choose(app, 'View', 'Color Scheme', 'Dark Mode');
+    expect((await theme(page)).theme).toBe('golem');
+    expect(await pagesAttr(page)).toBeNull();
+    await choose(app, 'View', 'Color Scheme', 'Dark Mode');
+    expect(await pagesAttr(page)).toBe('dark');
+  });
+
+  test.describe('Page Sidebar', () => {
+    test.use({ sidebarDefault: true });
+
+    /** Most pixels of the first thumbnail are light (> 128). */
+    const thumbLight = (page: Page) =>
+      page.locator('.wm-pages-item canvas').first().evaluate((c: HTMLCanvasElement) => {
+        const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+        let light = 0;
+        for (let i = 0; i < data.length; i += 4) if ((data[i] + data[i + 1] + data[i + 2]) / 3 > 128) light++;
+        return light > data.length / 8;
+      });
+
+    test('the thumbnails turn dark and back with Dark Pages', async ({ app, page }) => {
+      await page.emulateMedia({ colorScheme: 'light' });
+      await app.goto('?doc=welcome');
+      await expect(page.locator('.wm-pages')).toBeVisible();
+      await expect.poll(() => thumbLight(page)).toBe(true);
+      // Redrawn in the same moment as the switch, not after a pause showing the old colors.
+      await choose(app, 'View', 'Color Scheme', 'Dark Pages');
+      expect(await thumbLight(page)).toBe(false);
+      await choose(app, 'View', 'Color Scheme', 'Dark Pages');
+      expect(await thumbLight(page)).toBe(true);
+    });
+
+    test('a thumbnail not drawn yet is dark, not white, under Dark Pages', async ({ app, page }) => {
+      await page.emulateMedia({ colorScheme: 'light' });
+      await seedStorage(page, { 'golem.appearance': 'dark', 'golem.darkPages': 'on' });
+      await app.goto('?doc=welcome');
+      const background = await page.locator('.wm-pages-thumb').first().evaluate((c) => getComputedStyle(c).backgroundColor);
+      expect(background).toBe('rgb(40, 41, 45)');
+    });
+  });
+
+  test('under Match System, Dark Pages follows a dark system', async ({ app, page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await seedStorage(page, { 'golem.darkPages': 'on' });
+    await app.goto('?doc=welcome');
+    expect(await pagesAttr(page)).toBeNull();
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(() => pagesAttr(page)).toBe('dark');
   });
 });
 

@@ -146,6 +146,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': 'デバッグ(&D)…',
   'chrome.view.fullScreen': '全画面表示(&U)',
   'chrome.view.darkMode': 'ダーク モード(&D)',
+  'chrome.view.darkPages': 'ダーク ページ(&P)',
   'chrome.view.matchSystem': 'システムに合わせる(&M)',
   'chrome.view.customizeToolbars': 'ユーザー設定(&Z)…',
   'chrome.help.shortcuts': 'キーボード ショートカット(&K)',

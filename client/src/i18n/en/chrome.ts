@@ -144,6 +144,7 @@ export const chrome = {
   'chrome.admin.debug': '&Debug…',
   'chrome.view.fullScreen': 'F&ull Screen',
   'chrome.view.darkMode': '&Dark Mode',
+  'chrome.view.darkPages': 'Dark &Pages',
   'chrome.view.matchSystem': '&Match System',
   'chrome.view.customizeToolbars': 'Customi&ze…',
   'chrome.help.shortcuts': '&Keyboard Shortcuts',

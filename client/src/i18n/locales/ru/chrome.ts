@@ -146,6 +146,7 @@ export const chrome: Catalog = {
   'chrome.admin.debug': '&Отладка…',
   'chrome.view.fullScreen': 'Полно&экранный режим',
   'chrome.view.darkMode': 'Темный &режим',
+  'chrome.view.darkPages': 'Темные с&траницы',
   'chrome.view.matchSystem': 'Как в систем&е',
   'chrome.view.customizeToolbars': 'Настро&йка…',
   'chrome.help.shortcuts': 'Сочетания &клавиш',

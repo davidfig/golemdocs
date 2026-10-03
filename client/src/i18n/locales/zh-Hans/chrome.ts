@@ -146,6 +146,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': '调试(&D)…',
   'chrome.view.fullScreen': '全屏(&U)',
   'chrome.view.darkMode': '深色模式(&D)',
+  'chrome.view.darkPages': '深色页面(&P)',
   'chrome.view.matchSystem': '跟随系统(&M)',
   'chrome.view.customizeToolbars': '自定义(&Z)…',
   'chrome.help.shortcuts': '键盘快捷键(&K)',

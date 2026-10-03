@@ -5,11 +5,13 @@ import { RectRenderer } from './shapes/rectRenderer.ts';
 import type { TextBatch } from './text/textBatch.ts';
 import { TextRenderer } from './text/textRenderer.ts';
 import { deskColor } from '../ui/theme.ts';
+import { DARK_PAGE_RGB } from './program.ts';
 import type { Camera } from '../view/camera.ts';
 import type { GpuPage } from './gpuPage.ts';
 import type { SelectionLayer } from './selectionLayer.ts';
 
 const PAGE_COLOR = packColor(0xffffff);
+const DARK_PAGE_COLOR = packColor(DARK_PAGE_RGB);
 const PAGE_BORDER = packColor(0x000000, 0.18);
 const PAGE_SHADOW = packColor(0x000000, 0.035);
 const SHADOW_LAYERS = 4;
@@ -42,8 +44,11 @@ export class PageRenderer {
   /** Draw pages edge to edge with no shadow or border (Normal view). */
   flat = false;
 
-  render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true): FrameStats {
+  /** `darkPages`: dark sheets with light letters (View › Color Scheme › Dark Pages); pictures of pages leave it off. */
+  render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true, darkPages = false): FrameStats {
     const gl = this.gl;
+    this.rects.darkPages = darkPages;
+    this.text.darkPages = darkPages;
     const scale = camera.scale;
     const left = camera.x;
     const top = camera.y;
@@ -82,7 +87,7 @@ export class PageRenderer {
         this.sheets.add(x0 - grow, y0 - grow + 2 * scale, x1 - x0 + 2 * grow, y1 - y0 + 2 * grow, PAGE_SHADOW);
       }
       if (!this.flat) this.sheets.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
-      this.sheets.add(x0, y0, x1 - x0, y1 - y0, PAGE_COLOR);
+      this.sheets.add(x0, y0, x1 - x0, y1 - y0, darkPages ? DARK_PAGE_COLOR : PAGE_COLOR);
     }
     this.sheets.flush(camera.width, camera.height);
 

@@ -30,7 +30,7 @@ import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, ty
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
 import { livePreviewOn, setLivePreview } from './livePreview.ts';
-import { SCHEMES, currentAppearance, currentScheme, isDark, setAppearance, setScheme, toggleDark } from './theme.ts';
+import { SCHEMES, currentAppearance, currentScheme, isDark, pagesDark, setAppearance, setScheme, toggleDark, toggleDarkPages } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { iconElement } from './icons.ts';
 import { CommandPalette } from './commandPalette.ts';
@@ -309,6 +309,7 @@ export class Chrome {
     }
     r.add(
       { id: 'view.darkMode', label: t('chrome.view.darkMode'), run: toggleDark, checked: isDark },
+      { id: 'view.darkPages', label: t('chrome.view.darkPages'), run: toggleDarkPages, checked: pagesDark },
       {
         id: 'view.matchSystem',
         label: t('chrome.view.matchSystem'),
@@ -523,6 +524,7 @@ export class Chrome {
       cmd('view.formattingMarks'),
       cmd('view.pageWidth'),
       cmd('view.darkMode'),
+      cmd('view.darkPages'),
       heading(t('chrome.menu.tools')),
       cmd('tools.spelling'),
       cmd('tools.wordCount'),
@@ -609,7 +611,7 @@ export class Chrome {
           cmd('view.print'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
-          sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.matchSystem')]),
+          sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
           sep,

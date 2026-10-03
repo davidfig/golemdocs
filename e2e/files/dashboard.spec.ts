@@ -3,6 +3,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { MOD, expect, test, type App } from './fixtures';
 import { formatLabel, importFile, status, text, waitForOpen, waitForSaved } from './helpers';
+import { pngPixels } from '../layout/helpers';
 
 const dashboard = (page: Page) => page.locator('.wm-dashboard');
 const cards = (page: Page) => dashboard(page).locator('article.wm-card');
@@ -60,6 +61,28 @@ test('every card shows a thumbnail of its first page', async ({ app, page }) => 
     const loaded = await images.nth(i).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0 && img.src.startsWith('blob:'));
     expect(loaded).toBe(true);
   }
+});
+
+test('under Dark Pages the thumbnails are dark pages with light letters', async ({ app, page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await saveThree(app);
+  await app.menu('File', 'Open…');
+  const thumb = dashboard(page).locator('.wm-thumb').first();
+  await expect(thumb.locator('img')).toHaveCount(1);
+  /** The share of the thumbnail's pixels that are light. */
+  const lightShare = async () => {
+    const img = pngPixels(await thumb.screenshot());
+    let light = 0;
+    for (let i = 0; i < img.data.length; i += 4) if ((img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3 > 128) light++;
+    return light / (img.data.length / 4);
+  };
+  expect(await lightShare()).toBeGreaterThan(0.5);
+  await page.keyboard.press('Escape');
+  await expect(dashboard(page)).toBeHidden();
+  await app.menu('View', 'Color Scheme', 'Dark Pages');
+  await app.menu('File', 'Open…');
+  await expect(thumb.locator('img')).toHaveCount(1);
+  expect(await lightShare()).toBeLessThan(0.5);
 });
 
 test('clicking a card opens that document and closes the dashboard', async ({ app, page }) => {

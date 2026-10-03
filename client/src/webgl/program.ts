@@ -48,3 +48,23 @@ export function uniforms<const T extends readonly string[]>(
   }
   return out;
 }
+
+/** The sheet's color under Dark Pages: what pageColor() makes of white. */
+export const DARK_PAGE_RGB = 0x28292d;
+
+/**
+ * Dark Pages: a document color as it shows on a dark page. The lightness flips and the hue stays,
+ * so white paper turns dark grey, black letters light grey, and red stays red. Declares the
+ * `u_darkPages` uniform (0 or 1); pasted into a shader before its main().
+ */
+export const DARK_PAGES_GLSL = /* glsl */ `
+uniform float u_darkPages;
+vec3 pageColor(vec3 c) {
+  vec3 flipped = c + (1.0 - max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b));
+  return mix(c, mix(vec3(${hexToGlsl(DARK_PAGE_RGB)}), vec3(${hexToGlsl(0xe3e3e0)}), flipped), u_darkPages);
+}
+`;
+
+function hexToGlsl(rgb: number): string {
+  return [rgb >> 16, (rgb >> 8) & 255, rgb & 255].map((v) => (v / 255).toFixed(4)).join(', ');
+}

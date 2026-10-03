@@ -1,3 +1,5 @@
+import { DARK_PAGES_GLSL } from '../program.ts';
+
 // Instanced MSDF text. One instance per glyph; the quad's 4 corners come from gl_VertexID,
 // and the glyph's quad and atlas UVs are fetched from the face's glyph table texture.
 
@@ -20,7 +22,7 @@ uniform float u_skew;                 // synthetic italic shear
 out vec2 v_uv;
 flat out float v_screenPxRange;
 flat out vec4 v_color;
-
+${DARK_PAGES_GLSL}
 void main() {
   // Triangle strip corners: (0,0) (1,0) (0,1) (1,1)
   vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
@@ -37,7 +39,7 @@ void main() {
   v_uv = mix(atlas.xy, atlas.zw, corner);
   // How many screen pixels the SDF range spans at this size; drives edge antialiasing.
   v_screenPxRange = max(u_distanceRangeEm * a_size * u_scale, 1.0);
-  v_color = a_color;
+  v_color = vec4(pageColor(a_color.rgb), a_color.a);
 }
 `;
 

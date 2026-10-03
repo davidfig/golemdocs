@@ -5,7 +5,7 @@ import type { TextBatch } from './textBatch.ts';
 import { TEXT_FRAGMENT, TEXT_VERTEX } from './textShaders.ts';
 
 const UNIFORMS = [
-  'u_glyphTable', 'u_atlas', 'u_translate', 'u_scale', 'u_viewport', 'u_distanceRangeEm', 'u_skew', 'u_embolden', 'u_atlasSize',
+  'u_glyphTable', 'u_atlas', 'u_translate', 'u_scale', 'u_viewport', 'u_distanceRangeEm', 'u_skew', 'u_embolden', 'u_atlasSize', 'u_darkPages',
 ] as const;
 
 const ATLAS_UNIT = 0;
@@ -20,6 +20,8 @@ export interface TextRenderStats {
 export class TextRenderer {
   private readonly program: WebGLProgram;
   private readonly u: Record<(typeof UNIFORMS)[number], WebGLUniformLocation>;
+  /** Draw colors as they show on a dark page (Dark Pages). */
+  darkPages = false;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = createProgram(gl, TEXT_VERTEX, TEXT_FRAGMENT);
@@ -43,6 +45,7 @@ export class TextRenderer {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(this.u.u_scale, scale);
     gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
+    gl.uniform1f(this.u.u_darkPages, this.darkPages ? 1 : 0);
 
     let boundFace: GpuFace | null = null;
     for (const batch of batches) {

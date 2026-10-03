@@ -7,8 +7,11 @@
 - The Files sidebar can be reached with Tab, and Left Arrow on a document moves to the folder it is in.
 - A collaborative document whose connection was lost rejoins by itself once you are back online.
 - The AI assistant can open one of your documents, start a new blank one (in a folder, with a name), and download all your documents as a ZIP.
+- Dark Pages (View › Color Scheme) turns the pages, and their thumbnails in the Page Sidebar and on the Documents screen, dark with light letters along with the rest of the app; pictures in the open document keep their colors.
 
 ### Fixed
+- Opening a document no longer flashes a lighter background before its pages appear, and the loading box only shows when a document takes a moment to open.
+- The Page Sidebar stays open, emptied, while another document opens, instead of closing and opening again.
 - Two devices saving the same document at the same moment no longer lose one of the saves, and a save that arrives just after the document was deleted no longer leaves its file behind.
 - A document deleted with its folder can no longer be downloaded afterwards, by you or by the people it was shared with.
 - Moving many documents, or importing a ZIP with many folders, no longer pauses your account (and others) for minutes on the server's request limit.

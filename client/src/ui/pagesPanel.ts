@@ -151,6 +151,18 @@ export class PagesPanel {
     this.schedule(REDRAW_DELAY);
   }
 
+  /**
+   * Every thumbnail is drawn again at once in the new colors (Dark Pages turned on or off): the ones
+   * in view right away, the rest are cleared to the sheet's color so none shows the old colors when scrolled to.
+   */
+  recolor(): void {
+    for (const item of this.items) {
+      item.stale = true;
+      if (!item.onScreen) item.canvas.width = item.canvas.width; // clears it
+    }
+    this.drawSome(true);
+  }
+
   /** The page in view. Scrolls the panel to it, unless the pointer is in the panel (where it is being scrolled by hand). */
   setCurrent(index: number): void {
     if (index === this.current) return;
@@ -220,13 +232,14 @@ export class PagesPanel {
     }, delay);
   }
 
-  private drawSome(): void {
+  /** Draws the stale thumbnails in view, a few at a time unless `all`. */
+  private drawSome(all = false): void {
     if (this.el.hidden) return;
     const dpr = window.devicePixelRatio || 1;
     let drawn = 0;
     for (const item of this.items) {
       if (!item.stale || !item.onScreen) continue;
-      if (drawn === BATCH) return this.schedule(16);
+      if (drawn === BATCH && !all) return this.schedule(16);
       drawn++;
       const { width, height } = item.page;
       const w = Math.max(1, Math.round(Math.max(40, this.el.clientWidth - THUMB_MARGIN) * dpr));

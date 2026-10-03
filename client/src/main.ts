@@ -1,7 +1,7 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import type { MoveTarget } from '@golemdocs/editor';
-import { deskColor, onThemeChange } from './ui/theme.ts';
+import { deskColor, onThemeChange, pagesDark } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
@@ -2295,7 +2295,7 @@ function render(): void {
   renderer.flat = reflowing();
   if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
   if (renderer.flat) camera.x = bounds.x;
-  lastStats = renderer.render(camera, pages, selection, caretVisible);
+  lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
   const end = performance.now();
   // The caret blinks on an idle document; counting that would make idle read as a steady frame rate.
   if (!caretOnly) {
@@ -3476,13 +3476,14 @@ const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, 
 // The thumbnails of the pages beside the document; for a PDF's pages, drag them into order or delete them (see ui/pagesPanel.ts).
 const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
   go: goToPage,
-  draw: (page, width, height) => (gl ? readPage(gl, renderer, page as GpuPage, width, height) : null),
+  draw: (page, width, height) => (gl ? readPage(gl, renderer, page as GpuPage, width, height, pagesDark()) : null),
   move: (index, to) => changePages(index, { op: 'move', to }),
   remove: (index) => changePages(index, { op: 'delete' }),
   close: togglePagesPanel,
   focusEditor: focusInput,
 });
 document.getElementById('workspace')!.prepend(pagesPanel.el);
+onThemeChange(() => pagesPanel.recolor()); // the thumbnails turn dark or light with Dark Pages
 
 // The account's folders and documents as a tree, left of everything else (see ui/filesPanel.ts).
 const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
@@ -3561,7 +3562,8 @@ function updateFooter(): void {
 
 /** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
 function syncPagesPanel(): void {
-  const shown = pagesOpen() && !largeView.active && !reflowing() && pages.length > 0;
+  // While a document opens it has no pages yet: a panel already showing stays, empty, rather than closing and opening again.
+  const shown = pagesOpen() && !largeView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
   pagesPanel.setVisible(shown);
   if (!shown) return;
   const editing = annotating && formMode === 'edit';

@@ -146,6 +146,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': '디버그(&D)…',
   'chrome.view.fullScreen': '전체 화면(&U)',
   'chrome.view.darkMode': '어두운 모드(&D)',
+  'chrome.view.darkPages': '어두운 페이지(&P)',
   'chrome.view.matchSystem': '시스템 설정에 맞춤(&M)',
   'chrome.view.customizeToolbars': '사용자 지정(&Z)…',
   'chrome.help.shortcuts': '바로 가기 키(&K)',

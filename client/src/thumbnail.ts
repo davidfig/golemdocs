@@ -36,10 +36,10 @@ export function toTopDownOpaque(pixels: Uint8Array, width: number, height: numbe
 
 /**
  * Draws a page into an offscreen framebuffer at a pixel size and reads it back, top row first and
- * opaque. Null if the framebuffer can't be made. Leaves the GL state the editor's frame loop relies on
+ * opaque (dark with light letters if `darkPages`, as the pages sidebar shows under Dark Pages). Null if the framebuffer can't be made. Leaves the GL state the editor's frame loop relies on
  * as found.
  */
-export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
+export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage, width: number, height: number, darkPages = false): Uint8ClampedArray<ArrayBuffer> | null {
   const camera = new Camera();
   camera.width = width;
   camera.height = height;
@@ -59,7 +59,7 @@ export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, pag
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
-      renderer.render(camera, [page]);
+      renderer.render(camera, [page], undefined, true, darkPages);
       gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
       ok = true;
     }

@@ -146,6 +146,19 @@
   object-fit: contain;
 }
 
+/* Dark Pages: the saved thumbnails are pictures of white pages, so they are flipped to match the
+   editor's dark sheets (#28292d, DARK_PAGE_RGB in webgl/program.ts) with light letters, keeping
+   hues. Invert and turn the hue back, then squeeze black-white into sheet-ink:
+   brightness(1.046) after contrast(0.7) takes 0 to 0.157 and 1 to 0.889. */
+html[data-pages='dark'] .wm-thumb:not(.wm-folder-art) {
+  background: #28292d;
+}
+
+html[data-pages='dark'] .wm-thumb > img,
+html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
+  filter: invert(1) hue-rotate(180deg) contrast(0.7) brightness(1.046);
+}
+
 /* Until there's a picture: the Golem face's page text (the favicon without its corner or color). */
 .wm-thumb-empty {
   width: 100%;

@@ -146,6 +146,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': '&Debug…',
   'chrome.view.fullScreen': '&Vollbild',
   'chrome.view.darkMode': '&Dunkelmodus',
+  'chrome.view.darkPages': 'Dunkle Seite&n',
   'chrome.view.matchSystem': 'Systemeinstellung &folgen',
   'chrome.view.customizeToolbars': '&Anpassen…',
   'chrome.help.shortcuts': '&Tastenkombinationen',

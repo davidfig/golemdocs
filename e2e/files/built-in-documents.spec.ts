@@ -33,7 +33,7 @@ test('the /changelog and /welcome paths open those documents directly', async ({
   await page.goto('/welcome');
   await app.ready();
   await expect(page).toHaveTitle('Welcome to Golem Docs - Golem Docs');
-  expect(await app.text()).toContain('A document editor that lives in your browser');
+  expect(await app.text()).toContain('one editor that opens every kind of document');
 });
 
 test('the privacy and terms paths lead to the plain pages of the site', async ({ page }) => {
@@ -108,7 +108,7 @@ test('Open Sample opens each sample: Welcome, Fonts and War and Peace', async ({
   expect(await app.text()).toContain('Calibri');
   await app.menu('Admin', 'Open Sample', 'Welcome to Golem Docs');
   await waitForOpen(app, 'Welcome to Golem Docs');
-  expect(await app.text()).toContain('A document editor that lives in your browser');
+  expect(await app.text()).toContain('one editor that opens every kind of document');
   await app.menu('Admin', 'Open Sample', 'War and Peace');
   await waitForOpen(app, 'War and Peace');
   await expect(page).toHaveTitle('War and Peace - Golem Docs');

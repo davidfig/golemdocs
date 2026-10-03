@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.7.2 - Unreleased
+## 0.8.0 - 2026-10-02
 
 ### Added
 - Dropping several files, or a folder, from your computer imports them all, each in the folder it was in (a ZIP among them goes in a folder of its own name). One file still opens as before.

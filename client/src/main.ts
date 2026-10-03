@@ -32,6 +32,7 @@ import {
 import { folderOf, folderPath, type Folder } from './folders.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
+import { stopSettingsSync, syncSettings } from './settingsSync.ts';
 import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
@@ -868,6 +869,9 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
   sharedDeviceNotice.update({ signedIn: signedIn !== null });
   assistant.update({ signedIn: signedIn !== null });
+  // Interface settings follow the account (and a reload shows what came from it); see settingsSync.ts.
+  if (account) void syncSettings(account.id, { reload: reloadForSettings });
+  else stopSettingsSync();
   if (account) {
     // Folders made before signing in go to the account first, so the documents in them can be filed there.
     await adoptGuestFolders().catch(() => {});
@@ -883,6 +887,14 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
     void flushUploads();
   }
   showSync();
+}
+
+/** Reloads the page to show settings that came from the account, once what is open is saved. */
+async function reloadForSettings(): Promise<void> {
+  if (cleared) return;
+  saveIfEdited();
+  await saving.catch(() => {});
+  location.reload();
 }
 
 /** Refreshes what File ▸ Open Recent lists. */
@@ -1416,6 +1428,7 @@ async function signOutQuietly(): Promise<boolean> {
     return false;
   }
   cleared = true; // nothing more is saved for this account here
+  stopSettingsSync();
   clearTimeout(autosaveTimer);
   uploads.clear();
   await saving.catch(() => {});

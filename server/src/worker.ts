@@ -9,6 +9,7 @@ import { handleDocuments, ownStorage, resolveAccess, roomFor, type DocumentRoute
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
+import { handlePreferences } from './preferences.ts';
 import { Room } from './room.ts';
 import { handleSearch } from './search.ts';
 import type { Role } from './sharing.ts';
@@ -153,6 +154,15 @@ const handler: ExportedHandler = {
         if (message.length > MAX_FEEDBACK_CHARS) throw new HttpError(413, 'feedback is too long');
         await addFeedback(env, userId, message);
         return json({ ok: true }, 201);
+      }
+
+      // GET/PUT /api/preferences: the user's interface settings, kept in their account (preferences.ts).
+      if (path === '/api/preferences') {
+        if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
+          throw new HttpError(503, 'cloud storage is not configured');
+        }
+        const { syncing, ownDb } = await ownStorage(env, userId, request.method);
+        return await handlePreferences(request, url, ownDb, syncing);
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).

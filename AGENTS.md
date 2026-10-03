@@ -40,6 +40,10 @@ Every feature a user can do should have an equivalent assistant tool, so the AI 
 - Mention the capability in the system prompt's list of what the AI can do, and test the tool (`client/test/agentTools.test.ts` for worker tools).
 - If a feature truly cannot be done by a tool (it is purely visual or needs the user's own device), say so in the change instead of silently skipping it.
 
+## Settings that follow the account
+
+A setting kept in browser storage is either per device or follows the person (see `client/src/settingsSync.ts`). When you add a persisted setting, decide which: a preference (a choice of look, language, behavior, view) goes in `SYNCED_KEYS` so every computer shows it; anything tied to this screen (sizes, positions, panel or toolbar layout, per-document zoom or scroll) and notices already dismissed stay out. A phone's settings are separate from a computer's, so a synced setting needs a sensible default on both.
+
 ## Welcome document
 
 The welcome documents (`client/src/layout/welcome/*.md`) must show no spelling errors. After you edit the English one, spell check it (F7, or run `pnpm --filter @golemdocs/client test`: a test fails on any misspelled word). Then, for each flagged word, confirm it is actually spelled correctly (a name, a format, a key) and add it to `client/src/spelling/appWords.ts`. Fix real typos in the document instead.

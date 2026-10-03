@@ -3,6 +3,7 @@
 ## 0.9.1 - Unreleased
 
 ### Added
+- Your settings now follow your account: appearance and dark pages, language, keyboard shortcuts, autoformat, Markdown at the caret, spelling and grammar options, your personal dictionary, the view, formatting marks, the ruler and the status bar are the same on every computer you sign in on. A phone or tablet keeps settings of its own. Toolbar layout, panel sizes and what each document remembers stay on the device. Needs sync.
 - View › Ruler shows a ruler above and beside the page in view, in inches (centimetres in other languages), with the margins marked; the assistant can turn it on and off. Drag a margin’s edge on either ruler, or the indent markers on the top one (first line, hanging, left, right), to change them.
 - The import progress card shows an estimate of the time left.
 

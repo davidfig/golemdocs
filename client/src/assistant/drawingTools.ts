@@ -33,11 +33,15 @@ export interface DrawingEditor {
   setPage(width: number, height: number, mode: 'keep' | 'scale', background: string | null): void;
   fitPage(margin: number, background?: string | null): void;
   readonly page: { width: number; height: number; background: string | null };
+  newLayer(name?: string): void;
+  newGroup(name?: string): void;
   addGuide(axis: 'v' | 'h', position?: number): void;
   clearGuides(): void;
   makeMask(): void;
   releaseMask(): void;
   addShape(node: SceneNode): void;
+  /** Pushes the lines within `radius` of a point by a distance (the nudge tool); false when none were in reach. */
+  pushLines(at: readonly [number, number], by: readonly [number, number], radius: number): boolean;
 }
 
 const kindName = (node: SceneNode): string => (node.kind === 'ellipse' ? (node.rx === node.ry ? 'circle' : 'ellipse') : node.kind);
@@ -145,6 +149,17 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
     }
   }
 
+  if (op === 'nudge_lines') {
+    const radius = number(args, 'radius', 40);
+    if (radius <= 0 || radius > 10000) throw new Error('`radius` must be more than 0 and at most 10000.');
+    const x = number(args, 'x');
+    const y = number(args, 'y');
+    const dx = number(args, 'dx', 0);
+    const dy = number(args, 'dy', 0);
+    if (!dx && !dy) throw new Error('Say how far to push: `dx` and `dy`.');
+    if (!editor.pushLines([x, y], [dx, dy], radius)) return 'No lines are within reach of that point, so nothing moved.';
+    return `Pushed the lines within ${radius} of (${x}, ${y}) by (${dx}, ${dy}); the lines bend most at the middle and not at all at the edge. Shapes that were rectangles or ellipses are paths now.`;
+  }
   if (op === 'set_canvas') {
     const w = number(args, 'width', scene.width);
     const h = number(args, 'height', scene.height);
@@ -157,6 +172,14 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
   if (op === 'fit_canvas') {
     editor.fitPage(Math.max(0, number(args, 'margin', 0)));
     return 'Fitted the canvas to the shapes.';
+  }
+  if (op === 'new_layer') {
+    editor.newLayer(typeof args.name === 'string' ? args.name : undefined);
+    return 'Added a layer on top; shapes you add now go on it.';
+  }
+  if (op === 'new_group' && args.shapes === undefined) {
+    editor.newGroup(typeof args.name === 'string' ? args.name : undefined);
+    return 'Added an empty group.';
   }
   if (op === 'add_guide') {
     const axis = args.axis === 'vertical' ? 'v' : args.axis === 'horizontal' ? 'h' : null;
@@ -249,6 +272,6 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
         await editor.boolean(op as BooleanOp);
         return `Combined ${these} (${op}).`;
       }
-      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, set_canvas, fit_canvas, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
+      throw new Error(`\`op\` must be one of add_rect, add_ellipse, add_line, add_path, add_text, delete, duplicate, group, ungroup, order, move, scale, rotate, style, stroke_style, fill_type, make_clip, release_clip, make_mask, release_mask, set_canvas, fit_canvas, new_layer, new_group, add_guide, clear_guides, ${BOOLEANS.join(', ')}.`);
   }
 }

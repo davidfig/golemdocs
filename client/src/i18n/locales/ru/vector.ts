@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Сплошной цвет',
   'vector.fillType.linear': 'Линейный градиент',
   'vector.fillType.radial': 'Радиальный градиент',
+  'vector.gradientHint': 'Перетаскивайте точки на фигуре, чтобы сдвинуть градиент. Дважды щёлкните линию, чтобы добавить опорную точку; щёлкните точку и выберите цвет.',
   'vector.unite': 'Объединить',
   'vector.intersect': 'Пересечение',
   'vector.subtract': 'Вычесть передние фигуры',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'Размер должен быть от {min} до {max} пикселей.',
   'vector.canvas.nothing': 'На холсте нет ничего, по чему можно подогнать размер.',
   'vector.pencil': 'Карандаш',
+  'vector.nudge': 'Сдвиг',
+  'vector.newLayer': 'Новый слой',
+  'vector.newGroup': 'Новая группа',
+  'vector.layerDefault': 'Слой {number}',
 };

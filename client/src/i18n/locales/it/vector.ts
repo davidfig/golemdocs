@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Tinta unita',
   'vector.fillType.linear': 'Sfumatura lineare',
   'vector.fillType.radial': 'Sfumatura radiale',
+  'vector.gradientHint': 'Trascina i punti sulla forma per spostare il gradiente. Fai doppio clic sulla linea per aggiungere un punto; fai clic su un punto, poi scegli un colore.',
   'vector.unite': 'Unisci',
   'vector.intersect': 'Interseca',
   'vector.subtract': 'Sottrai forme frontali',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'La dimensione deve essere da {min} a {max} pixel.',
   'vector.canvas.nothing': 'Non c’è nulla sul canvas a cui adattarsi.',
   'vector.pencil': 'Matita',
+  'vector.nudge': 'Spingi',
+  'vector.newLayer': 'Nuovo livello',
+  'vector.newGroup': 'Nuovo gruppo',
+  'vector.layerDefault': 'Livello {number}',
 };

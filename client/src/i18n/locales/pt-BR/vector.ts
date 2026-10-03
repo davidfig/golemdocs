@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Cor sólida',
   'vector.fillType.linear': 'Gradiente linear',
   'vector.fillType.radial': 'Gradiente radial',
+  'vector.gradientHint': 'Arraste os pontos na forma para mover o gradiente. Clique duas vezes na linha para adicionar uma parada; clique em uma parada e escolha uma cor.',
   'vector.unite': 'Unir',
   'vector.intersect': 'Interseção',
   'vector.subtract': 'Subtrair formas da frente',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'O tamanho deve ser de {min} a {max} pixels.',
   'vector.canvas.nothing': 'Não há nada na tela para ajustar.',
   'vector.pencil': 'Lápis',
+  'vector.nudge': 'Empurrar',
+  'vector.newLayer': 'Nova camada',
+  'vector.newGroup': 'Novo grupo',
+  'vector.layerDefault': 'Camada {number}',
 };

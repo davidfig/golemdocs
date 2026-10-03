@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Couleur unie',
   'vector.fillType.linear': 'Dégradé linéaire',
   'vector.fillType.radial': 'Dégradé radial',
+  'vector.gradientHint': 'Faites glisser les points sur la forme pour déplacer le dégradé. Double-cliquez sur la ligne pour ajouter un point d’arrêt ; cliquez sur un point, puis choisissez une couleur.',
   'vector.unite': 'Réunir',
   'vector.intersect': 'Intersection',
   'vector.subtract': 'Soustraire les formes de devant',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'La taille doit être comprise entre {min} et {max} pixels.',
   'vector.canvas.nothing': 'Il n’y a rien sur le plan de travail à quoi s’ajuster.',
   'vector.pencil': 'Crayon',
+  'vector.nudge': 'Pousser',
+  'vector.newLayer': 'Nouveau calque',
+  'vector.newGroup': 'Nouveau groupe',
+  'vector.layerDefault': 'Calque {number}',
 };

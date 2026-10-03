@@ -360,6 +360,8 @@ export interface ColorSpec {
   palette: 'full' | 'highlight';
   /** Colors the open document already uses, shown under the palette. */
   documentColors?(state: ChromeState): string[];
+  /** A section shown above the palette (the fill's solid or gradient choice); `close` shuts the popup. */
+  header?(state: ChromeState, close: () => void): HTMLElement | null;
   action(color: string | null): Action;
 }
 
@@ -386,6 +388,8 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
   arrow.addEventListener('click', () => {
     if (popupOpenFor(el)) return closePopup();
     const panel = h('div', { class: 'wm-palette', attrs: { role: 'dialog', 'aria-label': spec.label } });
+    const header = spec.header?.(registry.state(), closePopup);
+    if (header) panel.append(header);
     const none = h('button', { class: 'wm-palette-wide', attrs: { type: 'button' } }, h('span', { class: 'wm-chip', attrs: { style: `background:${spec.palette === 'full' ? '#000' : 'transparent'}` } }), spec.noneLabel);
     none.addEventListener('click', () => apply(null));
     panel.append(none);

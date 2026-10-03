@@ -406,7 +406,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: 'edit_drawing',
     description:
-      'When the document is a vector drawing (SVG), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dryInk, frayedInk, charcoal, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, add_guide (axis: vertical or horizontal; position: where; shapes snap to it), clear_guides, set_canvas (the page\'s width and height in pixels; shapes_follow: true to scale the shapes with it; background: a color or "none") and fit_canvas (the page shrinks or grows to the shapes, with a margin). These need no shapes.',
+      'When the document is a vector drawing (SVG), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), nudge_lines (x, y: where the round brush is; dx, dy: how far it pushes the lines under it; radius, default 40; bends lines near the brush and leaves the rest, like the Nudge tool; needs no shapes), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dryInk, frayedInk, charcoal, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, new_layer (name: optional; adds a layer on top, which new shapes then go on), new_group (name: optional; an empty group), add_guide (axis: vertical or horizontal; position: where; shapes snap to it), clear_guides, set_canvas (the page\'s width and height in pixels; shapes_follow: true to scale the shapes with it; background: a color or "none") and fit_canvas (the page shrinks or grows to the shapes, with a margin). These need no shapes.',
     parameters: {
       type: 'object',
       properties: {
@@ -419,6 +419,7 @@ export const TOOLS: ToolDefinition[] = [
         width: { type: 'number' },
         height: { type: 'number' },
         corner_radius: { type: 'number' },
+        radius: { type: 'number' },
         d: { type: 'string' },
         text: { type: 'string' },
         font_size: { type: 'number' },
@@ -435,6 +436,7 @@ export const TOOLS: ToolDefinition[] = [
         background: { type: 'string' },
         margin: { type: 'number' },
         position: { type: 'number' },
+        name: { type: 'string' },
         to: { type: 'string', enum: ['front', 'forward', 'backward', 'back'] },
         value: { type: 'string' },
         type: { type: 'string', enum: ['solid', 'linear', 'radial'] },

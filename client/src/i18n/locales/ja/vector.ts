@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': '単色',
   'vector.fillType.linear': '線形グラデーション',
   'vector.fillType.radial': '円形グラデーション',
+  'vector.gradientHint': '図形上の点をドラッグするとグラデーションが動きます。線をダブルクリックすると色の位置を追加できます。色の位置をクリックしてから色を選びます。',
   'vector.unite': '合体',
   'vector.intersect': '交差',
   'vector.subtract': '前面オブジェクトで型抜き',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'サイズは {min} から {max} ピクセルにしてください。',
   'vector.canvas.nothing': '合わせる対象がキャンバスにありません。',
   'vector.pencil': '鉛筆',
+  'vector.nudge': 'ずらす',
+  'vector.newLayer': '新規レイヤー',
+  'vector.newGroup': '新規グループ',
+  'vector.layerDefault': 'レイヤー {number}',
 };

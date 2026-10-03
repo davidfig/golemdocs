@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Volltonfarbe',
   'vector.fillType.linear': 'Linearer Verlauf',
   'vector.fillType.radial': 'Radialer Verlauf',
+  'vector.gradientHint': 'Ziehen Sie die Punkte auf der Form, um den Verlauf zu verschieben. Doppelklicken Sie auf die Linie, um einen Farbstopp hinzuzufügen; klicken Sie auf einen Stopp und wählen Sie eine Farbe.',
   'vector.unite': 'Vereinen',
   'vector.intersect': 'Schnittmenge',
   'vector.subtract': 'Vordere Formen abziehen',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'Die Größe muss zwischen {min} und {max} Pixel liegen.',
   'vector.canvas.nothing': 'Auf der Zeichenfläche ist nichts, woran sie angepasst werden kann.',
   'vector.pencil': 'Bleistift',
+  'vector.nudge': 'Verschieben',
+  'vector.newLayer': 'Neue Ebene',
+  'vector.newGroup': 'Neue Gruppe',
+  'vector.layerDefault': 'Ebene {number}',
 };

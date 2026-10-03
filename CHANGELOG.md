@@ -14,9 +14,12 @@
 - In the vector editor, Ctrl or Cmd plus a click picks a shape inside a group, double-clicking a group goes into it so that clicks and rubber bands pick its children (Escape comes back out), and the layers list can pick anything.
 - In the vector editor, Ctrl+Alt+click picks the shape underneath the one picked, and again for the next one down, round to the top. In the layers list, hidden shapes show a red eye and locked ones an orange padlock, so they stand out.
 - The vector editor has a Pencil for free drawing: draw with the pointer and it turns the stroke into a smooth path with just a few points, keeps corners sharp, and closes a loop you finish where you began.
+- The vector editor has a Nudge tool: drag it across a drawing and the lines under the round brush bend and move with the pointer, the most at the middle and none at the edge; locked and hidden shapes stay put.
+- The layers list has New Layer and New Group buttons (also in the Drawing menu and toolbar). A layer is a top-level group that Inkscape also reads as a layer, and new shapes are drawn onto the layer you picked or made last; New Group adds an empty group, or groups what is picked.
 - The import progress card shows an estimate of the time left.
 
 ### Fixed
+- Color pop-ups (font color, highlight, fill, outline) no longer have a wide empty strip beside the swatches, and the vector Fill pop-up now lets you pick solid, linear or radial and explains how to edit a gradient.
 - Importing a ZIP no longer starts with the progress bar a quarter full; it fills steadily and never moves back.
 
 ## 0.9.0 - 2026-10-03

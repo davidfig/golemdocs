@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': '단색',
   'vector.fillType.linear': '선형 그라디언트',
   'vector.fillType.radial': '원형 그라디언트',
+  'vector.gradientHint': '도형의 점을 끌어 그라데이션을 옮깁니다. 선을 두 번 클릭하면 색 정지점을 추가합니다. 정지점을 클릭한 다음 색을 고르세요.',
   'vector.unite': '합치기',
   'vector.intersect': '교차',
   'vector.subtract': '앞쪽 도형으로 빼기',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': '크기는 {min}에서 {max} 픽셀 사이여야 합니다.',
   'vector.canvas.nothing': '맞출 대상이 캔버스에 없습니다.',
   'vector.pencil': '연필',
+  'vector.nudge': '밀기',
+  'vector.newLayer': '새 레이어',
+  'vector.newGroup': '새 그룹',
+  'vector.layerDefault': '레이어 {number}',
 };

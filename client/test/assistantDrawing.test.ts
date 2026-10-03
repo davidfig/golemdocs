@@ -41,9 +41,12 @@ function recorder() {
     fitPage: (margin) => void calls.push(['fitPage', margin]),
     addGuide: (axis, position) => void calls.push(['addGuide', axis, position]),
     clearGuides: record('clearGuides'),
+    newLayer: (name) => void calls.push(['newLayer', name]),
+    newGroup: (name) => void calls.push(['newGroup', name]),
     makeMask: record('makeMask'),
     releaseMask: record('releaseMask'),
     addShape: record('addShape'),
+    pushLines: (at, by, radius) => (calls.push(['pushLines', at, by, radius]), true),
   };
   return { editor, calls };
 }
@@ -140,4 +143,12 @@ test('the model is told about both tools, with the stroke styles the editor offe
   const edit = TOOLS.find((t) => t.name === 'edit_drawing');
   assert.ok(read && edit);
   for (const style of ['taperBoth', 'calligraphic', 'dryBrush', 'confetti', 'arrowBoth', 'diamondEnd', 'dash:dashDot']) assert.match(edit!.description, new RegExp(style));
+});
+
+test('nudge_lines pushes the lines under the brush, like the Nudge tool', async () => {
+  const { editor, calls } = recorder();
+  assert.match(await editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10, dx: 0, dy: 8 }), /Pushed the lines/);
+  assert.deepEqual(calls[0], ['pushLines', [50, 10], [0, 8], 40]);
+  await assert.rejects(editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10 }), /how far/);
+  await assert.rejects(editDrawing(editor, { op: 'nudge_lines', x: 50, y: 10, dx: 1, radius: 0 }), /radius/);
 });

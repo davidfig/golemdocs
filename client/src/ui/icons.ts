@@ -220,6 +220,10 @@ export const ICONS: Record<string, string> = {
   // The pen: a nib over a curve with anchor points, as the Bézier pen of drawing programs is shown.
   penTool: svg(`<path d='M3.5 19.500C6 11 10 8 14 12.500' fill='none' stroke-width='1.5'/><rect x='2' y='18' width='3.600' height='3.600' rx='.6' fill='${PAPER}' stroke-width='1.2'/><path d='M13.500 3.500l7 7-3.300 1.600-5.300-5.300z' fill='${YELLOW}'/><path d='M12 7.500l-.7 5.200 5.200-1.700' fill='${BUTTER}'/><circle cx='12.600' cy='12.600' r='1.200' fill='${PAPER}' stroke-width='1.100'/>`),
   pencil: svg(`<path d='M4 19.5l1.2-4.2L16.6 4a2.1 2.1 0 0 1 3 3L8.2 18.3z' fill='${PINK}'/><path d='M14.8 5.8l3.4 3.4M4 19.5l4.2-1.2-3-3z' fill='${MIST}'/><path d='M3.5 21.5c2-1.5 3 .5 5-.5s3-1 4.500-.2' fill='none' stroke-width='1.3'/>`),
+  // The nudge: a fingertip from below pushes a line up into a bump.
+  nudge: svg(`<path d='M2 13h4.500c2.500 0 3.500-6 5.500-6s3 6 5.500 6H22' stroke='${BLUE}' stroke-width='2.200'/><rect x='6.500' y='14.500' width='11' height='7.500' rx='2.500' fill='${BUTTER}'/><path d='M9.500 16V9.500a2.500 2.500 0 0 1 5 0V16z' fill='${BUTTER}'/><path d='M12 11.500v3' stroke-width='1'/>`),
+  newLayer: svg(`<path d='M12 3.500l9 4.500-9 4.500-9-4.500z' fill='${SKY}'/><path d='M3 12l9 4.500 9-4.500M3 16l9 4.500 9-4.500' fill='none'/><path d='M19 2.500v4M17 4.500h4' stroke='${GREEN}' stroke-width='2.200'/>`),
+  newGroup: svg(`<rect x='3.500' y='6' width='14' height='13' rx='1.500' stroke-dasharray='2.500 2.500' stroke-width='1.400'/><rect x='6.500' y='9' width='5' height='5' fill='${SKY}'/><path d='M19 2.500v4M17 4.500h4' stroke='${GREEN}' stroke-width='2.200'/>`),
   select: svg(`<path d="M6.5 3.5l11 7.2-5 1.2 2.6 5.6-2.4 1.1-2.6-5.6-3.6 3.6z" fill="${PAPER}"/>`),
   group: svg(`<rect x="3.5" y="3.5" width="17" height="17" rx="2" stroke-dasharray="2.5 2.5" stroke-width="1.4"/><rect x="7" y="7" width="6.5" height="6.5" fill="${SKY}"/><rect x="10.5" y="10.5" width="6.5" height="6.5" fill="${BLUE}"/>`),
   ungroup: svg(`<rect x="3.5" y="3.5" width="9" height="9" fill="${SKY}"/><rect x="11.5" y="11.5" width="9" height="9" fill="${BLUE}"/>`),

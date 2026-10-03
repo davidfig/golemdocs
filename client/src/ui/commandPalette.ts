@@ -86,7 +86,7 @@ export class CommandPalette {
 
     const input = h('input', { class: 'wm-palette-input', attrs: { type: 'text', placeholder: t('chrome.palette.search'), 'aria-label': t('chrome.palette.search'), autocomplete: 'off', spellcheck: 'false' } });
     const list = h('div', { class: 'wm-list wm-palette-list', attrs: { role: 'listbox' } });
-    const panel = h('div', { class: 'wm-palette', attrs: { role: 'dialog', 'aria-label': t('chrome.palette.label') } }, input, list);
+    const panel = h('div', { class: 'wm-command-palette', attrs: { role: 'dialog', 'aria-label': t('chrome.palette.label') } }, input, list);
 
     let rows: { el: HTMLElement; command: Command }[] = [];
     let active = -1;

@@ -817,6 +817,35 @@
   border: 1px solid var(--wm-muted);
 }
 
+.wm-fill-types {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.wm-fill-type {
+  flex: 1;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.wm-fill-type:hover,
+.wm-fill-type.current {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-fill-hint {
+  max-width: 160px;
+  padding-bottom: 4px;
+  white-space: normal;
+}
+
 .wm-palette-label {
   padding: 2px 3px 0;
   color: var(--wm-muted);
@@ -2184,7 +2213,7 @@
   height: 16px;
 }
 
-.wm-palette {
+.wm-command-palette {
   width: 340px;
   max-width: calc(100vw - 8px);
 }

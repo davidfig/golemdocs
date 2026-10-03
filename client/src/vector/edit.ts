@@ -329,3 +329,30 @@ export function moveNodeTo(scene: Scene, from: NodePath, parent: NodePath, index
   target.splice(Math.max(0, Math.min(target.length, place)), 0, node);
   return pathOf(scene, node);
 }
+
+/** A layer is a top-level group marked as one, the way Inkscape marks its layers (so they open there as layers too). */
+export const LAYER_ATTR = 'inkscape:groupmode';
+export const LAYER_LABEL_ATTR = 'inkscape:label';
+const INKSCAPE_NAMESPACE = 'http://www.inkscape.org/namespaces/inkscape';
+
+export const isLayer = (node: SceneNode | undefined): boolean => node?.kind === 'group' && node.attrs[LAYER_ATTR] === 'layer';
+
+/** Adds an empty group on top inside `parent` (the drawing when empty), named `name`; as a layer when `layer` (then it goes at the top of the drawing). Returns its path. */
+export function addEmptyGroup(scene: Scene, parent: NodePath, name: string, layer: boolean): NodePath {
+  const group: GroupNode = { kind: 'group', tag: 'g', children: [], style: {}, attrs: {} };
+  if (name) group.attrs[NAME_ATTR] = name;
+  if (layer) {
+    group.attrs[LAYER_ATTR] = 'layer';
+    if (name) group.attrs[LAYER_LABEL_ATTR] = name;
+    // The prefix has to be declared for the file to be well formed.
+    scene.attrs['xmlns:inkscape'] ??= INKSCAPE_NAMESPACE;
+    return addNode(scene, group, []);
+  }
+  return addNode(scene, group, parent);
+}
+
+/** "Layer 1", "Layer 2"...: the first not used by a layer yet. */
+export function nextLayerName(scene: Scene, label: (n: number) => string): string {
+  const used = new Set(scene.children.filter(isLayer).map((n) => n.attrs[NAME_ATTR]));
+  for (let n = 1; ; n++) if (!used.has(label(n))) return label(n);
+}

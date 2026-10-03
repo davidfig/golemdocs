@@ -93,6 +93,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         case 'line':
         case 'pen':
         case 'pencil':
+        case 'nudge':
         case 'text':
           return editor.setTool(op);
         case 'delete':
@@ -119,6 +120,10 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
           return editor.makeClip();
         case 'releaseClip':
           return editor.releaseClip();
+        case 'newLayer':
+          return editor.newLayer();
+        case 'newGroup':
+          return editor.newGroup();
         case 'canvasSize':
           return openCanvas();
         case 'guideV':

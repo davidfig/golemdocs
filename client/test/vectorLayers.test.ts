@@ -62,3 +62,25 @@ test('a node is moved to a place in its group, or into another group', () => {
   assert.equal(moveNodeTo(s, [1], [1], 0), null);
   assert.equal(moveNodeTo(s, [9], [], 0), null);
 });
+
+test('layers are top-level groups marked the way Inkscape marks them, named in turn, and written with their namespace', async () => {
+  const { addEmptyGroup, isLayer, nextLayerName } = await import('../src/vector/edit.ts');
+  const s = scene();
+  const label = (n: number) => `Layer ${n}`;
+  assert.equal(nextLayerName(s, label), 'Layer 1');
+  const first = addEmptyGroup(s, [], nextLayerName(s, label), true);
+  assert.deepEqual(first, [3]);
+  assert.ok(isLayer(nodeAt(s, first)));
+  assert.equal(nextLayerName(s, label), 'Layer 2');
+  // A layer is always at the top of the drawing, even when asked for inside a group.
+  assert.deepEqual(addEmptyGroup(s, [2], 'Inside', true), [4]);
+  // A plain group goes where it is asked, and is not a layer.
+  const plain = addEmptyGroup(s, [2], 'Box', false);
+  assert.deepEqual(plain, [2, 2]);
+  assert.ok(!isLayer(nodeAt(s, plain)));
+  const text = writeSvg(s);
+  assert.match(text, /xmlns:inkscape="http:\/\/www\.inkscape\.org\/namespaces\/inkscape"/);
+  assert.match(text, /<g [^>]*inkscape:groupmode="layer"[^>]*inkscape:label="Layer 1"/);
+  // Read back, it is still a layer.
+  assert.ok(isLayer(readSvg(text).children[3]));
+});

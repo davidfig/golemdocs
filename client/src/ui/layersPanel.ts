@@ -7,7 +7,7 @@
 import { t } from '../i18n/index.ts';
 import type { MessageKey } from '../i18n/index.ts';
 import type { SceneNode } from '../vector/model.ts';
-import { NAME_ATTR, isHidden, isLocked } from '../vector/edit.ts';
+import { NAME_ATTR, isHidden, isLayer, isLocked } from '../vector/edit.ts';
 import type { NodePath } from '../vector/edit.ts';
 import { CLOSE_ICON, h, iconButton } from './dom.ts';
 import { showPopupMenu } from './popupMenu.ts';
@@ -19,6 +19,9 @@ const EYE = 'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6zM6 4.5a1.5 1.5 0 1 
 const EYE_CLOSED = 'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6zM2 10L10 2';
 const LOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 4 0v1.5';
 const UNLOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 3.9-.6';
+const NEW_LAYER = 'M2 4.5l4-2 4 2-4 2zM2 7l4 2 4-2M2 9l4 2 4-2';
+const NEW_GROUP = 'M1.5 3.5h9v7h-9zM4 6h4M6 4.200v3.600';
+const TRASH = 'M2.500 3.500h7M4.500 3.500v-1h3v1M3.500 3.500l.4 6.500h4.200l.4-6.500';
 const CHEVRON = 'M4 2.5l4 3.5-4 3.5';
 
 /** The name a shape of a kind has until it is given one. */
@@ -61,7 +64,17 @@ export class LayersPanel {
     this.el.hidden = true;
     const close = iconButton('wm-pages-close', CLOSE_ICON, t('vector.layersClose'));
     close.addEventListener('click', () => host.close());
-    this.el.append(h('header', { class: 'wm-pages-bar' }, h('h2', { text: t('vector.layers') }), close), this.list);
+    // New layer, new group, delete: the buttons at the bottom of the list.
+    const tool = (path: string, label: string, run: () => void): HTMLButtonElement => {
+      const button = iconButton('wm-layers-tool', path, label);
+      button.addEventListener('click', () => {
+        run();
+        host.focusEditor();
+      });
+      return button;
+    };
+    const bar = h('footer', { class: 'wm-layers-bar' }, tool(NEW_LAYER, t('vector.newLayer'), () => editor.newLayer()), tool(NEW_GROUP, t('vector.newGroup'), () => editor.newGroup()), tool(TRASH, t('vector.delete'), () => editor.delete()));
+    this.el.append(h('header', { class: 'wm-pages-bar' }, h('h2', { text: t('vector.layers') }), close), this.list, bar);
     this.el.addEventListener('keydown', (e) => e.stopPropagation());
     parent.append(this.el);
   }
@@ -134,6 +147,8 @@ export class LayersPanel {
       });
       expand.append(arrow);
     }
+    row.classList.toggle('layer', isLayer(node));
+    row.classList.toggle('active-layer', isLayer(node) && this.editor.currentLayer?.[0] === path[0] && path.length === 1);
     const name = h('span', { class: 'wm-layers-name', text: nameOf(node) });
     const eye = iconButton('wm-layers-eye', isHidden(node) ? EYE_CLOSED : EYE, t(isHidden(node) ? 'vector.layerShow' : 'vector.layerHide'));
     const lock = iconButton('wm-layers-lock', isLocked(node) ? LOCK : UNLOCK, t(isLocked(node) ? 'vector.layerUnlock' : 'vector.layerLock'));

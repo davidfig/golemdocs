@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': '純色',
   'vector.fillType.linear': '線性漸層',
   'vector.fillType.radial': '放射狀漸層',
+  'vector.gradientHint': '拖曳形狀上的點來移動漸層。按兩下線條可新增色標；按一下色標後再選擇顏色。',
   'vector.unite': '合併',
   'vector.intersect': '交集',
   'vector.subtract': '減去前面的形狀',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': '大小必須介於 {min} 到 {max} 像素之間。',
   'vector.canvas.nothing': '畫布上沒有可供符合的內容。',
   'vector.pencil': '鉛筆',
+  'vector.nudge': '推移',
+  'vector.newLayer': '新增圖層',
+  'vector.newGroup': '新增群組',
+  'vector.layerDefault': '圖層 {number}',
 };

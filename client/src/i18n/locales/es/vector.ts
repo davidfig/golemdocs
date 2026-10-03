@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Color sólido',
   'vector.fillType.linear': 'Degradado lineal',
   'vector.fillType.radial': 'Degradado radial',
+  'vector.gradientHint': 'Arrastra los puntos de la forma para mover el degradado. Haz doble clic en la línea para añadir una parada; haz clic en una parada y elige un color.',
   'vector.unite': 'Unir',
   'vector.intersect': 'Intersecar',
   'vector.subtract': 'Restar formas frontales',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'El tamaño debe estar entre {min} y {max} píxeles.',
   'vector.canvas.nothing': 'No hay nada en el lienzo a lo que ajustarse.',
   'vector.pencil': 'Lápiz',
+  'vector.nudge': 'Empujar',
+  'vector.newLayer': 'Nueva capa',
+  'vector.newGroup': 'Nuevo grupo',
+  'vector.layerDefault': 'Capa {number}',
 };

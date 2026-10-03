@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': 'Solid Color',
   'vector.fillType.linear': 'Linear Gradient',
   'vector.fillType.radial': 'Radial Gradient',
+  'vector.gradientHint': 'Drag the points on the shape to move the gradient. Double-click the line to add a stop; click a stop, then pick a color.',
   'vector.unite': 'Unite',
   'vector.intersect': 'Intersect',
   'vector.subtract': 'Subtract Front Shapes',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': 'The size must be from {min} to {max} pixels.',
   'vector.canvas.nothing': 'There is nothing on the canvas to fit to.',
   'vector.pencil': 'Pencil',
+  'vector.nudge': 'Nudge',
+  'vector.newLayer': 'New Layer',
+  'vector.newGroup': 'New Group',
+  'vector.layerDefault': 'Layer {number}',
 } as const;

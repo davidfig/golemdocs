@@ -152,6 +152,44 @@ test.describe('editing a drawing', () => {
   });
 });
 
+test.describe('layers', () => {
+  test('New Layer adds a layer on top, and what is drawn next goes on it', async ({ app }) => {
+    await openDrawing(app);
+    const tree = app.page.getByRole('tree', { name: 'Layers' });
+    await app.page.locator('.wm-layers-bar').getByRole('button', { name: 'New Layer' }).click();
+    await expect(tree.getByRole('treeitem')).toHaveCount(3);
+    await expect(tree.getByRole('treeitem').first()).toContainText('Layer 1');
+    await app.toolbarButton(/^Rectangle$/).click();
+    const from = await onPage(app, 0.1, 0.6);
+    const to = await onPage(app, 0.4, 0.95);
+    await app.page.mouse.move(from.x, from.y);
+    await app.page.mouse.down();
+    await app.page.mouse.move(to.x, to.y, { steps: 4 });
+    await app.page.mouse.up();
+    // The rectangle is in the layer: one more row, and the file has it inside the layer's group.
+    await expect(tree.getByRole('treeitem')).toHaveCount(4);
+    await expect.poll(async () => /<g [^>]*inkscape:groupmode="layer"[^>]*>\s*<rect/.test(await currentSvg(app)), { timeout: 15_000 }).toBe(true);
+  });
+
+  test('New Group adds an empty group when nothing is picked, and groups what is picked otherwise', async ({ app }) => {
+    await openDrawing(app);
+    const rows = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    const newGroup = app.page.locator('.wm-layers-bar').getByRole('button', { name: 'New Group' });
+    await newGroup.click();
+    await expect(rows).toHaveCount(3);
+    // Pick the rectangle and the circle: the same button groups them.
+    const rect = await onPage(app, 0.25, 0.4);
+    const circle = await onPage(app, 0.75, 0.5);
+    await app.page.mouse.click(rect.x, rect.y);
+    await app.page.keyboard.down('Shift');
+    await app.page.mouse.click(circle.x, circle.y);
+    await app.page.keyboard.up('Shift');
+    await newGroup.click();
+    // The two shapes are in a group now, beside the empty one: three groups' worth of rows, the shapes nested.
+    await expect.poll(async () => (await currentSvg(app)).match(/<g[ >]/g)?.length ?? 0, { timeout: 15_000 }).toBe(2);
+  });
+});
+
 test.describe('free drawing', () => {
   test('the Pencil draws a smooth path through the points the pointer went through, and stays picked for the next', async ({ app }) => {
     await openDrawing(app);

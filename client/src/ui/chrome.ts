@@ -467,7 +467,7 @@ export class Chrome {
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
-    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['text', 'text']] as const) {
+    for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, checked: (s) => s.vector.tool === tool }));
     }
     const vectorOps = { delete: 'trash', duplicate: 'copy', group: 'group', ungroup: 'ungroup', front: 'toFront', forward: 'forward', backward: 'backward', back: 'toBack' } as const;
@@ -482,6 +482,8 @@ export class Chrome {
     r.add(a('vector.releaseClip', t('vector.releaseClip'), { kind: 'vector', op: 'releaseClip' }, { enabled: (s) => s.vector.clipped }));
     r.add(a('vector.makeMask', t('vector.makeMask'), { kind: 'vector', op: 'makeMask' }, { enabled: (s) => s.vector.multiple }));
     r.add(a('vector.releaseMask', t('vector.releaseMask'), { kind: 'vector', op: 'releaseMask' }, { enabled: (s) => s.vector.masked }));
+    r.add(a('vector.newLayer', t('vector.newLayer'), { kind: 'vector', op: 'newLayer' }, { icon: 'newLayer' }));
+    r.add(a('vector.newGroup', t('vector.newGroup'), { kind: 'vector', op: 'newGroup' }, { icon: 'newGroup' }));
     r.add(a('vector.canvasSize', t('vector.canvasSize'), { kind: 'vector', op: 'canvasSize' }));
     r.add(a('vector.guideV', t('vector.guideV'), { kind: 'vector', op: 'guideV' }));
     r.add(a('vector.guideH', t('vector.guideH'), { kind: 'vector', op: 'guideH' }));
@@ -827,7 +829,11 @@ export class Chrome {
           cmd('vector.line'),
           cmd('vector.pen'),
           cmd('vector.pencil'),
+          cmd('vector.nudge'),
           cmd('vector.text'),
+          sep,
+          cmd('vector.newLayer'),
+          cmd('vector.newGroup'),
           sep,
           cmd('vector.group'),
           cmd('vector.ungroup'),
@@ -1013,7 +1019,7 @@ export class Chrome {
     );
     define('control.vectorFill', t('vector.fill'), t('vector.toolbar'), 'fill', () =>
       gated(
-        colorButton({ label: t('vector.fill'), icon: 'fill', noneLabel: t('vector.noFill'), initial: '#5B8DEF', palette: 'full', action: (color) => ({ kind: 'vectorStyle', fill: color }) }, r),
+        colorButton({ label: t('vector.fill'), icon: 'fill', noneLabel: t('vector.noFill'), initial: '#5B8DEF', palette: 'full', header: (state, close) => this.fillTypeChoices(state.vector.fillType, close), action: (color) => ({ kind: 'vectorStyle', fill: color }) }, r),
         () => profile().vectorTools,
       ),
     );
@@ -1027,6 +1033,24 @@ export class Chrome {
     define('control.vectorStrokeStyle', t('vector.strokeStyle'), t('vector.toolbar'), 'line', () => gated(this.vectorStrokeStyleBox(), () => profile().vectorTools));
     define('control.vectorStrokeWidth', t('vector.strokeWidth'), t('vector.toolbar'), 'line', () => gated(this.vectorWidthBox(), () => profile().vectorTools));
     define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
+  }
+
+  /** The fill popup's choice of solid colour, linear gradient or radial gradient, with how to edit a gradient. */
+  private fillTypeChoices(current: 'solid' | 'linear' | 'radial', close: () => void): HTMLElement {
+    const r = this.registry;
+    const row = h('div', { class: 'wm-fill-types' });
+    for (const type of ['solid', 'linear', 'radial'] as const) {
+      const button = h('button', { class: type === current ? 'wm-fill-type current' : 'wm-fill-type', text: t(`vector.fillType.${type}`), attrs: { type: 'button', 'aria-pressed': String(type === current) } });
+      button.addEventListener('click', () => {
+        close();
+        r.perform({ kind: 'vectorStyle', fillType: type }, t('vector.fillType'));
+        r.focusEditor();
+      });
+      row.append(button);
+    }
+    const box = h('div', { class: 'wm-fill-gradient' }, row);
+    if (current !== 'solid') box.append(h('div', { class: 'wm-palette-label wm-fill-hint', text: t('vector.gradientHint') }));
+    return box;
   }
 
   /** Solid colour, or a linear or radial gradient. */

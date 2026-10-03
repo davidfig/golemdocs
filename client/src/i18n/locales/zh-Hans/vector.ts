@@ -65,6 +65,7 @@ export const vector = {
   'vector.fillType.solid': '纯色',
   'vector.fillType.linear': '线性渐变',
   'vector.fillType.radial': '径向渐变',
+  'vector.gradientHint': '拖动形状上的点来移动渐变。双击线条可添加色标；点击色标后再选择颜色。',
   'vector.unite': '合并',
   'vector.intersect': '相交',
   'vector.subtract': '减去前面的形状',
@@ -116,4 +117,8 @@ export const vector = {
   'vector.canvas.invalid': '大小必须在 {min} 到 {max} 像素之间。',
   'vector.canvas.nothing': '画布上没有可供适配的内容。',
   'vector.pencil': '铅笔',
+  'vector.nudge': '推移',
+  'vector.newLayer': '新建图层',
+  'vector.newGroup': '新建组',
+  'vector.layerDefault': '图层 {number}',
 };

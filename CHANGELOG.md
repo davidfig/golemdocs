@@ -3,7 +3,7 @@
 ## 0.9.1 - Unreleased
 
 ### Added
-- SVG and compressed SVG (.svgz) files open as vector drawings of their own kind, listed under Vector rather than Images in Convert To. Convert any document to SVG and its text stays text; convert a drawing to PDF and it stays vector; to PNG, JPEG, WebP or Word and it becomes a picture at full resolution.
+- SVG and compressed SVG (.svgz) files open as vector drawings of their own kind, staying sharp at any zoom, listed under Vector rather than Images in Convert To. Convert any document to SVG and its text stays text; convert a drawing to PDF and it stays vector; to PNG, JPEG, WebP or Word and it becomes a picture at full resolution.
 - The import progress card shows an estimate of the time left.
 
 ### Fixed

@@ -80,6 +80,8 @@ import { Footer } from './ui/footer.ts';
 import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
+import { VectorLayer } from './ui/vectorLayer.ts';
+import { svgText } from './formats/vectorDoc.ts';
 import { askDropChoice } from './ui/dropChoice.ts';
 import { LargeTextView } from './largeText/view.ts';
 import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
@@ -320,6 +322,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   cropLayer.cancel();
   largeView.close();
   drawLayer.cancel();
+  vectorLayer.show(null);
   // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
   current = {
@@ -391,6 +394,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
     done(count, times) {
       loaded = true;
+      if (isDrawing()) void showDrawing();
       documentReady();
       loadingScreen.hide();
       arrange();
@@ -2315,6 +2319,7 @@ function render(): void {
   updateFooter();
   cropLayer.position();
   drawLayer.position();
+  vectorLayer.position();
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
@@ -3245,6 +3250,21 @@ const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { ca
 const cropLayer = new CropLayer(document.getElementById('viewport')!, { camera, page: () => pages[0] });
 // Text files too big to be documents (see largeText/view.ts).
 const largeView = new LargeTextView(document.getElementById('viewport')!);
+// A vector drawing, painted at the view's zoom (see ui/vectorLayer.ts).
+const vectorLayer = new VectorLayer(document.getElementById('viewport')!, { camera, page: () => pages[0], changed: () => requestRender() });
+
+/** Shows the open drawing sharply: reads its SVG from the document and paints that. */
+async function showDrawing(): Promise<void> {
+  const doc = current;
+  try {
+    const { scene } = await svgText(await worker.convert(doc.kind as Format));
+    if (doc === current) vectorLayer.show(scene);
+  } catch {
+    // The page's own picture of the drawing stays.
+  }
+  requestRender();
+}
+
 // Drawing on a picture (see ui/drawLayer.ts).
 const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });
 

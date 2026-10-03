@@ -9,6 +9,7 @@
 import { INDEX_VERSION, WordDocument, buildIndex, encodeIndex, paragraphSegments } from '@golemdocs/docx';
 import type { Env } from './cf.ts';
 import { HttpError } from './http.ts';
+import { storedDocx } from './stored.ts';
 import { indexKey } from './keys.ts';
 
 /** Documents bigger than this aren't indexed (the same limit as the assistant's search). */
@@ -42,7 +43,10 @@ export async function documentIndex(env: Env, ownerId: string, row: { id: string
   const bytes = new Uint8Array(await new Response(file.body).arrayBuffer());
   let encoded: Uint8Array;
   try {
-    encoded = await encodeIndex(buildIndex(paragraphSegments(await WordDocument.read(bytes))));
+    // The app keeps its own wrapper around the .docx: a wrapper with no document in it has no text here, and the page reads the document itself.
+    const docx = await storedDocx(bytes);
+    if (!docx) throw new Error('no flowing document to read');
+    encoded = await encodeIndex(buildIndex(paragraphSegments(await WordDocument.read(docx))));
   } catch (error) {
     console.error('indexing failed', error);
     throw new HttpError(422, 'the document could not be read');

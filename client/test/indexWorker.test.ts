@@ -4,7 +4,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseQuery, searchIndex } from '@golemdocs/docx';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { readDocument } from '../src/formats/convert.ts';
+import { writeWdoc } from '../src/formats/wdoc.ts';
 import { IndexWorker, type IndexWorkerHandle } from '../src/search/indexClient.ts';
 import { indexFromBytes } from '../src/search/indexJob.ts';
 import type { IndexReply, IndexRequest } from '../src/search/indexWorker.ts';
@@ -14,6 +17,18 @@ const docx = async (md: string): Promise<ArrayBuffer> => {
   const out = await (await readDocument('md', encoder.encode(md))).write();
   return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
 };
+
+test('a PDF that is not a document yet is indexed by the text of its pages', async () => {
+  const pdf = new Uint8Array(readFileSync(join(import.meta.dirname, '../../pdf/test/fixtures/chromium.pdf')));
+  const wdoc = await writeWdoc({ manifest: { version: 1, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: pdf, extensions: {} });
+  const index = await indexFromBytes(wdoc.buffer.slice(wdoc.byteOffset, wdoc.byteOffset + wdoc.byteLength) as ArrayBuffer);
+  assert.equal(index.n, 1);
+  assert.equal(searchIndex(index, parseQuery('quick fox'))?.paragraph, 0);
+  assert.equal(searchIndex(index, parseQuery('"lazy dog"'))?.paragraph, 0);
+  // A PDF nobody can read (a password) is an empty index, not an error that is tried again for ever.
+  const locked = await writeWdoc({ manifest: { version: 1, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: new Uint8Array(readFileSync(join(import.meta.dirname, '../../pdf/test/fixtures/aes-128.pdf'))), extensions: {} });
+  assert.equal((await indexFromBytes(locked.buffer.slice(locked.byteOffset, locked.byteOffset + locked.byteLength) as ArrayBuffer)).n, 0);
+});
 
 test('the job turns a document\'s bytes into its index, empty when there is no text', async () => {
   const index = await indexFromBytes(await docx('# Plan\n\nBuy cabinets #renovation'));

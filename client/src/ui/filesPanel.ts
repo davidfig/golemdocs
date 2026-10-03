@@ -11,6 +11,7 @@ import type { LibraryStore } from '../libraryStore.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { CLOSE_ICON, h, iconButton, isFileDrag, toggleClass } from './dom.ts';
+import { setDocumentDrag } from './documentDrag.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
@@ -424,8 +425,11 @@ export class FilesPanel {
     el.addEventListener('dragstart', (e) => {
       this.dragged = item;
       if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', item.kind === 'doc' ? item.entry.name : item.folder.name);
+        if (item.kind === 'doc') setDocumentDrag(e.dataTransfer, item.entry.key, item.entry.name);
+        else {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', item.folder.name);
+        }
       }
     });
     el.addEventListener('dragend', () => (this.dragged = null));

@@ -8,7 +8,7 @@ import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, renameCloudDocument, saveDocument, type CloudDocument } from './cloud.ts';
 import { zipDocuments } from './storage/archive.ts';
 import { pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
-import { importFiles, readZipFiles, type ZipContents } from './storage/zipImport.ts';
+import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { appTools } from './assistant/appTools.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
@@ -25,6 +25,7 @@ import {
   listLocalFolders,
   listSaved,
   markSynced,
+  saveFromCloud,
   saveSaved,
   saveThumbnail,
   deleteSearchIndexes,
@@ -90,19 +91,21 @@ import { showSplitDialog, showTableDialog } from './ui/tableDialog.ts';
 import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
 import { askDropChoice } from './ui/dropChoice.ts';
+import { askDuplicate } from './ui/duplicateDialog.ts';
 import { LargeTextView } from './largeText/view.ts';
 import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
+import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
-import { findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
+import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
 import { rewriteDocumentLinks } from './formats/docLinks.ts';
-import { afterChange, anyMoved, placedDocs, retargets, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
+import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
 import { encodeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { FORMATS, PICTURE_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
@@ -1212,27 +1215,63 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
       await library.reloadLocal();
       showSync();
     };
+    // A picture is kept as the PNG it opens as (GIF, BMP and SVG); null if it can't be read.
+    const kept = async (name: string, bytes: Uint8Array): Promise<{ name: string; bytes: Uint8Array } | null> => {
+      if (sourceFromFile(name, new ArrayBuffer(0))?.kind !== 'image') return { name, bytes };
+      try {
+        return await toPng(name, bytes);
+      } catch {
+        return null;
+      }
+    };
     progress.startTimer();
     const result = await importFiles(files, {
       folders,
-      documents: library.entries.map((e) => ({ name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
+      documents: library.entries.map((e) => ({ id: e.key, name: e.name, folderId: folderOf({ local: { folderId: e.folderId } }, folders) })),
       root: root !== null && folders.some((f) => f.id === root) ? root : null,
       signal: progress.signal,
       onProgress: (done, total) => progress.update(READ_SHARE + (done / total) * (100 - READ_SHARE), 100, t('app.importProgress', { done, total })),
       async makeFolder(name, parentId) {
         return createFolder(cloud, name, parentId);
       },
-      async save(name, bytes, folderId) {
-        let doc = { name, bytes };
-        if (sourceFromFile(name, new ArrayBuffer(0))?.kind === 'image') {
-          // GIF, BMP and SVG are kept as the PNG they open as.
-          try {
-            const picture = await toPng(name, bytes);
-            doc = { name: picture.name, bytes: picture.bytes };
-          } catch {
-            return false;
+      async same(id, name, bytes) {
+        const entry = library.entries.find((e) => e.key === id);
+        const doc = entry && (await kept(name, bytes));
+        if (!entry || !doc) return false;
+        try {
+          // The copy that is current: this browser's, else the account's. Sizes first, as they are free (the listing has them).
+          if (entry.local && !opensFromCloud(entry)) {
+            if (entry.local.size !== doc.bytes.byteLength) return false;
+            const saved = await getSaved(entry.local.id);
+            return !!saved && sameBytes(saved.bytes, doc.bytes);
           }
+          if (!entry.cloud || entry.cloud.size !== doc.bytes.byteLength) return false;
+          // Same size: one download (a read, no egress charge) is cheaper than overwriting and re-syncing everywhere.
+          return sameBytes(await downloadDocument(entry.cloud.id), doc.bytes);
+        } catch {
+          return false; // can't be read now (busy, offline): the user decides
         }
+      },
+      async replace(id, name, bytes) {
+        const entry = library.entries.find((e) => e.key === id);
+        const doc = entry && (await kept(name, bytes));
+        if (!entry || !doc) return false;
+        let saved: SavedInfo;
+        if (entry.local) saved = await saveSaved({ id: entry.local.id, name: entry.name, bytes: doc.bytes });
+        else if (entry.cloud) {
+          // A cloud-only document gets its browser copy linked to the cloud one, then changed, so it uploads as an edit.
+          const link = { id: entry.cloud.id, cloudId: entry.cloud.id, cloudUpdatedAt: entry.cloud.updatedAt, name: entry.name, owner, ...(entry.folderId !== null && { folderId: entry.folderId }) };
+          await saveFromCloud({ ...link, bytes: doc.bytes });
+          saved = await saveSaved({ id: entry.cloud.id, name: entry.name, bytes: doc.bytes });
+        } else return false;
+        if (owner) uploads.add(saved.id);
+        showSoFar();
+        return true;
+      },
+      ask: askDuplicate,
+      async save(name, bytes, folderId) {
+        const doc = await kept(name, bytes);
+        if (!doc) return false;
         const info = await saveSaved({ name: doc.name, bytes: doc.bytes, owner, ...(folderId !== null && { folderId }) });
         if (owner) {
           // Sent in batches (and left in the queue meanwhile, so whatever a batch doesn't take goes the ordinary way, offline too).
@@ -1254,7 +1293,9 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
       finished = true;
     }
     if (result.cancelled) return setStatus(t('app.importCancelled', { count: result.imported }));
-    setStatus(left ? t('app.importedZipSkipped', { count: result.imported, skipped: left }) : t('app.importedZip', { count: result.imported }));
+    if (left) setStatus(t('app.importedZipSkipped', { count: result.imported, skipped: left }));
+    else if (result.unchanged) setStatus(t('app.importedZipUnchanged', { count: result.imported, unchanged: result.unchanged }));
+    else setStatus(t('app.importedZip', { count: result.imported }));
   } catch (e) {
     if (progress.signal.aborted) return setStatus(t('app.importCancelled', { count: 0 }));
     reportError(t('app.importZipFailed', { message: (e as Error).message }));
@@ -2140,6 +2181,30 @@ function dropFile(drop: Dropped, folderId: string | null): void {
   if (drop.kind === 'import') return void importDropped(drop);
   if (isZipName(drop.file.name)) return void importZip(drop.file);
   openFile(drop.file);
+}
+
+/** Whether a link can be dropped on the document at this point of the screen: it is on a page, of a document that holds links. */
+function canLinkDropAt(x: number, y: number): boolean {
+  if (!loaded || current.builtIn || isPicture() || annotating || dashboard.visible || !FORMATS[current.kind].links) return false;
+  const rect = canvas.getBoundingClientRect();
+  return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom && pageAt(x - rect.left, y - rect.top) !== null;
+}
+
+/** A document dragged from the Files panel onto the open one: a link to it where it was dropped, named as `[[Note]]` would. */
+function linkDroppedDocument(key: string, x: number, y: number): void {
+  const entry = library.entries.find((e) => e.key === key);
+  if (!entry) return;
+  const documents = placedDocs(librarySnapshot());
+  const target = documents.find((d) => d.key === key);
+  const rect = canvas.getBoundingClientRect();
+  const hit = pageAt(x - rect.left, y - rect.top);
+  if (!target || !hit) return;
+  const title = shortestTitle(target, documents, linkPlaces().from ?? []);
+  send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
+  // Where Markdown shows at the caret, the paragraph is its source text: the link goes in written out, and is a link once the caret leaves.
+  if (current.kind === 'md' && livePreviewOn()) send({ kind: 'insertText', text: `[[${title}]]` });
+  else send({ kind: 'setLink', url: docAddress(title), text: title });
+  focusInput();
 }
 
 /** Puts a picture file in the document, at `at` (a point on the screen) or else the caret. */
@@ -3408,7 +3473,8 @@ function openSearchHit(hit: SearchHit, find: string): void {
   const shared = entry ? undefined : library.shared.find((d) => d.id === hit.key);
   const source = entry ? sourceOf(entry) : shared ? `shared:${shared.id}` : null;
   if (!source) return;
-  const jump = { source, ...(hit.paragraph !== undefined && { paragraph: hit.paragraph }), find };
+  // A PDF's "paragraphs" in the index are its pages: there is no caret to put in one.
+  const jump = { source, ...(hit.paragraph !== undefined && !/\.pdf$/i.test(hit.name) && { paragraph: hit.paragraph }), find };
   if (source === viewDocKey && loaded) {
     goToHit(jump);
     focusInput();
@@ -3736,9 +3802,18 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   focusEditor: focusInput,
 });
 
-window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  // A document from the Files panel is dropped as a link, where the document can hold one.
+  if (e.dataTransfer && isDocumentDrag(e.dataTransfer)) e.dataTransfer.dropEffect = canLinkDropAt(e.clientX, e.clientY) ? 'link' : 'none';
+});
 window.addEventListener('drop', (e) => {
   e.preventDefault();
+  if (isDocumentDrag(e.dataTransfer)) {
+    const key = droppedDocumentKey(e.dataTransfer);
+    if (key && canLinkDropAt(e.clientX, e.clientY)) linkDroppedDocument(key, e.clientX, e.clientY);
+    return;
+  }
   const drop = takeDropped(e.dataTransfer);
   if (drop) void dropped(drop, e.clientX, e.clientY);
 });

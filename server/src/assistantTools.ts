@@ -263,7 +263,7 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'other_documents',
-    description: "The person's other documents (own and shared; not the open one). list: newest first, each with an id (start, count). search: find which contain some words (every word in query must appear, anywhere in the document; names and headings count) or are tagged with a #tag (`#plan` also finds `#plan/q3`; use only `#plan` to list everything tagged), and returns ids with the best-matching paragraph; with no match it falls back to meaning. read: paragraphs of one, each with its number (document, start, count).",
+    description: "The person's other documents (own and shared; not the open one). list: newest first, each with an id (start, count). search: find which contain some words (every word in query must appear, anywhere in the document; names and headings count) or are tagged with a #tag (`#plan` also finds `#plan/q3`; use only `#plan` to list everything tagged); put a phrase in double quotes to require it in one paragraph, and `-word` or `-#tag` to leave out documents that have it, and returns ids with the best-matching paragraph; with no match it falls back to meaning. read: paragraphs of one, each with its number (document, start, count).",
     parameters: {
       type: 'object',
       properties: {

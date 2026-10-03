@@ -2,11 +2,38 @@
 
 import type { Page } from '@playwright/test';
 import { MOD, expect, test, type App } from './fixtures';
-import { importFile, text, waitForSaved } from './helpers';
+import { importFile, text } from './helpers';
 
 const panel = (page: Page) => page.locator('dialog.wm-search');
 const input = (page: Page) => panel(page).getByRole('textbox', { name: 'Search words or #tags in every document' });
 const rows = (page: Page) => panel(page).locator('.wm-search-row');
+
+/** Waits until a document called `name` is kept in this browser (read from its storage: the status bar's message can be replaced before it is seen). */
+async function waitForKept(page: Page, name: string): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (wanted) =>
+            new Promise<boolean>((resolve) => {
+              const open = indexedDB.open('word');
+              open.onerror = () => resolve(false);
+              open.onsuccess = () => {
+                try {
+                  const all = open.result.transaction('meta').objectStore('meta').getAll();
+                  all.onsuccess = () => resolve((all.result as { name: string }[]).some((d) => d.name === wanted));
+                  all.onerror = () => resolve(false);
+                } catch {
+                  resolve(false);
+                }
+              };
+            }),
+          name,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
 
 /** Saves a few Markdown notes in this browser. */
 async function saveNotes(app: App): Promise<void> {
@@ -17,7 +44,7 @@ async function saveNotes(app: App): Promise<void> {
     text('taxes.md', '# Taxes\n\nCollect receipts for the budget review.\n'),
   ]) {
     await importFile(app, file);
-    await waitForSaved(app.page, file.name);
+    await waitForKept(app.page, file.name);
   }
 }
 
@@ -78,4 +105,21 @@ test('the Documents screen finds documents by what is in them too', async ({ app
   // The name matches at once; what is inside a document a moment later.
   await expect(dashboard.locator('article.wm-card')).toHaveCount(1);
   await expect(dashboard.locator('article.wm-card .wm-card-name')).toHaveText('kitchen.md');
+});
+
+test('quotes find a phrase in one paragraph, and a minus leaves documents out', async ({ app, page }) => {
+  await saveNotes(app);
+  await app.menu('Edit', 'Search All Documents');
+  await input(page).fill('"new cabinets"');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toContainText('kitchen.md');
+  await input(page).fill('"cabinets new"'); // the words are there, not in that order
+  await expect(panel(page).getByText('No document matches.')).toBeVisible();
+  // "budget" is a word in taxes.md and a tag in kitchen.md; the minus drops the document that has the tag.
+  await input(page).fill('budget -#budget');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toContainText('taxes.md');
+  await input(page).fill('budget -receipts');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toContainText('kitchen.md');
 });

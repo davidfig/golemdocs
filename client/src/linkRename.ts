@@ -68,7 +68,6 @@ function titleFor(old: string, was: PlacedDoc, doc: PlacedDoc, documents: readon
   // `Plan.md` stays `Plan.md`, and `Plan` stays `Plan`.
   const whole = normalizeTitle(titleOfName(was.name)) !== normalizeTitle(oldName) && normalizeTitle(was.name) === normalizeTitle(oldName);
   const name = whole ? doc.name : titleOfName(doc.name);
-  const places = { folderNames: (d: PlacedDoc) => d.folders, from };
   if (exact) {
     if (old.startsWith('/')) return `/${[...doc.folders, name].join('/')}`;
     let common = 0;
@@ -76,8 +75,16 @@ function titleFor(old: string, was: PlacedDoc, doc: PlacedDoc, documents: readon
     const up = from.length - common;
     return [...(up ? Array<string>(up).fill('..') : ['.']), ...doc.folders.slice(common), name].join('/');
   }
-  // As short as it can be while still meaning this document, and at least as many folders as the link had.
-  for (let k = Math.min(oldFolders.length, doc.folders.length); k <= doc.folders.length; k++) {
+  return shortestTitle(doc, documents, from, oldFolders.length, name);
+}
+
+/**
+ * How to write a link to `doc` from a document in `from` so that it means this document: its name when that is enough, else with as few
+ * folders before it as will do (at least `folders`). `name` is the document's name as the link shows it (default: without its extension).
+ */
+export function shortestTitle(doc: PlacedDoc, documents: readonly PlacedDoc[], from: readonly string[], folders = 0, name = titleOfName(doc.name)): string {
+  const places = { folderNames: (d: PlacedDoc) => d.folders, from };
+  for (let k = Math.min(folders, doc.folders.length); k <= doc.folders.length; k++) {
     const candidate = [...doc.folders.slice(doc.folders.length - k), name].join('/');
     if (findByTitle(candidate, documents, places)?.key === doc.key) return candidate;
   }

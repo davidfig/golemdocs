@@ -10,6 +10,7 @@
 import { removeShare, type CloudDocument } from '../cloud.ts';
 import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
 import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, outermost, type Folder } from '../folders.ts';
+import { setDocumentDrag } from './documentDrag.ts';
 import { warmOnHover } from './warmOnHover.ts';
 import type { LibraryStore } from '../libraryStore.ts';
 import { forgetSharedInCatalogue, type LibraryEntry } from '../sync.ts';
@@ -643,8 +644,11 @@ export class Dashboard {
       this.dragged = item;
       el.classList.add('wm-dragging');
       if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', item.kind === 'doc' ? item.entry.name : item.folder.name);
+        if (item.kind === 'doc') setDocumentDrag(e.dataTransfer, item.entry.key, item.entry.name);
+        else {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', item.folder.name);
+        }
       }
     });
     el.addEventListener('dragend', () => {

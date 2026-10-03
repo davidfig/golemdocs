@@ -5,6 +5,12 @@ import { convertTo, importFile, text } from '../files/helpers';
 import { caretClient, docxPart, waitCaretSettled } from './helpers';
 
 test.describe('Markdown shortcuts as you type', () => {
+  // With Show Markdown at the Caret on (the default) a Markdown paragraph shows its source while the caret is in it, so
+  // typed shortcuts are left as typed; these tests are about the shortcuts, so that setting is off.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('word.livePreview', 'off'));
+  });
+
   test('headings, check boxes, marks and rules are made as they are typed', async ({ app }) => {
     await app.blank();
     await convertTo(app, 'Markdown (.md)', 'Markdown');

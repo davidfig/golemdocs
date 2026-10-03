@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { INDEX_VERSION, WordDocument, decodeIndex } from '@golemdocs/docx';
+import { INDEX_VERSION, WordDocument, decodeIndex, writeZip } from '@golemdocs/docx';
 import { DOCX, world, type World } from './harness.ts';
 
 let w: World;
@@ -105,4 +105,37 @@ test('deleting a document deletes its index too', async () => {
   assert.equal(idxKeys().length, 1);
   assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${doc.id}`)).status, 204);
   assert.equal(w.objects.size, 0);
+});
+
+/** What the app uploads: its own .wdoc (a ZIP with the .docx inside) under the document's key. */
+async function wdoc(document: Uint8Array | null, original?: Uint8Array): Promise<Uint8Array> {
+  const text = (value: string) => new TextEncoder().encode(value);
+  return writeZip([
+    { name: 'mimetype', data: text('application/x-golem-document'), compress: false },
+    { name: 'manifest.json', data: text(JSON.stringify({ version: 1, lens: 'docx', origin: 'docx', pagesCurrent: true })) },
+    ...(document ? [{ name: 'document.docx', data: document, compress: false }] : []),
+    ...(original ? [{ name: 'originals/source.pdf', data: original, compress: false }] : []),
+  ]);
+}
+
+test('the app\'s own .wdoc wrapper is read through to the document inside', async () => {
+  const r = await w.call(OWNER, 'POST', '/api/documents?name=Doc.wdoc', { body: await wdoc(await docx('Giraffe necks')), type: DOCX });
+  const doc = (await r.json()) as { id: string; updatedAt: number };
+  const answer = await index(OWNER, doc.id);
+  assert.equal(answer.status, 200);
+  assert.ok((await words(answer)).includes('giraffe'));
+  assert.equal(answer.headers.get('x-index-at'), String(doc.updatedAt));
+});
+
+test('a .wdoc with no flowing document (a PDF not turned into one) has no text here: refused, and nothing is kept', async () => {
+  const r = await w.call(OWNER, 'POST', '/api/documents?name=Scan.wdoc', { body: await wdoc(null, new Uint8Array([37, 80, 68, 70])), type: DOCX });
+  const doc = (await r.json()) as { id: string };
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await index(OWNER, doc.id)).status, 422);
+  } finally {
+    console.error = quiet;
+  }
+  assert.equal(idxKeys().length, 0);
 });

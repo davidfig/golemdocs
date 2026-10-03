@@ -112,6 +112,21 @@
   font: inherit;
 }
 
+.wm-layers-canvas {
+  border-bottom: 1px solid var(--wm-toolbar-border);
+  margin-bottom: 2px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wm-layers-size {
+  flex: none;
+  padding-right: 6px;
+  color: var(--wm-muted, #6b7285);
+  font-weight: 400;
+  font-size: 11px;
+}
+
 /* Where a dragged row would land. */
 .wm-layers-row.drop-above::before,
 .wm-layers-row.drop-below::after {

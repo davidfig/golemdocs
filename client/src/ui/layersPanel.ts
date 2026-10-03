@@ -56,7 +56,7 @@ export class LayersPanel {
   constructor(
     parent: HTMLElement,
     private readonly editor: VectorEditor,
-    private readonly host: { close(): void; focusEditor(): void },
+    private readonly host: { close(): void; focusEditor(): void; canvasSize(): void; fitCanvas(): void },
   ) {
     this.el.hidden = true;
     const close = iconButton('wm-pages-close', CLOSE_ICON, t('vector.layersClose'));
@@ -81,7 +81,21 @@ export class LayersPanel {
     this.shown = key;
     this.list.replaceChildren();
     if (!scene) return;
+    this.list.append(this.canvasRow(scene.width, scene.height));
     this.build(scene.children, [], 0);
+  }
+
+  /** The page itself, at the top of the list: a click opens Canvas Size. */
+  private canvasRow(width: number, height: number): HTMLLIElement {
+    const size = `${Math.round(width * 100) / 100} × ${Math.round(height * 100) / 100}`;
+    const row = h('li', { class: 'wm-layers-row wm-layers-canvas', attrs: { role: 'button', title: t('vector.canvas.title') } }, h('span', { class: 'wm-layers-expand' }), h('span', { class: 'wm-layers-name', text: t('vector.canvas.title') }), h('span', { class: 'wm-layers-size', text: size }));
+    row.style.paddingLeft = '6px';
+    row.addEventListener('click', () => this.host.canvasSize());
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showPopupMenu([{ label: t('vector.canvasSize'), run: () => this.host.canvasSize() }, { label: t('vector.canvas.fit'), run: () => this.host.fitCanvas() }], e.clientX, e.clientY, t('vector.layers'), () => this.host.focusEditor());
+    });
+    return row;
   }
 
   private build(nodes: readonly SceneNode[], parent: NodePath, depth: number): void {

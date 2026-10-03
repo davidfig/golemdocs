@@ -148,7 +148,8 @@ test.describe('editing a drawing', () => {
 test.describe('the canvas', () => {
   test('Canvas Size changes the page, keeping the proportions, and Fit to Artwork shrinks it to the shapes', async ({ app }) => {
     await openDrawing(app);
-    await app.menu('Drawing', 'Canvas Size');
+    // The page is the first row of the layers list, and opens the same dialog.
+    await app.page.getByRole('tree', { name: 'Layers' }).getByRole('button', { name: 'Canvas Size' }).click();
     const dialog = app.page.getByRole('dialog', { name: 'Canvas Size' });
     await expect(dialog).toContainText('Now 400 × 200 pixels');
     await dialog.getByRole('spinbutton', { name: 'Width' }).fill('800');

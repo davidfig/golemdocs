@@ -50,7 +50,16 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
     stateChanged: host.changed,
     notice: host.notice,
   });
-  const panel = new LayersPanel(host.workspace, editor, { close: host.toggleLayers, focusEditor: host.focusEditor });
+  const openCanvas = (): void =>
+    void import('./canvasDialog.ts').then(({ showCanvasDialog }) =>
+      showCanvasDialog({
+        state: () => editor.page,
+        apply: (w, h, mode, background) => editor.setPage(w, h, mode, background),
+        fit: (margin, background) => editor.fitPage(margin, background),
+        focusEditor: host.focusEditor,
+      }),
+    );
+  const panel = new LayersPanel(host.workspace, editor, { close: host.toggleLayers, focusEditor: host.focusEditor, canvasSize: openCanvas, fitCanvas: () => editor.fitPage(0) });
 
   return {
     editor,
@@ -110,14 +119,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         case 'releaseClip':
           return editor.releaseClip();
         case 'canvasSize':
-          return void import('./canvasDialog.ts').then(({ showCanvasDialog }) =>
-            showCanvasDialog({
-              state: () => editor.page,
-              apply: (w, h, mode, background) => editor.setPage(w, h, mode, background),
-              fit: (margin, background) => editor.fitPage(margin, background),
-              focusEditor: host.focusEditor,
-            }),
-          );
+          return openCanvas();
         case 'guideV':
           return editor.addGuide('v');
         case 'guideH':

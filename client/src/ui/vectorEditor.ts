@@ -6,8 +6,10 @@
 // drawing. Like the draw layer, it takes the pointer from the view's own handlers (in the capture
 // phase) while a drawing is open.
 
-import type { PathCommand, Scene, SceneNode, TextNode } from '../vector/model.ts';
-import { addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
+import type { PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
+import { applyBrush, brushOf, editableCommands, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
+import { DASHES, presetById } from '../vector/brushPresets.ts';
+import { addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
 import type { NodePath, Order } from '../vector/edit.ts';
 import { outline } from '../vector/geometry.ts';
 import type { Bounds } from '../vector/geometry.ts';
@@ -38,6 +40,8 @@ export interface ShapeStyle {
   fill: string | null;
   stroke: string | null;
   strokeWidth: number;
+  /** How the line is drawn: `dash:<id>` (see brushPresets.ts DASHES) or `brush:<id>` (BRUSH_PRESETS). */
+  strokeStyle: string;
 }
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate';
@@ -52,7 +56,7 @@ const ROTATE_OFFSET = 24;
 const ACCENT = '#316ac5';
 /** Two clicks this close in time and place are a double click. */
 const DOUBLE_CLICK_MS = 400;
-const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2 };
+const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2, strokeStyle: 'dash:solid' };
 const DEFAULT_FONT_SIZE = 24;
 
 type NodePart = 'anchor' | 'c1' | 'c2';
@@ -71,6 +75,14 @@ interface NodeMode {
   path: NodePath;
   /** The command whose anchor is picked. */
   selected: number | null;
+}
+
+/** Which of the dash patterns a `stroke-dasharray` is (in widths), as a stroke style value. */
+function dashOf(dasharray: string | undefined, width: number): string {
+  if (!dasharray || dasharray === 'none') return 'dash:solid';
+  const parts = dasharray.split(/[\s,]+/).map(Number).filter((n) => Number.isFinite(n));
+  const found = DASHES.find((d) => d.pattern.length === parts.length && d.pattern.length > 0 && d.pattern.every((v, i) => Math.abs(v * width - parts[i]) < 0.02 * Math.max(1, width)));
+  return found ? `dash:${found.id}` : 'dash:solid';
 }
 
 const asPath = (node: SceneNode): SceneNode | null => {
@@ -139,7 +151,11 @@ export class VectorEditor {
       const v = styleOf(scene, first, property) ?? fallback;
       return v === undefined || v === 'none' ? null : v;
     };
-    return { fill: paint('fill', '#000000'), stroke: paint('stroke', null), strokeWidth: parseLength(styleOf(scene, first, 'stroke-width')) ?? 1 };
+    const node = nodeAt(scene, first);
+    const brush = node?.kind === 'path' ? brushOf(node) : null;
+    // A brush stroke is a filled outline: its colour is its fill.
+    if (brush && node?.kind === 'path') return { fill: null, stroke: paint('fill', '#000000'), strokeWidth: strokeWidthOf(node), strokeStyle: `brush:${brush.preset ?? 'plain'}` };
+    return { fill: paint('fill', '#000000'), stroke: paint('stroke', null), strokeWidth: parseLength(styleOf(scene, first, 'stroke-width')) ?? 1, strokeStyle: dashOf(styleOf(scene, first, 'stroke-dasharray'), parseLength(styleOf(scene, first, 'stroke-width')) ?? 1) };
   }
 
   /** Starts editing a drawing that has just been opened: no selection, no history. */
@@ -279,17 +295,82 @@ export class VectorEditor {
 
   /** Changes how the selection (and what is drawn next) looks. */
   applyStyle(change: Partial<ShapeStyle>): void {
-    this.shape = { ...this.shape, ...change };
+    const { strokeStyle, ...rest } = change;
+    this.shape = { ...this.shape, ...rest };
     const props: Record<string, string | null> = {};
-    if ('fill' in change) props.fill = change.fill ?? 'none';
-    if ('stroke' in change) props.stroke = change.stroke ?? 'none';
-    if ('strokeWidth' in change) props['stroke-width'] = fmt(change.strokeWidth ?? 1);
+    if ('fill' in rest) props.fill = rest.fill ?? 'none';
+    if ('stroke' in rest) props.stroke = rest.stroke ?? 'none';
+    if ('strokeWidth' in rest) props['stroke-width'] = fmt(rest.strokeWidth ?? 1);
+    if (strokeStyle !== undefined) return this.applyStrokeStyle(strokeStyle);
     if (this._selection.length && this.scene) {
       this.edit((scene, selection) => {
-        setStyle(scene, selection, props);
+        for (const path of outermost(selection)) {
+          const node = nodeAt(scene, path);
+          const brush = node?.kind === 'path' ? brushOf(node) : null;
+          if (node?.kind !== 'path' || !brush) {
+            setStyle(scene, [path], props);
+            continue;
+          }
+          // A brush stroke's colour is its fill, and its width is the brush's.
+          const own: Record<string, string | null> = {};
+          const color = 'stroke' in rest ? rest.stroke : 'fill' in rest ? rest.fill : undefined;
+          if (color) own.fill = color;
+          setStyle(scene, [path], own);
+          if (rest.strokeWidth !== undefined) {
+            node.attrs[BRUSH_ATTR] = JSON.stringify({ ...brush, width: rest.strokeWidth });
+            regenerate(node);
+          }
+        }
         return selection;
       });
     } else this.refresh();
+  }
+
+  /** Draws the selected lines (and the next ones) as dashes or with a brush; a rectangle or ellipse takes dashes only. */
+  applyStrokeStyle(value: string): void {
+    this.shape = { ...this.shape, strokeStyle: value };
+    if (!this._selection.length || !this.scene) return this.refresh();
+    this.edit((scene, selection) => {
+      for (const path of outermost(selection)) this.styleLine(scene, path, value);
+      return selection;
+    });
+  }
+
+  /** Sets a node's stroke style (see `ShapeStyle.strokeStyle`). */
+  private styleLine(scene: Scene, path: NodePath, value: string): void {
+    let node = nodeAt(scene, path);
+    if (!node || node.kind === 'raw' || node.kind === 'group' || node.kind === 'text' || node.kind === 'image' || node.kind === 'use') return;
+    const [kind, id] = value.split(':');
+    if (kind === 'brush' && node.kind !== 'path') {
+      // A brush runs along a line: a rectangle or an ellipse becomes the path it draws.
+      const list = path.length > 1 ? (nodeAt(scene, path.slice(0, -1)) as { children: SceneNode[] }).children : scene.children;
+      const replacement = asPath(node);
+      if (!replacement) return;
+      list[path[path.length - 1]] = replacement;
+      node = replacement;
+    }
+    const width = node.kind === 'path' ? strokeWidthOf(node) : (parseLength(node.style['stroke-width']) ?? 1);
+    if (kind === 'brush') {
+      const preset = presetById(id);
+      if (preset && node.kind === 'path') applyBrush(node, preset.make(Math.max(width, 1)));
+      return;
+    }
+    if (node.kind === 'path') applyBrush(node, null);
+    const dash = DASHES.find((d) => d.id === id);
+    if (!dash) return;
+    const w = Math.max(width, 1);
+    if (!node.style.stroke || node.style.stroke === 'none') {
+      node.style.stroke = this.shape.stroke ?? DEFAULT_STYLE.stroke!;
+      node.style['stroke-width'] = fmt(w);
+    }
+    if (dash.pattern.length) {
+      node.style['stroke-dasharray'] = dash.pattern.map((v) => fmt(v * w)).join(' ');
+      // Dots are round.
+      node.style['stroke-linecap'] = Math.min(...dash.pattern) < 0.1 ? 'round' : 'butt';
+    } else {
+      delete node.style['stroke-dasharray'];
+      delete node.style['stroke-linecap'];
+    }
   }
 
   selectAll(): void {
@@ -418,15 +499,13 @@ export class VectorEditor {
       const picked = this.nodeAt(frame, sx, sy);
       if (picked) {
         this.nodes.selected = picked.part === 'anchor' ? picked.index : this.nodes.selected;
-        const node = nodeAt(scene, this.nodes.path) as { commands: PathCommand[] };
-        const smooth = picked.part !== 'anchor' && isSmooth(node.commands, picked.part === 'c2' ? picked.index : picked.index - 1);
+        const smooth = picked.part !== 'anchor' && isSmooth(this.nodeCommands(scene, this.nodes.path), picked.part === 'c2' ? picked.index : picked.index - 1);
         this.gesture = { kind: 'node', base: cloneScene(scene), part: picked.part, index: picked.index, start: at, smooth, moved: false };
         return this.refresh();
       }
       if (double) {
         // A double click on the path adds a point there.
-        const node = nodeAt(scene, this.nodes.path) as { commands: PathCommand[] };
-        const near = nearestSegment(node.commands, this.toLocal(this.nodes.path, at));
+        const near = nearestSegment(this.nodeCommands(scene, this.nodes.path), this.toLocal(this.nodes.path, at));
         if (near && near.distance * frame.unit <= LINE_REACH * 2) {
           this.editNode((commands) => splitSegment(commands, near.index, near.t));
           this.nodes!.selected = near.index;
@@ -518,12 +597,11 @@ export class VectorEditor {
       if (!mode) return;
       const from = this.toLocal(mode.path, gesture.start);
       const to = this.toLocal(mode.path, at);
-      const node = nodeAt(next, mode.path) as { commands: PathCommand[]; source?: string };
+      const node = nodeAt(next, mode.path) as PathNode;
       const dx = to.x - from.x;
       const dy = to.y - from.y;
-      if (gesture.part === 'anchor') node.commands = moveAnchor(node.commands, gesture.index, dx, dy);
-      else node.commands = moveHandle(node.commands, gesture.index, gesture.part, dx, dy, gesture.smooth && !e.altKey);
-      delete node.source;
+      const commands = editableCommands(node);
+      setEditableCommands(node, gesture.part === 'anchor' ? moveAnchor(commands, gesture.index, dx, dy) : moveHandle(commands, gesture.index, gesture.part, dx, dy, gesture.smooth && !e.altKey));
     } else if (gesture.kind === 'move') {
       let dx = at[0] - gesture.start[0];
       let dy = at[1] - gesture.start[1];
@@ -619,6 +697,9 @@ export class VectorEditor {
     if (!this.scene) return;
     const next = cloneScene(this.scene);
     const path = addNode(next, node);
+    // What the line is drawn with: dashes for any shape, a brush for a line.
+    const style = this.shape.strokeStyle;
+    if (style !== 'dash:solid' && (node.kind === 'path' || style.startsWith('dash:'))) this.styleLine(next, path, style);
     this._tool = 'select';
     this.host.canvas.style.cursor = '';
     this.commit(next, [path]);
@@ -774,9 +855,8 @@ export class VectorEditor {
     const mode = this.nodes;
     if (!this.scene || !mode) return;
     const next = cloneScene(this.scene);
-    const node = nodeAt(next, mode.path) as { commands: PathCommand[]; source?: string };
-    node.commands = change(node.commands);
-    delete node.source;
+    const node = nodeAt(next, mode.path) as PathNode;
+    setEditableCommands(node, change(editableCommands(node)));
     this.commit(next, this._selection);
   }
 
@@ -784,12 +864,17 @@ export class VectorEditor {
     const mode = this.nodes;
     if (!mode || mode.selected === null) return;
     const index = mode.selected;
-    const node = nodeAt(this.scene!, mode.path) as { commands: PathCommand[] };
     // A path of one point or two is not a path.
-    if (node.commands.filter((c) => c[0] !== 'Z').length <= 2) return this.host.notice?.(t('vector.pathNeedsPoints'));
+    if (this.nodeCommands(this.scene!, mode.path).filter((c) => c[0] !== 'Z').length <= 2) return this.host.notice?.(t('vector.pathNeedsPoints'));
     this.editNode((commands) => removeAnchor(commands, index));
     mode.selected = null;
     this.refresh();
+  }
+
+  /** The points being edited of a path: its own line (not the outline of its brush). */
+  private nodeCommands(scene: Scene, path: NodePath): PathCommand[] {
+    const node = nodeAt(scene, path);
+    return node?.kind === 'path' ? editableCommands(node) : [];
   }
 
   /** A point of the drawing as the path's own coordinates. */
@@ -803,14 +888,12 @@ export class VectorEditor {
   private nodeAt(frame: VectorFrame, sx: number, sy: number): { part: NodePart; index: number } | null {
     const mode = this.nodes;
     if (!mode || !this.scene) return null;
-    const node = nodeAt(this.scene, mode.path) as { commands: PathCommand[] } | undefined;
-    if (!node) return null;
     const world = worldMatrix(this.scene, mode.path);
     const near = (x: number, y: number): boolean => {
       const [px, py] = frame.toScreen(...apply(world, x, y));
       return Math.hypot(sx - px, sy - py) <= HANDLE_REACH;
     };
-    const { commands } = node;
+    const commands = this.nodeCommands(this.scene, mode.path);
     // Handles of the picked anchor first: they lie over other points.
     if (mode.selected !== null) {
       const i = mode.selected;
@@ -877,11 +960,10 @@ export class VectorEditor {
 
   private decorateNodes(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {
     const mode = this.nodes!;
-    const node = nodeAt(scene, mode.path) as { commands: PathCommand[] } | undefined;
-    if (!node) return;
+    if (!nodeAt(scene, mode.path)) return;
     const world = worldMatrix(scene, mode.path);
     const screen = (x: number, y: number): [number, number] => frame.toScreen(...apply(world, x, y));
-    const { commands } = node;
+    const commands = this.nodeCommands(scene, mode.path);
     if (mode.selected !== null) {
       const i = mode.selected;
       const handle = (ax: number, ay: number, hx: number, hy: number): void => {

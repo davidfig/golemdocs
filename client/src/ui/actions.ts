@@ -164,7 +164,7 @@ export type Action =
   // Drawing (vector)
   | { kind: 'vector'; op: VectorOp }
   /** How the selected shapes (and the next ones) look; null is none. */
-  | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number }
+  | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string }
   // Tools
   | { kind: 'toggleTrackChanges' };
 
@@ -247,7 +247,7 @@ export interface ChromeState {
   /** The Draw toolbar: the tool picked (if any), its colour and its thickness step. */
   draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
   /** The vector editor: the tool picked, whether anything is selected, and the look of the selection (or of the next shape). */
-  vector: { tool: 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text'; hasSelection: boolean; fill: string | null; stroke: string | null; strokeWidth: number };
+  vector: { tool: 'select' | 'rect' | 'ellipse' | 'line' | 'pen' | 'text'; hasSelection: boolean; fill: string | null; stroke: string | null; strokeWidth: number; strokeStyle: string };
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
@@ -299,7 +299,7 @@ export const DEFAULT_STATE: ChromeState = {
   formMode: null,
   painting: false,
   draw: { tool: null, color: '#e5322d', size: 1, fill: false },
-  vector: { tool: 'select', hasSelection: false, fill: null, stroke: null, strokeWidth: 1 },
+  vector: { tool: 'select', hasSelection: false, fill: null, stroke: null, strokeWidth: 1, strokeStyle: 'dash:solid' },
   inTable: false,
   sync: { user: null, document: 'guest', error: null },
   subscription: null,

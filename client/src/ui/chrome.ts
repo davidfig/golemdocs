@@ -19,6 +19,7 @@ import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h, isFormField } from './dom.ts';
 import { format, getLocale, setLocale, t } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
+import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, VECTOR_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { analyticsPanel } from './analyticsPanel.ts';
@@ -989,8 +990,40 @@ export class Chrome {
         () => profile().vectorTools,
       ),
     );
+    define('control.vectorStrokeStyle', t('vector.strokeStyle'), t('vector.toolbar'), 'line', () => gated(this.vectorStrokeStyleBox(), () => profile().vectorTools));
     define('control.vectorStrokeWidth', t('vector.strokeWidth'), t('vector.toolbar'), 'line', () => gated(this.vectorWidthBox(), () => profile().vectorTools));
     define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
+  }
+
+  /** The list of ways a line can be drawn: dashes, then the brushes in groups. */
+  private vectorStrokeStyleBox(): Control {
+    const r = this.registry;
+    const label = t('vector.strokeStyle');
+    const select = h('select', { class: 'wm-draw-size wm-stroke-style', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
+    const group = (name: string, options: [string, string][]): void => {
+      const g = h('optgroup', { attrs: { label: name } });
+      for (const [value, text] of options) {
+        const option = h('option', { text });
+        option.value = value;
+        g.append(option);
+      }
+      select.append(g);
+    };
+    group(t('vector.brushGroup.dashes'), DASHES.map((d) => [`dash:${d.id}`, t(`vector.dash.${d.id}`)]));
+    for (const g of BRUSH_GROUPS) {
+      group(t(`vector.brushGroup.${g}`), BRUSH_PRESETS.filter((p) => p.group === g).map((p) => [`brush:${p.id}`, t(`vector.brush.${p.id}`)]));
+    }
+    select.addEventListener('change', () => {
+      r.perform({ kind: 'vectorStyle', strokeStyle: select.value }, label);
+      r.focusEditor();
+    });
+    return {
+      el: select,
+      refresh: (state) => {
+        select.value = state.vector.strokeStyle;
+        select.disabled = !r.allows({ kind: 'vectorStyle', strokeStyle: state.vector.strokeStyle });
+      },
+    };
   }
 
   /** The outline width of the selected shapes: a short list of widths, and the shape's own when it is another. */

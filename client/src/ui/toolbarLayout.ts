@@ -89,7 +89,7 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
   {
     name: 'Drawing',
     visible: true,
-    items: ['vector.select', SEPARATOR, 'vector.rect', 'vector.ellipse', 'vector.line', 'vector.pen', 'vector.text', SEPARATOR, 'control.vectorFill', 'control.vectorStroke', 'control.vectorStrokeWidth', SEPARATOR, 'vector.group', 'vector.ungroup', 'vector.duplicate', 'vector.delete', SEPARATOR, 'vector.front', 'vector.forward', 'vector.backward', 'vector.back'],
+    items: ['vector.select', SEPARATOR, 'vector.rect', 'vector.ellipse', 'vector.line', 'vector.pen', 'vector.text', SEPARATOR, 'control.vectorFill', 'control.vectorStroke', 'control.vectorStrokeWidth', 'control.vectorStrokeStyle', SEPARATOR, 'vector.group', 'vector.ungroup', 'vector.duplicate', 'vector.delete', SEPARATOR, 'vector.front', 'vector.forward', 'vector.backward', 'vector.back'],
   },
 ];
 

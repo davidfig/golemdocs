@@ -32,3 +32,8 @@
   font-family: sans-serif;
   pointer-events: auto;
 }
+
+/* The stroke style list in the Drawing toolbar. */
+.wm-stroke-style {
+  width: 112px;
+}

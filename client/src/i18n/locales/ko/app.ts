@@ -100,9 +100,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': '이 브라우저에 저장된 모든 항목과 도구 모음 레이아웃이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
   'app.clearBodyOne': '이 브라우저에 저장된 문서 1개와 도구 모음 레이아웃이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
   'app.clearBodyMany': '이 브라우저에 저장된 문서 {count}개와 도구 모음 레이아웃이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
-  'app.clearBodyNoneAccount': '이 브라우저에 저장된 모든 항목과 도구 모음 레이아웃이 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계정에 저장된 문서는 유지됩니다.',
-  'app.clearBodyOneAccount': '이 브라우저에 저장된 문서 1개와 도구 모음 레이아웃이 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계정에 저장된 문서는 유지됩니다.',
-  'app.clearBodyManyAccount': '이 브라우저에 저장된 문서 {count}개와 도구 모음 레이아웃이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다. 계정에 저장된 문서는 유지됩니다.',
+  'app.clearBodyAccount': '로그아웃하고 Golem Docs가 이 브라우저에 보관하는 데이터(도구 모음 레이아웃 포함)를 삭제합니다. 문서는 계정에 안전하게 보관되어 있습니다.',
+  'app.clearUnsent': '단, 문서 {count}개의 변경 내용은 아직 계정에 전송되지 않았으며, 전송할 수 없으면 사라집니다.',
+  'app.clearSignOut': '로그아웃됩니다.',
+  'app.clearLoss': '계정에 저장되지 않은 문서는 영구적으로 사라집니다. 보관하려는 문서는 먼저 다운로드하세요.',
   'app.clearFailed': '로컬 데이터를 지울 수 없습니다: {message}',
 
   // Formats

@@ -100,9 +100,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': '這會刪除儲存在此瀏覽器中的所有內容，包括你的工具列配置。此操作無法復原。',
   'app.clearBodyOne': '這會刪除儲存在此瀏覽器中的這份文件，包括你的工具列配置。此操作無法復原。',
   'app.clearBodyMany': '這會刪除儲存在此瀏覽器中的全部 {count} 份文件，包括你的工具列配置。此操作無法復原。',
-  'app.clearBodyNoneAccount': '這會刪除儲存在此瀏覽器中的所有內容，包括你的工具列配置。此操作無法復原。儲存在你帳號中的文件會保留。',
-  'app.clearBodyOneAccount': '這會刪除儲存在此瀏覽器中的這份文件，包括你的工具列配置。此操作無法復原。儲存在你帳號中的文件會保留。',
-  'app.clearBodyManyAccount': '這會刪除儲存在此瀏覽器中的全部 {count} 份文件，包括你的工具列配置。此操作無法復原。儲存在你帳號中的文件會保留。',
+  'app.clearBodyAccount': '這會讓你登出，並刪除 Golem Docs 在此瀏覽器中儲存的內容，包括你的工具列配置。你的文件安全地儲存在你的帳號中。',
+  'app.clearUnsent': '但有 {count} 份文件的變更尚未送達你的帳號，如果無法傳送就會遺失。',
+  'app.clearSignOut': '你將登出。',
+  'app.clearLoss': '未儲存到帳號的文件將永久遺失：請先下載你想保留的文件。',
   'app.clearFailed': '無法清除本機資料：{message}',
 
   // Formats

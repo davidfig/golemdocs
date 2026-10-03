@@ -106,9 +106,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Questa operazione elimina tutto ciò che è salvato in questo browser, insieme al layout della barra degli strumenti. Non può essere annullata.',
   'app.clearBodyOne': 'Questa operazione elimina l’unico documento salvato in questo browser, insieme al layout della barra degli strumenti. Non può essere annullata.',
   'app.clearBodyMany': 'Questa operazione elimina tutti i {count} documenti salvati in questo browser, insieme al layout della barra degli strumenti. Non può essere annullata.',
-  'app.clearBodyNoneAccount': 'Questa operazione elimina tutto ciò che è salvato in questo browser, insieme al layout della barra degli strumenti. Non può essere annullata. I documenti salvati nel tuo account vengono conservati.',
-  'app.clearBodyOneAccount': 'Questa operazione elimina l’unico documento salvato in questo browser, insieme al layout della barra degli strumenti. Non può essere annullata. I documenti salvati nel tuo account vengono conservati.',
-  'app.clearBodyManyAccount': 'Questa operazione elimina tutti i {count} documenti salvati in questo browser, insieme al layout della barra degli strumenti. Non può essere annullata. I documenti salvati nel tuo account vengono conservati.',
+  'app.clearBodyAccount': 'Questa operazione chiude la sessione e rimuove ciò che Golem Docs conserva in questo browser, incluso il layout della barra degli strumenti. I tuoi documenti sono al sicuro nel tuo account.',
+  'app.clearUnsent': 'Eccetto: le modifiche a {count} dei tuoi documenti non hanno ancora raggiunto il tuo account e andranno perse se non possono essere inviate.',
+  'app.clearSignOut': 'Verrà chiusa la tua sessione.',
+  'app.clearLoss': 'I documenti non salvati in un account vanno persi per sempre: scarica prima quelli che vuoi conservare.',
   'app.clearFailed': 'Impossibile cancellare i dati locali: {message}',
 
   // Formats

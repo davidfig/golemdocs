@@ -106,9 +106,10 @@ export const app = {
   'app.clearBodyNone': 'This deletes everything saved in this browser, along with your toolbar layout. It can’t be undone.',
   'app.clearBodyOne': 'This deletes the one document saved in this browser, along with your toolbar layout. It can’t be undone.',
   'app.clearBodyMany': 'This deletes all {count} documents saved in this browser, along with your toolbar layout. It can’t be undone.',
-  'app.clearBodyNoneAccount': 'This deletes everything saved in this browser, along with your toolbar layout. It can’t be undone. Documents saved to your account are kept.',
-  'app.clearBodyOneAccount': 'This deletes the one document saved in this browser, along with your toolbar layout. It can’t be undone. Documents saved to your account are kept.',
-  'app.clearBodyManyAccount': 'This deletes all {count} documents saved in this browser, along with your toolbar layout. It can’t be undone. Documents saved to your account are kept.',
+  'app.clearBodyAccount': 'This signs you out and removes what Golem Docs keeps in this browser, including your toolbar layout. Your documents are safe in your account.',
+  'app.clearUnsent': 'Except: changes to {count} of your documents haven’t reached your account yet, and are lost if they can’t be sent.',
+  'app.clearSignOut': 'You’ll be signed out.',
+  'app.clearLoss': 'Documents that aren’t saved to an account are lost for good: download any you want to keep first.',
   'app.clearFailed': 'Couldn’t clear local data: {message}',
 
   // Formats

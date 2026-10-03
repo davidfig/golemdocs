@@ -106,9 +106,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Esto elimina todo lo guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer.',
   'app.clearBodyOne': 'Esto elimina el único documento guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer.',
   'app.clearBodyMany': 'Esto elimina los {count} documentos guardados en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer.',
-  'app.clearBodyNoneAccount': 'Esto elimina todo lo guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer. Los documentos guardados en tu cuenta se conservan.',
-  'app.clearBodyOneAccount': 'Esto elimina el único documento guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer. Los documentos guardados en tu cuenta se conservan.',
-  'app.clearBodyManyAccount': 'Esto elimina los {count} documentos guardados en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer. Los documentos guardados en tu cuenta se conservan.',
+  'app.clearBodyAccount': 'Esto cierra tu sesión y elimina lo que Golem Docs guarda en este navegador, incluida la disposición de tu barra de herramientas. Tus documentos están a salvo en tu cuenta.',
+  'app.clearUnsent': 'Excepto: los cambios en {count} de tus documentos aún no han llegado a tu cuenta y se perderán si no se pueden enviar.',
+  'app.clearSignOut': 'Se cerrará tu sesión.',
+  'app.clearLoss': 'Los documentos que no están guardados en una cuenta se pierden para siempre: descarga antes los que quieras conservar.',
   'app.clearFailed': 'No se pudieron borrar los datos locales: {message}',
 
   // Formats

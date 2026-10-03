@@ -6,6 +6,9 @@
 - View › Ruler shows a ruler above and beside the page in view, in inches (centimetres in other languages), with the margins marked; the assistant can turn it on and off. Drag a margin’s edge on either ruler, or the indent markers on the top one (first line, hanging, left, right), to change them.
 - The import progress card shows an estimate of the time left.
 
+### Changed
+- File › Clear Local Data now signs you out too (warning first about changes not yet in your account), so the next person on a shared computer isn’t signed in as you.
+
 ### Fixed
 - Importing a ZIP no longer starts with the progress bar a quarter full; it fills steadily and never moves back.
 

@@ -100,9 +100,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': '这会删除保存在此浏览器中的所有内容，包括你的工具栏配置。此操作无法撤销。',
   'app.clearBodyOne': '这会删除保存在此浏览器中的这份文档，包括你的工具栏配置。此操作无法撤销。',
   'app.clearBodyMany': '这会删除保存在此浏览器中的全部 {count} 份文档，包括你的工具栏配置。此操作无法撤销。',
-  'app.clearBodyNoneAccount': '这会删除保存在此浏览器中的所有内容，包括你的工具栏配置。此操作无法撤销。保存在你账户中的文档会保留。',
-  'app.clearBodyOneAccount': '这会删除保存在此浏览器中的这份文档，包括你的工具栏配置。此操作无法撤销。保存在你账户中的文档会保留。',
-  'app.clearBodyManyAccount': '这会删除保存在此浏览器中的全部 {count} 份文档，包括你的工具栏配置。此操作无法撤销。保存在你账户中的文档会保留。',
+  'app.clearBodyAccount': '这会让你退出登录，并删除 Golem Docs 在此浏览器中保存的内容，包括你的工具栏配置。你的文档安全地保存在你的账户中。',
+  'app.clearUnsent': '但有 {count} 份文档的更改尚未到达你的账户，如果无法发送就会丢失。',
+  'app.clearSignOut': '你将退出登录。',
+  'app.clearLoss': '未保存到账户的文档将永久丢失：请先下载你想保留的文档。',
   'app.clearFailed': '无法清除本地数据：{message}',
 
   // Formats

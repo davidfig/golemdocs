@@ -106,9 +106,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Isso exclui tudo o que está salvo neste navegador, junto com o layout da sua barra de ferramentas. Não é possível desfazer.',
   'app.clearBodyOne': 'Isso exclui o único documento salvo neste navegador, junto com o layout da sua barra de ferramentas. Não é possível desfazer.',
   'app.clearBodyMany': 'Isso exclui todos os {count} documentos salvos neste navegador, junto com o layout da sua barra de ferramentas. Não é possível desfazer.',
-  'app.clearBodyNoneAccount': 'Isso exclui tudo o que está salvo neste navegador, junto com o layout da sua barra de ferramentas. Não é possível desfazer. Os documentos salvos na sua conta são mantidos.',
-  'app.clearBodyOneAccount': 'Isso exclui o único documento salvo neste navegador, junto com o layout da sua barra de ferramentas. Não é possível desfazer. Os documentos salvos na sua conta são mantidos.',
-  'app.clearBodyManyAccount': 'Isso exclui todos os {count} documentos salvos neste navegador, junto com o layout da sua barra de ferramentas. Não é possível desfazer. Os documentos salvos na sua conta são mantidos.',
+  'app.clearBodyAccount': 'Isso desconecta você e remove o que o Golem Docs guarda neste navegador, incluindo o layout da sua barra de ferramentas. Seus documentos estão seguros na sua conta.',
+  'app.clearUnsent': 'Exceto: as alterações em {count} dos seus documentos ainda não chegaram à sua conta e serão perdidas se não puderem ser enviadas.',
+  'app.clearSignOut': 'Você será desconectado.',
+  'app.clearLoss': 'Os documentos que não estão salvos em uma conta são perdidos para sempre: baixe antes os que quiser manter.',
   'app.clearFailed': 'Não foi possível limpar os dados locais: {message}',
 
   // Formats

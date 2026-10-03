@@ -25,7 +25,6 @@ import {
   listLocalFolders,
   listSaved,
   markSynced,
-  ownedBy,
   saveSaved,
   saveThumbnail,
   type SavedInfo,
@@ -33,7 +32,7 @@ import {
 import { folderOf, folderPath, type Folder } from './folders.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
-import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, putDocInCatalogue, type LibraryEntry } from './sync.ts';
+import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -1388,27 +1387,33 @@ async function afterCheckout(): Promise<void> {
  * some changes haven't reached the account yet, it says so first, since signing out loses them.
  */
 async function signOut(): Promise<void> {
+  if (await signOutQuietly()) location.replace(location.pathname);
+}
+
+/** `signOut` without the reload; false if the user cancelled or the sign-out failed. */
+async function signOutQuietly(): Promise<boolean> {
   const user = signedIn;
-  if (!user) return;
+  if (!user) return true;
   saveIfEdited();
   await saving;
   uploads.backOnline();
   await flushUploads();
-  const unsent = ownedBy(await listSaved().catch(() => []), user.id).filter(hasUnsentChanges);
+  // The same copies the Documents page lists (not those of documents already deleted from the account).
+  const unsent = ((await localCopies(user)) ?? []).filter(hasUnsentChanges);
   if (unsent.length) {
     const key = uploads.offline ? 'app.signOutLossOffline' : uploads.signedOut ? 'app.signOutLossExpired' : 'app.signOutLoss';
     const body = document.createElement('p');
     body.textContent = t(key, { count: unsent.length, name: unsent[0]!.name });
     if (!(await showConfirm(t('app.signOutTitle'), body, t('app.signOutAnyway')))) {
       focusInput();
-      return;
+      return false;
     }
   }
   try {
     await signOutOfCloud();
   } catch (e) {
     reportError(e instanceof TypeError ? t('app.signOutOffline') : t('app.signOutFailed', { message: (e as Error).message }));
-    return;
+    return false;
   }
   cleared = true; // nothing more is saved for this account here
   clearTimeout(autosaveTimer);
@@ -1419,7 +1424,7 @@ async function signOut(): Promise<void> {
   try {
     localStorage.setItem(SIGNED_OUT_KEY, String(Date.now())); // tells this page's other tabs
   } catch {}
-  location.replace(location.pathname);
+  return true;
 }
 
 /** Set when signing out, so the app's other tabs hear of it (a `storage` event). */
@@ -1521,17 +1526,37 @@ async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readon
 
 /**
  * File ▸ Clear Local Data: deletes every document, thumbnail and setting kept in this browser,
- * then starts afresh (with the welcome document). The account's documents and the sign-in stay.
+ * then starts afresh (with the welcome document). Signed in, it signs out first (with the usual
+ * warning about changes not yet in the account), so the next person at this browser isn't you.
  */
 async function clearLocalData(): Promise<void> {
-  const count = library.local.length;
+  if (account) {
+    // Let the open document's last edit reach the account first, so only real leftovers are counted.
+    saveIfEdited();
+    await saving;
+    uploads.backOnline();
+    await flushUploads();
+  }
+  // Everything in this browser's storage goes, whoever it belongs to and whichever folder it is in.
+  const saved = await listSaved().catch(() => []);
+  const count = saved.length;
+  const unsent = account ? ((await localCopies(account)) ?? []).filter(hasUnsentChanges).length : 0;
   const body = document.createElement('p');
-  const which = count === 0 ? 'None' : count === 1 ? 'One' : 'Many';
-  body.textContent = t(`app.clearBody${which}${account ? 'Account' : ''}` as MessageKey, { count });
+  if (account) {
+    // Synced: this browser only holds copies, so the count would only alarm. Say more only if something hasn't reached the account.
+    body.textContent = t('app.clearBodyAccount');
+    if (unsent) body.textContent += ` ${t('app.clearUnsent', { count: unsent })}`;
+  } else {
+    const which = count === 0 ? 'None' : count === 1 ? 'One' : 'Many';
+    body.textContent = t(`app.clearBody${which}` as MessageKey, { count });
+    if (signedIn) body.textContent += ` ${t('app.clearSignOut')}`;
+    body.textContent += ` ${t('app.clearLoss')}`;
+  }
   if (!(await showConfirm(t('app.clearTitle'), body, t('app.clearConfirm')))) {
     focusInput();
     return;
   }
+  if (signedIn && !(await signOutQuietly())) return;
   cleared = true;
   clearTimeout(autosaveTimer);
   try {

@@ -106,9 +106,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Dadurch wird alles gelöscht, was in diesem Browser gespeichert ist, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden.',
   'app.clearBodyOne': 'Dadurch wird das eine in diesem Browser gespeicherte Dokument gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden.',
   'app.clearBodyMany': 'Dadurch werden alle {count} in diesem Browser gespeicherten Dokumente gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden.',
-  'app.clearBodyNoneAccount': 'Dadurch wird alles gelöscht, was in diesem Browser gespeichert ist, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden. In Ihrem Konto gespeicherte Dokumente bleiben erhalten.',
-  'app.clearBodyOneAccount': 'Dadurch wird das eine in diesem Browser gespeicherte Dokument gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden. In Ihrem Konto gespeicherte Dokumente bleiben erhalten.',
-  'app.clearBodyManyAccount': 'Dadurch werden alle {count} in diesem Browser gespeicherten Dokumente gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden. In Ihrem Konto gespeicherte Dokumente bleiben erhalten.',
+  'app.clearBodyAccount': 'Dadurch werden Sie abgemeldet und alles, was Golem Docs in diesem Browser speichert, einschließlich Ihres Symbolleisten-Layouts, wird entfernt. Ihre Dokumente sind in Ihrem Konto sicher.',
+  'app.clearUnsent': 'Ausnahme: Änderungen an {count} Ihrer Dokumente haben Ihr Konto noch nicht erreicht und gehen verloren, wenn sie nicht gesendet werden können.',
+  'app.clearSignOut': 'Sie werden abgemeldet.',
+  'app.clearLoss': 'Dokumente, die nicht in einem Konto gespeichert sind, gehen endgültig verloren: Laden Sie vorher herunter, was Sie behalten möchten.',
   'app.clearFailed': 'Lokale Daten konnten nicht gelöscht werden: {message}',
 
   // Formats

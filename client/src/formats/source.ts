@@ -27,7 +27,8 @@ const OPML_FILE = /\.opml$/i;
 const XML_FILE = /\.xml$/i;
 const EML_FILE = /\.eml$/i;
 const IPYNB_FILE = /\.ipynb$/i;
-const IMAGE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
+const IMAGE_FILE = /\.(png|jpe?g|webp|gif|bmp)$/i;
+const SVG_FILE = /\.(svg|svgz)$/i;
 const PDF_FILE = /\.pdf$/i;
 const MARKDOWN_FILE = /\.(md|markdown)$/i;
 const TEXT_FILE = /\.(txt|text)$/i;
@@ -67,6 +68,7 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
   if (EML_FILE.test(name)) return { kind: 'eml', name, bytes };
   if (IPYNB_FILE.test(name)) return { kind: 'ipynb', name, bytes };
   if (IMAGE_FILE.test(name)) return { kind: 'image', name, bytes };
+  if (SVG_FILE.test(name)) return { kind: 'svg', name, bytes };
   if (PDF_FILE.test(name)) return { kind: 'pdf', name, bytes };
   if (MARKDOWN_FILE.test(name)) return { kind: 'md', name, bytes };
   if (TEXT_FILE.test(name) || isTextName(name)) return { kind: 'txt', name, bytes };
@@ -79,7 +81,7 @@ export const isZipName = (name: string): boolean => /\.zip$/i.test(name);
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|svg|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
 }
 
 /**

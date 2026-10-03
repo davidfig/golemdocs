@@ -132,8 +132,10 @@ export const app: Partial<Messages> = {
   'app.notRtf': '這不是 RTF 檔案。',
 
   'app.notImage': '這不是我們能讀取的圖片。',
+  'app.notSvg': '這不是我們能讀取的 SVG 向量圖。',
   'app.notEmail': '這不是電子郵件。',
   'app.convertedToPicture': '已從文件的頁面製作 {name}。文件本身沒有變更。',
+  'app.convertedToDrawing': '已用文件的頁面製作 {name}，文字仍為文字。文件本身未變更。',
   'app.pictureShortened': '一張圖片只放得下前 {count} 頁,因此 {name} 顯示這些頁面。文件本身沒有變更。',
   'app.notReadyToConvert': '文件尚未準備好轉換。',
   'app.notNotebook': '這不是 Jupyter 筆記本。',

@@ -136,8 +136,10 @@ export const app: Partial<Messages> = {
   'app.docDamaged': 'この Word ドキュメントは破損しているか、読み取れないレイアウトが使われています。',
 
   'app.notImage': '読み取れる画像ではありません。',
+  'app.notSvg': '読み取れる SVG 図形ではありません。',
   'app.notEmail': 'メールメッセージではありません。',
   'app.convertedToPicture': '文書のページから {name} を作成しました。元の文書は変更されていません。',
+  'app.convertedToDrawing': 'ドキュメントのページから {name} を作成しました。文字は文字のまま保持されます。元のドキュメントは変更されていません。',
   'app.pictureShortened': '1 枚の画像に収まるのは最初の {count} ページまでなので、{name} にはそのページを表示しています。元の文書は変更されていません。',
   'app.notReadyToConvert': '文書はまだ変換できる状態ではありません。',
   'app.notNotebook': 'Jupyter ノートブックではありません。',

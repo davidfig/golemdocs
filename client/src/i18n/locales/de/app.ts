@@ -142,8 +142,10 @@ export const app: Partial<Messages> = {
   'app.docDamaged': 'Dieses Word-Dokument ist beschädigt oder verwendet ein Layout, das wir nicht lesen können.',
 
   'app.notImage': 'Dies ist kein Bild, das wir lesen können.',
+  'app.notSvg': 'Dies ist keine SVG-Zeichnung, die wir lesen können.',
   'app.notEmail': 'Dies ist keine E-Mail-Nachricht.',
   'app.convertedToPicture': '{name} wurde aus den Seiten des Dokuments erstellt. Das Dokument selbst ist unverändert.',
+  'app.convertedToDrawing': '{name} wurde aus den Seiten des Dokuments erstellt, der Text bleibt Text. Das Dokument selbst bleibt unverändert.',
   'app.pictureShortened': 'Nur die ersten {count} Seiten passen in ein Bild, daher zeigt {name} diese. Das Dokument selbst ist unverändert.',
   'app.notReadyToConvert': 'Das Dokument kann noch nicht konvertiert werden.',
   'app.notNotebook': 'Dies ist kein Jupyter-Notebook.',

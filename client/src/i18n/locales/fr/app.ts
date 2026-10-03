@@ -138,8 +138,10 @@ export const app: Partial<Messages> = {
   'app.notRtf': 'Ce n’est pas un fichier RTF.',
 
   'app.notImage': 'Ce fichier n’est pas une image que nous pouvons lire.',
+  'app.notSvg': 'Ce fichier n’est pas un dessin SVG que nous pouvons lire.',
   'app.notEmail': 'Ce fichier n’est pas un message électronique.',
   'app.convertedToPicture': '{name} a été créé à partir des pages du document. Le document lui-même n’a pas changé.',
+  'app.convertedToDrawing': '{name} a été créé à partir des pages du document, le texte restant du texte. Le document lui-même n’est pas modifié.',
   'app.pictureShortened': 'Seules les {count} premières pages tiennent dans une image ; {name} montre celles-ci. Le document lui-même n’a pas changé.',
   'app.notReadyToConvert': 'Le document n’est pas encore prêt à être converti.',
   'app.notNotebook': 'Ce fichier n’est pas un notebook Jupyter.',

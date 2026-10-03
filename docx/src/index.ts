@@ -8,7 +8,7 @@ export { paragraphSegments, type Segment } from './edit/segments.ts';
 export { WordDocument } from './docx/document.ts';
 export { OpcPackage, PackageError, REL, CONTENT_TYPE } from './opc/package.ts';
 export { ZipArchive, ZipError, writeZip } from './zip/zip.ts';
-export { parseXml, serializeXml, el, XmlError, type XmlElement, type XmlNode } from './xml/xml.ts';
+export { parseXml, serializeXml, el, elements, textContent, cloneElement, XmlError, type XmlElement, type XmlNode } from './xml/xml.ts';
 export * from './docx/metadata.ts';
 export * from './math/tree.ts';
 export { isMathInline, mathAt, mathInline, readMathInline, readOmml, writeOmml, mergeText } from './math/omml.ts';

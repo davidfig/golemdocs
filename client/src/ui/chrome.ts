@@ -19,7 +19,7 @@ import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h, isFormField } from './dom.ts';
 import { format, getLocale, setLocale, t } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
-import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
+import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, VECTOR_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { analyticsPanel } from './analyticsPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
@@ -266,7 +266,7 @@ export class Chrome {
       a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' }),
       a('file.manageSubscription', t('chrome.file.manageSubscription'), { kind: 'manageSubscription' }, { tooltip: t('chrome.file.manageSubscription.tip'), visible: (s) => s.subscription === 'active' }),
     );
-    for (const kind of new Set([...CONVERT_ORDER, ...PICTURE_CONVERT_ORDER])) {
+    for (const kind of new Set([...CONVERT_ORDER, ...PICTURE_CONVERT_ORDER, ...VECTOR_CONVERT_ORDER])) {
       const profile = FORMATS[kind];
       r.add(a(`file.convertTo.${kind}`, `${profile.label} (${profile.extensions[0]})`, { kind: 'convert', to: kind }, { enabled: (s) => s.kind !== kind }));
     }

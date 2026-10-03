@@ -14,6 +14,14 @@ export class FakeContext {
   fillStyle: unknown = '#000';
   font = '10px sans-serif';
   textBaseline = '';
+  textAlign = '';
+  strokeStyle: unknown = '#000';
+  lineWidth = 1;
+  lineCap = '';
+  lineJoin = '';
+  miterLimit = 10;
+  lineDashOffset = 0;
+  globalAlpha = 1;
   constructor(readonly canvas: FakeCanvas) {}
   private record(op: string, args: unknown[]) {
     this.calls.push({ op, args, fillStyle: this.fillStyle, font: this.font });
@@ -29,6 +37,24 @@ export class FakeContext {
   fillText = (...a: unknown[]) => this.record('fillText', a);
   drawImage = (...a: unknown[]) => this.record('drawImage', a);
   fill = (...a: unknown[]) => this.record('fill', a);
+  moveTo = (...a: unknown[]) => this.record('moveTo', a);
+  lineTo = (...a: unknown[]) => this.record('lineTo', a);
+  bezierCurveTo = (...a: unknown[]) => this.record('bezierCurveTo', a);
+  closePath = (...a: unknown[]) => this.record('closePath', a);
+  transform = (...a: unknown[]) => this.record('transform', a);
+  stroke = (...a: unknown[]) => this.record('stroke', a);
+  strokeText = (...a: unknown[]) => this.record('strokeText', a);
+  setLineDash = (...a: unknown[]) => this.record('setLineDash', a);
+  createLinearGradient = (...a: unknown[]) => {
+    this.record('createLinearGradient', a);
+    return { addColorStop: (...stop: unknown[]) => this.record('addColorStop', stop) };
+  };
+  createRadialGradient = (...a: unknown[]) => {
+    this.record('createRadialGradient', a);
+    return { addColorStop: (...stop: unknown[]) => this.record('addColorStop', stop) };
+  };
+  /** Every letter is 5 units wide. */
+  measureText = (text: string) => ({ width: text.length * 5 });
   ops = (op: string) => this.calls.filter((c) => c.op === op);
 }
 

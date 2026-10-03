@@ -154,6 +154,9 @@ const MARKUP: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
 /** A text file too big to be a document: read in the large-text viewer (see ../largeText). */
 const LARGE_TEXT: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, largeText: true };
 
+/** A vector drawing: looked at for now; the vector editor's tools come with it (see vector/). */
+const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false };
+
 /** A picture opened as an image: looked at, and changed with the picture tools. */
 const PICTURE: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, imageTools: true };
 
@@ -273,9 +276,11 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   // An outline: headings and nested lists of plain text.
   opml: { ...NOTHING, kind: 'opml', label: 'OPML', extensions: ['.opml'], mime: 'text/x-opml', styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'], lists: true, indent: true },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.largetext'); }, extensions: [], mime: 'text/plain' },
-  png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp', '.svg'], mime: 'image/png' },
+  png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg'], mime: 'image/jpeg' },
   webp: { ...PICTURE, kind: 'webp', get label() { return t('menus.format.webp'); }, extensions: ['.webp'], mime: 'image/webp' },
+  svg: { ...VECTOR, kind: 'svg', get label() { return t('menus.format.svg'); }, extensions: ['.svg'], mime: 'image/svg+xml' },
+  svgz: { ...VECTOR, kind: 'svgz', get label() { return t('menus.format.svgz'); }, extensions: ['.svgz'], mime: 'image/svg+xml' },
   txt: {
     ...NOTHING,
     kind: 'txt',
@@ -304,22 +309,29 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
 };
 
 /** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
-export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
 
 /** What a picture can be converted to: the picture types, and the document types that can hold it. */
-export const PICTURE_CONVERT_ORDER: DocumentKind[] = ['png', 'jpeg', 'webp', 'docx', 'pdf'];
+export const PICTURE_CONVERT_ORDER: DocumentKind[] = ['png', 'jpeg', 'webp', 'svg', 'svgz', 'docx', 'pdf'];
+
+/** What a vector drawing can be converted to: the vector and picture types, and the document types that can hold a picture of it. */
+export const VECTOR_CONVERT_ORDER: DocumentKind[] = ['svg', 'svgz', 'png', 'jpeg', 'webp', 'docx', 'odt', 'rtf', 'html', 'pdf'];
+
+/** The vector drawings' kinds. */
+export const VECTOR_KINDS: readonly DocumentKind[] = ['svg', 'svgz'];
 
 /** The pictures' kinds. */
 export const PICTURE_KINDS: readonly DocumentKind[] = ['png', 'jpeg', 'webp'];
 
 /** How the format list is grouped: the popular formats first, then the rest by type. */
-export const FORMAT_GROUPS: { id: 'popular' | 'documents' | 'web' | 'data' | 'markup' | 'images'; kinds: DocumentKind[] }[] = [
+export const FORMAT_GROUPS: { id: 'popular' | 'documents' | 'web' | 'data' | 'markup' | 'images' | 'vector'; kinds: DocumentKind[] }[] = [
   { id: 'popular', kinds: ['docx', 'pdf', 'html', 'md', 'txt'] },
   { id: 'documents', kinds: ['odt', 'rtf'] },
   { id: 'web', kinds: ['epub', 'fb2', 'mhtml'] },
   { id: 'data', kinds: ['csv', 'tsv'] },
   { id: 'markup', kinds: ['tex', 'typst', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'docbook', 'jats', 'opml'] },
   { id: 'images', kinds: ['png', 'jpeg', 'webp'] },
+  { id: 'vector', kinds: ['svg', 'svgz'] },
 ];
 
 /** The group a format is listed under. */
@@ -330,7 +342,7 @@ export function formatGroup(kind: DocumentKind): (typeof FORMAT_GROUPS)[number][
 /** The kinds a document of this kind can be switched to, grouped and in order: the document's own group first (an image lists the other images first), then the popular formats and the rest (its own kind included, if it isn't one of them). */
 export function convertTargets(kind: DocumentKind): DocumentKind[] {
   if (kind === 'largetext') return ['largetext'];
-  const order = PICTURE_KINDS.includes(kind) ? PICTURE_CONVERT_ORDER : CONVERT_ORDER;
+  const order = PICTURE_KINDS.includes(kind) ? PICTURE_CONVERT_ORDER : VECTOR_KINDS.includes(kind) ? VECTOR_CONVERT_ORDER : CONVERT_ORDER;
   const all = order.includes(kind) ? order : [...order, kind];
   const own = FORMAT_GROUPS.find((g) => g.kinds.includes(kind));
   const rank = (k: DocumentKind) => {

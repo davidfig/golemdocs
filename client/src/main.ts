@@ -94,7 +94,7 @@ import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
 import { findByTitle, parseDocAddress } from './formats/wikiLinks.ts';
 import { encodeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
-import { FORMATS, PICTURE_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import { FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -256,7 +256,7 @@ let pendingView: SavedView | null = null;
 let viewRestored = false;
 
 /** The caret is in text that a click can put it back in (not a picture, a grid or a PDF's own pages). */
-const textCaret = (): boolean => !grid && !annotating && !isPicture();
+const textCaret = (): boolean => !grid && !annotating && !isPicture() && !isDrawing();
 
 /** Remembers where the open document is scrolled to and its zoom, so opening it again returns there. */
 function rememberView(): void {
@@ -279,6 +279,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
     return isFormat(kind) ? kind : 'docx';
   }
   if (source.kind === 'image') return kindFromName(source.name, 'png');
+  if (source.kind === 'svg') return kindFromName(source.name, 'svg');
   return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
 }
 
@@ -572,7 +573,7 @@ function arrange(): void {
 
 /** Flow view is on, and applies to this document (not a PDF's own pages, a picture or the page grid). */
 function reflowing(): boolean {
-  return viewMode === 'flow' && !annotating && !isPicture() && !grid;
+  return viewMode === 'flow' && !annotating && !isPicture() && !isDrawing() && !grid;
 }
 
 /** Flow view: the width in points the text should fill at the current zoom. */
@@ -597,7 +598,7 @@ function syncReflow(immediate = false): void {
 }
 
 /** Word's page view (not reflowed text, a grid or a picture). */
-const wordView = (): boolean => !reflowing() && !grid && !PICTURE_KINDS.includes(current.kind);
+const wordView = (): boolean => !reflowing() && !grid && !isPicture() && !isDrawing();
 
 /** Gray kept beside a page that was zoomed to fit the screen's width. */
 const PAGE_FIT_MARGIN_PX = 16;
@@ -618,8 +619,8 @@ function placeCamera(): void {
     camera.y = bounds.y;
   } else if (grid) {
     camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
-  } else if (PICTURE_KINDS.includes(current.kind)) {
-    // A picture: the whole page in view.
+  } else if (isPicture() || isDrawing()) {
+    // A picture or drawing: the whole page in view.
     camera.fit(bounds, canvas.clientWidth, canvas.clientHeight, 32);
   } else {
     // Word's view: first page at 100%, centered, with a little gray above it. On a screen narrower
@@ -1716,7 +1717,9 @@ function switchedNotice(to: Format): string {
 async function convertTo(to: DocumentKind): Promise<void> {
   const from = current.kind;
   if (to === from) return;
-  if (PICTURE_KINDS.includes(to) && !PICTURE_KINDS.includes(from)) return convertToPicture(to as 'png' | 'jpeg' | 'webp');
+  // A drawing's pictures are made from the drawing itself (at full resolution), as a document's pages are drawn into one.
+  if (PICTURE_KINDS.includes(to) && !PICTURE_KINDS.includes(from) && !VECTOR_KINDS.includes(from)) return convertToPicture(to as 'png' | 'jpeg' | 'webp');
+  if (VECTOR_KINDS.includes(to) && !VECTOR_KINDS.includes(from)) return convertToDrawing(to as 'svg' | 'svgz');
   if (!isFormat(to) || !isFormat(from)) throw new Error(t('app.unsupportedFormat', { label: FORMATS[isFormat(to) ? from : to].label }));
   if (new URLSearchParams(location.search).get('room')) {
     reportError(t('app.leaveRoomToSwitch'));
@@ -1777,6 +1780,26 @@ async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
   }
 }
 
+/**
+ * Convert To a vector format from another kind of document: its pages, laid out and drawn as vector graphics (text stays
+ * text), saved and opened as a drawing of its own. The document stays as it is.
+ */
+async function convertToDrawing(to: 'svg' | 'svgz'): Promise<void> {
+  if (!loaded) return reportError(t('app.notReadyToConvert'));
+  setStatus(t('app.switching', { label: FORMATS[to].label }));
+  try {
+    const name = stem(current.name) + FORMATS[to].extensions[0];
+    const latest = openTicket();
+    const bytes = await worker.convert(to);
+    if (!latest()) return;
+    open({ kind: 'svg', name, bytes: bytes.slice().buffer });
+    documentEdited();
+    pendingNotice = t('app.convertedToDrawing', { name });
+  } catch (e) {
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+  }
+}
+
 // --- Pictures ------------------------------------------------------------------------------
 // A picture opens as a document that is one page showing it (see formats/imageDoc.ts). The picture
 // tools change its pixels and open the result in place of it: the same saved document, the same
@@ -1785,6 +1808,8 @@ async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
 const PICTURE_HISTORY = 12;
 let pictureHistory: { undo: Uint8Array[]; redo: Uint8Array[] } = { undo: [], redo: [] };
 const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
+/** A vector drawing is open: a page showing it, looked at as a whole like a picture. */
+const isDrawing = (): boolean => VECTOR_KINDS.includes(current.kind);
 
 /** The open picture as a file, of the type it is edited as. */
 const pictureBytes = (): Promise<Uint8Array> => worker.convert(current.kind as Format);
@@ -1930,7 +1955,7 @@ const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
 const isPictureFile = (file: File): boolean => PICTURE_FILE.test(file.name) || (file.type.startsWith('image/') && file.type !== 'image/tiff');
 
 /** Whether a picture can go into the open document now. */
-const canInsertPicture = (): boolean => loaded && !isPicture() && !annotating && !dashboard.visible && FORMATS[current.kind].images;
+const canInsertPicture = (): boolean => loaded && !isPicture() && !isDrawing() && !annotating && !dashboard.visible && FORMATS[current.kind].images;
 
 async function dropped(drop: Dropped, x: number, y: number): Promise<void> {
   if (drop?.kind === 'file' && isPictureFile(drop.file) && canInsertPicture()) {
@@ -3278,7 +3303,7 @@ function refreshFooterSoon(): void {
 }
 
 function refreshFooter(): void {
-  if (!footerOn || !loaded || isPicture() || largeView.active) return;
+  if (!footerOn || !loaded || isPicture() || isDrawing() || largeView.active) return;
   send({ kind: 'countWords', whole: true, footer: true });
   if (selection.text.length > 0) send({ kind: 'countWords', footer: true });
   else footerSelection = null;
@@ -3290,7 +3315,10 @@ function updateFooter(): void {
   footer.setVisible(visible);
   if (!visible) return;
   let picture = null;
-  if (isPicture()) {
+  if (isDrawing() && pages[0]) {
+    // The page is the drawing's size at 96 dpi.
+    picture = { width: Math.round((pages[0].width * 96) / 72), height: Math.round((pages[0].height * 96) / 72) };
+  } else if (isPicture()) {
     picture = pictureSizes.get(current) ?? null;
     if (!picture && !pictureSizing.has(current)) {
       const doc = current;
@@ -3313,7 +3341,7 @@ function updateFooter(): void {
     selection: selection.text.length > 0 ? footerSelection : null,
     picture,
     view: grid ? 'grid' : reflowing() ? 'flow' : 'print',
-    canFlow: !annotating && !isPicture(),
+    canFlow: !annotating && !isPicture() && !isDrawing(),
   });
 }
 

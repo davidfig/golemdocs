@@ -8,7 +8,7 @@ import { getLocale, t, type MessageKey } from '../i18n/index.ts';
 import type { WordStats } from '../layout/protocol.ts';
 import { h, setAttr, stripMnemonic } from './dom.ts';
 import type { DocumentKind, ViewMode } from './actions.ts';
-import { PICTURE_KINDS } from './formats.ts';
+import { PICTURE_KINDS, VECTOR_KINDS } from './formats.ts';
 
 export interface FooterInfo {
   kind: DocumentKind;
@@ -60,7 +60,7 @@ export interface FooterSegment {
 /** What the status bar says about a document, left to right. */
 export function footerSegments(info: FooterInfo): FooterSegment[] {
   const out: FooterSegment[] = [];
-  if (PICTURE_KINDS.includes(info.kind)) {
+  if (PICTURE_KINDS.includes(info.kind) || VECTOR_KINDS.includes(info.kind)) {
     if (info.picture) out.push({ key: 'panels.footer.pixels', params: info.picture });
   } else {
     const table = info.words?.table;

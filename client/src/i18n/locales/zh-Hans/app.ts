@@ -132,8 +132,10 @@ export const app: Partial<Messages> = {
   'app.notRtf': '这不是 RTF 文件。',
 
   'app.notImage': '这不是我们能读取的图片。',
+  'app.notSvg': '这不是我们能读取的 SVG 矢量图。',
   'app.notEmail': '这不是电子邮件。',
   'app.convertedToPicture': '已从文档的页面制作 {name}。文档本身没有更改。',
+  'app.convertedToDrawing': '已用文档的页面制作 {name}，文字仍为文字。文档本身未更改。',
   'app.pictureShortened': '一张图片只放得下前 {count} 页，因此 {name} 显示这些页面。文档本身没有更改。',
   'app.notReadyToConvert': '文档尚未准备好转换。',
   'app.notNotebook': '这不是 Jupyter 笔记本。',

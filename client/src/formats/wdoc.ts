@@ -54,6 +54,15 @@ export interface Extensions {
   eml?: EmlExtension;
   /** What a Jupyter notebook has that the document doesn't show (its output, metadata), see ipynb.ts. */
   ipynb?: IpynbExtension;
+  /** A vector drawing: its SVG text, which the page showing it is drawn from (see vectorDoc.ts). */
+  svg?: SvgExtension;
+}
+
+export interface SvgExtension {
+  /** The drawing as SVG text. */
+  source: string;
+  /** The file was gzip-compressed (.svgz). */
+  gzip?: true;
 }
 
 export interface IpynbExtension {
@@ -114,7 +123,7 @@ export interface Wdoc {
 
 const encoder = new TextEncoder();
 const MIME_BYTES = encoder.encode(WDOC_MIME);
-const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv', 'eml', 'ipynb'] as const satisfies readonly (keyof Extensions)[];
+const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv', 'eml', 'ipynb', 'svg'] as const satisfies readonly (keyof Extensions)[];
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {

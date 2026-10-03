@@ -51,7 +51,10 @@ test('data, configuration, log and source files open as text and keep their name
   assert.equal(sourceFromFile('data.bin', new ArrayBuffer(0)), null);
   // The document formats with their own readers are not taken over.
   assert.equal(sourceFromFile('page.html', new ArrayBuffer(0))?.kind, 'html');
-  assert.equal(sourceFromFile('picture.svg', new ArrayBuffer(0))?.kind, 'image');
+  assert.equal(sourceFromFile('picture.png', new ArrayBuffer(0))?.kind, 'image');
+  // Vector drawings have a kind of their own, compressed or not.
+  assert.equal(sourceFromFile('drawing.svg', new ArrayBuffer(0))?.kind, 'svg');
+  assert.equal(sourceFromFile('drawing.svgz', new ArrayBuffer(0))?.kind, 'svg');
   assert.equal(sourceFromFile('read.rst', new ArrayBuffer(0))?.kind, 'rst');
   assert.equal(stem('data.json'), 'data');
   assert.equal(stem('Report.final.pdf'), 'Report.final');

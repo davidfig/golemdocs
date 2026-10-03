@@ -176,6 +176,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       const { document, extensions } = await importDocument(lens, new Uint8Array(source.bytes));
       return flowing(source.name, document, lens, extensions);
     }
+    case 'svg': {
+      const lens: Format = /\.svgz$/i.test(source.name) ? 'svgz' : 'svg';
+      const { document, extensions } = await importDocument(lens, new Uint8Array(source.bytes));
+      return flowing(source.name, document, lens, extensions);
+    }
     case 'doc': {
       const { docToDocument } = await import('../formats/docImport.ts');
       return flowing(source.name, await docToDocument(new Uint8Array(source.bytes)));

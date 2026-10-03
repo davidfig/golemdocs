@@ -14,6 +14,8 @@ const KINDS: [string, FileKind][] = [
   ['Mail.eml', 'eml'],
   ['Lab.ipynb', 'notebook'],
   ['Photo.jpeg', 'image'],
+  ['Logo.svg', 'vector'],
+  ['Logo.svgz', 'vector'],
   ['main.ts', 'code'],
   ['Letter.docx', 'doc'],
   ['Letter.odt', 'doc'],

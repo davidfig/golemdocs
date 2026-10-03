@@ -32,6 +32,8 @@ export type DocumentSource =
   | { kind: 'odt'; name: string; bytes: ArrayBuffer }
   /** A picture (PNG, JPEG or WebP), opened as a page showing it. */
   | { kind: 'image'; name: string; bytes: ArrayBuffer }
+  /** A vector drawing (SVG, or gzip-compressed .svgz), opened as a page showing it. */
+  | { kind: 'svg'; name: string; bytes: ArrayBuffer }
   /** LaTeX source. */
   | { kind: 'tex'; name: string; bytes: ArrayBuffer }
   /** AsciiDoc source. */

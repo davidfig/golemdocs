@@ -15,9 +15,9 @@ import { jpeg as jpegHandler, png as pngHandler, webp as webpHandler } from './h
 import mdHandler from './handlers/md.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'pdf' | 'md' | 'txt';
+export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'pdf' | 'md' | 'txt';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'pdf', 'md', 'txt'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -74,6 +74,8 @@ const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   png: async () => pngHandler,
   jpeg: async () => jpegHandler,
   webp: async () => webpHandler,
+  svg: async () => (await import('./handlers/svg.ts')).svg,
+  svgz: async () => (await import('./handlers/svg.ts')).svgz,
   txt: async () => txtHandler,
 };
 
@@ -123,6 +125,10 @@ export function conversionIsLossy(from: Format, to: Format): boolean {
   // OPML holds plain one-line entries, and FictionBook has no lists or code blocks.
   if (to === 'opml' || to === 'fb2') return from !== 'txt' && from !== 'csv' && from !== 'tsv';
   // A picture document is a page with the picture on it: nothing is lost going to Word or PDF, or to PNG; JPEG and WebP compress.
+  // A drawing is vector: it stays so as SVG or PDF; as a picture it is pixels; as a document it is a page showing it.
+  if (from === 'svg' || from === 'svgz') return !(to === 'svg' || to === 'svgz' || to === 'pdf');
+  // A page drawn as vector graphics keeps its look, but not the way it reflows.
+  if (to === 'svg' || to === 'svgz') return !(from === 'png' || from === 'jpeg' || from === 'webp');
   if (from === 'png' || from === 'jpeg' || from === 'webp') return to === 'png' || to === 'jpeg' || to === 'webp' ? to !== 'png' : false;
   if (from === 'txt' || from === 'csv' || from === 'tsv') return to === 'pdf';
   if (from === 'tex' || from === 'adoc' || from === 'rst' || from === 'org' || from === 'mediawiki' || from === 'textile' || from === 'typst' || from === 'docbook' || from === 'jats' || from === 'fb2' || from === 'opml' || from === 'eml' || from === 'ipynb') return to === 'txt' || to === 'pdf';

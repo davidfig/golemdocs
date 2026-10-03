@@ -69,6 +69,13 @@ const ACCENT = '#316ac5';
 const DOUBLE_CLICK_MS = 400;
 const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2, fillType: 'solid', strokeStyle: 'dash:solid' };
 const DEFAULT_FONT_SIZE = 24;
+/** A curved arrow, as a cursor (browsers have none for turning), with its point in the middle; a grab hand where cursor images aren't used. */
+const ROTATE_CURSOR = (() => {
+  const arrow = "<path d='M5 13a7 7 0 0 1 12-5' fill='none'/><path d='M19 13a7 7 0 0 1-12 5' fill='none'/><path d='M14 3.5l4.5 3.5-5.5 1.5z' stroke-linejoin='round'/><path d='M10 20.5l-4.5-3.5 5.5-1.5z' stroke-linejoin='round'/>";
+  // A white outline under a dark one, so that it shows on any background.
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='white' stroke-width='4.2' fill='white'>${arrow}</g><g stroke='black' stroke-width='1.8' fill='black'>${arrow}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, grab`;
+})();
 /** The cursor over each handle of the selection's box. */
 const RESIZE_CURSORS: Record<Exclude<Handle, 'rotate'>, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
 
@@ -142,7 +149,7 @@ export class VectorEditor {
       case 'resize':
         return RESIZE_CURSORS[g.handle];
       case 'rotate':
-        return 'grabbing';
+        return ROTATE_CURSOR;
       case 'guide':
         return g.axis === 'v' ? 'ew-resize' : 'ns-resize';
       case 'move':
@@ -182,7 +189,7 @@ export class VectorEditor {
     if (gradient && this.gradientHandleAt(frame, gradient, sx, sy)) return 'move';
     // The handles around the selection.
     const handle = this.handleAt(frame, sx, sy);
-    if (handle === 'rotate') return 'grab';
+    if (handle === 'rotate') return ROTATE_CURSOR;
     if (handle) return RESIZE_CURSORS[handle];
     const hit = hitTest(scene, { x: at[0], y: at[1] }, LINE_REACH / frame.unit);
     if (hit) return this._selection.some((p) => p[0] === hit[0]) ? 'move' : 'pointer';

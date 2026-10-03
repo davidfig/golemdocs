@@ -194,7 +194,10 @@ export class VectorEditor {
     if (handle === 'rotate') return ROTATE_CURSOR;
     if (handle) return RESIZE_CURSORS[handle];
     const hit = hitTest(scene, { x: at[0], y: at[1] }, LINE_REACH / frame.unit);
-    if (hit) return this._selection.some((p) => p[0] === hit[0]) ? 'move' : 'pointer';
+    if (hit) {
+      const target = this.pickTarget(hit, false);
+      return this._selection.some((p) => p.join() === target.join()) ? 'move' : 'pointer';
+    }
     const guide = this.guideAt(frame, sx, sy);
     if (guide) return guide.axis === 'v' ? 'ew-resize' : 'ns-resize';
     return '';
@@ -203,6 +206,8 @@ export class VectorEditor {
   /** Whether things snap to the other shapes and the page, and the lines they have caught just now. */
   private snapOn = true;
   private guides: SnapTargets = { xs: [], ys: [] };
+  /** The group being worked in: a double click enters one, and clicks then pick its children. */
+  private entered: NodePath | null = null;
   /** The gradient stop picked on a selected shape (an interior one can be removed). */
   private stop: number | null = null;
 
@@ -327,6 +332,7 @@ export class VectorEditor {
     this.history = { undo: [], redo: [] };
     this.pen = null;
     this.nodes = null;
+    this.entered = null;
     this.lastClick = null;
     this.closeText();
     this._tool = 'select';
@@ -348,9 +354,15 @@ export class VectorEditor {
     this.history.redo = [];
     this.scene = scene;
     this._selection = selection;
+    this.keepGroup();
     this.host.layer.update(scene);
     this.refresh();
     this.host.changed(scene);
+  }
+
+  /** The group being worked in is let go of when it is no longer one (it was deleted or taken apart). */
+  private keepGroup(): void {
+    if (this.entered && nodeAt(this.scene!, this.entered)?.kind !== 'group') this.entered = null;
   }
 
   /** Changes a copy of the drawing and keeps the result; `change` returns the selection afterwards. */
@@ -381,6 +393,7 @@ export class VectorEditor {
     // What was selected may not be there any more.
     this._selection = this._selection.filter((p) => nodeAt(scene, p));
     if (this.nodes && !nodeAt(scene, this.nodes.path)) this.nodes = null;
+    this.keepGroup();
     this.host.layer.update(scene);
     this.refresh();
     this.host.changed(scene);
@@ -851,6 +864,7 @@ export class VectorEditor {
       if ((e.key === 'Delete' || e.key === 'Backspace') && this.nodes.selected !== null) return this.deleteNode(), true;
     }
     if (e.key === 'Escape' && this._tool !== 'select') return this.setTool('select'), true;
+    if (e.key === 'Escape' && this.entered) return this.leaveGroup(), true;
     if (mod && k === 'a') return this.selectAll(), true;
     if (!this._selection.length) return false;
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.removeStop()) return true;
@@ -1009,17 +1023,25 @@ export class VectorEditor {
       this.gesture = { kind: 'guide', base: cloneScene(scene), axis: guide.axis, index: guide.index, moved: false };
       return;
     }
-    if (hit && double) {
-      const node = nodeAt(scene, hit)!;
-      if (node.kind === 'text') return this.editText(hit, frame);
-      if (outline(node)) return this.enterNodes(hit);
-    }
+    // Clicking outside the group being worked in leaves it.
+    if (this.entered && !(hit && this.within(hit, this.entered))) this.entered = null;
     if (hit) {
-      // A click selects the outermost group around what is under it; Shift adds to or takes from the selection.
-      const top: NodePath = [hit[0]];
-      const index = this._selection.findIndex((p) => p.length === 1 && p[0] === top[0]);
-      if (e.shiftKey) this._selection = index >= 0 ? this._selection.filter((_, i) => i !== index) : [...this._selection, top];
-      else if (index < 0) this._selection = [top];
+      const target = this.pickTarget(hit, e.ctrlKey || e.metaKey);
+      const node = nodeAt(scene, target)!;
+      if (double) {
+        // A double click goes into a group; on anything else it edits it (a text's words, a path's points).
+        if (node.kind === 'group') {
+          this.entered = target;
+          this._selection = [];
+          return this.refresh();
+        }
+        if (node.kind === 'text') return this.editText(target, frame);
+        if (outline(node)) return this.enterNodes(target);
+      }
+      // Shift adds to or takes from the selection.
+      const index = this._selection.findIndex((p) => p.join() === target.join());
+      if (e.shiftKey) this._selection = index >= 0 ? this._selection.filter((_, i) => i !== index) : [...this._selection, target];
+      else if (index < 0) this._selection = [target];
       this.refresh();
       if (index >= 0 && e.shiftKey) return;
       this.gesture = { kind: 'move', base: cloneScene(scene), start: at, moved: false };
@@ -1028,8 +1050,46 @@ export class VectorEditor {
     this.gesture = { kind: 'band', start: at, to: at, add: e.shiftKey, before: this._selection };
     if (!e.shiftKey) {
       this._selection = [];
+      this.entered = null;
       this.refresh();
     }
+  }
+
+  /** What a rubber band takes: the shapes at the top, or the children of the group being worked in. */
+  private inRect(scene: Scene, rect: { x: number; y: number; width: number; height: number }): NodePath[] {
+    const group = this.entered && nodeAt(scene, this.entered);
+    if (!this.entered || group?.kind !== 'group') return nodesInRect(scene, rect);
+    const out: NodePath[] = [];
+    group.children.forEach((child, i) => {
+      if (child.kind === 'raw' || child.style.display === 'none') return;
+      const b = selectionBounds(scene, [[...this.entered!, i]]);
+      if (b && b.x <= rect.x + rect.width && b.x + b.width >= rect.x && b.y <= rect.y + rect.height && b.y + b.height >= rect.y) out.push([...this.entered!, i]);
+    });
+    return out;
+  }
+
+  /** Goes back out of the group being worked in, with the group picked. */
+  private leaveGroup(): void {
+    const group = this.entered;
+    this.entered = null;
+    if (group) this._selection = [group];
+    this.refresh();
+  }
+
+  /** Whether a path is inside (or is) another. */
+  private within(path: NodePath, outer: NodePath): boolean {
+    return path.length >= outer.length && outer.every((v, i) => path[i] === v);
+  }
+
+  /**
+   * What a click on a shape picks. Usually the outermost group around it; inside a group that has
+   * been entered (by double-clicking it), the group's own child; with Ctrl or Cmd, the shape itself,
+   * however deep.
+   */
+  private pickTarget(hit: NodePath, deepest: boolean): NodePath {
+    if (deepest) return hit;
+    const inside = this.entered && this.within(hit, this.entered) && hit.length > this.entered.length ? this.entered.length + 1 : 1;
+    return hit.slice(0, inside);
   }
 
   private move(e: PointerEvent): void {
@@ -1198,8 +1258,8 @@ export class VectorEditor {
     if (gesture.kind === 'band') {
       const { start, to } = gesture;
       const rect = { x: Math.min(start[0], to[0]), y: Math.min(start[1], to[1]), width: Math.abs(to[0] - start[0]), height: Math.abs(to[1] - start[1]) };
-      const found = this.scene && rect.width + rect.height > 0 ? nodesInRect(this.scene, rect) : [];
-      const merged = gesture.add ? [...gesture.before, ...found.filter((p) => !gesture.before.some((q) => q[0] === p[0]))] : found;
+      const found = this.scene && rect.width + rect.height > 0 ? this.inRect(this.scene, rect) : [];
+      const merged = gesture.add ? [...gesture.before, ...found.filter((p) => !gesture.before.some((q) => q.join() === p.join()))] : found;
       this._selection = merged;
       return this.refresh();
     }
@@ -1476,6 +1536,19 @@ export class VectorEditor {
     ctx.lineWidth = 1;
     ctx.strokeStyle = ACCENT;
     ctx.fillStyle = '#fff';
+    if (this.entered) {
+      // The group being worked in, outlined, so that it is clear what clicks pick.
+      const box = selectionBounds(scene, [this.entered]);
+      if (box) {
+        const [x0, y0] = frame.toScreen(box.x, box.y);
+        const [x1, y1] = frame.toScreen(box.x + box.width, box.y + box.height);
+        ctx.save();
+        ctx.strokeStyle = '#8a8fa3';
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(Math.min(x0, x1) - 3.5, Math.min(y0, y1) - 3.5, Math.abs(x1 - x0) + 7, Math.abs(y1 - y0) + 7);
+        ctx.restore();
+      }
+    }
     if (this.nodes) this.decorateNodes(ctx, frame, scene);
     else this.decorateSelection(ctx, frame, scene);
     this.decorateGesture(ctx, frame);

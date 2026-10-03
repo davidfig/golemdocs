@@ -145,6 +145,47 @@ test.describe('editing a drawing', () => {
   });
 });
 
+test.describe('groups', () => {
+  const GROUPED = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+    <g id="pair"><rect id="left" x="20" y="20" width="120" height="80" fill="#e53935"/><circle id="right" cx="300" cy="100" r="60" fill="#43a047"/></g>
+  </svg>`;
+
+  async function open(app: App): Promise<void> {
+    await app.blank();
+    await importFile(app, { name: 'grouped.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(GROUPED) });
+    await app.menubar.getByRole('menuitem', { name: 'Drawing' }).waitFor({ timeout: 30_000 });
+    await expect(app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem')).toHaveCount(3, { timeout: 30_000 });
+  }
+
+  test('a click picks the group, Ctrl-click the shape inside it, and a double click goes into the group', async ({ app }) => {
+    await open(app);
+    const rows = app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    const group = rows.filter({ hasText: 'pair' });
+    const inner = rows.filter({ hasText: 'left' });
+    const at = await onPage(app, 0.2, 0.4);
+    await app.page.mouse.click(at.x, at.y);
+    await expect(group).toHaveAttribute('aria-selected', 'true');
+    await expect(inner).toHaveAttribute('aria-selected', 'false');
+    // Ctrl (or Cmd) goes straight to the shape.
+    await app.page.keyboard.down(process.platform === 'darwin' ? 'Meta' : 'Control');
+    await app.page.mouse.click(at.x, at.y);
+    await app.page.keyboard.up(process.platform === 'darwin' ? 'Meta' : 'Control');
+    await expect(inner).toHaveAttribute('aria-selected', 'true');
+    await expect(group).toHaveAttribute('aria-selected', 'false');
+    // Clear, then a double click enters the group: the next click picks a child.
+    await app.press('Escape');
+    await app.page.waitForTimeout(600);
+    await app.page.mouse.dblclick(at.x, at.y);
+    await expect(rows.filter({ hasText: 'pair' })).toHaveAttribute('aria-selected', 'false');
+    await app.page.waitForTimeout(600);
+    await app.page.mouse.click(at.x, at.y);
+    await expect(inner).toHaveAttribute('aria-selected', 'true');
+    // Escape goes back out, with the group picked.
+    await app.press('Escape');
+    await expect(group).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
 test.describe('the canvas', () => {
   test('Canvas Size changes the page, keeping the proportions, and Fit to Artwork shrinks it to the shapes', async ({ app }) => {
     await openDrawing(app);

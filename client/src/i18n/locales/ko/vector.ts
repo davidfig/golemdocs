@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': '단색',
   'vector.fillType.linear': '선형 그라디언트',
   'vector.fillType.radial': '원형 그라디언트',
+  'vector.unite': '합치기',
+  'vector.intersect': '교차',
+  'vector.subtract': '앞쪽 도형으로 빼기',
+  'vector.exclude': '겹침 제외',
+  'vector.makeClip': '클리핑 마스크 만들기',
+  'vector.releaseClip': '클리핑 마스크 해제',
+  'vector.booleanFailed': '이 도형들은 결합할 수 없습니다. 같은 그룹의 도형이어야 하며 결과가 남아야 합니다.',
+  'vector.clipFailed': '클리핑 마스크에는 같은 그룹 안에서 다른 개체 위에 있는 도형이 필요합니다.',
 };

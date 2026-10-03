@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Tinta unita',
   'vector.fillType.linear': 'Sfumatura lineare',
   'vector.fillType.radial': 'Sfumatura radiale',
+  'vector.unite': 'Unisci',
+  'vector.intersect': 'Interseca',
+  'vector.subtract': 'Sottrai forme frontali',
+  'vector.exclude': 'Escludi sovrapposizione',
+  'vector.makeClip': 'Crea maschera di ritaglio',
+  'vector.releaseClip': 'Rilascia maschera di ritaglio',
+  'vector.booleanFailed': 'Queste forme non possono essere combinate: devono essere forme dello stesso gruppo e deve restare qualcosa.',
+  'vector.clipFailed': 'Una maschera di ritaglio richiede una forma sopra almeno un altro oggetto, tutti nello stesso gruppo.',
 };

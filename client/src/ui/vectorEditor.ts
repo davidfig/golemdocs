@@ -8,6 +8,8 @@
 
 import type { XmlElement } from '@golemdocs/docx';
 import type { PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
+import type { BooleanOp } from '../vector/boolean.ts';
+import { isClipped, makeClippingMask, releaseClippingMask } from '../vector/clipEdit.ts';
 import { applyBrush, brushOf, editableCommands, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
 import { DASHES, presetById } from '../vector/brushPresets.ts';
 import { addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
@@ -172,6 +174,11 @@ export class VectorEditor {
     return { fill: gradient ? stopColor : fillPaint, fillType: gradient ? gradient.type : 'solid', stroke: paint('stroke', null), strokeWidth: parseLength(styleOf(scene, first, 'stroke-width')) ?? 1, strokeStyle: dashOf(styleOf(scene, first, 'stroke-dasharray'), parseLength(styleOf(scene, first, 'stroke-width')) ?? 1) };
   }
 
+  /** Whether the one selected node is clipped by a clipping mask. */
+  get clipped(): boolean {
+    return !!this.scene && this._selection.length === 1 && isClipped(this.scene, nodeAt(this.scene, this._selection[0]));
+  }
+
   /** Starts editing a drawing that has just been opened: no selection, no history. */
   open(scene: Scene): void {
     this.scene = scene;
@@ -298,6 +305,36 @@ export class VectorEditor {
 
   order(order: Order): void {
     this.edit((scene, selection) => reorderNodes(scene, selection, order));
+  }
+
+  /** Combines the selected shapes into one (unite, intersect, subtract the front ones from the back one, or exclude where they overlap). */
+  async boolean(op: BooleanOp): Promise<void> {
+    if (!this.scene || this._selection.length < 2) return;
+    const scene = this.scene;
+    const { booleanNodes } = await import('../vector/boolean.ts');
+    // Another change while the code loaded: this one is not applied to a drawing it wasn't asked of.
+    if (scene !== this.scene) return;
+    const next = cloneScene(scene);
+    const at = booleanNodes(next, this._selection, op);
+    if (!at) return this.host.notice?.(t('vector.booleanFailed'));
+    this.commit(next, [at]);
+  }
+
+  /** Cuts the selected shapes to the outline of the topmost one. */
+  makeClip(): void {
+    if (!this.scene || this._selection.length < 2) return;
+    const next = cloneScene(this.scene);
+    const at = makeClippingMask(next, this._selection);
+    if (!at) return this.host.notice?.(t('vector.clipFailed'));
+    this.commit(next, [at]);
+  }
+
+  /** Takes the clip off the selected group. */
+  releaseClip(): void {
+    this.edit((scene, selection) => {
+      const released = releaseClippingMask(scene, selection[0]);
+      return released.length ? released : selection;
+    });
   }
 
   nudge(dx: number, dy: number): void {

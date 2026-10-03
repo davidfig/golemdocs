@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Сплошной цвет',
   'vector.fillType.linear': 'Линейный градиент',
   'vector.fillType.radial': 'Радиальный градиент',
+  'vector.unite': 'Объединить',
+  'vector.intersect': 'Пересечение',
+  'vector.subtract': 'Вычесть передние фигуры',
+  'vector.exclude': 'Исключить пересечение',
+  'vector.makeClip': 'Создать обтравочную маску',
+  'vector.releaseClip': 'Освободить обтравочную маску',
+  'vector.booleanFailed': 'Эти фигуры нельзя объединить: они должны быть фигурами из одной группы, и от них должно что-то остаться.',
+  'vector.clipFailed': 'Для обтравочной маски нужна фигура поверх хотя бы одного другого объекта, все в одной группе.',
 };

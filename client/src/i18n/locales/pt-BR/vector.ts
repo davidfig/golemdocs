@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Cor sólida',
   'vector.fillType.linear': 'Gradiente linear',
   'vector.fillType.radial': 'Gradiente radial',
+  'vector.unite': 'Unir',
+  'vector.intersect': 'Interseção',
+  'vector.subtract': 'Subtrair formas da frente',
+  'vector.exclude': 'Excluir sobreposição',
+  'vector.makeClip': 'Criar máscara de recorte',
+  'vector.releaseClip': 'Liberar máscara de recorte',
+  'vector.booleanFailed': 'Essas formas não podem ser combinadas: devem ser formas do mesmo grupo e algo precisa sobrar delas.',
+  'vector.clipFailed': 'Uma máscara de recorte precisa de uma forma sobre pelo menos outro objeto, todos no mesmo grupo.',
 };

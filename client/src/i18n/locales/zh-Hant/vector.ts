@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': '純色',
   'vector.fillType.linear': '線性漸層',
   'vector.fillType.radial': '放射狀漸層',
+  'vector.unite': '合併',
+  'vector.intersect': '交集',
+  'vector.subtract': '減去前面的形狀',
+  'vector.exclude': '排除重疊',
+  'vector.makeClip': '建立剪裁遮色片',
+  'vector.releaseClip': '釋放剪裁遮色片',
+  'vector.booleanFailed': '這些形狀無法組合：它們必須是同一群組中的形狀，且組合後要有剩餘部分。',
+  'vector.clipFailed': '剪裁遮色片需要一個位於至少另一個物件之上的形狀，且都在同一群組中。',
 };

@@ -2320,7 +2320,7 @@ function render(): void {
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
-    vector: { tool: vectorEditor.tool, hasSelection: vectorEditor.selection.length > 0, ...vectorEditor.currentStyle },
+    vector: { tool: vectorEditor.tool, hasSelection: vectorEditor.selection.length > 0, multiple: vectorEditor.selection.length > 1, clipped: vectorEditor.clipped, ...vectorEditor.currentStyle },
     inTable,
     formattingMarks,
     viewMode: grid ? 'grid' : viewMode,
@@ -3042,6 +3042,15 @@ const chromeHost = createChromeHost({
         return vectorEditor.order(op);
       case 'selectAll':
         return vectorEditor.selectAll();
+      case 'unite':
+      case 'intersect':
+      case 'subtract':
+      case 'exclude':
+        return void vectorEditor.boolean(op);
+      case 'makeClip':
+        return vectorEditor.makeClip();
+      case 'releaseClip':
+        return vectorEditor.releaseClip();
     }
   },
   vectorStyle: (change) => vectorEditor.applyStyle(change),

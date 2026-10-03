@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Couleur unie',
   'vector.fillType.linear': 'Dégradé linéaire',
   'vector.fillType.radial': 'Dégradé radial',
+  'vector.unite': 'Réunir',
+  'vector.intersect': 'Intersection',
+  'vector.subtract': 'Soustraire les formes de devant',
+  'vector.exclude': 'Exclure le chevauchement',
+  'vector.makeClip': 'Créer un masque d’écrêtage',
+  'vector.releaseClip': 'Libérer le masque d’écrêtage',
+  'vector.booleanFailed': 'Ces formes ne peuvent pas être combinées : ce doivent être des formes du même groupe, et il doit en rester quelque chose.',
+  'vector.clipFailed': 'Un masque d’écrêtage demande une forme au-dessus d’au moins un autre objet, tous dans le même groupe.',
 };

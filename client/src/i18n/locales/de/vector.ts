@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Volltonfarbe',
   'vector.fillType.linear': 'Linearer Verlauf',
   'vector.fillType.radial': 'Radialer Verlauf',
+  'vector.unite': 'Vereinen',
+  'vector.intersect': 'Schnittmenge',
+  'vector.subtract': 'Vordere Formen abziehen',
+  'vector.exclude': 'Überlappung ausschließen',
+  'vector.makeClip': 'Schnittmaske erstellen',
+  'vector.releaseClip': 'Schnittmaske aufheben',
+  'vector.booleanFailed': 'Diese Formen lassen sich nicht kombinieren: Sie müssen Formen in derselben Gruppe sein, und es muss etwas übrig bleiben.',
+  'vector.clipFailed': 'Eine Schnittmaske braucht eine Form über mindestens einem weiteren Objekt, alle in derselben Gruppe.',
 };

@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': '纯色',
   'vector.fillType.linear': '线性渐变',
   'vector.fillType.radial': '径向渐变',
+  'vector.unite': '合并',
+  'vector.intersect': '相交',
+  'vector.subtract': '减去前面的形状',
+  'vector.exclude': '排除重叠',
+  'vector.makeClip': '建立剪切蒙版',
+  'vector.releaseClip': '释放剪切蒙版',
+  'vector.booleanFailed': '这些形状无法组合：它们必须是同一组中的形状，并且组合后要有剩余部分。',
+  'vector.clipFailed': '剪切蒙版需要一个位于至少另一个对象之上的形状，且都在同一组中。',
 };

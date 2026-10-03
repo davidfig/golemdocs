@@ -17,7 +17,8 @@
     "@golemdocs/layout": "workspace:*",
     "@golemdocs/odt": "workspace:*",
     "@golemdocs/ops": "workspace:*",
-    "@golemdocs/pdf": "workspace:*"
+    "@golemdocs/pdf": "workspace:*",
+    "polygon-clipping": "^0.15.7"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

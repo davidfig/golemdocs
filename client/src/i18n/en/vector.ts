@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Solid Color',
   'vector.fillType.linear': 'Linear Gradient',
   'vector.fillType.radial': 'Radial Gradient',
+  'vector.unite': 'Unite',
+  'vector.intersect': 'Intersect',
+  'vector.subtract': 'Subtract Front Shapes',
+  'vector.exclude': 'Exclude Overlap',
+  'vector.makeClip': 'Make Clipping Mask',
+  'vector.releaseClip': 'Release Clipping Mask',
+  'vector.booleanFailed': 'Those shapes can’t be combined: they must be shapes in the same group, and something has to be left of them.',
+  'vector.clipFailed': 'A clipping mask needs a shape on top of at least one other object, all in the same group.',
 } as const;

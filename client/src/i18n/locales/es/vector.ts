@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': 'Color sólido',
   'vector.fillType.linear': 'Degradado lineal',
   'vector.fillType.radial': 'Degradado radial',
+  'vector.unite': 'Unir',
+  'vector.intersect': 'Intersecar',
+  'vector.subtract': 'Restar formas frontales',
+  'vector.exclude': 'Excluir superposición',
+  'vector.makeClip': 'Crear máscara de recorte',
+  'vector.releaseClip': 'Liberar máscara de recorte',
+  'vector.booleanFailed': 'Esas formas no se pueden combinar: deben ser formas del mismo grupo y debe quedar algo de ellas.',
+  'vector.clipFailed': 'Una máscara de recorte necesita una forma encima de al menos otro objeto, todos en el mismo grupo.',
 };

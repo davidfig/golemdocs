@@ -62,4 +62,12 @@ export const vector = {
   'vector.fillType.solid': '単色',
   'vector.fillType.linear': '線形グラデーション',
   'vector.fillType.radial': '円形グラデーション',
+  'vector.unite': '合体',
+  'vector.intersect': '交差',
+  'vector.subtract': '前面オブジェクトで型抜き',
+  'vector.exclude': '重なりを除外',
+  'vector.makeClip': 'クリッピングマスクを作成',
+  'vector.releaseClip': 'クリッピングマスクを解除',
+  'vector.booleanFailed': 'これらの図形は結合できません。同じグループ内の図形で、結果が残る必要があります。',
+  'vector.clipFailed': 'クリッピングマスクには、同じグループ内の、ほかのオブジェクトの上にある図形が必要です。',
 };

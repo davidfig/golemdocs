@@ -230,3 +230,17 @@ test('sameBytes compares contents', () => {
   assert.equal(sameBytes(new Uint8Array([1, 2]), new Uint8Array([1, 3])), false);
   assert.equal(sameBytes(new Uint8Array([1]), new Uint8Array([1, 1])), false);
 });
+
+test('duplicates in subfolders are asked about too', async () => {
+  const asked: string[] = [];
+  const { t } = dup({
+    folders: [folder('w', 'Work'), folder('r', 'Reports', 'w')],
+    documents: [{ id: 'd9', name: 'b.txt', folderId: 'r' }],
+    ask: async (d) => {
+      asked.push([...d.folders, d.name].join('/'));
+      return { action: 'rename', all: false };
+    },
+  });
+  await importFiles([file('Work/Reports/b.txt')], t);
+  assert.deepEqual(asked, ['Work/Reports/b.txt']);
+});

@@ -78,6 +78,10 @@ export async function startWorker(): Promise<void> {
 export async function stopWorker(): Promise<void> {
   // Vite's close can wait forever on its esbuild service; don't let that hold the test process open.
   await Promise.race([server?.close(), new Promise((r) => setTimeout(r, 3000).unref())]);
+  // Nor what it leaves running: once this file's results are out, its process ends (this timer only
+  // fires if something else is keeping it alive). The runner's own --test-force-exit would do this
+  // for every file, but it also stops the run before the others have all reported.
+  setTimeout(() => process.exit(), 2000).unref();
 }
 
 /** Opens a document under a fresh id and waits for its first full layout (or its error). */

@@ -4,7 +4,7 @@ Drop a PNG, JPEG, or WebP onto Golem Docs and it opens as a picture you can crop
 
 ## Open a picture, or put it in a document
 
-Drop an image onto the window and Golem Docs asks what to do with it: insert it in the document you are working on, or open it as a picture of its own. GIF, BMP, and SVG files open as pictures too, and save as PNG.
+Drop an image onto the window and Golem Docs asks what to do with it: insert it in the document you are working on, or open it as a picture of its own. GIF and BMP files open as pictures too, and save as PNG. SVG files open as [vector drawings](/home/vector) instead.
 
 ## Fix and reshape
 

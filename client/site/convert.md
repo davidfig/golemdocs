@@ -18,7 +18,8 @@ Some conversions can't keep everything. Going from a richer format to a poorer o
 - **Notebooks:** Jupyter notebooks (.ipynb).
 - **Data:** CSV and TSV open as tables you can edit, and save as the same file.
 - **PDF:** open it to mark it up or [edit it](/home/pdf), or convert it to another format as a reflowed copy.
-- **Pictures:** PNG, JPEG, and WebP, plus GIF, BMP, and SVG, which open as pictures and save as PNG. See [editing pictures](/home/images).
+- **Pictures:** PNG, JPEG, and WebP, plus GIF and BMP, which open as pictures and save as PNG. See [editing pictures](/home/images).
+- **Vector drawings:** SVG and compressed SVG (.svgz). A drawing converts to PDF as vector, to a picture or a Word page at full resolution, and any document can become SVG with its text kept as text. See [editing vectors](/home/vector).
 - **Plain text:** .txt and the many text-based files that look like it. Very large ones open in the [large file viewer](/home/large-files).
 
 ## Turn a document into a picture

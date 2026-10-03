@@ -1,5 +1,5 @@
-// Minimal ZIP container support for OOXML packages: stored and deflated entries, UTF-8
-// names, no encryption, no ZIP64 (Word never produces packages over 4GB).
+// Minimal ZIP container support for OOXML packages: stored and deflated entries, UTF-8 (or
+// code page 437) names, no encryption, no ZIP64 (Word never produces packages over 4GB).
 //
 // Reading goes through the central directory and inflates lazily, so parts nobody asks for
 // are never decompressed. Writing can reuse an entry's compressed bytes verbatim, so
@@ -52,22 +52,45 @@ export class ZipEntry {
   }
 }
 
+/** Characters 0x80-0xFF of code page 437, which ZIP names are in when they don't say they are UTF-8. */
+const CP437_HIGH =
+  'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0';
+
+/**
+ * An entry's name. Flagged as UTF-8, it is; otherwise it is UTF-8 if it reads as that (macOS and
+ * many tools write UTF-8 without saying so), and else code page 437 (Windows' own ZIP folders).
+ */
+function decodeName(bytes: Uint8Array, flags: number): string {
+  if (flags & UTF8_FLAG || bytes.every((b) => b < 0x80)) return new TextDecoder().decode(bytes);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return Array.from(bytes, (b) => (b < 0x80 ? String.fromCharCode(b) : CP437_HIGH[b - 0x80])).join('');
+  }
+}
+
 export class ZipArchive {
   readonly entries = new Map<string, ZipEntry>();
+  /** Entries that can't be read (encrypted, compressed in a way not supported, damaged), when read with `lenient`. */
+  readonly unreadable: string[] = [];
 
-  static read(input: Uint8Array): ZipArchive {
+  /**
+   * Reads a ZIP's directory. `lenient`: an entry that can't be read is listed in `unreadable` rather
+   * than failing the whole archive (an import of someone's ZIP, not a document's own package).
+   */
+  static read(input: Uint8Array, options: { lenient?: boolean } = {}): ZipArchive {
     if (input.length >= 8 && input[0] === 0xd0 && input[1] === 0xcf && input[2] === 0x11 && input[3] === 0xe0) {
       throw new ZipError('this is an encrypted document or a legacy binary .doc, not a .docx package');
     }
     try {
-      return ZipArchive.parse(input);
+      return ZipArchive.parse(input, options.lenient ?? false);
     } catch (e) {
       if (e instanceof ZipError) throw e;
       throw new ZipError(`corrupt ZIP file (${(e as Error).message})`);
     }
   }
 
-  private static parse(input: Uint8Array): ZipArchive {
+  private static parse(input: Uint8Array, lenient: boolean): ZipArchive {
     // Plain Uint8Array view (not a Node Buffer), so entry data behaves the same everywhere.
     const bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -86,7 +109,6 @@ export class ZipArchive {
     if (count === 0xffff || directoryOffset === 0xffffffff) throw new ZipError('ZIP64 archives are not supported');
 
     const archive = new ZipArchive();
-    const decoder = new TextDecoder();
     let p = directoryOffset;
     for (let i = 0; i < count; i++) {
       if (view.getUint32(p, true) !== CENTRAL_HEADER) throw new ZipError('corrupt central directory');
@@ -99,12 +121,22 @@ export class ZipArchive {
       const extraLength = view.getUint16(p + 30, true);
       const commentLength = view.getUint16(p + 32, true);
       const localOffset = view.getUint32(p + 42, true);
-      const name = decoder.decode(bytes.subarray(p + 46, p + 46 + nameLength));
+      const name = decodeName(bytes.subarray(p + 46, p + 46 + nameLength), flags);
       p += 46 + nameLength + extraLength + commentLength;
 
-      if (flags & 1) throw new ZipError('encrypted (password-protected) documents are not supported');
-      if (method !== STORED && method !== DEFLATED) throw new ZipError(`${name}: unsupported compression method ${method}`);
-      if (view.getUint32(localOffset, true) !== LOCAL_HEADER) throw new ZipError(`${name}: corrupt local header`);
+      const problem =
+        flags & 1
+          ? 'encrypted (password-protected) documents are not supported'
+          : method !== STORED && method !== DEFLATED
+            ? `${name}: unsupported compression method ${method}`
+            : localOffset + 30 > bytes.length || view.getUint32(localOffset, true) !== LOCAL_HEADER
+              ? `${name}: corrupt local header`
+              : null;
+      if (problem) {
+        if (!lenient) throw new ZipError(problem);
+        if (!name.endsWith('/')) archive.unreadable.push(name);
+        continue;
+      }
       const dataStart = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
       if (name.endsWith('/')) continue; // directory entry
       archive.entries.set(name, new ZipEntry(name, method, crc, size, bytes.subarray(dataStart, dataStart + compressedSize)));

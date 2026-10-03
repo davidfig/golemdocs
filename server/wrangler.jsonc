@@ -85,6 +85,9 @@
 		// touching production data. Create them with `pnpm --filter @golemdocs/server cf:setup:dev`, then
 		// put the printed database id in wrangler.local.json (and your account id).
 		"dev": {
+			// Not inherited from the top level: deploying this environment would otherwise move the
+			// golemdocs.com custom domain away from production.
+			"routes": [],
 			"ai": {
 				"binding": "AI"
 			},

@@ -413,7 +413,7 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
     }
     let m: RegExpExecArray | null;
     // Links and images.
-    if ((m = /^(?:link:)?((?:https?|ftp|mailto|file):[^\s[]*|[^\s[:]+\.\w+)\[((?:[^\]\\]|\\.)*)\]/.exec(rest)) && (rest.startsWith('link:') || /^(https?|ftp|mailto|file):/.test(m[1]))) {
+    if ((m = /^(?:link:)?((?:https?|ftp|mailto|file|tag):[^\s[]*|[^\s[:]+\.\w+)\[((?:[^\]\\]|\\.)*)\]/.exec(rest)) && (rest.startsWith('link:') || /^(https?|ftp|mailto|file|tag):/.test(m[1]))) {
       flush();
       const label = m[2].replace(/\\\]/g, ']').replace(/,.*$/s, (x) => (/^,\s*\w+=/.test(x) ? '' : x));
       out.push(...parseInline(label || m[1], { ...marks, link: m[1] }));

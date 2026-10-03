@@ -47,6 +47,13 @@ export const app: Partial<Messages> = {
   'app.importZipNone': '{name} enthält keine importierbaren Dokumente',
   'app.importedZip': 'Importierte Dokumente: {count}',
   'app.importedZipSkipped': 'Importierte Dokumente: {count}. Nicht lesbare Dateien wurden übersprungen: {skipped}',
+  'app.importDuplicateTitle': 'Name bereits vergeben',
+  'app.importDuplicateMessage': '„{name}“ gibt es bereits mit anderem Inhalt. Was soll mit der neuen Datei geschehen?',
+  'app.importDuplicateAll': 'Für alle weiteren Duplikate so verfahren',
+  'app.importDuplicateOverwrite': 'Überschreiben',
+  'app.importDuplicateRename': 'Beide behalten',
+  'app.importDuplicateSkip': 'Überspringen',
+  'app.importedZipUnchanged': 'Importierte Dokumente: {count}. Unverändert gelassen (identisch oder übersprungen): {unchanged}',
   'app.importZipFailed': 'Import fehlgeschlagen: {message}',
   'app.importProgress': '{done} von {total}',
   'app.timeLeft': 'noch {time}',
@@ -106,9 +113,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Dadurch wird alles gelöscht, was in diesem Browser gespeichert ist, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden.',
   'app.clearBodyOne': 'Dadurch wird das eine in diesem Browser gespeicherte Dokument gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden.',
   'app.clearBodyMany': 'Dadurch werden alle {count} in diesem Browser gespeicherten Dokumente gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden.',
-  'app.clearBodyNoneAccount': 'Dadurch wird alles gelöscht, was in diesem Browser gespeichert ist, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden. In Ihrem Konto gespeicherte Dokumente bleiben erhalten.',
-  'app.clearBodyOneAccount': 'Dadurch wird das eine in diesem Browser gespeicherte Dokument gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden. In Ihrem Konto gespeicherte Dokumente bleiben erhalten.',
-  'app.clearBodyManyAccount': 'Dadurch werden alle {count} in diesem Browser gespeicherten Dokumente gelöscht, einschließlich Ihres Symbolleisten-Layouts. Dies kann nicht rückgängig gemacht werden. In Ihrem Konto gespeicherte Dokumente bleiben erhalten.',
+  'app.clearBodyAccount': 'Dadurch werden Sie abgemeldet und alles, was Golem Docs in diesem Browser speichert, einschließlich Ihres Symbolleisten-Layouts, wird entfernt. Ihre Dokumente sind in Ihrem Konto sicher.',
+  'app.clearUnsent': 'Ausnahme: Änderungen an {count} Ihrer Dokumente haben Ihr Konto noch nicht erreicht und gehen verloren, wenn sie nicht gesendet werden können.',
+  'app.clearSignOut': 'Sie werden abgemeldet.',
+  'app.clearLoss': 'Dokumente, die nicht in einem Konto gespeichert sind, gehen endgültig verloren: Laden Sie vorher herunter, was Sie behalten möchten.',
   'app.clearFailed': 'Lokale Daten konnten nicht gelöscht werden: {message}',
 
   // Formats
@@ -155,6 +163,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': 'Wird jetzt als {label} bearbeitet. Beim Speichern als Datei wird komprimiert, dabei geht ein wenig Detail verloren.',
 
   'app.createLinkedDocument': 'Es gibt kein Dokument mit dem Namen „{title}“. Soll es erstellt werden?',
+  'app.linksUpdated': 'Die Links auf umbenannte oder verschobene Elemente wurden aktualisiert.',
+  'app.linksSkipped': 'Einige Links auf umbenannte oder verschobene Elemente konnten nicht aktualisiert werden: Die Dokumente werden gerade von anderen bearbeitet oder sind im Konflikt.',
+  'app.linksUpdateFailed': 'Die Links auf umbenannte oder verschobene Elemente konnten nicht aktualisiert werden: {message}',
+  'app.createLinkedTitle': 'Dokument nicht gefunden',
+  'app.createLinkedAction': 'Erstellen',
 
   // Browser storage
   'app.storageOpenFailed': 'Der Browserspeicher konnte nicht geöffnet werden.',

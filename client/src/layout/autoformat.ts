@@ -4,6 +4,8 @@
 // the menus use, so the result is real headings, lists and marks, not the characters typed. A
 // conversion is undone with Backspace right after it, which gives the typed characters back.
 
+import { readTag, tagAddress } from '@golemdocs/docx';
+import { readWikiLink } from '../formats/wikiLinks.ts';
 import type { Action, Mark } from '../ui/actions.ts';
 
 /** A line start that turned into formatting: the characters before the caret to remove, and what to apply. */
@@ -93,6 +95,30 @@ export function inlineShortcut(before: string): InlineShortcut | null {
     if (m) return { start: before.length - m[1].length, marker, mark };
   }
   return null;
+}
+
+const WIKI_LINK = /(?:^|[^\\])(!?\[\[[^[\]\n]{1,400}\]\])$/;
+
+/** The text before a space just typed ends with an Obsidian link: "[[Note]]", "[[Note#Heading]]" or "[[Note|label]]". */
+export function wikiLinkShortcut(before: string): LinkShortcut | null {
+  if (!before.endsWith(']]')) return null;
+  const m = WIKI_LINK.exec(before);
+  const link = m ? readWikiLink(m[1], 0) : null;
+  return m && link && link.end === m[1].length ? { start: before.length - m[1].length, text: link.shown, url: link.address } : null;
+}
+
+const TAG_AT_END = /(?:^|[^\p{L}\p{N}\p{M}_&/#-])(#[\p{L}\p{N}\p{M}_/-]+)$/u;
+
+/** The text before a space just typed ends with a tag ("#project", "#work/plans"): it becomes a link that searches for the tag. */
+export function tagShortcut(before: string): LinkShortcut | null {
+  const m = TAG_AT_END.exec(before);
+  if (!m) return null;
+  const start = before.length - m[1].length;
+  // "[text](#section)" is a link to a heading, not a tag.
+  if (before.slice(0, start).endsWith('](')) return null;
+  const tag = readTag(before, start);
+  // A tag ends at its last letter or digit: "#plan-" is not finished.
+  return tag && tag.end === before.length ? { start, text: before.slice(start), url: tagAddress(tag.name) } : null;
 }
 
 /** The text before a space just typed ends with "[text](url)". */

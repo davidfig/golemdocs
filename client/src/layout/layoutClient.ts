@@ -35,6 +35,9 @@ export class LayoutClient {
   private readonly linkRequests = new Map<number, (found: { url: string | null; checkbox: boolean }) => void>();
   private readonly agentRequests = new Map<number, (result: string | { text: string; images: string[] }) => void>();
 
+  /** Finds the stored document an embed (`![[Note]]`) names, as its name and bytes (set by the page, which knows what is stored). */
+  embeds: ((title: string) => Promise<{ name: string; bytes: ArrayBuffer } | null>) | null = null;
+
   constructor(
     /** New faces, before any page that uses them. Called for every document, stale or not. */
     private readonly onFaces: (faces: FaceDescriptor[]) => void,
@@ -141,6 +144,11 @@ export class LayoutClient {
   }
 
   private receive(message: FromWorker): void {
+    if (message.type === 'embed') {
+      const reply = (file: { name: string; bytes: ArrayBuffer } | null): void => this.send({ type: 'embedFile', request: message.request, file }, file ? [file.bytes] : []);
+      (this.embeds?.(message.title) ?? Promise.resolve(null)).then(reply, () => reply(null));
+      return;
+    }
     if (message.type === 'linkAt') {
       this.linkRequests.get(message.request)?.({ url: message.url, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);

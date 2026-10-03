@@ -255,6 +255,7 @@ export class Chrome {
       a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
       a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
       a('file.import', t('chrome.file.import'), { kind: 'import' }, { tooltip: t('chrome.file.import.tip') }),
+      a('file.importFolder', t('chrome.file.importFolder'), { kind: 'importFolder' }, { tooltip: t('chrome.file.importFolder.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
       a('file.downloadAll', t('chrome.file.downloadAll'), { kind: 'downloadAll' }, { tooltip: t('chrome.file.downloadAll.tip') }),
       a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
@@ -285,6 +286,7 @@ export class Chrome {
       dialog('edit.find', t('chrome.edit.find'), 'find', { icon: 'find', shortcut: 'Mod+F' }),
       dialog('edit.replace', t('chrome.edit.replace'), 'replace', { shortcut: { other: 'Mod+H', mac: 'Ctrl+H' } }),
       dialog('edit.goTo', t('chrome.edit.goTo'), 'goTo', { shortcut: 'Mod+G' }),
+      dialog('edit.searchAll', t('chrome.edit.searchAll'), 'searchAll', { icon: 'find', shortcut: 'Mod+Shift+F' }),
     );
 
     // View
@@ -556,6 +558,7 @@ export class Chrome {
       heading(t('chrome.menu.edit')),
       cmd('edit.find'),
       cmd('edit.replace'),
+      cmd('edit.searchAll'),
       cmd('edit.selectAll'),
       cmd('edit.pasteSpecial'),
       heading(t('chrome.menu.insert')),
@@ -617,6 +620,7 @@ export class Chrome {
           cmd('file.new'),
           cmd('file.open'),
           cmd('file.import'),
+          cmd('file.importFolder'),
           this.openRecentItem(),
           sep,
           cmd('file.share'),
@@ -654,6 +658,7 @@ export class Chrome {
           cmd('edit.find'),
           cmd('edit.replace'),
           cmd('edit.goTo'),
+          cmd('edit.searchAll'),
         ],
       },
       {
@@ -665,8 +670,10 @@ export class Chrome {
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
+          sep,
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
+          cmd('help.clip'),
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),
@@ -674,7 +681,7 @@ export class Chrome {
           cmd('view.pagesPanel'),
           cmd('view.filesPanel'),
           cmd('view.footer'),
-          cmd('help.clip'),
+          sep,
           cmd('view.fullScreen'),
           sub(
             t('chrome.view.zoom'),

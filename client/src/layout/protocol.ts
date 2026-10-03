@@ -251,7 +251,9 @@ export type ToWorker =
   /** The document exported as a file of a format (the open document is left as it is). */
   | { type: 'convert'; doc: number; request: number; to: Format }
   /** The assistant uses a tool on the open document (see agentTools.ts): `args` is the JSON the model wrote. */
-  | { type: 'agent'; doc: number; request: number; name: string; args: string };
+  | { type: 'agent'; doc: number; request: number; name: string; args: string }
+  /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
+  | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null };
 
 export interface LayoutTimings {
   /** Reading and parsing the file. */
@@ -363,6 +365,8 @@ export type FromWorker =
   /** Someone else's edit changed the document (it needs saving here too). */
   | { type: 'remoteEdit'; doc: number }
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
+  /** A Markdown document being opened embeds a picture or note (`![[title]]`): the stored document of that title, as `embedFile`. */
+  | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
   /** What an assistant tool did or found. */

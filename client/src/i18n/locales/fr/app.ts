@@ -47,6 +47,13 @@ export const app: Partial<Messages> = {
   'app.importZipNone': '{name} ne contient aucun document importable',
   'app.importedZip': 'Documents importés : {count}',
   'app.importedZipSkipped': 'Documents importés : {count}. Les fichiers impossibles à ouvrir ont été ignorés : {skipped}',
+  'app.importDuplicateTitle': 'Nom déjà utilisé',
+  'app.importDuplicateMessage': '« {name} » existe déjà avec un contenu différent. Que faire du nouveau fichier ?',
+  'app.importDuplicateAll': 'Faire de même pour tous les doublons restants',
+  'app.importDuplicateOverwrite': 'Remplacer',
+  'app.importDuplicateRename': 'Conserver les deux',
+  'app.importDuplicateSkip': 'Ignorer',
+  'app.importedZipUnchanged': 'Documents importés : {count}. Laissés tels quels (identiques ou ignorés) : {unchanged}',
   'app.importZipFailed': 'Échec de l’importation : {message}',
   'app.importProgress': '{done} sur {total}',
   'app.timeLeft': '{time} restantes',
@@ -106,9 +113,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Cette action supprime tout ce qui est enregistré dans ce navigateur, ainsi que la disposition de votre barre d’outils. Elle est irréversible.',
   'app.clearBodyOne': 'Cette action supprime l’unique document enregistré dans ce navigateur, ainsi que la disposition de votre barre d’outils. Elle est irréversible.',
   'app.clearBodyMany': 'Cette action supprime les {count} documents enregistrés dans ce navigateur, ainsi que la disposition de votre barre d’outils. Elle est irréversible.',
-  'app.clearBodyNoneAccount': 'Cette action supprime tout ce qui est enregistré dans ce navigateur, ainsi que la disposition de votre barre d’outils. Elle est irréversible. Les documents enregistrés dans votre compte sont conservés.',
-  'app.clearBodyOneAccount': 'Cette action supprime l’unique document enregistré dans ce navigateur, ainsi que la disposition de votre barre d’outils. Elle est irréversible. Les documents enregistrés dans votre compte sont conservés.',
-  'app.clearBodyManyAccount': 'Cette action supprime les {count} documents enregistrés dans ce navigateur, ainsi que la disposition de votre barre d’outils. Elle est irréversible. Les documents enregistrés dans votre compte sont conservés.',
+  'app.clearBodyAccount': 'Cette action vous déconnecte et supprime ce que Golem Docs conserve dans ce navigateur, y compris la disposition de votre barre d’outils. Vos documents sont en sécurité dans votre compte.',
+  'app.clearUnsent': 'Sauf : les modifications de {count} de vos documents ne sont pas encore dans votre compte et seront perdues si elles ne peuvent pas être envoyées.',
+  'app.clearSignOut': 'Vous serez déconnecté.',
+  'app.clearLoss': 'Les documents qui ne sont pas enregistrés dans un compte sont perdus définitivement : téléchargez d’abord ceux que vous voulez garder.',
   'app.clearFailed': 'Impossible d’effacer les données locales : {message}',
 
   // Formats
@@ -151,6 +159,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': 'Modification au format {label}. L’image est compressée lors de l’enregistrement en fichier, ce qui fait perdre un peu de détail.',
 
   'app.createLinkedDocument': 'Il n’existe aucun document nommé « {title} ». Le créer ?',
+  'app.linksUpdated': 'Les liens vers ce que vous avez renommé ou déplacé ont été mis à jour.',
+  'app.linksSkipped': 'Certains liens vers ce que vous avez renommé ou déplacé n’ont pas pu être mis à jour : ces documents sont en cours de modification par d’autres personnes ou en conflit.',
+  'app.linksUpdateFailed': 'Impossible de mettre à jour les liens vers ce que vous avez renommé ou déplacé : {message}',
+  'app.createLinkedTitle': 'Document introuvable',
+  'app.createLinkedAction': 'Créer',
 
   // Browser storage
   'app.storageOpenFailed': 'Impossible d’ouvrir le stockage du navigateur.',

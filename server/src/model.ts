@@ -8,7 +8,7 @@ import type { AiBinding } from './cf.ts';
 export const MODEL = '@cf/zai-org/glm-5.3-flash';
 
 /** Dollars per million tokens, which is also micro-dollars per token. Keep in step with Cloudflare's pricing page. */
-export const PRICE = { input: 0.15, output: 0.5 };
+export const PRICE = { input: 0.15, output: 0.5, cachedInput: 0.03 };
 
 /** Input tokens a picture is held at before the model has said what it cost (a picture is scaled to fit about this many). */
 export const IMAGE_TOKENS = 2000;
@@ -37,12 +37,15 @@ export interface ToolDefinition {
 export interface Completion {
   content: string;
   toolCalls: ToolCall[];
-  /** Tokens billed, as the model reports them (null: it didn't say). */
-  usage: { input: number; output: number } | null;
+  /** Tokens billed, as the model reports them (null: it didn't say). `cached` is the part of `input` served from the prefix cache, billed at a lower rate. */
+  usage: { input: number; output: number; cached?: number } | null;
 }
 
 /** The cost of some tokens, in micro-dollars, rounded up. */
-export const costMicro = (input: number, output: number): number => Math.ceil(input * PRICE.input + output * PRICE.output);
+export const costMicro = (input: number, output: number, cached = 0): number => {
+  const hit = Math.min(cached, input);
+  return Math.ceil((input - hit) * PRICE.input + hit * PRICE.cachedInput + output * PRICE.output);
+};
 
 /** A rough token count for text, for holding money before the model has answered (an overestimate). */
 export const estimateTokens = (chars: number): number => Math.ceil(chars / 3);
@@ -106,11 +109,17 @@ export function parseCompletion(raw: unknown): Completion {
   if (isObject(raw.usage)) {
     const input = asCount(raw.usage.prompt_tokens) ?? asCount(raw.usage.input_tokens);
     const output = asCount(raw.usage.completion_tokens) ?? asCount(raw.usage.output_tokens);
-    if (input !== null && output !== null) out.usage = { input, output };
+    const details = isObject(raw.usage.prompt_tokens_details) ? raw.usage.prompt_tokens_details : {};
+    const cached = asCount(details.cached_tokens) ?? asCount(raw.usage.cached_tokens);
+    if (input !== null && output !== null) out.usage = { input, output, ...(cached && { cached }) };
   }
   return out;
 }
 
-export async function complete(ai: AiBinding, system: string, messages: ChatMessage[], tools: ToolDefinition[]): Promise<Completion> {
-  return parseCompletion(await ai.run(MODEL, buildRequest(system, messages, tools)));
+/**
+ * `session` keys the prefix cache: Workers AI only reuses the system prompt and tools (the same
+ * on every request) when a request lands on the instance that holds them, and this pins it there.
+ */
+export async function complete(ai: AiBinding, system: string, messages: ChatMessage[], tools: ToolDefinition[], session: string): Promise<Completion> {
+  return parseCompletion(await ai.run(MODEL, buildRequest(system, messages, tools), { extraHeaders: { 'x-session-affinity': session } }));
 }

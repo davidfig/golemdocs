@@ -46,6 +46,13 @@ export const app: Partial<Messages> = {
   'app.importZipNone': '{name} 中没有可导入的文档',
   'app.importedZip': '已导入的文档：{count}',
   'app.importedZipSkipped': '已导入的文档：{count}。已跳过无法打开的文件：{skipped}',
+  'app.importDuplicateTitle': '名称已被使用',
+  'app.importDuplicateMessage': '“{name}”已存在，但内容不同。要如何处理新文件？',
+  'app.importDuplicateAll': '对其余所有重复项执行相同操作',
+  'app.importDuplicateOverwrite': '覆盖',
+  'app.importDuplicateRename': '保留两者',
+  'app.importDuplicateSkip': '跳过',
+  'app.importedZipUnchanged': '已导入的文档：{count}。保持原样（相同或已跳过）：{unchanged}',
   'app.importZipFailed': '导入失败：{message}',
   'app.importProgress': '{done} / {total}',
   'app.timeLeft': '剩余 {time}',
@@ -100,9 +107,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': '这会删除保存在此浏览器中的所有内容，包括你的工具栏配置。此操作无法撤销。',
   'app.clearBodyOne': '这会删除保存在此浏览器中的这份文档，包括你的工具栏配置。此操作无法撤销。',
   'app.clearBodyMany': '这会删除保存在此浏览器中的全部 {count} 份文档，包括你的工具栏配置。此操作无法撤销。',
-  'app.clearBodyNoneAccount': '这会删除保存在此浏览器中的所有内容，包括你的工具栏配置。此操作无法撤销。保存在你账户中的文档会保留。',
-  'app.clearBodyOneAccount': '这会删除保存在此浏览器中的这份文档，包括你的工具栏配置。此操作无法撤销。保存在你账户中的文档会保留。',
-  'app.clearBodyManyAccount': '这会删除保存在此浏览器中的全部 {count} 份文档，包括你的工具栏配置。此操作无法撤销。保存在你账户中的文档会保留。',
+  'app.clearBodyAccount': '这会让你退出登录，并删除 Golem Docs 在此浏览器中保存的内容，包括你的工具栏配置。你的文档安全地保存在你的账户中。',
+  'app.clearUnsent': '但有 {count} 份文档的更改尚未到达你的账户，如果无法发送就会丢失。',
+  'app.clearSignOut': '你将退出登录。',
+  'app.clearLoss': '未保存到账户的文档将永久丢失：请先下载你想保留的文档。',
   'app.clearFailed': '无法清除本地数据：{message}',
 
   // Formats
@@ -145,6 +153,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': '当前以 {label} 编辑。另存为文件时会压缩，因此会丢失少许细节。',
 
   'app.createLinkedDocument': '没有名为“{title}”的文档。要创建吗？',
+  'app.linksUpdated': '已更新指向你重命名或移动内容的链接。',
+  'app.linksSkipped': '部分指向你重命名或移动内容的链接无法更新：这些文档正由他人编辑或存在冲突。',
+  'app.linksUpdateFailed': '无法更新指向你重命名或移动内容的链接：{message}',
+  'app.createLinkedTitle': '未找到文档',
+  'app.createLinkedAction': '创建',
 
   // Browser storage
   'app.storageOpenFailed': '无法打开浏览器存储。',

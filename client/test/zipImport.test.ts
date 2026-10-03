@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { writeZip } from '@golemdocs/docx';
 import type { Folder } from '../src/folders.ts';
-import { importFiles, readZipFiles, type ImportTarget } from '../src/storage/zipImport.ts';
+import { importFiles, readZipFiles, sameBytes, type DuplicateChoice, type ImportTarget } from '../src/storage/zipImport.ts';
 import { uniqueName } from '../src/storage/uniqueName.ts';
 
 const enc = new TextEncoder();
@@ -109,7 +109,7 @@ test('makes the folders that are missing and reuses the ones that exist', async 
     { name: 'c.txt', folderId: 'new1' },
     { name: 'd.txt', folderId: 'new0' },
   ]);
-  assert.deepEqual(result, { imported: 4, skipped: 0, folders: 2, cancelled: false });
+  assert.deepEqual(result, { imported: 4, replaced: 0, unchanged: 0, skipped: 0, folders: 2, cancelled: false });
 });
 
 test('never takes a name that is in use in the same folder', async () => {
@@ -127,7 +127,7 @@ test('the top level of the ZIP goes in the chosen folder', async () => {
 
 test('a document that cannot be saved is counted as skipped', async () => {
   const { t } = target({ save: async (name) => name !== 'bad.png' });
-  assert.deepEqual(await importFiles([file('ok.txt'), file('bad.png')], t), { imported: 1, skipped: 1, folders: 0, cancelled: false });
+  assert.deepEqual(await importFiles([file('ok.txt'), file('bad.png')], t), { imported: 1, replaced: 0, unchanged: 0, skipped: 1, folders: 0, cancelled: false });
 });
 
 test('importing reports progress and stops when aborted, keeping what was saved', async () => {
@@ -159,4 +159,88 @@ test('reading a ZIP rejects when aborted', async () => {
   const abort = new AbortController();
   abort.abort();
   await assert.rejects(readZipFiles(zip, { signal: abort.signal }), { name: 'AbortError' });
+});
+
+const dup = (over: Partial<ImportTarget> = {}) => {
+  const replaced: string[] = [];
+  const asked: string[] = [];
+  const base = target({
+    documents: [{ id: 'd1', name: 'a.txt', folderId: null }, { id: 'd2', name: 'b.txt', folderId: null }, { id: 'd3', name: 'c.txt', folderId: null }],
+    replace: async (id) => {
+      replaced.push(id);
+      return true;
+    },
+    ...over,
+  });
+  return { ...base, replaced, asked };
+};
+
+test('a file identical to the document there is left alone, without asking', async () => {
+  const { t, saved, asked } = dup({ same: async (id) => id === 'd1', ask: async () => 'cancel' });
+  const result = await importFiles([file('a.txt')], t);
+  assert.deepEqual(saved, []);
+  assert.deepEqual([result.unchanged, result.imported, result.cancelled], [1, 0, false]);
+  assert.deepEqual(asked, []);
+});
+
+test('each duplicate is asked about, and overwrite, keep both and skip do what they say', async () => {
+  const answers: DuplicateChoice[] = [{ action: 'overwrite', all: false }, { action: 'rename', all: false }, { action: 'skip', all: false }];
+  const asked: string[] = [];
+  const { t, saved, replaced } = dup({
+    ask: async (d) => {
+      asked.push(d.name);
+      return answers.shift()!;
+    },
+  });
+  const result = await importFiles([file('a.txt'), file('b.txt'), file('c.txt'), file('new.txt')], t);
+  assert.deepEqual(asked, ['a.txt', 'b.txt', 'c.txt']);
+  assert.deepEqual(replaced, ['d1']);
+  assert.deepEqual(saved.map((s) => s.name), ['b (2).txt', 'new.txt']);
+  assert.deepEqual([result.imported, result.replaced, result.unchanged], [3, 1, 1]);
+});
+
+test('"all" answers for the rest of the files', async () => {
+  let asks = 0;
+  const { t, replaced } = dup({
+    ask: async () => {
+      asks++;
+      return { action: 'overwrite', all: true };
+    },
+  });
+  await importFiles([file('a.txt'), file('b.txt'), file('c.txt')], t);
+  assert.equal(asks, 1);
+  assert.deepEqual(replaced, ['d1', 'd2', 'd3']);
+});
+
+test('dismissing the dialog stops the import', async () => {
+  const { t, saved } = dup({ ask: async () => 'cancel' });
+  const result = await importFiles([file('new.txt'), file('a.txt'), file('later.txt')], t);
+  assert.equal(result.cancelled, true);
+  assert.deepEqual(saved.map((s) => s.name), ['new.txt']);
+});
+
+test('without a way to ask, both are kept; a second copy in the same import is only renamed', async () => {
+  const { t, saved } = dup({ ask: undefined });
+  await importFiles([file('a.txt'), file('a.txt')], t);
+  assert.deepEqual(saved.map((s) => s.name), ['a (2).txt', 'a (3).txt']);
+});
+
+test('sameBytes compares contents', () => {
+  assert.equal(sameBytes(new Uint8Array([1, 2]), new Uint8Array([1, 2]).buffer), true);
+  assert.equal(sameBytes(new Uint8Array([1, 2]), new Uint8Array([1, 3])), false);
+  assert.equal(sameBytes(new Uint8Array([1]), new Uint8Array([1, 1])), false);
+});
+
+test('duplicates in subfolders are asked about too', async () => {
+  const asked: string[] = [];
+  const { t } = dup({
+    folders: [folder('w', 'Work'), folder('r', 'Reports', 'w')],
+    documents: [{ id: 'd9', name: 'b.txt', folderId: 'r' }],
+    ask: async (d) => {
+      asked.push([...d.folders, d.name].join('/'));
+      return { action: 'rename', all: false };
+    },
+  });
+  await importFiles([file('Work/Reports/b.txt')], t);
+  assert.deepEqual(asked, ['Work/Reports/b.txt']);
 });

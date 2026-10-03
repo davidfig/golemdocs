@@ -134,9 +134,9 @@ export async function handleAssistant(request: Request, env: Env, userId: string
 
   let cost = 0;
   try {
-    const completion = await complete(env.AI, SYSTEM_PROMPT, messages, TOOLS);
+    const completion = await complete(env.AI, SYSTEM_PROMPT, messages, TOOLS, `assistant-${userId}`);
     // If the model doesn't report usage, charge the worst case rather than nothing.
-    cost = completion.usage ? costMicro(completion.usage.input, completion.usage.output) : hold;
+    cost = completion.usage ? costMicro(completion.usage.input, completion.usage.output, completion.usage.cached) : hold;
     return respond({
       message: { role: 'assistant', content: completion.content, ...(completion.toolCalls.length && { tool_calls: completion.toolCalls }) },
       creditsLeft: creditsLeft((await spentThisMonth(env, userId, period)) + cost),

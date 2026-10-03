@@ -46,6 +46,13 @@ export const app: Partial<Messages> = {
   'app.importZipNone': '{name} にインポートできるドキュメントはありません',
   'app.importedZip': 'インポートしたドキュメント：{count}',
   'app.importedZipSkipped': 'インポートしたドキュメント：{count}。開けないファイルはスキップしました：{skipped}',
+  'app.importDuplicateTitle': '名前が使用されています',
+  'app.importDuplicateMessage': '「{name}」はすでに異なる内容で存在します。新しいファイルをどうしますか？',
+  'app.importDuplicateAll': '残りの重複すべてに同じ操作を行う',
+  'app.importDuplicateOverwrite': '上書き',
+  'app.importDuplicateRename': '両方残す',
+  'app.importDuplicateSkip': 'スキップ',
+  'app.importedZipUnchanged': 'インポートしたドキュメント：{count}。変更なし（同一またはスキップ）：{unchanged}',
   'app.importZipFailed': 'インポートに失敗しました：{message}',
   'app.importProgress': '{done} / {total}',
   'app.timeLeft': '残り {time}',
@@ -100,9 +107,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'このブラウザーに保存されているすべてのデータとツールバーのレイアウトを削除します。この操作は元に戻せません。',
   'app.clearBodyOne': 'このブラウザーに保存されている 1 件のドキュメントとツールバーのレイアウトを削除します。この操作は元に戻せません。',
   'app.clearBodyMany': 'このブラウザーに保存されているすべてのドキュメント({count} 件)とツールバーのレイアウトを削除します。この操作は元に戻せません。',
-  'app.clearBodyNoneAccount': 'このブラウザーに保存されているすべてのデータとツールバーのレイアウトを削除します。この操作は元に戻せません。アカウントに保存されているドキュメントは保持されます。',
-  'app.clearBodyOneAccount': 'このブラウザーに保存されている 1 件のドキュメントとツールバーのレイアウトを削除します。この操作は元に戻せません。アカウントに保存されているドキュメントは保持されます。',
-  'app.clearBodyManyAccount': 'このブラウザーに保存されているすべてのドキュメント({count} 件)とツールバーのレイアウトを削除します。この操作は元に戻せません。アカウントに保存されているドキュメントは保持されます。',
+  'app.clearBodyAccount': 'サインアウトし、Golem Docs がこのブラウザーに保存しているデータ（ツールバーのレイアウトを含む）を削除します。ドキュメントはアカウントに安全に保存されています。',
+  'app.clearUnsent': 'ただし、{count} 件のドキュメントの変更はまだアカウントに届いておらず、送信できない場合は失われます。',
+  'app.clearSignOut': 'サインアウトされます。',
+  'app.clearLoss': 'アカウントに保存されていないドキュメントは完全に失われます。残したいものは先にダウンロードしてください。',
   'app.clearFailed': 'ローカルデータを消去できませんでした：{message}',
 
   // Formats
@@ -149,6 +157,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': '{label} として編集中です。ファイルとして保存するときに圧縮されるため、細部がわずかに失われます。',
 
   'app.createLinkedDocument': '「{title}」という文書はありません。作成しますか?',
+  'app.linksUpdated': '名前を変更または移動したものへのリンクを更新しました。',
+  'app.linksSkipped': '名前を変更または移動したものへの一部のリンクを更新できませんでした。それらの文書は他の人が編集中か、競合しています。',
+  'app.linksUpdateFailed': '名前を変更または移動したものへのリンクを更新できませんでした：{message}',
+  'app.createLinkedTitle': '文書が見つかりません',
+  'app.createLinkedAction': '作成',
 
   // Browser storage
   'app.storageOpenFailed': 'ブラウザーのストレージを開けませんでした。',

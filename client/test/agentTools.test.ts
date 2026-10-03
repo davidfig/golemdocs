@@ -221,6 +221,12 @@ test('insert_link and remove_link', async () => {
   assert.equal(await md(doc), 'See the docs for more.');
 });
 
+test('insert_link to another document is written as an Obsidian link in Markdown', async () => {
+  const doc = await openMarkdown('See the plan for more.\n');
+  await agent(doc, 'insert_link', { paragraph: 0, find: 'plan', url: 'doc:Project Plan' });
+  assert.equal(await md(doc), 'See the [[Project Plan|plan]] for more.');
+});
+
 test('insert_table fills the cells, edit_table changes it, and neither works where it makes no sense', async () => {
   const doc = await openMarkdown('Before\n\nAfter\n');
   assert.match(

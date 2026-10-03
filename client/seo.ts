@@ -23,6 +23,8 @@ const FEATURE_PAGES = [
   { name: 'documents', label: 'Word documents', blurb: 'A real word processor for .docx, with tables, columns, and equations.', description: 'Write and edit Word documents in your browser: true page layout, tables, columns, comments, LaTeX equations, and spelling and grammar checking.' },
   { name: 'collaborate', label: 'Work together', blurb: 'Share a link and edit together, live.', description: 'Share a document and edit it together in real time, with names and cursors. Sharing is part of the subscription; editing and downloading are free and never need an account.' },
   { name: 'customize', label: 'Make it yours', blurb: 'Word 2003 menus, five color schemes, dark mode, and 11 languages.', description: 'A Word 2003-style editor you can make your own: color schemes, dark mode, customizable toolbars, and 11 languages.' },
+  { name: 'import', label: 'Import files and folders', blurb: 'Bring in files, whole folders, and ZIP archives, keeping their folders.', description: 'Import files, folders, and ZIP archives into Golem Docs. Documents land in the same folders they came from, names never collide, and nothing is uploaded.' },
+  { name: 'obsidian', label: 'Import an Obsidian vault', blurb: 'Move your notes from Obsidian, folders and all.', description: 'Import an Obsidian vault into Golem Docs as a folder or ZIP: your notes arrive in their folders, with properties kept and nothing uploaded.' },
   { name: 'large-files', label: 'Huge text files', blurb: 'Open, search, and filter 50 MB log files without freezing.', description: 'Open text and log files of 50 MB and more in your browser, then scroll, search, filter, and copy without freezing.' },
 ];
 
@@ -169,10 +171,12 @@ const homePage = (): string => withClip(readFileSync(HOME, 'utf8'));
 
 /**
  * A feature page's illustration (`site/<name>.figure.html`, drawn in HTML and CSS, styled by `site/figures.css`) goes after the
- * page's first paragraph, its introduction.
+ * page's first paragraph, its introduction. A screenshot (`site/<name>.shot.html`) goes where the page's text has a `{{shot}}` paragraph.
  */
 function withFigure(html: string, name: string): string {
   const file = path.join(SITE, `${name}.figure.html`);
+  const shot = path.join(SITE, `${name}.shot.html`);
+  if (existsSync(shot)) html = html.replace('<p>{{shot}}</p>', () => readFileSync(shot, 'utf8'));
   return existsSync(file) ? html.replace('</p>', () => `</p>\n${readFileSync(file, 'utf8')}`) : html;
 }
 

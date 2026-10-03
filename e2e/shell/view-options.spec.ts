@@ -157,13 +157,20 @@ test.describe('Page Grid', () => {
 });
 
 test.describe('Ruler', () => {
-  test('the Ruler item is offered; running it reports that it is not available yet', async ({ app, page }) => {
+  test('View > Ruler shows a ruler above the page, ticks the item, and hides again', async ({ app, page }) => {
     await app.goto('?doc=welcome');
+    const ruler = page.locator('#ruler');
+    await expect(ruler).toBeHidden();
     await openMenu(app, 'View');
     await expect(menuRow(page, 'Ruler')).toHaveAttribute('role', 'menuitemcheckbox');
     await menuRow(page, 'Ruler').click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { status: string }).status)).toContain('Ruler');
-    await expect(app.canvas).toBeVisible(); // nothing broke
+    await expect(ruler).toBeVisible();
+    await expect(ruler.locator('canvas')).toBeVisible();
+    await expect(page.locator('#vruler canvas')).toBeVisible();
+    await openMenu(app, 'View');
+    expect(await isChecked(page, 'Ruler')).toBe(true);
+    await menuRow(page, 'Ruler').click();
+    await expect(ruler).toBeHidden();
   });
 });
 

@@ -320,7 +320,7 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
       i += m[0].length;
       continue;
     }
-    if (c === '"' && (m = /^"([^"]+?)(?:\(([^)]*)\))?":((?:https?:\/\/|mailto:|ftp:|\/|#|doc:)[^\s<]*[^\s<.,;:!?)\]"'])/i.exec(rest))) {
+    if (c === '"' && (m = /^"([^"]+?)(?:\(([^)]*)\))?":((?:https?:\/\/|mailto:|ftp:|\/|#|doc:|tag:)[^\s<]*[^\s<.,;:!?)\]"'])/i.exec(rest))) {
       push(parseInline(m[1], { ...marks, link: m[3].replace(/%20/g, ' ') }));
       i += m[0].length;
       continue;

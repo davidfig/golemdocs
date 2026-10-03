@@ -1,6 +1,6 @@
 # Bienvenido a Golem Docs
 
-Un editor de documentos que vive en tu navegador, creado para abrir todo tipo de documentos: Word, PDF, Markdown, páginas web, incluso un archivo CSV, y más. Te deja seguir trabajando en la forma que necesites. Esta página es un documento como cualquier otro: haz clic en cualquier parte y empieza a escribir.
+Hice Golem Docs porque quería un solo editor que abriera todo tipo de documentos: Word, PDF, Markdown, páginas web, incluso un archivo CSV, y más, y que me dejara seguir trabajando en la forma que necesite. Vive en tu navegador. Esta página es un documento como cualquier otro: haz clic en cualquier parte y empieza a escribir.
 
 ## Qué hace
 
@@ -8,8 +8,8 @@ Un editor de documentos que vive en tu navegador, creado para abrir todo tipo de
 - **Cambiar de forma sin perder nada.** Convertir a, en el menú Archivo, cambia lo que es el documento al editarlo, y al volver recuperas tu formato.
 - **Marcar PDF.** Resalta, subraya, tacha y deja notas en las páginas de un PDF.
 - **Editar PDF.** Cambia a Editar PDF para modificar el texto de una página donde está, mover, añadir o eliminar imágenes y formas, tachar datos privados y reorganizar páginas. Rellenar escribe en los campos de un formulario.
-- **Trabajar en equipo.** Compartir, en el menú Archivo, te da un enlace. Quien lo abre edita el mismo documento, y los cambios se ven en directo. También puedes compartir con personas concretas. Compartir forma parte de la suscripción; editar por tu cuenta es gratis.
-- **Pregunta a la IA.** El asistente de IA de la esquina puede leer tu documento, reescribir o añadir párrafos, dar formato al texto, dejar comentarios, rellenar formularios y convertir a otro formato, y Deshacer revierte sus cambios. Forma parte de la suscripción. Ver › Asistente de IA lo muestra u oculta.
+- **Trabajar en equipo.** Compartir, en el menú Archivo, te da un enlace. Quien lo abre edita el mismo documento, y los cambios se ven en directo. También puedes compartir con personas concretas. Compartir necesita mi servidor, así que forma parte de la suscripción; editar por tu cuenta es gratis.
+- **Pregunta a la IA.** El asistente de IA de la esquina puede leer tu documento, reescribir o añadir párrafos, dar formato al texto, dejar comentarios, rellenar formularios y convertir a otro formato, y Deshacer revierte sus cambios. Forma parte de la suscripción, porque cada petición me cuesta dinero. Ver › Asistente de IA lo muestra u oculta.
 
 ## Pruébalo
 
@@ -28,6 +28,7 @@ Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o D
 - **Cambiar nombre:** haz clic en el nombre del documento, en el centro de la barra de menús, para escribir uno nuevo.
 - **Vínculos y tablas:** Ctrl+K (Cmd+K en Mac) vincula la selección, y el botón Tabla de la barra de herramientas inserta una cuadrícula.
 - **Ortografía y gramática:** pulsa F7. Buscar y reemplazar está en el menú Edición.
+- **Buscar en todos los documentos:** Edición › Buscar en todos los documentos (Ctrl+Mayús+F, Cmd+Mayús+F en Mac) encuentra palabras y #etiquetas en todos tus documentos. Escribe #proyecto y un espacio para crear una etiqueta, y haz Ctrl+clic en ella para encontrar todos los documentos que la tienen.
 - **Comentarios:** selecciona texto y elige Comentario en el menú Insertar. Otras personas pueden responder, y puedes resolver un comentario cuando esté atendido.
 - **Temas, modo oscuro y barras de herramientas** están en el menú Ver, y el menú Herramientas cambia el idioma.
 
@@ -35,13 +36,13 @@ Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o D
 
 No hay botón de guardar. Cada cambio se conserva en este navegador un momento después de hacerlo, y no necesitas una cuenta. Archivo › Abrir muestra todos tus documentos, y Descargar te da un archivo cuando quieras. Guardar en el navegador y descargar son gratis, sin necesidad de suscripción.
 
-Una suscripción añade sincronización, uso compartido y el asistente de IA integrado:
+Todo lo anterior que funciona en tu navegador no me cuesta nada, así que es gratis. Una suscripción cuesta 5 $ al mes y paga las partes que me cuesta dinero mantener:
 
-- **Sincronizar** guarda tus documentos en tu cuenta, para que puedas abrirlos en cualquier dispositivo.
+- **Sincronizar** guarda tus documentos en mi servidor, para que puedas abrirlos en cualquier dispositivo.
 - **Compartir y editar en equipo** con un enlace o con personas concretas.
-- **La IA** viene integrada, sin nada que configurar.
+- **La IA** viene integrada, sin nada que configurar. Yo pago cada petición que hace.
 
-Suscribirte también es la forma de apoyar el desarrollo de Golem Docs. Si una suscripción termina, tus documentos siguen en este navegador y aún puedes abrir los documentos que un suscriptor comparta contigo. Consulta los [precios](https://golemdocs.com/home/#pricing) para ver el costo, o elige Archivo › Suscribirse… para empezar.
+Lo que sobra me permite seguir trabajando en Golem Docs. Si una suscripción termina, tus documentos siguen en este navegador y aún puedes abrir los documentos que un suscriptor comparta contigo. Consulta los [precios](https://golemdocs.com/home/#pricing) para ver el costo, o elige Archivo › Suscribirse… para empezar.
 
 ## Sobre el nombre
 
@@ -55,6 +56,6 @@ Lee la [Política de privacidad](/privacy) y los [Términos del servicio](/terms
 
 ## Sobre el desarrollador
 
-Golem Docs lo crea David Figatner, con mucha ayuda de Claude, una IA de Anthropic que escribió gran parte del código junto a él.
+Soy [David Figatner](https://yopeyopey.com/about/) y [Claude](https://claude.ai/). Golem Docs nació como sustituto de dos cosas que uso a diario: Obsidian, que organiza mi vida, y las herramientas que no paraba de buscar para convertir o editar PDF. Los ZIP lo hicieron más interesante, porque un archivo comprimido puede contener cualquier cosa, y un editor que abre uno tiene que abrir lo que haya dentro. Después pensé que sería divertido que pudiera abrir todo tipo de documentos, y sigo construyendo hacia eso. Gran parte del código lo escribió Claude, y yo llevaba el timón (te prometo que podría haberlo programado yo, pero habría tardado años).
 
-La aplicación nació como sustituto de dos cosas que David usa a diario: Obsidian, con el que organiza su vida, y un visor de archivos de Word y PDF. Después pensó que sería divertido que pudiera abrir todo tipo de documentos. Sigue creciendo hacia ese objetivo.
+Si algo no se abre como debería, o te gustaría que hiciera algo que no hace, escríbeme a [david@golemdocs.com](mailto:david@golemdocs.com).

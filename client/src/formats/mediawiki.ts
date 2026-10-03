@@ -18,7 +18,7 @@ function escapeText(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/'{2,}/g, (m) => m.replace(/'/g, '&#39;'))
     .replace(/\[\[|\]\]|\{\{|\}\}|\{\||\|\}/g, (m) => [...m].map((c) => `&#${c.charCodeAt(0)};`).join(''))
-    .replace(/\[(?=(?:https?|ftp|mailto):)/g, '&#91;')
+    .replace(/\[(?=(?:https?|ftp|mailto|tag):)/g, '&#91;')
     .replace(/~{3,}/g, (m) => m.replace(/~/g, '&#126;'))
     .replace(/__(?=[A-Z])/g, '&#95;_');
 }
@@ -449,7 +449,7 @@ export function parseInline(s: string, marks: Omit<Span, 'text'> = {}): Span[] {
       i += m[0].length;
       continue;
     }
-    if ((m = /^\[((?:https?|ftp|mailto):[^\s\]]+)(?:\s+([^\]]*))?\]/i.exec(rest)) || (m = /^\[(\/\/[^\s\]]+)(?:\s+([^\]]*))?\]/.exec(rest))) {
+    if ((m = /^\[((?:https?|ftp|mailto|tag):[^\s\]]+)(?:\s+([^\]]*))?\]/i.exec(rest)) || (m = /^\[(\/\/[^\s\]]+)(?:\s+([^\]]*))?\]/.exec(rest))) {
       const url = m[1].startsWith('//') ? `https:${m[1]}` : m[1];
       push(parseInline(m[2] || url, { ...current(), link: url }));
       i += m[0].length;

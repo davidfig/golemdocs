@@ -17,6 +17,7 @@ import { WordDocument, paragraphSegments, type Segment } from '@golemdocs/docx';
 import type { AiBinding, Env } from './cf.ts';
 import { HttpError } from './http.ts';
 import { docxKey } from './keys.ts';
+import { storedDocx } from './stored.ts';
 import { subscriptionFor } from './subscriptions.ts';
 import type { UserDb } from './userDb.ts';
 
@@ -99,7 +100,9 @@ const vectorId = (doc: string, chunk: number) => `${doc}:${chunk}`;
 /** Puts (the current version of) a document in the index, replacing whatever was there. */
 export async function indexDocument(env: Env, ownerId: string, doc: IndexedDocument, bytes: Uint8Array): Promise<void> {
   const index = env.VECTORS!;
-  const chunks = chunkSegments(paragraphSegments(await WordDocument.read(bytes)));
+  // The app saves its own wrapper around the .docx: one with no document in it has no text to index.
+  const docx = await storedDocx(bytes);
+  const chunks = docx ? chunkSegments(paragraphSegments(await WordDocument.read(docx))) : [];
   // The name is part of what each chunk is about, and what finds a document by its title.
   const vectors = chunks.length ? await embed(env.AI!, chunks.map((c) => `${doc.name}\n${c.text}`)) : [];
   if (vectors.length) {

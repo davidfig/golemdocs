@@ -13,9 +13,9 @@ const NAMES = ['Docs', 'Golem', 'Word', 'Markdown', 'OpenDocument', 'Rich', 'Tex
 export const APP_WORDS: Record<SpellLanguage, readonly string[]> = {
   en: [...NAMES, "pdf's"],
   de: [...NAMES, 'Strg', 'Datenschutzerklärung', 'Nutzungsbedingungen', 'Webseite', 'Webseiten', 'Überschriften', 'Überlieferung', 'Unterstützung'],
-  es: [...NAMES, 'Praga', 'gólem', 'Pruébalo'],
+  es: [...NAMES, 'Praga', 'gólem', 'Pruébalo', 'conversor', 'Mayús'],
   fr: [...NAMES, "d'Anthropic"],
-  it: [...NAMES, 'Maiusc', "un'IA", "L'app"],
-  pt: NAMES,
+  it: [...NAMES, 'Maiusc', "un'IA", "L'app", 'tag'],
+  pt: [...NAMES, 'tag'],
   ru: [...NAMES, 'скачается', 'голем', 'голема', 'Лёв', 'Иехуда', 'бен', 'Бецалель', 'Влтавы', 'эмет', 'мет', 'Фигатнер'],
 };

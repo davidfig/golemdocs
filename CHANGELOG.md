@@ -3,6 +3,18 @@
 ## 0.9.1 - Unreleased
 
 ### Added
+- Edit › Search All Documents (Ctrl/Cmd+Shift+F) finds words and #tags in every document you have: this browser’s copies, your account’s and what others shared. Every word must be in the document, a partly typed word counts, and choosing a result opens the document at the paragraph that matched. Put a phrase in quotes (`"exact words"`) to find it in one paragraph, and `-word` or `-#tag` to leave out documents that have it. PDFs are searched by their text too. The Documents screen’s search box now looks inside documents too, and the assistant searches the same way. The first search of a large library prepares each document once; with sync, the account keeps that work so your other computers don’t repeat it.
+- Tags: type `#project` and then a space, comma, Enter or other punctuation (not a full stop), in any document, and it becomes a tag, drawn in its own colour: a link (Ctrl/Cmd+click) that opens a search of every document with that tag. In Markdown a tag is saved as plain `#project`; `#work` also finds `#work/plans`. With nothing typed, the search lists your tags to pick from. The assistant can find tagged documents and tag text.
+- Your settings now follow your account: appearance and dark pages, language, keyboard shortcuts, autoformat, Markdown at the caret, spelling and grammar options, your personal dictionary, the view, formatting marks, the ruler and the status bar are the same on every computer you sign in on. A phone or tablet keeps settings of its own. Toolbar layout, panel sizes and what each document remembers stay on the device. Needs sync.
+- View › Ruler shows a ruler above and beside the page in view, in inches (centimetres in other languages), with the margins marked; the assistant can turn it on and off. Drag a margin’s edge on either ruler, or the indent markers on the top one (first line, hanging, left, right), to change them.
+- Obsidian-style links in Markdown: `[[Note]]`, `[[Note#Heading]]` and `[[Note|label]]` link to the stored document of that name, are made as you type them in Markdown (the space after `]]` turns one into a link), and are written back the same way. Links follow folders like Obsidian’s: `[[Notes/Plan]]` finds Plan in a folder called Notes, `[[/Notes/Plan]]` from the top level, and `[[../Plan]]` relative to the note’s own folder; a plain `[[Plan]]` prefers the note beside it. Following a link to a note that doesn’t exist yet makes its folders too.
+- Renaming a document, or renaming or moving a folder or document, now updates the links to it in your other documents (`[[Plan]]`, `[[Notes/Plan]]`, `[[./Plan]]`, embeds and links to a heading), so they keep working. A link keeps its style and its own label, and a note someone else is editing live is left alone and reported. Search indexes are rebuilt once to record each document’s links.
+- Drag a document from the Files sidebar onto the open document to make a link to it where you drop it (`[[Note]]` in Markdown). It works in any format that can hold links, and uses the folder path when the name alone would be ambiguous.
+- Obsidian embeds in Markdown: `![[map.png]]` shows the picture in place (`![[map.png|300]]` sets its width), `![[Note]]` shows that note’s text, and `![[Note#Heading]]` shows the part under a heading. They are looked up from your documents each time the note opens, and saved back as `![[ ]]`, never as copies.
+- Two new pages on the website: how to import files, folders, and ZIP archives, and how to import an Obsidian vault.
+- File › Import Folder, and an Import folder button on the Documents screen, import a folder from your computer (with its subfolders) the way a ZIP is imported.
+- The welcome document ends with a short note about the developer and what Golem Docs is for.
+- Importing files, folders or a ZIP whose names match documents you already have now asks what to do: overwrite, keep both or skip, with a checkbox to answer once for all the rest. A file identical to the document already there is skipped without asking, which makes syncing a folder again quick. Documents that are only in your account are compared too (downloaded only when their size matches).
 - SVG and compressed SVG (.svgz) files open as vector drawings of their own kind, staying sharp at any zoom, listed under Vector rather than Images in Convert To. Convert any document to SVG and its text stays text; convert a drawing to PDF and it stays vector; to PNG, JPEG, WebP or Word and it becomes a picture at full resolution.
 - Vector drawings can be edited: a Drawing menu and toolbar select, move, resize and rotate shapes, draw rectangles, ellipses, lines, pen paths and text, edit a path's points (double-click it), set fill and outline, group, reorder, duplicate and delete, with undo and redo.
 - The Pencil tool shows the selected brush as you draw, not only once you let go.
@@ -18,10 +30,20 @@
 - The vector editor has a Nudge tool: drag it across a drawing and the lines under the round brush bend and move with the pointer, the most at the middle and none at the edge; locked and hidden shapes stay put.
 - The layers list has New Layer and New Group buttons (also in the Drawing menu and toolbar). A layer is a top-level group that Inkscape also reads as a layer, and new shapes are drawn onto the layer you picked or made last; New Group adds an empty group, or groups what is picked.
 - The import progress card shows an estimate of the time left.
+- The website has a new section showing War and Peace, all 1,006 pages, zooming in Page Grid.
+
+### Changed
+- Tools › Show Markdown at the Caret is now on by default, alongside Autoformat as You Type; both can be turned off in the Tools menu.
+- The website and the welcome document now speak in the developer's own voice, and the pricing explains that the subscription covers server and AI costs.
+- File › Clear Local Data now signs you out too (warning first about changes not yet in your account), so the next person on a shared computer isn’t signed in as you.
 
 ### Fixed
+- The assistant’s search by meaning in your account’s documents could not read documents the app had saved, so it never found them; it reads them now.
+- Ctrl/Cmd+click on a link now follows it when Show Markdown at the Caret is on, instead of only putting the caret in the link's Markdown.
+- Following a link to a document that doesn't exist asks in the app's own dialog, not the browser's, whether to create it.
 - Color pop-ups (font color, highlight, fill, outline) no longer have a wide empty strip beside the swatches, and the vector Fill pop-up now lets you pick solid, linear or radial and explains how to edit a gradient.
 - Importing a ZIP no longer starts with the progress bar a quarter full; it fills steadily and never moves back.
+- The delete and ZIP import progress cards now fill to the end and stay a moment before closing, instead of vanishing part way.
 
 ## 0.9.0 - 2026-10-03
 
@@ -104,7 +126,7 @@
 
 ### Added
 - Deleting a large number of documents or a big folder shows a progress card.
-- Tools › Show Markdown at the Caret (experimental, off by default): in a Markdown document, the line the caret is in shows its Markdown prefix (`## `, `- [ ] `), and the bold, italic, strikethrough, code or link text the caret is in shows its `**`, `*`, `~~`, `` ` `` or `[](url)` in gray, while the rest stays formatted. Edit the Markdown, then move the caret away to see it formatted. Showing and hiding the Markdown is not an edit, so Undo only sees what you changed.
+- Tools › Show Markdown at the Caret (on by default; turn it off in the Tools menu): in a Markdown document, the line the caret is in shows its Markdown prefix (`## `, `- [ ] `), and the bold, italic, strikethrough, code or link text the caret is in shows its `**`, `*`, `~~`, `` ` `` or `[](url)` in gray, while the rest stays formatted. Edit the Markdown, then move the caret away to see it formatted. Showing and hiding the Markdown is not an edit, so Undo only sees what you changed.
 
 ### Fixed
 - Deleting a folder with thousands of documents is far faster and no longer stalls with no progress.

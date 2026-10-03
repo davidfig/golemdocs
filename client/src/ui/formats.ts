@@ -385,11 +385,12 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'share':
         return false;
       case 'dialog':
-        return action.name === 'find' || action.name === 'goTo';
+        return action.name === 'find' || action.name === 'goTo' || action.name === 'searchAll';
     }
   }
   switch (action.kind) {
     case 'import':
+    case 'importFolder':
     case 'convert':
     case 'new':
     case 'open':
@@ -433,6 +434,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       switch (action.name) {
         case 'find':
         case 'goTo':
+        case 'searchAll':
         case 'wordCount':
         case 'options':
         case 'properties':

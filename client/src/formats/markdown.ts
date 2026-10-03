@@ -57,6 +57,9 @@ import type {
 
 import { commentMarker, commentThreads, RangeTracker } from './commentRanges.ts';
 import { MONO_FONTS, styleFor, TASK_GLYPHS } from './markdownStyles.ts';
+import { EMBED_PREFIX, EMBED_STYLE, embedPlaceholder, embedTag, placeholderBody } from './embedMarks.ts';
+import { readWikiLink, wikiLinkText } from './wikiLinks.ts';
+import { normalizeTag, parseTagAddress, readTag, tagAddress } from '@golemdocs/docx';
 
 const MAX_DEPTH = 24;
 const PAGE_TEXT_WIDTH = 9360;
@@ -98,6 +101,8 @@ interface INode {
   s: string;
   /** Destination when the node is inside a link. */
   link?: string;
+  /** The link is an Obsidian embed (`![[Note]]`): kept as a link until the embedded note or picture is looked up (see embeds.ts). */
+  embed?: boolean;
   /** Image destination. */
   url?: string;
   /** Emphasis deltas (difference array: the running sum along the node list is the depth). */
@@ -223,7 +228,9 @@ const isPunct = (c: string | undefined): boolean => {
 const UNI_WS = /\s/;
 const UNI_PUNCT = /[\p{P}\p{S}]/u;
 
-const SPECIAL = /[\\`*_~[\]!<&$\n{]/g;
+const SPECIAL = /[\\`*_~[\]!<&$\n{#]/g;
+/** A raw HTML tag or comment, which is literal text here: a `#` inside it (`<a href="#top">`) is not a tag. */
+const HTML_TAG = /<(?:[A-Za-z/][^>\n]*|!--[\s\S]*?--)>/y;
 
 /**
  * The equation the `$` at `p` opens, if it does: `$$…$$` (anything between), or `$…$` with no space inside
@@ -469,6 +476,7 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
 
   const n = text.length;
   let p = 0;
+  let htmlEnd = 0;
   while (p < n) {
     if (range && p > range.at) closeRange();
     SPECIAL.lastIndex = p;
@@ -621,19 +629,31 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
         p = e;
         break;
       }
-      case '!': {
-        if (text[p + 1] === '[') {
-          flush();
-          nodes.push(mk('text', '!['));
-          brackets.push({ node: nodes.length - 1, image: true, index: brackets.length, lastDelim: stack.tail, textStart: p + 2 });
-          p += 2;
-        } else {
-          parts.push('!');
-          p++;
-        }
-        break;
-      }
+      case '!':
       case '[': {
+        // [[Note]], [[Note#Section]], [[Note|label]] (and ![[Note]]): a link to another stored document, as Obsidian writes one.
+        const wiki = readWikiLink(text, p);
+        if (wiki) {
+          flush();
+          const node = mk('text', wiki.shown);
+          node.link = wiki.address;
+          if (wiki.embed) node.embed = true;
+          nodes.push(node);
+          p = wiki.end;
+          break;
+        }
+        if (c === '!') {
+          if (text[p + 1] === '[') {
+            flush();
+            nodes.push(mk('text', '!['));
+            brackets.push({ node: nodes.length - 1, image: true, index: brackets.length, lastDelim: stack.tail, textStart: p + 2 });
+            p += 2;
+          } else {
+            parts.push('!');
+            p++;
+          }
+          break;
+        }
         flush();
         nodes.push(mk('text', '['));
         brackets.push({ node: nodes.length - 1, image: false, index: brackets.length, lastDelim: stack.tail, textStart: p + 1 });
@@ -716,6 +736,21 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
         p = end;
         break;
       }
+      case '#': {
+        // #tag: a link to the tag, written as it was typed.
+        const tag = p >= htmlEnd ? readTag(text, p) : null;
+        if (!tag) {
+          parts.push('#');
+          p++;
+          break;
+        }
+        flush();
+        const node = mk('text', text.slice(p, tag.end));
+        node.link = tagAddress(tag.name);
+        nodes.push(node);
+        p = tag.end;
+        break;
+      }
       case '<': {
         BR_TAG.lastIndex = p;
         if (BR_TAG.exec(text)) {
@@ -740,6 +775,8 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
           p += auto[0].length;
           break;
         }
+        HTML_TAG.lastIndex = p;
+        if (HTML_TAG.test(text)) htmlEnd = HTML_TAG.lastIndex;
         parts.push('<');
         p++;
         break;
@@ -843,6 +880,20 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
       appendText(placeholder.content, node.s ? `[Image: ${node.s}]` : '[Image]');
       st.link!.children.push(placeholder);
       // Each image is its own hyperlink, even when two in a row share a destination.
+      st.link = null;
+      st.url = undefined;
+      st.run = null;
+      continue;
+    }
+    if (node.embed && node.link !== undefined && node.s) {
+      // Each embed is its own hyperlink, as the one made of the embedded content it stands for will be.
+      st.link = null;
+      st.url = undefined;
+      setLink(node.link);
+      const run = newRun({ style: EMBED_STYLE }, []);
+      used.add('Hyperlink').add(EMBED_STYLE);
+      appendText(run.content, node.s);
+      st.link!.children.push(run);
       st.link = null;
       st.url = undefined;
       st.run = null;
@@ -1651,6 +1702,32 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
   }
   while (segs.length && segs[segs.length - 1].br) segs.pop();
   while (segs.length && segs[0].br) segs.shift();
+  // A link to another stored document is written as an Obsidian link, unless it holds formatting a [[link]] can't.
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (!s.link || s.code || s.raw || s.bold || s.italic || s.strike || s.cm || segs[i - 1]?.link === s.link || segs[i + 1]?.link === s.link) continue;
+    const wiki = wikiLinkText(s.link, s.text);
+    if (wiki) {
+      s.text = wiki;
+      s.raw = true;
+      s.link = undefined;
+    }
+  }
+  // A link to a tag, written as the `#tag` it reads as.
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (!s.link || s.code || s.raw || s.cm || !s.text.startsWith('#')) continue;
+    const name = parseTagAddress(s.link);
+    if (name === null || normalizeTag(s.text.slice(1)) !== normalizeTag(name)) continue;
+    // Only where it reads back as that tag: not after a letter (`C#x`), and not run on into more tag characters.
+    const prev = segs[i - 1];
+    const next = segs[i + 1];
+    const lead = prev && !prev.br ? prev.text : '';
+    if (readTag(lead + s.text, lead.length)?.end !== lead.length + s.text.length) continue;
+    if (next && !next.br && readTag(s.text + next.text, 0)?.end !== s.text.length) continue;
+    s.link = undefined;
+    s.raw = true;
+  }
   // A link whose text is its own address reads better as an autolink.
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
@@ -1875,7 +1952,11 @@ class Exporter {
 
   private flatten(blocks: readonly Block[], out: Block[] = []): Block[] {
     for (const b of blocks) {
-      if (b.kind === 'wrapper') this.flatten(b.children, out);
+      const embed = embedTag(b);
+      const placeholder = embed === null ? null : embedPlaceholder(embed);
+      // An embedded note's text is the other note's: written as the embed.
+      if (placeholder) out.push({ kind: 'paragraph', properties: {}, children: [placeholder], attrs: {} });
+      else if (b.kind === 'wrapper') this.flatten(b.children, out);
       else out.push(b);
     }
     return out;
@@ -1987,6 +2068,11 @@ class Exporter {
                   break;
                 case 'drawing': {
                   flush();
+                  // A picture from an embed (`![[picture.png]]`) is the other document's: written as the embed, not as an image.
+                  if (item.name?.startsWith(EMBED_PREFIX)) {
+                    segs.push({ text: `![[${item.name.slice(EMBED_PREFIX.length)}]]`, ...plainFmt, raw: true });
+                    break;
+                  }
                   const name = item.image ? item.image.slice(item.image.lastIndexOf('/') + 1) : '';
                   segs.push({ text: `![${escapeAlt(item.description || item.name || '')}](${formatDest(name)})`, ...plainFmt, raw: true });
                   break;
@@ -1999,7 +2085,8 @@ class Exporter {
             break;
           }
           case 'hyperlink': {
-            const image = this.imagePlaceholder(inline);
+            const embed = placeholderBody(inline);
+            const image = embed !== null && !/[[\]\n]/.test(embed) ? `![[${embed}]]` : this.imagePlaceholder(inline);
             if (image !== null) segs.push({ text: image, ...plainFmt, raw: true });
             else walk(inline.children, inline.url ?? (inline.anchor !== undefined ? `#${inline.anchor}` : link));
             break;

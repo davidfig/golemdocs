@@ -47,6 +47,13 @@ export const app: Partial<Messages> = {
   'app.importZipNone': '{name} no tiene documentos que se puedan importar',
   'app.importedZip': 'Documentos importados: {count}',
   'app.importedZipSkipped': 'Documentos importados: {count}. Se omitieron los archivos que no se pueden abrir: {skipped}',
+  'app.importDuplicateTitle': 'Nombre ya en uso',
+  'app.importDuplicateMessage': '«{name}» ya existe con otro contenido. ¿Qué hacer con el archivo nuevo?',
+  'app.importDuplicateAll': 'Hacer lo mismo con todos los duplicados restantes',
+  'app.importDuplicateOverwrite': 'Sobrescribir',
+  'app.importDuplicateRename': 'Conservar ambos',
+  'app.importDuplicateSkip': 'Omitir',
+  'app.importedZipUnchanged': 'Documentos importados: {count}. Sin cambios (idénticos u omitidos): {unchanged}',
   'app.importZipFailed': 'Error al importar: {message}',
   'app.importProgress': '{done} de {total}',
   'app.timeLeft': 'quedan {time}',
@@ -106,9 +113,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': 'Esto elimina todo lo guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer.',
   'app.clearBodyOne': 'Esto elimina el único documento guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer.',
   'app.clearBodyMany': 'Esto elimina los {count} documentos guardados en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer.',
-  'app.clearBodyNoneAccount': 'Esto elimina todo lo guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer. Los documentos guardados en tu cuenta se conservan.',
-  'app.clearBodyOneAccount': 'Esto elimina el único documento guardado en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer. Los documentos guardados en tu cuenta se conservan.',
-  'app.clearBodyManyAccount': 'Esto elimina los {count} documentos guardados en este navegador, junto con la disposición de tu barra de herramientas. No se puede deshacer. Los documentos guardados en tu cuenta se conservan.',
+  'app.clearBodyAccount': 'Esto cierra tu sesión y elimina lo que Golem Docs guarda en este navegador, incluida la disposición de tu barra de herramientas. Tus documentos están a salvo en tu cuenta.',
+  'app.clearUnsent': 'Excepto: los cambios en {count} de tus documentos aún no han llegado a tu cuenta y se perderán si no se pueden enviar.',
+  'app.clearSignOut': 'Se cerrará tu sesión.',
+  'app.clearLoss': 'Los documentos que no están guardados en una cuenta se pierden para siempre: descarga antes los que quieras conservar.',
   'app.clearFailed': 'No se pudieron borrar los datos locales: {message}',
 
   // Formats
@@ -151,6 +159,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': 'Ahora se edita como {label}. Se comprime al guardarla como archivo, por lo que se pierde algo de detalle.',
 
   'app.createLinkedDocument': 'No hay ningún documento llamado «{title}». ¿Crearlo?',
+  'app.linksUpdated': 'Se actualizaron los enlaces a lo que renombraste o moviste.',
+  'app.linksSkipped': 'No se pudieron actualizar algunos enlaces a lo que renombraste o moviste: otras personas están editando esos documentos o tienen un conflicto.',
+  'app.linksUpdateFailed': 'No se pudieron actualizar los enlaces a lo que renombraste o moviste: {message}',
+  'app.createLinkedTitle': 'Documento no encontrado',
+  'app.createLinkedAction': 'Crear',
 
   // Browser storage
   'app.storageOpenFailed': 'No se pudo abrir el almacenamiento del navegador.',

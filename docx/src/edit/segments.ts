@@ -5,6 +5,7 @@
 import type { WordDocument } from '../docx/document.ts';
 import { StyleResolver } from '../model/resolve.ts';
 import type { Paragraph } from '../model/types.ts';
+import { docLinkTitles } from '../search/links.ts';
 import { OBJECT_CHAR, paragraphText, paragraphsIn } from './text.ts';
 
 /** One paragraph of a document, as plain text. */
@@ -14,6 +15,8 @@ export interface Segment {
   text: string;
   /** The paragraph is a bullet or numbered list item. */
   list?: 'bullet' | 'number';
+  /** The titles of the stored documents the paragraph links to (see ../search/links.ts). */
+  links?: string[];
 }
 
 /** The document as numbered paragraphs (the first is 0), with their style names and list kinds. */
@@ -23,10 +26,12 @@ export function paragraphSegments(doc: WordDocument): Segment[] {
     const named = p.properties.style ? doc.styles.styles.find((s) => s.id === p.properties.style)?.name : undefined;
     const numbering = resolver.paragraph(p.properties).numbering;
     const level = numbering?.id ? resolver.listLevel(numbering.id, numbering.level ?? 0) : undefined;
+    const links = docLinkTitles(p);
     return {
       ...(named && !/^normal$/i.test(named) && { style: named }),
       text: paragraphText(p).replaceAll(OBJECT_CHAR, '[object]'),
       ...(level && { list: level.format === 'bullet' ? ('bullet' as const) : ('number' as const) }),
+      ...(links.length ? { links } : {}),
     };
   });
 }

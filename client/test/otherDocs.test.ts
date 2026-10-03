@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readDocument } from '../src/formats/convert.ts';
-import { OtherDocuments, segmentsFromBytes, type StoredDocument } from '../src/assistant/libraryDocs.ts';
+import { OtherDocuments, type StoredDocument } from '../src/assistant/libraryDocs.ts';
+import { segmentsFromBytes } from '../src/formats/docBytes.ts';
 import { paragraphSegments as segmentsOf } from '@golemdocs/docx';
 import { describeHits, readSegments, resolveDocument, scoreDocument, termsOf } from '../src/assistant/otherDocs.ts';
 
@@ -164,4 +165,29 @@ test('without the server, every document is searched here', async () => {
   const other = new OtherDocuments(async () => [{ id: 'a', name: 'A.docx', updatedAt: 1, size: 5, cloudId: 'c', load: async () => (loads.push('A'), docxBytes('lisbon')) }], async () => null);
   assert.match(await other.search('lisbon'), /"A\.docx"/);
   assert.deepEqual(loads, ['A']);
+});
+
+test('the assistant searches by the words and #tags in the documents\' indexes first', async () => {
+  const stored = (id: string, name: string): StoredDocument => ({ id, name, updatedAt: 1, size: 10, load: async () => docxBytes('nothing relevant') });
+  const asked: string[] = [];
+  const docs = new OtherDocuments(
+    async () => [stored('k1', 'Kitchen.docx'), stored('k2', 'Garden.docx')],
+    async () => null,
+    async (query) => {
+      asked.push(query);
+      return { hits: [{ key: 'k1', name: 'Kitchen.docx', score: 9, paragraph: 3, text: 'Buy cabinets #renovation' }, { key: 'open', name: 'Open.docx', score: 8 }], pending: 1 };
+    },
+  );
+  const answer = await docs.search('#renovation');
+  assert.deepEqual(asked, ['#renovation']);
+  assert.match(answer, /1 document matches/);
+  assert.match(answer, /"Kitchen\.docx" \(id k1\) \[3\] Buy cabinets/);
+  assert.doesNotMatch(answer, /Open\.docx/); // the open document isn't one of the other documents
+  assert.match(answer, /still being prepared/);
+  // A tag nobody has is an answer, not a reason to read every document.
+  const none = new OtherDocuments(async () => [stored('k1', 'Kitchen.docx')], async () => null, async () => ({ hits: [], pending: 0 }));
+  assert.match(await none.search('#nothing'), /No document matches "#nothing"/);
+  // Words found nowhere in the indexes fall back to reading the documents.
+  const reads = new OtherDocuments(async () => [{ ...stored('k1', 'Kitchen.docx'), load: async () => docxBytes('The budget is 12000 dollars.') }], async () => null, async () => ({ hits: [], pending: 0 }));
+  assert.match(await reads.search('budget dollars'), /Kitchen\.docx/);
 });

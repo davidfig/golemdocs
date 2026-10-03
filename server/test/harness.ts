@@ -42,7 +42,7 @@ export interface World {
   env: Env;
   directory: DatabaseSync;
   /** R2 objects by key. */
-  objects: Map<string, { bytes: ArrayBuffer; contentType?: string; etag?: string }>;
+  objects: Map<string, { bytes: ArrayBuffer; contentType?: string; etag?: string; customMetadata?: Record<string, string> }>;
   /** A request to the worker, signed in as `as` (the DEV_USER identity; null: not signed in). */
   call(as: string | null, method: string, path: string, init?: { body?: BodyInit; type?: string; headers?: Record<string, string> }): Promise<Response>;
   /**
@@ -71,16 +71,16 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
   const bucket: any = {
     async get(key: string) {
       const o = objects.get(key);
-      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, httpEtag: `"${o.etag}"`, httpMetadata: { contentType: o.contentType } };
+      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, httpEtag: `"${o.etag}"`, httpMetadata: { contentType: o.contentType }, customMetadata: o.customMetadata };
     },
     async head(key: string) {
       const o = objects.get(key);
       return o ? { etag: o.etag } : null;
     },
-    async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; onlyIf?: { etagMatches?: string } }) {
+    async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string>; onlyIf?: { etagMatches?: string } }) {
       const match = options?.onlyIf?.etagMatches;
       if (match !== undefined && objects.get(key)?.etag !== match) return null;
-      objects.set(key, { bytes: value, contentType: options?.httpMetadata?.contentType, etag: `etag-${++writes}` });
+      objects.set(key, { bytes: value, contentType: options?.httpMetadata?.contentType, customMetadata: options?.customMetadata, etag: `etag-${++writes}` });
       return {};
     },
     async delete(keys: string | string[]) {

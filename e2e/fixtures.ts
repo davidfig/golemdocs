@@ -113,17 +113,34 @@ function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean }>({
+export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean; livePreviewDefault: boolean }>({
   // The page sidebar is open by default in a wide window, where it would cover the PDF tool palette and shift the
   // page. Tests start with it closed (unless the browser already holds a choice); the ones about the default opt in.
   sidebarDefault: [false, { option: true }],
   // The status bar too is on by default; tests start with it off, so the document has the window's whole height.
   statusBarDefault: [false, { option: true }],
-  page: async ({ page, sidebarDefault, statusBarDefault }, use) => {
+  // Show Markdown at the Caret is on by default too, which shows `# ` in the heading the caret is in; tests start with it off.
+  livePreviewDefault: [false, { option: true }],
+  page: async ({ page, sidebarDefault, statusBarDefault, livePreviewDefault }, use) => {
+    // Every test shares one signed-in account, so settings kept in it (shortcuts, view choices) would carry from
+    // one test to the next. Each test gets an account with no settings that forgets what it is sent; the specs
+    // about settings following the account use their own people and contexts, which this does not touch.
+    await page.route('**/api/preferences**', (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ json: { prefs: {} } }) : route.fulfill({ json: { ok: true, updatedAt: Date.now() } }),
+    );
     if (!sidebarDefault) {
       await page.addInitScript(() => {
         try {
           if (localStorage.getItem('word.pagesPanel') === null) localStorage.setItem('word.pagesPanel', 'off');
+        } catch {
+          // No storage: the app falls back to its default.
+        }
+      });
+    }
+    if (!livePreviewDefault) {
+      await page.addInitScript(() => {
+        try {
+          if (localStorage.getItem('word.livePreview') === null) localStorage.setItem('word.livePreview', 'off');
         } catch {
           // No storage: the app falls back to its default.
         }

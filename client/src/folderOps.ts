@@ -4,9 +4,19 @@
 import { listFolders, moveDocuments, putFolders, throwIfFailed, type BatchResult } from './cloud.ts';
 import { folderContents, folderOf, folderPath, isInside, parentsFirst, type Folder } from './folders.ts';
 import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder, updateLocalFolder } from './storage/local.ts';
+import type { LibraryChange } from './linkRename.ts';
 import { addFoldersToCatalogue, moveDocsInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
 
 /** Folders that were not saved by a batch call (the cloud's answer for each), as an error naming the first reason. */
+/**
+ * Told before each rename or move of folders and documents: it returns what to call once the change is made, to keep the links to
+ * what moved working (main.ts sets it; see linkRename.ts). Not awaited: the links are written in the background.
+ */
+let linkKeeper: ((change: LibraryChange) => () => void) | null = null;
+export function setLinkKeeper(keeper: typeof linkKeeper): void {
+  linkKeeper = keeper;
+}
+
 function saved<T extends { id: string }>(result: BatchResult<T>): T[] {
   throwIfFailed(result);
   return result.ok;
@@ -38,13 +48,16 @@ export async function createFolder(cloud: boolean, name: string, parentId: strin
  */
 export async function updateFolders(cloud: boolean, changes: readonly { folder: Folder; name?: string; parentId?: string | null }[]): Promise<Folder[]> {
   const now = Date.now();
+  const linksAfter = linkKeeper?.({ kind: 'folders', changes: changes.map(({ folder, name, parentId }) => ({ id: folder.id, name, parentId })) });
   if (cloud) {
     const done = saved(await putFolders(changes.map(({ folder, name, parentId }) => ({ id: folder.id, name, parentId }))));
     updateFoldersInCatalogue(done);
+    linksAfter?.();
     return done;
   }
   const next: Folder[] = [];
   for (const { folder, ...change } of changes) next.push((await updateLocalFolder(folder.id, change, now)) ?? { ...folder, ...change, updatedAt: now });
+  linksAfter?.();
   return next;
 }
 
@@ -111,11 +124,14 @@ export function withMoved(entries: readonly LibraryEntry[], moved: readonly Libr
 /** Moves documents to a folder (null: the top level); the account's in one request. */
 export async function moveEntries(entries: readonly LibraryEntry[], folderId: string | null): Promise<void> {
   const cloudIds = entries.flatMap((e) => (e.cloud ? [e.cloud.id] : []));
+  const linksAfter = linkKeeper?.({ kind: 'move', keys: entries.map((e) => e.key), to: folderId });
   const result = cloudIds.length ? await moveDocuments(cloudIds, folderId) : { ok: [], failed: [] };
   // What did move is recorded, here too, even when some did not (and that is then reported).
   const refused = new Set(result.failed.map((f) => f.id));
   if (result.ok.length) moveDocsInCatalogue(result.ok, folderId);
   for (const entry of entries) if (entry.local && !(entry.cloud && refused.has(entry.cloud.id))) await setSavedFolder(entry.local.id, folderId);
+  // Links are only written for a move that all happened.
+  if (!result.failed.length) linksAfter?.();
   throwIfFailed(result);
 }
 

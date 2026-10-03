@@ -62,6 +62,8 @@ export interface AppHooks {
   showSpelling(): void;
   /** Show the Find, Replace or Go To dialog on that tab. */
   showFind(tab: FindTab): void;
+  /** Search every document by its words and #tags (Edit ▸ Search All Documents). */
+  showSearchAll(): void;
   /** Print the document (as a PDF), or open that PDF in a new tab to preview it. */
   print(preview: boolean): Promise<void>;
   /** Make a copy of the document in another format next to the original, and open it. */
@@ -102,6 +104,8 @@ export interface AppHooks {
   downloadAll(): Promise<void>;
   /** Import the documents in a ZIP, keeping its folders. */
   importZip(file: File): Promise<void>;
+  /** Import the documents in a folder picked from the computer, keeping its folders. */
+  importPicked(files: FileList): Promise<void>;
   /** The user's documents (ids are sources: `local:…` or `cloud:…`). */
   saved(): Sample[];
   send(command: WireCommand): void;
@@ -124,6 +128,7 @@ export interface AppHooks {
   toggleFilesPanel(): void;
   /** Show or hide the status bar under the document. */
   toggleFooter(): void;
+  toggleRuler(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
   /** Print layout (pages), Flow (the text reflowed to the window) or the page grid. */
@@ -139,6 +144,7 @@ const SUPPORTED = new Set<ActionKind>([
   'new',
   'open',
   'import',
+  'importFolder',
   'openSample',
   'openSaved',
   'syncNow',
@@ -170,6 +176,7 @@ const SUPPORTED = new Set<ActionKind>([
   'togglePagesPanel',
   'toggleFilesPanel',
   'toggleFooter',
+  'toggleRuler',
   'toggleFormattingMarks',
   'insertText',
   'convert',
@@ -234,6 +241,17 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     input.click();
   };
 
+  const pickFolder = (folderId: string | null): void => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', webkitdirectory: true });
+    input.addEventListener('change', async () => {
+      const files = input.files;
+      if (!files?.length) return;
+      await app.prepareNew(folderId);
+      void app.importPicked(files);
+    });
+    input.click();
+  };
+
   /** The page at the middle of the view (or nearest to it). */
   const currentPage = (): GpuPage | null => {
     const { canvas, camera } = app;
@@ -275,7 +293,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'pasteSpecial' || action.name === 'searchAll';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode !== 'flow' || !(app.annotating() || app.isPicture());
@@ -295,6 +313,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.dashboard();
         case 'import':
           return pickFile(action.folderId ?? null);
+        case 'importFolder':
+          return pickFolder(action.folderId ?? null);
         case 'openSample':
           return app.openSample(action.id);
         case 'openSaved':
@@ -313,6 +333,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (action.name === 'pageSetup') return app.showPageSetup();
           if (action.name === 'properties') return app.showProperties();
           if (action.name === 'pasteSpecial') return app.showPasteSpecial();
+          if (action.name === 'searchAll') return app.showSearchAll();
           if (action.name === 'find' || action.name === 'replace' || action.name === 'goTo') return app.showFind(action.name);
           return app.notify(t('app.notAvailable', { name: action.name }));
         case 'print':
@@ -388,6 +409,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleFilesPanel();
         case 'toggleFooter':
           return app.toggleFooter();
+        case 'toggleRuler':
+          return app.toggleRuler();
         case 'insertText':
           return app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':

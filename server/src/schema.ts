@@ -30,4 +30,15 @@ export const USER_MIGRATIONS: string[][] = [
      )`,
     `ALTER TABLE documents ADD COLUMN folder_id TEXT`,
   ],
+  // 4: the person's interface settings, kept per profile ('desktop' or 'mobile': a phone wants its own),
+  // one row per setting. A null value is a setting put back to its default. updated_at is the server's clock.
+  [
+    `CREATE TABLE preferences (
+       profile    TEXT NOT NULL,
+       key        TEXT NOT NULL,
+       value      TEXT,
+       updated_at INTEGER NOT NULL,
+       PRIMARY KEY (profile, key)
+     )`,
+  ],
 ];

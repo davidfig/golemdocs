@@ -1,6 +1,7 @@
 {
   "name": "golemdocs",
   "private": true,
+  "description": "GolemDocs monorepo root (private, not published to npm)",
   "version": "0.9.0",
   "type": "module",
   "scripts": {
@@ -10,11 +11,12 @@
     "kill": "tsx scripts/kill.ts",
     "build": "pnpm --recursive build",
     "typecheck": "tsc && pnpm --recursive typecheck",
-    "home": "pnpm --filter @golemdocs/client home",
+    "build:home": "pnpm --filter @golemdocs/client build:home",
     "fonts": "tsx scripts/fonts/generate.ts",
     "test": "pnpm --no-bail --filter @golemdocs/docx --filter @golemdocs/layout --filter @golemdocs/ops --filter @golemdocs/editor --filter @golemdocs/server --filter @golemdocs/client --filter @golemdocs/pdf --filter @golemdocs/odt test",
     "test:coverage": "tsx scripts/coverage.ts",
-    "e2e": "tsx scripts/e2e.ts"
+    "e2e": "tsx scripts/e2e.ts",
+    "record:home": "tsx scripts/marketing/record-war-and-peace.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

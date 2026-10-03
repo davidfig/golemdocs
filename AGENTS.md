@@ -1,5 +1,9 @@
 # Agent Instructions
 
+## Never look up `@golemdocs/*` on npm
+
+`@golemdocs/*` packages are private workspace packages and are **not on npm**. Do not open npmjs.com or the registry in any browser, `WebFetch`, `curl`, `npm view`, `npm info` or `npm login`/`whoami`: the page doesn't exist and just redirects to a login screen you cannot pass. Everything you would look up is local: read the package's own `package.json` (`name`, `version`, `description`) and its `README.md` or `src/index.ts`.
+
 ## Dependencies
 
 Prefer fewer dependencies. Default to hand-coding functionality rather than pulling in a package.
@@ -40,6 +44,14 @@ Every feature a user can do should have an equivalent assistant tool, so the AI 
 - Mention the capability in the system prompt's list of what the AI can do, and test the tool (`client/test/agentTools.test.ts` for worker tools).
 - If a feature truly cannot be done by a tool (it is purely visual or needs the user's own device), say so in the change instead of silently skipping it.
 
+## Marketing clip
+
+The home page's performance section plays `client/public/home/war-and-peace.webm`, a recording of the real app. When the app's look changes in a way the clip shows (toolbars, menus, the status bar, Page Grid, the mascot), re-record it with `pnpm record:home` (`scripts/marketing/record-war-and-peace.ts`). It needs the user's dev server on :5173 and takes about a minute; see the script's header for options.
+
+## Settings that follow the account
+
+A setting kept in browser storage is either per device or follows the person (see `client/src/settingsSync.ts`). When you add a persisted setting, decide which: a preference (a choice of look, language, behavior, view) goes in `SYNCED_KEYS` so every computer shows it; anything tied to this screen (sizes, positions, panel or toolbar layout, per-document zoom or scroll) and notices already dismissed stay out. A phone's settings are separate from a computer's, so a synced setting needs a sensible default on both.
+
 ## Welcome document
 
 The welcome documents (`client/src/layout/welcome/*.md`) must show no spelling errors. After you edit the English one, spell check it (F7, or run `pnpm --filter @golemdocs/client test`: a test fails on any misspelled word). Then, for each flagged word, confirm it is actually spelled correctly (a name, a format, a key) and add it to `client/src/spelling/appWords.ts`. Fix real typos in the document instead.
@@ -56,7 +68,7 @@ The app should look and behave the same everywhere: the same buttons, icons, fon
 
 Every user-visible string goes through `t('area.key')` (`client/src/i18n`), never an inline literal. Add the English to `client/src/i18n/en/` and call `t()` inside functions, not at module top level. Adding an English key makes the translation-completeness test fail until every language in `client/src/i18n/locales/` has it. See `docs/localization.md` for the conventions and how to add a language.
 
-**The marketing site is translated too.** The home page (`client/public/home/`) is generated in every language the app supports from `client/home/template.html` and `client/home/locales/<tag>.json` (`pnpm home`). When you add a language to the app, also add `client/home/locales/<tag>.json`, run `pnpm home`, and add the new page to `client/public/sitemap.xml`; the `home` test fails until you do. When you change English marketing copy, update every language's file too.
+**The marketing site is translated too.** The home page (`client/public/home/`) is generated in every language the app supports from `client/home/template.html` and `client/home/locales/<tag>.json` (`pnpm build:home`). When you add a language to the app, also add `client/home/locales/<tag>.json`, run `pnpm build:home`, and add the new page to `client/public/sitemap.xml`; the `home` test fails until you do. When you change English marketing copy, update every language's file too.
 
 **Adding a language** also means adding its spelling dictionary and checking its grammar. Follow *Spelling dictionaries* in `docs/localization.md`: put the Hunspell `.aff`/`.dic` pair and its license in `client/public/dictionaries/`, register it in `client/src/spelling/languages.ts`, and add a test. The grammar checker (`client/src/spelling/grammar.ts`) is English only: add rules for the new language (and let the layout worker turn them on for it), or say in the change that it has none. A language with no usable Hunspell dictionary (such as Chinese, Japanese or Korean) is left unchecked, so it shows no squiggles. Spell check the language's welcome document, and add its properly spelled words to `client/src/spelling/appWords.ts`.
 

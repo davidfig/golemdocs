@@ -309,6 +309,7 @@ test.describe('Clear Local Data', () => {
     await app.menu('File', 'Clear Local Data');
     const dialog = await confirmDialog(page, 'Delete Everything');
     await expect(dialog).toContainText('deletes the one document saved in this browser');
+    await expect(dialog).toContainText('lost for good');
     await dialog.getByRole('button', { name: 'Delete Everything' }).click();
     await page.waitForURL((u) => u.search === '');
     await app.ready();
@@ -320,26 +321,25 @@ test.describe('Clear Local Data', () => {
     await context.close();
   });
 
-  test('signed in, the account\'s documents are kept and you stay signed in', async ({ browser }) => {
+  test('signed in, it signs you out and the account\'s documents are kept', async ({ browser }) => {
     const person = await newPerson(browser, 'clear');
     await person.app.blank();
     await person.app.type('in the account');
     await waitSaved(person.page);
-    const doc = await waitForCloudDoc(person.page);
+    await waitForCloudDoc(person.page);
     await person.app.menu('File', 'Clear Local Data');
     const dialog = await confirmDialog(person.page, 'Delete Everything');
-    await expect(dialog).toContainText('Documents saved to your account are kept.');
-    await dialog.getByRole('button', { name: 'Delete Everything' }).click();
+    await expect(dialog).toContainText('Your documents are safe in your account.');
+    await expect(dialog).not.toContainText('haven’t reached your account');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect((await me(person.page))?.email).toBe(person.email); // Cancel leaves you signed in
+    await person.app.menu('File', 'Clear Local Data');
+    await (await confirmDialog(person.page, 'Delete Everything')).getByRole('button', { name: 'Delete Everything' }).click();
     await person.page.waitForURL((u) => u.search === '');
     await person.app.ready();
     await expect.poll(() => person.app.text()).toContain('Welcome to Golem Docs');
-    expect((await me(person.page))?.email).toBe(person.email);
-    const listed = (await (await person.page.request.get('/api/documents')).json()) as { id: string }[];
-    expect(listed.map((d) => d.id)).toContain(doc.id);
-    // And the account's copy opens again.
-    await person.page.goto(`/?doc=cloud:${doc.id}`);
-    await person.app.ready();
-    await expect.poll(() => person.app.text()).toBe('in the account');
+    expect(await me(person.page)).toBeNull();
     await person.context.close();
   });
 });

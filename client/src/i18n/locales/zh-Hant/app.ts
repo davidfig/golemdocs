@@ -46,6 +46,13 @@ export const app: Partial<Messages> = {
   'app.importZipNone': '{name} 中沒有可匯入的文件',
   'app.importedZip': '已匯入的文件：{count}',
   'app.importedZipSkipped': '已匯入的文件：{count}。已略過無法開啟的檔案：{skipped}',
+  'app.importDuplicateTitle': '名稱已被使用',
+  'app.importDuplicateMessage': '「{name}」已存在，但內容不同。要如何處理新檔案？',
+  'app.importDuplicateAll': '對其餘所有重複項目執行相同操作',
+  'app.importDuplicateOverwrite': '覆寫',
+  'app.importDuplicateRename': '保留兩者',
+  'app.importDuplicateSkip': '略過',
+  'app.importedZipUnchanged': '已匯入的文件：{count}。保持原樣（相同或已略過）：{unchanged}',
   'app.importZipFailed': '匯入失敗：{message}',
   'app.importProgress': '{done} / {total}',
   'app.timeLeft': '剩餘 {time}',
@@ -100,9 +107,10 @@ export const app: Partial<Messages> = {
   'app.clearBodyNone': '這會刪除儲存在此瀏覽器中的所有內容，包括你的工具列配置。此操作無法復原。',
   'app.clearBodyOne': '這會刪除儲存在此瀏覽器中的這份文件，包括你的工具列配置。此操作無法復原。',
   'app.clearBodyMany': '這會刪除儲存在此瀏覽器中的全部 {count} 份文件，包括你的工具列配置。此操作無法復原。',
-  'app.clearBodyNoneAccount': '這會刪除儲存在此瀏覽器中的所有內容，包括你的工具列配置。此操作無法復原。儲存在你帳號中的文件會保留。',
-  'app.clearBodyOneAccount': '這會刪除儲存在此瀏覽器中的這份文件，包括你的工具列配置。此操作無法復原。儲存在你帳號中的文件會保留。',
-  'app.clearBodyManyAccount': '這會刪除儲存在此瀏覽器中的全部 {count} 份文件，包括你的工具列配置。此操作無法復原。儲存在你帳號中的文件會保留。',
+  'app.clearBodyAccount': '這會讓你登出，並刪除 Golem Docs 在此瀏覽器中儲存的內容，包括你的工具列配置。你的文件安全地儲存在你的帳號中。',
+  'app.clearUnsent': '但有 {count} 份文件的變更尚未送達你的帳號，如果無法傳送就會遺失。',
+  'app.clearSignOut': '你將登出。',
+  'app.clearLoss': '未儲存到帳號的文件將永久遺失：請先下載你想保留的文件。',
   'app.clearFailed': '無法清除本機資料：{message}',
 
   // Formats
@@ -145,6 +153,11 @@ export const app: Partial<Messages> = {
   'app.switchedPictureLossy': '目前以 {label} 編輯。另存為檔案時會壓縮,因此會損失少許細節。',
 
   'app.createLinkedDocument': '沒有名為「{title}」的文件。要建立嗎?',
+  'app.linksUpdated': '已更新指向你重新命名或移動內容的連結。',
+  'app.linksSkipped': '部分指向你重新命名或移動內容的連結無法更新：這些文件正由他人編輯或發生衝突。',
+  'app.linksUpdateFailed': '無法更新指向你重新命名或移動內容的連結：{message}',
+  'app.createLinkedTitle': '找不到文件',
+  'app.createLinkedAction': '建立',
 
   // Browser storage
   'app.storageOpenFailed': '無法開啟瀏覽器儲存空間。',

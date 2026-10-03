@@ -22,12 +22,12 @@ test('the marketing page has a translation for every app language', () => {
 test('every template slot is filled by the English strings', () => {
   const english = readStrings(SOURCE);
   const slots = new Set([...readTemplate().matchAll(/\{\{([\w.]+)\}\}/g)].map((m) => m[1]));
-  const own = new Set(['lang', 'ogLocale', 'url', 'home', 'alternates', 'languages', 'redirect']);
+  const own = new Set(['lang', 'ogLocale', 'url', 'home', 'alternates', 'languages', 'languageName', 'redirect']);
   for (const slot of slots) assert.ok(own.has(slot) || slot in english, slot);
   for (const key of Object.keys(english)) assert.ok(slots.has(key), `${key} is unused`);
 });
 
-test('the committed pages are up to date (run pnpm home)', () => {
+test('the committed pages are up to date (run pnpm build:home)', () => {
   for (const [file, html] of renderAll()) assert.equal(readFileSync(new URL(`../public/${file}`, import.meta.url), 'utf8'), html, file);
 });
 

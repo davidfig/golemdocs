@@ -1,5 +1,6 @@
 // Client for the server's document API (server/src/worker.ts): a user's .docx files, kept in
 // Cloudflare R2 with their catalogue in the user's own D1 database.
+import { decodeIndex, type DocIndex } from '@golemdocs/docx';
 import type { Folder } from './folders.ts';
 import { t } from './i18n/index.ts';
 
@@ -73,6 +74,18 @@ export function documentUrl(id: string): string {
 /** The document's .docx bytes. */
 export async function downloadDocument(id: string): Promise<ArrayBuffer> {
   return (await check(await send(documentUrl(id)))).arrayBuffer();
+}
+
+/**
+ * The account's search index of a document (made by the server the first time it is asked for, and
+ * again after the document changes), and the version of the document it is for (the document's
+ * `updatedAt`). Null when there is none to have: too big, or made by another version of the app.
+ */
+export async function downloadIndex(id: string): Promise<{ index: DocIndex; at: number } | null> {
+  const response = await check(await send(`/api/documents/${id}/index`));
+  const at = Number(response.headers.get('x-index-at'));
+  const index = Number.isFinite(at) && at > 0 ? await decodeIndex(new Uint8Array(await response.arrayBuffer())) : null;
+  return index ? { index, at } : null;
 }
 
 /** Where a document's thumbnail image is (the version in the URL makes it safe to cache forever). */

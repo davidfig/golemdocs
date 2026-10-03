@@ -1,0 +1,127 @@
+.wm-search {
+  width: min(640px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 48px));
+  padding: 0;
+}
+
+.wm-search-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  min-height: 0;
+}
+
+.wm-search-input {
+  border: 1px solid var(--wm-field-border, #7f9db9);
+  background: var(--wm-field, #fff);
+  color: inherit;
+  font: inherit;
+  padding: 5px 7px;
+}
+
+.wm-search-status {
+  min-height: 1.3em;
+  color: var(--wm-disabled, #6b6b6b);
+  font-size: 12px;
+}
+
+.wm-search-list {
+  overflow-y: auto;
+  max-height: 400px;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  background: var(--wm-field, #fff);
+  min-height: 80px;
+}
+
+.wm-search-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.wm-search-row.active {
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-search-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wm-search-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-search-meta {
+  color: var(--wm-disabled, #6b6b6b);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wm-search-snippet {
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.wm-search-snippet mark {
+  background: var(--wm-find, #ffe38a);
+  color: inherit;
+}
+
+.wm-search-tag {
+  color: var(--wm-link, #0b57d0);
+  cursor: pointer;
+}
+
+.wm-search-tag:hover {
+  text-decoration: underline;
+}
+
+.wm-search-empty {
+  padding: 14px 10px;
+  color: var(--wm-disabled, #6b6b6b);
+}
+
+.wm-search-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px 10px;
+}
+
+.wm-search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--wm-border, #b9b9b9);
+  border-radius: 10px;
+  background: linear-gradient(var(--wm-bar-top, #fbfbfb), var(--wm-bar-bottom, #e4e4e4));
+  color: var(--wm-link, #0b57d0);
+  font: inherit;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+
+.wm-search-chip:hover,
+.wm-search-chip:focus-visible {
+  border-color: var(--wm-hot-border, #316ac5);
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-search-count {
+  color: var(--wm-disabled, #6b6b6b);
+  font-size: 11px;
+}

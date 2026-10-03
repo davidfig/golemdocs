@@ -11,6 +11,7 @@ import type { LibraryStore } from '../libraryStore.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { CLOSE_ICON, h, iconButton, isFileDrag, toggleClass } from './dom.ts';
+import { setDocumentDrag } from './documentDrag.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
@@ -26,6 +27,8 @@ export interface FilesPanelHost {
   newDocument(folderId: string | null): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
+  /** Asks for a folder on this computer and imports its documents, filed in `folderId`. */
+  importFolder(folderId: string | null): void;
   /** Opens a file dropped from the computer, to be filed in `folderId` (null: the top level) when it is first saved. */
   /** Opens a dropped file, or imports several (or a folder), filed in `folderId`. */
   dropFile(drop: Dropped, folderId: string | null): void;
@@ -45,6 +48,8 @@ export interface FilesPanelHost {
 /** What is being dragged onto a folder. */
 /** Folders left open, kept in this browser. */
 const OPEN_KEY = 'word.filesOpen';
+/** Set once the tip about dropping files here is dismissed, kept in this browser. */
+const TIP_KEY = 'word.filesDropTipDismissed';
 
 export class FilesPanel {
   readonly el = h('aside', { class: 'wm-files', attrs: { 'aria-label': t('panels.files.label') } });
@@ -84,7 +89,7 @@ export class FilesPanel {
     const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
     collapse.addEventListener('click', () => this.collapseAll());
-    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.tree, this.empty);
+    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.tree, this.empty, this.dropTip());
     this.notice.hidden = true;
     this.el.addEventListener('contextmenu', (e) => {
       if ((e.target as HTMLElement).closest('.wm-files-row')) return;
@@ -100,6 +105,27 @@ export class FilesPanel {
     });
     parent.append(this.el);
     makeResizable(this.el, { key: 'word.filesWidth', min: 140, max: 480, initial: 200 });
+  }
+
+  /** How to drop files and folders here; gone for good once dismissed. */
+  private dropTip(): HTMLElement {
+    const tip = h('div', { class: 'wm-files-tip', attrs: { role: 'note' } });
+    try {
+      if (localStorage.getItem(TIP_KEY)) tip.hidden = true;
+    } catch {
+      // Storage unavailable: shown each time.
+    }
+    const dismiss = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.dismissTip'));
+    dismiss.addEventListener('click', () => {
+      tip.hidden = true;
+      try {
+        localStorage.setItem(TIP_KEY, '1');
+      } catch {
+        // Storage unavailable: it comes back next time.
+      }
+    });
+    tip.append(h('p', { text: t('panels.files.dropTip') }), dismiss);
+    return tip;
   }
 
   get visible(): boolean {
@@ -306,6 +332,7 @@ export class FilesPanel {
       'separator',
       { label: t('panels.dashboard.newBlank'), run: () => this.host.newDocument(folder.id) },
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
+      { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
       'separator',
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
@@ -320,6 +347,7 @@ export class FilesPanel {
     return [
       { label: t('panels.dashboard.newBlank'), run: () => this.host.newDocument(null) },
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(null) },
+      { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(null) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(null) },
     ];
   }
@@ -397,8 +425,11 @@ export class FilesPanel {
     el.addEventListener('dragstart', (e) => {
       this.dragged = item;
       if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', item.kind === 'doc' ? item.entry.name : item.folder.name);
+        if (item.kind === 'doc') setDocumentDrag(e.dataTransfer, item.entry.key, item.entry.name);
+        else {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', item.folder.name);
+        }
       }
     });
     el.addEventListener('dragend', () => (this.dragged = null));

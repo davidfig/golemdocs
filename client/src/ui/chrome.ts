@@ -16,7 +16,7 @@ import {
   type ZoomTarget,
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
-import { h, isFormField } from './dom.ts';
+import { h, isFormField, segmented } from './dom.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
@@ -1084,17 +1084,15 @@ export class Chrome {
     const render = (): void => {
       const state = this.state.vector;
       box.replaceChildren();
-      const row = h('div', { class: 'wm-fill-types', attrs: { role: 'group', 'aria-label': t('vector.fillType') } });
-      for (const type of ['solid', 'linear', 'radial'] as const) {
-        const current = type === state.fillType;
-        const button = h('button', { class: current ? 'wm-fill-type current' : 'wm-fill-type', text: t(`vector.fill.${type}`), title: t(`vector.fillType.${type}`), attrs: { type: 'button', 'aria-pressed': String(current) } });
-        button.addEventListener('click', () => {
-          if (current) return;
-          r.perform({ kind: 'vectorStyle', fillType: type }, t('vector.fillType'));
-        });
-        row.append(button);
-      }
-      box.append(row);
+      // Each kind of fill with a small sample of it: flat, fading across, fading out from the middle.
+      const types = segmented(
+        t('vector.fillType'),
+        (['solid', 'linear', 'radial'] as const).map((type) => ({ value: type, text: t(`vector.fill.${type}`), title: t(`vector.fillType.${type}`), icon: h('span', { class: `wm-fill-sample wm-fill-sample-${type}`, attrs: { 'aria-hidden': 'true' } }) })),
+        (type) => r.perform({ kind: 'vectorStyle', fillType: type }, t('vector.fillType')),
+      );
+      types.set(state.fillType);
+      types.el.classList.add('wm-fill-types');
+      box.append(types.el);
       const g = state.gradient;
       if (!g) return;
       palette.setColor(g.stops[g.stop].color);
@@ -1177,7 +1175,16 @@ export class Chrome {
       box.append(stopsBox, h('div', { class: 'wm-palette-label', text: t('vector.stopColor') }));
     };
     // The state follows the change a frame later: the popup shows it as soon as the chrome does.
-    this.onFillChange = () => (!box.isConnected ? (this.onFillChange = null) : dragging ? undefined : render());
+    // Only a change to the fill redraws it: a redraw for anything else (the save status, say) could land
+    // between a button's press and release, which loses the click.
+    const shown = () => JSON.stringify([this.state.vector.fillType, this.state.vector.gradient]);
+    let drawn = shown();
+    this.onFillChange = () => {
+      if (!box.isConnected) return void (this.onFillChange = null);
+      if (dragging || shown() === drawn) return;
+      drawn = shown();
+      render();
+    };
     render();
     return box;
   }

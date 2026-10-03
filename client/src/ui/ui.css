@@ -818,34 +818,72 @@
 }
 
 .wm-fill-types {
-  display: flex;
   margin: 2px 3px 6px;
 }
 
-.wm-fill-type {
+/* The samples on the fill types: flat, fading across, fading out from the middle. */
+.wm-fill-sample {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1px solid var(--wm-muted);
+}
+
+.wm-fill-sample-solid {
+  background: #5b8def;
+}
+
+.wm-fill-sample-linear {
+  background: linear-gradient(to right, #5b8def, #fff);
+}
+
+.wm-fill-sample-radial {
+  background: radial-gradient(circle, #fff, #5b8def 75%);
+}
+
+/* A segmented control (dom.ts segmented): joined buttons, the one that is on pressed in. */
+.wm-segmented {
+  display: flex;
+  border: 1px solid var(--wm-etch-dark);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--wm-menu-bg);
+}
+
+.wm-segment {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   height: 24px;
   padding: 0 8px;
-  margin: 0 0 0 -1px;
-  border: 1px solid var(--wm-muted);
+  margin: 0;
+  border: none;
+  border-left: 1px solid var(--wm-etch-dark);
   background: none;
+  color: inherit;
   font: inherit;
   white-space: nowrap;
   cursor: default;
 }
 
-.wm-fill-type:first-child {
-  margin-left: 0;
+.wm-segment:first-child {
+  border-left: none;
 }
 
-.wm-fill-type:hover {
+.wm-segment:hover {
   background: var(--wm-hot);
 }
 
-.wm-fill-type.current {
-  position: relative;
-  background: var(--wm-hot);
-  border-color: var(--wm-hot-border);
+.wm-segment[aria-pressed='true'] {
+  background: var(--wm-checked-hot);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.wm-segment:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: -2px;
 }
 
 .wm-fill-gradient {
@@ -946,9 +984,16 @@
 
 .wm-palette-grid {
   display: grid;
+  grid-template-columns: repeat(var(--palette-columns, 8), 18px);
   gap: 2px;
   margin: 4px 0;
   padding: 2px 3px;
+}
+
+/* In the Fill popup (its fill types and gradient editor are wider than the palette) the swatches flow across the whole width. */
+.wm-fill-palette .wm-palette-grid {
+  grid-template-columns: repeat(auto-fill, 18px);
+  justify-content: center;
 }
 
 .wm-swatch {

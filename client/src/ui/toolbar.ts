@@ -430,7 +430,7 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
     panel.append(none);
     const rows = spec.palette === 'full' ? PALETTE : HIGHLIGHTS;
     const grid = h('div', { class: 'wm-palette-grid' });
-    grid.style.gridTemplateColumns = `repeat(${rows[0].length}, 18px)`;
+    grid.style.setProperty('--palette-columns', String(rows[0].length));
     for (const row of rows) {
       for (const c of row) {
         const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
@@ -446,7 +446,7 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
     if (used.length > 0) {
       panel.append(h('div', { class: 'wm-palette-label', text: t('menus.palette.document') }));
       const usedGrid = h('div', { class: 'wm-palette-grid' });
-      usedGrid.style.gridTemplateColumns = `repeat(${rows[0].length}, 18px)`;
+      usedGrid.style.setProperty('--palette-columns', String(rows[0].length));
       for (const c of used) {
         const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
         cell.style.background = c;

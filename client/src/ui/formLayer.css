@@ -214,33 +214,7 @@ select.wm-field {
 
 
 .wm-forms-modes {
-  display: flex;
   margin: 0 0 8px;
-}
-
-.wm-forms-palette .wm-forms-mode {
-  flex: 1;
-  padding: 3px 4px;
-  background: var(--wm-menu-bg);
-  border: 1px solid var(--wm-etch-dark);
-}
-
-.wm-forms-mode:first-child {
-  border-radius: 3px 0 0 3px;
-}
-
-.wm-forms-mode:last-child {
-  border-left: none;
-  border-radius: 0 3px 3px 0;
-}
-
-.wm-forms-mode:hover {
-  background: var(--wm-hot);
-}
-
-.wm-forms-palette .wm-forms-mode.wm-forms-mode-on {
-  background: var(--wm-checked-hot);
-  border-color: var(--wm-hot-border);
 }
 
 .wm-forms-palette > h3 {

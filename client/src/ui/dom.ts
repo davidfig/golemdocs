@@ -38,6 +38,37 @@ export function iconButton(className: string, path: string, label: string): HTML
   return h('button', { class: className, attrs: { type: 'button', 'aria-label': label }, title: label }, icon as unknown as Node);
 }
 
+/** One choice of a segmented control: its value, its words, and optionally a tooltip and a small picture before the words. */
+export interface SegmentOption<T extends string> {
+  value: T;
+  text: string;
+  title?: string;
+  icon?: Node;
+}
+
+/**
+ * A row of joined buttons of which exactly one is on (Solid | Linear | Radial, Fill | Edit): the one
+ * look for choosing a mode wherever the app does it. `set` marks the current value; `onPick` runs
+ * when another one is clicked.
+ */
+export function segmented<T extends string>(label: string, options: readonly SegmentOption<T>[], onPick: (value: T) => void): { el: HTMLElement; set(value: T): void } {
+  const el = h('div', { class: 'wm-segmented', attrs: { role: 'group', 'aria-label': label } });
+  const buttons = options.map((option) => {
+    const button = h('button', { class: 'wm-segment', title: option.title, attrs: { type: 'button', 'aria-pressed': 'false', 'data-value': option.value } }, option.icon ?? null, h('span', { text: option.text }));
+    button.addEventListener('click', () => {
+      if (button.getAttribute('aria-pressed') !== 'true') onPick(option.value);
+    });
+    el.append(button);
+    return button;
+  });
+  return {
+    el,
+    set(value) {
+      buttons.forEach((button, i) => setAttr(button, 'aria-pressed', String(options[i].value === value)));
+    },
+  };
+}
+
 /** Sets an attribute only when it changes (refreshes run often). */
 export function setAttr(el: Element, name: string, value: string | null): void {
   if (value === null) {

@@ -266,8 +266,11 @@ export class VectorEditor {
 
   /** The group being worked in: a double click enters one, and clicks then pick its children. */
   private entered: NodePath | null = null;
-  /** The gradient stop picked on a selected shape (an interior one can be removed). */
+  /** The gradient stop picked on a selected shape. */
   private stop: number | null = null;
+  /** The gradient new shapes are filled with when the fill type is a gradient (made when first needed), and its picked stop. */
+  private newGradient: GradientStop[] | null = null;
+  private newStop = 0;
 
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.scene || isFormField(e.target)) return;
@@ -328,7 +331,7 @@ export class VectorEditor {
   get currentStyle(): ShapeStyle {
     const scene = this.scene;
     const first = this._selection[0];
-    if (!scene || !first || !nodeAt(scene, first)) return this.shape;
+    if (!scene || !first || !nodeAt(scene, first)) return this.preparing ? { ...this.shape, fill: this.pendingStops()[this.newStop].color } : this.shape;
     const paint = (property: string, fallback: string | null): string | null => {
       const v = styleOf(scene, first, property) ?? fallback;
       return v === undefined || v === 'none' ? null : v;
@@ -697,6 +700,11 @@ export class VectorEditor {
   /** Changes how the selection (and what is drawn next) looks. */
   applyStyle(change: Partial<ShapeStyle>): void {
     const { strokeStyle, fillType, ...rest } = change;
+    // With nothing selected and a gradient for new shapes, a colour is its picked stop's; No Fill is no gradient either.
+    if ('fill' in rest && this.preparing) {
+      if (rest.fill) return this.setStopColor(rest.fill);
+      this.shape = { ...this.shape, fillType: 'solid' };
+    }
     this.shape = { ...this.shape, ...rest };
     const props: Record<string, string | null> = {};
     if ('fill' in rest) props.fill = rest.fill ?? 'none';
@@ -732,6 +740,15 @@ export class VectorEditor {
 
   /** Fills the selected shapes with a colour or a gradient. */
   applyFillType(type: 'solid' | 'linear' | 'radial'): void {
+    // With nothing selected it is what new shapes get: a gradient made from the fill colour, or back to its first colour.
+    if (!this._selection.length) {
+      if (type === 'solid') this.shape = { ...this.shape, fill: this.newGradient?.[0].color ?? this.shape.fill, fillType: type };
+      else {
+        this.shape = { ...this.shape, fillType: type };
+        this.pendingStops();
+      }
+      return this.refresh();
+    }
     this.shape = { ...this.shape, fillType: type };
     this.edit((scene, selection) => {
       for (const path of outermost(selection)) {
@@ -836,8 +853,42 @@ export class VectorEditor {
     return true;
   }
 
-  /** The stops of the selected shape's gradient and the picked one, for the fill popup; null when the fill is not a gradient. */
+  /** True when the fill controls change the gradient new shapes get (nothing is selected and the fill type is a gradient). */
+  private get preparing(): boolean {
+    return !this._selection.length && this.shape.fillType !== 'solid';
+  }
+
+  /** The stops of the gradient for new shapes: the fill colour to white until they are changed. */
+  private pendingStops(): GradientStop[] {
+    return (this.newGradient ??= [
+      { offset: 0, color: this.shape.fill ?? DEFAULT_STYLE.fill! },
+      { offset: 1, color: '#ffffff' },
+    ]);
+  }
+
+  /** Changes the gradient for new shapes; `change` returns its new stops and the one to pick. */
+  private changePending(change: (stops: GradientStop[]) => { stops: GradientStop[]; stop: number }): void {
+    const { stops, stop } = change(this.pendingStops().map((s) => ({ ...s })));
+    this.newGradient = [...stops].sort((a, b) => a.offset - b.offset);
+    this.newStop = Math.max(0, this.newGradient.indexOf(stops[stop]));
+    this.refresh();
+  }
+
+  /** Fills a just-placed shape with the gradient for new shapes, fitted to its box. */
+  private fillWithGradient(scene: Scene, path: NodePath): void {
+    const node = nodeAt(scene, path);
+    const box = node ? localBounds(node, scene) : null;
+    if (!node || !box || this.shape.fillType === 'solid') return;
+    const stops = this.pendingStops();
+    const id = createGradient(scene, this.shape.fillType, box, stops[0].color, stops[stops.length - 1].color);
+    const editable = editableGradient(scene, id, box);
+    if (editable) writeStops(editable.element, stops);
+    node.style.fill = `url(#${id})`;
+  }
+
+  /** The stops of the selected shape's gradient (or, with nothing selected, of the one new shapes get) and the picked one, for the fill popup; null when the fill is not a gradient. */
   get gradientStops(): { stops: GradientStop[]; stop: number; type: 'linear' | 'radial' } | null {
+    if (this.preparing) return { stops: this.pendingStops(), stop: Math.min(this.newStop, this.pendingStops().length - 1), type: this.shape.fillType as 'linear' | 'radial' };
     const g = this.scene ? this.gradientOfSelection(this.scene) : null;
     if (!g) return null;
     const stops = g.gradient.stops.map((s) => ({ offset: s.offset, color: colorText(s.color) }));
@@ -846,23 +897,37 @@ export class VectorEditor {
 
   /** Picks a stop of the gradient (its colour is then the one the fill colours change). */
   selectStop(index: number): void {
-    this.stop = index;
+    if (this.preparing) this.newStop = Math.max(0, Math.min(index, this.pendingStops().length - 1));
+    else this.stop = index;
     this.refresh();
   }
 
   /** Adds a stop at a position along the gradient (0 to 1), with the colour the gradient has there, and picks it. */
   addStopAt(offset: number): void {
+    const t = Math.max(0.01, Math.min(0.99, offset));
+    if (this.preparing) return this.changePending((stops) => ({ stops: [...stops, { offset: t, color: colorAt(stops, t, parseColor) }], stop: stops.length }));
     const g = this.scene ? this.gradientOfSelection(this.scene) : null;
     if (g) this.addStop(g, Math.max(0.01, Math.min(0.99, offset)));
   }
 
   /** Takes a stop away (two always stay). */
   removeStopAt(index: number): void {
+    if (this.preparing) {
+      if (this.pendingStops().length > 2 && index >= 0 && index < this.pendingStops().length) this.changePending((stops) => ({ stops: stops.filter((_, i) => i !== index), stop: 0 }));
+      return;
+    }
     this.removeStop(index);
   }
 
   /** Moves a stop along the gradient (past its neighbours, too); it stays picked. */
   moveStop(index: number, offset: number): void {
+    if (this.preparing) {
+      if (index < 0 || index >= this.pendingStops().length) return;
+      return this.changePending((stops) => {
+        stops[index].offset = Math.max(0, Math.min(1, offset));
+        return { stops, stop: index };
+      });
+    }
     const scene = this.scene;
     const g = scene ? this.gradientOfSelection(scene) : null;
     if (!scene || !g || index < 0 || index >= g.gradient.stops.length) return;
@@ -880,6 +945,7 @@ export class VectorEditor {
 
   /** Turns the gradient around: its first colour becomes its last. */
   reverseGradient(): void {
+    if (this.preparing) return this.changePending((stops) => ({ stops: stops.map((s) => ({ ...s, offset: 1 - s.offset })), stop: this.newStop }));
     const scene = this.scene;
     const g = scene ? this.gradientOfSelection(scene) : null;
     if (!scene || !g) return;
@@ -891,6 +957,12 @@ export class VectorEditor {
 
   /** Gives the picked stop (the first when none is) a colour. */
   private setStopColor(color: string): void {
+    if (this.preparing) {
+      return this.changePending((stops) => {
+        stops[this.newStop].color = color;
+        return { stops, stop: this.newStop };
+      });
+    }
     const scene = this.scene;
     const g = scene ? this.gradientOfSelection(scene) : null;
     if (!scene || !g) return;
@@ -1526,8 +1598,9 @@ export class VectorEditor {
 
   /** The style properties a new shape is made with. */
   private newStyle(filled: boolean): Record<string, string> {
-    const { fill, stroke, strokeWidth } = this.shape;
-    return { fill: filled && fill ? fill : 'none', stroke: stroke ?? 'none', ...(stroke && { 'stroke-width': fmt(strokeWidth) }) };
+    const { fill, stroke, strokeWidth, fillType } = this.shape;
+    // A gradient is filled even when the plain fill colour is none (fillWithGradient puts it in when placed).
+    return { fill: filled && (fill || fillType !== 'solid') ? (fill ?? '#000000') : 'none', stroke: stroke ?? 'none', ...(stroke && { 'stroke-width': fmt(strokeWidth) }) };
   }
 
   /** Puts a node on the drawing and selects it (unless `select` is false). Goes back to the select tool unless the options keep the drawing tool or `keepTool` does. */
@@ -1535,6 +1608,7 @@ export class VectorEditor {
     if (!this.scene) return;
     const next = cloneScene(this.scene);
     const path = addNode(next, node, this.container(next));
+    if (this.shape.fillType !== 'solid' && node.kind !== 'text' && node.style.fill && node.style.fill !== 'none') this.fillWithGradient(next, path);
     // What the line is drawn with: dashes for any shape, a brush for a line.
     const style = this.shape.strokeStyle;
     if (style !== 'dash:solid' && ((node.kind === 'path' && !closedShape) || style.startsWith('dash:'))) this.styleLine(next, path, style);
@@ -2011,9 +2085,16 @@ export class VectorEditor {
       } else if (g.tool === 'rect') ctx.rect(Math.min(sx0, sx1), Math.min(sy0, sy1), Math.abs(sx1 - sx0), Math.abs(sy1 - sy0));
       else ctx.ellipse((sx0 + sx1) / 2, (sy0 + sy1) / 2, Math.abs(sx1 - sx0) / 2, Math.abs(sy1 - sy0) / 2, 0, 0, Math.PI * 2);
       // As placed: filled with the chosen fill and outlined with the chosen stroke.
-      const { fill, stroke, strokeWidth } = this.shape;
+      const { fill, stroke, strokeWidth, fillType } = this.shape;
       ctx.save();
-      if (g.tool !== 'line' && fill) {
+      if (g.tool !== 'line' && fillType !== 'solid') {
+        // The gradient new shapes get, across the box as it will be fitted.
+        const [left, top, w, ht] = [Math.min(sx0, sx1), Math.min(sy0, sy1), Math.abs(sx1 - sx0), Math.abs(sy1 - sy0)];
+        const paint = fillType === 'linear' ? ctx.createLinearGradient(left, top + ht / 2, left + w, top + ht / 2) : ctx.createRadialGradient(left + w / 2, top + ht / 2, 0, left + w / 2, top + ht / 2, Math.max(w, ht, 1) / 2);
+        for (const s of this.pendingStops()) paint.addColorStop(Math.max(0, Math.min(1, s.offset)), colorText(parseColor(s.color) ?? [0, 0, 0, 1]));
+        ctx.fillStyle = paint;
+        ctx.fill();
+      } else if (g.tool !== 'line' && fill) {
         ctx.fillStyle = fill;
         ctx.fill();
       }

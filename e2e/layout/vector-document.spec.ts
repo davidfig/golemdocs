@@ -167,6 +167,7 @@ test.describe('editing a drawing', () => {
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     const popup = app.page.locator('.wm-palette');
     await popup.getByRole('button', { name: 'Radial' }).click();
+    await expect(popup.locator('.wm-grad-stop')).toHaveCount(2); // the editor is drawn when the state follows
     const bar = await popup.locator('.wm-grad-bar').boundingBox();
     await app.page.mouse.click(bar!.x + bar!.width / 2, bar!.y + bar!.height / 2); // a stop halfway out
     await expect(popup.locator('.wm-grad-stop')).toHaveCount(3);
@@ -228,6 +229,70 @@ test.describe('editing a drawing', () => {
     await expect.poll(async () => (await currentSvg(app)).match(/<linearGradient[\s\S]*?<\/linearGradient>/)?.[0].match(/<stop /g)?.length, { timeout: 15_000 }).toBe(2);
   });
 
+  test('with nothing selected, the Fill popup makes and edits the gradient the next shape is drawn with', async ({ app }) => {
+    await openDrawing(app);
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    const popup = app.page.locator('.wm-palette');
+    await popup.getByRole('button', { name: 'Linear' }).click();
+    // The gradient for new shapes shows its two stops: the second picked and coloured, and a third added.
+    const stops = popup.locator('.wm-grad-stop');
+    await expect(stops).toHaveCount(2);
+    await popup.getByRole('button', { name: 'Color stop 2' }).click();
+    await expect(popup.getByRole('button', { name: 'Color stop 2' })).toHaveAttribute('aria-pressed', 'true');
+    await popup.getByRole('button', { name: '#FF0000' }).click();
+    await expect.poll(() => popup.getByRole('button', { name: 'Color stop 2' }).evaluate((e) => (e as HTMLElement).style.getPropertyValue('--stop').toLowerCase())).toBe('#ff0000');
+    const bar = (await popup.locator('.wm-grad-bar').boundingBox())!;
+    await app.page.mouse.click(bar.x + bar.width * 0.4, bar.y + bar.height / 2);
+    await expect(stops).toHaveCount(3);
+    await app.page.keyboard.press('Escape');
+    // A rectangle drawn now is filled with it.
+    await app.toolbarButton('Rectangle').click();
+    const from = await onPage(app, 0.1, 0.6);
+    const to = await onPage(app, 0.4, 0.95);
+    await app.page.mouse.move(from.x, from.y);
+    await app.page.mouse.down();
+    await app.page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2);
+    await app.page.mouse.move(to.x, to.y);
+    await app.page.mouse.up();
+    await expect(app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem')).toHaveCount(3);
+    const svg = await currentSvg(app);
+    const gradient = svg.match(/<linearGradient[^>]*id="([^"]+)"[\s\S]*?<\/linearGradient>/);
+    expect(gradient).not.toBeNull();
+    expect(gradient![0].match(/<stop /g)).toHaveLength(3);
+    expect(gradient![0]).toMatch(/offset="1"[^>]*stop-color="#FF0000"/i);
+    expect(svg).toMatch(new RegExp(`<rect[^>]*fill="url\\(#${gradient![1]}\\)"`));
+  });
+
+  test('one click on Solid, Linear or Radial changes the fill, even while the document is saving', async ({ app }) => {
+    await openDrawing(app);
+    const at = await onPage(app, 0.75, 0.5);
+    await app.page.mouse.click(at.x, at.y);
+    await app.page.getByRole('button', { name: 'Fill Color options' }).click();
+    const popup = app.page.locator('.wm-palette');
+    const types = popup.getByRole('group', { name: 'Fill Type' });
+    await types.getByRole('button', { name: 'Linear' }).click();
+    await expect(types.getByRole('button', { name: 'Linear' })).toHaveAttribute('aria-pressed', 'true');
+    // Held down while the change just made is saved (the save status changes under it), then let go.
+    const solid = (await types.getByRole('button', { name: 'Solid' }).boundingBox())!;
+    await app.page.mouse.move(solid.x + solid.width / 2, solid.y + solid.height / 2);
+    await app.page.mouse.down();
+    await app.page.waitForTimeout(1500);
+    await app.page.mouse.up();
+    await expect(types.getByRole('button', { name: 'Solid' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(popup.locator('.wm-grad-bar')).toHaveCount(0);
+    // With a solid fill too, the swatches flow across the popup's width, centred.
+    const spread = await popup.locator('.wm-palette-grid').first().evaluate((grid) => {
+      const box = grid.getBoundingClientRect();
+      const boxes = [...grid.children].map((c) => c.getBoundingClientRect());
+      return { left: Math.min(...boxes.map((b) => b.left)) - box.left, right: box.right - Math.max(...boxes.map((b) => b.right)) };
+    });
+    expect(spread.right).toBeLessThan(24);
+    expect(Math.abs(spread.left - spread.right)).toBeLessThanOrEqual(1);
+    await types.getByRole('button', { name: 'Radial' }).click();
+    await expect(types.getByRole('button', { name: 'Radial' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(popup.locator('.wm-grad-stop')).toHaveCount(2);
+  });
+
   test('the Fill popup’s stop markers: one added off centre is picked, a drag moves it, a click picks another, Delete Stop takes any', async ({ app }) => {
     await openDrawing(app);
     const at = await onPage(app, 0.75, 0.5);
@@ -237,6 +302,15 @@ test.describe('editing a drawing', () => {
     await popup.getByRole('button', { name: 'Linear' }).click();
     const stops = popup.locator('.wm-grad-stop');
     await expect(stops).toHaveCount(2);
+    // Under the gradient's editor the swatches flow across the popup's whole width, centred, leaving no empty strip.
+    const spread = await popup.locator('.wm-palette-grid').first().evaluate((grid) => {
+      const box = grid.getBoundingClientRect();
+      const boxes = [...grid.children].map((c) => c.getBoundingClientRect());
+      return { left: Math.min(...boxes.map((b) => b.left)) - box.left, right: box.right - Math.max(...boxes.map((b) => b.right)), columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length };
+    });
+    expect(spread.columns).toBeGreaterThan(8);
+    expect(spread.right).toBeLessThan(24);
+    expect(Math.abs(spread.left - spread.right)).toBeLessThanOrEqual(1);
     // A stop added anywhere on the bar (not just its middle) is the picked one.
     const bar = (await popup.locator('.wm-grad-bar').boundingBox())!;
     await app.page.mouse.click(bar.x + bar.width * 0.3, bar.y + bar.height / 2);
@@ -255,11 +329,13 @@ test.describe('editing a drawing', () => {
     await expect(popup.getByRole('button', { name: 'Color stop 1' })).toHaveAttribute('aria-pressed', 'true');
     await expect(popup.getByLabel('Position')).toHaveValue('0');
     await popup.getByRole('button', { name: '#0000FF' }).click();
-    await expect.poll(async () => /offset="0"[^>]*stop-color="#0000FF"/i.test(await currentSvg(app)), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => popup.getByRole('button', { name: 'Color stop 1' }).evaluate((e) => (e as HTMLElement).style.getPropertyValue('--stop').toLowerCase())).toBe('#0000ff');
     // With three stops, even an end can be deleted; two always stay.
     await popup.getByRole('button', { name: 'Delete Stop' }).click();
     await expect(stops).toHaveCount(2);
     await expect(popup.getByRole('button', { name: 'Delete Stop' })).toBeDisabled();
+    // The blue first stop went; the moved stop (now first) and the last are left.
+    await expect.poll(async () => (await currentSvg(app)).match(/<linearGradient[\s\S]*?<\/linearGradient>/)?.[0].match(/offset="[^"]*"/g), { timeout: 15_000 }).toEqual(['offset="0.7"', 'offset="1"']);
   });
 });
 

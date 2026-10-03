@@ -40,7 +40,7 @@
 - The website has a new section showing War and Peace, all 1,006 pages, zooming in Page Grid.
 
 ### Changed
-- In the vector editor, the Fill Color popup now holds the whole fill: choose Solid, Linear or Radial at its top, and a gradient shows a bar of its colors with a marker for each stop. Click a marker to pick it, drag it to move it, click the bar to add a stop, type its position, Delete Stop, or Reverse the gradient; the palette colors the picked stop and the popup stays open. The separate Fill Type list is gone from the toolbar, and No Fill and No Stroke now show a crossed-out swatch.
+- In the vector editor, the Fill Color popup now holds the whole fill: choose Solid, Linear or Radial at its top, and a gradient shows a bar of its colors with a marker for each stop. Click a marker to pick it, drag it to move it (the end stops too, even past their neighbors), click the bar to add a stop, type its position, Delete Stop (any stop, as long as two are left), or Reverse the gradient; the palette colors the picked stop and the popup stays open. With nothing selected, it sets up the gradient the next shapes you draw are filled with. The separate Fill Type list is gone from the toolbar, and No Fill and No Stroke now show a crossed-out swatch.
 - Tools › Show Markdown at the Caret is now on by default, alongside Autoformat as You Type; both can be turned off in the Tools menu.
 - The website and the welcome document now speak in the developer's own voice, and the pricing explains that the subscription covers server and AI costs.
 - File › Clear Local Data now signs you out too (warning first about changes not yet in your account), so the next person on a shared computer isn’t signed in as you.

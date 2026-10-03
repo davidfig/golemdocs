@@ -9,10 +9,12 @@
 import type { XmlElement } from '@golemdocs/docx';
 import type { PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
+import { snapBox, snapPoint, snapTargets } from '../vector/snap.ts';
+import type { SnapTargets } from '../vector/snap.ts';
 import { isClipped, makeClippingMask, releaseClippingMask } from '../vector/clipEdit.ts';
 import { applyBrush, brushOf, editableCommands, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
 import { DASHES, presetById } from '../vector/brushPresets.ts';
-import { addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
+import { isHidden, isLocked, moveNodeTo, setLocked, setName, setVisible, addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
 import type { NodePath, Order } from '../vector/edit.ts';
 import { outline } from '../vector/geometry.ts';
 import type { Bounds } from '../vector/geometry.ts';
@@ -71,8 +73,8 @@ const DEFAULT_FONT_SIZE = 24;
 type NodePart = 'anchor' | 'c1' | 'c2';
 
 type Gesture =
-  | { kind: 'move'; base: Scene; start: [number, number]; moved: boolean }
-  | { kind: 'resize'; base: Scene; handle: Exclude<Handle, 'rotate'>; box: Bounds; moved: boolean }
+  | { kind: 'move'; base: Scene; start: [number, number]; moved: boolean; targets?: SnapTargets }
+  | { kind: 'resize'; base: Scene; handle: Exclude<Handle, 'rotate'>; box: Bounds; moved: boolean; targets?: SnapTargets }
   | { kind: 'rotate'; base: Scene; center: [number, number]; from: number; moved: boolean }
   | { kind: 'band'; start: [number, number]; to: [number, number]; add: boolean; before: NodePath[] }
   | { kind: 'create'; tool: 'rect' | 'ellipse' | 'line'; start: [number, number]; to: [number, number]; square: boolean }
@@ -111,6 +113,9 @@ export class VectorEditor {
   private nodes: NodeMode | null = null;
   private lastClick: { time: number; x: number; y: number } | null = null;
   private typing: HTMLInputElement | null = null;
+  /** Whether things snap to the other shapes and the page, and the lines they have caught just now. */
+  private snapOn = true;
+  private guides: SnapTargets = { xs: [], ys: [] };
   /** The gradient stop picked on a selected shape (an interior one can be removed). */
   private stop: number | null = null;
 
@@ -174,6 +179,40 @@ export class VectorEditor {
     return { fill: gradient ? stopColor : fillPaint, fillType: gradient ? gradient.type : 'solid', stroke: paint('stroke', null), strokeWidth: parseLength(styleOf(scene, first, 'stroke-width')) ?? 1, strokeStyle: dashOf(styleOf(scene, first, 'stroke-dasharray'), parseLength(styleOf(scene, first, 'stroke-width')) ?? 1) };
   }
 
+  /** The drawing being edited, for the layers list to show (it is never changed from outside). */
+  get drawing(): Scene | null {
+    return this.scene;
+  }
+
+  /** Changes every time what is shown over the drawing does: the selection, or the drawing. */
+  version = 0;
+
+  get snapping(): boolean {
+    return this.snapOn;
+  }
+
+  toggleSnap(): void {
+    this.snapOn = !this.snapOn;
+    this.guides = { xs: [], ys: [] };
+    this.refresh();
+  }
+
+  /** The lines to snap to while something is moved: everything except it, taken once when the gesture starts. */
+  private targets(scene: Scene): SnapTargets {
+    return snapTargets(scene, this._selection);
+  }
+
+  /** How close, in the drawing's units, counts as on a line: a few screen pixels. */
+  private reach(): number {
+    const frame = this.host.layer.frame();
+    return 6 / (frame?.unit || 1);
+  }
+
+  /** Whether the Alt key is held, which turns snapping off for a moment. */
+  private snaps(e: PointerEvent): boolean {
+    return this.snapOn && !e.altKey;
+  }
+
   /** Whether the one selected node is clipped by a clipping mask. */
   get clipped(): boolean {
     return !!this.scene && this._selection.length === 1 && isClipped(this.scene, nodeAt(this.scene, this._selection[0]));
@@ -208,6 +247,7 @@ export class VectorEditor {
   }
 
   private refresh(): void {
+    this.version++;
     this.host.layer.decorationVersion++;
     this.host.layer.invalidate();
     this.host.stateChanged();
@@ -544,6 +584,56 @@ export class VectorEditor {
     }
   }
 
+  /** Selects nodes picked in the layers list. */
+  pick(paths: NodePath[], add: boolean): void {
+    if (!this.scene) return;
+    const kept = add ? [...this._selection] : [];
+    for (const p of paths) {
+      const at = kept.findIndex((q) => q.join() === p.join());
+      if (at >= 0 && add) kept.splice(at, 1);
+      else if (at < 0) kept.push(p);
+    }
+    this.select(kept);
+  }
+
+  /** Shows or hides a node. */
+  toggleVisible(path: NodePath): void {
+    const node = this.scene && nodeAt(this.scene, path);
+    if (!node) return;
+    this.edit((scene) => {
+      setVisible(scene, [path], isHidden(node));
+      return this._selection;
+    }, false);
+  }
+
+  /** Locks or unlocks a node; a locked node is let go of if it was selected. */
+  toggleLocked(path: NodePath): void {
+    const node = this.scene && nodeAt(this.scene, path);
+    if (!node) return;
+    const lock = !isLocked(node);
+    this.edit((scene) => {
+      setLocked(scene, [path], lock);
+      return lock ? this._selection.filter((p) => p.join() !== path.join()) : this._selection;
+    }, false);
+  }
+
+  /** Names a node. */
+  rename(path: NodePath, name: string): void {
+    this.edit((scene) => {
+      setName(scene, path, name);
+      return this._selection;
+    }, false);
+  }
+
+  /** Moves a node to a place in a group (see `moveNodeTo`); what was selected follows it. */
+  moveNode(from: NodePath, parent: NodePath, index: number): void {
+    let moved: NodePath | null = null;
+    this.edit((scene) => {
+      moved = moveNodeTo(scene, from, parent, index);
+      return moved ? [moved] : this._selection;
+    }, false);
+  }
+
   selectAll(): void {
     if (!this.scene) return;
     this.select(this.scene.children.map((_, i) => [i] as NodePath).filter((p) => this.scene!.children[p[0]].kind !== 'raw'));
@@ -657,12 +747,19 @@ export class VectorEditor {
       case 'rect':
       case 'ellipse':
       case 'line':
-        this.gesture = { kind: 'create', tool: this._tool, start: at, to: at, square: false };
+        this.gesture = { kind: 'create', tool: this._tool, start: this.snapStart(e, at), to: at, square: false };
         return;
       case 'text':
         return this.textDown(at, frame);
     }
     this.selectDown(e, frame, at, double);
+  }
+
+  /** Where a shape being drawn starts: pulled to the other shapes' lines. */
+  private snapStart(e: PointerEvent, at: [number, number]): [number, number] {
+    if (!this.snaps(e) || !this.scene) return at;
+    const p = snapPoint({ x: at[0], y: at[1] }, snapTargets(this.scene), this.reach());
+    return [p.x, p.y];
   }
 
   private selectDown(e: PointerEvent, frame: VectorFrame, at: [number, number], double: boolean): void {
@@ -763,7 +860,13 @@ export class VectorEditor {
       return this.refresh();
     }
     if (gesture.kind === 'create') {
+      this.guides = { xs: [], ys: [] };
       gesture.to = at;
+      if (this.snaps(e) && this.scene) {
+        const p = snapPoint({ x: at[0], y: at[1] }, snapTargets(this.scene), this.reach());
+        gesture.to = [p.x, p.y];
+        this.guides = p.guides;
+      }
       gesture.square = e.shiftKey;
       return this.refresh();
     }
@@ -812,10 +915,32 @@ export class VectorEditor {
       // Not a move until the pointer has gone a few pixels: a click is not a drag.
       if (!gesture.moved && Math.hypot(dx, dy) * frame.unit < 3) return;
       if (e.shiftKey) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
+      this.guides = { xs: [], ys: [] };
+      if (this.snaps(e)) {
+        const box = selectionBounds(gesture.base, paths);
+        if (box) {
+          gesture.targets ??= this.targets(gesture.base);
+          const snap = snapBox({ ...box, x: box.x + dx, y: box.y + dy }, gesture.targets, this.reach());
+          // Along an axis that was locked, nothing is pulled.
+          if (!(e.shiftKey && dx === 0)) dx += snap.dx;
+          if (!(e.shiftKey && dy === 0)) dy += snap.dy;
+          this.guides = snap.guides;
+        }
+      }
       gesture.moved = true;
       translateNodes(next, paths, dx, dy);
     } else if (gesture.kind === 'resize') {
-      const m = this.resizeMatrix(gesture, at, e.shiftKey);
+      this.guides = { xs: [], ys: [] };
+      let target = at;
+      if (this.snaps(e)) {
+        gesture.targets ??= this.targets(gesture.base);
+        const p = snapPoint({ x: at[0], y: at[1] }, gesture.targets, this.reach());
+        const h = gesture.handle;
+        // Only the sides the handle moves are pulled.
+        target = [h.includes('w') || h.includes('e') ? p.x : at[0], h.includes('n') || h.includes('s') ? p.y : at[1]];
+        this.guides = { xs: target[0] !== at[0] ? p.guides.xs : [], ys: target[1] !== at[1] ? p.guides.ys : [] };
+      }
+      const m = this.resizeMatrix(gesture, target, e.shiftKey);
       if (!m) return;
       gesture.moved = true;
       transformNodes(next, paths, m);
@@ -860,6 +985,7 @@ export class VectorEditor {
     e.stopImmediatePropagation();
     if (this.host.canvas.hasPointerCapture(e.pointerId)) this.host.canvas.releasePointerCapture(e.pointerId);
     this.gesture = null;
+    this.guides = { xs: [], ys: [] };
     if (gesture.kind === 'penHandle') return this.refresh();
     if (gesture.kind === 'band') {
       const { start, to } = gesture;
@@ -880,6 +1006,7 @@ export class VectorEditor {
   private cancelGesture(): void {
     const gesture = this.gesture;
     this.gesture = null;
+    this.guides = { xs: [], ys: [] };
     if (!gesture) return;
     if (gesture.kind === 'move' || gesture.kind === 'resize' || gesture.kind === 'rotate' || gesture.kind === 'node' || gesture.kind === 'gradient') {
       this.scene = gesture.base;
@@ -1232,6 +1359,26 @@ export class VectorEditor {
   }
 
   private decorateGesture(ctx: CanvasRenderingContext2D, frame: VectorFrame): void {
+    // The lines something has snapped to, across the whole view.
+    if (this.guides.xs.length || this.guides.ys.length) {
+      const view = this.host.canvas.getBoundingClientRect();
+      ctx.save();
+      ctx.strokeStyle = '#e6007e';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const x of this.guides.xs) {
+        const [sx] = frame.toScreen(x, 0);
+        ctx.moveTo(Math.round(sx) + 0.5, 0);
+        ctx.lineTo(Math.round(sx) + 0.5, view.height);
+      }
+      for (const y of this.guides.ys) {
+        const [, sy] = frame.toScreen(0, y);
+        ctx.moveTo(0, Math.round(sy) + 0.5);
+        ctx.lineTo(view.width, Math.round(sy) + 0.5);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
     const g = this.gesture;
     if (g?.kind === 'band') {
       const [x0, y0] = frame.toScreen(g.start[0], g.start[1]);

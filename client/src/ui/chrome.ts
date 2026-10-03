@@ -479,6 +479,8 @@ export class Chrome {
     }
     r.add(a('vector.makeClip', t('vector.makeClip'), { kind: 'vector', op: 'makeClip' }, { icon: 'clipMask', enabled: (s) => s.vector.multiple }));
     r.add(a('vector.releaseClip', t('vector.releaseClip'), { kind: 'vector', op: 'releaseClip' }, { enabled: (s) => s.vector.clipped }));
+    r.add(a('vector.layers', t('vector.layers'), { kind: 'vector', op: 'layers' }, { checked: (s) => s.vector.layers }));
+    r.add(a('vector.snap', t('vector.snap'), { kind: 'vector', op: 'snap' }, { checked: (s) => s.vector.snap }));
     r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }));
 
     r.add({ id: 'image.fill', label: t('picture.draw.fill'), icon: 'fill', action: (s) => ({ kind: 'drawStyle', fill: !s.draw.fill }), checked: (s) => s.draw.fill });
@@ -836,6 +838,9 @@ export class Chrome {
           sep,
           cmd('vector.makeClip'),
           cmd('vector.releaseClip'),
+          sep,
+          cmd('vector.snap'),
+          cmd('vector.layers'),
           sep,
           cmd('vector.selectAll'),
         ],

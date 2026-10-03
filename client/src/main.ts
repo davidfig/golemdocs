@@ -82,6 +82,7 @@ import { CropLayer } from './ui/cropLayer.ts';
 import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
 import { VectorLayer } from './ui/vectorLayer.ts';
 import { VectorEditor } from './ui/vectorEditor.ts';
+import { LayersPanel } from './ui/layersPanel.ts';
 import { svgBytes, svgText } from './formats/vectorDoc.ts';
 import { writeSvg } from './vector/svgWrite.ts';
 import type { Scene } from './vector/model.ts';
@@ -2320,7 +2321,7 @@ function render(): void {
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
-    vector: { tool: vectorEditor.tool, hasSelection: vectorEditor.selection.length > 0, multiple: vectorEditor.selection.length > 1, clipped: vectorEditor.clipped, ...vectorEditor.currentStyle },
+    vector: { tool: vectorEditor.tool, hasSelection: vectorEditor.selection.length > 0, multiple: vectorEditor.selection.length > 1, clipped: vectorEditor.clipped, layers: layersOpen, snap: vectorEditor.snapping, ...vectorEditor.currentStyle },
     inTable,
     formattingMarks,
     viewMode: grid ? 'grid' : viewMode,
@@ -2335,6 +2336,8 @@ function render(): void {
   cropLayer.position();
   drawLayer.position();
   vectorLayer.position();
+  layersPanel.setVisible(layersOpen && vectorEditor.active);
+  layersPanel.update();
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
   const caret = selection.caret;
@@ -3051,6 +3054,10 @@ const chromeHost = createChromeHost({
         return vectorEditor.makeClip();
       case 'releaseClip':
         return vectorEditor.releaseClip();
+      case 'layers':
+        return toggleLayers();
+      case 'snap':
+        return vectorEditor.toggleSnap();
     }
   },
   vectorStyle: (change) => vectorEditor.applyStyle(change),
@@ -3334,6 +3341,26 @@ const vectorEditor = new VectorEditor({
   stateChanged: () => requestRender(),
   notice: (message) => setStatus(message),
 });
+
+// The drawing's shapes as a list beside it (see ui/layersPanel.ts).
+const LAYERS_KEY = 'word.layersPanel';
+let layersOpen = (() => {
+  try {
+    return localStorage.getItem(LAYERS_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+})();
+function toggleLayers(): void {
+  layersOpen = !layersOpen;
+  try {
+    localStorage.setItem(LAYERS_KEY, layersOpen ? 'on' : 'off');
+  } catch {
+    // Not remembered.
+  }
+  requestRender();
+}
+const layersPanel = new LayersPanel(document.getElementById('workspace')!, vectorEditor, { close: toggleLayers, focusEditor: focusInput });
 
 // Drawing on a picture (see ui/drawLayer.ts).
 const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });

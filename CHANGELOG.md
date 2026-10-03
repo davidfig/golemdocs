@@ -7,6 +7,7 @@
 - Vector drawings can be edited: a Drawing menu and toolbar select, move, resize and rotate shapes, draw rectangles, ellipses, lines, pen paths and text, edit a path's points (double-click it), set fill and outline, group, reorder, duplicate and delete, with undo and redo.
 - Drawing strokes beyond a plain line: dashes, tapered and swelling width profiles, calligraphic pens, dry brush and chalk, patterns along the path, scattered shapes, and arrowheads, chosen from the Stroke Style list; a stroke keeps its path, so the path can still be reshaped.
 - In the vector editor, Unite, Intersect, Subtract and Exclude combine shapes into one; Make Clipping Mask cuts shapes to the one on top; and fills can be linear or radial gradients, with points and stops you drag on the drawing.
+- Vector drawings have a Layers panel to hide, lock, rename, select and drag shapes into a new order or into groups, and shapes snap to each other and the page with guide lines (Drawing › Snap to Objects).
 - The import progress card shows an estimate of the time left.
 
 ### Fixed

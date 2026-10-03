@@ -3,7 +3,7 @@
 import { apply, invert, meanScale } from './matrix.ts';
 import type { PathCommand, Scene, SceneNode, Style } from './model.ts';
 import { outline, textBounds } from './geometry.ts';
-import { worldBounds } from './edit.ts';
+import { isLocked, worldBounds } from './edit.ts';
 import type { NodePath } from './edit.ts';
 import { inherited, parseLength } from './style.ts';
 
@@ -112,7 +112,7 @@ export function hitTest(scene: Scene, point: Pt, tolerance = 0): NodePath | null
   const visit = (nodes: readonly SceneNode[], parent: readonly Style[], p: Pt, tol: number, prefix: NodePath): NodePath | null => {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const node = nodes[i];
-      if (node.kind === 'raw' || node.style.display === 'none') continue;
+      if (node.kind === 'raw' || node.style.display === 'none' || isLocked(node)) continue;
       const chain = [node.style, ...parent];
       if (inherited(chain, 'pointer-events') === 'none') continue;
       let local = p;
@@ -157,7 +157,7 @@ export function hitTest(scene: Scene, point: Pt, tolerance = 0): NodePath | null
 export function nodesInRect(scene: Scene, rect: { x: number; y: number; width: number; height: number }, mode: 'inside' | 'touching' = 'touching'): NodePath[] {
   const out: NodePath[] = [];
   scene.children.forEach((node, i) => {
-    if (node.kind === 'raw' || node.style.display === 'none') return;
+    if (node.kind === 'raw' || node.style.display === 'none' || isLocked(node)) return;
     const b = worldBounds(scene, [i]);
     if (!b) return;
     const inside = b.x >= rect.x && b.y >= rect.y && b.x + b.width <= rect.x + rect.width && b.y + b.height <= rect.y + rect.height;

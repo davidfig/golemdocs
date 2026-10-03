@@ -1,0 +1,137 @@
+/* The layers panel (see layersPanel.ts): the drawing's shapes as a list to the right of the editor. It borrows the pages panel's header. */
+
+.wm-layers {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 220px;
+  border-left: 1px solid var(--wm-border);
+  background: var(--wm-face);
+  color: var(--wm-text);
+  font: 12px/1.4 var(--wm-font);
+}
+
+.wm-layers[hidden] {
+  display: none;
+}
+
+.wm-layers-list {
+  flex: 1;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.wm-layers-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding-right: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.wm-layers-row:hover {
+  background: var(--wm-hover, rgb(0 0 0 / 0.06));
+}
+
+.wm-layers-row.selected {
+  background: var(--wm-selection, rgb(49 106 197 / 0.22));
+}
+
+.wm-layers-row.hidden-node .wm-layers-name {
+  opacity: 0.45;
+  font-style: italic;
+}
+
+.wm-layers-row.locked-node .wm-layers-name {
+  opacity: 0.7;
+}
+
+.wm-layers-expand {
+  display: inline-flex;
+  width: 16px;
+  flex: none;
+}
+
+.wm-layers-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-layers-toggle,
+.wm-layers-eye,
+.wm-layers-lock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wm-layers-toggle svg,
+.wm-layers-eye svg,
+.wm-layers-lock svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wm-layers-toggle.open svg {
+  transform: rotate(90deg);
+}
+
+.wm-layers-eye:hover,
+.wm-layers-lock:hover,
+.wm-layers-toggle:hover {
+  background: rgb(0 0 0 / 0.1);
+}
+
+.wm-layers-row.locked-node .wm-layers-lock {
+  opacity: 1;
+}
+
+.wm-layers-rename {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+}
+
+/* Where a dragged row would land. */
+.wm-layers-row.drop-above::before,
+.wm-layers-row.drop-below::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: #316ac5;
+  content: '';
+}
+
+.wm-layers-row.drop-above::before {
+  top: 0;
+}
+
+.wm-layers-row.drop-below::after {
+  bottom: 0;
+}
+
+.wm-layers-row.drop-inside {
+  outline: 2px solid #316ac5;
+  outline-offset: -2px;
+}

@@ -275,3 +275,57 @@ export function styleOf(scene: Scene, path: NodePath, property: string): string 
   for (const style of styles) if (style[property] !== undefined && style[property] !== 'inherit') return style[property];
   return undefined;
 }
+
+/** The attribute that locks a node: it can still be seen, but not picked. */
+export const LOCK_ATTR = 'data-golem-locked';
+/** The attribute that gives a node the name the layers list shows. */
+export const NAME_ATTR = 'data-name';
+
+export const isLocked = (node: SceneNode): boolean => node.attrs[LOCK_ATTR] === 'true';
+export const isHidden = (node: SceneNode): boolean => node.style.display === 'none';
+
+/** Locks or unlocks nodes. */
+export function setLocked(scene: Scene, paths: readonly NodePath[], locked: boolean): void {
+  for (const path of paths) {
+    const node = nodeAt(scene, path);
+    if (!node) continue;
+    if (locked) node.attrs[LOCK_ATTR] = 'true';
+    else delete node.attrs[LOCK_ATTR];
+  }
+}
+
+/** Shows or hides nodes (a hidden node has `display: none`). */
+export function setVisible(scene: Scene, paths: readonly NodePath[], visible: boolean): void {
+  for (const path of paths) {
+    const node = nodeAt(scene, path);
+    if (!node || node.kind === 'raw') continue;
+    if (visible) delete node.style.display;
+    else node.style.display = 'none';
+  }
+}
+
+/** Gives a node a name for the layers list (an empty name takes it away). */
+export function setName(scene: Scene, path: NodePath, name: string): void {
+  const node = nodeAt(scene, path);
+  if (!node) return;
+  if (name.trim()) node.attrs[NAME_ATTR] = name.trim();
+  else delete node.attrs[NAME_ATTR];
+}
+
+/**
+ * Moves a node to a place in a group: `parent` is the group's path (empty for the drawing) and
+ * `index` the place among its children, counted as they are before the node leaves where it was.
+ * A node can't go inside itself. Returns the node's new path.
+ */
+export function moveNodeTo(scene: Scene, from: NodePath, parent: NodePath, index: number): NodePath | null {
+  const at = locate(scene, from);
+  if (!at) return null;
+  // Not into itself or what is inside it.
+  if (parent.length >= from.length && from.every((v, i) => parent[i] === v)) return null;
+  const target = parent.length ? childrenOf(scene, parent) : scene.children;
+  if (!target) return null;
+  const [node] = at.list.splice(at.index, 1);
+  const place = target === at.list && index > at.index ? index - 1 : index;
+  target.splice(Math.max(0, Math.min(target.length, place)), 0, node);
+  return pathOf(scene, node);
+}

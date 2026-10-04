@@ -205,5 +205,6 @@ source to `openLarge` (`usesTextEngine` in `formats/textFiles.ts`; tables of 8 M
   the server (`docIndex.ts`, `search.ts`).
 - A text file's thumbnail in Documents is its first lines drawn on a page (`textThumbnail` in `thumbnail.ts`).
 - The chrome talks to the text editor through `DocumentEngine` (`client/src/documentEngine.ts`): `main.ts` offers it as `engine()` (null for a
-  document), and the menus' copy, cut, paste, undo, redo, select all, insert, find and zoom-to-fit ask it. The empty document the layout worker
-  keeps open under the editor is still there: the worker's commands, settings and room code all assume one.
+  document), and the menus' copy, cut, paste, undo, redo, select all, insert, find and zoom-to-fit ask it. Opening a text file runs the same
+  `beginOpen` as a document, then tells the layout worker to `close`: no empty document is kept under the editor. The worker keeps the spelling
+  settings and the person's added words with no document open (`applySettings`).

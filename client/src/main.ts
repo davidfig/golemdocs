@@ -346,23 +346,12 @@ function openTicket(): () => boolean {
   return () => ticket === openRequests;
 }
 
-function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean; asDocument?: boolean } = {}): void {
-  // Plain text is edited in the text editor, not as a document (`asDocument`: for the things only a document does, such as printing).
-  if (source.kind === 'txt' && !options.asDocument) {
-    void openLarge(source.name, new Uint8Array(source.bytes), options);
-    return;
-  }
-  openRequests++;
-  // A changed drawing in the text is put back in its document first, so the change is saved with it; then this opens (unless another was asked for meanwhile).
-  if (embeddedDrawing?.latest != null && !options.pictureEdit) {
-    const still = openTicket();
-    void leaveEmbeddedDrawing(false).then(() => still() && open(source, options));
-    return;
-  }
+type OpenOptions = { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean; asDocument?: boolean };
+
+/** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
+function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
   keepCamera = !!options.pictureEdit && source.kind === 'svg';
-  const start = performance.now();
-  let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
-  let firstPage = 0;
+  const name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   rememberView();
   viewDocKey = wantedDocKey;
@@ -435,14 +424,33 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   sharedDeviceNotice.update({ welcome: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' });
   setStatus(t('app.loading', { name }));
 
-  const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
-  current.roomRequested = requestedRoom !== undefined;
   layerSteps = { canUndo: false, canRedo: false };
   vectorSteps = { canUndo: false, canRedo: false };
   latestVectorScene = null;
   drawLayer.unbind();
   drawLayer.setBase(null);
   baseFor = null;
+  return { name, opening };
+}
+
+function open(source: DocumentSource, options: OpenOptions = {}): void {
+  // Plain text is edited in the text editor, not as a document (`asDocument`: for the things only a document does, such as printing).
+  if (source.kind === 'txt' && !options.asDocument) {
+    void openLarge(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
+  openRequests++;
+  // A changed drawing in the text is put back in its document first, so the change is saved with it; then this opens (unless another was asked for meanwhile).
+  if (embeddedDrawing?.latest != null && !options.pictureEdit) {
+    const still = openTicket();
+    void leaveEmbeddedDrawing(false).then(() => still() && open(source, options));
+    return;
+  }
+  const start = performance.now();
+  let { name, opening } = beginOpen(source, options);
+  let firstPage = 0;
+  const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
+  current.roomRequested = requestedRoom !== undefined;
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;
@@ -2401,6 +2409,12 @@ async function pictureAction(op: ImageOp): Promise<void> {
 // is opened under it (with the file's name) so that the rest of the app has something to stand on.
 
 async function openLarge(name: string, bytes: Uint8Array, options: { localId?: string; cloudId?: string; shared?: CloudDocument; store?: boolean } = {}): Promise<void> {
+  // A changed drawing in the text is put back in its document first, so the change is saved with it; then this opens (unless another was asked for meanwhile).
+  if (embeddedDrawing?.latest != null) {
+    const still = openTicket();
+    void leaveEmbeddedDrawing(false).then(() => void (still() && openLarge(name, bytes, options)));
+    return;
+  }
   // The editor is fetched the first time a text file is opened (it is about 60 kB that sessions of Word documents never need).
   const latest = openTicket();
   try {
@@ -2409,20 +2423,32 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
     return reportError(t('app.openFailed', { message: (e as Error).message }));
   }
   if (!latest()) return;
-  // Never with the account's id: the layout worker would join a room for a Word document. The text editor joins its own (`joinTextRoom`).
-  open({ kind: 'blank', name }, { localId: options.localId, shared: options.shared });
+  openRequests++;
+  // No account id is passed on: the layout worker has no document here, so it joins no room. The text editor joins its own (`joinTextRoom`).
+  const { opening } = beginOpen({ kind: 'txt', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared });
+  worker.close();
+  spellDialog.sendLive(); // what is underlined, and the person's words: the worker holds them for text files too
   const text = toUtf8WithEncoding(bytes);
   textView.open(name, text.bytes, { encoding: text.encoding, bom: text.bom, original: bytes });
   textView.editor!.readOnly = options.shared?.role === 'viewer';
-  current.name = name;
   const big = bytes.length >= LARGE_TEXT_BYTES;
-  pendingNotice = (big ? t('textEditor.notice', { name, size: `${(bytes.length / (1 << 20)).toFixed(bytes.length < 10 << 20 ? 1 : 0)} MB` }) : '') + (text.encoding === 'windows-1252' ? `${big ? ' ' : ''}${t('textEditor.latin1Note')}` : '') || null;
+  const notice = (big ? t('textEditor.notice', { name, size: `${(bytes.length / (1 << 20)).toFixed(bytes.length < 10 << 20 ? 1 : 0)} MB` }) : '') + (text.encoding === 'windows-1252' ? `${big ? ' ' : ''}${t('textEditor.latin1Note')}` : '');
+  // What opening a document ends with: it is ready, the loading screen goes, and a search hit is gone to.
+  loaded = true;
+  documentReady();
+  loadingScreen.hide();
+  setStatus(notice || t('app.ready', { name }));
+  if (pendingJump) {
+    const jump = pendingJump;
+    pendingJump = null;
+    if (jump.source === viewDocKey) goToHit(jump);
+  }
   focusInput();
   // A file that came from somewhere is kept in this browser at once, as a document is (a big one only once it is edited, so looking costs nothing).
-  if (!options.localId && !big && !options.shared) documentEdited();
-  const doc = current;
+  if (options.localId) backfillThumbnail(options.localId);
+  else if (!big && !options.shared) documentEdited();
   const cloudId = options.shared?.id ?? (options.localId ? library.local.find((d) => d.id === options.localId)?.cloudId : undefined);
-  if (cloudId) void accountKnown.then(() => joinTextRoom(doc, cloudId));
+  if (cloudId) void accountKnown.then(() => joinTextRoom(opening, cloudId));
 }
 
 /** The most of a big file that opens as an ordinary document: past this the document model costs too much (see docs/text-files.md). */
@@ -2926,10 +2952,9 @@ function render(): void {
   syncReflow();
   renderer.flat = reflowing();
   if (textView.active) {
-    // A big text file: its own bounds, left-aligned when narrower than the window, and drawn by the large-text editor.
+    // A big text file: its own bounds, from the top-left corner however short or narrow it is, and drawn by the large-text editor.
     const area = textView.bounds();
-    camera.clamp(area, canvas.clientWidth, canvas.clientHeight);
-    if (area.width * camera.zoom * CSS_PX_PER_POINT <= canvas.clientWidth) camera.x = area.x;
+    camera.clampToStart(area, canvas.clientWidth, canvas.clientHeight);
     const frame = textView.draw(pagesDark(), caretOn && document.hasFocus());
     lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
   } else {
@@ -3937,6 +3962,8 @@ library.subscribe(() => {
 /** Selects the start of `jump.paragraph` in the open document and finds `jump.find` from there. */
 function goToHit(jump: { paragraph?: number; find: string }): void {
   if (jump.paragraph === undefined) return;
+  // A text file's paragraphs are its lines.
+  if (textView.active) return textView.editor?.goToLine(jump.paragraph + 1);
   send({ kind: 'select', paragraph: jump.paragraph, from: 0, to: 0 });
   if (jump.find) send({ kind: 'find', text: jump.find, matchCase: false });
 }

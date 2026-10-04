@@ -78,6 +78,7 @@
 - File › Clear Local Data now signs you out too (warning first about changes not yet in your account), so the next person on a shared computer isn’t signed in as you.
 
 ### Fixed
+- Text files no longer open with empty space above the first line: a short file starts at the top of the window instead of in the middle, and scrolling stops at the first line.
 - Edit › Copy was off in the large text viewer even with lines selected; it now copies them.
 - Pictures and drawings can be inserted into a document in your account again: when you were signed in with sync, Insert › Picture did nothing even with nobody else in the document.
 - A document shared with you that its owner saved in the app’s own format (and any Markdown or other non-Word document) now opens in its own format, and your edits to it keep it. Before, it failed to open or became plain Word.

@@ -133,6 +133,26 @@ test('clamp centres a document smaller than the view, per axis', () => {
   near(d.y, 5000 - 450);
 });
 
+test('clampToStart keeps text at the top-left corner, with padding only past its end', () => {
+  const c = new Camera(); // 400x300 CSS px view = 300x225 points at 100%
+  // Text shorter and narrower than the view sits at its start, not in the middle.
+  c.x = -500;
+  c.y = 999;
+  c.clampToStart({ x: 0, y: 0, width: 100, height: 100 }, 400, 300, 24);
+  assert.deepEqual([c.x, c.y], [0, 0]);
+  // Nothing before the start is shown, even with padding; the end may be scrolled 24 CSS px (18 points) past.
+  const bounds = { x: 0, y: -10, width: 1000, height: 2000 };
+  c.x = -50;
+  c.y = -50;
+  c.clampToStart(bounds, 400, 300, 24);
+  assert.deepEqual([c.x, c.y], [0, -10]);
+  c.x = 5000;
+  c.y = 5000;
+  c.clampToStart(bounds, 400, 300, 24);
+  near(c.x, 1000 + 18 - 300);
+  near(c.y, -10 + 2000 + 18 - 225);
+});
+
 test('clamp ignores empty bounds and follows the zoom', () => {
   const c = new Camera();
   c.x = 77;

@@ -61,6 +61,13 @@ export class LayoutClient {
   }
 
   /** Opens a document, cancelling any layout in progress; in a collaboration room if given. */
+  /** Lets go of the open document with nothing to replace it: messages of the old one are ignored from now on. */
+  close(): void {
+    this.doc++;
+    this.listener = null;
+    this.send({ type: 'close' });
+  }
+
   open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions): void {
     this.doc++;
     this.listener = listener;

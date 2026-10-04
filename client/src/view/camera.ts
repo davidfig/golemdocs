@@ -60,6 +60,16 @@ export class Camera {
     this.y = clampAxis(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss);
   }
 
+  /**
+   * Keeps the view over text that starts at the top-left corner, as a text file does: the view never shows anything before `bounds`,
+   * may run `padding` CSS px past its end, and text smaller than the view sits at its start rather than in the middle.
+   */
+  clampToStart(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24): void {
+    const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
+    this.x = clampAxisToStart(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, padding * pointsPerCss);
+    this.y = clampAxisToStart(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss);
+  }
+
   toDocument(cssX: number, cssY: number): { x: number; y: number } {
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
     return { x: this.x + cssX * pointsPerCss, y: this.y + cssY * pointsPerCss };
@@ -71,4 +81,9 @@ function clampAxis(origin: number, start: number, size: number, view: number, pa
   const min = start - pad;
   const max = start + size + pad - view;
   return max < min ? (min + max) / 2 : Math.min(Math.max(origin, min), max);
+}
+
+/** Clamps one axis of the view origin to at least the content's start and at most its end plus padding less the view (all in points). */
+function clampAxisToStart(origin: number, start: number, size: number, view: number, pad: number): number {
+  return Math.max(Math.min(origin, start + size + pad - view), start);
 }

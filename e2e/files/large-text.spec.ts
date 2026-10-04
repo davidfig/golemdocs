@@ -271,11 +271,10 @@ test('Download gives the file back exactly as it was, under its own name', async
 
 test('opening another document takes the viewer away', { tag: '@heavy' }, async ({ app, page }) => {
   await openBig(app);
-  await app.menu('File', 'New');
-  await waitForOpen(app, 'Document1');
+  await importFile(app, { name: 'note.md', buffer: Buffer.from('normal again') });
+  await waitForOpen(app, 'note');
   await expect(viewer(page)).toBeHidden();
-  expect(await formatLabel(page)).toBe('Word Document');
-  await app.type('normal again');
+  expect(await formatLabel(page)).toBe('Markdown');
   await expect.poll(() => app.text()).toBe('normal again');
 });
 

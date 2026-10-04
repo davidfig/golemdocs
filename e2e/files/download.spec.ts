@@ -157,5 +157,6 @@ test('Download All numbers documents that share a name, and keeps each in its ow
   const files = readZip(zip.bytes);
   expect(files.map((f) => f.name)).toEqual(expect.arrayContaining(['notes.md', 'same (2).txt', 'same.txt']));
   const bodies = files.filter((f) => f.name.endsWith('.txt')).map((f) => f.bytes.toString());
-  expect(bodies.length).toBe(2);
+  // The new document is a text file too: the last type made is the one File › New makes.
+  expect(bodies.length).toBe(3);
 });

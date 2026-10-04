@@ -241,6 +241,8 @@ export type ToWorker =
   | { type: 'joinRoom'; doc: number; room: Extract<RoomOptions, { kind: 'network' }> }
   /** Leaving the page: tell the room. */
   | { type: 'leave' }
+  /** The open document is closed and none replaces it (the page now shows something the worker does not hold: a plain text file). */
+  | { type: 'close' }
   /** Bytes of an image part of the open document. */
   | { type: 'media'; doc: number; request: number; part: string }
   /** The address of the link under a page point (for the hover tip). */

@@ -320,6 +320,17 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 
 /** Commands that change the editor's settings rather than the document (they work with none open). */
 const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellCheck', 'autoFormat', 'livePreview']);
+
+/** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
+function applySettings(wire: WireCommand): void {
+  if (wire.kind === 'spellWords') void acceptSpelling(wire.words ?? [], wire.rules ?? []);
+  else if (wire.kind === 'spellCheck') {
+    live.spelling = wire.spelling;
+    live.grammar = wire.grammar;
+    void acceptSpelling(wire.words ?? [], []);
+  } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
+  else if (wire.kind === 'livePreview') live.livePreview = wire.on;
+}
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
 const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
 
@@ -2918,6 +2929,11 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
     case 'leave':
       current?.leave();
       break;
+    case 'close':
+      current?.leave();
+      current?.controller.abort();
+      current = null;
+      break;
     case 'marks':
       setFormattingMarks(message.on);
       current?.relayout();
@@ -2942,6 +2958,8 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, checkbox: false }) });
       break;
     case 'command':
+      // The settings are the worker's own (the dictionary, what is underlined), so they hold with no document open.
+      if (current?.doc !== message.doc && SETTINGS_COMMANDS.has(message.command.kind)) applySettings(message.command);
       if (current?.doc === message.doc) {
         try {
           current.command(message.command);

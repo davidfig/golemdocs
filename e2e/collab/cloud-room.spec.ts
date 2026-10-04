@@ -345,7 +345,7 @@ test.describe('a cloud picture in a room', () => {
     const second = await openCloud(page, doc.id);
     await expect.poll(() => statusLine(a.page), { timeout: 30_000 }).toContain('2 people here');
 
-    const shapes = (on: import('@playwright/test').Page) => on.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.map((s) => s.tool).sort());
+    const shapes = (on: import('@playwright/test').Page) => on.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.filter((s) => s.tool !== 'group').map((s) => s.tool).sort());
     const drag = async (app: App, from: [number, number], to: [number, number]) => {
       const p = await pictureToScreen(app.page, 400, ...from);
       const q = await pictureToScreen(app.page, 400, ...to);
@@ -367,7 +367,7 @@ test.describe('a cloud picture in a room', () => {
         const parts = await cloudParts(a.page, doc.id);
         const manifest = parts['manifest.json'] ? JSON.parse(parts['manifest.json'].toString()) : null;
         const extension = parts['extensions/img.json'] ? JSON.parse(parts['extensions/img.json'].toString()) : null;
-        const tools = ((extension?.shapes ?? []) as { tool: string }[]).map((s) => s.tool).sort();
+        const tools = ((extension?.shapes ?? []) as { tool: string }[]).filter((s) => s.tool !== 'group').map((s) => s.tool).sort();
         return manifest?.lens === 'png' && !!parts['document.docx'] && tools.join() === 'line,rectangle';
       }, { timeout: 30_000 })
       .toBe(true);

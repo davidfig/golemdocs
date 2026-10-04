@@ -120,9 +120,7 @@ test.describe('Help menu documents', () => {
     await app.blank();
     await choose(app, 'Help', 'What’s New');
     await expect(page).toHaveTitle(/What.s New|Changelog/i);
-    await expect.poll(async () => (await app.text()).length, { timeout: 15_000 }).toBeGreaterThan(50);
-    const text = await app.text();
-    expect(text).toMatch(/Added|Changed|Fixed|Unreleased/);
+    await expect.poll(() => app.text(), { timeout: 15_000 }).toMatch(/Added|Changed|Fixed|Unreleased/);
     expect(new URL(page.url()).pathname).toBe('/changelog');
   });
 

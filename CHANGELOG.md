@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.10.1 - 2026-10-04
+
+### Fixed
+- Converting a document to plain text (File › Convert To) says again what the text file leaves out, instead of only “ready”.
+
 ## 0.10.0 - 2026-10-04
 
 ### Added

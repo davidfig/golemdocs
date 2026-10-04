@@ -16,7 +16,7 @@ test.describe('opening a picture as a document', () => {
     await expect(app.menubar.getByRole('menuitem', { name: 'Table' })).toHaveCount(0);
     await expect(app.menubar.getByRole('menuitem', { name: 'Format' })).toHaveCount(0);
     for (const name of ['Rotate Left', 'Rotate Right', 'Flip Horizontal', 'Flip Vertical', 'Crop', 'Resize', 'Adjust Colors', 'Auto Levels', 'Grayscale', 'Sepia', 'Invert Colors', 'Blur', 'Sharpen']) {
-      await expect(app.toolbarButton(name)).toBeEnabled();
+      await expect(app.toolbarButton(new RegExp(`^${name}$`))).toBeEnabled();
     }
     const img = await currentPicture(app);
     expect(img).toMatchObject({ width: 120, height: 60 });

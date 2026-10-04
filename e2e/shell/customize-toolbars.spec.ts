@@ -8,7 +8,7 @@ const toolbarSelect = (page: Page) => dialog(page).getByRole('combobox', { name:
 const closeButton = (page: Page) => dialog(page).locator('.wm-dialog-buttons').getByRole('button', { name: 'Close' });
 const commands = (page: Page) => dialog(page).getByRole('listbox', { name: 'Commands' });
 const standard = (page: Page) => page.getByRole('toolbar', { name: 'Standard' });
-const buttonNames = (bar: Locator) => bar.getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+const buttonNames = (bar: Locator) => bar.getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')).filter((name) => name !== 'New options'));
 
 async function open(app: App): Promise<void> {
   await choose(app, 'View', 'Toolbars', 'Customize…');

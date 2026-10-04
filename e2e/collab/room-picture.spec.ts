@@ -16,7 +16,7 @@ function inked(img: { width: number; data: Uint8Array }, x0: number, y0: number,
   return n;
 }
 
-const shapesOf = (app: App) => app.page.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.map((s) => s.tool));
+const shapesOf = (app: App) => app.page.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.filter((s) => s.tool !== 'group').map((s) => s.tool));
 
 async function drag(app: App, from: [number, number], to: [number, number]): Promise<void> {
   const a = await pictureToScreen(app.page, W, ...from);

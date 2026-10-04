@@ -557,7 +557,8 @@ async function migrateText(doc: OpenDocument, name: string, options: { localId?:
     const bytes = await worker.convert('txt');
     if (current !== doc) return;
     await openLarge(name, bytes, { localId: options.localId, shared: options.shared });
-    pendingNotice = notice ?? pendingNotice;
+    // The text editor is ready at once, so the notice is said now rather than held for a worker that has nothing to load.
+    if (notice) setStatus(notice);
   } catch (e) {
     console.error(e);
   }

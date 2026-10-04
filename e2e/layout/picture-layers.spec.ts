@@ -145,6 +145,8 @@ test.describe('the Layers panel', () => {
     await app.toolbarButton(/^Fill Shapes$/).click();
     await drag(app, [100, 100], [200, 180]);
     await panel.getByRole('button', { name: 'Group', exact: true }).click();
+    // A layer made for a tool starts closed.
+    await panel.getByRole('button', { name: 'Expand' }).first().click();
     const group = panel.locator('.wm-layers-row').filter({ hasText: 'Group' });
     await expect(group).toBeVisible();
     await group.getByRole('button', { name: 'Hide' }).click();
@@ -160,7 +162,8 @@ test.describe('the Layers panel', () => {
     await expect(panel.locator('.wm-layers-row.selected')).not.toHaveCount(0);
     await app.page.keyboard.press('Delete');
     await expectPicture(app, (i) => isWhite(pixelAt(i, 150, 140)));
-    await expect(panel.locator('.wm-layers-row').filter({ hasText: 'Rectangle' })).toHaveCount(0);
+    // Only the layer made for the tool is left (empty: it goes when another tool is picked).
+    await expect(panel.locator('.wm-layers-row').filter({ hasText: 'Rectangle' })).toHaveCount(1);
   });
 
   test('a new layer takes the shapes drawn next, and its opacity fades them', async ({ app }) => {
@@ -197,10 +200,13 @@ test.describe('layers from tools', () => {
     // Three layers, the two rectangles in the first.
     const layers = panel.locator('.wm-layers-row.layer');
     await expect(layers).toHaveCount(3);
-    await expect(panel.locator('.wm-layers-row').filter({ hasText: /^Rectangle/ })).toHaveCount(2);
+    // A layer made for a tool starts closed; opened, its shapes show.
+    await expect(panel.locator('.wm-layers-row').filter({ hasText: /^Rectangle/ })).toHaveCount(1);
+    await layers.last().getByRole('button', { name: 'Expand' }).click();
+    await expect(panel.locator('.wm-layers-row').filter({ hasText: /^Rectangle/ })).toHaveCount(3);
     // A layer can be closed, so its shapes are out of the way.
     await layers.last().getByRole('button', { name: 'Collapse' }).click();
-    await expect(panel.locator('.wm-layers-row').filter({ hasText: /^Rectangle/ })).toHaveCount(0);
+    await expect(panel.locator('.wm-layers-row').filter({ hasText: /^Rectangle/ })).toHaveCount(1);
     // Click one layer, Shift-click another: everything between is picked; Ctrl-click takes one away.
     await layers.nth(0).click();
     await layers.nth(2).click({ modifiers: ['Shift'] });

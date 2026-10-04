@@ -51,7 +51,7 @@ test('a PNG opens as a picture document with picture tools and no text formattin
   expect(await formatLabel(app.page)).toBe('PNG Image');
   await expect(app.page).toHaveTitle('red.png - Golem Docs');
   const picture = await menuContents(app, 'Picture');
-  expect(picture?.items).toEqual(expect.arrayContaining(['Rotate Left', 'Crop…', 'Resize…', 'Grayscale']));
+  for (const item of ['Rotate Left', 'Crop…', 'Resize…', 'Grayscale']) expect(hasItem(picture, item)).toBe(true);
   expect(await menuContents(app, 'Format')).toBeNull();
   expect(await menuContents(app, 'Table')).toBeNull();
   expect(hasItem(await menuContents(app, 'Insert'), 'Picture')).toBe(false);

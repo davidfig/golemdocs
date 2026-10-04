@@ -32,8 +32,8 @@ import type { Selection } from './history.ts';
 export type RoomMode = 'solo' | 'handoff' | 'shared';
 export type RoomRole = 'owner' | 'editor' | 'viewer';
 
-/** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), or a picture's shapes (`layers`). */
-export type RoomKind = 'doc' | 'objects' | 'layers';
+/** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), a picture's shapes (`layers`), or a drawing's nodes (`nodes`). */
+export type RoomKind = 'doc' | 'objects' | 'layers' | 'nodes';
 
 /** Where someone's mouse pointer is: on this page (its position in display order), at this point on it (points). */
 export interface Pointer {

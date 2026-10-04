@@ -7,7 +7,7 @@ import type { ChromeState, VectorOp } from './actions.ts';
 import { colorText, parseColor } from '../vector/style.ts';
 import { sceneToPng, svgBytes, svgText } from '../formats/vectorDoc.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
-import { emptyScene } from '../vector/model.ts';
+import { emptyScene, type Scene } from '../vector/model.ts';
 import { LayersPanel } from './layersPanel.ts';
 import { ToolOptions } from './toolOptions.ts';
 import { VectorEditor } from './vectorEditor.ts';
@@ -27,6 +27,10 @@ export interface VectorSessionHost {
   changed(): void;
   /** The drawing was changed: its file is to be opened in place of the open one and saved. */
   reopen(bytes: Uint8Array): void;
+  /** Offered the drawing itself after each change: true if it was taken (a drawing edited together sends the change to the room). */
+  sceneCommitted?(scene: Scene): boolean;
+  /** Undo and redo of a drawing edited together are the room's: true if the step was taken. */
+  step?(direction: 'undo' | 'redo'): boolean;
   /** Offered the drawing's SVG text first after each change: true if it was taken (put in a room instead of the file being opened again). */
   committed?(svg: string): boolean;
   notice(message: string): void;
@@ -44,6 +48,8 @@ export interface VectorSession {
   picture(svg: string): Promise<{ png: Uint8Array; width: number; height: number }>;
   /** Shows another version of the drawing being edited (someone else changed it, in a room). */
   reload(bytes: Uint8Array): Promise<void>;
+  /** The drawing as it now stands after changes from others (or an undo) in a drawing edited together; the selection stays. */
+  syncScene(scene: Scene): void;
   /** The drawing can be looked at but not changed. */
   setReadOnly(on: boolean): void;
   /** The SVG text of a new blank drawing. */
@@ -74,6 +80,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
     canvas: host.canvas,
     layer,
     changed: (scene) => {
+      if (!embedded && host.sceneCommitted?.(scene)) return;
       const text = writeSvg(scene);
       if (embedded) embedded.changed(text);
       else if (!host.committed?.(text)) void svgBytes(text, compressed.value).then(host.reopen);
@@ -81,6 +88,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
     stateChanged: host.changed,
     notice: host.notice,
     outside: (e) => !!embedded && layer.outside(e.clientX, e.clientY),
+    step: (direction) => host.step?.(direction) ?? false,
     get leave() {
       return embedded ? embedded.leave : undefined;
     },
@@ -119,6 +127,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
       const { scene } = await svgText(bytes);
       if (editor.active) editor.open(scene);
     },
+    syncScene: (scene) => editor.sync(scene),
     setReadOnly: (on) => (editor.readOnly = on),
     blank: (width, height) => writeSvg(emptyScene(width, height)),
     closeEmbedded() {

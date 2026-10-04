@@ -6,7 +6,7 @@
 // history covers both.
 
 import { alignOf, cellsOf, isStandardName, nearestStandard, noteRect, quadBoxes, quadsFor, textOf, type Annotation, type AnnotationKind, type Box, type FormField, type ApplyResult, type PdfEdit, type Rgb, type ShapeEdit, type TextBlock, type TextEdit, type TextStyle } from '@golemdocs/pdf';
-import { applyObjectOps, type ObjectLayers, type ObjectOp } from '@golemdocs/ops';
+import { applyObjectOps, layersOf, type Keyed, type ObjectLayers, type ObjectOp } from '@golemdocs/ops';
 import type { PdfCharacter, PdfView } from '../formats/pdfPages.ts';
 
 /** A rectangle to show, on a page (by index), in page coordinates. */
@@ -30,8 +30,6 @@ const DEFAULT_COLORS: Record<AnnotationKind, [number, number, number]> = {
 
 const HISTORY_LIMIT = 200;
 
-/** A PDF has no shapes of a picture's kind (the same empty list, so it never counts as changed). */
-const NO_OBJECTS: readonly never[] = [];
 
 /** What undo and redo step between. */
 interface Layers {
@@ -194,7 +192,7 @@ export class PdfAnnotator {
 
   /** The three lists as they are, for editing together with others (see pdfRoom.ts). */
   get objects(): ObjectLayers {
-    return { annotations: this.annotations, fields: this.fields, edits: this.editList, shapes: NO_OBJECTS };
+    return layersOf<Keyed>({ annotations: this.annotations, fields: this.fields, edits: this.editList });
   }
 
   /**

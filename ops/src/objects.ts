@@ -7,10 +7,10 @@
 import type { ClientMessage, ServerMessage } from './collab.ts';
 import type { Transaction } from './types.ts';
 
-/** The lists a document of objects is made of: a PDF's annotations, form fields and edits; a picture's shapes. */
-export type ObjectLayer = 'annotations' | 'fields' | 'edits' | 'shapes';
+/** The lists a document of objects is made of: a PDF's annotations, form fields and edits; a picture's shapes; a drawing's page settings (`meta`, one object), nodes and definitions. */
+export type ObjectLayer = 'annotations' | 'fields' | 'edits' | 'shapes' | 'meta' | 'nodes' | 'defs';
 
-export const OBJECT_LAYERS: readonly ObjectLayer[] = ['annotations', 'fields', 'edits', 'shapes'];
+export const OBJECT_LAYERS: readonly ObjectLayer[] = ['annotations', 'fields', 'edits', 'shapes', 'meta', 'nodes', 'defs'];
 
 /** An object of a layer: whatever it is, it has an id (unique in its layer). */
 export interface Keyed {
@@ -21,6 +21,11 @@ export type ObjectOp = { type: 'put'; layer: ObjectLayer; id: string; value: Key
 
 /** The lists a document is made of, by layer. */
 export type ObjectLayers<T extends Keyed = Keyed> = Record<ObjectLayer, readonly T[]>;
+
+const NONE: readonly never[] = [];
+
+/** Lists with the given layers and every other one empty (the same empty list, so an untouched layer is never seen as changed). */
+export const layersOf = <T extends Keyed = Keyed>(given: Partial<ObjectLayers<T>>): ObjectLayers<T> => ({ annotations: NONE, fields: NONE, edits: NONE, shapes: NONE, meta: NONE, nodes: NONE, defs: NONE, ...given });
 
 /** The most one change may carry (a whole picture of an edit can be in it): the room's messages are limited. */
 export const MAX_OBJECT_BYTES = 3 * 1024 * 1024;
@@ -46,7 +51,7 @@ export const objectTransaction = (id: string, client: string, ops: ObjectOp[]): 
 
 /** The lists with the changes made, in order. Lists no change touches are the same lists; an object put keeps its place if it had one, else goes last. */
 export function applyObjectOps<T extends Keyed>(layers: ObjectLayers<T>, ops: readonly ObjectOp[]): { layers: ObjectLayers<T>; changed: { layer: ObjectLayer; before: T | undefined; after: T | undefined }[] } {
-  const next: Record<ObjectLayer, T[] | null> = { annotations: null, fields: null, edits: null, shapes: null };
+  const next = Object.fromEntries(OBJECT_LAYERS.map((layer) => [layer, null])) as Record<ObjectLayer, T[] | null>;
   const changed: { layer: ObjectLayer; before: T | undefined; after: T | undefined }[] = [];
   for (const op of ops) {
     const list = (next[op.layer] ??= [...layers[op.layer]]);
@@ -62,7 +67,7 @@ export function applyObjectOps<T extends Keyed>(layers: ObjectLayers<T>, ops: re
       changed.push({ layer: op.layer, before, after: value });
     }
   }
-  return { layers: { annotations: next.annotations ?? layers.annotations, fields: next.fields ?? layers.fields, edits: next.edits ?? layers.edits, shapes: next.shapes ?? layers.shapes }, changed };
+  return { layers: Object.fromEntries(OBJECT_LAYERS.map((layer) => [layer, next[layer] ?? layers[layer]])) as ObjectLayers<T>, changed };
 }
 
 /** The changes that turn the lists `from` into the lists `to`: a put for each object that is new or different, a del for each that is gone. */

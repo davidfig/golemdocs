@@ -10,6 +10,7 @@ import type { AnnotationKind, FormField } from '@golemdocs/pdf';
 import type { EncodedPage, FaceDescriptor } from '@golemdocs/layout';
 import type { Format } from '../formats/convert.ts';
 import type { Shape } from '../formats/imageDraw.ts';
+import type { Scene } from '../vector/model.ts';
 import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
@@ -251,6 +252,9 @@ export type ToWorker =
   /** A picture's shapes are now these (the person drew, erased or moved something); or step back over (undo) or forward again (redo) over the person's own changes to them. */
   | { type: 'shapes'; doc: number; shapes: Shape[] }
   | { type: 'shapesStep'; doc: number; action: 'undo' | 'redo' }
+  /** A drawing edited together is now this (the person changed it); or step back over, or forward again over, the person's own changes to it. */
+  | { type: 'vectorScene'; doc: number; scene: Scene }
+  | { type: 'vectorStep'; doc: number; action: 'undo' | 'redo' }
   /** Asks for, or lets go of, the right to edit a document that only one person at a time may (a drawing in a room). */
   | { type: 'lease'; doc: number; action: 'request' | 'release' }
   | { type: 'putDrawing'; doc: number; svg: string; png: ArrayBuffer; width: number; height: number; description?: string; replace?: string }
@@ -367,6 +371,8 @@ export type FromWorker =
   | { type: 'notice'; doc: number; message: string }
   /** A picture's shapes (opening, or changed by others or by undo), its size in pixels, and whether its shapes can be undone or redone. */
   | { type: 'shapes'; doc: number; shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }
+  /** A drawing being edited together: as it stands now (null: it has not changed, only what can be undone) after others' changes or an undo, and whether the person's own changes can be undone or redone. */
+  | { type: 'vectorScene'; doc: number; scene: Scene | null; canUndo: boolean; canRedo: boolean }
   /** Who may edit a document that only one person at a time may: `mine` is whether this person may now, `holder` the name of whoever does (null: nobody), `shared` whether others are there. */
   | { type: 'lease'; doc: number; exclusive: boolean; mine: boolean; holder: string | null; shared: boolean }
   /** Collaboration status: people in the room, and edits not yet confirmed by the server. */

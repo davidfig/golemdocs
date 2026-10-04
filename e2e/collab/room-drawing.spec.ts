@@ -40,40 +40,54 @@ async function drawRectangle(app: App): Promise<void> {
   await app.page.mouse.up();
 }
 
-test('a drawing can be shared: the first to join may edit, the other sees the drawing and is told who is editing', async ({ browser }) => {
+test('a drawing can be shared: the one who joins opens the same drawing as a drawing, and nobody waits to edit', async ({ browser }) => {
   const { context, a, b } = await drawingPair(browser);
   await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/SVG/);
-  await expect(b.page.locator('.wm-lease')).toBeVisible();
-  await expect(b.page.locator('.wm-lease').getByRole('button', { name: 'Take over' })).toBeVisible();
+  // There is no one editor: no bar telling anyone to wait.
   await expect(a.page.locator('.wm-lease')).toBeHidden();
-  await context.close();
-});
-
-test('what the editor draws appears for the other person, who cannot draw until they take over', async ({ browser }) => {
-  const { context, a, b } = await drawingPair(browser);
-  // The one who may not edit draws nothing.
-  await drawRectangle(b);
-  await expect(layers(b)).toHaveCount(2);
-  // The one who may edit draws, and the other sees it.
-  await drawRectangle(a);
-  await expect(layers(a)).toHaveCount(3);
-  await expect(layers(b)).toHaveCount(3, { timeout: 30_000 });
-  await context.close();
-});
-
-test('taking over is refused while the editor is working, and once they have gone the other is alone and edits freely', async ({ browser }) => {
-  const { context, a, b } = await drawingPair(browser);
-  await drawRectangle(a);
-  await expect(layers(b)).toHaveCount(3, { timeout: 30_000 });
-  // The editor was working a moment ago: the lease stays with them.
-  await b.page.locator('.wm-lease').getByRole('button', { name: 'Take over' }).click();
-  await drawRectangle(b);
-  await expect(layers(b)).toHaveCount(3);
-  await expect(b.page.locator('.wm-lease')).toBeVisible();
-  // They go: nobody else is here, so there is nothing to wait for.
-  await a.page.close();
   await expect(b.page.locator('.wm-lease')).toBeHidden();
+  await context.close();
+});
+
+test('both draw at the same time, and every shape ends up on both drawings', async ({ browser }) => {
+  const { context, a, b } = await drawingPair(browser);
+  await drawRectangle(a);
   await drawRectangle(b);
-  await expect(layers(b)).toHaveCount(4);
+  await expect(layers(a)).toHaveCount(4, { timeout: 30_000 });
+  await expect(layers(b)).toHaveCount(4, { timeout: 30_000 });
+  // The same shapes in the same order on both.
+  const names = (app: App) => layers(app).allTextContents();
+  await expect.poll(async () => JSON.stringify(await names(a))).toBe(JSON.stringify(await names(b)));
+  await context.close();
+});
+
+test('what one person deletes goes from the other’s drawing too, and each person’s undo takes back only their own', async ({ browser }) => {
+  const { context, a, b } = await drawingPair(browser);
+  await drawRectangle(a);
+  await expect(layers(b)).toHaveCount(3, { timeout: 30_000 });
+  await drawRectangle(b);
+  await expect(layers(a)).toHaveCount(4, { timeout: 30_000 });
+  // b undoes its own rectangle: a's stays.
+  await b.menu('Edit', 'Undo');
+  await expect(layers(b)).toHaveCount(3, { timeout: 30_000 });
+  await expect(layers(a)).toHaveCount(3, { timeout: 30_000 });
+  // b picks the red shape and deletes it: it goes from a's too.
+  await layers(b).filter({ hasText: 'red' }).click();
+  await b.press('Delete');
+  await expect(layers(b)).toHaveCount(2, { timeout: 30_000 });
+  await expect(layers(a)).toHaveCount(2, { timeout: 30_000 });
+  await expect(layers(a).filter({ hasText: 'red' })).toHaveCount(0);
+  await context.close();
+});
+
+test('one person’s change to a shape reaches the other without losing what the other did', async ({ browser }) => {
+  const { context, a, b } = await drawingPair(browser);
+  // a draws; b recolours the green circle while a is still drawing.
+  await drawRectangle(a);
+  await layers(b).filter({ hasText: 'green' }).click();
+  await b.press('Delete');
+  await expect(layers(a)).toHaveCount(2, { timeout: 30_000 });
+  await expect(layers(b)).toHaveCount(2, { timeout: 30_000 });
+  expect((await layers(a).allTextContents()).some((t) => t.includes('green'))).toBe(false);
   await context.close();
 });

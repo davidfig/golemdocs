@@ -22,13 +22,19 @@ const PICTURES: ReadonlySet<Format> = new Set(['png', 'jpeg', 'webp']);
 /** Whether a document edited as this format is a picture. */
 export const isPictureFormat = (format: Format): boolean => PICTURES.has(format);
 
-/** What the changes sent to a room are: for a PDF's own pages, changes to the objects on them; for a picture, to the shapes drawn over it; for everything else, to the text. */
-export const roomKind = (format: Format): 'doc' | 'objects' | 'layers' => (format === 'pdf' ? 'objects' : PICTURES.has(format) ? 'layers' : 'doc');
+/** What the changes sent to a room are: for a PDF's own pages, changes to the objects on them; for a picture, to the shapes drawn over it; for a drawing, to its nodes; for everything else, to the text. */
+export const roomKind = (format: Format): 'doc' | 'objects' | 'layers' | 'nodes' => (format === 'pdf' ? 'objects' : PICTURES.has(format) ? 'layers' : isVectorFormat(format) ? 'nodes' : 'doc');
 
-/** Formats whose each edit replaces the whole thing (a drawing), so that only one person at a time may edit: the room gives that right out as a lease. */
-const ONE_AT_A_TIME: ReadonlySet<Format> = new Set(['svg', 'svgz']);
+/** Formats whose each edit replaces the whole thing, so that only one person at a time may edit: the room gives that right out as a lease. (None now: a drawing is edited together node by node.) */
+const ONE_AT_A_TIME: ReadonlySet<Format> = new Set();
 
 export const exclusiveRoom = (format: Format): boolean => ONE_AT_A_TIME.has(format);
+
+/** Whether a document edited as this format is a vector drawing. */
+export const isVectorFormat = (format: Format): boolean => format === 'svg' || format === 'svgz';
+
+/** Whether its room shares objects with a host of its own (a picture's shapes, a drawing's nodes) rather than the document's text. */
+export const isLayeredFormat = (format: Format): boolean => PICTURES.has(format) || isVectorFormat(format);
 
 /** Whether a document edited as this format can be in a room: every one can. */
 export const roomable = (_format: Format): boolean => true;

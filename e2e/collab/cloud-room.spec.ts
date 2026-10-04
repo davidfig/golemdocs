@@ -256,7 +256,7 @@ test.describe('pictures and drawings in a cloud document', () => {
 });
 
 test.describe('a cloud drawing in a room', () => {
-  test('one device edits at a time; what it draws appears on the other and in the account’s copy', async ({ browser }) => {
+  test('both devices edit at once; what one draws appears on the other and in the account’s copy', async ({ browser }) => {
     const a = await newPerson(browser, 'drawing');
     await a.page.goto('/?doc=welcome');
     await importFile(a.app, { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"><rect id="red" x="20" y="20" width="120" height="80" fill="#e53935"/></svg>') });
@@ -269,10 +269,9 @@ test.describe('a cloud drawing in a room', () => {
     const page = await other.newPage();
     await openCloud(page, doc.id);
     await expect(layers(page)).toHaveCount(1, { timeout: 30_000 });
-    await expect.poll(async () => (await others(a.page)).length, { timeout: 30_000 }).toBe(1);
 
-    // The first device holds the lease (it handed the document over); the second is told so.
-    await expect(page.locator('.wm-lease')).toBeVisible({ timeout: 30_000 });
+    // Nobody waits for the other: no lease.
+    await expect(page.locator('.wm-lease')).toBeHidden();
     await expect(a.page.locator('.wm-lease')).toBeHidden();
     await a.app.toolbarButton('Rectangle').click();
     const box = await a.page.locator('.wm-vector-canvas').boundingBox();
@@ -287,9 +286,8 @@ test.describe('a cloud drawing in a room', () => {
     await expect
       .poll(async () => {
         const parts = await cloudParts(a.page, doc.id);
-        const inner = parts['document.docx'] ? unzip(parts['document.docx']) : {};
-        const svg = Object.entries(inner).find(([name]) => /^word\/media\/h-[0-9a-f]{64}\.svg$/.test(name))?.[1]?.toString() ?? '';
-        return (svg.match(/<rect /g) ?? []).length;
+        const vec = parts['extensions/vec.json']?.toString() ?? '';
+        return (vec.match(/"kind":\s*"rect"/g) ?? []).length;
       }, { timeout: 30_000 })
       .toBe(2);
     await other.close();

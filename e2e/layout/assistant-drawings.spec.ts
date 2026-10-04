@@ -108,7 +108,7 @@ test.describe('who is editing', () => {
 test.describe('a drawing in a room', () => {
   const DRAWING = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"><rect id="red" x="20" y="20" width="120" height="80" fill="#e53935"/></svg>';
 
-  test('the one who may not edit is refused, told who may, and cannot take over while they work', async ({ browser }) => {
+  test('both may edit at once, and the status says so', async ({ browser }) => {
     const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     const { App: AppClass } = await import('../fixtures');
     const a = new AppClass(await context.newPage());
@@ -120,21 +120,12 @@ test.describe('a drawing in a room', () => {
     await b.page.goto(url);
     await b.ready();
     await b.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem').first().waitFor({ timeout: 30_000 });
-    await expect(b.page.locator('.wm-lease')).toBeVisible();
-
-    // The first to join may edit: its changes go through, and the other's are refused with who and what to do.
+    await expect(b.page.locator('.wm-lease')).toBeHidden();
     expect(await tool(a, 'edit_drawing', { op: 'add_rect', x: 200, y: 20, width: 50, height: 50 })).not.toContain('Error');
-    const refused = await tool(b, 'edit_drawing', { op: 'add_rect', x: 0, y: 0, width: 5, height: 5 });
-    expect(refused).toMatch(/^Error: .* is editing this drawing now\./);
-    expect(refused).toContain('collaboration (take_over)');
-    expect(await tool(b, 'collaboration_status')).toMatch(/is editing this drawing now\./);
-    // The one working keeps it.
-    expect(await tool(b, 'take_over_editing')).toMatch(/^Refused: .* is editing this drawing now\./);
-    expect(await tool(a, 'collaboration_status')).toContain('This person may edit the drawing.');
-    // And lets go of it: nobody holds it, and the other (here, a development room, asks for it at once) may edit.
-    expect(await tool(a, 'release_editing')).toContain('Let go');
-    await expect.poll(() => tool(b, 'collaboration_status'), { timeout: 30_000 }).toContain('This person may edit the drawing.');
     expect(await tool(b, 'edit_drawing', { op: 'add_rect', x: 0, y: 0, width: 5, height: 5 })).not.toContain('Error');
+    const rows = (app: InstanceType<typeof AppClass>) => app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    await expect(rows(a)).toHaveCount(3, { timeout: 30_000 });
+    await expect(rows(b)).toHaveCount(3, { timeout: 30_000 });
     await context.close();
   });
 });

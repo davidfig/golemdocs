@@ -7,7 +7,7 @@ import type { ClientMessage, Selection, ServerMessage, Transaction } from '@gole
 
 export type RoomClientMessage =
   /** Join a room; `snapshot` becomes the room's document if the room is new. */
-  | { type: 'join'; room: string; client: string; snapshot: ArrayBuffer; /** Only one person at a time can edit the document: the first to join says so for the room. */ exclusive?: boolean; kind?: 'doc' | 'objects' | 'layers' }
+  | { type: 'join'; room: string; client: string; snapshot: ArrayBuffer; /** Only one person at a time can edit the document: the first to join says so for the room. */ exclusive?: boolean; kind?: 'doc' | 'objects' | 'layers' | 'nodes' }
   | ClientMessage
   | { type: 'presence'; name: string; color: number; selection: Selection | null }
   /** A picture added while editing together, kept under the hash of its bytes; and a request for one. */

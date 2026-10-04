@@ -105,7 +105,9 @@ import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
-import { roomable } from './formats/roomDoc.ts';
+import { isVectorFormat, roomable } from './formats/roomDoc.ts';
+import { ensureUids } from './vector/nodes.ts';
+import type { Scene } from './vector/model.ts';
 import { LeaseBanner, type LeaseState } from './ui/leaseBanner.ts';
 import type { Collaboration } from './assistant/appTools.ts';
 import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
@@ -413,6 +415,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   current.roomRequested = requestedRoom !== undefined;
   shownDrawingPart = null;
   layerSteps = { canUndo: false, canRedo: false };
+  vectorSteps = { canUndo: false, canRedo: false };
+  latestVectorScene = null;
   drawLayer.unbind();
   leaseChanged(NO_LEASE);
   worker.open(source, {
@@ -506,6 +510,14 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
     notice: (message) => reportError(message),
     lease: (state) => leaseChanged(state),
+    vectorScene(state) {
+      vectorSteps = { canUndo: state.canUndo, canRedo: state.canRedo };
+      if (state.scene) {
+        latestVectorScene = state.scene;
+        if (vector?.editor.active) vector.syncScene(state.scene);
+      }
+      requestRender();
+    },
     shapes(state) {
       layerSteps = { canUndo: state.canUndo, canRedo: state.canRedo };
       drawLayer.bind(state.width, state.height, state.shapes, state.canUndo);
@@ -2075,6 +2087,9 @@ const PICTURE_HISTORY = 12;
 let pictureHistory: { undo: Uint8Array[]; redo: Uint8Array[] } = { undo: [], redo: [] };
 /** Whether the picture's layers (the shapes drawn over it) have changes to step back over or forward again. */
 let layerSteps = { canUndo: false, canRedo: false };
+/** A drawing edited together: whether the person's own changes to it can be stepped back over or forward again, and the drawing as the room last had it (with the ids its nodes have there). */
+let vectorSteps = { canUndo: false, canRedo: false };
+let latestVectorScene: Scene | null = null;
 /** Called when the worker next sends the picture's shapes (the answer to a change of them). */
 let shapesEcho: (() => void) | null = null;
 const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
@@ -2676,8 +2691,8 @@ function render(): void {
     footer: footerOn,
     rulerVisible: rulerOn,
     format: selectionFormat,
-    canUndo: isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    canUndo: isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
@@ -3832,6 +3847,19 @@ async function loadVector(): Promise<VectorSession> {
       page: () => (embeddedDrawing ? embeddedRect() : pages[0]),
       changed: () => requestRender(),
       // The editor changed the drawing: its file is opened in place of the open one (the same saved document, the same name), then saved soon.
+      // A drawing edited together sends each change to the room as changes to its nodes, and undoes through the room.
+      sceneCommitted: (scene) => {
+        if (!isDrawing() || !isVectorFormat(current.kind as Format) || !sharedLive()) return false;
+        ensureUids(scene);
+        worker.setVectorScene(scene);
+        documentEdited();
+        return true;
+      },
+      step: (direction) => {
+        if (!isDrawing() || !isVectorFormat(current.kind as Format) || !sharedLive()) return false;
+        worker.stepVector(direction);
+        return true;
+      },
       committed: (svg) => commitToRoom(svg),
       reopen(bytes) {
         const doc = current;
@@ -3998,6 +4026,8 @@ async function showDrawing(): Promise<void> {
     if (session.editor.active || doc !== current) return;
     await session.open(await worker.convert(doc.kind as Format));
     session.setReadOnly(lockedOut());
+    // A drawing edited together: the editor is given the drawing with the ids its nodes have in the room.
+    if (latestVectorScene) session.syncScene(latestVectorScene);
     // What the page shows of the drawing now: a different one later is somebody else's change.
     shownDrawingPart = pages[0]?.images.find((i) => i.svg)?.svg ?? null;
   } catch {

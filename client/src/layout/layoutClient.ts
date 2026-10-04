@@ -1,4 +1,5 @@
 import type { Shape } from '../formats/imageDraw.ts';
+import type { Scene } from '../vector/model.ts';
 import type { FaceDescriptor } from '@golemdocs/layout';
 import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
@@ -27,6 +28,7 @@ export interface DocumentListener {
   notice(message: string): void;
   lease(state: { exclusive: boolean; mine: boolean; holder: string | null; shared: boolean }): void;
   shapes(state: { shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }): void;
+  vectorScene(state: { scene: Scene | null; canUndo: boolean; canRedo: boolean }): void;
 }
 
 /** The page's side of the layout worker. One document is open at a time. */
@@ -105,6 +107,16 @@ export class LayoutClient {
   /** A picture's shapes are now these. */
   setShapes(shapes: Shape[]): void {
     this.send({ type: 'shapes', doc: this.doc, shapes });
+  }
+
+  /** A drawing edited together is now this. */
+  setVectorScene(scene: Scene): void {
+    this.send({ type: 'vectorScene', doc: this.doc, scene });
+  }
+
+  /** Steps back over, or forward again over, the person's own changes to a drawing edited together. */
+  stepVector(action: 'undo' | 'redo'): void {
+    this.send({ type: 'vectorStep', doc: this.doc, action });
   }
 
   /** Steps back over, or forward again over, the person's own changes to a picture's shapes. */
@@ -225,6 +237,9 @@ export class LayoutClient {
         break;
       case 'notice':
         this.listener.notice(message.message);
+        break;
+      case 'vectorScene':
+        this.listener.vectorScene({ scene: message.scene, canUndo: message.canUndo, canRedo: message.canRedo });
         break;
       case 'shapes':
         this.listener.shapes({ shapes: message.shapes, width: message.width, height: message.height, canUndo: message.canUndo, canRedo: message.canRedo });

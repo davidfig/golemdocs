@@ -3,11 +3,9 @@
 // objectSync.ts); the pixels are put together with them only when the picture is flattened or written out as a picture.
 
 import type { ObjectLayers, ObjectOp } from '@golemdocs/ops';
-import { applyObjectOps } from '@golemdocs/ops';
+import { applyObjectOps, layersOf } from '@golemdocs/ops';
 import type { Shape } from '../formats/imageDraw.ts';
 import type { ObjectHost } from './objectSync.ts';
-
-const NONE: readonly never[] = [];
 
 /** A shape with the id it was given, or a new one. */
 export const withId = (shape: Shape): Shape & { id: string } => (shape.id ? (shape as Shape & { id: string }) : { ...shape, id: crypto.randomUUID().slice(0, 12) });
@@ -29,7 +27,7 @@ export class PictureLayers implements ObjectHost {
   }
 
   get objects(): ObjectLayers {
-    return { annotations: NONE, fields: NONE, edits: NONE, shapes: this.list };
+    return layersOf({ shapes: this.list });
   }
 
   /** Changes from others, or an undo: put in as they are. There is one part to a picture, so it is the one that changed. */

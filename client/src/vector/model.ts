@@ -23,6 +23,8 @@ export type PathCommand =
 export type Style = Record<string, string>;
 
 interface Base {
+  /** Names the node among everyone's when a drawing is edited together (see nodes.ts); never written to the file. */
+  uid?: string;
   /** The `id` attribute, which other elements refer to (gradients, clip paths, `use`). */
   id?: string;
   /** Places the node's coordinates in its parent's. Absent: the identity. */

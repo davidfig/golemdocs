@@ -179,3 +179,24 @@ test('a picture’s shapes are written into its extension, and the picture itsel
   assert.deepEqual(JSON.parse(await zip.entries.get('extensions/img.json')!.text()).shapes, [{ id: 'b', tool: 'line' }, { id: 'c' }]);
   assert.equal('annotations' in JSON.parse(await zip.entries.get('extensions/img.json')!.text()), false, 'a list a picture does not have is not made');
 });
+
+test('a drawing’s log is written into its nodes, definitions and page settings', async () => {
+  const encoder = new TextEncoder();
+  const picture = encoder.encode('page');
+  const base = await writeZip([
+    { name: 'mimetype', data: encoder.encode('application/x-golem-document'), compress: false },
+    { name: 'manifest.json', data: encoder.encode(JSON.stringify({ version: 1, lens: 'svg', origin: 'svg', pagesCurrent: false })) },
+    { name: 'document.docx', data: picture, compress: false },
+    { name: 'extensions/vec.json', data: encoder.encode(JSON.stringify({ meta: [{ id: 'scene' }], nodes: [{ id: 'a' }, { id: 'b' }], defs: [] })) },
+  ]);
+  const out = await applyLog(
+    base,
+    [objectTransaction('x:0', 'x', [put('nodes', { id: 'c' }), { type: 'del', layer: 'nodes', id: 'a' }]), objectTransaction('y:0', 'y', [put('shapes', { id: 'stray' })])],
+    undefined,
+    'nodes',
+  );
+  const vec = JSON.parse(await ZipArchive.read(out).entries.get('extensions/vec.json')!.text());
+  assert.deepEqual(vec.nodes, [{ id: 'b' }, { id: 'c' }]);
+  assert.deepEqual(vec.meta, [{ id: 'scene' }]);
+  assert.equal('shapes' in vec, false);
+});

@@ -24,7 +24,9 @@ import { exportDocument, importDocument, type Format } from '../formats/convert.
 import type { PdfView } from '../formats/pdfPages.ts';
 import { sniffImage } from '../formats/images.ts';
 import { networkMedia, PortMedia, type RoomMedia } from '../collab/roomMedia.ts';
-import { exclusiveRoom, isPictureFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
+import { exclusiveRoom, isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
+import type { VectorLayers } from './vectorLayers.ts';
+import type { Scene } from '../vector/model.ts';
 import { PictureLayers } from './pictureLayers.ts';
 import type { Shape } from '../formats/imageDraw.ts';
 import { objectOps } from '@golemdocs/ops';
@@ -183,6 +185,12 @@ async function showEmbeds(document: WordDocument, fonts: FontSet): Promise<void>
  */
 async function withDrawingText(document: WordDocument | null, lens: Format, extensions: Extensions): Promise<Extensions> {
   if (!document || (lens !== 'svg' && lens !== 'svgz')) return extensions;
+  // A drawing edited together is its objects (a room writes only those): the SVG is made from them.
+  const vec = extensions.vec;
+  if (vec?.meta[0]) {
+    const [{ objectsToScene }, { writeSvg }] = await Promise.all([import('../vector/nodes.ts'), import('../vector/svgWrite.ts')]);
+    return { ...extensions, svg: { ...extensions.svg, source: writeSvg(objectsToScene({ meta: vec.meta[0], nodes: vec.nodes, defs: vec.defs })) } };
+  }
   const text = await (await import('../formats/vectorDoc.ts')).svgOfDocument(document).catch(() => null);
   return text === null ? extensions : { ...extensions, svg: { ...extensions.svg, source: text } };
 }
@@ -1051,7 +1059,7 @@ class OpenDocument {
   }
 
   /** Joins the room: resolves with the room's document and its log so far. */
-  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer, exclusive: boolean, kind: 'doc' | 'objects' | 'layers' = 'doc'): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
+  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer, exclusive: boolean, kind: 'doc' | 'objects' | 'layers' | 'nodes' = 'doc'): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
     this.clientId = client;
     this.room = room;
     this.portMedia = new PortMedia((message, transfer) => this.toRoom(message, transfer));
@@ -1097,7 +1105,7 @@ class OpenDocument {
       }
       return;
     }
-    if (isPictureFormat(this.format)) {
+    if (isLayeredFormat(this.format)) {
       if (message.type === 'transactions') {
         if (this.layerSync) this.receiveLayers(message);
         else this.backlog.push(message);
@@ -1186,7 +1194,10 @@ class OpenDocument {
       this.lateRoom = room;
       return;
     }
-    const start = await this.joinNetwork(room, this.replica?.clientId ?? crypto.randomUUID().slice(0, 8));
+    const client = this.replica?.clientId ?? crypto.randomUUID().slice(0, 8);
+    // A drawing's nodes are made objects of when it is first shared.
+    if (isVectorFormat(this.format) && !this.layerSync) await this.setupVector(client, []);
+    const start = await this.joinNetwork(room, client);
     if (!start || this.closed) return;
     if (start.kind === 'own') this.net!.ready(start);
     else {
@@ -1254,7 +1265,7 @@ class OpenDocument {
       color: room.color,
       exclusive: exclusiveRoom(this.format),
       kind: roomKind(this.format),
-      host: this.format === 'pdf' ? this.pdfRoomHost() : isPictureFormat(this.format) ? this.layersRoomHost() : this.roomHost(),
+      host: this.format === 'pdf' ? this.pdfRoomHost() : isLayeredFormat(this.format) ? this.layersRoomHost() : this.roomHost(),
       connect: () => new WebSocket(`${self.location.protocol === 'https:' ? 'wss' : 'ws'}://${self.location.host}/api/rooms/${docId}`) as unknown as SocketLike,
       fetchDocument: async () => {
         const response = await fetch(`/api/rooms/${docId}/document`);
@@ -1298,6 +1309,54 @@ class OpenDocument {
       original: this.original,
       extensions: currentExtensions(this),
     });
+  }
+
+  /** A drawing being edited together: its nodes as objects (changed through `layerSync`), and how to write it as SVG. */
+  vectorLayers: VectorLayers | null = null;
+  private svgText: ((scene: Scene) => string) | null = null;
+
+  /** A drawing is to be edited together (or may be): its nodes become objects, from what the room has, else from the drawing. */
+  async setupVector(client: string, log: Transaction[]): Promise<void> {
+    const [{ VectorLayers }, { readSvg }, { writeSvg }] = await Promise.all([import('./vectorLayers.ts'), import('../vector/svgRead.ts'), import('../vector/svgWrite.ts')]);
+    this.svgText = writeSvg;
+    const vec = this.extensions.vec;
+    this.vectorLayers = vec ? new VectorLayers(vec) : new VectorLayers(readSvg(this.extensions.svg?.source ?? ''));
+    if (log.length) this.vectorLayers.applyObjects(log.flatMap(objectOps));
+    this.layerSync = new ObjectSync(this.vectorLayers, client);
+    this.keepVector();
+  }
+
+  /** The drawing's objects are saved with the document, and the SVG that exports and conversions are made from follows them. */
+  private keepVector(): void {
+    const layers = this.vectorLayers;
+    if (!layers || !this.svgText) return;
+    this.extensions = { ...this.extensions, vec: layers.extension, svg: { ...this.extensions.svg, source: this.svgText(layers.scene) } };
+  }
+
+  /** Tells the page the drawing as it stands (null: it has not changed) and whether the person's changes can be stepped back over. */
+  postVector(withScene: boolean): void {
+    if (!this.vectorLayers) return;
+    post({ type: 'vectorScene', doc: this.doc, scene: withScene ? this.vectorLayers.scene : null, canUndo: this.layerSync?.canUndo ?? false, canRedo: this.layerSync?.canRedo ?? false });
+  }
+
+  /** The person changed the drawing: it is now this. */
+  setVectorScene(scene: Scene): void {
+    if (!this.vectorLayers || !this.layerSync || this.readOnly) return this.postVector(true);
+    this.vectorLayers.set(scene);
+    this.layerSync.local();
+    this.edited = true;
+    this.keepVector();
+    this.postVector(false);
+  }
+
+  /** Undo or redo of the person's own changes to the drawing. */
+  stepVector(action: 'undo' | 'redo'): void {
+    if (!this.layerSync || this.readOnly) return;
+    if (action === 'undo') this.layerSync.undo();
+    else this.layerSync.redo();
+    this.edited = true;
+    this.keepVector();
+    this.postVector(true);
   }
 
   /** A picture opened: its layers are the shapes kept with it, and the page is told them. */
@@ -1347,11 +1406,17 @@ class OpenDocument {
   private receiveLayers(message: Parameters<ObjectSync['receive']>[0]): void {
     const sync = this.layerSync;
     if (!sync) return;
-    if (sync.receive(message).length === 0) return;
+    const got = sync.receive(message);
+    if (got.length === 0) return;
     this.edited = true;
     post({ type: 'remoteEdit', doc: this.doc });
-    this.keepLayers();
-    this.postShapes();
+    if (this.vectorLayers) {
+      this.keepVector();
+      this.postVector(true);
+    } else {
+      this.keepLayers();
+      this.postShapes();
+    }
   }
 
   /** What a picture's room needs from it: its changes to the shapes go out through `layerSync`, and others' come in through it. */
@@ -2458,9 +2523,9 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     let document = loaded.document ?? (await reflow(loaded.original!, loaded.extensions));
     // Rooms share the document itself, so any format edited through it can be in one. A picture is the exception: its pixels are not
     // edited together, but the shapes drawn over it (its layers) are, in a room of their own kind.
-    const picture = isPictureFormat(entry.format);
-    let room = roomable(entry.format) && !picture ? requestedRoom : undefined;
-    let pictureRoom = picture ? requestedRoom : undefined;
+    const layered = isLayeredFormat(entry.format);
+    let room = roomable(entry.format) && !layered ? requestedRoom : undefined;
+    let pictureRoom = layered ? requestedRoom : undefined;
     let layerLog: Transaction[] = [];
     const readMs = performance.now() - t0;
     if (entry.closed) return;
@@ -2483,7 +2548,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       }
     } else if (pictureRoom) {
       const mine = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: entry.format, origin: entry.origin, pagesCurrent: false }, document: await document.write(), original: null, extensions: entry.extensions });
-      const joined = await entry.join(pictureRoom, clientId, mine.slice().buffer, false, 'layers');
+      const joined = await entry.join(pictureRoom, clientId, mine.slice().buffer, false, roomKind(entry.format));
       if (entry.closed) return;
       const shared = await load({ kind: 'wdoc', name, bytes: joined.snapshot }, fonts);
       document = shared.document!;
@@ -2511,7 +2576,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       }
       // A picture's room: the person who joined by a link starts from a blank Word one, and takes the picture as it is in the room instead.
       const lens = isWdocBytes(joined.snapshot) ? (await readWdoc(new Uint8Array(joined.snapshot))).manifest.lens : null;
-      if (lens && isPictureFormat(lens)) {
+      if (lens && isLayeredFormat(lens)) {
         const shared = await load({ kind: 'wdoc', name, bytes: joined.snapshot }, fonts);
         document = shared.document!;
         entry.format = shared.lens;
@@ -2542,9 +2607,10 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     entry.session = session;
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
-    // A picture's shapes (its layers) are set up before the room's messages are handled.
-    if (isPictureFormat(entry.format)) {
-      await entry.setupLayers(clientId, layerLog);
+    // A picture's shapes (its layers), or a drawing's nodes, are set up before the room's messages are handled.
+    if (isPictureFormat(entry.format) || (isVectorFormat(entry.format) && pictureRoom)) {
+      if (isVectorFormat(entry.format)) await entry.setupVector(clientId, layerLog);
+      else await entry.setupLayers(clientId, layerLog);
       if (pictureRoom?.kind === 'dev') {
         const port = pictureRoom.port;
         entry.layerSync!.connect((message) => port.postMessage(message satisfies RoomClientMessage), layerLog.length);
@@ -2554,6 +2620,8 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     if (start) entry.net!.ready(start);
     post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
     if (entry.layers) entry.postShapes();
+    // The drawing's nodes have ids of their own now: the editor is given them, so that what it changes is named as the room names it.
+    if (entry.vectorLayers) entry.postVector(true);
     await entry.pump();
     if (entry.closed) return;
     post({ type: 'done', doc, pages: session.pages.length, timings: { read: readMs, ...session.timings } });
@@ -2877,6 +2945,12 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'shapesStep':
       if (current?.doc === message.doc) current.stepShapes(message.action);
+      break;
+    case 'vectorScene':
+      if (current?.doc === message.doc) current.setVectorScene(message.scene);
+      break;
+    case 'vectorStep':
+      if (current?.doc === message.doc) current.stepVector(message.action);
       break;
     case 'putDrawing':
       if (current?.doc === message.doc) current.putDrawing(message.svg, new Uint8Array(message.png), message.width, message.height, message.description, message.replace);

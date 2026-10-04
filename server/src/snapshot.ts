@@ -3,7 +3,7 @@
 // holds the one ordered log, is the only writer. Application is deterministic (see @golemdocs/ops), so
 // the result is exactly what every client shows.
 
-import { applyObjectOps, Engine, objectOps, type ObjectLayers, type RoomKind, type Transaction } from '@golemdocs/ops';
+import { applyObjectOps, Engine, layersOf, objectOps, type ObjectLayers, type RoomKind, type Transaction } from '@golemdocs/ops';
 import { SHARED_MEDIA_IN_TEXT, sharedMediaHash, WordDocument, writeZip, ZipArchive } from '@golemdocs/docx';
 import { replaceStoredDocx, storedDocx } from './stored.ts';
 
@@ -48,6 +48,7 @@ async function applyAll(base: Uint8Array, transactions: readonly Transaction[], 
 const OBJECT_ENTRIES = {
   objects: { entry: 'extensions/pdf.json', layers: ['annotations', 'fields', 'edits'] },
   layers: { entry: 'extensions/img.json', layers: ['shapes'] },
+  nodes: { entry: 'extensions/vec.json', layers: ['meta', 'nodes', 'defs'] },
 } as const;
 
 /**
@@ -60,7 +61,7 @@ async function applyObjects(base: Uint8Array, transactions: readonly Transaction
   const entry = zip.entries.get(entryName);
   const extension = (entry ? JSON.parse(await entry.text()) : {}) as Record<string, { id: string }[] | undefined>;
   const touched = new Set<string>();
-  let layers: ObjectLayers = { annotations: extension.annotations ?? [], fields: extension.fields ?? [], edits: extension.edits ?? [], shapes: extension.shapes ?? [] };
+  let layers: ObjectLayers = layersOf(Object.fromEntries(names.map((name) => [name, extension[name] ?? []])));
   for (const tx of transactions) {
     const ops = objectOps(tx).filter((op) => (names as readonly string[]).includes(op.layer));
     for (const op of ops) touched.add(op.layer);

@@ -36,6 +36,7 @@ import { DEFAULT_SHAPE, shapePath, type ShapeId } from '../vector/shapes.ts';
 import { parseColor, parseLength, colorText, urlReference } from '../vector/style.ts';
 import { t } from '../i18n/index.ts';
 import { isFormField } from './dom.ts';
+import { pathsByUid } from '../vector/nodes.ts';
 import type { VectorFrame, VectorLayer } from './vectorLayer.ts';
 
 export interface VectorEditorHost {
@@ -50,6 +51,8 @@ export interface VectorEditorHost {
   /** For a drawing inside another document: whether a press is outside the drawing, and the way back out (a press outside, or Escape with nothing selected, leaves). */
   outside?(e: PointerEvent): boolean;
   leave?(): void;
+  /** Undo or redo are not the editor's own when the drawing is edited together: this one steps back over the person's own changes, and says it did. */
+  step?(direction: 'undo' | 'redo'): boolean;
 }
 
 export type VectorTool = 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas';
@@ -454,6 +457,35 @@ export class VectorEditor {
     this.refresh();
   }
 
+  /**
+   * The drawing changed under the editor (others edited it, or an undo stepped back): this is it now. What was selected stays selected
+   * (the nodes are found again by their ids), and the undo history is the room's, not the editor's. Waits for a drag in progress.
+   */
+  sync(scene: Scene): void {
+    if (!this.scene) return;
+    if (this.gesture || this.typing || this.pen) {
+      this.syncLater = scene;
+      window.setTimeout(() => this.syncPending(), 150);
+      return;
+    }
+    const uids = this._selection.map((path) => nodeAt(this.scene!, path)?.uid).filter((uid): uid is string => !!uid);
+    const paths = pathsByUid(scene);
+    this.scene = scene;
+    this.nodes = null;
+    this._selection = uids.map((uid) => paths.get(uid)).filter((p): p is number[] => !!p);
+    this.keepGroup();
+    this.host.layer.update(scene);
+    this.refresh();
+  }
+
+  private syncLater: Scene | null = null;
+
+  private syncPending(): void {
+    const scene = this.syncLater;
+    this.syncLater = null;
+    if (scene) this.sync(scene);
+  }
+
   /** Stops editing (another document was opened). */
   close(): void {
     this.scene = null;
@@ -511,7 +543,7 @@ export class VectorEditor {
   }
 
   undo(): void {
-    if (this._readOnly) return;
+    if (this._readOnly || this.host.step?.('undo')) return;
     const before = this.history.undo.pop();
     if (!before || !this.scene) return;
     this.history.redo.push(this.scene);
@@ -519,7 +551,7 @@ export class VectorEditor {
   }
 
   redo(): void {
-    if (this._readOnly) return;
+    if (this._readOnly || this.host.step?.('redo')) return;
     const after = this.history.redo.pop();
     if (!after || !this.scene) return;
     this.history.undo.push(this.scene);

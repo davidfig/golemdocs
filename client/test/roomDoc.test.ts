@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { WordDocument } from '@golemdocs/docx';
 import { isWdoc } from '../src/formats/wdoc.ts';
-import { exclusiveRoom, isPictureFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../src/formats/roomDoc.ts';
+import { exclusiveRoom, isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../src/formats/roomDoc.ts';
 import { sourceFromFile } from '../src/formats/source.ts';
 
 const docx = async (): Promise<Uint8Array> => (await WordDocument.create()).write();
@@ -46,12 +46,18 @@ test('a picture’s changes are to the shapes drawn over it', () => {
 
 test('a PDF’s changes are to its objects; those of everything else, to its text', () => {
   assert.equal(roomKind('pdf'), 'objects');
-  for (const format of ['docx', 'md', 'svg', 'txt'] as const) assert.equal(roomKind(format), 'doc', format);
+  for (const format of ['docx', 'md', 'txt'] as const) assert.equal(roomKind(format), 'doc', format);
 });
 
-test('only drawings are edited by one person at a time', () => {
-  for (const format of ['svg', 'svgz'] as const) assert.equal(exclusiveRoom(format), true, format);
-  for (const format of ['docx', 'md', 'txt', 'html', 'csv'] as const) assert.equal(exclusiveRoom(format), false, format);
+test('nobody has to wait to edit: a drawing is shared node by node', () => {
+  for (const format of ['svg', 'svgz', 'docx', 'md', 'txt', 'html', 'csv', 'png'] as const) assert.equal(exclusiveRoom(format), false, format);
+  for (const format of ['svg', 'svgz'] as const) {
+    assert.equal(roomKind(format), 'nodes', format);
+    assert.equal(isVectorFormat(format), true, format);
+    assert.equal(isLayeredFormat(format), true, format);
+  }
+  assert.equal(isLayeredFormat('png'), true);
+  assert.equal(isLayeredFormat('docx'), false);
 });
 
 test('a plain Word file under another format’s name opens as Word, not as that format read from a ZIP', async () => {

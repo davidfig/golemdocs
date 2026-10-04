@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applyObjectOps, diffObjects, invertObjectOps, isObjectOp, objectOps, objectTransaction, ObjectReplica, type ClientMessage, type ObjectLayers, type ObjectOp, type ServerMessage } from '../src/index.ts';
+import { layersOf, applyObjectOps, diffObjects, invertObjectOps, isObjectOp, objectOps, objectTransaction, ObjectReplica, type ClientMessage, type ObjectLayers, type ObjectOp, type ServerMessage } from '../src/index.ts';
 
 const item = (id: string, text = id): { id: string; text: string } => ({ id, text });
-const layers = (annotations: { id: string; text: string }[] = [], fields: { id: string; text: string }[] = [], edits: { id: string; text: string }[] = [], shapes: { id: string; text: string }[] = []): ObjectLayers<{ id: string; text: string }> => ({ annotations, fields, edits, shapes });
+const layers = (annotations: { id: string; text: string }[] = [], fields: { id: string; text: string }[] = [], edits: { id: string; text: string }[] = [], shapes: { id: string; text: string }[] = []): ObjectLayers<{ id: string; text: string }> => layersOf({ annotations, fields, edits, shapes });
 
 test('only a change to an object of a layer, with an id that is the object’s, is an object operation', () => {
   assert.equal(isObjectOp({ type: 'put', layer: 'annotations', id: 'a', value: { id: 'a', x: 1 } }), true);

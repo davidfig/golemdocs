@@ -9,6 +9,7 @@ import type { Pointer, RoomRole } from '@golemdocs/ops';
 import type { AnnotationKind, FormField } from '@golemdocs/pdf';
 import type { EncodedPage, FaceDescriptor } from '@golemdocs/layout';
 import type { Format } from '../formats/convert.ts';
+import type { Shape } from '../formats/imageDraw.ts';
 import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
@@ -246,6 +247,13 @@ export type ToWorker =
   | { type: 'command'; doc: number; command: WireCommand }
   /** Puts a picture in the document at the caret (its bytes go into the document; its size is in EMUs). */
   | { type: 'insertImage'; doc: number; bytes: ArrayBuffer; ext: string; width: number; height: number; description?: string }
+  /** A vector drawing at the caret, or (`replace`: the part of the SVG it replaces) in place of the one it is an edited version of; sizes in EMUs. */
+  /** A picture's shapes are now these (the person drew, erased or moved something); or step back over (undo) or forward again (redo) over the person's own changes to them. */
+  | { type: 'shapes'; doc: number; shapes: Shape[] }
+  | { type: 'shapesStep'; doc: number; action: 'undo' | 'redo' }
+  /** Asks for, or lets go of, the right to edit a document that only one person at a time may (a drawing in a room). */
+  | { type: 'lease'; doc: number; action: 'request' | 'release' }
+  | { type: 'putDrawing'; doc: number; svg: string; png: ArrayBuffer; width: number; height: number; description?: string; replace?: string }
   /** The whole document as a .wdoc; `lens` records a different format to edit it as next time. */
   | { type: 'save'; doc: number; request: number; lens?: Format }
   /** The document exported as a file of a format (the open document is left as it is). */
@@ -355,6 +363,12 @@ export type FromWorker =
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }
   | ({ type: 'selection'; doc: number } & SelectionUpdate)
   | { type: 'error'; doc: number; message: string }
+  /** Something to tell the person that isn't a failure to open (a picture that could not be shared, say). */
+  | { type: 'notice'; doc: number; message: string }
+  /** A picture's shapes (opening, or changed by others or by undo), its size in pixels, and whether its shapes can be undone or redone. */
+  | { type: 'shapes'; doc: number; shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }
+  /** Who may edit a document that only one person at a time may: `mine` is whether this person may now, `holder` the name of whoever does (null: nobody), `shared` whether others are there. */
+  | { type: 'lease'; doc: number; exclusive: boolean; mine: boolean; holder: string | null; shared: boolean }
   /** Collaboration status: people in the room, and edits not yet confirmed by the server. */
   | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */

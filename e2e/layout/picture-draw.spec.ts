@@ -47,13 +47,13 @@ function inked(img: { width: number; data: Uint8Array }, x0: number, y0: number,
 }
 
 test.describe('the Draw toolbar', () => {
-  test('picking a tool shows the drawing bar, Done and Cancel close it, and only one tool is pressed at a time', async ({ app }) => {
+  test('picking a tool shows the drawing bar, Done closes it, and only one tool is pressed at a time', async ({ app }) => {
     await start(app, 'Pen');
     await expect(app.page.locator('.wm-draw').getByRole('button', { name: 'Undo' })).toBeDisabled();
     await pickTool(app, 'Line');
     await expect(app.toolbarButton(/^Pen$/)).toHaveAttribute('aria-pressed', 'false');
-    await app.page.locator('.wm-draw').getByRole('button', { name: 'Cancel' }).click();
-    await expect(app.page.locator('.wm-draw')).toBeHidden();
+    await done(app);
+    await expect(app.page.locator('.wm-draw-bar')).toBeHidden();
     await expect(app.toolbarButton(/^Line$/)).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -223,27 +223,24 @@ test.describe('editing a sketch before Done', () => {
     await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)) && isReddish(pixelAt(i, 40, 150)) && isWhite(pixelAt(i, 120, 150)));
   });
 
-  test('Cancel and Escape throw the sketch away', { tag: '@heavy' }, async ({ app }) => {
+  test('Escape puts the tools down, and what is drawn stays on the picture as its layers', { tag: '@heavy' }, async ({ app }) => {
     await start(app, 'Rectangle');
     await drag(app, [40, 40], [120, 100]);
-    await app.page.locator('.wm-draw').getByRole('button', { name: 'Cancel' }).click();
-    await pickTool(app, 'Rectangle');
-    await drag(app, [40, 40], [120, 100]);
     await app.page.keyboard.press('Escape');
-    await expect(app.page.locator('.wm-draw')).toBeHidden();
-    const img = await currentPicture(app);
-    expect(inked(img, 0, 0, W, H)).toBe(0);
+    await expect(app.page.locator('.wm-draw-bar')).toBeHidden();
+    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(1);
+    await expectPicture(app, (i) => inked(i, 0, 0, W, H) > 0);
   });
 
   test('Enter finishes the sketch like Done', async ({ app }) => {
     await start(app, 'Line');
     await drag(app, [40, 40], [200, 40]);
     await app.page.keyboard.press('Enter');
-    await expect(app.page.locator('.wm-draw')).toBeHidden();
+    await expect(app.page.locator('.wm-draw-bar')).toBeHidden();
     await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)));
   });
 
-  test('Done with nothing drawn changes nothing, and a finished sketch is one undo step', async ({ app }) => {
+  test('Done with nothing drawn changes nothing, and each shape is an undo step', async ({ app }) => {
     await start(app, 'Pen');
     await done(app);
     expect(inked(await currentPicture(app), 0, 0, W, H)).toBe(0);
@@ -253,7 +250,22 @@ test.describe('editing a sketch before Done', () => {
     await done(app);
     await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)) && isReddish(pixelAt(i, 120, 100)));
     await app.menu('Edit', 'Undo');
+    await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)) && isWhite(pixelAt(i, 120, 100)));
+    await app.menu('Edit', 'Undo');
     await expectPicture(app, (i) => inked(i, 0, 0, W, H) === 0);
+    await app.menu('Edit', 'Redo');
+    await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)));
+  });
+
+  test('a shape drawn stays on the picture after the tools are put down, and Crop puts it into the picture', async ({ app }) => {
+    await start(app, 'Rectangle');
+    await drag(app, [40, 40], [120, 100]);
+    await done(app);
+    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(1);
+    // A change to the picture itself takes the shapes into it: they are not layers any more.
+    await app.menu('Picture', 'Rotate Right');
+    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(0);
+    await expectPicture(app, (i) => inked(i, 0, 0, i.width, i.height) > 0);
   });
 
   test('the Line Thickness list makes thicker strokes', async ({ app }) => {

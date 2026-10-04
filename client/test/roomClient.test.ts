@@ -38,11 +38,14 @@ const welcome = (over: Partial<Extract<MultiplayerServerMessage, { type: 'welcom
   mode: 'solo',
   epoch: 1,
   people: [person('me')],
+  exclusive: false,
+  holder: null,
+  kind: 'doc',
   ...over,
 });
 const txs = (epoch: number, version = 0): MultiplayerServerMessage => ({ type: 'transactions', epoch, version, transactions: [] });
 
-function setup(timing = { joinMs: 100, handoffMs: 100, reconnectMs: [5, 5] }) {
+function setup(timing = { joinMs: 100, handoffMs: 100, reconnectMs: [5, 5] }, exclusive = false) {
   const sockets: FakeSocket[] = [];
   const log: string[] = [];
   const states: RoomState[] = [];
@@ -76,6 +79,7 @@ function setup(timing = { joinMs: 100, handoffMs: 100, reconnectMs: [5, 5] }) {
     name: 'Me',
     color: 7,
     host,
+    ...(exclusive && { exclusive }),
     connect: () => {
       const s = new FakeSocket();
       sockets.push(s);
@@ -120,6 +124,7 @@ test('joining says hello with who we are; alone, we open our own copy', async ()
   assert.equal(t.client.state.mode, 'solo');
   assert.equal(t.client.state.role, 'editor');
   assert.deepEqual(t.client.state.people, [{ client: 'me', name: 'me', picture: null, color: 1 }]);
+  assert.deepEqual([t.client.state.me, t.client.state.exclusive, t.client.state.holder], ['me', false, null]);
 });
 
 test('joining a room that is already shared opens its document and starts syncing from it', async () => {
@@ -378,4 +383,61 @@ test('leaving closes the socket and does not reconnect', async () => {
   socket.drop(1006);
   await tick(20);
   assert.equal(t.sockets.length, 1);
+});
+
+// --- Exclusive rooms ---------------------------------------------------------------------------------------------------
+
+test('an exclusive room is declared in the hello, and the room’s answer says whether it is', async () => {
+  const t = setup(undefined, true);
+  await t.join(welcome({ exclusive: true }));
+  assert.deepEqual(t.socket.sent[0], { type: 'hello', client: 'me', name: 'Me', color: 7, exclusive: true });
+  assert.equal(t.client.state.exclusive, true);
+  // Whatever it declared, the room has the last word.
+  const plain = setup(undefined, true);
+  await plain.join(welcome({ exclusive: false }));
+  assert.equal(plain.client.state.exclusive, false);
+});
+
+test('in a shared exclusive room only the holder of the lease may edit, and who that is comes from the room', async () => {
+  const t = setup(undefined, true);
+  const start = await t.join(welcome({ mode: 'shared', epoch: 2, exclusive: true, holder: 'ann', people: [person('me'), person('ann')] }));
+  t.client.ready(start);
+  assert.equal(t.client.canEdit, false, 'ann holds it');
+  assert.equal(t.client.state.holder, 'ann');
+  assert.equal(t.socket.of('lease').length, 0, 'it is not asked for while someone has it');
+
+  t.client.requestLease();
+  assert.equal(t.socket.of('lease').length, 1);
+  t.socket.deliver({ type: 'lease', holder: 'ann' }); // refused
+  assert.equal(t.client.canEdit, false);
+  t.socket.deliver({ type: 'lease', holder: 'me' });
+  assert.equal(t.client.canEdit, true);
+  assert.equal(t.states.at(-1)?.holder, 'me', 'the host is told');
+
+  t.client.releaseLease();
+  assert.equal(t.socket.of('release').length, 1);
+  t.socket.deliver({ type: 'lease', holder: null });
+  assert.equal(t.client.canEdit, false);
+});
+
+test('a lease nobody holds is asked for when the room becomes shared; a room that is not exclusive never asks', async () => {
+  const t = setup(undefined, true);
+  const start = await t.join(welcome({ mode: 'shared', epoch: 2, exclusive: true, holder: null, people: [person('me'), person('ann')] }));
+  t.client.ready(start);
+  assert.equal(t.socket.of('lease').length, 1);
+
+  const plain = setup();
+  const plainStart = await plain.join(welcome({ mode: 'shared', epoch: 2, people: [person('me'), person('ann')] }));
+  plain.client.ready(plainStart);
+  assert.equal(plain.socket.of('lease').length, 0);
+  plain.client.requestLease();
+  assert.equal(plain.socket.of('lease').length, 0);
+  assert.equal(plain.client.canEdit, true);
+});
+
+test('alone in an exclusive room one edits freely, with no lease', async () => {
+  const t = setup(undefined, true);
+  await t.join(welcome({ exclusive: true }));
+  assert.equal(t.client.state.mode, 'solo');
+  assert.equal(t.client.canEdit, true);
 });

@@ -1,0 +1,25 @@
+/* The bar saying who is editing a document only one person at a time may edit (see leaseBanner.ts). */
+
+.wm-lease {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 6px 10px;
+  transform: translateX(-50%);
+  border: 1px solid var(--wm-border, #b9b9b9);
+  border-radius: 6px;
+  background: var(--wm-face, #f0f0f0);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+  font: 12px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: var(--wm-text, #000);
+}
+
+.wm-lease[hidden] {
+  display: none;
+}

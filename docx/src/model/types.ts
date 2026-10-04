@@ -206,6 +206,8 @@ export interface Drawing {
   height: number;
   /** Package part of the embedded picture, if this drawing is a picture. */
   image?: string;
+  /** Package part of the editable SVG this picture is a rendering of (Word's own `asvg:svgBlip`): a vector drawing embedded in the text. */
+  svg?: string;
   name?: string;
   description?: string;
   /** The content of a text box (wps:txbx), if this drawing is one; edited here, written back into `xml`. */

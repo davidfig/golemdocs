@@ -21,6 +21,7 @@ import { inflateRawSync } from 'node:zlib';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import { App, expect } from '../fixtures';
 import { CLIENT_ORIGIN } from '../ports.ts';
+import { buildZip } from '../files/helpers';
 
 export interface Person {
   context: BrowserContext;
@@ -309,9 +310,10 @@ export async function openCloud(page: Page, id: string): Promise<App> {
  * that starts with `paragraphs`. Both sides are the same account, so they show up to each other
  * under the same name.
  */
-export async function cloudPair(browser: Browser, paragraphs: string[] = ['Hello']): Promise<CloudPair> {
+export async function cloudPair(browser: Browser, paragraphs: string[] = ['Hello'], file: { name: string; wrap?: (docx: Buffer) => Buffer } = { name: 'Shared.docx' }): Promise<CloudPair> {
   const a = await newPerson(browser, 'room');
-  const doc = await uploadDoc(a.page, 'Shared.docx', await makeDocx(browser, paragraphs));
+  const docx = await makeDocx(browser, paragraphs);
+  const doc = await uploadDoc(a.page, file.name, file.wrap ? file.wrap(docx) : docx);
   const b = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   await signInAs(b, a.email);
   const page = await b.newPage();
@@ -331,4 +333,21 @@ export async function cloudPair(browser: Browser, paragraphs: string[] = ['Hello
 /** Waits for the status line to say how many people are in the room. */
 export async function expectPeople(page: Page, count: number): Promise<void> {
   await expect.poll(() => statusLine(page), { message: `${count} people in the room` }).toContain(`${count} people here`);
+}
+
+/** A stored Markdown document (the app's .wdoc: the document, with that it is edited as Markdown and its front matter) around a .docx. */
+export function markdownWdoc(docx: Buffer, frontMatter: string): Buffer {
+  return buildZip([
+    { name: 'mimetype', data: 'application/x-golem-document', store: true },
+    { name: 'manifest.json', data: JSON.stringify({ version: 1, lens: 'md', origin: 'md', pagesCurrent: false }) },
+    { name: 'document.docx', data: docx, store: true },
+    { name: 'extensions/md.json', data: JSON.stringify({ frontMatter }) },
+  ]);
+}
+
+/** The cloud copy of a document, as the account stores it: the entries of the .wdoc (or of a plain .docx, which has others). */
+export async function cloudParts(page: Page, id: string): Promise<Record<string, Buffer>> {
+  const response = await page.request.get(`/api/documents/${id}`);
+  expect(response.ok()).toBe(true);
+  return unzip(Buffer.from(await response.body()));
 }

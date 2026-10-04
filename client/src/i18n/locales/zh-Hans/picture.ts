@@ -63,5 +63,7 @@ export const picture = {
   'picture.drop.open': '作为图片打开',
   'picture.insertFailed': '无法插入图片：{message}',
   'picture.editFailed': '无法修改图片：{message}',
-  'picture.notInRoom': '共享文档目前还不能添加图片。',
+  'picture.shareFailed': '无法与其他人共享该图片：{message}',
+  'picture.embedNotInRoom': '共享的 Markdown 文档目前还不能添加绘图。',
+  'picture.editsNotShared': '其他人正在编辑时，不能对图片本身进行更改（裁剪、调整大小、旋转、颜色）。绘图可以。',
 };

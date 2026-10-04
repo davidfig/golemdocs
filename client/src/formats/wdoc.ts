@@ -16,6 +16,7 @@ import type { OdtExtension } from '@golemdocs/odt';
 import type { HtmlExtension } from './html.ts';
 import type { Annotation, FormField, PdfEdit } from '@golemdocs/pdf';
 import type { Format } from './convert.ts';
+import type { Shape } from './imageDraw.ts';
 import { t } from '../i18n/index.ts';
 
 export const WDOC_MIME = 'application/x-golem-document';
@@ -56,6 +57,12 @@ export interface Extensions {
   ipynb?: IpynbExtension;
   /** A vector drawing: its SVG text, which the page showing it is drawn from (see vectorDoc.ts). */
   svg?: SvgExtension;
+  /** A picture's layers: the shapes drawn over it, which are not in its pixels until it is flattened (see layout/pictureLayers.ts). */
+  img?: ImgExtension;
+}
+
+export interface ImgExtension {
+  shapes: Shape[];
 }
 
 export interface SvgExtension {
@@ -123,7 +130,7 @@ export interface Wdoc {
 
 const encoder = new TextEncoder();
 const MIME_BYTES = encoder.encode(WDOC_MIME);
-const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv', 'eml', 'ipynb', 'svg'] as const satisfies readonly (keyof Extensions)[];
+const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv', 'eml', 'ipynb', 'svg', 'img'] as const satisfies readonly (keyof Extensions)[];
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {

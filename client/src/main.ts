@@ -61,7 +61,7 @@ import { IndexWorker } from './search/indexClient.ts';
 import { SearchLibrary, type SearchHit } from './search/searchLibrary.ts';
 import { searchableDocuments, type SourceDeps } from './search/sources.ts';
 import { SearchPanel } from './ui/searchPanel.ts';
-import { parseTagAddress } from '@golemdocs/docx';
+import { embedTitle, parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
@@ -105,6 +105,9 @@ import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
+import { roomable } from './formats/roomDoc.ts';
+import { LeaseBanner, type LeaseState } from './ui/leaseBanner.ts';
+import type { Collaboration } from './assistant/appTools.ts';
 import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
 import { rewriteDocumentLinks } from './formats/docLinks.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
@@ -347,7 +350,11 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   largeView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
-  if (!options.pictureEdit) vector?.editor.close();
+  if (!options.pictureEdit) {
+    embeddedDrawing = null;
+    vector?.closeEmbedded();
+    vector?.editor.close();
+  }
   // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
   current = {
@@ -404,6 +411,10 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
 
   const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
   current.roomRequested = requestedRoom !== undefined;
+  shownDrawingPart = null;
+  layerSteps = { canUndo: false, canRedo: false };
+  drawLayer.unbind();
+  leaseChanged(NO_LEASE);
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;
@@ -493,6 +504,16 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       documentReady();
       reportError(t('app.documentError', { name, message }));
     },
+    notice: (message) => reportError(message),
+    lease: (state) => leaseChanged(state),
+    shapes(state) {
+      layerSteps = { canUndo: state.canUndo, canRedo: state.canRedo };
+      drawLayer.bind(state.width, state.height, state.shapes, state.canUndo);
+      requestRender();
+      const echo = shapesEcho;
+      shapesEcho = null;
+      echo?.();
+    },
   }, requestedRoom);
   focusInput();
 }
@@ -552,24 +573,30 @@ function describeRoom(state: RoomState): string {
   return parts.join(' · ');
 }
 
+/** Others may be editing the open document with this person now (a room). */
+const sharedLive = (): boolean => !!new URLSearchParams(location.search).get('room') || (current.room !== null && current.room.mode !== 'solo');
+
+/** Whether the open document can be edited together with others: any document except a picture. */
+const sharable = (): boolean => isFormat(current.kind) && roomable(current.kind);
+
 /**
  * Puts the document, as it is now, in a room (unless it is in one), and gives the link that lets
  * others join it. Throws, with a message to show, when it can't.
  */
 async function enterRoom(): Promise<string> {
   const params = new URLSearchParams(location.search);
-  if (current.kind !== 'docx') throw new Error(t('app.collabNeedsWord'));
+  if (!sharable()) throw new Error(t('app.collabNotHere'));
   if (!params.get('room')) {
     let bytes: Uint8Array;
     try {
-      bytes = await worker.convert('docx');
+      // The whole document, with what it is edited as: the room's first copy, which the others join.
+      bytes = await worker.save();
     } catch (e) {
       throw new Error(t('app.collabFailed', { message: (e as Error).message }));
     }
-    // Others join with just the room: its first member's copy is the document.
-    const name = current.name.replace(/\.(docx|docm|dotx|txt)$/i, '') + '.docx';
+    const name = fileName();
     setUrl(new URLSearchParams({ room: Math.random().toString(36).slice(2, 8), name }));
-    open({ kind: 'docx', name, bytes: bytes.slice().buffer });
+    open({ kind: 'wdoc', name, bytes: bytes.slice().buffer });
   }
   return location.href;
 }
@@ -606,6 +633,17 @@ function applyLayout(update: LayoutUpdate): void {
   }
   pagesPanel.setPages(pages);
   arrange();
+  showRoomDrawing();
+  if (newDrawingSince) {
+    for (const page of pages) {
+      const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
+      if (added?.svg) {
+        newDrawingSince = null;
+        void editEmbeddedDrawing(page.id, added.svg);
+        break;
+      }
+    }
+  }
 }
 
 /** Positions pages; places the camera the first time, and keeps a grid fitted while it grows. */
@@ -823,8 +861,8 @@ async function uploadShared(): Promise<void> {
   showSync();
   try {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
-    // being opened, and always ends in .docx).
-    putDocInCatalogue(await saveDocument(shared.id, await worker.convert('docx')));
+    // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
+    putDocInCatalogue(await saveDocument(shared.id, await worker.save()));
     library.refreshSoon();
   } catch (e) {
     // Refused because the room started saving: the edits are in the room's hands now.
@@ -1790,7 +1828,7 @@ setLinkKeeper(keepLinks);
 
 // A Markdown document that embeds a picture or a note (`![[map.png]]`) has the layout worker ask for it by title: this browser's copy or the account's.
 worker.embeds = async (title) => {
-  const found = findByTitle(title, library.entries.filter((e) => e.key !== current.localId && !(current.shared && e.cloud?.id === current.shared.id)), linkPlaces());
+    const found = findByTitle(title, library.entries.filter((e) => e.key !== current.localId && !(current.shared && e.cloud?.id === current.shared.id)), linkPlaces());
   if (!found) return null;
   try {
     const bytes = (found.local && !opensFromCloud(found) ? (await getSaved(found.local.id))?.bytes : null) ?? (found.cloud ? await downloadDocument(found.cloud.id) : null);
@@ -1834,7 +1872,7 @@ async function share(): Promise<void> {
   await accountKnown;
   if (current.localId && !library.local.some((d) => d.id === current.localId)) await library.reloadLocal();
   const inRoom = new URLSearchParams(location.search).has('room');
-  const room = current.kind !== 'docx' ? { unavailable: t('app.collabNeedsWord') } : inRoom ? { link: location.href } : { create: enterRoom };
+  const room = !sharable() ? { unavailable: t('app.collabNotHere') } : inRoom ? { link: location.href } : { create: enterRoom };
   const info = library.local.find((d) => d.id === current.localId);
   const people = !account
     ? { unavailable: signedIn ? t('app.subscribeToShare') : t('app.signInToShare') }
@@ -1948,7 +1986,8 @@ async function convertTo(to: DocumentKind): Promise<void> {
   if (PICTURE_KINDS.includes(to) && !PICTURE_KINDS.includes(from) && !VECTOR_KINDS.includes(from)) return convertToPicture(to as 'png' | 'jpeg' | 'webp');
   if (VECTOR_KINDS.includes(to) && !VECTOR_KINDS.includes(from)) return convertToDrawing(to as 'svg' | 'svgz');
   if (!isFormat(to) || !isFormat(from)) throw new Error(t('app.unsupportedFormat', { label: FORMATS[isFormat(to) ? from : to].label }));
-  if (new URLSearchParams(location.search).get('room')) {
+  // What a room's people edit the document as is the room's, so it stays while others are in it.
+  if (new URLSearchParams(location.search).get('room') || (current.room && current.room.mode !== 'solo')) {
     reportError(t('app.leaveRoomToSwitch'));
     return;
   }
@@ -2034,6 +2073,10 @@ async function convertToDrawing(to: 'svg' | 'svgz'): Promise<void> {
 
 const PICTURE_HISTORY = 12;
 let pictureHistory: { undo: Uint8Array[]; redo: Uint8Array[] } = { undo: [], redo: [] };
+/** Whether the picture's layers (the shapes drawn over it) have changes to step back over or forward again. */
+let layerSteps = { canUndo: false, canRedo: false };
+/** Called when the worker next sends the picture's shapes (the answer to a change of them). */
+let shapesEcho: (() => void) | null = null;
 const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
 /** A vector drawing is open: a page showing it, looked at as a whole like a picture. */
 const isDrawing = (): boolean => VECTOR_KINDS.includes(current.kind);
@@ -2048,6 +2091,8 @@ function showPicture(bytes: Uint8Array): void {
 }
 
 async function changePicture(edit: ImageEdit): Promise<void> {
+  // Each of these makes a new picture, which a room has no way to hand round: only the layers are shared.
+  if (sharedLive()) return reportError(t('picture.editsNotShared'));
   const doc = current;
   try {
     const before = await pictureBytes();
@@ -2063,7 +2108,9 @@ async function changePicture(edit: ImageEdit): Promise<void> {
 }
 
 async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
-  if (isDrawing()) return direction === 'undo' ? vector?.editor.undo() : vector?.editor.redo();
+  if (isDrawing() || embeddedDrawing) return direction === 'undo' ? vector?.editor.undo() : vector?.editor.redo();
+  // What was drawn over the picture is stepped back over first; then the picture's own changes.
+  if (isPicture() && (direction === 'undo' ? layerSteps.canUndo : layerSteps.canRedo)) return worker.stepShapes(direction);
   const from = direction === 'undo' ? pictureHistory.undo : pictureHistory.redo;
   const to = direction === 'undo' ? pictureHistory.redo : pictureHistory.undo;
   const target = from.pop();
@@ -2085,30 +2132,17 @@ async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
 
 /** What the Draw tools draw with; the colour is CSS, the size a step from thin (0) to extra thick (3). */
 const drawStyle = { color: '#e5322d', size: 1, fill: false };
-/** The last drawing being put into the picture, for what comes next to wait on. */
-let drawing: Promise<void> = Promise.resolve();
 
 async function pictureAction(op: ImageOp): Promise<void> {
   if (!isPicture()) return;
   if (isDrawTool(op)) {
     cropLayer.cancel();
     if (drawLayer.active) return drawLayer.setTool(op);
-    const doc = current;
-    try {
-      const size = sniffImage(await pictureBytes());
-      if (!size || doc !== current) return;
-      drawLayer.start(size.width, size.height, op, (shapes) => {
-        if (shapes) drawing = changePicture({ op: 'draw', shapes });
-        focusInput();
-      });
-    } catch (e) {
-      reportError(t('picture.editFailed', { message: (e as Error).message }));
-    }
+    drawLayer.start(op);
     return;
   }
-  // Any other tool takes the picture as drawn so far.
+  // Any other tool takes the picture as drawn so far: the shapes are put into it (and are no longer layers).
   drawLayer.apply();
-  await drawing;
   const page = pages[0];
   if (op === 'rotateLeft') return changePicture({ op: 'rotate', turns: 3 });
   if (op === 'rotateRight') return changePicture({ op: 'rotate', turns: 1 });
@@ -2261,11 +2295,18 @@ function linkDroppedDocument(key: string, x: number, y: number): void {
 
 /** Puts a picture file in the document, at `at` (a point on the screen) or else the caret. */
 async function insertPicture(file: File, at?: { x: number; y: number }): Promise<void> {
-  if (new URLSearchParams(location.search).get('room')) return reportError(t('picture.notInRoom'));
   try {
     let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
     let name = file.name;
-    // SVG is drawn to a PNG (the document holds pictures, not drawings); the other types go in as they are.
+    // An SVG goes into a Word document as a drawing that can be edited there; in other documents it is drawn to a PNG (they hold pictures), and the other types go in as they are.
+    if (current.kind === 'docx' && !sniffImage(bytes) && /\.svg$/i.test(name)) {
+      const svg = new TextDecoder().decode(bytes).replace(/^\uFEFF/, '');
+      try {
+        return await putDrawing(svg, name.replace(/\.[^.]*$/, ''), at);
+      } catch {
+        // Not a drawing the editor reads: it goes in as a picture.
+      }
+    }
     if (!sniffImage(bytes)) ({ bytes, name } = await toPng(name, bytes));
     const image = sniffImage(bytes);
     if (!image) throw new Error(t('app.notImage'));
@@ -2277,6 +2318,70 @@ async function insertPicture(file: File, at?: { x: number; y: number }): Promise
     // At 96 dpi, in EMUs; the document trims it to the page.
     worker.insertImage(bytes, image.type, Math.max(image.width, 1) * 9525, Math.max(image.height, 1) * 9525, name.replace(/\.[^.]*$/, ''));
     focusInput();
+  } catch (e) {
+    reportError(t('picture.insertFailed', { message: (e as Error).message }));
+  }
+}
+
+/** Puts a vector drawing (SVG text) in the text at the caret or `at`; with `edit`, starts editing it once it is there. */
+async function putDrawing(svg: string, description: string, at?: { x: number; y: number }, edit = false): Promise<void> {
+  const session = await loadVector();
+  const picture = await session.picture(svg);
+  if (at) {
+    const rect = canvas.getBoundingClientRect();
+    const hit = pageAt(at.x - rect.left, at.y - rect.top);
+    if (hit) send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
+  }
+  if (edit) {
+    const known = new Set(pages.flatMap((p) => p.images.flatMap((i) => (i.svg ? [i.svg] : []))));
+    newDrawingSince = known;
+    // If it never arrives (not allowed here), another drawing appearing later is not this one.
+    setTimeout(() => newDrawingSince === known && (newDrawingSince = null), 5000);
+  }
+  // At 96 dpi, in EMUs; the document trims it to the page.
+  worker.putDrawing({ svg, png: picture.png, width: Math.max(picture.width, 1) * 9525, height: Math.max(picture.height, 1) * 9525, description });
+  documentEdited();
+  focusInput();
+}
+
+/** The drawings the text had before a new one was put in: the one that isn't among them, once the pages arrive, is edited. */
+let newDrawingSince: Set<string> | null = null;
+
+/** Insert ▸ Drawing: a blank drawing at the caret, open for drawing. */
+function insertDrawing(size: { width?: number; height?: number } = {}): void {
+  if (current.kind === 'md') return void insertStoredDrawing(size);
+  void loadVector()
+    .then((session) => putDrawing(session.blank(size.width ?? 480, size.height ?? 320), t('chrome.insert.drawing').replace('&', ''), undefined, true))
+    .catch((e: Error) => reportError(t('picture.insertFailed', { message: e.message })));
+}
+
+/** Insert ▸ Drawing in a Markdown document: a new drawing of its own is stored and embedded (`![[Drawing.svg]]`), and opened for drawing once it shows. */
+async function insertStoredDrawing(size: { width?: number; height?: number } = {}): Promise<void> {
+  // The note is opened again to show the drawing, which would take it out of the room.
+  if (sharedLive()) return reportError(t('picture.embedNotInRoom'));
+  try {
+    const session = await loadVector();
+    const { newStoredDrawing } = await import('./formats/vectorDoc.ts');
+    const taken = new Set(library.entries.map((e) => e.name.toLowerCase()));
+    let name = 'Drawing.svg';
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `Drawing ${n}.svg`;
+    const info = await saveSaved({ name, bytes: await newStoredDrawing(session.blank(size.width ?? 480, size.height ?? 320)), owner: account?.id });
+    library.putLocal(info);
+    if (account) scheduleUpload(info.id);
+    // In a paragraph of its own at the end, with the caret after it (a paragraph the caret is in shows its Markdown, not the picture).
+    const { embedPlaceholder } = await import('./formats/embedMarks.ts');
+    const link = embedPlaceholder(name);
+    if (!link) throw new Error(name);
+    send({ kind: 'move', to: 'documentEnd' });
+    send({ kind: 'insertParagraph' });
+    send({ kind: 'insertContent', content: [link] });
+    send({ kind: 'insertParagraph' });
+    await saveNow();
+    if (!current.localId) return;
+    const known = new Set<string>();
+    newDrawingSince = known;
+    setTimeout(() => newDrawingSince === known && (newDrawingSince = null), 15000);
+    openSource(`local:${current.localId}`, false, 'replace');
   } catch (e) {
     reportError(t('picture.insertFailed', { message: (e as Error).message }));
   }
@@ -2405,6 +2510,8 @@ let commandsSent = 0;
 let commandsAtOpen = 0;
 
 function send(command: WireCommand): void {
+  // A drawing in the document is being edited: the document waits.
+  if (embeddedDrawing) return;
   commandsSent++;
   if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
@@ -2561,7 +2668,7 @@ function render(): void {
     documentName: current.name,
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
-    kind: largeView.active ? 'largetext' : current.kind,
+    kind: largeView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
     hasSelection: selection.text.length > 0,
     zoom: camera.zoom,
     pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
@@ -2569,8 +2676,8 @@ function render(): void {
     footer: footerOn,
     rulerVisible: rulerOn,
     format: selectionFormat,
-    canUndo: isDrawing() ? (vector?.editor.canUndo ?? false) : isPicture() ? pictureHistory.undo.length > 0 : canUndo,
-    canRedo: isDrawing() ? (vector?.editor.canRedo ?? false) : isPicture() ? pictureHistory.redo.length > 0 : canRedo,
+    canUndo: isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
     draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
@@ -2703,6 +2810,12 @@ function press(e: Press): void {
   // The link is read where the pointer is, before the click moves the caret: with Markdown at the caret on, the caret's paragraph turns into its source and the link is no longer there to find.
   if (e.metaKey || e.ctrlKey) void worker.linkAt(hit.page.id, hit.x, hit.y).then((found) => found.url && followLink(found.url));
   const clicks = clickCount(e);
+  // A double click on a vector drawing in the text edits the drawing.
+  if (clicks === 2 && !embeddedDrawing && FORMATS[current.kind].editable && !isDrawing()) {
+    const image = hit.page.images.find((i) => i.svg && hit.x >= i.x && hit.x <= i.x + i.width && hit.y >= i.y && hit.y <= i.y + i.height);
+    // A drawing embedded from another document is saved into that document, and this one reopened: that takes it out of a room.
+    if (image?.svg && !(image.embed !== undefined && sharedLive())) return void editEmbeddedDrawing(hit.page.id, image.svg, image.embed);
+  }
   const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   if (clicks === 2) editMathUntil = performance.now() + 1000;
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
@@ -3299,9 +3412,10 @@ const chromeHost = createChromeHost({
   vectorAction: (op) => (op === 'layers' ? toggleLayers() : vector?.action(op)),
   vectorStyle: (change) => vector?.style(change),
   vectorGradient: (change) => vector?.gradient(change),
-  isDrawing,
+  isDrawing: () => isDrawing() || !!embeddedDrawing,
   pickPicture,
-  isPicture: () => isPicture() || isDrawing(),
+  insertDrawing: () => insertDrawing(),
+  isPicture: () => isPicture() || isDrawing() || !!embeddedDrawing,
   stepPicture,
   signIn,
   signOut,
@@ -3570,6 +3684,71 @@ const searchPanel = new SearchPanel({
 const listFoldersHere = async (): Promise<Folder[]> => (account ? await listFolders() : await listLocalFolders());
 
 // The assistant's tools that act on the app rather than the document's text (see assistant/appTools.ts).
+// --- What the assistant does with drawings in the text and with editing together --------------------------------------------
+
+/** The drawings in the text, in reading order: where each is, and what is needed to open it. */
+function textDrawingRefs(): { number: number; pageId: number; svg: string; embed?: string; width: number; height: number }[] {
+  const out: { number: number; pageId: number; svg: string; embed?: string; width: number; height: number }[] = [];
+  pages.forEach((page, index) => {
+    for (const image of page.images) {
+      if (!image.svg) continue;
+      // Points to pixels at 96 dpi.
+      out.push({ number: index + 1, pageId: page.id, svg: image.svg, ...(image.embed !== undefined && { embed: image.embed }), width: Math.round((image.width * 4) / 3), height: Math.round((image.height * 4) / 3) });
+    }
+  });
+  return out;
+}
+
+async function openTextDrawing(index: number): Promise<string | null> {
+  if (isDrawing()) return 'the open document is a drawing already.';
+  if (embeddedDrawing) return 'a drawing in the text is being edited: close it first (text_drawings close).';
+  const ref = textDrawingRefs()[index];
+  if (!ref) return `there is no drawing ${index}: see text_drawings list.`;
+  if (!FORMATS[current.kind].editable) return 'this document cannot be changed.';
+  // A drawing embedded from another document is saved into that one, and this one is opened again: that takes it out of a room.
+  if (ref.embed !== undefined && sharedLive()) return 'a drawing embedded from another document cannot be edited while others are editing this one.';
+  await editEmbeddedDrawing(ref.pageId, ref.svg, ref.embed);
+  return embeddedDrawing ? null : 'the drawing could not be opened.';
+}
+
+async function closeTextDrawing(): Promise<string | null> {
+  if (!embeddedDrawing) return 'no drawing in the text is open.';
+  await leaveEmbeddedDrawing();
+  return embeddedDrawing ? 'the drawing could not be put back.' : null;
+}
+
+async function insertTextDrawing(size: { width?: number; height?: number }): Promise<string | null> {
+  if (isDrawing() || isPicture()) return 'the open document is not text.';
+  if (embeddedDrawing) return 'a drawing in the text is being edited: close it first (text_drawings close).';
+  if (!FORMATS[current.kind].editable || !chromeHost.supports({ kind: 'insertDrawing' })) return 'a drawing cannot be put in this kind of document (Word and Markdown can hold them).';
+  if (current.kind === 'md' && sharedLive()) return 'a drawing cannot be added to a Markdown note while others are editing it.';
+  insertDrawing(size);
+  // It opens for drawing once it is in the text (a Markdown note is stored, embedded and opened again first).
+  for (let waited = 0; waited < 20_000; waited += 100) {
+    if (embeddedDrawing) return null;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return 'the drawing was not put in the text.';
+}
+
+/** Who is editing the open document with this person. */
+function collaboration(): Collaboration {
+  const net = current.room;
+  const people = net ? net.people.map((p) => (p.me ? `${p.name} (you)` : p.name)) : [];
+  const count = net ? net.people.length : devRoom ? devRoom.people : 1;
+  return { shared: sharedLive() && count > 1, people, count, exclusive: lease.exclusive, mine: lease.mine, holder: lease.holder };
+}
+
+/** Asks for, or lets go of, the lease of a drawing in a room, and waits for the room's answer. */
+async function leaseAction(action: 'request' | 'release'): Promise<Collaboration> {
+  worker.lease(action);
+  for (let waited = 0; waited < 3000; waited += 100) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (action === 'request' ? lease.mine : !lease.mine) break;
+  }
+  return collaboration();
+}
+
 const assistantTools = appTools({
   current: () => current,
   documentName: () => current.name,
@@ -3586,7 +3765,7 @@ const assistantTools = appTools({
   renamable,
   renameDocument,
   convertTo,
-  inRoom: () => new URLSearchParams(location.search).get('room') !== null,
+  inRoom: () => sharedLive(),
   openEntry: async (entry) => {
     const ready = nextDocumentReady();
     newDocumentFolder = null;
@@ -3604,8 +3783,25 @@ const assistantTools = appTools({
   isPicture,
   pictureBytes,
   changePicture,
+  textDrawings: () => textDrawingRefs().map((d) => ({ page: d.number, width: d.width, height: d.height, ...(d.embed !== undefined && { embed: d.embed }) })),
+  openTextDrawing,
+  closeTextDrawing,
+  insertTextDrawing,
+  collaboration,
+  lease: leaseAction,
+  pictureShapes: () => drawLayer.shapes,
+  setPictureShapes: (shapes) =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 3000);
+      shapesEcho = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      worker.setShapes(shapes);
+    }),
+  sharedLive,
   drawing: async () => {
-    if (!isDrawing()) return null;
+    if (!isDrawing() && !embeddedDrawing) return null;
     const session = await loadVector();
     return session.editor;
   },
@@ -3633,9 +3829,10 @@ async function loadVector(): Promise<VectorSession> {
       canvas,
       viewport: document.getElementById('viewport')!,
       workspace: document.getElementById('workspace')!,
-      page: () => pages[0],
+      page: () => (embeddedDrawing ? embeddedRect() : pages[0]),
       changed: () => requestRender(),
       // The editor changed the drawing: its file is opened in place of the open one (the same saved document, the same name), then saved soon.
+      committed: (svg) => commitToRoom(svg),
       reopen(bytes) {
         const doc = current;
         open({ kind: 'svg', name: doc.name, bytes: bytes.slice().buffer }, { grid, localId: doc.localId ?? undefined, pictureEdit: true });
@@ -3650,6 +3847,149 @@ async function loadVector(): Promise<VectorSession> {
   return vectorLoading;
 }
 
+/**
+ * A vector drawing inside the document, being edited in place: the drawing is lit and everything
+ * else dimmed, and the whole vector toolbar is there. Edits are kept in `latest`; leaving puts the
+ * result in the document as one change (one undo).
+ */
+let embeddedDrawing: { svg: string; page: number; latest: string | null; width: number; embed?: string } | null = null;
+
+/** Where the embedded drawing is, in points of the view. */
+function embeddedRect(): { x: number; y: number; width: number; height: number } | undefined {
+  const e = embeddedDrawing;
+  if (!e) return undefined;
+  let page = pagesById.get(e.page);
+  let image = page?.images.find((i) => i.svg === e.svg);
+  if (!image) {
+    // The pages were laid out again: it is on another one.
+    page = pages.find((p) => p.images.some((i) => i.svg === e.svg));
+    image = page?.images.find((i) => i.svg === e.svg);
+    if (page) e.page = page.id;
+  }
+  return page && image ? { x: page.x + image.x, y: page.y + image.y, width: image.width, height: image.height } : undefined;
+}
+
+async function editEmbeddedDrawing(pageId: number, svg: string, embed?: string): Promise<void> {
+  const doc = current;
+  try {
+    const session = await loadVector();
+    const bytes = await worker.media(svg);
+    if (doc !== current || embeddedDrawing) return;
+    const width = pagesById.get(pageId)?.images.find((i) => i.svg === svg)?.width ?? 0;
+    embeddedDrawing = { svg, page: pageId, latest: null, width, ...(embed !== undefined && { embed }) };
+    await session.openEmbedded(bytes, {
+      changed: (text) => {
+        if (embeddedDrawing) embeddedDrawing.latest = text;
+        requestRender();
+      },
+      leave: () => void leaveEmbeddedDrawing(),
+    });
+    focusInput();
+  } catch {
+    embeddedDrawing = null;
+    vector?.closeEmbedded();
+  }
+  requestRender();
+}
+
+/** Puts a new version of the stored drawing an embed (`![[body]]`) names in its document, in the library. Whether it did. */
+async function saveEmbeddedDrawing(body: string, svg: string): Promise<boolean> {
+  const entry = findByTitle(embedTitle(body), library.entries.filter((e) => e.key !== current.localId && !(current.shared && e.cloud?.id === current.shared.id)), linkPlaces());
+  if (!entry || entry.state === 'conflict') return false;
+  try {
+    const found = entry.cloud && opensFromCloud(entry) ? await openFromCloud(entry.cloud, account?.id) : entry.local ? await getSaved(entry.local.id) : null;
+    if (!found) return false;
+    const bytes = await (await import('./formats/vectorDoc.ts')).rewriteStoredDrawing(new Uint8Array(found.bytes), svg);
+    if (!bytes) return false;
+    const info = await saveSaved({ id: found.info.id, name: found.info.name, bytes, owner: account?.id });
+    library.putLocal(info);
+    if (account) scheduleUpload(info.id);
+    return true;
+  } catch (e) {
+    reportError((e as Error).message);
+    return false;
+  }
+}
+
+/** Done with the embedded drawing: if it changed, the document gets the new version. */
+async function leaveEmbeddedDrawing(): Promise<void> {
+  const e = embeddedDrawing;
+  const session = vector;
+  if (!e || !session) return;
+  try {
+    if (e.latest !== null) {
+      const picture = await session.picture(e.latest);
+      // Sizes in EMUs: the drawing keeps its width in the text and its shape follows the drawing's.
+      const width = Math.round((e.width || picture.width) * 12700);
+      const height = Math.round((width * picture.height) / Math.max(picture.width, 1));
+      // A drawing embedded from another document (`![[...]]`) is that document's: the change goes into it, and this one is opened again to show it.
+      if (e.embed !== undefined && (await saveEmbeddedDrawing(e.embed, e.latest))) {
+        if (current.localId) {
+          await saveNow();
+          openSource(`local:${current.localId}`, false, 'replace');
+          return;
+        }
+        worker.putDrawing({ svg: e.latest, png: picture.png, width, height }, e.svg);
+        return;
+      }
+      worker.putDrawing({ svg: e.latest, png: picture.png, width, height }, e.svg);
+      documentEdited();
+    }
+  } catch (error) {
+    reportError((error as Error).message);
+  } finally {
+    embeddedDrawing = null;
+    session.closeEmbedded();
+    focusInput();
+    requestRender();
+  }
+}
+
+// --- A drawing edited together --------------------------------------------------------------------------------------------
+// Only one person at a time may edit a drawing in a room (see the lease in @golemdocs/ops multiplayer.ts): the others see each
+// change as it is made, and can ask to take over.
+
+const leaseBanner = new LeaseBanner(document.getElementById('viewport')!, () => worker.lease('request'));
+const NO_LEASE: LeaseState = { exclusive: false, mine: false, holder: null, shared: false };
+let lease: LeaseState = NO_LEASE;
+/** The drawing can be looked at, not changed: someone else may edit it. */
+const lockedOut = (): boolean => lease.exclusive && lease.shared && !lease.mine;
+
+function leaseChanged(state: LeaseState): void {
+  lease = state;
+  leaseBanner.update(state);
+  vector?.setReadOnly(lockedOut());
+  requestRender();
+}
+
+/** Each change the one who may edit makes goes into the room, one after another so they arrive in the order they were made. */
+let commits: Promise<unknown> = Promise.resolve();
+function commitToRoom(svg: string): boolean {
+  if (!(lease.exclusive && lease.shared && lease.mine) || !vector) return false;
+  const session = vector;
+  commits = commits
+    .then(() => session.picture(svg))
+    .then((picture) => {
+      // Its size stays what it was (0): the page is that size.
+      worker.putDrawing({ svg, png: picture.png, width: 0, height: 0 }, '*');
+      documentEdited();
+    })
+    .catch((e: Error) => reportError(e.message));
+  return true;
+}
+
+/** The part of the SVG the page last showed, to see that someone else changed the drawing. */
+let shownDrawingPart: string | null = null;
+function showRoomDrawing(): void {
+  if (!isDrawing() || !vector?.editor.active) return;
+  const part = pages[0]?.images.find((i) => i.svg)?.svg ?? null;
+  if (part === null || part === shownDrawingPart) return;
+  const first = shownDrawingPart === null;
+  shownDrawingPart = part;
+  // Changed by the one who may edit: this one's editor shows it. (What this one did itself is in the editor already.)
+  if (!first && lease.exclusive && lease.shared && !lease.mine) void worker.media(part).then((bytes) => vector?.reload(new Uint8Array(bytes)));
+}
+
 /** Starts editing the open drawing: reads its SVG from the document. A drawing that comes back after a change is the editor's already. */
 async function showDrawing(): Promise<void> {
   const doc = current;
@@ -3657,6 +3997,9 @@ async function showDrawing(): Promise<void> {
     const session = await loadVector();
     if (session.editor.active || doc !== current) return;
     await session.open(await worker.convert(doc.kind as Format));
+    session.setReadOnly(lockedOut());
+    // What the page shows of the drawing now: a different one later is somebody else's change.
+    shownDrawingPart = pages[0]?.images.find((i) => i.svg)?.svg ?? null;
   } catch {
     // The page's own picture of the drawing stays.
   }
@@ -3684,7 +4027,15 @@ function toggleLayers(): void {
 }
 
 // Drawing on a picture (see ui/drawLayer.ts).
-const drawLayer = new DrawLayer(document.getElementById('viewport')!, { camera, canvas, page: () => pages[0], style: () => drawStyle, changed: () => requestRender() });
+const drawLayer = new DrawLayer(document.getElementById('viewport')!, {
+  camera,
+  canvas,
+  page: () => pages[0],
+  style: () => drawStyle,
+  changed: () => requestRender(),
+  shapesChanged: (shapes) => worker.setShapes(shapes),
+  undo: () => worker.stepShapes('undo'),
+});
 
 // The thumbnails of the pages beside the document; for a PDF's pages, drag them into order or delete them (see ui/pagesPanel.ts).
 const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
@@ -3956,11 +4307,12 @@ window.addEventListener('drop', (e) => {
 });
 
 // Debug/automation hooks.
-Object.assign(window, { camera, requestRender, render, openSource, send, pageAt });
+Object.assign(window, { camera, requestRender, render, openSource, send, pageAt, assistantTools });
 Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },
   status: { get: () => status },
+  pictureShapes: { get: () => drawLayer.shapes },
   selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others }) },
 });
 

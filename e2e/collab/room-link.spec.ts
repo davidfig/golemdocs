@@ -3,6 +3,7 @@
 // browser profile: each test's `roomPair` is two pages of the same context.
 
 import { test, expect, App, MOD } from '../fixtures';
+import { docx, makePng } from '../layout/helpers';
 import { addComment, commentTexts, commentsTitle, expectText, getRoomLink, others, roomPair, selectForward } from './helpers';
 
 test.describe('Get Link', () => {
@@ -57,15 +58,38 @@ test.describe('Get Link', () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test('only Word documents can be shared live', async ({ app, page }) => {
+  test('a Markdown document can be shared live, and the other person edits it as Markdown', async ({ browser }) => {
+    const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+    const a = new App(await context.newPage());
+    await a.blank();
+    await a.type('plain');
+    await a.menu('File', 'Convert To', 'Markdown');
+    await expect(a.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    const url = await getRoomLink(a);
+    await a.press('ControlOrMeta+End');
+    const b = new App(await context.newPage());
+    await b.page.goto(url);
+    await b.ready();
+    // The format travels with the room: the one who joined edits it as Markdown too.
+    await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await expectText(b, 'plain');
+    await b.press('ControlOrMeta+End');
+    await b.type(' text');
+    await expectText(a, 'plain text');
+    // It is saved as Markdown, not as Word.
+    const file = await a.download(() => a.menu('File', 'Download'));
+    expect(file.name).toMatch(/\.md$/);
+    expect(file.text.trim()).toBe('plain text');
+    await context.close();
+  });
+
+  test('a picture can be shared live too', async ({ app, page }) => {
     await app.blank();
-    await app.type('plain');
-    await app.menu('File', 'Convert To', 'Markdown');
-    await expect(page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await app.menu('File', 'Convert To', 'PNG Image');
     await app.menu('File', 'Share');
     const dialog = page.locator('dialog.wm-share');
-    await expect(dialog.getByText('Switch the format to Word Document to collaborate')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Get Link' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Get Link' })).toBeVisible();
+    await expect(dialog.getByText('Pictures can’t be edited together yet')).toHaveCount(0);
   });
 
   test('a guest can get a link too (no account needed)', async ({ browser }) => {
@@ -92,6 +116,50 @@ test.describe('two people in one room', () => {
     await c.ready();
     await expectText(c, 'first line\nsecond line');
     await expectText(b, 'first line\nsecond line');
+    await context.close();
+  });
+
+  test('a picture added in one page reaches the other, bytes and all', async ({ browser }) => {
+    const { a, b, context } = await roomPair(browser, 'Hello');
+    await expectText(b, 'Hello');
+    const picture = makePng(50, 30);
+    const [chooser] = await Promise.all([a.page.waitForEvent('filechooser'), a.menu('Insert', 'Picture…')]);
+    await chooser.setFiles({ name: 'p.png', mimeType: 'image/png', buffer: picture });
+    const images = (app: App) => app.page.evaluate(() => (window as unknown as { pages: { images: unknown[] }[] }).pages.reduce((n, pg) => n + pg.images.length, 0));
+    await expect.poll(() => images(a)).toBe(1);
+    await expect.poll(() => images(b)).toBe(1);
+    // The other page's document holds the bytes under the name they hash to.
+    const { files } = await docx(b);
+    const media = [...files.keys()].filter((k) => /^word\/media\/h-[0-9a-f]{64}\.png$/.test(k));
+    expect(media).toHaveLength(1);
+    expect(files.get(media[0]!)!.equals(picture)).toBe(true);
+    await context.close();
+  });
+
+  test('a drawing inserted in one page, and drawn in, is the same drawing in the other', async ({ browser }) => {
+    const { a, b, context } = await roomPair(browser, 'Hello');
+    await expectText(b, 'Hello');
+    await a.menu('Insert', 'Drawing');
+    await expect(a.page.getByRole('tree', { name: 'Layers' })).toBeVisible({ timeout: 30_000 });
+    const drawingOf = (app: App) =>
+      app.page.evaluate(() => (window as unknown as { pages: { images: { svg?: string }[] }[] }).pages.flatMap((p) => p.images).find((i) => i.svg)?.svg ?? null);
+    await expect.poll(() => drawingOf(b), { timeout: 30_000 }).toMatch(/^word\/media\/h-[0-9a-f]{64}\.svg$/);
+    const before = await drawingOf(b);
+    // Draw a rectangle and leave: the drawing is replaced everywhere, by the one with the rectangle in it.
+    await a.toolbarButton('Rectangle').click();
+    const box = await a.page.locator('.wm-vector-canvas').boundingBox();
+    const x = box!.x + box!.width / 2;
+    const y = box!.y + box!.height / 2;
+    await a.page.mouse.move(x - 60, y - 40);
+    await a.page.mouse.down();
+    await a.page.mouse.move(x, y);
+    await a.page.mouse.move(x + 60, y + 40);
+    await a.page.mouse.up();
+    await a.press('Escape');
+    await a.press('Escape');
+    await expect(a.page.getByRole('tree', { name: 'Layers' })).toBeHidden();
+    await expect.poll(() => drawingOf(b), { timeout: 30_000 }).not.toBe(before);
+    expect(await drawingOf(a)).toBe(await drawingOf(b));
     await context.close();
   });
 

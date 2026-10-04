@@ -98,3 +98,47 @@ test('the room’s file write updates the bytes and the catalogue row, and never
   assert.equal(await files.write(new Uint8Array([8])), false);
   assert.equal(await files.read(), null);
 });
+
+// --- Pictures added while a document is edited together ---------------------------------------------------------------------
+
+const hashOf = async (bytes: Uint8Array): Promise<string> => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>))].map((b) => b.toString(16).padStart(2, '0')).join('');
+const putMedia = (as: string, id: string, hash: string, bytes: Uint8Array) => w.call(as, 'PUT', `/api/rooms/${id}/media/${hash}`, { body: bytes, type: 'application/octet-stream' });
+
+test('an editor’s picture is kept by its hash and read back by anyone who can open the document', async () => {
+  const id = await create();
+  await share(id, ALICE, 'editor');
+  await share(id, BOB, 'viewer');
+  const picture = new Uint8Array([9, 8, 7, 6]);
+  const hash = await hashOf(picture);
+  assert.equal((await putMedia(ALICE, id, hash, picture)).status, 204);
+  for (const who of [OWNER, ALICE, BOB]) {
+    const response = await w.call(who, 'GET', `/api/rooms/${id}/media/${hash}`);
+    assert.equal(response.status, 200, who);
+    assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [9, 8, 7, 6]);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  }
+});
+
+test('bytes cannot be put under a hash that is not theirs, a viewer cannot put any, and a stranger can neither put nor read', async () => {
+  const id = await create();
+  await share(id, BOB, 'viewer');
+  const picture = new Uint8Array([1, 2, 3]);
+  const hash = await hashOf(picture);
+  assert.equal((await putMedia(OWNER, id, hash, new Uint8Array([4, 5, 6]))).status, 400, 'the name is the bytes’ hash');
+  assert.equal((await putMedia(OWNER, id, 'not-a-hash', picture)).status, 404);
+  assert.equal((await putMedia(BOB, id, hash, picture)).status, 403, 'view only');
+  assert.equal((await putMedia(ALICE, id, hash, picture)).status, 404, 'not shared with her');
+  await putMedia(OWNER, id, hash, picture);
+  assert.equal((await w.call(ALICE, 'GET', `/api/rooms/${id}/media/${hash}`)).status, 404);
+  assert.equal((await w.call(OWNER, 'GET', `/api/rooms/${id}/media/${'0'.repeat(64)}`)).status, 404, 'nothing under that name');
+});
+
+test('deleting a document deletes its pictures too', async () => {
+  const id = await create();
+  const picture = new Uint8Array([1, 1]);
+  const hash = await hashOf(picture);
+  await putMedia(OWNER, id, hash, picture);
+  assert.equal((await w.call(OWNER, 'GET', `/api/rooms/${id}/media/${hash}`)).status, 200);
+  assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${id}`)).status, 204);
+  assert.ok(![...w.objects.keys()].some((key) => key.includes('.media/')), 'no picture is left behind');
+});

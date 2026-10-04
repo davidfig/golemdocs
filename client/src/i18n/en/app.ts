@@ -66,7 +66,7 @@ export const app = {
   'app.roomViewOnly': 'view only',
   'app.roomPeople.one': '{count} person here',
   'app.roomPeople': '{count} people here',
-  'app.collabNeedsWord': 'Switch the format to Word Document to collaborate',
+  'app.collabNotHere': 'Pictures can’t be edited together yet',
   'app.collabFailed': 'Can’t collaborate: {message}',
   'app.leaveRoomToSwitch': 'Leave the collaboration room to switch formats',
 
@@ -170,4 +170,11 @@ export const app = {
   'app.storageOpenFailed': 'Could not open browser storage.',
   'app.storageAborted': 'The storage transaction was aborted.',
   'app.storageClearFailed': 'Could not clear browser storage.',
+  'room.leaseHeld': '{name} is editing this drawing.',
+  'room.leaseFree': 'Nobody is editing this drawing.',
+  'room.leaseTakeOver': 'Take over',
+  'room.leaseEdit': 'Edit',
+  'room.pdfPageOps': 'Pages can’t be moved, deleted or rotated while others are editing this PDF yet.',
+  'room.pdfImageTooBig': 'That picture is too big to add while others are editing this PDF.',
 } as const;
+

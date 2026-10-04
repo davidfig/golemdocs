@@ -144,6 +144,10 @@ export class RectList extends InstanceList {
 export interface ImageItem {
   /** Package part of the image (resolve bytes through the source document). */
   part: string;
+  /** Package part of the SVG this picture shows, when it is a vector drawing that can be edited. */
+  svg?: string;
+  /** For an embedded stored drawing (`![[...]]` in Markdown): what was written between the brackets. The drawing is that document's, not this one's. */
+  embed?: string;
   x: number;
   y: number;
   width: number;

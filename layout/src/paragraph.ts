@@ -1,7 +1,7 @@
 // Paragraph layout: turns one paragraph into lines of positioned glyphs for a given width.
 // Pure and independent of pagination, so edits can re-lay out just the changed paragraph.
 
-import { CHECKBOX, mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@golemdocs/docx';
+import { CHECKBOX, EMBED_PREFIX, mergeProperties, type Border, type Drawing, type Paragraph, type ParagraphProperties, type SectionProperties, type TabStop, type XmlElement } from '@golemdocs/docx';
 import { parseHexColor } from './display.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import type { ResolvedFont } from './fonts/fontSet.ts';
@@ -44,7 +44,7 @@ export interface LineLayout {
   rects: Float32Array;
   rectColors: Uint32Array;
   rectLayers: Uint8Array;
-  images: { part: string; x: number; y: number; width: number; height: number }[];
+  images: { part: string; svg?: string; embed?: string; x: number; y: number; width: number; height: number }[];
   /** Range of the paragraph's visible text on this line (list label excluded). */
   start: number;
   end: number;
@@ -177,6 +177,9 @@ function findElement(root: XmlElement, name: string): XmlElement | undefined {
   }
   return undefined;
 }
+
+/** What an embedded drawing stands for (the text between the brackets of its `![[...]]`), for a drawing that can be edited. */
+const embedOf = (d: Drawing): { embed?: string } => (d.svg && d.name?.startsWith(EMBED_PREFIX) ? { embed: d.name.slice(EMBED_PREFIX.length) } : {});
 
 function readFloat(d: Drawing): FloatSpec {
   const anchor = d.xml?.children.find((c) => typeof c !== 'string' && c.name === 'wp:anchor');
@@ -557,7 +560,7 @@ function layoutParagraphUncached(
       } else if (code === 0xfffc) {
         const d = objects.get(j);
         const h = (d?.height ?? 0) / 12700;
-        if (d?.image) builder.images.push({ part: d.image, x: pen, y: baseline - h - styles[s].rise, width: w, height: h });
+        if (d?.image) builder.images.push({ part: d.image, ...(d.svg && { svg: d.svg }), ...embedOf(d), x: pen, y: baseline - h - styles[s].rise, width: w, height: h });
       } else if (code === 0x09 && leaders.has(j)) {
         const leader = leaders.get(j)!;
         const style = styles[s];
@@ -670,7 +673,7 @@ export function emitLine(
     target.push(x + line.rects[r * 4], y + line.rects[r * 4 + 1], line.rects[r * 4 + 2], line.rects[r * 4 + 3], line.rectColors[r]);
   }
   for (const image of line.images) {
-    page.images.push({ part: image.part, x: x + image.x, y: y + image.y, width: image.width, height: image.height, behind: false });
+    page.images.push({ part: image.part, ...(image.svg && { svg: image.svg }), ...(image.embed && { embed: image.embed }), x: x + image.x, y: y + image.y, width: image.width, height: image.height, behind: false });
   }
   page.lines.push({
     paragraph: paragraph.paragraph,

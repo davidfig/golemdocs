@@ -17,6 +17,8 @@ export interface Point {
 }
 
 export interface Shape {
+  /** Names the shape among the layers of its picture, which several people may be drawing on at once; given when it is kept. */
+  id?: string;
   tool: DrawTool;
   color: string;
   /** Line width in picture pixels. */

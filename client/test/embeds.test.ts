@@ -100,3 +100,17 @@ test('collapsing a document makes embeds links without looking anything up', asy
   assert.equal(drawings(document).length, 0);
   assert.equal(document.body.some((b) => embedTag(b) !== null), false);
 });
+
+test('an embedded drawing is its picture with its SVG beside it, and writes back as the embed', async () => {
+  const document = await markdownToDocument('![[Sketch.svg]]\n\nAnd ![[Sketch.svg|100]] again.\n');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"/>';
+  await resolveEmbeds(document, async () => ({ kind: 'drawing', svg, png: png(800, 400), width: 400, height: 200 }));
+  const [first, second] = drawings(document);
+  assert.deepEqual([first.width, first.height], [400 * 9525, 200 * 9525]);
+  assert.deepEqual([second.width, second.height], [100 * 9525, 50 * 9525]);
+  assert.equal(first.name, 'embed:Sketch.svg');
+  assert.ok(first.svg && first.image, 'the SVG is kept beside the picture');
+  assert.equal(first.svg, second.svg, 'one drawing used twice is stored once');
+  assert.equal(new TextDecoder().decode(await document.media(first.svg!)), svg);
+  assert.equal(roundTrip(document), '![[Sketch.svg]]\n\nAnd ![[Sketch.svg|100]] again.');
+});

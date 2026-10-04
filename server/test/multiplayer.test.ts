@@ -38,7 +38,7 @@ async function cloud() {
   const clock = { now: 1000 };
   const core = new RoomCore(
     store,
-    { read: async () => file, write: async (b) => ((file = b), true) },
+    { read: async () => file, write: async (b) => ((file = b), true), media: async () => null, clearMedia: async () => {} },
     { now: () => clock.now, alarm: () => {}, log: () => {} },
     { handoffMs: 15_000, snapshotMs: 5_000, graceMs: 0 },
   );

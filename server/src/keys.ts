@@ -12,3 +12,9 @@ export const thumbKey = (ownerId: string, docId: string): string => `${ownerId}/
 
 /** Its full-text search index (see docIndex.ts). */
 export const indexKey = (ownerId: string, docId: string): string => `${ownerId}/${docId}.idx`;
+
+/** A picture people editing a document together added, kept by the hash of its bytes (see room.ts, roomMedia.ts). */
+export const mediaKey = (ownerId: string, docId: string, hash: string): string => `${ownerId}/${docId}.media/${hash}`;
+
+/** What every one of a document's pictures' keys starts with. */
+export const mediaPrefix = (ownerId: string, docId: string): string => `${ownerId}/${docId}.media/`;

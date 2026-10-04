@@ -7,13 +7,16 @@ import { describeDrawing, editDrawing } from './drawingTools.ts';
 import { SMOOTHING_LEVELS, setLockGuides, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides } from '../ui/drawingOptions.ts';
 import type { DrawingEditor } from './drawingTools.ts';
 import type { ImageEdit } from '../formats/imageEdit.ts';
+import { shiftShape } from '../formats/imageDraw.ts';
+import type { Shape } from '../formats/imageDraw.ts';
 import { FORMAT_LIST, isFormat } from '../formats/convert.ts';
 import { sniffImage } from '../formats/images.ts';
 import { MAX_SIDE } from '../formats/imagePixels.ts';
 import { displayDocumentName } from '../documentName.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { Action, ImageOp } from '../ui/actions.ts';
-import { FORMATS, type DocumentKind } from '../ui/index.ts';
+import { FORMATS } from '../ui/formats.ts';
+import type { DocumentKind } from '../ui/actions.ts';
 import type { ToolResult } from './conversation.ts';
 import { fileTools, type FileToolsHost } from './fileTools.ts';
 import type { OtherDocuments } from './libraryDocs.ts';
@@ -49,12 +52,44 @@ export interface AppToolsHost {
   pictureBytes(): Promise<Uint8Array>;
   /** Changes the open picture (one undoable step). */
   changePicture(edit: ImageEdit): Promise<void>;
-  /** The open vector drawing's editor (loaded if need be), or null when the open document is not a drawing. */
+  /** The open vector drawing's editor (loaded if need be), or null when the open document is not a drawing (or a drawing in its text being edited). */
   drawing(): Promise<DrawingEditor | null>;
+  /** The drawings in the text of the open document, in reading order. */
+  textDrawings(): { page: number; width: number; height: number; embed?: string }[];
+  /** Starts editing drawing `index` of `textDrawings` in place; the reason it can't, or null. */
+  openTextDrawing(index: number): Promise<string | null>;
+  /** Puts the drawing being edited in place back in the text; the reason it can't, or null. */
+  closeTextDrawing(): Promise<string | null>;
+  /** A new blank drawing in the text, open for drawing; the reason it can't be, or null. */
+  insertTextDrawing(size: { width?: number; height?: number }): Promise<string | null>;
+  /** Who is editing the open document, and for a drawing only one person at a time may edit, who may. */
+  collaboration(): Collaboration;
+  /** Asks for, or lets go of, the right to edit such a drawing, and says how it stands once answered. */
+  lease(action: 'request' | 'release'): Promise<Collaboration>;
+  /** The shapes drawn over the open picture (its layers), and a change of them (resolving once it has taken effect). */
+  pictureShapes(): readonly Shape[];
+  setPictureShapes(shapes: Shape[]): Promise<void>;
+  /** Others are editing the open document now (changes to a picture itself are not possible then). */
+  sharedLive(): boolean;
+}
+
+/** Who is editing the open document. */
+export interface Collaboration {
+  /** Others are here with the person. */
+  shared: boolean;
+  /** Everyone's names when known (yours marked), else how many. */
+  people: string[];
+  count: number;
+  /** Only one person at a time may edit this document (a drawing). */
+  exclusive: boolean;
+  /** This person may edit it now. */
+  mine: boolean;
+  /** Who may, when somebody does. */
+  holder: string | null;
 }
 
 /** The app's tools that act on the open document (the others are about the library). */
-const OPEN_DOCUMENT_APP_TOOLS = new Set(['read_drawing', 'edit_drawing', 'view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
+const OPEN_DOCUMENT_APP_TOOLS = new Set(['read_drawing', 'edit_drawing', 'list_text_drawings', 'insert_text_drawing', 'open_text_drawing', 'close_text_drawing', 'collaboration_status', 'take_over_editing', 'release_editing', 'view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
 /** Tools that open another document on purpose: the request goes on with that one. */
 const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document']);
 
@@ -91,6 +126,26 @@ const IMAGE_OPS: Record<string, ImageOp> = {
   auto_levels: 'autoLevels',
 };
 const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
+
+const SHARED_PICTURE = 'others are editing this picture now, so changes to the picture itself (crop, resize, rotate, flip, colours, effects, flatten) are not available; draw, layers, erase_shape and move_shape are.';
+
+/** Who may edit a shared drawing, in a sentence. */
+function hold(info: Collaboration): string {
+  if (info.mine) return 'This person may edit the drawing.';
+  return info.holder ? `${info.holder} is editing this drawing now.` : 'Nobody holds the right to edit this drawing now.';
+}
+
+/** The shapes drawn over a picture, back to front, numbered from 0. */
+function describeShapes(shapes: readonly Shape[]): string {
+  if (!shapes.length) return 'No shapes are drawn over the picture.';
+  return shapes
+    .map((s, i) => {
+      const [a, b] = [s.points[0], s.points[s.points.length - 1]];
+      const where = s.points.length > 1 ? ` from (${Math.round(a.x)}, ${Math.round(a.y)}) to (${Math.round(b.x)}, ${Math.round(b.y)})` : ` at (${Math.round(a.x)}, ${Math.round(a.y)})`;
+      return `${i}: ${s.tool}${where}; ${s.color}; width ${s.width}${s.text ? `; "${s.text}"` : ''}${s.fill ? '; filled' : ''}`;
+    })
+    .join('\n');
+}
 
 /**
  * The assistant's tools, and what it needs to know of each request: `begin` when one starts (the
@@ -267,8 +322,49 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
     },
     async edit_drawing(args) {
       const editor = await host.drawing();
-      if (!editor?.drawing) return 'Error: the open document is not a vector drawing (SVG). Convert it to SVG to edit it as one.';
+      if (!editor?.drawing) return 'Error: the open document is not a vector drawing (SVG), and no drawing in its text is open. Convert it to SVG, or open one with text_drawings.';
+      if (editor.readOnly) return `Error: ${hold(host.collaboration())} Nothing was changed; use collaboration (take_over) if the person wants to edit it.`;
       return `${await editDrawing(editor, args)}\n${describeDrawing(editor.drawing)}`;
+    },
+    async list_text_drawings() {
+      const list = host.textDrawings();
+      if (!list.length) return 'There are no drawings in the text. insert puts a new one in.';
+      return list.map((d, i) => `${i}: page ${d.page}, ${d.width} x ${d.height} px${d.embed ? `, embedded from "${d.embed}"` : ''}`).join('\n');
+    },
+    async insert_text_drawing(args) {
+      const size = { ...(args.width !== undefined && { width: wholeNumber(args, 'width', 16, 4000) }), ...(args.height !== undefined && { height: wholeNumber(args, 'height', 16, 4000) }) };
+      const problem = await host.insertTextDrawing(size);
+      if (problem) return `Error: ${problem}`;
+      return 'Inserted a blank drawing at the caret and opened it for drawing: edit_drawing draws in it, and text_drawings close puts it back in the text.';
+    },
+    async open_text_drawing(args) {
+      const number = wholeNumber(args, 'number', 0, 100_000);
+      const problem = await host.openTextDrawing(number);
+      if (problem) return `Error: ${problem}`;
+      return `Opened drawing ${number} for editing in place: read_drawing shows it, edit_drawing changes it, and text_drawings close puts it back in the text.`;
+    },
+    async close_text_drawing() {
+      const problem = await host.closeTextDrawing();
+      return problem ? `Error: ${problem}` : 'The drawing is back in the text.';
+    },
+    async collaboration_status() {
+      const info = host.collaboration();
+      if (!info.shared) return 'Nobody else is editing this document now.';
+      const who = info.people.length ? `Editing now: ${info.people.join(', ')}.` : `${info.count} people are editing now.`;
+      return info.exclusive ? `${who} ${hold(info)}` : `${who} Everyone can edit at once.`;
+    },
+    async take_over_editing() {
+      const before = host.collaboration();
+      if (!before.exclusive) return 'Nothing to take over: everyone can edit this document at once.';
+      if (before.mine) return 'This person already may edit the drawing.';
+      const after = await host.lease('request');
+      return after.mine ? 'This person may edit the drawing now.' : `Refused: ${hold(after)} It is given up when they stop working for a while; do not keep asking.`;
+    },
+    async release_editing() {
+      const before = host.collaboration();
+      if (!before.exclusive || !before.mine) return 'This person is not the one editing a shared drawing, so there is nothing to let go of.';
+      const after = await host.lease('release');
+      return after.mine ? 'It could not be let go of.' : 'Let go: others may edit the drawing now.';
     },
     async edit_picture(args) {
       if (!host.isPicture()) return 'Error: the open document is not a picture. Convert it to png, jpeg or webp to edit it as one.';
@@ -276,6 +372,24 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       if (typeof op !== 'string') throw new Error('`op` must be text.');
       const size = sniffImage(await host.pictureBytes());
       if (!size) throw new Error('the picture could not be read');
+      // Shapes drawn over the picture are its layers: they are listed, changed and put into the picture here.
+      if (op === 'layers') return describeShapes(host.pictureShapes());
+      if (op === 'erase_shape' || op === 'move_shape') {
+        const shapes = host.pictureShapes();
+        const at = wholeNumber(args, 'number', 0, Math.max(0, shapes.length - 1));
+        if (!shapes.length) return 'Error: there are no shapes drawn over the picture.';
+        const next = op === 'erase_shape' ? shapes.filter((_, i) => i !== at) : shapes.map((s, i) => (i === at ? shiftShape(s, wholeNumber(args, 'dx', -size.width, size.width), wholeNumber(args, 'dy', -size.height, size.height)) : s));
+        await host.setPictureShapes([...next]);
+        return `Done: ${op.replace('_', ' ')} ${at}.\n${describeShapes(host.pictureShapes())}`;
+      }
+      if (op === 'flatten') {
+        if (!host.pictureShapes().length) return 'There are no shapes to put into the picture.';
+        if (host.sharedLive()) return `Error: ${SHARED_PICTURE}`;
+        await host.changePicture({ op: 'draw', shapes: [] });
+        return 'Done: the shapes are in the picture now (they are not layers any more).';
+      }
+      // The rest change the picture itself, which others editing it at the same time cannot be given.
+      if (op !== 'draw' && host.sharedLive()) return `Error: ${SHARED_PICTURE}`;
       let edit: ImageEdit;
       if (Object.hasOwn(IMAGE_OPS, op)) {
         const name = IMAGE_OPS[op]!;
@@ -298,9 +412,12 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         const points = tool === 'text' ? [at('x', 'y')] : [at('x', 'y'), at('to_x', 'to_y')];
         if (tool === 'text' && (typeof args.text !== 'string' || !args.text)) throw new Error('`text` is what to write.');
         const width = args.width === undefined ? Math.max(2, Math.round(Math.max(size.width, size.height) / 150)) : wholeNumber(args, 'width', 1, 200);
-        edit = { op: 'draw', shapes: [{ tool: tool as 'line', color, width, points, ...(optionalFlag(args, 'fill') && { fill: true }), ...(tool === 'text' && { text: args.text as string }) }] };
+        const shape: Shape = { id: crypto.randomUUID().slice(0, 12), tool: tool as 'line', color, width, points, ...(optionalFlag(args, 'fill') && { fill: true }), ...(tool === 'text' && { text: args.text as string }) };
+        // A shape is a layer over the picture (its pixels are not changed), and is shared with others editing it.
+        await host.setPictureShapes([...host.pictureShapes(), shape]);
+        return `Done: draw ${tool} as shape ${host.pictureShapes().length - 1} over the picture (it is ${size.width} x ${size.height}; layers lists the shapes).`;
       } else {
-        throw new Error(`\`op\` must be one of ${[...Object.keys(IMAGE_OPS), 'crop', 'resize', 'adjust', 'draw'].join(', ')}.`);
+        throw new Error(`\`op\` must be one of ${[...Object.keys(IMAGE_OPS), 'crop', 'resize', 'adjust', 'draw', 'layers', 'erase_shape', 'move_shape', 'flatten'].join(', ')}.`);
       }
       await host.changePicture(edit);
       return `Done: ${op.replaceAll('_', ' ')} (the picture is ${size.width} x ${size.height} before the change; undo steps back).`;

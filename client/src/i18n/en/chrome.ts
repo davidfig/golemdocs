@@ -38,6 +38,8 @@ export const chrome = {
   'chrome.view.pageWidth': 'Page &Width',
   'chrome.view.wholePage': 'W&hole Page',
   'chrome.view.allPages': 'All Pa&ges',
+  'chrome.insert.drawing': '&Drawing',
+  'chrome.insert.drawing.tip': 'Insert a vector drawing (double-click it to edit)',
   'chrome.insert.pageBreak': '&Page Break',
   'chrome.insert.columnBreak': '&Column Break',
   'chrome.insert.lineBreak': '&Line Break',

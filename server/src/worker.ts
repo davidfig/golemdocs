@@ -9,6 +9,7 @@ import { handleDocuments, ownStorage, resolveAccess, roomFor, type DocumentRoute
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
+import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
 import { Room } from './room.ts';
 import { handleSearch } from './search.ts';
@@ -73,6 +74,17 @@ const handler: ExportedHandler = {
       // The session cookie is SameSite=Lax already; this also refuses cross-origin writes outright.
       if (request.method !== 'GET' && request.method !== 'HEAD' && request.headers.get('origin') !== url.origin) {
         throw new HttpError(403, 'bad origin');
+      }
+
+      // A picture added while a document is edited together: its bytes, by hash.
+      const mediaMatch = /^\/api\/rooms\/([^/]+)\/media\/([^/]+)$/.exec(path);
+      if (mediaMatch) {
+        const docId = mediaMatch[1]!;
+        if (!ID.test(docId)) throw new HttpError(404, 'not found');
+        const access = await resolveAccess(env, userId, docId);
+        if (!access) throw new HttpError(404, 'not found');
+        await requireOwnerSync(env, userId, access.ownerId);
+        return await handleRoomMedia(request, env, access.ownerId, docId, access.role, mediaMatch[2]!);
       }
 
       const roomMatch = /^\/api\/rooms\/([^/]+)(\/document)?$/.exec(path);

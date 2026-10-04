@@ -187,9 +187,73 @@ export class WordDocument {
     return hf;
   }
 
-  /** Bytes of a media part (e.g. a Drawing's image). */
-  media(part: string): Promise<Uint8Array> {
-    return this.pkg.bytes(part);
+  /**
+   * Looks for a part this package doesn't have (a picture another person put in a document being edited together): its bytes,
+   * or null when there are none to be had. Set by whatever knows where such parts are kept.
+   */
+  fetchPart: ((part: string) => Promise<Uint8Array | null>) | null = null;
+
+  /** Bytes of a media part (e.g. a Drawing's image). A part that isn't here is asked for through `fetchPart`, and kept. */
+  async media(part: string): Promise<Uint8Array> {
+    if (this.pkg.has(part) || !this.fetchPart) return this.pkg.bytes(part);
+    const bytes = await this.fetchPart(part);
+    if (!bytes) return this.pkg.bytes(part);
+    this.setMedia(part, bytes);
+    return bytes;
+  }
+
+  /** Puts a media part under a name of its own (see opc/sharedMedia.ts). */
+  setMedia(part: string, data: Uint8Array): void {
+    const ext = part.slice(part.lastIndexOf('.') + 1).toLowerCase();
+    const contentType = contentTypeForExtension(ext);
+    if (contentType) this.pkg.setDefaultContentType(ext, contentType);
+    this.pkg.set(part, data);
+  }
+
+  /** Whether the package has this part. */
+  hasPart(part: string): boolean {
+    return this.pkg.has(part);
+  }
+
+  /** The media parts that drawings in the text refer to but the package doesn't have. */
+  missingMedia(): string[] {
+    const missing = new Set<string>();
+    const walk = (blocks: Block[]) => {
+      const stack: unknown[] = [...blocks];
+      while (stack.length) {
+        const node = stack.pop() as { kind: string; [k: string]: unknown };
+        switch (node.kind) {
+          case 'drawing':
+            for (const part of [node.image, node.svg]) if (typeof part === 'string' && !this.pkg.has(part)) missing.add(part);
+            if (Array.isArray(node.textBox)) stack.push(...(node.textBox as unknown[]));
+            break;
+          case 'paragraph':
+          case 'wrapper':
+          case 'hyperlink':
+          case 'cell':
+            stack.push(...(node.children as unknown[]));
+            break;
+          case 'run':
+            stack.push(...(node.content as unknown[]));
+            break;
+          case 'table':
+            stack.push(...(node.rows as unknown[]));
+            break;
+          case 'row':
+            stack.push(...(node.cells as unknown[]));
+            break;
+        }
+      }
+    };
+    walk(this.body);
+    for (const hf of this.headersFooters.values()) walk(hf.children);
+    return [...missing];
+  }
+
+  /** Fetches (through `fetchPart`) the media parts drawings refer to that the package lacks, so that writing the document leaves none dangling. */
+  async fetchMissingMedia(): Promise<void> {
+    if (!this.fetchPart) return;
+    await Promise.all(this.missingMedia().map((part) => this.media(part).catch(() => undefined)));
   }
 
   // --- Writing -----------------------------------------------------------------------------

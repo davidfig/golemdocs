@@ -83,6 +83,9 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
       objects.set(key, { bytes: value, contentType: options?.httpMetadata?.contentType, customMetadata: options?.customMetadata, etag: `etag-${++writes}` });
       return {};
     },
+    async list({ prefix }: { prefix: string }) {
+      return { objects: [...objects.keys()].filter((key) => key.startsWith(prefix)).map((key) => ({ key })), truncated: false };
+    },
     async delete(keys: string | string[]) {
       // A real delete is a request to R2, so work deferred past the response (background) finishes
       // after the response is seen, not within the same few microtasks.

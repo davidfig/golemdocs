@@ -50,6 +50,8 @@ export class VectorLayer {
   decorate: ((ctx: CanvasRenderingContext2D, frame: VectorFrame) => void) | null = null;
   /** Changes whenever what `decorate` paints does. */
   decorationVersion = 0;
+  /** The drawing is one inside another document: everything else is dimmed, and the drawing is cut off at its edge. */
+  private _focus = false;
 
   constructor(
     parent: HTMLElement,
@@ -61,6 +63,28 @@ export class VectorLayer {
 
   get scene(): Scene | null {
     return this._scene;
+  }
+
+  get focus(): boolean {
+    return this._focus;
+  }
+
+  set focus(on: boolean) {
+    if (on === this._focus) return;
+    this._focus = on;
+    this.painted = '';
+    this.host.changed();
+  }
+
+  /** Whether a point of the screen is outside the drawing's page. */
+  outside(clientX: number, clientY: number): boolean {
+    const frame = this.frame();
+    const scene = this._scene;
+    if (!frame || !scene) return true;
+    const box = this.el.getBoundingClientRect();
+    const x = clientX - box.left - frame.left;
+    const y = clientY - box.top - frame.top;
+    return x < 0 || y < 0 || x > scene.width * frame.scale || y > scene.height * frame.scale;
   }
 
   /** The drawing shown; null stops showing one. */
@@ -127,7 +151,7 @@ export class VectorLayer {
     const ratio = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(this.el.clientWidth * ratio));
     const height = Math.max(1, Math.round(this.el.clientHeight * ratio));
-    const key = [camera.x, camera.y, camera.zoom, width, height, page.x, page.y, page.width, this.decorationVersion].join();
+    const key = [camera.x, camera.y, camera.zoom, width, height, page.x, page.y, page.width, page.height, this._focus, this.decorationVersion].join();
     if (key === this.painted) return;
     this.painted = key;
     if (this.canvas.width !== width || this.canvas.height !== height) {
@@ -137,11 +161,26 @@ export class VectorLayer {
     const ctx = this.canvas.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    if (this._focus) {
+      // Everything but the drawing is dimmed (the document shows through, darker).
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.rect(0, 0, width, height);
+      ctx.rect(ratio * frame.left, ratio * frame.top, ratio * frame.scale * scene.width, ratio * frame.scale * scene.height);
+      ctx.fill('evenodd');
+    }
     ctx.setTransform(ratio * frame.scale, 0, 0, ratio * frame.scale, ratio * frame.left, ratio * frame.top);
     // The page is white under the drawing, and covers the picture of it.
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, scene.width, scene.height);
+    ctx.save();
+    if (this._focus) {
+      ctx.beginPath();
+      ctx.rect(0, 0, scene.width, scene.height);
+      ctx.clip();
+    }
     paintScene(ctx, scene, scene.width, scene.height, { images: this.images });
+    ctx.restore();
     if (this.decorate) {
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       this.decorate(ctx, frame);

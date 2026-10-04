@@ -50,4 +50,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.insertFromDocument': '正在從另一個文件複製…',
   'assistant.tool.files': '正在處理你的檔案…',
   'assistant.tool.openDocument': '正在開啟文件…',
+  'assistant.tool.collaboration': '正在查看誰在編輯…',
 };

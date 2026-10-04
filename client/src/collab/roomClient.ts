@@ -13,6 +13,7 @@ import {
   type MultiplayerServerMessage,
   type Person,
   type Pointer,
+  type RoomKind,
   type RoomRole,
   type Selection,
   type ServerMessage,
@@ -54,6 +55,11 @@ export type RoomState = {
   role: RoomRole;
   /** Everyone in the room, including us. */
   people: { client: string; name: string; picture: string | null; color: number }[];
+  /** This connection's id (the `client` of its entry in `people`). */
+  me: string;
+  /** Only one person at a time may edit this document, and who may now (null: nobody holds the lease). */
+  exclusive: boolean;
+  holder: string | null;
 };
 
 export type RoomStart =
@@ -67,6 +73,10 @@ export interface RoomClientOptions {
   name: string;
   color: number;
   host: RoomHost;
+  /** The document can only be edited by one person at a time (a drawing, which each edit replaces whole): the room gives the right to edit out as a lease. */
+  exclusive?: boolean;
+  /** What the changes are: to the text (the default), or to the objects of a PDF. */
+  kind?: RoomKind;
   connect(): SocketLike;
   /** The room's current document (`GET /api/rooms/:id/document`). */
   fetchDocument(): Promise<{ bytes: Uint8Array; epoch: number; version: number }>;
@@ -95,17 +105,38 @@ export class RoomClient {
   private welcome: ((m: Extract<MultiplayerServerMessage, { type: 'welcome' }>) => void) | null = null;
   private whenShared: { resolve: (v: 'shared' | 'solo') => void } | null = null;
   private handoff: Promise<void> | null = null;
+  private exclusive = false;
+  private holder: string | null = null;
 
   constructor(private readonly o: RoomClientOptions) {
     this.timing = o.timing ?? DEFAULT_TIMING;
   }
 
   get state(): RoomState {
-    return { mode: this.mode, role: this.role, people: this.people.map(({ client, name, picture, color }) => ({ client, name, picture, color })) };
+    return {
+      mode: this.mode,
+      role: this.role,
+      people: this.people.map(({ client, name, picture, color }) => ({ client, name, picture, color })),
+      me: this.o.client,
+      exclusive: this.exclusive,
+      holder: this.holder,
+    };
   }
 
+  /** Whether this connection may change the document now: not a viewer, not cut off, and in an exclusive room that is shared, only the one who holds the lease. */
   get canEdit(): boolean {
-    return this.role !== 'viewer' && this.mode !== 'offline';
+    if (this.role === 'viewer' || this.mode === 'offline') return false;
+    return !this.exclusive || this.mode !== 'shared' || this.holder === this.o.client;
+  }
+
+  /** Asks for the lease of an exclusive room (to be the one who edits); the answer comes as a change of `state.holder`. */
+  requestLease(): void {
+    if (this.exclusive && this.attached) this.send({ type: 'lease' });
+  }
+
+  /** Lets go of the lease. */
+  releaseLease(): void {
+    if (this.exclusive && this.holder === this.o.client) this.send({ type: 'release' });
   }
 
   // --- Joining -------------------------------------------------------------------------
@@ -116,6 +147,8 @@ export class RoomClient {
     this.role = welcome.role;
     this.epoch = welcome.epoch;
     this.people = welcome.people;
+    this.exclusive = welcome.exclusive;
+    this.holder = welcome.holder;
     // Alone and saving: open our own copy. Otherwise the room has the current document.
     if (welcome.mode === 'solo' && welcome.people.length <= 1) return { kind: 'own' };
     if (welcome.mode !== 'shared') {
@@ -143,7 +176,7 @@ export class RoomClient {
         socket.close();
       }, this.timing.joinMs);
       this.welcome = answered;
-      socket.onopen = () => this.send({ type: 'hello', client: this.o.client, name: this.o.name, color: this.o.color });
+      socket.onopen = () => this.send({ type: 'hello', client: this.o.client, name: this.o.name, color: this.o.color, ...(this.o.exclusive && { exclusive: true }), ...(this.o.kind && this.o.kind !== 'doc' && { kind: this.o.kind }) });
       // A socket given up on (it timed out, or we left) can still deliver or close late, even after
       // its replacement opened: only the current one speaks for the room.
       socket.onmessage = (event) => {
@@ -182,6 +215,7 @@ export class RoomClient {
     const backlog = this.backlog;
     this.backlog = [];
     for (const message of backlog) this.handle(message);
+    if (this.exclusive && this.attached && this.holder === null) this.requestLease();
     this.announce();
   }
 
@@ -238,6 +272,10 @@ export class RoomClient {
         host.pointers(this.people);
         break;
       }
+      case 'lease':
+        this.holder = message.holder;
+        this.announce();
+        break;
       case 'handoff':
         this.epoch = message.epoch;
         this.startHandoff();
@@ -298,6 +336,8 @@ export class RoomClient {
     }
     this.sharedHook?.();
     this.sharedHook = null;
+    // Nobody holds an exclusive room's lease at the start of its sharing: the first to ask (the one who handed the document over, usually) does.
+    if (this.exclusive && this.holder === null) this.requestLease();
     this.announce();
   }
 
@@ -343,6 +383,8 @@ export class RoomClient {
       this.attempts = 0;
       this.role = welcome.role;
       this.people = welcome.people;
+      this.exclusive = welcome.exclusive;
+      this.holder = welcome.holder;
       // What we have is only good to continue with if the room is where we left it.
       if (wasAttached ? welcome.mode === 'shared' && welcome.epoch === epoch : welcome.mode === 'solo' && welcome.people.length <= 1) {
         if (wasAttached) {

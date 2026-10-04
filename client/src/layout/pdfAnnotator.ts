@@ -6,6 +6,7 @@
 // history covers both.
 
 import { alignOf, cellsOf, isStandardName, nearestStandard, noteRect, quadBoxes, quadsFor, textOf, type Annotation, type AnnotationKind, type Box, type FormField, type ApplyResult, type PdfEdit, type Rgb, type ShapeEdit, type TextBlock, type TextEdit, type TextStyle } from '@golemdocs/pdf';
+import { applyObjectOps, type ObjectLayers, type ObjectOp } from '@golemdocs/ops';
 import type { PdfCharacter, PdfView } from '../formats/pdfPages.ts';
 
 /** A rectangle to show, on a page (by index), in page coordinates. */
@@ -28,6 +29,9 @@ const DEFAULT_COLORS: Record<AnnotationKind, [number, number, number]> = {
 };
 
 const HISTORY_LIMIT = 200;
+
+/** A PDF has no shapes of a picture's kind (the same empty list, so it never counts as changed). */
+const NO_OBJECTS: readonly never[] = [];
 
 /** What undo and redo step between. */
 interface Layers {
@@ -186,6 +190,33 @@ export class PdfAnnotator {
 
   get annotations(): readonly Annotation[] {
     return this.view.annotations;
+  }
+
+  /** The three lists as they are, for editing together with others (see pdfRoom.ts). */
+  get objects(): ObjectLayers {
+    return { annotations: this.annotations, fields: this.fields, edits: this.editList, shapes: NO_OBJECTS };
+  }
+
+  /**
+   * Changes to the lists (made by others, or an undo of one's own while sharing): put in as they are, without a step in the undo history.
+   * Returns the pages that changed.
+   */
+  applyObjects(ops: readonly ObjectOp[]): number[] {
+    const { layers, changed } = applyObjectOps(this.objects, ops);
+    const pages = new Set<number>();
+    for (const { before, after } of changed) for (const object of [before, after] as ({ page?: number } | undefined)[]) if (typeof object?.page === 'number') pages.add(object.page);
+    if (layers.annotations !== this.annotations) {
+      this.view.setAnnotations(layers.annotations as readonly Annotation[]);
+      if (this.selectedId && !layers.annotations.some((a) => a.id === this.selectedId)) this.selectedId = null;
+    }
+    if (layers.fields !== this.fields) this.view.setFields(layers.fields as readonly FormField[]);
+    if (layers.edits !== this.editList) {
+      this.editList = layers.edits as readonly PdfEdit[];
+      this.setView(this.editList);
+      // What is being edited here may have been changed or taken out by someone else: it is put down.
+      if (this.picked && !layers.edits.some((e) => e.id === this.picked!.id)) this.picked = null;
+    }
+    return [...pages];
   }
 
   get fields(): readonly FormField[] {

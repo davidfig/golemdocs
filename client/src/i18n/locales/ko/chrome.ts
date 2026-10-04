@@ -49,6 +49,8 @@ export const chrome: Partial<Messages> = {
   'chrome.insert.comment': '메모(&M)',
   'chrome.insert.footnote': '각주(&N)',
   'chrome.insert.image': '그림(&P)…',
+  'chrome.insert.drawing': '벡터 그리기(&D)',
+  'chrome.insert.drawing.tip': '벡터 그림 삽입 (두 번 클릭하여 편집)',
   'chrome.insert.textBox': '텍스트 상자(&X)',
   'chrome.insert.table': '표(&T)…',
   'chrome.insert.horizontalRule': '가로줄(&Z)',

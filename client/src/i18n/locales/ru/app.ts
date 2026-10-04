@@ -70,7 +70,7 @@ export const app: Catalog = {
   'app.roomPeople.few': 'Здесь {count} человека',
   'app.roomPeople.many': 'Здесь {count} человек',
   'app.roomPeople': 'Здесь {count} человек',
-  'app.collabNeedsWord': 'Для совместной работы переключите формат на документ Word',
+  'app.collabNotHere': 'Изображения пока нельзя редактировать совместно',
   'app.collabFailed': 'Не удалось начать совместную работу: {message}',
   'app.leaveRoomToSwitch': 'Чтобы сменить формат, выйдите из совместной работы',
 
@@ -182,4 +182,10 @@ export const app: Catalog = {
   'app.storageOpenFailed': 'Не удалось открыть хранилище браузера.',
   'app.storageAborted': 'Транзакция хранилища была прервана.',
   'app.storageClearFailed': 'Не удалось очистить хранилище браузера.',
+  'room.leaseHeld': '{name} редактирует этот рисунок.',
+  'room.leaseFree': 'Никто не редактирует этот рисунок.',
+  'room.leaseTakeOver': 'Перехватить',
+  'room.leaseEdit': 'Редактировать',
+  'room.pdfPageOps': 'Пока нельзя перемещать, удалять и поворачивать страницы, пока другие редактируют этот PDF.',
+  'room.pdfImageTooBig': 'Это изображение слишком велико, чтобы добавить его, пока другие редактируют этот PDF.',
 };

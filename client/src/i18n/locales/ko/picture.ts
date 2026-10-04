@@ -65,5 +65,7 @@ export const picture: Partial<Messages> = {
   'picture.drop.open': '그림으로 열기',
   'picture.insertFailed': '그림을 삽입할 수 없습니다: {message}',
   'picture.editFailed': '그림을 변경할 수 없습니다: {message}',
-  'picture.notInRoom': '공유 문서에는 아직 그림을 추가할 수 없습니다.',
+  'picture.shareFailed': '그림을 다른 사람과 공유할 수 없습니다: {message}',
+  'picture.embedNotInRoom': '공유된 Markdown 문서에는 아직 드로잉을 추가할 수 없습니다.',
+  'picture.editsNotShared': '다른 사람이 편집하는 동안에는 그림 자체의 변경(자르기, 크기 조정, 회전, 색상)을 할 수 없습니다. 그리기는 가능합니다.',
 };

@@ -49,6 +49,8 @@ export const chrome: Catalog = {
   'chrome.insert.comment': '&Примечание',
   'chrome.insert.footnote': 'Сн&оска',
   'chrome.insert.image': '&Рисунок…',
+  'chrome.insert.drawing': '&Векторный рисунок',
+  'chrome.insert.drawing.tip': 'Вставить векторный рисунок (дважды щёлкните, чтобы изменить)',
   'chrome.insert.textBox': 'Н&адпись',
   'chrome.insert.table': '&Таблица…',
   'chrome.insert.horizontalRule': 'Горизонтальная &линия',

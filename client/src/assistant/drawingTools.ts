@@ -18,6 +18,8 @@ import type { ShapeStyle } from '../ui/vectorEditor.ts';
 /** The part of the vector editor the tools use. */
 export interface DrawingEditor {
   readonly drawing: Scene | null;
+  /** Someone else may edit the drawing (in a room): it can be looked at, not changed. */
+  readonly readOnly: boolean;
   select(paths: NodePath[]): void;
   delete(): void;
   duplicate(): void;

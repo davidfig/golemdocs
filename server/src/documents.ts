@@ -10,6 +10,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkFolder, type FolderRow } from './folders.ts';
 import { removeManyFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
+import { deleteMedia } from './roomMedia.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, userDb, type UserDb } from './userDb.ts';
 
@@ -113,6 +114,7 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
     // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
     const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+    for (const row of rows) await deleteMedia(env, ownerId, row.id);
   };
   if (defer) defer(cleanup().catch((error) => console.error('delete cleanup failed', error)));
   else await cleanup();

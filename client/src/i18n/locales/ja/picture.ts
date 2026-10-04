@@ -63,5 +63,7 @@ export const picture = {
   'picture.drop.open': '画像として開く',
   'picture.insertFailed': '画像を挿入できませんでした: {message}',
   'picture.editFailed': '画像を変更できませんでした: {message}',
-  'picture.notInRoom': '共有文書にはまだ画像を追加できません。',
+  'picture.shareFailed': '画像を他の人と共有できませんでした: {message}',
+  'picture.embedNotInRoom': '共有された Markdown 文書にはまだ図形を追加できません。',
+  'picture.editsNotShared': '他の人が編集している間は、画像そのものの変更（切り抜き、サイズ変更、回転、色）はできません。描画はできます。',
 };

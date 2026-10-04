@@ -49,6 +49,8 @@ export const chrome: Partial<Messages> = {
   'chrome.insert.comment': 'コメント(&M)',
   'chrome.insert.footnote': '脚注(&N)',
   'chrome.insert.image': '図(&P)…',
+  'chrome.insert.drawing': 'ベクター図形(&D)',
+  'chrome.insert.drawing.tip': 'ベクター図形を挿入 (ダブルクリックで編集)',
   'chrome.insert.textBox': 'テキスト ボックス(&X)',
   'chrome.insert.table': '表(&T)…',
   'chrome.insert.horizontalRule': '水平線(&Z)',

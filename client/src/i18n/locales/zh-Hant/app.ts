@@ -64,7 +64,7 @@ export const app: Partial<Messages> = {
   'app.roomConnectionLost': '連線中斷',
   'app.roomViewOnly': '僅供檢視',
   'app.roomPeople': '目前有 {count} 人在此',
-  'app.collabNeedsWord': '請將格式切換為 Word 文件以進行共同作業',
+  'app.collabNotHere': '圖片暫不支援共同編輯',
   'app.collabFailed': '無法共同作業：{message}',
   'app.leaveRoomToSwitch': '請先離開共同作業房間，才能切換格式',
 
@@ -167,4 +167,10 @@ export const app: Partial<Messages> = {
   'app.docTooOld': '此檔案是由 Word 6 或 95 儲存的，不受支援。請在 Word 中開啟並另存為較新的格式。',
   'app.docEncrypted': '此 Word 文件已設定密碼保護。請在 Word 中移除密碼後再試一次。',
   'app.docDamaged': '此 Word 文件已損毀，或使用了我們無法讀取的版面配置。',
+  'room.leaseHeld': '{name} 正在編輯此繪圖。',
+  'room.leaseFree': '沒有人正在編輯此繪圖。',
+  'room.leaseTakeOver': '接手',
+  'room.leaseEdit': '編輯',
+  'room.pdfPageOps': '其他人正在編輯此 PDF 時，暫時無法移動、刪除或旋轉頁面。',
+  'room.pdfImageTooBig': '其他人正在編輯此 PDF 時，該圖片太大，無法加入。',
 };

@@ -162,7 +162,8 @@
   pointer-events: none;
 }
 
-.wm-draw[hidden] {
+.wm-draw[hidden],
+.wm-draw-bar[hidden] {
   display: none;
 }
 

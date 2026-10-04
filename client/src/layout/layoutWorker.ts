@@ -2,7 +2,7 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { isMathInline, paragraphLength, paragraphText, plainText, type DocumentProperties, type Inline, type NumberingReference, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type NumberingReference, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
 import { Replica, type HistoryMark, type RunFormat, type Pointer, type Selection as OpSelection, type Transaction } from '@golemdocs/ops';
 import type { RoomClientMessage, RoomServerMessage } from '../collab/messages.ts';
@@ -23,7 +23,14 @@ import {
 import { exportDocument, importDocument, type Format } from '../formats/convert.ts';
 import type { PdfView } from '../formats/pdfPages.ts';
 import { sniffImage } from '../formats/images.ts';
-import { readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
+import { networkMedia, PortMedia, type RoomMedia } from '../collab/roomMedia.ts';
+import { exclusiveRoom, isPictureFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
+import { PictureLayers } from './pictureLayers.ts';
+import type { Shape } from '../formats/imageDraw.ts';
+import { objectOps } from '@golemdocs/ops';
+import { isWdoc as isWdocBytes } from '../formats/wdoc.ts';
+import { ObjectSync } from './objectSync.ts';
+import { isWdoc, readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
 import type { FormField } from '@golemdocs/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
 import { getLocale, loadLocale, t } from '../i18n/index.ts';
@@ -150,6 +157,11 @@ async function embedded(title: string, fonts: FontSet): Promise<Embedded | null>
   if (!file) return null;
   const bytes = new Uint8Array(file.bytes);
   if (sniffImage(bytes)) return { kind: 'image', bytes };
+  // A drawing (a stored one, or an SVG file): shown as its picture, with the drawing beside it to be edited there.
+  if (isWdoc(bytes) || /\.svgz?$/i.test(file.name)) {
+    const drawing = await (await import('../formats/vectorDoc.ts')).storedDrawing(bytes);
+    if (drawing) return { kind: 'drawing', ...drawing };
+  }
   const source = sourceFromFile(file.name, file.bytes);
   if (!source || source.kind === 'pdf' || source.kind === 'image') return null;
   const { document } = await load(source, fonts);
@@ -164,6 +176,19 @@ async function showEmbeds(document: WordDocument, fonts: FontSet): Promise<void>
     console.error(e);
   }
 }
+
+/**
+ * A drawing's SVG is the part beside its picture in the document, and the extension keeps the same text for saving as SVG. Others
+ * may have changed the drawing in a room, which writes only the document: the extension is made to follow it.
+ */
+async function withDrawingText(document: WordDocument | null, lens: Format, extensions: Extensions): Promise<Extensions> {
+  if (!document || (lens !== 'svg' && lens !== 'svgz')) return extensions;
+  const text = await (await import('../formats/vectorDoc.ts')).svgOfDocument(document).catch(() => null);
+  return text === null ? extensions : { ...extensions, svg: { ...extensions.svg, source: text } };
+}
+
+/** The most a picture added to a shared PDF may be, as the text that carries it: one change is one message to the room. */
+const MAX_SHARED_IMAGE_CHARS = 2_500_000;
 
 /** A document as read from its source: the universal document (see ../formats/wdoc.ts). */
 interface Loaded {
@@ -238,10 +263,12 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       // A PDF edited as something else, with its text unedited, is reflowed afresh: that picks up
       // annotations added on its own pages since.
       const reflowAgain = wdoc.original && wdoc.manifest.pagesCurrent && wdoc.manifest.lens !== 'pdf';
+      const document = wdoc.document && !reflowAgain ? await WordDocument.read(wdoc.document) : null;
+      const extensions = await withDrawingText(document, wdoc.manifest.lens, wdoc.extensions);
       return {
         name: source.name,
-        document: wdoc.document && !reflowAgain ? await WordDocument.read(wdoc.document) : null,
-        extensions: wdoc.extensions,
+        document,
+        extensions,
         original: wdoc.original,
         lens: wdoc.manifest.lens,
         origin: wdoc.manifest.origin,
@@ -250,8 +277,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     }
     case 'docx':
       return flowing(source.name, await WordDocument.read(new Uint8Array(source.bytes)));
-    case 'docx-url':
-      return flowing(source.name, await WordDocument.read(new Uint8Array(await (await fetchOk(source.url)).arrayBuffer())));
+    case 'docx-url': {
+      const bytes = await (await fetchOk(source.url)).arrayBuffer();
+      // What the app stores is a .wdoc (what it is edited as goes with the document); anything else is Word.
+      return isWdoc(bytes) ? load({ kind: 'wdoc', name: source.name, bytes }, fonts) : flowing(source.name, await WordDocument.read(new Uint8Array(bytes)));
+    }
     case 'text-url':
       return flowing(source.name, await plainTextDocument(await (await fetchOk(source.url)).text()));
     case 'blank': {
@@ -313,6 +343,12 @@ class OpenDocument {
   pdf: { view: PdfView; bytes: Uint8Array } | null = null;
   /** Selecting a PDF's text and marking it up, when showing its own pages. */
   annotator: PdfAnnotator | null = null;
+  /** A PDF being edited together with others: its changes to objects, and theirs (see pdfRoom.ts). */
+  pdfSync: ObjectSync | null = null;
+  /** A picture's layers (the shapes drawn over it), their history, and their changes shared with a room (see pictureLayers.ts). */
+  layers: PictureLayers | null = null;
+  layerSync: ObjectSync | null = null;
+  private pictureSize = { width: 0, height: 0 };
   /** The PDF's pages laid out so far, in order. */
   private pdfPages: PageLayout[] = [];
   /** Ids for PDF pages laid out again (the first layout of page i has id i). */
@@ -596,8 +632,8 @@ class OpenDocument {
       reveal: this.reveal,
       text: annotator.selectedText(CLIPBOARD_LIMIT),
       format: {},
-      canUndo: annotator.canUndo,
-      canRedo: annotator.canRedo,
+      canUndo: this.pdfSync ? this.pdfSync.canUndo : annotator.canUndo,
+      canRedo: this.pdfSync ? this.pdfSync.canRedo : annotator.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote: [],
       stats: this.stats,
@@ -692,6 +728,8 @@ class OpenDocument {
 
   /** Commands on a PDF shown as its own pages: selecting text, and marking it up. */
   private pdfCommand(annotator: PdfAnnotator, wire: WireCommand): void {
+    // Someone who may only look (a viewer, or cut off from the room) can select and copy, nothing more.
+    if (this.readOnly && wire.kind !== 'pointer' && wire.kind !== 'selectAll') return;
     this.commandAt = performance.now();
     this.reveal = false;
     let changed: number[] = [];
@@ -792,6 +830,8 @@ class OpenDocument {
         break;
       }
       case 'pdfAddImage': {
+        // A change is one message to the room, and a picture is the whole of it: past a size it can't go.
+        if (this.pdfSync && wire.data.length > MAX_SHARED_IMAGE_CHARS) return this.notice(t('room.pdfImageTooBig'));
         const index = this.pdfPages.findIndex((p) => p.id === wire.page);
         if (index >= 0) changed = annotator.addImage(index, this.userBox(index, wire.box), wire.data);
         break;
@@ -805,19 +845,31 @@ class OpenDocument {
         break;
       }
       case 'pdfPageOp':
+        // A page operation makes a new PDF file, which a room has no way to hand round yet.
+        if (this.pdfSync) return this.notice(t('room.pdfPageOps'));
         void this.pdfPageOp(annotator, wire);
         return;
       case 'undo':
+        // Shared, undo steps back over this person's own changes only.
+        if (this.pdfSync) {
+          changed = this.pdfSync.undo();
+          break;
+        }
         changed = annotator.undo();
         if (annotator.reopen) return void this.reopenPdf(annotator);
         break;
       case 'redo':
+        if (this.pdfSync) {
+          changed = this.pdfSync.redo();
+          break;
+        }
         changed = annotator.redo();
         if (annotator.reopen) return void this.reopenPdf(annotator);
         break;
       default:
         return;
     }
+    this.pdfSync?.local();
     if (changed.length) this.relayoutPdf(changed);
     else this.sendSelection();
   }
@@ -841,6 +893,7 @@ class OpenDocument {
     if (this.closed || annotator.picked !== picked) return;
     const color = wire.color ? parseHex(wire.color) : undefined;
     const changed = annotator.setTextStyle({ font: wire.font, bold: wire.bold, italic: wire.italic, size: wire.size, ...(color && { color }) });
+    this.pdfSync?.local();
     if (changed.length) this.relayoutPdf([...new Set(changed)]);
     else this.sendSelection();
   }
@@ -950,27 +1003,68 @@ class OpenDocument {
       if (this.closed || annotator.picked !== picked) return;
       changed = [...changed, picked.page];
     }
+    this.pdfSync?.local();
     if (changed.length) this.relayoutPdf([...new Set(changed)]);
     else this.sendSelection();
   }
 
   // --- Collaboration ---------------------------------------------------------------------
 
+  /** Whether only one person at a time may edit this (a development room's), and who. */
+  private devLease: { exclusive: boolean; holder: string | null } = { exclusive: false, holder: null };
+
+  /** Tells the page who may edit, when only one person at a time may. */
+  private postLease(): void {
+    // In a development room nobody holds the lease when the one who did has gone, and others are here: whoever asks first gets it.
+    if (!this.net && this.room && this.devLease.exclusive && this.devLease.holder === null && this.count > 1 && !this.devLetGo) this.toRoom({ type: 'lease' });
+    const net = this.net?.state;
+    const exclusive = net ? net.exclusive : this.devLease.exclusive;
+    const holder = net ? net.holder : this.devLease.holder;
+    const people = net ? net.people : [];
+    const mine = exclusive && holder === this.clientId;
+    // A development room's people are only counted, so it can name its holder only as the connection they are.
+    const holderName = holder === null ? null : (people.find((p) => p.client === holder)?.name ?? this.people.get(holder)?.name ?? holder);
+    const shared = net ? net.mode === 'shared' : this.count > 1;
+    const key = JSON.stringify([exclusive, holder, mine, holderName, shared]);
+    if (key === this.lastLease) return;
+    this.lastLease = key;
+    post({ type: 'lease', doc: this.doc, exclusive, mine, holder: holderName, shared });
+  }
+  private lastLease = '';
+  /** This person let go of the lease on purpose: it is not asked for again until somebody comes or goes. */
+  private devLetGo = false;
+
+  /** Asks for, or lets go of, the right to edit an exclusive room. */
+  lease(action: 'request' | 'release'): void {
+    if (this.net) return action === 'request' ? this.net.requestLease() : this.net.releaseLease();
+    this.devLetGo = action === 'release';
+    if (this.room) this.toRoom({ type: action === 'request' ? 'lease' : 'release' });
+  }
+
+  /** The pictures of a development room, with its SharedWorker. */
+  private portMedia: PortMedia | null = null;
+  /** The cloud document whose room this is in, for its pictures. */
+  private netDoc: string | null = null;
+
   private toRoom(message: RoomClientMessage, transfer: Transferable[] = []): void {
     this.room?.port.postMessage(message, transfer);
   }
 
   /** Joins the room: resolves with the room's document and its log so far. */
-  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
+  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer, exclusive: boolean, kind: 'doc' | 'objects' | 'layers' = 'doc'): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
+    this.clientId = client;
     this.room = room;
+    this.portMedia = new PortMedia((message, transfer) => this.toRoom(message, transfer));
     room.port.onmessage = (event: MessageEvent<RoomServerMessage>) => this.fromRoom(event.data);
     return new Promise((resolve) => {
       this.joined = resolve;
-      this.toRoom({ type: 'join', room: room.name, client, snapshot }, [snapshot]);
+      this.toRoom({ type: 'join', room: room.name, client, snapshot, ...(exclusive && { exclusive }), ...(kind !== 'doc' && { kind }) }, [snapshot]);
     });
   }
 
   private fromRoom(message: RoomServerMessage): void {
+    // The answer to a picture asked for or put: not a change to the document, and wanted at once.
+    if (this.portMedia?.receive(message)) return;
     try {
       this.handleRoom(message);
     } catch (e) {
@@ -982,7 +1076,36 @@ class OpenDocument {
     if (this.closed) return;
     if (message.type === 'joined') {
       this.count = message.people;
+      this.devLease = { exclusive: message.exclusive, holder: message.holder };
       this.joined?.(message);
+      return;
+    }
+    if (message.type === 'lease') {
+      this.devLease.holder = message.holder;
+      this.postLease();
+      return;
+    }
+    // A PDF has no text to edit: what the room sends goes to the lists of what is on its pages.
+    if (this.format === 'pdf') {
+      if (message.type === 'transactions') {
+        if (this.pdfSync) this.receivePdf(message);
+        else this.backlog.push(message);
+      } else if (message.type === 'people') {
+        this.count = message.count;
+        this.status();
+        this.postLease();
+      }
+      return;
+    }
+    if (isPictureFormat(this.format)) {
+      if (message.type === 'transactions') {
+        if (this.layerSync) this.receiveLayers(message);
+        else this.backlog.push(message);
+      } else if (message.type === 'people') {
+        this.count = message.count;
+        this.status();
+        this.postLease();
+      }
       return;
     }
     if (!this.editor) {
@@ -993,6 +1116,7 @@ class OpenDocument {
       case 'transactions': {
         const { change } = this.editor.receive(message);
         if (change) {
+          this.drawingChanged();
           // Other people's carets move with the text too.
           for (const person of this.people.values()) if (person.selection) person.selection = Replica.mapSelection(person.selection, change.mapping);
           void this.pump();
@@ -1007,7 +1131,9 @@ class OpenDocument {
         break;
       case 'people':
         this.count = message.count;
+        this.devLetGo = false;
         this.status();
+        this.postLease();
         break;
     }
   }
@@ -1035,9 +1161,10 @@ class OpenDocument {
   }
 
   private status(): void {
-    const sync = this.replica?.sync;
+    const sync = this.replica?.sync ?? (this.pdfSync ? { version: this.pdfSync.version, unconfirmed: this.pdfSync.unconfirmed } : this.layerSync?.connected ? { version: this.layerSync.version, unconfirmed: this.layerSync.unconfirmed } : undefined);
     if (this.room && sync) post({ type: 'room', doc: this.doc, people: this.count, ...sync });
     if (this.net) this.postRoomState();
+    else this.postLease();
   }
 
   leave(): void {
@@ -1052,14 +1179,14 @@ class OpenDocument {
    * it carries on unshared and is merged as a separate copy later.
    */
   async joinLate(room: Extract<RoomOptions, { kind: 'network' }>): Promise<void> {
-    if (this.net || this.room || this.format !== 'docx') return;
+    if (this.net || this.room || !roomable(this.format)) return;
     // Still being set up (the page heard who is signed in first): joined once it is, as the page
     // asks only once.
-    if (!this.replica || !this.editor) {
+    if (this.format === 'pdf' ? !this.annotator : isPictureFormat(this.format) ? !this.layerSync : !this.replica || !this.editor) {
       this.lateRoom = room;
       return;
     }
-    const start = await this.joinNetwork(room, this.replica.clientId);
+    const start = await this.joinNetwork(room, this.replica?.clientId ?? crypto.randomUUID().slice(0, 8));
     if (!start || this.closed) return;
     if (start.kind === 'own') this.net!.ready(start);
     else {
@@ -1072,9 +1199,25 @@ class OpenDocument {
 
   // --- The multiplayer server ---------------------------------------------------------
 
+  /** Others are editing this document with this person now. Alone in a cloud document (the room only tells who else is here) a picture's bytes are in the file, and go with it to whoever joins later; once shared they are not in the changes the room passes on. */
+  private get shared(): boolean {
+    return this.room !== null || (this.net !== null && this.net.state.mode !== 'solo');
+  }
+
+  /** A drawing's SVG is the part beside its picture in the document, and the extension keeps the same text for saving as SVG: after changes from others, the extension is made to match. */
+  drawingChanged(): void {
+    if ((this.format !== 'svg' && this.format !== 'svgz') || !this.document) return;
+    const document = this.document;
+    void import('../formats/vectorDoc.ts').then(async ({ svgOfDocument }) => {
+      const text = await svgOfDocument(document).catch(() => null);
+      if (text !== null && this.document === document) this.extensions = { ...this.extensions, svg: { ...this.extensions.svg, source: text } };
+    });
+  }
+
   /** Viewers, and anyone whose connection to the room is gone, can look but not edit. */
   get readOnly(): boolean {
-    return this.net !== null && !this.net.canEdit;
+    // In an exclusive room only the one who holds the lease may edit (alone in a development room, the lease is theirs from the start).
+    return (this.net !== null && !this.net.canEdit) || (this.room !== null && this.devLease.exclusive && this.count > 1 && this.devLease.holder !== this.clientId);
   }
 
   private postPointers(): void {
@@ -1092,7 +1235,8 @@ class OpenDocument {
     const net = this.net;
     if (!net) return;
     const { mode, role, people } = net.state;
-    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? 0 });
+    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.pdfSync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0 });
+    this.postLease();
   }
 
   /**
@@ -1103,11 +1247,14 @@ class OpenDocument {
   async joinNetwork(room: Extract<RoomOptions, { kind: 'network' }>, clientId: string): Promise<RoomStart | null> {
     this.clientId = clientId;
     const docId = room.docId;
+    this.netDoc = docId;
     const net = new RoomClient({
       client: clientId,
       name: room.user,
       color: room.color,
-      host: this.roomHost(),
+      exclusive: exclusiveRoom(this.format),
+      kind: roomKind(this.format),
+      host: this.format === 'pdf' ? this.pdfRoomHost() : isPictureFormat(this.format) ? this.layersRoomHost() : this.roomHost(),
       connect: () => new WebSocket(`${self.location.protocol === 'https:' ? 'wss' : 'ws'}://${self.location.host}/api/rooms/${docId}`) as unknown as SocketLike,
       fetchDocument: async () => {
         const response = await fetch(`/api/rooms/${docId}/document`);
@@ -1143,10 +1290,156 @@ class OpenDocument {
     }
   }
 
+  /** The whole document as a .wdoc, as it is now (what is saved, and what a PDF's room starts from: the file with the lists of what is on its pages). */
+  async wdocBytes(): Promise<Uint8Array> {
+    return writeWdoc({
+      manifest: { version: WDOC_VERSION, lens: this.format, origin: this.origin, pagesCurrent: this.pagesCurrent && !this.edited },
+      document: this.document ? await this.document.write() : null,
+      original: this.original,
+      extensions: currentExtensions(this),
+    });
+  }
+
+  /** A picture opened: its layers are the shapes kept with it, and the page is told them. */
+  async setupLayers(client: string, log: Transaction[]): Promise<void> {
+    this.layers = new PictureLayers(this.extensions.img?.shapes);
+    this.layerSync = new ObjectSync(this.layers, client);
+    if (log.length) this.layers.applyObjects(log.flatMap(objectOps));
+    this.keepLayers();
+    const picture = this.document ? await (await import('../formats/imageDoc.ts')).firstPicture(this.document).catch(() => null) : null;
+    if (picture) this.pictureSize = { width: picture.image.width, height: picture.image.height };
+  }
+
+  /** The layers are saved with the picture. */
+  private keepLayers(): void {
+    const shapes = [...(this.layers?.shapes ?? [])];
+    const { img: _old, ...rest } = this.extensions;
+    this.extensions = shapes.length ? { ...rest, img: { shapes } } : rest;
+  }
+
+  /** Tells the page the picture's shapes and whether they can be stepped back over. */
+  postShapes(): void {
+    const sync = this.layerSync;
+    post({ type: 'shapes', doc: this.doc, shapes: [...(this.layers?.shapes ?? [])], ...this.pictureSize, canUndo: sync?.canUndo ?? false, canRedo: sync?.canRedo ?? false });
+  }
+
+  /** The person drew, erased or moved something: the shapes are now these. */
+  setShapes(shapes: Shape[]): void {
+    if (!this.layers || !this.layerSync || this.readOnly) return this.postShapes();
+    this.layers.set(shapes);
+    this.layerSync.local();
+    this.edited = true;
+    this.keepLayers();
+    this.postShapes();
+  }
+
+  /** Undo or redo of the person's own changes to the shapes. */
+  stepShapes(action: 'undo' | 'redo'): void {
+    if (!this.layerSync || this.readOnly) return;
+    if (action === 'undo') this.layerSync.undo();
+    else this.layerSync.redo();
+    this.edited = true;
+    this.keepLayers();
+    this.postShapes();
+  }
+
+  /** Changes to a picture's shapes from the room. */
+  private receiveLayers(message: Parameters<ObjectSync['receive']>[0]): void {
+    const sync = this.layerSync;
+    if (!sync) return;
+    if (sync.receive(message).length === 0) return;
+    this.edited = true;
+    post({ type: 'remoteEdit', doc: this.doc });
+    this.keepLayers();
+    this.postShapes();
+  }
+
+  /** What a picture's room needs from it: its changes to the shapes go out through `layerSync`, and others' come in through it. */
+  private layersRoomHost(): RoomHost {
+    return {
+      serialize: () => this.wdocBytes(),
+      freeze: (until) => this.later(() => until.then(() => {}, () => {})),
+      connect: (send, version) => this.layerSync?.connect(send, version),
+      disconnect: () => this.layerSync?.disconnect(),
+      receive: (message) => this.receiveLayers(message),
+      sync: () => (this.layerSync?.connected ? { version: this.layerSync.version, unconfirmed: this.layerSync.unconfirmed } : null),
+      resubmit: () => this.layerSync?.resubmit(),
+      changed: () => this.postRoomState(),
+      people: (list) => {
+        this.people.clear();
+        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, picture: p.picture, color: p.color, selection: null, pointer: p.pointer });
+        this.postPointers();
+      },
+      pointers: (list) => {
+        for (const p of list) {
+          const person = this.people.get(p.client);
+          if (person) person.pointer = p.pointer;
+        }
+        this.postPointers();
+      },
+    };
+  }
+
+  /** What a PDF's room needs from it: its changes to objects go out through `pdfSync`, and others' come in through it. */
+  private pdfRoomHost(): RoomHost {
+    return {
+      serialize: () => this.wdocBytes(),
+      freeze: (until) => this.later(() => until.then(() => {}, () => {})),
+      connect: (send, version) => {
+        if (this.annotator) {
+          this.pdfSync = new ObjectSync(this.annotator, this.clientId);
+          this.pdfSync.connect(send, version);
+        }
+      },
+      disconnect: () => {
+        this.pdfSync = null;
+      },
+      receive: (message) => this.receivePdf(message),
+      sync: () => (this.pdfSync ? { version: this.pdfSync.version, unconfirmed: this.pdfSync.unconfirmed } : null),
+      resubmit: () => this.pdfSync?.resubmit(),
+      changed: () => this.postRoomState(),
+      people: (list) => {
+        this.people.clear();
+        for (const p of list) if (p.client !== this.clientId) this.people.set(p.client, { name: p.name, picture: p.picture, color: p.color, selection: null, pointer: p.pointer });
+        this.postPointers();
+      },
+      pointers: (list) => {
+        for (const p of list) {
+          const person = this.people.get(p.client);
+          if (person) person.pointer = p.pointer;
+        }
+        this.postPointers();
+      },
+    };
+  }
+
+  /** Changes to a PDF's objects from the room: put in, and the pages they changed shown again. */
+  private receivePdf(message: Parameters<ObjectSync['receive']>[0]): void {
+    const sync = this.pdfSync;
+    if (!sync || !this.pdf) return;
+    const pages = sync.receive(message);
+    this.edited = true;
+    post({ type: 'remoteEdit', doc: this.doc });
+    if (pages.length) this.relayoutPdf(pages);
+    else this.sendSelection();
+  }
+
+  /** The document as the room holds it: what it is edited as and what only that format keeps go with it. */
+  private async roomDocument(): Promise<Uint8Array> {
+    // A paragraph being edited as Markdown source is read back first, so the room starts from the formatted text.
+    const resume = await this.flushRaw();
+    try {
+      await this.document!.fetchMissingMedia();
+      return await writeRoomDocument({ docx: await this.document!.write(), lens: this.format, origin: this.origin, extensions: currentExtensions(this) });
+    } finally {
+      resume();
+    }
+  }
+
   /** What the room needs from this document. */
   private roomHost(): RoomHost {
     return {
-      serialize: () => this.document!.write(),
+      serialize: () => this.roomDocument(),
       // Commands made while the document is being handed over wait for the handover.
       freeze: (until) => this.later(() => until.then(() => {}, () => {})),
       connect: (send, version) => this.replica!.connect(send, version),
@@ -1154,6 +1447,7 @@ class OpenDocument {
       receive: (message) => {
         const { change } = this.editor!.receive(message);
         if (change) {
+          this.drawingChanged();
           // Other people's carets move with the text too.
           for (const person of this.people.values()) if (person.selection) person.selection = Replica.mapSelection(person.selection, change.mapping);
           this.edited = true;
@@ -1189,15 +1483,87 @@ class OpenDocument {
     // Asked for while the document is still loading: once it has, in turn with the commands.
     if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.insertImage(bytes, ext, width, height, description)));
     const document = this.document;
-    if (!document || this.readOnly || this.room || this.net || this.pdf) return;
+    if (!document || this.readOnly || this.pdf) return;
     const { pageSize, margins } = document.section;
     const most = ((pageSize?.w ?? 12240) - (margins?.left ?? 1440) - (margins?.right ?? 1440)) * 635;
     if (most > 0 && width > most) {
       height = Math.round((height * most) / width);
       width = most;
     }
-    const image = document.addImage(bytes, ext);
-    this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image, ...(description && { description }) }], attrs: {} }] });
+    const place = (image: string) => this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image, ...(description && { description }) }], attrs: {} }] });
+    // Alone, at once. With others, once the picture is in the room for them to fetch.
+    if (!this.shared) return place(document.addImage(bytes, ext));
+    this.mediaChain = this.mediaChain.then(() => this.addMedia(bytes, ext)).then(
+      (image) => this.later(() => place(image)),
+      (error) => this.mediaFailed(error),
+    );
+  }
+
+  /** Pictures put in the room one after another, so what is added last is applied last. */
+  private mediaChain: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Puts a picture's bytes in the document as a part, and says its name. Alone, the part is named as the package likes. With others
+   * editing it, the part is named for the hash of its bytes (so no two people give different pictures one name), and the bytes are put
+   * in the room first, since the change that names it is all the others are sent.
+   */
+  private async addMedia(bytes: Uint8Array, ext: string): Promise<string> {
+    const document = this.document!;
+    const store = this.shared ? this.mediaStore() : null;
+    if (!store) return document.addImage(bytes, ext);
+    const hash = await sha256Hex(bytes);
+    const part = sharedMediaPart(hash, ext);
+    if (!document.hasPart(part)) document.setMedia(part, bytes);
+    await store.put(hash, bytes);
+    return part;
+  }
+
+  /** Tells the person something that isn't a failure. */
+  private notice(message: string): void {
+    post({ type: 'notice', doc: this.doc, message });
+  }
+
+  private mediaFailed(error: unknown): void {
+    post({ type: 'notice', doc: this.doc, message: t('picture.shareFailed', { message: (error as Error).message }) });
+  }
+
+  /** A picture another person added to the document being edited together, from the room; null for any other part, or when there is no room. */
+  async fetchRoomMedia(part: string): Promise<Uint8Array | null> {
+    const hash = sharedMediaHash(part);
+    const store = hash ? this.mediaStore() : null;
+    return hash && store ? store.get(hash).catch(() => null) : null;
+  }
+
+  /** Where the pictures of the room this document is in are kept. */
+  private mediaStore(): RoomMedia | null {
+    if (this.portMedia) return this.portMedia;
+    return this.netDoc ? networkMedia(this.netDoc) : null;
+  }
+
+  /** A vector drawing: at the caret, or in place of the embedded one whose SVG is package part `replace`, in one undoable step. */
+  putDrawing(svg: string, png: Uint8Array, width: number, height: number, description?: string, replace?: string): void {
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.putDrawing(svg, png, width, height, description, replace)));
+    const document = this.document;
+    if (!document || this.readOnly || this.pdf) return;
+    if (!replace) {
+      const { pageSize, margins } = document.section;
+      const most = ((pageSize?.w ?? 12240) - (margins?.left ?? 1440) - (margins?.right ?? 1440)) * 635;
+      if (most > 0 && width > most) {
+        height = Math.round((height * most) / width);
+        width = most;
+      }
+    }
+    const place = (image: string, svgPart: string) => {
+      const drawing = { kind: 'drawing' as const, inline: true, width, height, image, svg: svgPart, ...(description && { description }) };
+      if (replace) this.apply({ kind: 'replaceDrawing', svg: replace, drawing });
+      else this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [drawing], attrs: {} }] });
+    };
+    // Alone, at once. With others, once the parts are in the room for them to fetch.
+    if (!this.shared) return place(document.addImage(png, 'png'), document.addImage(new TextEncoder().encode(svg), 'svg'));
+    this.mediaChain = this.mediaChain.then(() => Promise.all([this.addMedia(png, 'png'), this.addMedia(new TextEncoder().encode(svg), 'svg')])).then(
+      ([image, svgPart]) => this.later(() => place(image, svgPart)),
+      (error) => this.mediaFailed(error),
+    );
   }
 
   /** Commands waiting for fonts a formatting command needs; later ones queue behind it. */
@@ -1246,6 +1612,7 @@ class OpenDocument {
   private agentPdf(annotator: PdfAnnotator, name: string, args: string): Promise<string> {
     const ids = () => this.pdfPages;
     const pageCount = () => this.pdf?.view.pageCount ?? 0;
+    const shared = () => this.pdfSync !== null;
     return runPdfTool(
       {
         annotator,
@@ -1260,6 +1627,9 @@ class OpenDocument {
           if (this.closed) throw new Error('the document was closed');
           this.command(wire);
           while (this.waiting) await this.waiting;
+        },
+        get shared() {
+          return shared();
         },
         pageOp: (index, op) => this.pdfPageOp(annotator, { kind: 'pdfPageOp', page: ids()[index]!.id, op }),
         pick: (index, x, y) => this.pickText(annotator, index, x, y),
@@ -2052,8 +2422,8 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     const t0 = performance.now();
     const loaded = await load(source, fonts);
     if (entry.closed) return;
-    // Not in a room: the others would have no bytes for a picture.
-    if (loaded.document && loaded.lens === 'md' && !requestedRoom) {
+    // In a room the first person's embeds go to the others with the document (a picture's bytes are in the file the room starts from).
+    if (loaded.document && loaded.lens === 'md') {
       await showEmbeds(loaded.document, fonts);
       if (entry.closed) return;
     }
@@ -2066,41 +2436,96 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Shown as PDF: the original's own pages, even when its text has since been edited as
     // something else (the page is told, to say that the edits aren't on them).
     if (loaded.lens === 'pdf' && loaded.original) {
-      const { openPdfView, PdfAnnotator } = await import('../formats/handlers/pdf.ts');
-      const view = await openPdfView(loaded.original, fonts, { annotations: loaded.extensions.pdf?.annotations, fields: loaded.extensions.pdf?.fields, edits: loaded.extensions.pdf?.edits, editFonts: await editFontsFor(fonts) });
-      const readMs = performance.now() - t0;
-      if (entry.closed) return;
-      entry.document = loaded.document; // kept as it is, for saving
-      entry.pdf = { view, bytes: loaded.original };
-      entry.annotator = new PdfAnnotator(view, undefined, loaded.original);
-      entry.setUpDone();
-      post({ type: 'opened', doc, name, format: 'pdf', annotating: true, outdated: !!loaded.document && !loaded.pagesCurrent });
-      const bodyMs = await entry.pumpPdf();
-      if (entry.closed) return;
-      post({ type: 'done', doc, pages: view.pageCount, timings: { read: readMs, fonts: 0, body: bodyMs, headers: 0 } });
-      return;
+      const pdfClient = crypto.randomUUID().slice(0, 8);
+      const pdfRoom = roomable(loaded.lens) ? requestedRoom : undefined;
+      // Others in the room: the pages open from the room's file, not ours.
+      let source = loaded;
+      let start: RoomStart | null = null;
+      let log: Transaction[] = [];
+      if (pdfRoom?.kind === 'network') {
+        start = await entry.joinNetwork(pdfRoom, pdfClient);
+        if (entry.closed) return;
+        if (start?.kind === 'room') source = await load({ kind: 'wdoc', name: loaded.name, bytes: start.bytes.slice().buffer }, fonts);
+      } else if (pdfRoom) {
+        const joined = await entry.join(pdfRoom, pdfClient, (await entry.wdocBytes()).slice().buffer, false, 'objects');
+        if (entry.closed) return;
+        source = await load({ kind: 'wdoc', name: loaded.name, bytes: joined.snapshot }, fonts);
+        log = joined.transactions;
+      }
+      return await openPdf(entry, source, fonts, t0, { room: pdfRoom, start, log, client: pdfClient });
     }
     // A PDF edited as anything else is reflowed into a flowing document the first time.
     let document = loaded.document ?? (await reflow(loaded.original!, loaded.extensions));
-    // Rooms share a .docx, so only a Word document can be in one.
-    const room = entry.format === 'docx' ? requestedRoom : undefined;
+    // Rooms share the document itself, so any format edited through it can be in one. A picture is the exception: its pixels are not
+    // edited together, but the shapes drawn over it (its layers) are, in a room of their own kind.
+    const picture = isPictureFormat(entry.format);
+    let room = roomable(entry.format) && !picture ? requestedRoom : undefined;
+    let pictureRoom = picture ? requestedRoom : undefined;
+    let layerLog: Transaction[] = [];
     const readMs = performance.now() - t0;
     if (entry.closed) return;
     const clientId = crypto.randomUUID().slice(0, 8);
+    // The room's document says what everyone edits it as (a person who joined by a link starts from a blank Word one).
+    const adopt = async (shared: { lens: Format; origin: Format; extensions: Extensions }, from: WordDocument): Promise<void> => {
+      entry.format = shared.lens;
+      entry.origin = shared.origin;
+      entry.extensions = await withDrawingText(from, shared.lens, shared.extensions);
+    };
     let log: Transaction[] = [];
     let start: RoomStart | null = null;
-    if (room?.kind === 'network') {
+    if (pictureRoom?.kind === 'network') {
+      start = await entry.joinNetwork(pictureRoom, clientId);
+      if (entry.closed) return;
+      if (start?.kind === 'room') {
+        const shared = await load({ kind: 'wdoc', name, bytes: start.bytes.slice().buffer }, fonts);
+        document = shared.document!;
+        entry.extensions = shared.extensions;
+      }
+    } else if (pictureRoom) {
+      const mine = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: entry.format, origin: entry.origin, pagesCurrent: false }, document: await document.write(), original: null, extensions: entry.extensions });
+      const joined = await entry.join(pictureRoom, clientId, mine.slice().buffer, false, 'layers');
+      if (entry.closed) return;
+      const shared = await load({ kind: 'wdoc', name, bytes: joined.snapshot }, fonts);
+      document = shared.document!;
+      entry.extensions = shared.extensions;
+      layerLog = joined.transactions;
+    } else if (room?.kind === 'network') {
       start = await entry.joinNetwork(room, clientId);
       if (entry.closed) return;
       // Someone else is already editing: everyone starts from the room's copy, not ours.
-      if (start?.kind === 'room') document = await WordDocument.read(start.bytes);
+      if (start?.kind === 'room') {
+        const shared = await readRoomDocument(start.bytes);
+        document = await WordDocument.read(shared.docx);
+        await adopt(shared, document);
+      }
     } else if (room) {
       // Everyone starts from the room's copy (ours, if we're first): the same bytes, read the
       // same way, then the log so far.
-      const joined = await entry.join(room, clientId, (await document.write()).slice().buffer);
+      const mine = await writeRoomDocument({ docx: await document.write(), lens: entry.format, origin: entry.origin, extensions: entry.extensions });
+      const joined = await entry.join(room, clientId, mine.slice().buffer, exclusiveRoom(entry.format));
       if (entry.closed) return;
-      document = await WordDocument.read(new Uint8Array(joined.snapshot));
-      log = joined.transactions;
+      // A PDF's room: the person who joined by a link starts from a blank Word one, and opens the PDF it is the room of instead.
+      if (isWdocBytes(joined.snapshot) && (await readWdoc(new Uint8Array(joined.snapshot))).manifest.lens === 'pdf') {
+        const source = await load({ kind: 'wdoc', name, bytes: joined.snapshot }, fonts);
+        return await openPdf(entry, source, fonts, t0, { room, start: null, log: joined.transactions, client: clientId, joined: true });
+      }
+      // A picture's room: the person who joined by a link starts from a blank Word one, and takes the picture as it is in the room instead.
+      const lens = isWdocBytes(joined.snapshot) ? (await readWdoc(new Uint8Array(joined.snapshot))).manifest.lens : null;
+      if (lens && isPictureFormat(lens)) {
+        const shared = await load({ kind: 'wdoc', name, bytes: joined.snapshot }, fonts);
+        document = shared.document!;
+        entry.format = shared.lens;
+        entry.origin = shared.origin;
+        entry.extensions = shared.extensions;
+        layerLog = joined.transactions;
+        pictureRoom = room;
+        room = undefined;
+      } else {
+        const shared = await readRoomDocument(new Uint8Array(joined.snapshot));
+        document = await WordDocument.read(shared.docx);
+        await adopt(shared, document);
+        log = joined.transactions;
+      }
     }
     // Operations need paragraph ids and normalized content: set up before layout sees the document.
     const replica = new Replica(document, { clientId });
@@ -2109,13 +2534,26 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     const session = await LayoutSession.create(document, fonts);
     if (entry.closed) return;
     entry.document = document;
+    // A picture another person added is fetched from the room when it is first needed.
+    document.fetchPart = (part) => entry.fetchRoomMedia(part);
+    // Changes made before this one joined are in the log it has just replayed.
+    if (log.length) entry.drawingChanged();
     entry.replica = replica;
     entry.session = session;
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
+    // A picture's shapes (its layers) are set up before the room's messages are handled.
+    if (isPictureFormat(entry.format)) {
+      await entry.setupLayers(clientId, layerLog);
+      if (pictureRoom?.kind === 'dev') {
+        const port = pictureRoom.port;
+        entry.layerSync!.connect((message) => port.postMessage(message satisfies RoomClientMessage), layerLog.length);
+      }
+    }
     entry.ready();
     if (start) entry.net!.ready(start);
     post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
+    if (entry.layers) entry.postShapes();
     await entry.pump();
     if (entry.closed) return;
     post({ type: 'done', doc, pages: session.pages.length, timings: { read: readMs, ...session.timings } });
@@ -2127,6 +2565,43 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Failed, or stopped for another: what waits on it is answered as for no document.
     entry.setUpDone();
   }
+}
+
+/** Opens a PDF's own pages for marking up, in a room (`options.room`) if it is in one: the file it opens from is the room's. */
+async function openPdf(
+  entry: OpenDocument,
+  source: Loaded,
+  fonts: FontSet,
+  t0: number,
+  options: { room: RoomOptions | undefined; start: RoomStart | null; log: Transaction[]; client: string; joined?: boolean },
+): Promise<void> {
+  const { openPdfView, PdfAnnotator } = await import('../formats/handlers/pdf.ts');
+  const view = await openPdfView(source.original!, fonts, { annotations: source.extensions.pdf?.annotations, fields: source.extensions.pdf?.fields, edits: source.extensions.pdf?.edits, editFonts: await editFontsFor(fonts) });
+  const readMs = performance.now() - t0;
+  if (entry.closed) return;
+  // What it is edited as comes from the file it opens from (a person who joined by a link starts as Word).
+  entry.format = source.lens;
+  entry.origin = source.origin;
+  entry.extensions = source.extensions;
+  entry.original = source.original;
+  entry.pagesCurrent = source.pagesCurrent;
+  entry.document = source.document; // kept as it is, for saving
+  entry.pdf = { view, bytes: source.original! };
+  const annotator = new PdfAnnotator(view, undefined, source.original);
+  entry.annotator = annotator;
+  // What others did before this one joined is in the log it has just been given.
+  if (options.log.length) annotator.applyObjects(options.log.flatMap(objectOps));
+  const { room } = options;
+  if (room?.kind === 'dev') {
+    entry.pdfSync = new ObjectSync(annotator, options.client);
+    entry.pdfSync.connect((message) => room.port.postMessage(message satisfies RoomClientMessage), options.log.length);
+  }
+  entry.ready();
+  if (options.start) entry.net!.ready(options.start);
+  post({ type: 'opened', doc: entry.doc, name: source.name, format: 'pdf', annotating: true, outdated: !!source.document && !source.pagesCurrent });
+  const bodyMs = await entry.pumpPdf();
+  if (entry.closed) return;
+  post({ type: 'done', doc: entry.doc, pages: view.pageCount, timings: { read: readMs, fonts: 0, body: bodyMs, headers: 0 } });
 }
 
 async function media(doc: number, request: number, part: string): Promise<void> {
@@ -2200,6 +2675,8 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     if (turn) await turn;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
     const resume = await open.flushRaw();
+    // Pictures others added that haven't been needed yet are brought in, so the file holds them all.
+    await open.document?.fetchMissingMedia();
     // A document changed since it was opened records when.
     if (open.document && open.edited) open.document.properties.modified = now();
     let bytes: Uint8Array;
@@ -2232,6 +2709,7 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
     let bytes: Uint8Array;
     try {
       // A PDF whose text wasn't edited exports as the original, pages and all.
+      await open.document?.fetchMissingMedia();
       if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
       else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
     } finally {
@@ -2390,6 +2868,18 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'insertImage':
       if (current?.doc === message.doc) current.insertImage(new Uint8Array(message.bytes), message.ext, message.width, message.height, message.description);
+      break;
+    case 'lease':
+      if (current?.doc === message.doc) current.lease(message.action);
+      break;
+    case 'shapes':
+      if (current?.doc === message.doc) current.setShapes(message.shapes);
+      break;
+    case 'shapesStep':
+      if (current?.doc === message.doc) current.stepShapes(message.action);
+      break;
+    case 'putDrawing':
+      if (current?.doc === message.doc) current.putDrawing(message.svg, new Uint8Array(message.png), message.width, message.height, message.description, message.replace);
       break;
     case 'save':
       void save(message.doc, message.request, message.lens);

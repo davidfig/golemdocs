@@ -64,7 +64,7 @@ export const app: Partial<Messages> = {
   'app.roomConnectionLost': '연결 끊김',
   'app.roomViewOnly': '보기 전용',
   'app.roomPeople': '{count}명 접속 중',
-  'app.collabNeedsWord': '공동 작업을 하려면 형식을 Word 문서로 전환하십시오',
+  'app.collabNotHere': '그림은 아직 공동 편집할 수 없습니다',
   'app.collabFailed': '공동 작업을 할 수 없습니다: {message}',
   'app.leaveRoomToSwitch': '형식을 전환하려면 공동 작업 방에서 나가십시오',
 
@@ -164,4 +164,10 @@ export const app: Partial<Messages> = {
   'app.linksUpdateFailed': '이름을 바꾸거나 옮긴 항목으로 가는 링크를 업데이트하지 못했습니다: {message}',
   'app.createLinkedTitle': '문서를 찾을 수 없음',
   'app.createLinkedAction': '만들기',
+  'room.leaseHeld': '{name} 님이 이 드로잉을 편집 중입니다.',
+  'room.leaseFree': '이 드로잉을 편집 중인 사람이 없습니다.',
+  'room.leaseTakeOver': '넘겨받기',
+  'room.leaseEdit': '편집',
+  'room.pdfPageOps': '다른 사람이 이 PDF를 편집하는 동안에는 페이지를 이동, 삭제 또는 회전할 수 없습니다.',
+  'room.pdfImageTooBig': '다른 사람이 이 PDF를 편집하는 동안에는 이 그림이 너무 커서 추가할 수 없습니다.',
 };

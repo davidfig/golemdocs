@@ -962,3 +962,20 @@ test('marks: rectangles over ranges of the text on the pages shown', skip, async
   assert.equal(marks[0].y, line.y);
   assert.deepEqual(editor.marks(() => []), []);
 });
+
+test('replacing a vector drawing swaps it in one undoable step', skip, async () => {
+  const drawing = (svg: string) => ({ kind: 'drawing' as const, inline: true, width: 100, height: 100, image: 'word/media/a.png', svg });
+  const { doc, editor, apply, session } = await setup(['ab']);
+  const found = () =>
+    (paragraphsIn(doc.body)[0].children as Inline[]).flatMap((c) => (c.kind === 'run' ? c.content.filter((i) => i.kind === 'drawing').map((i) => (i as ReturnType<typeof drawing>).svg) : []));
+  await apply({ kind: 'move', to: 'right' }, { kind: 'insertContent', content: [{ kind: 'run', properties: {}, attrs: {}, content: [drawing('word/media/one.svg')] }] });
+  assert.deepEqual(found(), ['word/media/one.svg']);
+  await apply({ kind: 'replaceDrawing', svg: 'word/media/one.svg', drawing: drawing('word/media/two.svg') });
+  assert.deepEqual(found(), ['word/media/two.svg']);
+  assert.equal(paragraphText(paragraphsIn(doc.body)[0]), 'a￼b', 'the text around it stays');
+  editor.undo();
+  await session.run();
+  assert.deepEqual(found(), ['word/media/one.svg'], 'one undo brings the old version back');
+  await apply({ kind: 'replaceDrawing', svg: 'word/media/missing.svg', drawing: drawing('word/media/three.svg') });
+  assert.deepEqual(found(), ['word/media/one.svg'], 'no such drawing: nothing happens');
+});

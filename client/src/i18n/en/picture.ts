@@ -63,5 +63,7 @@ export const picture = {
   'picture.drop.open': 'Open as a picture',
   'picture.insertFailed': 'Couldn’t insert the picture: {message}',
   'picture.editFailed': 'Couldn’t change the picture: {message}',
-  'picture.notInRoom': 'Pictures can’t be added to a shared document yet.',
+  'picture.shareFailed': 'The picture could not be shared with the others: {message}',
+  'picture.embedNotInRoom': 'A drawing can’t be added to a shared Markdown document yet.',
+  'picture.editsNotShared': 'Changes to the picture itself (crop, resize, rotate, colours) aren’t available while others are editing it. Drawing is.',
 } as const;

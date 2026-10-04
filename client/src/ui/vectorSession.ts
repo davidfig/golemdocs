@@ -5,8 +5,9 @@
 import type { Camera } from '../view/camera.ts';
 import type { ChromeState, VectorOp } from './actions.ts';
 import { colorText, parseColor } from '../vector/style.ts';
-import { svgBytes, svgText } from '../formats/vectorDoc.ts';
+import { sceneToPng, svgBytes, svgText } from '../formats/vectorDoc.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
+import { emptyScene } from '../vector/model.ts';
 import { LayersPanel } from './layersPanel.ts';
 import { ToolOptions } from './toolOptions.ts';
 import { VectorEditor } from './vectorEditor.ts';
@@ -26,6 +27,8 @@ export interface VectorSessionHost {
   changed(): void;
   /** The drawing was changed: its file is to be opened in place of the open one and saved. */
   reopen(bytes: Uint8Array): void;
+  /** Offered the drawing's SVG text first after each change: true if it was taken (put in a room instead of the file being opened again). */
+  committed?(svg: string): boolean;
   notice(message: string): void;
   focusEditor(): void;
   toggleLayers(): void;
@@ -35,6 +38,19 @@ export interface VectorSession {
   readonly editor: VectorEditor;
   /** Starts editing the drawing in these file bytes (SVG, or compressed SVG). */
   open(bytes: Uint8Array): Promise<void>;
+  /** Starts editing a drawing embedded in another document: dimmed all around, cut off at its edge. `changed` gets the SVG text after each edit; `leave` is asked for by a press outside it or Escape. */
+  openEmbedded(bytes: Uint8Array, hooks: { changed(svg: string): void; leave(): void }): Promise<void>;
+  /** The picture a document shows for the drawing in this SVG text, and the drawing's size. */
+  picture(svg: string): Promise<{ png: Uint8Array; width: number; height: number }>;
+  /** Shows another version of the drawing being edited (someone else changed it, in a room). */
+  reload(bytes: Uint8Array): Promise<void>;
+  /** The drawing can be looked at but not changed. */
+  setReadOnly(on: boolean): void;
+  /** The SVG text of a new blank drawing. */
+  blank(width: number, height: number): string;
+  /** Stops editing the embedded drawing. */
+  closeEmbedded(): void;
+  readonly embedded: boolean;
   /** Paints the drawing and the layers panel, where the view has them. */
   position(layersOpen: boolean): void;
   /** What the chrome shows of the editor. */
@@ -53,12 +69,21 @@ const hex = (color: string | null): string | null => {
 export function createVectorSession(host: VectorSessionHost): VectorSession {
   const layer = new VectorLayer(host.viewport, { camera: host.camera, page: host.page, changed: host.changed });
   const compressed = { value: false };
+  let embedded: { changed(svg: string): void; leave(): void } | null = null;
   const editor: VectorEditor = new VectorEditor({
     canvas: host.canvas,
     layer,
-    changed: (scene) => void svgBytes(writeSvg(scene), compressed.value).then(host.reopen),
+    changed: (scene) => {
+      const text = writeSvg(scene);
+      if (embedded) embedded.changed(text);
+      else if (!host.committed?.(text)) void svgBytes(text, compressed.value).then(host.reopen);
+    },
     stateChanged: host.changed,
     notice: host.notice,
+    outside: (e) => !!embedded && layer.outside(e.clientX, e.clientY),
+    get leave() {
+      return embedded ? embedded.leave : undefined;
+    },
   });
   const openCanvas = (): void =>
     void import('./canvasDialog.ts').then(({ showCanvasDialog }) =>
@@ -78,6 +103,32 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
       const { scene, gzip } = await svgText(bytes);
       compressed.value = gzip;
       if (!editor.active) editor.open(scene);
+    },
+    async openEmbedded(bytes, hooks) {
+      const { scene } = await svgText(bytes);
+      if (editor.active) editor.close();
+      embedded = hooks;
+      layer.focus = true;
+      editor.open(scene);
+    },
+    async picture(svg) {
+      const { scene } = await svgText(new TextEncoder().encode(svg));
+      return { png: await sceneToPng(scene), width: scene.width, height: scene.height };
+    },
+    async reload(bytes) {
+      const { scene } = await svgText(bytes);
+      if (editor.active) editor.open(scene);
+    },
+    setReadOnly: (on) => (editor.readOnly = on),
+    blank: (width, height) => writeSvg(emptyScene(width, height)),
+    closeEmbedded() {
+      if (!embedded) return;
+      embedded = null;
+      editor.close();
+      layer.focus = false;
+    },
+    get embedded() {
+      return !!embedded;
     },
     position(layersOpen) {
       layer.position();
@@ -115,6 +166,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         case 'pencil':
         case 'nudge':
         case 'text':
+        case 'canvas':
           return editor.setTool(op);
         case 'delete':
           return editor.delete();
@@ -151,7 +203,6 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         case 'guideH':
           return editor.addGuide('h');
         case 'clearGuides':
-        case 'canvas':
           return editor.clearGuides();
         case 'makeMask':
           return editor.makeMask();

@@ -23,6 +23,7 @@ function recorder() {
   const record = (name: string) => (...args: unknown[]) => void calls.push([name, ...args, ...(['delete', 'duplicate', 'group', 'ungroup', 'order', 'transformSelection', 'applyStyle', 'applyStrokeStyle', 'applyFillType', 'makeClip', 'releaseClip', 'makeMask', 'releaseMask', 'clearGuides'].includes(name) ? [selection.map((p) => p[0])] : [])]);
   const editor: DrawingEditor = {
     drawing: s,
+    readOnly: false,
     select: (paths) => void (selection = paths),
     delete: record('delete'),
     duplicate: record('duplicate'),

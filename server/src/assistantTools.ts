@@ -12,7 +12,7 @@ Work like this:
 - Change the document only through the tools. Use document (convert) when asked to turn the document into another format (Word, PDF, Markdown and so on); paragraph numbers can change afterwards, so read again. Make the smallest change that does what was asked, and leave everything else alone.
 - You can only see a picture the person attached or one you fetched with view_picture; use list_pictures to find the ones in the open document or the person's saved files. Do not guess what a picture shows. A picture you fetched is shown to you once: say what you need to remember from it.
 - Files: the person's documents and folders are separate from the open document. Call files (list) to see their ids, then change many at once: move, delete and folders take lists, so do all of a request in one call. Delete only what was asked for: deleting cannot be taken back.
-- files open and new replace the open document with another, and the document tools then work on that one: only when the person asked to open or start one. You cannot import files from the person's computer or share documents with other people; tell them to use File › Import, File › Import Folder or File › Share.
+- files open and new replace the open document with another, and the document tools then work on that one: only when the person asked to open or start one. You cannot import files from the person's computer or start sharing a document with other people (a link that lets others edit is the person's to give); tell them to use File › Import, File › Import Folder or File › Share. When others are already editing the open document you can see who with collaboration (status), and take over or let go of editing a drawing that only one person at a time may edit.
 - Links: a link is made with link, never by typing brackets. A web link has the address as its "url". A link to another of the person's documents has "doc:" and the document's title as its "url" ("doc:Project Plan", or "doc:Project Plan#Budget" for a heading in it); the title is the document's name without its extension, and matches ignoring case. In a Markdown document such a link is saved as an Obsidian-style "[[Project Plan]]" (or "[[Project Plan|label]]" when the text differs), and "[[Note]]" in an imported Obsidian note is already such a link; the same text typed through replace_text or insert_paragraph is only plain text, not a link. Check the title exists with list_documents first, since a link to a missing document asks to create it when clicked. Tags: "#plan" written in a document is a tag (also "#work/plans"; it needs a letter, so "#1" is not one), and a link whose url is "tag:plan" on the text "#plan" is a clickable one that opens a search of every document with that tag. In a Markdown document such a link is saved as plain "#plan". To tag a document, put the tag in a paragraph with insert_paragraph, then link it. Find the documents with a tag with other_documents search "#plan".
 - After editing, say in one or two short sentences what you changed. Do not repeat the whole text back.
 - If the request is unclear, or is about something you cannot do with these tools, say so briefly instead of guessing.
@@ -231,13 +231,13 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'read_drawing',
-    description: 'When the document is a vector drawing (SVG): its size and its shapes, back to front, numbered from 0, with where each is, its colors and any text. Read before you edit.',
+    description: 'When the document is a vector drawing (SVG), or a drawing in the text that you opened with text_drawings (open): its size and its shapes, back to front, numbered from 0, with where each is, its colors and any text. Read before you edit.',
     parameters: { type: 'object', properties: {} },
   },
   {
     name: 'edit_drawing',
     description:
-      'When the document is a vector drawing (SVG), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_shape (shape: roundRect, triangle, rightTriangle, diamond, trapezoid, parallelogram, pentagon, hexagon, octagon, star, star4, star6, heart, arrowRight, arrowLeft, arrowUp, arrowDown, chevron, plus, moon, cloud, bubble or lightning; x, y, width, height: the box it fills), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), nudge_lines (x, y: where the round brush is; dx, dy: how far it pushes the lines under it; radius, default 40; strength, 10 to 100 percent, default 100: how much of dx, dy reaches the lines; bends lines near the brush and leaves the rest, like the Nudge tool; needs no shapes), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dryInk, frayedInk, charcoal, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, new_layer (name: optional; adds a layer on top, which new shapes then go on), new_group (name: optional; an empty group), add_guide (axis: vertical or horizontal; position: where; shapes snap to it), clear_guides, set_canvas (the page\'s width and height in pixels; shapes_follow: true to scale the shapes with it; background: a color or "none") and fit_canvas (the page shrinks or grows to the shapes, with a margin). These need no shapes.',
+      'When the document is a vector drawing (SVG), or a drawing in the text opened with text_drawings (open), one change to it (undo steps back; while someone else is editing a shared drawing it is refused: see collaboration). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_shape (shape: roundRect, triangle, rightTriangle, diamond, trapezoid, parallelogram, pentagon, hexagon, octagon, star, star4, star6, heart, arrowRight, arrowLeft, arrowUp, arrowDown, chevron, plus, moon, cloud, bubble or lightning; x, y, width, height: the box it fills), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), nudge_lines (x, y: where the round brush is; dx, dy: how far it pushes the lines under it; radius, default 40; strength, 10 to 100 percent, default 100: how much of dx, dy reaches the lines; bends lines near the brush and leaves the rest, like the Nudge tool; needs no shapes), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dryInk, frayedInk, charcoal, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, new_layer (name: optional; adds a layer on top, which new shapes then go on), new_group (name: optional; an empty group), add_guide (axis: vertical or horizontal; position: where; shapes snap to it), clear_guides, set_canvas (the page\'s width and height in pixels; shapes_follow: true to scale the shapes with it; background: a color or "none") and fit_canvas (the page shrinks or grows to the shapes, with a margin). These need no shapes.',
     parameters: {
       type: 'object',
       properties: {
@@ -277,7 +277,7 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'edit_picture',
-    description: 'When the document is a picture (png, jpeg or webp): rotate_left, rotate_right, rotate_180, flip_horizontal, flip_vertical, grayscale, sepia, invert, blur, sharpen, auto_levels, crop (x, y, width, height in pixels), resize (width, height), adjust (brightness, contrast, saturation, each -100 to 100), or draw (tool line, arrow, rectangle, ellipse or text; x, y; to_x, to_y; color; width; fill; text).',
+    description: 'When the document is a picture (png, jpeg or webp): rotate_left, rotate_right, rotate_180, flip_horizontal, flip_vertical, grayscale, sepia, invert, blur, sharpen, auto_levels, crop (x, y, width, height in pixels), resize (width, height), adjust (brightness, contrast, saturation, each -100 to 100): these change the picture itself, put the shapes below into it, and are not available while others are editing it. draw adds a shape as a layer over the picture (tool line, arrow, rectangle, ellipse or text; x, y; to_x, to_y; color; width; fill; text), which works with others editing it too. layers lists the shapes drawn over the picture, numbered from 0, back to front; erase_shape and move_shape (dx, dy in pixels) change shape `number`; flatten puts the shapes into the picture.',
     parameters: {
       type: 'object',
       properties: {
@@ -292,6 +292,9 @@ export const TOOLS: ToolDefinition[] = [
         contrast: { type: 'integer', minimum: -100, maximum: 100 },
         saturation: { type: 'integer', minimum: -100, maximum: 100 },
         tool: { type: 'string', enum: ['line', 'arrow', 'rectangle', 'ellipse', 'text'] },
+        number: { type: 'integer', minimum: 0, description: 'For erase_shape and move_shape: the shape, from layers.' },
+        dx: { type: 'integer', description: 'For move_shape: pixels to the right.' },
+        dy: { type: 'integer', description: 'For move_shape: pixels down.' },
         color: { type: 'string' },
         fill: { type: 'boolean' },
         text: { type: 'string' },
@@ -422,6 +425,31 @@ export const TOOLS: ToolDefinition[] = [
         folders: { type: 'array', items: { type: 'string' }, description: 'Folder ids.' },
         to: { type: ['string', 'null'] },
       },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'text_drawings',
+    description:
+      'Vector drawings inside a Word or Markdown document (a drawing in the text can be drawn in place, like a drawing document). list: the drawings in the text, numbered from 0, with their page, size and, for one embedded from another document, its name. insert: a new blank drawing at the caret (`width` and `height` in pixels, default 480 x 320), open for drawing; in Markdown it is stored as a document of its own and embedded (not while others are editing the note). open: start editing drawing `number` in place; read_drawing and edit_drawing then work on it, and the rest of the document waits. close: put the edited drawing back in the text (one undo step; do this before changing the text again).',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'insert', 'open', 'close'] },
+        number: { type: 'integer', minimum: 0, description: 'For open: the drawing, from list.' },
+        width: { type: 'integer', minimum: 16, maximum: 4000 },
+        height: { type: 'integer', minimum: 16, maximum: 4000 },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'collaboration',
+    description:
+      'Whether others are editing the open document with the person. status: who is here, and for a drawing (which only one person at a time may edit) who may edit now. take_over: ask for the right to edit a drawing; it is given when nobody holds it, or the holder has been idle for a while, and refused otherwise (say so; do not keep asking). release: let go of it. You cannot start sharing: that is File › Share, the person\'s to do.',
+    parameters: {
+      type: 'object',
+      properties: { action: { type: 'string', enum: ['status', 'take_over', 'release'] } },
       required: ['action'],
     },
   },

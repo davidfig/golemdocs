@@ -16,6 +16,8 @@ export const TOOL_GROUPS: Record<string, Record<string, string>> = {
   document: { info: 'get_document_info', count_words: 'count_words', rename: 'rename_document', convert: 'convert_document', download: 'download_document', print: 'print_document' },
   files: { list: 'list_files', open: 'open_file', new: 'new_document', move: 'move_files', delete: 'delete_files', download_all: 'download_all' },
   folders: { create: 'create_folders', rename: 'rename_folders' },
+  text_drawings: { list: 'list_text_drawings', insert: 'insert_text_drawing', open: 'open_text_drawing', close: 'close_text_drawing' },
+  collaboration: { status: 'collaboration_status', take_over: 'take_over_editing', release: 'release_editing' },
 };
 
 export type Expanded = { name: string; arguments: string } | { error: string };

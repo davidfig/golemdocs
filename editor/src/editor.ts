@@ -12,13 +12,35 @@
 // links > search > formatting > comments > sections > tables. This file adds `apply`, which
 // dispatches a command to them.
 
-import { commentRanges, inlinesLength, paragraphLength, type Inline, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
+import { commentRanges, inlinesLength, itemLength, paragraphLength, type Drawing, type Inline, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
 import { END, type Operation, type Pos } from '@golemdocs/ops';
 import { type Command, type CommandResult, NO_CHANGE, combine } from './types.ts';
 import { EditorTables } from './tables.ts';
 
 export * from './types.ts';
 export { withFormat } from './formatting.ts';
+
+/** For `replaceDrawing`: the (first) drawing that has an SVG beside its picture, whatever part that is (a document that is one drawing). */
+export const ANY_DRAWING = '*';
+
+/** The model offset of the drawing whose SVG is part `svg`, within these inlines (offsets from their start). */
+function drawingOffset(inlines: readonly Inline[], svg: string): { offset: number; drawing: Drawing } | undefined {
+  let at = 0;
+  for (const inline of inlines) {
+    if (inline.kind === 'run') {
+      for (const item of inline.content) {
+        if (item.kind === 'drawing' && item.svg !== undefined && (svg === ANY_DRAWING || item.svg === svg)) return { offset: at, drawing: item };
+        at += itemLength(item);
+      }
+    } else if (inline.kind === 'raw') at += 1;
+    else {
+      const found = drawingOffset(inline.children, svg);
+      if (found) return { offset: at + found.offset, drawing: found.drawing };
+      at += inlinesLength(inline.children);
+    }
+  }
+  return undefined;
+}
 
 export class Editor extends EditorTables {
   /** The paragraph's id, which stays the same as it is edited. */
@@ -154,6 +176,27 @@ export class Editor extends EditorTables {
         const id = this.replica.id(at.paragraph);
         const ops: Operation[] = [{ type: 'insertContent', paragraph: id, offset: at.offset, content: command.content }];
         return combine(removed, this.edit([ops, { paragraph: id, offset: at.offset + inlinesLength(command.content) }], group));
+      }
+      case 'replaceDrawing': {
+        for (const paragraph of this.paragraphs()) {
+          const found = drawingOffset(paragraph.children, command.svg);
+          if (!found) continue;
+          const { offset, drawing: old } = found;
+          // The new version is the same drawing in the text: it keeps how it is placed, its name (which marks an embed) and its description, and its size unless the new one has one.
+          const drawing: Drawing = {
+            ...old,
+            image: command.drawing.image,
+            svg: command.drawing.svg,
+            ...(command.drawing.width > 0 && command.drawing.height > 0 && { width: command.drawing.width, height: command.drawing.height }),
+          };
+          const id = this.replica.id(paragraph);
+          const ops: Operation[] = [
+            { type: 'delete', paragraph: id, from: offset, to: offset + 1 },
+            { type: 'insertItem', paragraph: id, offset, item: drawing },
+          ];
+          return this.edit([ops, { paragraph: id, offset: offset + 1 }]);
+        }
+        return NO_CHANGE;
       }
       case 'setLink':
         return this.edit(this.setLinkOps(command.url, command.text));

@@ -1,6 +1,6 @@
 // Positions, selections, commands and results of the editor.
 
-import { type Block, type DocumentProperties, type Inline, type Paragraph, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { type Block, type DocumentProperties, type Drawing, type Inline, type Paragraph, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { type Operation, type RunFormat } from '@golemdocs/ops';
 import { type PageLayout } from '@golemdocs/layout';
 
@@ -53,6 +53,8 @@ export type Command =
   | { kind: 'move'; to: MoveTarget; extend?: boolean }
   /** A click or drag at page-relative points; `unit` selects a word or paragraph (double/triple click). */
   | { kind: 'pointer'; page: PageLayout; x: number; y: number; extend?: boolean; unit?: 'character' | 'word' | 'paragraph' }
+  /** Replaces the vector drawing whose SVG is package part `svg` (or, for '*', the one drawing a document is) with another version of it (it was edited in place), as one undoable step. Its size is kept when the new one has none (0). */
+  | { kind: 'replaceDrawing'; svg: string; drawing: Drawing }
   | { kind: 'selectAll' }
   /** Comments the selection (or, with none, the word at the caret). */
   | { kind: 'addComment'; text: string; author: string; date?: string }

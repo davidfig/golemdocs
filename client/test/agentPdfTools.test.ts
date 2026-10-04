@@ -81,3 +81,14 @@ test('the PDF tools are for PDFs, and the text tools for documents', async () =>
   const doc = await openMarkdown('Hello\n');
   assert.match(await agent(doc, 'read_pdf_page', { page: 1 }), /^Error: there is no tool called read_pdf_page/);
 });
+
+test('pdf_page is refused while others are editing the PDF (a page operation makes a new file a room cannot hand round), and nothing is changed', async () => {
+  const { runPdfTool } = await import('../src/layout/agentPdfTools.ts');
+  const called: unknown[] = [];
+  const env = { shared: true, pageCount: 3, pageOp: async (...args: unknown[]) => void called.push(args) } as never;
+  assert.match(await runPdfTool(env, 'pdf_page', JSON.stringify({ page: 2, op: 'delete' })), /^Error: others are editing this PDF now, so pages cannot be moved/);
+  assert.deepEqual(called, []);
+  const alone = { shared: false, pageCount: 3, pageOp: async (...args: unknown[]) => void called.push(args) } as never;
+  assert.match(await runPdfTool(alone, 'pdf_page', JSON.stringify({ page: 2, op: 'rotate_left' })), /^Done: rotate left on page 2/);
+  assert.equal(called.length, 1);
+});

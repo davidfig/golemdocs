@@ -7,6 +7,7 @@ export * from './edit/comments.ts';
 export { paragraphSegments, type Segment } from './edit/segments.ts';
 export { WordDocument } from './docx/document.ts';
 export { OpcPackage, PackageError, REL, CONTENT_TYPE } from './opc/package.ts';
+export { SHARED_MEDIA_IN_TEXT, sharedMediaHash, sharedMediaPart, sha256Hex } from './opc/sharedMedia.ts';
 export { ZipArchive, ZipError, writeZip } from './zip/zip.ts';
 export { parseXml, serializeXml, el, elements, textContent, cloneElement, XmlError, type XmlElement, type XmlNode } from './xml/xml.ts';
 export * from './docx/metadata.ts';

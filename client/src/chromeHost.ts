@@ -84,6 +84,8 @@ export interface AppHooks {
   drawStyle(color?: string, size?: number, fill?: boolean): void;
   /** Insert ▸ Picture: choose a picture file and put it in the document. */
   pickPicture(): void;
+  /** Puts a new blank vector drawing in the text and starts editing it. */
+  insertDrawing(): void;
   /** The open file is in the large-text viewer. */
   isLargeText(): boolean;
   /** Copy the lines selected in the large-text viewer. */
@@ -175,6 +177,7 @@ const SUPPORTED = new Set<ActionKind>([
   'vectorStyle',
   'vectorGradient',
   'insertImage',
+  'insertDrawing',
   'zoom',
   'zoomBy',
   'toggleGrid',
@@ -395,6 +398,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.vectorGradient(action);
         case 'insertImage':
           return app.pickPicture();
+        case 'insertDrawing':
+          return app.insertDrawing();
         case 'selectAll':
           return app.isDrawing() ? app.vectorAction('selectAll') : app.send({ kind: 'selectAll' });
         case 'zoom':

@@ -47,6 +47,9 @@ export interface VectorEditorHost {
   stateChanged(): void;
   /** Says something is not possible (a message for the person). */
   notice?(message: string): void;
+  /** For a drawing inside another document: whether a press is outside the drawing, and the way back out (a press outside, or Escape with nothing selected, leaves). */
+  outside?(e: PointerEvent): boolean;
+  leave?(): void;
 }
 
 export type VectorTool = 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas';
@@ -92,9 +95,6 @@ const PENCIL_CURSOR = (() => {
 /** The cursor over each handle of the selection's box. */
 const RESIZE_CURSORS: Record<Exclude<Handle, 'rotate'>, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
 
-type NodePart = 'anchor' | 'c1' | 'c2';
-
-type Gesture =
 /** The area of the drawing's coordinates a page shows: its left, top, right and bottom. */
 interface PageBox {
   x0: number;
@@ -103,6 +103,9 @@ interface PageBox {
   y1: number;
 }
 
+type NodePart = 'anchor' | 'c1' | 'c2';
+
+type Gesture =
   | { kind: 'move'; base: Scene; start: [number, number]; moved: boolean; targets?: SnapTargets }
   | { kind: 'resize'; base: Scene; handle: Exclude<Handle, 'rotate'>; box: Bounds; moved: boolean; targets?: SnapTargets }
   | { kind: 'rotate'; base: Scene; center: [number, number]; from: number; moved: boolean }
@@ -111,10 +114,10 @@ interface PageBox {
   | { kind: 'penHandle'; origin: [number, number] }
   | { kind: 'pencil'; points: [number, number][]; /** The brush outline drawn for the first `count` points, kept until another point is added. */ outline?: { count: number; commands: PathCommand[] } }
   | { kind: 'nudge'; base: Scene; last: [number, number]; moved: boolean }
+  | { kind: 'canvas'; handle: Exclude<Handle, 'rotate'>; from: PageBox; box: PageBox }
   | { kind: 'guide'; base: Scene; axis: 'v' | 'h'; index: number; moved: boolean }
   | { kind: 'gradient'; base: Scene; part: 0 | 1 | 'stop'; index: number; moved: boolean }
   | { kind: 'node'; base: Scene; part: NodePart; index: number; start: [number, number]; smooth: boolean; moved: boolean };
-  | { kind: 'canvas'; handle: Exclude<Handle, 'rotate'>; from: PageBox; box: PageBox }
 
 /** Editing the points of one path. */
 interface NodeMode {
@@ -177,10 +180,10 @@ export class VectorEditor {
   private dragCursor(g: Gesture): string {
     switch (g.kind) {
       case 'resize':
+      case 'canvas':
         return RESIZE_CURSORS[g.handle];
       case 'rotate':
         return ROTATE_CURSOR;
-      case 'canvas':
       case 'guide':
         return g.axis === 'v' ? 'ew-resize' : 'ns-resize';
       case 'move':
@@ -210,13 +213,13 @@ export class VectorEditor {
     }
     if (this._tool === 'text') return 'text';
     if (this._tool === 'pencil') return PENCIL_CURSOR;
-    if (this._tool !== 'select') return 'crosshair';
-    // Points and handles of the path being edited.
-    if (this.nodes) {
     if (this._tool === 'canvas') {
       const edge = this.pageHandleAt(frame, sx, sy);
       return edge ? RESIZE_CURSORS[edge] : '';
     }
+    if (this._tool !== 'select') return 'crosshair';
+    // Points and handles of the path being edited.
+    if (this.nodes) {
       if (this.nodeAt(frame, sx, sy)) return 'move';
       const near = nearestSegment(this.nodeCommands(scene, this.nodes.path), this.toLocal(this.nodes.path, at));
       if (near && near.distance * frame.unit <= LINE_REACH * 2) return 'copy';
@@ -287,7 +290,7 @@ export class VectorEditor {
   private newStop = 0;
 
   private readonly keys = (e: KeyboardEvent) => {
-    if (!this.scene || isFormField(e.target)) return;
+    if (!this.scene || this._readOnly || isFormField(e.target)) return;
     if (this.key(e)) {
       e.preventDefault();
       e.stopPropagation();
@@ -313,6 +316,20 @@ export class VectorEditor {
   /** Whether a drawing is open for editing. */
   get active(): boolean {
     return this.scene !== null;
+  }
+
+  /** The drawing can be looked at but not changed (someone else is editing it, in a room). */
+  private _readOnly = false;
+
+  get readOnly(): boolean {
+    return this._readOnly;
+  }
+
+  set readOnly(on: boolean) {
+    if (on === this._readOnly) return;
+    this._readOnly = on;
+    if (on) this.cancelGesture();
+    this.host.stateChanged();
   }
 
   get selection(): readonly NodePath[] {
@@ -468,7 +485,7 @@ export class VectorEditor {
 
   /** Keeps `scene` as the current drawing, the earlier one for undo, and tells the host. */
   private commit(scene: Scene, selection: NodePath[]): void {
-    if (!this.scene) return;
+    if (!this.scene || this._readOnly) return;
     this.history.undo.push(this.scene);
     if (this.history.undo.length > HISTORY) this.history.undo.shift();
     this.history.redo = [];
@@ -494,6 +511,7 @@ export class VectorEditor {
   }
 
   undo(): void {
+    if (this._readOnly) return;
     const before = this.history.undo.pop();
     if (!before || !this.scene) return;
     this.history.redo.push(this.scene);
@@ -501,6 +519,7 @@ export class VectorEditor {
   }
 
   redo(): void {
+    if (this._readOnly) return;
     const after = this.history.redo.pop();
     if (!after || !this.scene) return;
     this.history.undo.push(this.scene);
@@ -1133,7 +1152,7 @@ export class VectorEditor {
     }
     if (e.key === 'Escape' && this.entered) return this.leaveGroup(), true;
     if (mod && k === 'a') return this.selectAll(), true;
-    if (!this._selection.length) return false;
+    if (!this._selection.length) return e.key === 'Escape' && !!this.host.leave && (this.host.leave(), true);
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.removeStop()) return true;
     if (mod && k === 'd') return this.duplicate(), true;
     if (mod && k === 'g') return e.shiftKey ? (this.ungroup(), true) : (this.group(), true);
@@ -1160,9 +1179,6 @@ export class VectorEditor {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  /** The handle of the selection's box under a screen point. */
-  private handleAt(frame: VectorFrame, x: number, y: number): Handle | null {
-    const box = this.selectionBox();
   /** The part of the page's edge (a corner or a side) under a screen point, for the Canvas tool. */
   private pageHandleAt(frame: VectorFrame, x: number, y: number): Exclude<Handle, 'rotate'> | null {
     const scene = this.scene;
@@ -1234,6 +1250,9 @@ export class VectorEditor {
     return box;
   }
 
+  /** The handle of the selection's box under a screen point. */
+  private handleAt(frame: VectorFrame, x: number, y: number): Handle | null {
+    const box = this.selectionBox();
     if (!box) return null;
     const [rx, ry] = this.rotateHandle(frame, box);
     if (Math.hypot(x - rx, y - ry) <= HANDLE_REACH) return 'rotate';
@@ -1264,9 +1283,15 @@ export class VectorEditor {
   private down(e: PointerEvent): void {
     const scene = this.scene;
     // Alt alone pans the view; with Ctrl or Cmd it picks what is underneath.
-    if (!scene || e.button !== 0 || (e.altKey && !(e.ctrlKey || e.metaKey))) return;
+    if (!scene || this._readOnly || e.button !== 0 || (e.altKey && !(e.ctrlKey || e.metaKey))) return;
     const frame = this.host.layer.frame();
     if (!frame) return;
+    // A press outside a drawing embedded in a document goes on to the document.
+    if (this.host.outside?.(e)) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      return this.host.leave?.();
+    }
     // A box being typed in is settled by clicking away from it.
     if (this.typing) this.closeText(true);
     e.stopImmediatePropagation();
@@ -1280,15 +1305,6 @@ export class VectorEditor {
       case 'pencil':
         this.gesture = { kind: 'pencil', points: [at] };
         return;
-      case 'nudge':
-        this.gesture = { kind: 'nudge', base: scene, last: at, moved: false };
-        this.nudgeAt = at;
-        return;
-      case 'rect':
-      case 'ellipse':
-      case 'shape':
-      case 'line':
-        this.gesture = { kind: 'create', tool: this._tool, start: this.snapStart(e, at), to: at, square: false };
       case 'canvas': {
         const [sx, sy] = this.screen(e);
         const handle = this.pageHandleAt(frame, sx, sy);
@@ -1298,6 +1314,15 @@ export class VectorEditor {
         this.gesture = { kind: 'canvas', handle, from, box: from };
         return this.refresh();
       }
+      case 'nudge':
+        this.gesture = { kind: 'nudge', base: scene, last: at, moved: false };
+        this.nudgeAt = at;
+        return;
+      case 'rect':
+      case 'ellipse':
+      case 'shape':
+      case 'line':
+        this.gesture = { kind: 'create', tool: this._tool, start: this.snapStart(e, at), to: at, square: false };
         return;
       case 'text':
         return this.textDown(at, frame);
@@ -1507,6 +1532,10 @@ export class VectorEditor {
       }
       return this.refresh();
     }
+    if (gesture.kind === 'canvas') {
+      gesture.box = this.draggedPage(gesture, at, e.shiftKey, e.altKey);
+      return this.refresh();
+    }
     if (gesture.kind === 'band') {
       gesture.to = at;
       return this.refresh();
@@ -1516,10 +1545,6 @@ export class VectorEditor {
       gesture.to = at;
       if (this.snaps(e) && this.scene) {
         const p = snapPoint({ x: at[0], y: at[1] }, snapTargets(this.scene, [], showGuidesOn()), this.reach());
-    if (gesture.kind === 'canvas') {
-      gesture.box = this.draggedPage(gesture, at, e.shiftKey, e.altKey);
-      return this.refresh();
-    }
         gesture.to = [p.x, p.y];
         this.guides = p.guides;
       }
@@ -1670,6 +1695,14 @@ export class VectorEditor {
       this._selection = merged;
       return this.refresh();
     }
+    if (gesture.kind === 'canvas') {
+      const { box, from } = gesture;
+      if (box.x0 === from.x0 && box.y0 === from.y0 && box.x1 === from.x1 && box.y1 === from.y1) return this.refresh();
+      return this.edit((scene, selection) => {
+        setCanvasBounds(scene, { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 });
+        return selection;
+      }, false);
+    }
     if (gesture.kind === 'create') return this.create(gesture);
     if (gesture.kind === 'pencil') return this.drawn(gesture.points);
     if (gesture.kind === 'nudge' && !gesture.moved) return this.refresh();
@@ -1679,14 +1712,6 @@ export class VectorEditor {
     this.scene = gesture.base;
     this.commit(result, this._selection);
   }
-    if (gesture.kind === 'canvas') {
-      const { box, from } = gesture;
-      if (box.x0 === from.x0 && box.y0 === from.y0 && box.x1 === from.x1 && box.y1 === from.y1) return this.refresh();
-      return this.edit((scene, selection) => {
-        setCanvasBounds(scene, { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 });
-        return selection;
-      }, false);
-    }
 
   private cancelGesture(): void {
     const gesture = this.gesture;
@@ -2002,15 +2027,6 @@ export class VectorEditor {
     ctx.restore();
   }
 
-  private decorateSelection(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {
-    // The outline of each selected node, and the box around them all.
-    for (const path of this._selection) {
-      const box = selectionBounds(scene, [path]);
-      if (!box) continue;
-      const [x0, y0] = frame.toScreen(box.x, box.y);
-      const [x1, y1] = frame.toScreen(box.x + box.width, box.y + box.height);
-      ctx.setLineDash([3, 3]);
-      ctx.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0));
   /** The Canvas tool: handles on the page's edge, and where the page will be while one is dragged, with its size. */
   private decoratePage(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {
     const right = frame.left + scene.width * frame.scale;
@@ -2050,6 +2066,15 @@ export class VectorEditor {
     ctx.restore();
   }
 
+  private decorateSelection(ctx: CanvasRenderingContext2D, frame: VectorFrame, scene: Scene): void {
+    // The outline of each selected node, and the box around them all.
+    for (const path of this._selection) {
+      const box = selectionBounds(scene, [path]);
+      if (!box) continue;
+      const [x0, y0] = frame.toScreen(box.x, box.y);
+      const [x1, y1] = frame.toScreen(box.x + box.width, box.y + box.height);
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0));
     }
     ctx.setLineDash([]);
     const box = this.selectionBox();

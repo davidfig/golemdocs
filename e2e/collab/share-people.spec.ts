@@ -3,7 +3,7 @@
 // the people being shared with must have signed in once, which `newPerson` does.
 
 import { test, expect, App } from '../fixtures';
-import { cloudPair, makeDocx, newPerson, openCloud, shareWith, uploadDoc, waitSaved } from './helpers';
+import { cloudPair, makeDocx, markdownWdoc, newPerson, openCloud, shareWith, uploadDoc, waitSaved } from './helpers';
 import { CLIENT_ORIGIN } from '../ports.ts';
 import type { Browser, Page } from '@playwright/test';
 
@@ -145,7 +145,6 @@ test.describe('what the other person sees', () => {
   });
 
   test('a shared document opens for the other person with its text', async ({ browser }) => {
-    test.fixme(true, 'Suspected app bug: ?doc=shared:<id> opens the cloud file as a plain .docx (docx-url), but the app stores documents in its own wrapper format, so it fails with "not an Office document: [Content_Types].xml is missing"');
     const { owner, guest, doc } = await ownerAndGuest(browser);
     await shareWith(owner.page, doc.id, guest.email, 'editor');
     await guest.page.goto(`/?doc=shared:${doc.id}`);
@@ -154,11 +153,25 @@ test.describe('what the other person sees', () => {
     await owner.context.close();
     await guest.context.close();
   });
+
+  test('a shared Markdown document opens for the other person as Markdown', async ({ browser }) => {
+    const owner = await newPerson(browser, 'owner');
+    const guest = await newPerson(browser, 'guest');
+    await guest.page.goto('/?doc=welcome');
+    const doc = await uploadDoc(owner.page, 'Notes.md', markdownWdoc(await makeDocx(browser, ['the notes']), 'title: Notes'));
+    await openCloud(owner.page, doc.id);
+    await shareWith(owner.page, doc.id, guest.email, 'editor');
+    await guest.page.goto(`/?doc=shared:${doc.id}`);
+    await guest.app.ready();
+    await expect.poll(() => guest.app.text()).toBe('the notes');
+    await expect(guest.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await owner.context.close();
+    await guest.context.close();
+  });
 });
 
 test.describe('live editing between two accounts', () => {
   test('an editor and the owner edit the same shared document together', async ({ browser }) => {
-    test.fixme(true, 'Blocked by the shared-document open bug above (?doc=shared:<id> fails to load)');
     const { owner, guest, doc } = await ownerAndGuest(browser);
     await shareWith(owner.page, doc.id, guest.email, 'editor');
     await owner.app.focus();
@@ -171,7 +184,6 @@ test.describe('live editing between two accounts', () => {
   });
 
   test('a viewer sees the document read-only, and the status line says so', async ({ browser }) => {
-    test.fixme(true, 'Blocked by the shared-document open bug above (?doc=shared:<id> fails to load)');
     const { owner, guest, doc } = await ownerAndGuest(browser);
     await shareWith(owner.page, doc.id, guest.email, 'viewer');
     await guest.page.goto(`/?doc=shared:${doc.id}`);

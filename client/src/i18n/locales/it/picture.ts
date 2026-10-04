@@ -65,5 +65,7 @@ export const picture: Partial<Messages> = {
   'picture.drop.open': 'Apri come immagine',
   'picture.insertFailed': 'Impossibile inserire l’immagine: {message}',
   'picture.editFailed': 'Impossibile modificare l’immagine: {message}',
-  'picture.notInRoom': 'Non è ancora possibile aggiungere immagini a un documento condiviso.',
+  'picture.shareFailed': 'Non è stato possibile condividere l’immagine con gli altri: {message}',
+  'picture.embedNotInRoom': 'Non è ancora possibile aggiungere disegni a un documento Markdown condiviso.',
+  'picture.editsNotShared': 'Le modifiche all’immagine stessa (ritaglia, ridimensiona, ruota, colori) non sono disponibili mentre altri la modificano. Disegnare sì.',
 };

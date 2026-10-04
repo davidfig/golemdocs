@@ -22,6 +22,8 @@ export interface PdfAgentEnv {
   fields(): WireField[];
   run(command: WireCommand): Promise<void>;
   /** Changes the pages (done once the new file is shown). */
+  /** Others are editing this PDF with the person now. */
+  readonly shared: boolean;
   pageOp(index: number, op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert'): Promise<void>;
   /** Picks the text at a point of a page to edit it in place (done once it is picked). */
   pick(index: number, x: number, y: number): Promise<void>;
@@ -228,6 +230,8 @@ const PAGE_OPS = {
 async function pageOp(env: PdfAgentEnv, args: Args): Promise<string> {
   const index = pageIndex(env, args);
   const op = text(args, 'op');
+  // A page operation makes a new PDF file, which a room has no way to hand round yet.
+  if (env.shared) throw new ToolError('others are editing this PDF now, so pages cannot be moved, deleted, rotated, duplicated or added; markup, text edits, shapes and form fields work.');
   if (!Object.hasOwn(PAGE_OPS, op)) throw new ToolError(`\`op\` must be one of ${Object.keys(PAGE_OPS).join(', ')}.`);
   if (op === 'delete' && env.pageCount < 2) return 'The only page cannot be deleted.';
   const before = env.pageCount;

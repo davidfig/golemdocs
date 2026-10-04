@@ -150,6 +150,8 @@ export type Action =
   /** Without a size, the host asks for one. */
   | { kind: 'insertTable'; rows?: number; columns?: number }
   | { kind: 'insertImage' }
+  /** A new, blank vector drawing in the text, ready to draw in. */
+  | { kind: 'insertDrawing' }
   | { kind: 'insertLink' }
   /** Asks for an equation (in LaTeX) and inserts it at the caret. */
   | { kind: 'insertMath' }

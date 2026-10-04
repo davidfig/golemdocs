@@ -345,12 +345,15 @@ export function readDrawing(e: XmlElement, ctx: ReadContext): Drawing | Raw {
   const blip = findDescendant(container, 'a:blip');
   const textBox = findDescendant(container, 'w:txbxContent');
   const rel = blip?.attrs['r:embed'] ? ctx.rels.byId(blip.attrs['r:embed']) : undefined;
+  const svgBlip = blip && findDescendant(blip, 'asvg:svgBlip');
+  const svgRel = svgBlip?.attrs['r:embed'] ? ctx.rels.byId(svgBlip.attrs['r:embed']) : undefined;
   return {
     kind: 'drawing',
     inline: container.name === 'wp:inline',
     width,
     height,
     image: rel && !rel.external ? ctx.rels.partName(rel) : undefined,
+    ...(svgRel && !svgRel.external && { svg: ctx.rels.partName(svgRel) }),
     name: docPr?.attrs.name,
     description: docPr?.attrs.descr,
     ...(textBox && { textBox: readBlocks(textBox, ctx) }),
@@ -383,9 +386,37 @@ export function writeDrawing(d: Drawing, ctx: ContentWriteContext): XmlElement {
     if (blip) {
       const current = blip.attrs['r:embed'] ? ctx.rels.byId(blip.attrs['r:embed']) : undefined;
       if (!current || ctx.rels.partName(current) !== d.image) blip.attrs['r:embed'] = ctx.rels.add(REL.image, d.image);
+      writeSvgBlip(blip, d.svg, ctx);
     }
   }
   return xml;
+}
+
+const SVG_EXT_URI = '{96DAC541-7B7A-43D3-8B79-37D633B846F1}';
+
+/** Makes the blip's SVG sidecar (`asvg:svgBlip`, in an `a:extLst`) point at `svg`, or have none. */
+function writeSvgBlip(blip: XmlElement, svg: string | undefined, ctx: ContentWriteContext): void {
+  const list = blip.children.find((c): c is XmlElement => typeof c !== 'string' && c.name === 'a:extLst');
+  const ext = list?.children.find((c): c is XmlElement => typeof c !== 'string' && c.name === 'a:ext' && c.attrs.uri === SVG_EXT_URI);
+  if (!svg) {
+    if (list && ext) list.children = list.children.filter((c) => c !== ext);
+    return;
+  }
+  const blipExt = ext && findDescendant(ext, 'asvg:svgBlip');
+  if (blipExt) {
+    const current = blipExt.attrs['r:embed'] ? ctx.rels.byId(blipExt.attrs['r:embed']) : undefined;
+    if (!current || ctx.rels.partName(current) !== svg) blipExt.attrs['r:embed'] = ctx.rels.add(REL.image, svg);
+    return;
+  }
+  const made = svgExtList(ctx.rels.add(REL.image, svg));
+  if (list) list.children.push(...made.children);
+  else blip.children.push(made);
+}
+
+function svgExtList(rId: string): XmlElement {
+  return el('a:extLst', {}, [
+    el('a:ext', { uri: SVG_EXT_URI }, [el('asvg:svgBlip', { 'xmlns:asvg': 'http://schemas.microsoft.com/office/drawing/2016/SVG/main', 'r:embed': rId })]),
+  ]);
 }
 
 /** A new inline picture, in the same shape Word produces. */
@@ -408,7 +439,10 @@ function newPictureDrawing(d: Drawing, ctx: ContentWriteContext): XmlElement {
         el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/picture' }, [
           el('pic:pic', { 'xmlns:pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture' }, [
             el('pic:nvPicPr', {}, [el('pic:cNvPr', { id: 0, name }), el('pic:cNvPicPr')]),
-            el('pic:blipFill', {}, [el('a:blip', { 'r:embed': rId }), el('a:stretch', {}, [el('a:fillRect')])]),
+            el('pic:blipFill', {}, [
+              el('a:blip', { 'r:embed': rId }, d.svg ? [svgExtList(ctx.rels.add(REL.image, d.svg))] : []),
+              el('a:stretch', {}, [el('a:fillRect')]),
+            ]),
             el('pic:spPr', {}, [
               el('a:xfrm', {}, [el('a:off', { x: 0, y: 0 }), el('a:ext', { cx, cy })]),
               el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')]),

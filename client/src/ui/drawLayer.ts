@@ -1,7 +1,8 @@
-// Drawing on a picture: strokes and shapes sketched over the picture with the Draw toolbar's tools. They
-// are kept here, painted on a canvas over the view, until Done puts them into the picture as one edit
-// (or Cancel drops them). Like the crop layer, it follows the view as it scrolls and zooms; the shapes
-// are in the picture's own pixels (see formats/imageDraw.ts).
+// Drawing on a picture: strokes and shapes sketched over the picture with the Draw toolbar's tools. They are the picture's
+// layers: kept apart from its pixels, painted on a canvas over the view, and reported to the host (which keeps them with the
+// picture, shares them with others editing it, and undoes them) as they change. They stay on the picture after the tools are put
+// down, until it is flattened. Like the crop layer, it follows the view as it scrolls and zooms; the shapes are in the picture's
+// own pixels (see formats/imageDraw.ts).
 
 import { DRAW_TOOLS, bubbleGeometry, constrainEnd, fontSize, hitShape, lineWidth, nextStepNumber, paintShapes, shiftShape } from '../formats/imageDraw.ts';
 import type { DrawTool, Point, Shape } from '../formats/imageDraw.ts';
@@ -22,16 +23,20 @@ export interface DrawHost {
   style(): { color: string; size: number; fill: boolean };
   /** The tool or the shapes changed (for the toolbar). */
   changed(): void;
+  /** The shapes are now these: the person drew, erased or moved something. */
+  shapesChanged(shapes: Shape[]): void;
+  /** Step back over the person's own last change to the shapes. */
+  undo(): void;
 }
 
 interface Session {
   width: number;
   height: number;
   shapes: Shape[];
-  /** The shapes as they were before each change, for Undo (the eraser takes shapes away, so undoing is not just dropping the last). */
-  history: Shape[][];
-  done(shapes: Shape[] | null): void;
 }
+
+/** Names a shape among its picture's layers, where several people may be drawing at once. */
+const newId = (): string => crypto.randomUUID().slice(0, 12);
 
 export class DrawLayer {
   readonly el = h('div', { class: 'wm-draw', attrs: { hidden: '' } });
@@ -41,11 +46,12 @@ export class DrawLayer {
   private current: Shape | null = null;
   /** The box for typing a text shape, while there is one. */
   private typing: HTMLInputElement | null = null;
-  /** Whether the eraser has already taken something away in this drag (so it is one step to undo). */
-  private erasing = false;
   private _tool: DrawTool | null = null;
   /** The shape being dragged with the move tool: its index, where the drag began and what it looked like then. */
   private moving: { index: number; from: Point; original: Shape } | null = null;
+  /** Shapes from others that came while a shape was being drawn or dragged: shown once it is done. */
+  private waiting: Shape[] | null = null;
+  private readonly bar = h('div', { class: 'wm-crop-bar wm-draw-bar' });
 
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.session || e.target === this.typing) return;
@@ -64,11 +70,11 @@ export class DrawLayer {
     private readonly host: DrawHost,
   ) {
     const done = h('button', { class: 'wm-button', text: t('picture.draw.done'), attrs: { type: 'button' } });
-    const cancel = h('button', { class: 'wm-button', text: t('picture.cancel'), attrs: { type: 'button' } });
     this.undoButton.addEventListener('click', () => this.undo());
     done.addEventListener('click', () => this.finish(true));
-    cancel.addEventListener('click', () => this.finish(false));
-    this.el.append(this.overlay, h('div', { class: 'wm-crop-bar wm-draw-bar' }, this.undoButton, done, cancel));
+    this.bar.append(this.undoButton, done);
+    this.bar.hidden = true;
+    this.el.append(this.overlay, this.bar);
     parent.append(this.el);
     // In the capture phase, ahead of the view's own handlers, which would select or pan.
     const { canvas } = host;
@@ -78,23 +84,51 @@ export class DrawLayer {
     canvas.addEventListener('pointercancel', () => this.abandonShape(), true);
   }
 
+  /** A tool is picked: drawing is going on (the shapes are on the picture whether or not it is). */
   get active(): boolean {
-    return this.session !== null;
+    return this._tool !== null;
   }
 
   get tool(): DrawTool | null {
     return this._tool;
   }
 
-  /** Starts drawing on a picture of this many pixels with `tool`; `done` gets the shapes, or null when cancelled. */
-  start(width: number, height: number, tool: DrawTool, done: (shapes: Shape[] | null) => void): void {
-    this.session?.done(null);
-    this.session = { width, height, shapes: [], history: [], done };
-    this._tool = tool;
+  /** The picture is this many pixels and has these shapes (opened, or changed by others or by an undo). */
+  bind(width: number, height: number, shapes: readonly Shape[], canUndo: boolean): void {
+    if (this.current || this.moving || this.typing) {
+      // Drawing right now: what came is shown when that is done.
+      this.waiting = [...shapes];
+      this.undoButton.disabled = !canUndo;
+      return;
+    }
+    this.session = { width, height, shapes: [...shapes] };
+    this.waiting = null;
+    this.undoButton.disabled = !canUndo;
     this.el.hidden = false;
+    this.redraw();
+  }
+
+  /** Another document was opened: nothing is drawn over it any more. */
+  unbind(): void {
+    this.finish(false);
+    this.session = null;
+    this.waiting = null;
+    this.el.hidden = true;
+  }
+
+  /** The shapes drawn over the picture. */
+  get shapes(): readonly Shape[] {
+    return this.session?.shapes ?? [];
+  }
+
+  /** Starts drawing with `tool` on the picture (see `bind`). */
+  start(tool: DrawTool): void {
+    if (!this.session) return;
+    this._tool = tool;
+    this.bar.hidden = false;
     document.addEventListener('keydown', this.keys, true);
     this.host.canvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
-    this.refresh();
+    this.host.changed();
   }
 
   /** Picks another tool while drawing. */
@@ -114,35 +148,39 @@ export class DrawLayer {
     this.finish(true);
   }
 
-  private finish(apply: boolean): void {
-    const session = this.session;
-    if (!session) return;
+  /** Puts the tools down: the shapes stay on the picture. */
+  private finish(_apply: boolean): void {
+    if (!this.session || this._tool === null) return;
     this.abandonShape();
     this.typing?.remove();
     this.typing = null;
-    this.session = null;
     this._tool = null;
-    this.el.hidden = true;
+    this.bar.hidden = true;
     this.host.canvas.style.cursor = '';
     document.removeEventListener('keydown', this.keys, true);
     this.host.changed();
-    session.done(apply && session.shapes.length > 0 ? session.shapes : null);
+    this.catchUp();
   }
 
   private undo(): void {
-    const session = this.session;
-    if (!session || this.current || this.typing) return;
-    const before = session.history.pop();
-    if (before) session.shapes = before;
-    this.refresh();
+    if (!this.session || this.current || this.typing) return;
+    this.host.undo();
   }
 
-  /** Changes the shapes, keeping the old ones for Undo. */
+  /** The shapes are now these: kept, and the host told. */
   private change(shapes: Shape[]): void {
     const session = this.session;
     if (!session) return;
-    session.history.push(session.shapes);
     session.shapes = shapes;
+    this.host.shapesChanged(shapes);
+  }
+
+  /** Shapes others made while this person was drawing are shown now. */
+  private catchUp(): void {
+    if (!this.waiting || !this.session || this.current || this.moving || this.typing) return;
+    this.session.shapes = this.waiting;
+    this.waiting = null;
+    this.redraw();
   }
 
   private abandonShape(): void {
@@ -151,7 +189,6 @@ export class DrawLayer {
   }
 
   private refresh(): void {
-    this.undoButton.disabled = !this.session || this.session.history.length === 0;
     this.redraw();
     this.host.changed();
   }
@@ -185,17 +222,16 @@ export class DrawLayer {
     if (this._tool === 'step') {
       // One click drops the next number.
       const { color, size } = this.host.style();
-      this.change([...session.shapes, { tool: 'step', color, width: lineWidth(size, session.width, session.height), points: [at], text: String(nextStepNumber(session.shapes)) }]);
+      this.change([...session.shapes, { id: newId(), tool: 'step', color, width: lineWidth(size, session.width, session.height), points: [at], text: String(nextStepNumber(session.shapes)) }]);
       return this.refresh();
     }
     this.host.canvas.setPointerCapture(e.pointerId);
     if (this._tool === 'eraser') {
-      this.erasing = false;
       return this.erase(at);
     }
     if (this._tool === 'move') return this.grab(at);
     const { color, size, fill } = this.host.style();
-    this.current = { tool: this._tool, color, width: lineWidth(size, session.width, session.height), points: [at], ...(fill ? { fill } : {}) };
+    this.current = { id: newId(), tool: this._tool, color, width: lineWidth(size, session.width, session.height), points: [at], ...(fill ? { fill } : {}) };
     this.redraw();
   }
 
@@ -232,8 +268,10 @@ export class DrawLayer {
     if (this._tool === 'eraser' && this.session) e.stopImmediatePropagation();
     if (this._tool === 'move' && this.session) {
       e.stopImmediatePropagation();
+      if (this.moving) this.change([...this.session.shapes]);
       this.moving = null;
       this.host.canvas.style.cursor = 'grab';
+      this.catchUp();
       return;
     }
     const shape = this.current;
@@ -245,6 +283,7 @@ export class DrawLayer {
     const straight = shape.tool !== 'pen' && shape.tool !== 'marker';
     if (!straight || a.x !== b.x || a.y !== b.y) this.change([...this.session.shapes, shape]);
     this.refresh();
+    this.catchUp();
   }
 
   /** Picks up the topmost shape under `at` to drag it (one step to undo, however far it goes). */
@@ -255,7 +294,6 @@ export class DrawLayer {
     const reach = 6 / frame.scale;
     for (let i = session.shapes.length - 1; i >= 0; i--) {
       if (!hitShape(session.shapes[i], at, reach)) continue;
-      this.change([...session.shapes]);
       this.moving = { index: i, from: at, original: session.shapes[i] };
       this.host.canvas.style.cursor = 'grabbing';
       return;
@@ -267,7 +305,7 @@ export class DrawLayer {
     const session = this.session;
     const m = this.moving;
     if (!session || !m) return;
-    session.shapes[m.index] = shiftShape(m.original, to.x - m.from.x, to.y - m.from.y);
+    session.shapes = session.shapes.map((shape, i) => (i === m.index ? shiftShape(m.original, to.x - m.from.x, to.y - m.from.y) : shape));
     this.refresh();
   }
 
@@ -280,10 +318,7 @@ export class DrawLayer {
     const reach = 6 / frame.scale;
     for (let i = session.shapes.length - 1; i >= 0; i--) {
       if (!hitShape(session.shapes[i], at, reach)) continue;
-      const rest = session.shapes.filter((_, j) => j !== i);
-      if (this.erasing) session.shapes = rest;
-      else this.change(rest);
-      this.erasing = true;
+      this.change(session.shapes.filter((_, j) => j !== i));
       this.refresh();
       return;
     }
@@ -313,7 +348,7 @@ export class DrawLayer {
       const text = input.value.trim();
       this.typing = null;
       input.remove();
-      if (keep && text && this.session) this.change([...this.session.shapes, { tool, color, width, points: [at], text }]);
+      if (keep && text && this.session) this.change([...this.session.shapes, { id: newId(), tool, color, width, points: [at], text }]);
       this.refresh();
       this.host.canvas.focus?.();
     };

@@ -409,3 +409,124 @@ test('text can be set in one of the app\'s fonts: its file is loaded, shown in t
   assert.match(item.fontName, /Carlito-Bold/);
   assert.equal(item.text, 'First line of text');
 });
+
+// --- Edited together with others (src/layout/pdfRoom.ts) ----------------------------------------------------------------
+
+import { CollabServer } from '@golemdocs/ops';
+import { ObjectSync } from '../src/layout/objectSync.ts';
+
+/** Two people with the same PDF, joined to one room: what either sends goes to the room, which gives it to both. */
+async function pair() {
+  const bytes = await sample();
+  const ann = { annotator: new PdfAnnotator(await openPdfView(bytes, fonts!), 'Ann') };
+  const ben = { annotator: new PdfAnnotator(await openPdfView(bytes, fonts!), 'Ben') };
+  const server = new CollabServer();
+  const people: { sync: ObjectSync | null; annotator: PdfAnnotator; inbox: any[] }[] = [
+    { ...ann, sync: null, inbox: [] },
+    { ...ben, sync: null, inbox: [] },
+  ];
+  people.forEach((p, i) => {
+    const connection = server.connect((m) => p.inbox.push(m));
+    p.sync = new ObjectSync(p.annotator, i === 0 ? 'ann' : 'ben');
+    p.sync.connect((m) => void connection.submit(m), 0);
+  });
+  /** Delivers what the room sent, to each person in turn, until nothing is left. */
+  const deliver = () => {
+    for (let round = 0; round < 10; round++) {
+      let any = false;
+      for (const p of people) {
+        for (const m of p.inbox.splice(0)) {
+          any = true;
+          p.sync!.receive(m);
+        }
+      }
+      if (!any) break;
+    }
+  };
+  return { ann: people[0], ben: people[1], deliver };
+}
+
+const select = (annotator: PdfAnnotator, view: ReturnType<typeof Object>, from: number, to: number) => {
+  const chars = (annotator as any).view.characters(0);
+  const at = (i: number) => [(chars[i].x0 + chars[i].x1) / 2, (chars[i].top + chars[i].bottom) / 2] as const;
+  annotator.pointer(0, ...at(from), false, 'character');
+  annotator.pointer(0, ...at(to), true, 'character');
+};
+
+test('what one person marks up appears for the other, and an object both changed ends the way the room ordered it', skip, async () => {
+  const { ann, ben, deliver } = await pair();
+  select(ann.annotator, {}, 0, 4);
+  ann.annotator.annotate('highlight', {});
+  ann.sync!.local();
+  deliver();
+  assert.equal(ben.annotator.annotations.length, 1);
+  assert.equal(ben.annotator.annotations[0].kind, 'highlight');
+  assert.deepEqual(ben.annotator.annotations[0], ann.annotator.annotations[0]);
+
+  // Both change the same note's text: whichever the room put last wins, for both.
+  select(ben.annotator, {}, 20, 24);
+  ben.annotator.annotate('note', { text: 'first' });
+  ben.sync!.local();
+  deliver();
+  const note = ann.annotator.annotations.find((a) => a.kind === 'note')!;
+  assert.ok(note, 'ann has ben’s note');
+  assert.deepEqual(ann.annotator.annotations.map((a) => a.id), ben.annotator.annotations.map((a) => a.id));
+});
+
+test('undo while sharing takes back only one’s own change, and redo puts it back for both', skip, async () => {
+  const { ann, ben, deliver } = await pair();
+  select(ann.annotator, {}, 0, 4);
+  ann.annotator.annotate('highlight', {});
+  ann.sync!.local();
+  deliver();
+  select(ben.annotator, {}, 20, 24);
+  ben.annotator.annotate('underline', {});
+  ben.sync!.local();
+  deliver();
+  assert.deepEqual([ann.annotator.annotations.length, ben.annotator.annotations.length], [2, 2]);
+
+  assert.equal(ben.sync!.canUndo, true);
+  assert.equal(ann.sync!.canRedo, false);
+  ben.sync!.undo();
+  deliver();
+  assert.deepEqual(ben.annotator.annotations.map((a) => a.kind), ['highlight'], 'ben’s underline is gone, ann’s highlight is not');
+  assert.deepEqual(ann.annotator.annotations.map((a) => a.kind), ['highlight']);
+
+  ben.sync!.redo();
+  deliver();
+  assert.deepEqual(ann.annotator.annotations.map((a) => a.kind).sort(), ['highlight', 'underline']);
+  assert.equal(ben.sync!.canRedo, false);
+});
+
+test('changes from others go in without a step in the undo history, and drop a selection they take away', skip, async () => {
+  const { ann, ben, deliver } = await pair();
+  select(ann.annotator, {}, 0, 4);
+  ann.annotator.annotate('highlight', {});
+  ann.sync!.local();
+  deliver();
+  assert.equal(ben.annotator.canUndo, false, 'ben has done nothing of his own');
+  // The highlight is selected by clicking it; then ann deletes it.
+  const [pageX, pageY] = [(ann.annotator as any).view.characters(0)[1].x0 + 1, (ann.annotator as any).view.characters(0)[1].top + 1];
+  ben.annotator.pointer(0, pageX, pageY, false, 'character');
+  ann.annotator.pointer(0, pageX, pageY, false, 'character');
+  ann.annotator.deleteSelected();
+  ann.sync!.local();
+  deliver();
+  assert.equal(ben.annotator.annotations.length, 0);
+  assert.equal(ben.annotator.canUndo, false);
+  // What ben had selected is gone, so there is nothing for him to delete.
+  ben.annotator.deleteSelected();
+  ben.sync!.local();
+  assert.equal(ben.sync!.canUndo, false, 'no change of his');
+});
+
+test('applyObjects returns the pages that changed, and leaves lists nothing touched as they were', skip, async () => {
+  const { annotator } = await setup();
+  const fields = annotator.fields;
+  const pages = annotator.applyObjects([{ type: 'put', layer: 'annotations', id: 'x', value: { id: 'x', page: 0, kind: 'note', rect: [10, 10, 30, 30], quads: [], color: [1, 1, 0] } as any }]);
+  assert.deepEqual(pages, [0]);
+  assert.equal(annotator.annotations.length, 1);
+  assert.equal(annotator.fields, fields);
+  assert.deepEqual(annotator.applyObjects([{ type: 'del', layer: 'annotations', id: 'x' }]), [0]);
+  assert.equal(annotator.annotations.length, 0);
+});

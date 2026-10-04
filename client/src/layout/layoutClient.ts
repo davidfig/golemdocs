@@ -1,3 +1,4 @@
+import type { Shape } from '../formats/imageDraw.ts';
 import type { FaceDescriptor } from '@golemdocs/layout';
 import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
@@ -23,6 +24,9 @@ export interface DocumentListener {
   /** Other people's mouse pointers moved. */
   pointers(pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[]): void;
   error(message: string): void;
+  notice(message: string): void;
+  lease(state: { exclusive: boolean; mine: boolean; holder: string | null; shared: boolean }): void;
+  shapes(state: { shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }): void;
 }
 
 /** The page's side of the layout worker. One document is open at a time. */
@@ -96,6 +100,27 @@ export class LayoutClient {
   insertImage(bytes: Uint8Array, ext: string, width: number, height: number, description?: string): void {
     const copy = bytes.slice().buffer;
     this.send({ type: 'insertImage', doc: this.doc, bytes: copy, ext, width, height, description }, [copy]);
+  }
+
+  /** A picture's shapes are now these. */
+  setShapes(shapes: Shape[]): void {
+    this.send({ type: 'shapes', doc: this.doc, shapes });
+  }
+
+  /** Steps back over, or forward again over, the person's own changes to a picture's shapes. */
+  stepShapes(action: 'undo' | 'redo'): void {
+    this.send({ type: 'shapesStep', doc: this.doc, action });
+  }
+
+  /** Asks for, or lets go of, the right to edit a document that only one person at a time may. */
+  lease(action: 'request' | 'release'): void {
+    this.send({ type: 'lease', doc: this.doc, action });
+  }
+
+  /** Puts a vector drawing (its SVG text and a picture of it) in the open document at the caret, or in place of the one whose SVG is part `replace`. */
+  putDrawing(drawing: { svg: string; png: Uint8Array; width: number; height: number; description?: string }, replace?: string): void {
+    const png = drawing.png.slice().buffer;
+    this.send({ type: 'putDrawing', doc: this.doc, svg: drawing.svg, png, width: drawing.width, height: drawing.height, description: drawing.description, replace }, [png]);
   }
 
   /** An image part of the open document. */
@@ -197,6 +222,15 @@ export class LayoutClient {
         break;
       case 'error':
         this.listener.error(message.message);
+        break;
+      case 'notice':
+        this.listener.notice(message.message);
+        break;
+      case 'shapes':
+        this.listener.shapes({ shapes: message.shapes, width: message.width, height: message.height, canUndo: message.canUndo, canRedo: message.canRedo });
+        break;
+      case 'lease':
+        this.listener.lease({ exclusive: message.exclusive, mine: message.mine, holder: message.holder, shared: message.shared });
         break;
     }
   }

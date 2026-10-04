@@ -63,5 +63,7 @@ export const picture = {
   'picture.drop.open': 'Als Bild öffnen',
   'picture.insertFailed': 'Das Bild konnte nicht eingefügt werden: {message}',
   'picture.editFailed': 'Das Bild konnte nicht geändert werden: {message}',
-  'picture.notInRoom': 'Bilder können noch nicht in ein geteiltes Dokument eingefügt werden.',
+  'picture.shareFailed': 'Das Bild konnte nicht mit den anderen geteilt werden: {message}',
+  'picture.embedNotInRoom': 'Zeichnungen können noch nicht in ein geteiltes Markdown-Dokument eingefügt werden.',
+  'picture.editsNotShared': 'Änderungen am Bild selbst (zuschneiden, Größe ändern, drehen, Farben) sind nicht möglich, solange andere es bearbeiten. Zeichnen schon.',
 };

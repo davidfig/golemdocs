@@ -49,6 +49,8 @@ export const chrome: Partial<Messages> = {
   'chrome.insert.comment': '批注(&M)',
   'chrome.insert.footnote': '脚注(&N)',
   'chrome.insert.image': '图片(&P)…',
+  'chrome.insert.drawing': '矢量绘图(&D)',
+  'chrome.insert.drawing.tip': '插入矢量绘图（双击进行编辑）',
   'chrome.insert.textBox': '文本框(&X)',
   'chrome.insert.table': '表格(&T)…',
   'chrome.insert.horizontalRule': '水平线(&Z)',

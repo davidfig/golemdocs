@@ -49,6 +49,8 @@ export const chrome: Partial<Messages> = {
   'chrome.insert.comment': 'Co&mentário',
   'chrome.insert.footnote': 'Nota de &Rodapé',
   'chrome.insert.image': '&Imagem…',
+  'chrome.insert.drawing': '&Desenho',
+  'chrome.insert.drawing.tip': 'Inserir um desenho vetorial (clique duas vezes para editar)',
   'chrome.insert.textBox': 'Caixa de &Texto',
   'chrome.insert.table': 'Ta&bela…',
   'chrome.insert.horizontalRule': '&Linha Horizontal',

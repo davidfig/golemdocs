@@ -5,7 +5,11 @@
 
 import { test, expect, App, MOD } from '../fixtures';
 import { CLIENT_ORIGIN } from '../ports.ts';
-import { addComment, cloudPair, commentTexts, commentsTitle, expectText, newPerson, openCloud, others, selectForward, signInAs, statusLine } from './helpers';
+import { docx, makePng } from '../layout/helpers';
+import { importFile } from '../files/helpers';
+import { annotations, makePdf, openPdf, selectBetween, showPage } from '../pdf/helpers';
+import { openPicture, pictureToScreen } from '../layout/helpers';
+import { addComment, cloudPair, cloudParts, unzip, commentTexts, markdownWdoc, commentsTitle, expectText, newPerson, openCloud, others, selectForward, signInAs, statusLine, makeDocx, uploadDoc, waitForCloudDoc } from './helpers';
 
 test.describe('a cloud document open on two devices', () => {
   test('the status line says who is here, and each device sees the other\'s caret under the account name', async ({ browser }) => {
@@ -182,4 +186,196 @@ test('a document is not opened in a room when signed out', async ({ browser }) =
   await app.type('solo');
   expect(await others(app.page)).toEqual([]);
   await context.close();
+});
+
+test.describe('a cloud Markdown document in a room', () => {
+  test('both devices edit it as Markdown, and the cloud copy is still a Markdown document with its front matter after the edits', async ({ browser }) => {
+    const { a, b, doc } = await cloudPair(browser, ['Hello'], { name: 'Notes.md', wrap: (docx) => markdownWdoc(docx, 'title: Notes') });
+    await expect(a.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await expectText(b.app, 'Hello');
+    await b.app.type(' from B');
+    await expectText(a.app, 'Hello from B');
+    // The room's own copy goes to the account as the same kind of file it was: Markdown, with its front matter.
+    await expect
+      .poll(async () => {
+        const parts = await cloudParts(a.page, doc.id);
+        const manifest = parts['manifest.json'] ? JSON.parse(parts['manifest.json'].toString()) : null;
+        const text = parts['document.docx'] ? (unzip(parts['document.docx'])['word/document.xml']?.toString() ?? '') : '';
+        return manifest?.lens === 'md' && parts['extensions/md.json']?.toString().includes('title: Notes') && text.includes('from B');
+      }, { timeout: 30_000 })
+      .toBe(true);
+    await b.context.close();
+    await a.context.close();
+  });
+});
+
+test.describe('pictures and drawings in a cloud document', () => {
+  const imagesOn = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => (window as unknown as { pages: { images: unknown[] }[] }).pages.reduce((n, pg) => n + pg.images.length, 0));
+
+  test('they go in alone, travel with the document to a device that joins, and a picture added by either device reaches the other with its bytes', async ({ browser }) => {
+    const person = await newPerson(browser, 'pictures');
+    const doc = await uploadDoc(person.page, 'Mine.docx', await makeDocx(browser, ['hello']));
+    const app = await openCloud(person.page, doc.id);
+    await app.focus();
+    const insert = async (on: App, picture: Buffer): Promise<void> => {
+      const [chooser] = await Promise.all([on.page.waitForEvent('filechooser'), on.menu('Insert', 'Picture…')]);
+      await chooser.setFiles({ name: 'a.png', mimeType: 'image/png', buffer: picture });
+    };
+    await insert(app, makePng(40, 40));
+    await expect.poll(() => imagesOn(person.page)).toBe(1);
+    await app.menu('Insert', 'Drawing');
+    await expect.poll(() => imagesOn(person.page)).toBe(2);
+
+    // Another device joins: the pictures go to it with the document.
+    const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+    await signInAs(other, person.email);
+    const page = await other.newPage();
+    const second = await openCloud(page, doc.id);
+    await expect.poll(async () => (await others(person.page)).length, { timeout: 30_000 }).toBe(1);
+    await expect.poll(() => imagesOn(page), { timeout: 30_000 }).toBe(2);
+
+    // It adds one: the first device gets it, and has the bytes, not just a place for them.
+    await second.focus();
+    const added = makePng(30, 20);
+    await insert(second, added);
+    await expect.poll(() => imagesOn(person.page), { timeout: 30_000 }).toBe(3);
+    await expect.poll(() => imagesOn(page)).toBe(3);
+    const { files } = await docx(app);
+    const media = [...files.keys()].filter((k) => /^word\/media\/h-[0-9a-f]{64}\.png$/.test(k));
+    expect(media).toHaveLength(1);
+    expect(files.get(media[0]!)!.equals(added)).toBe(true);
+    // And the account's copy, written by the room, has it too.
+    await expect
+      .poll(async () => Object.keys(await cloudParts(person.page, doc.id).then((parts) => (parts['document.docx'] ? unzip(parts['document.docx']) : parts))).some((k) => /^word\/media\/h-[0-9a-f]{64}\.png$/.test(k)), { timeout: 30_000 })
+      .toBe(true);
+    await other.close();
+    await person.context.close();
+  });
+});
+
+test.describe('a cloud drawing in a room', () => {
+  test('one device edits at a time; what it draws appears on the other and in the account’s copy', async ({ browser }) => {
+    const a = await newPerson(browser, 'drawing');
+    await a.page.goto('/?doc=welcome');
+    await importFile(a.app, { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"><rect id="red" x="20" y="20" width="120" height="80" fill="#e53935"/></svg>') });
+    const layers = (page: import('@playwright/test').Page) => page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    await expect(layers(a.page)).toHaveCount(1, { timeout: 30_000 });
+    const doc = await waitForCloudDoc(a.page);
+
+    const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+    await signInAs(other, a.email);
+    const page = await other.newPage();
+    await openCloud(page, doc.id);
+    await expect(layers(page)).toHaveCount(1, { timeout: 30_000 });
+    await expect.poll(async () => (await others(a.page)).length, { timeout: 30_000 }).toBe(1);
+
+    // The first device holds the lease (it handed the document over); the second is told so.
+    await expect(page.locator('.wm-lease')).toBeVisible({ timeout: 30_000 });
+    await expect(a.page.locator('.wm-lease')).toBeHidden();
+    await a.app.toolbarButton('Rectangle').click();
+    const box = await a.page.locator('.wm-vector-canvas').boundingBox();
+    await a.page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await a.page.mouse.down();
+    await a.page.mouse.move(box!.x + box!.width / 2 + 40, box!.y + box!.height / 2 + 30);
+    await a.page.mouse.move(box!.x + box!.width / 2 + 80, box!.y + box!.height / 2 + 60);
+    await a.page.mouse.up();
+    await expect(layers(a.page)).toHaveCount(2);
+    await expect(layers(page)).toHaveCount(2, { timeout: 30_000 });
+    // The room writes the drawing into the account’s copy.
+    await expect
+      .poll(async () => {
+        const parts = await cloudParts(a.page, doc.id);
+        const inner = parts['document.docx'] ? unzip(parts['document.docx']) : {};
+        const svg = Object.entries(inner).find(([name]) => /^word\/media\/h-[0-9a-f]{64}\.svg$/.test(name))?.[1]?.toString() ?? '';
+        return (svg.match(/<rect /g) ?? []).length;
+      }, { timeout: 30_000 })
+      .toBe(2);
+    await other.close();
+    await a.context.close();
+  });
+});
+
+test.describe('a cloud PDF in a room', () => {
+  test('markup from either device reaches the other, and the account’s copy keeps the PDF with the markup written into its lists', async ({ browser }) => {
+    const a = await newPerson(browser, 'pdf');
+    await a.page.goto('/?doc=welcome');
+    await openPdf(a.app, makePdf({ pages: [[{ text: 'Hello PDF world', x: 40, y: 240, size: 18 }, { text: 'Second line of text', x: 40, y: 200, size: 18 }]] }));
+    const doc = await waitForCloudDoc(a.page);
+
+    const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+    await signInAs(other, a.email);
+    const page = await other.newPage();
+    const second = await openCloud(page, doc.id);
+    await expect.poll(() => statusLine(a.page), { timeout: 30_000 }).toContain('2 people here');
+    await showPage(a.page, 0);
+    await showPage(page, 0);
+
+    const save = async (app: App) => (await app.download(() => app.menu('File', 'Download'))).bytes;
+    const button = (on: import('@playwright/test').Page, name: string) => on.getByRole('button', { name, exact: true });
+    await selectBetween(a.page, 0, [41, 54], [120, 54]);
+    await button(a.page, 'Highlight').click();
+    await expect.poll(async () => annotations(await save(second), 'Highlight').length, { timeout: 30_000 }).toBe(1);
+    await selectBetween(page, 0, [41, 94], [120, 94]);
+    await button(page, 'Underline').click();
+    await expect.poll(async () => annotations(await save(a.app), 'Underline').length, { timeout: 30_000 }).toBe(1);
+
+    // The room wrote both into the account's copy: still a PDF document, the file untouched, the lists holding what was drawn.
+    await expect
+      .poll(async () => {
+        const parts = await cloudParts(a.page, doc.id);
+        const manifest = parts['manifest.json'] ? JSON.parse(parts['manifest.json'].toString()) : null;
+        const extension = parts['extensions/pdf.json'] ? JSON.parse(parts['extensions/pdf.json'].toString()) : null;
+        const kinds = ((extension?.annotations ?? []) as { kind: string }[]).map((x) => x.kind).sort();
+        return manifest?.lens === 'pdf' && !!parts['originals/source.pdf'] && kinds.includes('highlight') && kinds.includes('underline');
+      }, { timeout: 30_000 })
+      .toBe(true);
+    await other.close();
+    await a.context.close();
+  });
+});
+
+test.describe('a cloud picture in a room', () => {
+  test('shapes drawn on either device appear on the other, and the account’s copy keeps the picture with the shapes as its layers', async ({ browser }) => {
+    const a = await newPerson(browser, 'picture');
+    await a.page.goto('/?doc=welcome');
+    await openPicture(a.app, makePng(400, 300, () => [255, 255, 255, 255]));
+    const doc = await waitForCloudDoc(a.page);
+
+    const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+    await signInAs(other, a.email);
+    const page = await other.newPage();
+    const second = await openCloud(page, doc.id);
+    await expect.poll(() => statusLine(a.page), { timeout: 30_000 }).toContain('2 people here');
+
+    const shapes = (on: import('@playwright/test').Page) => on.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.map((s) => s.tool).sort());
+    const drag = async (app: App, from: [number, number], to: [number, number]) => {
+      const p = await pictureToScreen(app.page, 400, ...from);
+      const q = await pictureToScreen(app.page, 400, ...to);
+      await app.page.mouse.move(p.x, p.y);
+      await app.page.mouse.down();
+      await app.page.mouse.move(q.x, q.y, { steps: 6 });
+      await app.page.mouse.up();
+    };
+    await a.app.toolbarButton(/^Line$/).click();
+    await drag(a.app, [40, 40], [240, 40]);
+    await expect.poll(() => shapes(page), { timeout: 30_000 }).toEqual(['line']);
+    await second.toolbarButton(/^Rectangle$/).click();
+    await drag(second, [40, 150], [240, 250]);
+    await expect.poll(() => shapes(a.page), { timeout: 30_000 }).toEqual(['line', 'rectangle']);
+
+    // The room wrote both into the account's copy: still a picture document, the picture untouched, the shapes in its extension.
+    await expect
+      .poll(async () => {
+        const parts = await cloudParts(a.page, doc.id);
+        const manifest = parts['manifest.json'] ? JSON.parse(parts['manifest.json'].toString()) : null;
+        const extension = parts['extensions/img.json'] ? JSON.parse(parts['extensions/img.json'].toString()) : null;
+        const tools = ((extension?.shapes ?? []) as { tool: string }[]).map((s) => s.tool).sort();
+        return manifest?.lens === 'png' && !!parts['document.docx'] && tools.join() === 'line,rectangle';
+      }, { timeout: 30_000 })
+      .toBe(true);
+    await other.close();
+    await a.context.close();
+  });
 });

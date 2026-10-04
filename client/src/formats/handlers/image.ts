@@ -2,6 +2,7 @@
 // writing takes a picture document's picture back out (converted when it is another type) and draws any other document's pages. Loaded when a
 // picture is opened, saved or exported.
 
+import { applyImageEdit } from '../imageEdit.ts';
 import { transcode } from '../imageCodec.ts';
 import type { OutputType } from '../imageCodec.ts';
 import { documentToImage } from '../pageImage.ts';
@@ -17,10 +18,12 @@ function handler(type: OutputType): FormatHandler {
       if (!image) throw new Error(t('app.notImage'));
       return { document: await imageToDocument(image), extensions: {} };
     },
-    async write(document, _extensions, fonts) {
-      // A picture's own page gives the picture back untouched; any other document is drawn.
+    async write(document, extensions, fonts) {
+      // A picture's own page gives the picture back (with the shapes drawn over it, its layers, put into it); any other document is drawn.
       const picture = (await isPictureDocument(document)) ? await firstPicture(document) : null;
-      return picture ? transcode(picture.image.bytes, type) : documentToImage(document, fonts, type);
+      if (!picture) return documentToImage(document, fonts, type);
+      const shapes = extensions.img?.shapes ?? [];
+      return transcode(shapes.length ? (await applyImageEdit(picture.image.bytes, { op: 'draw', shapes })).bytes : picture.image.bytes, type);
     },
   };
 }

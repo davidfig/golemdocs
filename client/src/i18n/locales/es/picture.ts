@@ -63,5 +63,7 @@ export const picture = {
   'picture.drop.open': 'Abrir como imagen',
   'picture.insertFailed': 'No se pudo insertar la imagen: {message}',
   'picture.editFailed': 'No se pudo cambiar la imagen: {message}',
-  'picture.notInRoom': 'Aún no se pueden añadir imágenes a un documento compartido.',
+  'picture.shareFailed': 'No se pudo compartir la imagen con los demás: {message}',
+  'picture.embedNotInRoom': 'Aún no se pueden añadir dibujos a un documento Markdown compartido.',
+  'picture.editsNotShared': 'Los cambios en la propia imagen (recortar, redimensionar, girar, colores) no están disponibles mientras otras personas la editan. Dibujar sí.',
 };

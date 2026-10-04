@@ -12,7 +12,11 @@ import { normalizeTitle, parseDocAddress, readWikiLink } from './wikiLinks.ts';
 const PICTURE_NAME = /\.(png|jpe?g|webp|gif|bmp)$/i;
 
 /** What an embedded document looks up as. */
-export type Embedded = { kind: 'image'; bytes: Uint8Array } | { kind: 'document'; document: WordDocument };
+export type Embedded =
+  | { kind: 'image'; bytes: Uint8Array }
+  /** A vector drawing: its SVG text, a picture of it, and its size in pixels. */
+  | { kind: 'drawing'; svg: string; png: Uint8Array; width: number; height: number }
+  | { kind: 'document'; document: WordDocument };
 /** Finds a stored document by title: its picture, or its text as a document. Null when there is none. */
 export type EmbedLookup = (title: string) => Promise<Embedded | null>;
 
@@ -124,6 +128,24 @@ export async function resolveEmbeds(document: WordDocument, lookup: EmbedLookup)
     return { kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image: part, name: `${EMBED_PREFIX}${body}`, description: size || !label ? title : label }], attrs: {} };
   };
 
+  // A drawing is the picture of it with its SVG beside it, so a double click can edit it where it is.
+  const drawings = new Map<string, { image: string; svg: string }>();
+  const drawing = (body: string, found: Extract<Embedded, { kind: 'drawing' }>, title: string): Inline | null => {
+    const image = sniffImage(found.png);
+    if (!image) return null;
+    const { label } = parts(body);
+    const size = sizeOf(label);
+    let width = (size?.width ?? Math.max(found.width, 1)) * EMU_PER_PIXEL;
+    let height = size?.height ? size.height * EMU_PER_PIXEL : Math.round((width * Math.max(found.height, 1)) / Math.max(found.width, 1));
+    if (most > 0 && width > most) {
+      height = Math.round((height * most) / width);
+      width = most;
+    }
+    let part = drawings.get(title);
+    if (!part) drawings.set(title, (part = { image: document.addImage(found.png, image.type), svg: document.addImage(new TextEncoder().encode(found.svg), 'svg') }));
+    return { kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image: part.image, svg: part.svg, name: `${EMBED_PREFIX}${body}`, description: size || !label ? title : label }], attrs: {} };
+  };
+
   const replaceInlines = (inlines: Inline[]): Inline[] =>
     inlines.map((inline): Inline => {
       const body = inline.kind === 'hyperlink' ? placeholderBody(inline) : null;
@@ -131,6 +153,7 @@ export async function resolveEmbeds(document: WordDocument, lookup: EmbedLookup)
       const { title } = parts(body);
       const embedded = found.get(title);
       if (embedded?.kind === 'image' && PICTURE_NAME.test(title)) return picture(body, embedded.bytes, title) ?? inline;
+      if (embedded?.kind === 'drawing') return drawing(body, embedded, title) ?? inline;
       return inline;
     });
   for (const p of paragraphsIn(document.body)) p.children = replaceInlines(p.children);

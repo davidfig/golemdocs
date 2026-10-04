@@ -518,6 +518,9 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.tables;
     case 'insertImage':
       return profile.images;
+    // A Word document keeps the drawing's SVG beside its picture; a Markdown one embeds a drawing of its own.
+    case 'insertDrawing':
+      return (profile.kind === 'docx' && profile.images) || (profile.kind === 'md' && profile.links);
     case 'insertLink':
       return profile.links;
     case 'insertMath':

@@ -63,5 +63,7 @@ export const picture = {
   'picture.drop.open': '以圖片開啟',
   'picture.insertFailed': '無法插入圖片:{message}',
   'picture.editFailed': '無法變更圖片:{message}',
-  'picture.notInRoom': '共用文件目前還不能加入圖片。',
+  'picture.shareFailed': '無法與其他人共用該圖片：{message}',
+  'picture.embedNotInRoom': '共用的 Markdown 文件目前還不能加入繪圖。',
+  'picture.editsNotShared': '其他人正在編輯時，無法變更圖片本身（裁切、調整大小、旋轉、色彩）。繪圖可以。',
 };

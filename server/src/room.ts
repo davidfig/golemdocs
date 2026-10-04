@@ -9,6 +9,7 @@ import { DOCX, docxKey } from './keys.ts';
 import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Transaction } from '@golemdocs/ops';
 import type { DurableObjectState, Env, SqlStorage, WebSocketHandle } from './cf.ts';
 import { DEFAULT_TIMINGS, INITIAL_META, RoomCore, type Peer, type PeerState, type RoomFiles, type RoomMeta, type RoomStore } from './roomCore.ts';
+import { deleteMedia, readMedia } from './roomMedia.ts';
 import { userDb } from './userDb.ts';
 
 const MAX_MESSAGE_CHARS = 4 * 1024 * 1024;
@@ -122,6 +123,14 @@ export class CloudFiles implements RoomFiles {
     // Strictly increasing, like an upload's: clients tell versions apart by it.
     await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, Math.max(Date.now(), row.updated_at + 1), this.doc()]);
     return true;
+  }
+
+  media(hash: string): Promise<Uint8Array | null> {
+    return readMedia(this.env, this.owner(), this.doc(), hash);
+  }
+
+  clearMedia(): Promise<void> {
+    return deleteMedia(this.env, this.owner(), this.doc());
   }
 }
 

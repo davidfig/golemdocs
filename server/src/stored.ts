@@ -2,7 +2,7 @@
 // `document.docx` inside, see client/src/formats/wdoc.ts) under the document's key, and what the
 // server reads of a document (its search index, its search by meaning) needs the .docx in it.
 
-import { ZipArchive } from '@golemdocs/docx';
+import { ZipArchive, writeZip } from '@golemdocs/docx';
 
 /** The first entry of a .wdoc, and what it holds. */
 const WDOC_MIME = 'application/x-golem-document';
@@ -23,4 +23,21 @@ export async function storedDocx(bytes: Uint8Array): Promise<Uint8Array | null> 
   if (!mime || (await mime.text()) !== WDOC_MIME) return bytes;
   const document = zip.entries.get('document.docx');
   return document ? document.read() : null;
+}
+
+/**
+ * A stored file with its document replaced by `docx`. A .wdoc keeps everything else it has (the format the document is
+ * edited as, its extensions) exactly as it was; a plain .docx (or anything that isn't a .wdoc) is just replaced.
+ */
+export async function replaceStoredDocx(stored: Uint8Array, docx: Uint8Array): Promise<Uint8Array> {
+  let zip: ZipArchive;
+  try {
+    zip = ZipArchive.read(stored);
+  } catch {
+    return docx;
+  }
+  const mime = zip.entries.get('mimetype');
+  if (!mime || (await mime.text()) !== WDOC_MIME) return docx;
+  // The document is already compressed (a .docx is a ZIP), so it is stored.
+  return writeZip([...zip.entries.values()].map((entry) => (entry.name === 'document.docx' ? { name: entry.name, data: docx, compress: false } : { name: entry.name, entry })));
 }

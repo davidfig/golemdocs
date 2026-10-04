@@ -39,6 +39,8 @@ export interface R2Bucket {
     options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string>; onlyIf?: { etagMatches?: string } },
   ): Promise<unknown>;
   delete(keys: string | string[]): Promise<void>;
+  /** The keys that start with `prefix`, up to 1000 at a time (`cursor` continues a truncated listing). */
+  list(options: { prefix: string; cursor?: string }): Promise<{ objects: { key: string }[]; truncated: boolean; cursor?: string }>;
 }
 
 export interface SqlStorage {

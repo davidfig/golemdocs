@@ -2,6 +2,7 @@
 
 import type { DocumentSource } from '../layout/protocol.ts';
 import { isTextName } from './textFiles.ts';
+import { ZipArchive } from '@golemdocs/docx';
 import { isWdoc } from './wdoc.ts';
 
 const DOCX_FILE = /\.(docx|docm|dotx)$/i;
@@ -34,6 +35,17 @@ const MARKDOWN_FILE = /\.(md|markdown)$/i;
 const TEXT_FILE = /\.(txt|text)$/i;
 const WDOC_FILE = /\.wdoc$/i;
 
+/** Whether bytes are a Word document (a ZIP with `word/document.xml`), whatever the file is called. */
+function isPlainDocx(input: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(input);
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b || bytes[2] !== 3 || bytes[3] !== 4) return false;
+  try {
+    return ZipArchive.read(bytes).entries.has('word/document.xml');
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The source for a file's bytes, or null when the extension isn't one we open. A .wdoc is
  * recognised by its bytes whatever its name: saved documents keep the name of the format they
@@ -42,6 +54,8 @@ const WDOC_FILE = /\.wdoc$/i;
 export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource | null {
   if (WDOC_FILE.test(name) || isWdoc(bytes)) return { kind: 'wdoc', name, bytes };
   if (DOCX_FILE.test(name)) return { kind: 'docx', name, bytes };
+  // A room that ended wrote its document as plain Word into a file named for another format ("Report.md"): reading it as that format would make nonsense of the ZIP.
+  if (isPlainDocx(bytes)) return { kind: 'docx', name, bytes };
   if (DOC_FILE.test(name)) return { kind: 'doc', name, bytes };
   if (ODT_FILE.test(name)) return { kind: 'odt', name, bytes };
   if (RTF_FILE.test(name)) return { kind: 'rtf', name, bytes };

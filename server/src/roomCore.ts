@@ -7,7 +7,7 @@
 // transactions (persisted, so it survives the object being evicted) and turns it into .docx files:
 // on a timer while people keep editing, and for good when the epoch ends.
 
-import { isOperation, ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomMode, type RoomRole } from '@golemdocs/ops';
+import { isObjectOp, isOperation, ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomKind, type RoomMode, type RoomRole } from '@golemdocs/ops';
 import type { Transaction } from '@golemdocs/ops';
 import { applyLog } from './snapshot.ts';
 
@@ -24,9 +24,15 @@ export interface RoomMeta {
   settleAt: number | null;
   /** When the log is next written to the .docx, or null if it's all written. */
   snapshotDue: number | null;
+  /** Only one person at a time may edit (set by whoever joins an empty room), and what the changes are. */
+  exclusive: boolean;
+  kind: RoomKind;
+  /** The client who holds an exclusive room's lease, or null; and when they last did something. */
+  holder: string | null;
+  holderAt: number;
 }
 
-export const INITIAL_META: RoomMeta = { epoch: 0, mode: 'solo', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null };
+export const INITIAL_META: RoomMeta = { epoch: 0, mode: 'solo', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null, exclusive: false, kind: 'doc', holder: null, holderAt: 0 };
 
 export interface RoomStore {
   meta(): RoomMeta;
@@ -42,6 +48,10 @@ export interface RoomFiles {
   read(): Promise<Uint8Array | null>;
   /** Stores the new .docx (and updates the catalogue). Returns false if the document no longer exists. */
   write(bytes: Uint8Array): Promise<boolean>;
+  /** A picture people editing together added, by the hash of its bytes (null if there is none). */
+  media(hash: string): Promise<Uint8Array | null>;
+  /** Forgets the pictures: they are in the .docx now. */
+  clearMedia(): Promise<void>;
 }
 
 export interface RoomHost {
@@ -82,11 +92,14 @@ export interface RoomTimings {
   snapshotMs: number;
   /** How long a shared room waits for someone to come back (a dropped connection) before winding down. */
   graceMs: number;
+  /** How long the holder of an exclusive room's lease may do nothing before someone else can take it. */
+  leaseMs?: number;
 }
 
-export const DEFAULT_TIMINGS: RoomTimings = { handoffMs: 15_000, snapshotMs: 5_000, graceMs: 30_000 };
+export const DEFAULT_TIMINGS: RoomTimings = { handoffMs: 15_000, snapshotMs: 5_000, graceMs: 30_000, leaseMs: 30_000 };
 
 const MAX_SUBMIT_TRANSACTIONS = 500;
+const MAX_OPS_PER_TRANSACTION = 5000;
 
 /** A pointer message's position, checked (null: no pointer; undefined: not a pointer at all). */
 function cleanPointer(value: unknown): Person['pointer'] | undefined {
@@ -162,6 +175,10 @@ export class RoomCore {
         return this.submit(peer, message);
       case 'quiet':
         return this.quiet(peer, message.epoch, message.version);
+      case 'lease':
+        return this.lease(peer);
+      case 'release':
+        return this.release(peer);
       default:
         return peer.close(ROOM_CLOSE.badMessage, 'unknown message');
     }
@@ -170,6 +187,8 @@ export class RoomCore {
   async disconnect(peer: Peer): Promise<void> {
     if (!this.peers.delete(peer) || peer.state.client === null) return;
     this.broadcast({ type: 'people', people: this.people() });
+    // Whoever held the lease has gone: it is free.
+    if (this.meta.exclusive && this.meta.holder === peer.state.client) this.setHolder(null);
     await this.afterDeparture();
   }
 
@@ -179,8 +198,10 @@ export class RoomCore {
     if (peer.state.client !== null) return;
     Object.assign(peer.state, { client: String(message.client).slice(0, 64), name: String(message.name).slice(0, 80), color: Number(message.color) | 0, selection: null, pointer: null, synced: false });
     peer.persist();
+    // The first to join an empty room says whether it is exclusive (it is a property of the document, the same for everyone).
+    if (this.meta.mode === 'solo' && this.members.length === 1) this.store.setMeta({ exclusive: message.exclusive === true, kind: message.kind === 'objects' || message.kind === 'layers' ? message.kind : 'doc', holder: null });
     const meta = this.meta;
-    peer.send({ type: 'welcome', role: peer.state.role, client: peer.state.client!, mode: meta.mode, epoch: meta.epoch, people: this.people() });
+    peer.send({ type: 'welcome', role: peer.state.role, client: peer.state.client!, mode: meta.mode, epoch: meta.epoch, people: this.people(), exclusive: meta.exclusive, holder: meta.holder, kind: meta.kind });
     this.broadcast({ type: 'people', people: this.people() }, peer);
 
     if (meta.mode === 'solo' && this.members.length >= 2) this.beginHandoff(peer);
@@ -208,7 +229,7 @@ export class RoomCore {
   private beginShared(): void {
     // A new epoch: its log starts empty on top of whatever .docx is in the cloud now.
     this.store.clear();
-    this.store.setMeta({ mode: 'shared', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null });
+    this.store.setMeta({ mode: 'shared', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null, holder: this.meta.holder });
     for (const peer of this.members) peer.state.synced = false;
     this.reschedule();
     this.broadcast({ type: 'shared', epoch: this.meta.epoch });
@@ -230,8 +251,11 @@ export class RoomCore {
     const meta = this.meta;
     if (!this.canEdit(peer)) return peer.close(ROOM_CLOSE.badMessage, 'read-only');
     if (meta.mode !== 'shared' || message.epoch !== meta.epoch || !peer.state.synced) return;
+    // An exclusive room takes edits from the one who holds its lease; anyone else is told who does.
+    if (meta.exclusive && meta.holder !== peer.state.client) return peer.send({ type: 'lease', holder: meta.holder });
     if (!Array.isArray(message.transactions) || message.transactions.length > MAX_SUBMIT_TRANSACTIONS) return peer.close(ROOM_CLOSE.badMessage, 'too many transactions');
-    if (!message.transactions.every((tx) => typeof tx?.id === 'string' && Array.isArray(tx.ops) && tx.ops.every(isOperation))) return peer.close(ROOM_CLOSE.badMessage, 'bad transaction');
+    const valid = meta.kind === 'doc' ? isOperation : isObjectOp;
+    if (!message.transactions.every((tx) => typeof tx?.id === 'string' && Array.isArray(tx.ops) && tx.ops.length <= MAX_OPS_PER_TRANSACTION && tx.ops.every(valid))) return peer.close(ROOM_CLOSE.badMessage, 'bad transaction');
     // Made against an old version: the client will get the newer transactions and try again.
     if (message.version !== this.store.length()) return;
     // A resubmission of something already logged (after a reconnect) isn't applied twice, and
@@ -241,11 +265,35 @@ export class RoomCore {
     if (fresh.length === 0) return;
     const version = this.store.length();
     this.store.append(fresh);
+    if (meta.exclusive) this.store.setMeta({ holderAt: this.host.now() });
     this.broadcast({ type: 'transactions', epoch: meta.epoch, version, transactions: fresh }, undefined, (p) => p.state.synced);
     if (meta.snapshotDue === null) {
       this.store.setMeta({ snapshotDue: this.host.now() + this.timings.snapshotMs });
       this.reschedule();
     }
+  }
+
+  // --- The lease of an exclusive room ---------------------------------------------------
+
+  private setHolder(holder: string | null): void {
+    this.store.setMeta({ holder, holderAt: this.host.now() });
+    this.broadcast({ type: 'lease', holder });
+  }
+
+  /** Asks to be the one who edits: granted when nobody holds the lease, the holder is gone or has been idle too long, or it is already theirs. */
+  private lease(peer: Peer): void {
+    const meta = this.meta;
+    if (!meta.exclusive || !this.canEdit(peer)) return;
+    const holderHere = meta.holder !== null && this.members.some((p) => p.state.client === meta.holder);
+    const idle = this.host.now() - meta.holderAt > (this.timings.leaseMs ?? DEFAULT_TIMINGS.leaseMs!);
+    if (meta.holder === null || meta.holder === peer.state.client || !holderHere || idle) {
+      if (meta.holder === peer.state.client) this.store.setMeta({ holderAt: this.host.now() });
+      else this.setHolder(peer.state.client);
+    } else peer.send({ type: 'lease', holder: meta.holder });
+  }
+
+  private release(peer: Peer): void {
+    if (this.meta.exclusive && this.meta.holder === peer.state.client) this.setHolder(null);
   }
 
   // --- Going back to solo --------------------------------------------------------------
@@ -293,9 +341,11 @@ export class RoomCore {
     }
     // People may have arrived while the snapshot was being written.
     if (this.members.length >= 2 && wasShared) return;
+    // The pictures added meanwhile are in the .docx now (the snapshot wrote them in).
+    if (wasShared) await this.files.clearMedia().catch((error) => this.host.log('forgetting the pictures failed', error));
     this.store.clear();
     const epoch = meta.epoch + 1;
-    this.store.setMeta({ mode: 'solo', epoch, snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null });
+    this.store.setMeta({ mode: 'solo', epoch, snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null, holder: null });
     this.reschedule();
     for (const peer of this.members) {
       peer.state.synced = false;
@@ -317,7 +367,7 @@ export class RoomCore {
       try {
         const base = await this.files.read();
         if (!base) return true; // the document was deleted
-        const bytes = await applyLog(base, this.store.slice(snapshotVersion).slice(0, version - snapshotVersion));
+        const bytes = await applyLog(base, this.store.slice(snapshotVersion).slice(0, version - snapshotVersion), (hash) => this.files.media(hash), this.meta.kind);
         await this.files.write(bytes);
         this.store.setMeta({ snapshotVersion: version, snapshotDue: version === this.store.length() ? null : this.meta.snapshotDue });
         return true;

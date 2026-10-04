@@ -50,4 +50,5 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.insertFromDocument': 'Aus einem anderen Dokument wird kopiert…',
   'assistant.tool.files': 'Ihre Dateien werden bearbeitet…',
   'assistant.tool.openDocument': 'Ein Dokument wird geöffnet…',
+  'assistant.tool.collaboration': 'Prüfe, wer bearbeitet…',
 };

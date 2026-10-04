@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.9.1 - Unreleased
+## 0.10.0 - 2026-10-04
 
 ### Added
 - Drawing tablets (Wacom and other pens, or a stylus): in pictures, the Pen and Highlighter draw a thicker line the harder you press, and turning the pen over to its eraser end erases what it passes over, whatever tool is picked. In drawings, a Pencil line drawn with a pen follows how hard you press too (it becomes the Pen Pressure stroke; a closed loop stays an even line), and the Pen Pressure stroke follows the pen instead of its ready-made swell. Tools › Options › Drawing can turn pen pressure off. Fast strokes keep every point the pen reports, so they come out smooth rather than angular.

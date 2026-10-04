@@ -555,7 +555,8 @@ test.describe('overlapping shapes', () => {
     const selected = async () => (await rows.evaluateAll((els) => els.filter((e) => e.getAttribute('aria-selected') === 'true').map((e) => e.textContent ?? ''))).map((t) => t.replace(/\s+/g, ' ').trim());
     const at = await onPage(app, 0.4, 0.6); // inside all three
     await app.page.mouse.click(at.x, at.y);
-    expect(await selected()).toEqual(['top']);
+    // The layers panel follows the click a frame or two later.
+    await expect.poll(selected).toEqual(['top']);
     const control = process.platform === 'darwin' ? 'Meta' : 'Control';
     const underneath = async () => {
       await app.page.keyboard.down(control);

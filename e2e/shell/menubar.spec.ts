@@ -196,11 +196,11 @@ test.describe('menu bar with the keyboard', () => {
     await expect(menuRow(page, 'Paste Special…')).toHaveClass(/active/);
     await page.keyboard.press('End');
     await expect(page.locator('.wm-menu .wm-item.active')).toHaveCount(1);
-    await expect(menuRow(page, 'Go To…')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Search All Documents…')).toHaveClass(/active/);
     await page.keyboard.press('ArrowDown'); // wraps
     await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
     await page.keyboard.press('ArrowUp'); // wraps back
-    await expect(menuRow(page, 'Go To…')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Search All Documents…')).toHaveClass(/active/);
     await page.keyboard.press('Home');
     await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
   });

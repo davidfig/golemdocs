@@ -37,7 +37,7 @@ test.describe('Customize Toolbars', () => {
     await app.blank();
     await open(app);
     const toolbars = await toolbarSelect(page).locator('option').allTextContents();
-    expect(toolbars).toEqual(['Standard', 'Formatting', 'Picture', 'Draw']);
+    expect(toolbars).toEqual(['Standard', 'Formatting', 'Picture', 'Draw', 'Drawing']);
     await expect(onToolbar(page).first()).toContainText('New');
     await select(page, 'Formatting');
     await expect(onToolbar(page).first()).toContainText('Font');

@@ -14,6 +14,7 @@ const FEATURES = [
   { name: 'import', heading: 'Import files, folders, and ZIP archives' },
   { name: 'obsidian', heading: 'Import an Obsidian vault' },
   { name: 'large-files', heading: 'Open huge text and log files' },
+  { name: 'vector', heading: 'Edit vector drawings in your browser' },
 ] as const;
 
 const LEGAL = [
@@ -27,7 +28,7 @@ test.describe('home page', () => {
   test('has the headline, a main navigation and the sections it links to', async ({ page }) => {
     await page.goto('/home');
     await expect(page).toHaveTitle(/^Golem Docs: edit Word, PDF, Markdown, and more in your browser$/);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Every kind of document, one editor, right in your browser.');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('I wanted one editor for everything.');
     const nav = page.getByRole('navigation', { name: 'Main' });
     await expect(nav.getByRole('link')).toHaveText(['Features', 'Formats', 'Pricing', 'Privacy', 'Open Golem Docs']);
     for (const id of ['features', 'formats', 'pricing', 'privacy']) await expect(page.locator(`section#${id}`)).toHaveCount(1);
@@ -127,7 +128,7 @@ test.describe('feature pages', () => {
     });
   }
 
-  test('each page lists the other eight features and not itself', async ({ page }) => {
+  test('each page lists the other nine features and not itself', async ({ page }) => {
     await page.goto('/home/convert');
     const more = page.locator('.more');
     await expect(more.getByRole('heading', { name: 'More you can do' })).toBeVisible();

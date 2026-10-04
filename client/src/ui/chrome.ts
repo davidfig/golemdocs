@@ -509,11 +509,13 @@ export class Chrome {
     r.add(a('vector.canvasSize', t('vector.canvasSize'), { kind: 'vector', op: 'canvasSize' }, { scope: 'vector', shortcut: 'Alt+Mod+P' }));
     r.add(a('vector.guideV', t('vector.guideV'), { kind: 'vector', op: 'guideV' }, { scope: 'vector' }));
     r.add(a('vector.guideH', t('vector.guideH'), { kind: 'vector', op: 'guideH' }, { scope: 'vector' }));
-    r.add({ id: 'vector.showGuides', label: t('vector.showGuides'), run: () => setShowGuides(!showGuidesOn()), checked: showGuidesOn, scope: 'vector' });
-    r.add({ id: 'vector.lockGuides', label: t('vector.lockGuides'), run: () => setLockGuides(!lockGuidesOn()), checked: lockGuidesOn, scope: 'vector' });
+    // Drawing settings run directly (they are not actions the format gates), so they are shown where there is a drawing to edit.
+    const forVectors = (s: ChromeState): boolean => FORMATS[s.kind].vectorTools;
+    r.add({ id: 'vector.showGuides', label: t('vector.showGuides'), run: () => setShowGuides(!showGuidesOn()), checked: showGuidesOn, scope: 'vector', visible: forVectors });
+    r.add({ id: 'vector.lockGuides', label: t('vector.lockGuides'), run: () => setLockGuides(!lockGuidesOn()), checked: lockGuidesOn, scope: 'vector', visible: forVectors });
     r.add(a('vector.clearGuides', t('vector.clearGuides'), { kind: 'vector', op: 'clearGuides' }, { scope: 'vector' }));
     r.add(a('vector.layers', t('vector.layers'), { kind: 'vector', op: 'layers' }, { scope: 'vector', shortcut: 'F7', checked: (s) => s.vector.layers }));
-    r.add({ id: 'vector.selectAfterPencil', label: t('vector.selectAfterPencil'), tooltip: t('dialogs.options.selectAfterPencil'), run: () => setSelectAfterPencil(!selectAfterPencilOn()), checked: selectAfterPencilOn, scope: 'vector' });
+    r.add({ id: 'vector.selectAfterPencil', label: t('vector.selectAfterPencil'), tooltip: t('dialogs.options.selectAfterPencil'), run: () => setSelectAfterPencil(!selectAfterPencilOn()), checked: selectAfterPencilOn, scope: 'vector', visible: forVectors });
     r.add(a('vector.snap', t('vector.snap'), { kind: 'vector', op: 'snap' }, { scope: 'vector', shortcut: 'Mod+U', checked: (s) => s.vector.snap }));
     r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }, { scope: 'vector', shortcut: 'Mod+A' }));
 

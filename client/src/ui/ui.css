@@ -28,6 +28,17 @@
   --wm-button-border: #003c74;
   --wm-muted: #666;
   --wm-error: #b00020;
+  --wm-warning: #9a5b00;
+  --wm-link: #0b57d0;
+  /* Words found by a search: the same yellow in every theme, so the text on it is always dark. */
+  --wm-find: #ffe38a;
+  --wm-find-text: #000;
+  /* Comment cards: notes stuck beside the page. */
+  --wm-note: #fffbea;
+  --wm-note-border: #e3c36b;
+  --wm-note-edge: #ffc83d;
+  --wm-note-done: #f3f3f3;
+  --wm-note-done-border: #c9c9c9;
   --wm-row-hover: #eef3fb;
   --wm-letter: #2e3148;
   --wm-icon-halo: none;
@@ -35,6 +46,12 @@
   --wm-shadow: rgb(0 0 0 / 0.22);
   --wm-shadow-strong: rgb(0 0 0 / 0.3);
   --wm-ease: 120ms ease-out;
+  /* Anything that floats over the window (menus, pop-ups, option bars, toasts, notices): one corner and one shadow. */
+  --wm-radius: 4px;
+  --wm-float-shadow: 0 4px 14px var(--wm-shadow), 0 1px 3px var(--wm-shadow);
+  /* The handles of what is picked on a page (see handles.ts, which draws the same on a canvas). */
+  --wm-handle-size: 8px;
+  --wm-handle-line: 1.5px;
   color-scheme: light;
 }
 
@@ -136,7 +153,7 @@
   --wm-error: #ddd;
   --wm-row-hover: #383838;
   --wm-letter: #e0e0e0;
-  --wm-icon-halo: grayscale(1) drop-shadow(0 0 0.6px rgb(255 255 255 / 0.75));
+  --wm-icon-halo: grayscale(1);
   --wm-desk: #1d1d1d;
 }
 
@@ -225,13 +242,29 @@
   --wm-button-border: #5b5f66;
   --wm-muted: #a0a3a8;
   --wm-error: #ff8a80;
+  --wm-warning: #f0b95c;
+  --wm-link: #8ab4f8;
+  --wm-note: #37331f;
+  --wm-note-border: #6b5d2e;
+  --wm-note-edge: #c9992a;
+  --wm-note-done: #2f3136;
+  --wm-note-done-border: #4a4d53;
   --wm-row-hover: #363a40;
   --wm-letter: #dfe3f0;
-  --wm-icon-halo: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.75));
+  --wm-icon-halo: none;
+  /* The icons' ink, white paper and pale grey, turned around so they read on a dark bar (see .icon svg). */
+  --wm-icon-ink: #e3e6ef;
+  --wm-icon-paper: #3b3e45;
+  --wm-icon-mist: #575b64;
   --wm-desk: #1c1d20;
   --wm-shadow: rgb(0 0 0 / 0.5);
   --wm-shadow-strong: rgb(0 0 0 / 0.6);
   color-scheme: dark;
+}
+
+/* Check boxes, radio buttons and sliders take the theme's accent, like the rest of what is picked or on. */
+:root {
+  accent-color: var(--wm-hot-border);
 }
 
 .wm-chrome {
@@ -467,8 +500,8 @@
   padding: 2px;
   background: linear-gradient(90deg, var(--wm-gutter) 30px, var(--wm-menu-bg) 30px);
   border: 1px solid var(--wm-menu-border);
-  border-radius: 4px;
-  box-shadow: 0 4px 14px var(--wm-shadow), 0 1px 3px var(--wm-shadow);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-float-shadow);
   outline: none;
 }
 
@@ -639,6 +672,24 @@
   filter: var(--wm-icon-halo);
 }
 
+/*
+ * Dark: the icons are drawn in fixed colors (icons.ts, fileIcons.ts: an svg with an ink stroke), so their ink outlines, white paper
+ * and pale grey are swapped here, wherever they are shown; the bright colors stay.
+ */
+:root[data-theme='dark'] svg[stroke='#2e3148'],
+:root[data-theme='dark'] svg[stroke='#2e3148'] [stroke='#2e3148'] {
+  stroke: var(--wm-icon-ink);
+}
+:root[data-theme='dark'] svg[stroke='#2e3148'] [fill='#2e3148'] {
+  fill: var(--wm-icon-ink);
+}
+:root[data-theme='dark'] svg[stroke='#2e3148'] [fill='#ffffff'] {
+  fill: var(--wm-icon-paper);
+}
+:root[data-theme='dark'] svg[stroke='#2e3148'] [fill='#e8ecf3'] {
+  fill: var(--wm-icon-mist);
+}
+
 .icon {
   display: inline-flex;
   width: 20px;
@@ -751,8 +802,8 @@
   box-sizing: border-box;
   background: var(--wm-menu-bg);
   border: 1px solid var(--wm-menu-border);
-  border-radius: 4px;
-  box-shadow: 0 4px 14px var(--wm-shadow), 0 1px 3px var(--wm-shadow);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-float-shadow);
 }
 
 .wm-list {
@@ -1889,7 +1940,7 @@
 
 .wm-math-tab[aria-selected='true'] {
   border-color: var(--wm-border, #c8ccd4);
-  background: var(--wm-surface, #fff);
+  background: var(--wm-field-bg);
   border-radius: 3px 3px 0 0;
 }
 
@@ -1908,7 +1959,7 @@
   padding: 0 4px;
   border: 1px solid var(--wm-border, #c8ccd4);
   border-radius: 3px;
-  background: var(--wm-surface, #fff);
+  background: var(--wm-field-bg);
   cursor: pointer;
   font: 15px/1 'Cambria Math', 'STIX Two Math', 'Latin Modern Math', serif;
 }
@@ -1918,7 +1969,7 @@
 }
 
 .wm-math-key:hover {
-  background: var(--wm-hover, #e6eefb);
+  background: var(--wm-row-hover);
 }
 
 .wm-math-preview {
@@ -1929,7 +1980,9 @@
   padding: 6px;
   border: 1px solid var(--wm-border, #c8ccd4);
   border-radius: 3px;
+  /* Shown as it will be on the page. */
   background: #fff;
+  color: #000;
   font-size: 20px;
   overflow-x: auto;
 }
@@ -2212,9 +2265,70 @@
   resize: vertical;
 }
 
-.wm-draw-size {
+/* The drop-down list of a toolbar setting (see dropdown.ts): the button, and the list that opens under it. */
+.wm-dropdown {
+  display: inline-flex;
+  margin: 0 4px;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 150px;
   height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
   font: 12px var(--wm-font, system-ui);
+  text-align: left;
+}
+
+.wm-dropdown:disabled {
+  color: var(--wm-disabled);
+}
+
+.wm-dropdown-sample[hidden] {
+  display: none;
+}
+
+.wm-dropdown-sample .wm-brush-preview {
+  display: block;
+  width: 42px;
+  height: 10px;
+}
+
+.wm-dropdown-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-dropdown-caret {
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  border-bottom: 0;
+}
+
+.wm-dropdown-list {
+  max-height: 360px;
+}
+
+.wm-dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-dropdown-row:hover {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+}
+
+.wm-dropdown-row.chosen {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+  font-weight: bold;
 }
 
 /* --- Paste Special --------------------------------------------------------------------------- */
@@ -2309,8 +2423,8 @@
   padding: 3px;
   background: var(--wm-bar-top);
   border: 1px solid var(--wm-menu-border);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px var(--wm-shadow);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-float-shadow);
 }
 
 /* Fingers need bigger targets than a mouse. */

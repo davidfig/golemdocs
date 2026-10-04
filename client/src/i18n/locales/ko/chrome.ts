@@ -305,4 +305,8 @@ export const chrome: Partial<Messages> = {
   'chrome.title.tip': '클릭하여 이름 바꾸기',
   'chrome.rename.title': '문서 이름 바꾸기',
   'chrome.rename.action': '이름 바꾸기',
+  'chrome.shortcuts.picture': '그림 도구',
+  'chrome.shortcuts.pictureHint': '그리기 도구의 키입니다(Photoshop과 같음). 도구에는 글자, 숫자 또는 기호 키 하나를 지정할 수 있습니다.',
+  'chrome.file.openSelection': '선택 영역을 문서로 열기(&D)',
+  'chrome.file.openSelection.tip': '선택한 줄을 서식 지정과 변환이 가능한 일반 문서로 엽니다',
 };

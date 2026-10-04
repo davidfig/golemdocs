@@ -19,17 +19,14 @@ test('a Word document has the full set of menus (Picture only for pictures)', as
   expect(await visibleTitles(page)).toEqual(['File', 'Edit', 'View', 'Insert', 'Format', 'Tools', 'Table', 'Help', 'Admin']);
 });
 
-test('a plain-text document drops the menus and items it cannot use', async ({ app, page }) => {
+test('a plain-text file drops the menus and items it cannot use', async ({ app, page }) => {
   await app.blank();
   await importFile(app, { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('plain words') });
   await expect.poll(() => app.text(), { timeout: 20_000 }).toBe('plain words');
   await expect(menuTitle(app, 'Table')).toBeHidden();
   await expect(menuTitle(app, 'Picture')).toBeHidden();
   await expect(menuTitle(app, 'File')).toBeVisible();
-  await openMenu(app, 'Format');
-  await expect(menuRow(page, 'Align')).toHaveCount(0);
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('Escape');
+  await expect(menuTitle(app, 'Format')).toBeHidden();
   // The formatting toolbar has nothing for plain text.
   await expect(page.getByRole('toolbar', { name: 'Formatting' })).toBeHidden();
   await expect(app.toolbarButton('Bold')).toHaveCount(0);

@@ -37,3 +37,9 @@ test('footer: gives a CSV its rows and columns in place of its words', () => {
   assert.deepEqual(keys(info), ['panels.footer.table', 'panels.footer.zoom']);
   assert.deepEqual(footerSegments(info)[0].params, { rows: 10, columns: 4 });
 });
+
+test('footer: a plain text file says its lines, where the view is and what is being indexed, then the zoom', () => {
+  const text = { summary: '150,000 lines · 9.2 MB', position: 'Line 1,200', progress: '', wrap: true };
+  assert.deepEqual(footerSegments({ ...base, text }), [{ key: null, text: '150,000 lines · 9.2 MB' }, { key: null, text: 'Line 1,200' }, { key: 'panels.footer.zoom', params: { percent: 125 } }]);
+  assert.deepEqual(footerSegments({ ...base, text: { ...text, progress: 'Indexing… 40%' } }).map((s) => s.text ?? s.key), ['150,000 lines · 9.2 MB', 'Line 1,200', 'Indexing… 40%', 'panels.footer.zoom']);
+});

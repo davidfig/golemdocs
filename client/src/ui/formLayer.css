@@ -42,12 +42,12 @@
 }
 
 .wm-field:hover {
-  border-color: rgb(49 106 197 / 0.6);
+  border-color: color-mix(in srgb, var(--wm-hot-border) 60%, transparent);
 }
 
 .wm-field:focus {
   background: rgb(204 215 255 / 0.25);
-  border-color: #316ac5;
+  border-color: var(--wm-hot-border);
 }
 
 .wm-field:disabled,
@@ -82,14 +82,14 @@ select.wm-field {
 /* Edit mode: boxes to move and resize. */
 .wm-forms-edit > .wm-field-box {
   cursor: move;
-  background: rgb(49 106 197 / 0.12);
-  border: 1px dashed #316ac5;
+  background: color-mix(in srgb, var(--wm-hot-border) 12%, transparent);
+  border: 1px dashed var(--wm-hot-border);
   touch-action: none;
 }
 
 .wm-field-box.wm-field-selected {
-  background: rgb(49 106 197 / 0.22);
-  border: 1.5px solid #316ac5;
+  background: color-mix(in srgb, var(--wm-hot-border) 22%, transparent);
+  border: 1.5px solid var(--wm-hot-border);
 }
 
 .wm-field-name {
@@ -117,7 +117,7 @@ select.wm-field {
   padding: 0 3px;
   transform: none;
   background: #fff;
-  border: 1px solid #316ac5;
+  border: 1px solid var(--wm-hot-border);
 }
 
 .wm-field-box-checkbox:is(:hover, .wm-field-selected) .wm-field-name,
@@ -127,12 +127,13 @@ select.wm-field {
 
 .wm-field-handle {
   position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 8px;
-  height: 8px;
+  right: calc(var(--wm-handle-size) / -2);
+  bottom: calc(var(--wm-handle-size) / -2);
+  width: var(--wm-handle-size);
+  height: var(--wm-handle-size);
+  box-sizing: border-box;
   background: #fff;
-  border: 1px solid #316ac5;
+  border: var(--wm-handle-line) solid var(--wm-hot-border);
   cursor: nwse-resize;
 }
 

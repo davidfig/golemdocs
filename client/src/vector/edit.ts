@@ -284,6 +284,18 @@ export const NAME_ATTR = 'data-name';
 export const isLocked = (node: SceneNode): boolean => node.attrs[LOCK_ATTR] === 'true';
 export const isHidden = (node: SceneNode): boolean => node.style.display === 'none';
 
+/** Whether the node at `path`, or a group it is in, is locked (or, with `hidden`, hidden): then it can't be changed from the drawing. */
+export function lockedIn(scene: Scene, path: NodePath, hidden = false): boolean {
+  let nodes: readonly SceneNode[] = scene.children;
+  for (const i of path) {
+    const node = nodes[i];
+    if (!node) return false;
+    if (isLocked(node) || (hidden && isHidden(node))) return true;
+    nodes = node.kind === 'group' ? node.children : [];
+  }
+  return false;
+}
+
 /** Locks or unlocks nodes. */
 export function setLocked(scene: Scene, paths: readonly NodePath[], locked: boolean): void {
   for (const path of paths) {

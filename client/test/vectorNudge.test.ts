@@ -94,6 +94,12 @@ describe('nudgeScene', () => {
     assert.deepEqual((scene.children[1] as PathNode).commands, line);
     assert.notDeepEqual((scene.children[2] as PathNode).commands, line);
   });
+  test('pushes only the selection when there is one', () => {
+    const scene = sceneOf(pathNode(line), pathNode(line));
+    assert.equal(nudgeScene(scene, { x: 50, y: 0 }, { x: 0, y: 10 }, 30, [[1]]), true);
+    assert.deepEqual((scene.children[0] as PathNode).commands, line);
+    assert.notDeepEqual((scene.children[1] as PathNode).commands, line);
+  });
   test('takes the brush through a transform', () => {
     // Drawn twice as big, so a push of 20 in the drawing is 10 in the path's own units.
     const scene = sceneOf(pathNode(line, { transform: [2, 0, 0, 2, 0, 0] }));

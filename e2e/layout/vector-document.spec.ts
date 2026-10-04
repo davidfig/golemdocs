@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures';
 import { importFile } from '../files/helpers';
-import { pageBoxes } from './helpers';
+import { pageBoxes, penStroke } from './helpers';
 import type { App } from '../fixtures';
 
 const DRAWING = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
@@ -431,6 +431,63 @@ test.describe('free drawing', () => {
     // Still the pencil: the next stroke is another path, not a click on the first.
     await stroke(0.7);
     await expect(layers).toHaveCount(4);
+  });
+
+  test('the Pencil with the Pen Pressure stroke follows how hard a tablet’s pen is pressed', async ({ app }) => {
+    await openDrawing(app);
+    await app.toolbarButton(/^Pencil$/).click();
+    await app.page.getByRole('button', { name: 'Stroke Style' }).click();
+    await app.page.getByRole('listbox', { name: 'Stroke Style' }).getByRole('option', { name: 'Pen Pressure' }).click();
+    // Light at the start, pressed hard at the end: the ready-made stroke would thin out again there.
+    const points = [];
+    for (let i = 0; i <= 24; i++) points.push({ ...(await onPage(app, 0.1 + i * 0.03, 0.85)), pressure: 0.1 + (0.9 * i) / 24 });
+    await penStroke(app.page, points);
+    await expect
+      .poll(
+        async () => {
+          const attr = /data-golem-brush="([^"]*)"/.exec(await currentSvg(app))?.[1];
+          if (!attr) return false;
+          const profile = (JSON.parse(attr.replace(/&quot;/g, '"')) as { profile: [number, number][] }).profile;
+          return profile[0][1] < 0.3 && profile[profile.length - 1][1] > 0.8;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+  });
+
+  test('a plain Pencil line drawn with a tablet’s pen follows the pressure, and Tools ▸ Options can turn that off', async ({ app }) => {
+    await openDrawing(app);
+    await app.toolbarButton(/^Pencil$/).click();
+    const stroke = async (fy: number) => {
+      const points = [];
+      for (let i = 0; i <= 24; i++) points.push({ ...(await onPage(app, 0.1 + i * 0.03, fy)), pressure: 0.1 + (0.9 * i) / 24 });
+      await penStroke(app.page, points);
+    };
+    const brushes = async () => [...(await currentSvg(app)).matchAll(/data-golem-brush="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"')) as { preset: string; profile: [number, number][] });
+    await stroke(0.85);
+    await expect
+      .poll(async () => {
+        const [brush] = await brushes();
+        return !!brush && brush.preset === 'pressure' && brush.profile[0][1] < 0.3 && brush.profile[brush.profile.length - 1][1] > 0.8;
+      }, { timeout: 15_000 })
+      .toBe(true);
+    // The Stroke Style list shows what the line became.
+    await expect(app.page.getByRole('button', { name: 'Stroke Style' })).toBeVisible();
+
+    await app.menu('Tools', 'Options');
+    const options = app.page.getByRole('dialog', { name: 'Options' });
+    const pressure = options.getByRole('checkbox', { name: /harder a tablet’s pen is pressed/ });
+    await expect(pressure).toBeChecked();
+    await pressure.uncheck();
+    await options.getByRole('button', { name: 'OK' }).click();
+    await expect(options).toHaveCount(0);
+    expect(await app.page.evaluate(() => localStorage.getItem('vector.penPressure'))).toBe('off');
+    await app.toolbarButton(/^Pencil$/).click();
+    await stroke(0.7);
+    // Off: the second stroke is an ordinary line of one width.
+    await expect(app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem')).toHaveCount(4);
+    await expect.poll(async () => (await brushes()).length, { timeout: 15_000 }).toBe(1);
+    await app.page.evaluate(() => localStorage.removeItem('vector.penPressure'));
   });
 
   test('Drawing ▸ Lock Guides keeps a guide where it is, and Show Guides hides the guides without removing them', async ({ app }) => {

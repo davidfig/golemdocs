@@ -15,7 +15,7 @@ export async function mountSignIn(root: HTMLElement, returnTo?: string): Promise
     const message = document.createElement('p');
     message.setAttribute('role', 'alert');
     message.textContent = error;
-    message.style.cssText = 'margin:0;color:#b00020';
+    message.style.cssText = 'margin:0;color:var(--wm-error)';
     panel.append(message);
   }
 

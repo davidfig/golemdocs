@@ -11,6 +11,7 @@ const TOLERANCE: Record<Smoothing, number> = { off: 0.4, low: 1.25, medium: 2.5,
 export const SELECT_AFTER_PENCIL_KEY = 'vector.selectAfterPencil';
 export const RETURN_TO_SELECT_KEY = 'vector.returnToSelect';
 export const PENCIL_SMOOTHING_KEY = 'vector.pencilSmoothing';
+export const PEN_PRESSURE_KEY = 'vector.penPressure';
 // The guides' own switches are about the work in hand, so they stay on this device (not in SYNCED_KEYS).
 export const SHOW_GUIDES_KEY = 'vector.showGuides';
 export const LOCK_GUIDES_KEY = 'vector.lockGuides';
@@ -44,6 +45,7 @@ const write = (key: string, value: string): void => {
 let selectAfterPencil = read(SELECT_AFTER_PENCIL_KEY) !== 'off';
 let returnToSelect = read(RETURN_TO_SELECT_KEY) !== 'off';
 let smoothing: Smoothing = parseSmoothing(read(PENCIL_SMOOTHING_KEY));
+let penPressure = read(PEN_PRESSURE_KEY) !== 'off';
 
 let showGuides = read(SHOW_GUIDES_KEY) !== 'off';
 let lockGuides = read(LOCK_GUIDES_KEY) === 'on';
@@ -70,6 +72,8 @@ const changed = (): void => {
 export const selectAfterPencilOn = (): boolean => selectAfterPencil;
 /** After a shape or pen path is drawn the Select tool comes back (on by default); off keeps the drawing tool. */
 export const returnToSelectOn = (): boolean => returnToSelect;
+/** A drawing tablet's pen draws a wider line the harder it is pressed (on by default): the Pencil in drawings, the Pen and Highlighter on pictures. */
+export const penPressureOn = (): boolean => penPressure;
 export const pencilSmoothing = (): Smoothing => smoothing;
 /** The tolerance of the pencil's curve fit, in screen pixels. */
 export const pencilTolerance = (): number => TOLERANCE[smoothing];
@@ -127,6 +131,13 @@ export function setReturnToSelect(value: boolean): void {
   if (value === returnToSelect) return;
   returnToSelect = value;
   write(RETURN_TO_SELECT_KEY, value ? 'on' : 'off');
+  changed();
+}
+
+export function setPenPressure(value: boolean): void {
+  if (value === penPressure) return;
+  penPressure = value;
+  write(PEN_PRESSURE_KEY, value ? 'on' : 'off');
   changed();
 }
 

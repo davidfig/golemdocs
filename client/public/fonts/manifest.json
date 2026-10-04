@@ -2013,6 +2013,407 @@
       }
     },
     {
+      "id": "jetbrains-mono",
+      "wordName": "JetBrains Mono",
+      "substitute": "JetBrains Mono",
+      "license": "OFL-1.1",
+      "licenseFile": "jetbrains-mono/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "jetbrains-mono/regular.webp",
+          "layout": "jetbrains-mono/regular.json",
+          "font": "jetbrains-mono/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "jetbrains-mono/bold.webp",
+          "layout": "jetbrains-mono/bold.json",
+          "font": "jetbrains-mono/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "jetbrains-mono/italic.webp",
+          "layout": "jetbrains-mono/italic.json",
+          "font": "jetbrains-mono/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": -12,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 55,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "jetbrains-mono/bold-italic.webp",
+          "layout": "jetbrains-mono/bold-italic.json",
+          "font": "jetbrains-mono/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": -12,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 55,
+              "yOffset": 350
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "jetbrains-mono-extra",
+      "wordName": "JetBrains Mono (extra)",
+      "substitute": "JetBrains Mono",
+      "license": "OFL-1.1",
+      "licenseFile": "jetbrains-mono-extra/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "jetbrains-mono-extra/regular.webp",
+          "layout": "jetbrains-mono-extra/regular.json",
+          "font": "jetbrains-mono/regular.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": false,
+          "atlas": "jetbrains-mono-extra/bold.webp",
+          "layout": "jetbrains-mono-extra/bold.json",
+          "font": "jetbrains-mono/bold.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 0,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 400,
+          "italic": true,
+          "atlas": "jetbrains-mono-extra/italic.webp",
+          "layout": "jetbrains-mono-extra/italic.json",
+          "font": "jetbrains-mono/italic.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": -12,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 55,
+              "yOffset": 350
+            }
+          }
+        },
+        {
+          "weight": 700,
+          "italic": true,
+          "atlas": "jetbrains-mono-extra/bold-italic.webp",
+          "layout": "jetbrains-mono-extra/bold-italic.json",
+          "font": "jetbrains-mono/bold-italic.ttf",
+          "metrics": {
+            "unitsPerEm": 1000,
+            "hhea": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1020,
+              "descender": -300,
+              "lineGap": 0,
+              "useTypoMetrics": true
+            },
+            "win": {
+              "ascent": 1020,
+              "descent": 300
+            },
+            "xHeight": 550,
+            "capHeight": 730,
+            "underline": {
+              "position": -155,
+              "thickness": 50
+            },
+            "strikeout": {
+              "size": 50,
+              "position": 320
+            },
+            "subscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": -12,
+              "yOffset": 75
+            },
+            "superscript": {
+              "xSize": 650,
+              "ySize": 600,
+              "xOffset": 55,
+              "yOffset": 350
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "jetbrains-mono",
+        "order": 0,
+        "coverage": "jetbrains-mono-extra/coverage.json"
+      }
+    },
+    {
       "id": "georgia",
       "wordName": "Georgia",
       "substitute": "Gelasio",

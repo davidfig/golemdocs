@@ -305,4 +305,8 @@ export const chrome: Catalog = {
   'chrome.title.tip': 'Нажмите, чтобы переименовать',
   'chrome.rename.title': 'Переименование документа',
   'chrome.rename.action': 'Переименовать',
+  'chrome.shortcuts.picture': 'Инструменты изображения',
+  'chrome.shortcuts.pictureHint': 'Клавиши инструментов рисования, как в Photoshop. Инструменту можно назначить одну клавишу буквы, цифры или символа.',
+  'chrome.file.openSelection': 'Открыть выделенное как &документ',
+  'chrome.file.openSelection.tip': 'Открыть выделенные строки как обычный документ, который можно форматировать и конвертировать',
 };

@@ -305,4 +305,8 @@ export const chrome: Partial<Messages> = {
   'chrome.title.tip': '单击以重命名',
   'chrome.rename.title': '重命名文档',
   'chrome.rename.action': '重命名',
+  'chrome.shortcuts.picture': '图片工具',
+  'chrome.shortcuts.pictureHint': '绘图工具的快捷键，与 Photoshop 相同。工具可以使用单个字母、数字或符号键。',
+  'chrome.file.openSelection': '将所选内容作为文档打开(&D)',
+  'chrome.file.openSelection.tip': '将所选行作为可设置格式和转换的普通文档打开',
 };

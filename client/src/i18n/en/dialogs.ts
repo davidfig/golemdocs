@@ -121,6 +121,7 @@ export const dialogs = {
   'dialogs.options.selectAfterPencil': 'Select a pencil stroke when it is finished',
   'dialogs.options.returnToSelect': 'Switch back to the Select tool after drawing a shape or pen path',
   'dialogs.options.pencilSmoothing': 'Pencil smoothing',
+  'dialogs.options.penPressure': 'Draw thicker lines the harder a tablet’s pen is pressed',
   'dialogs.options.off': 'Off',
   'dialogs.options.low': 'Low',
   'dialogs.options.medium': 'Medium',
@@ -128,4 +129,6 @@ export const dialogs = {
   'dialogs.options.guides': 'Guides',
   'dialogs.options.showGuides': 'Show Guides',
   'dialogs.options.lockGuides': 'Lock Guides',
+  'dialogs.find.wholeWord': 'Whole word',
+  'dialogs.find.regex': 'Regular expression',
 } as const;

@@ -41,7 +41,6 @@ export const menus: Partial<Messages> = {
   'menus.format.txt': '纯文本',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '电子邮件',
-  'menus.format.largetext': '大型文本',
   'menus.format.png': 'PNG 图像',
   'menus.format.jpeg': 'JPEG 图像',
   'menus.format.webp': 'WebP 图像',

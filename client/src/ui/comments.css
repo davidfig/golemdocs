@@ -30,7 +30,7 @@
   gap: 4px;
   padding: 3px 6px;
   border-radius: 6px;
-  background: var(--wm-surface, #fff);
+  background: var(--wm-field-bg);
   color: var(--wm-text, #000);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   pointer-events: auto;
@@ -58,7 +58,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  color: var(--wm-text-muted, #555);
+  color: var(--wm-muted);
   white-space: nowrap;
 }
 
@@ -75,10 +75,11 @@
   box-sizing: border-box;
   pointer-events: auto;
   padding: 8px 10px;
-  border: 1px solid #e3c36b;
-  border-left: 4px solid #ffc83d;
+  border: 1px solid var(--wm-note-border);
+  border-left: 4px solid var(--wm-note-edge);
   border-radius: 4px;
-  background: #fffbea;
+  background: var(--wm-note);
+  color: var(--wm-text);
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   transition: box-shadow 0.12s;
@@ -86,26 +87,26 @@
 
 .wm-comment-active {
   cursor: default;
-  border-color: #3390ff;
-  border-left-color: #3390ff;
+  border-color: var(--wm-hot-border);
+  border-left-color: var(--wm-hot-border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .wm-comment-resolved {
-  border-color: #c9c9c9;
-  border-left-color: #a8a8a8;
-  background: #f3f3f3;
-  color: #555;
+  border-color: var(--wm-note-done-border);
+  border-left-color: var(--wm-note-done-border);
+  background: var(--wm-note-done);
+  color: var(--wm-muted);
 }
 
 .wm-comment:focus-visible {
-  outline: 2px solid #3390ff;
+  outline: 2px solid var(--wm-hot-border);
 }
 
 .wm-comment-entry + .wm-comment-entry {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  border-top: 1px solid var(--wm-note-border);
 }
 
 .wm-comment header {
@@ -116,7 +117,7 @@
 
 .wm-comment header time {
   margin-left: auto;
-  color: #666;
+  color: var(--wm-muted);
 }
 
 .wm-comment-avatar {
@@ -138,7 +139,7 @@
 }
 
 .wm-comment-count {
-  color: #555;
+  color: var(--wm-muted);
 }
 
 .wm-comment footer {
@@ -168,16 +169,16 @@
   min-height: 28px;
   max-height: 160px;
   padding: 4px 6px;
-  border: 1px solid #b9b9b9;
+  border: 1px solid var(--wm-field-border);
   border-radius: 4px;
-  background: #fff;
-  color: #1f1f1f;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
   font: inherit;
   resize: none;
 }
 
 .wm-comment-box:focus {
-  outline: 2px solid #3390ff;
+  outline: 2px solid var(--wm-hot-border);
   outline-offset: -1px;
 }
 

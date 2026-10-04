@@ -52,11 +52,11 @@ export function encodeText(text: string, encoding: TextEncoding = 'utf-8', bom =
   return out;
 }
 
-/** A text file this size or larger opens in the large-text viewer instead of as a document (see docs/large-text-files.md). */
+/** A text file this size or larger opens in the large-text viewer instead of as a document (see docs/text-files.md). */
 export const LARGE_TEXT_BYTES = 8 * 1024 * 1024;
 
-/** Whether a file of this kind and size opens in the large-text viewer rather than as a document (a table of 500,000 rows is no better than 500,000 paragraphs). */
-export const opensAsLargeText = (kind: string, size: number): boolean => (kind === 'txt' || kind === 'csv' || kind === 'tsv') && size >= LARGE_TEXT_BYTES;
+/** Whether a file of this kind and size opens in the text editor rather than as a document: plain text always, and a table too big to be one (500,000 rows is no better than 500,000 paragraphs). */
+export const usesTextEngine = (kind: string, size: number): boolean => kind === 'txt' || ((kind === 'csv' || kind === 'tsv') && size >= LARGE_TEXT_BYTES);
 
 /** The bytes of a text file as UTF-8, whatever it was in (UTF-16 and Windows-1252 files are converted; UTF-8 is used as it is, less its byte order mark). */
 export function toUtf8(bytes: Uint8Array): Uint8Array {
@@ -102,3 +102,24 @@ export const isTextName = (name: string): boolean => TEXT_EXTENSION.test(name);
 
 /** A name that ends in an extension of some kind ("notes.foo"), which a text file keeps when saved. */
 export const hasExtension = (name: string): boolean => /\.[A-Za-z0-9_+-]{1,12}$/.test(name);
+
+/** A big text file's bytes as UTF-8, and what it was written in, so that saving can write it back the same way. */
+export function toUtf8WithEncoding(bytes: Uint8Array): { bytes: Uint8Array; encoding: TextEncoding; bom: boolean } {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return { bytes: encodeText(decodeText(bytes).text), encoding: 'utf-16le', bom: true };
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return { bytes: encodeText(decodeText(bytes).text), encoding: 'utf-16be', bom: true };
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return { bytes: encodeText(decodeText(bytes).text), encoding: 'windows-1252', bom: false };
+  }
+  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+  return { bytes: bom ? bytes.subarray(3) : bytes, encoding: 'utf-8', bom };
+}
+
+/** The name a big text file is kept under: its own, unless its extension is not one that opens as text again (then `.txt` is added). */
+/** Whether a text file holds sentences (so spelling is checked in it), not code, data or logs. */
+export const isProseName = (name: string): boolean => /\.(txt|text|nfo)$/i.test(name);
+
+export function textFileName(name: string, opensAsText: boolean): string {
+  return opensAsText ? name : `${name}.txt`;
+}

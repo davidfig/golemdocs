@@ -43,7 +43,19 @@ export class App {
     return this.page.getByRole('menubar');
   }
 
+  /** Whether a plain text file is open: it is edited in the text editor (drawn on the canvas, with its own textarea), not as a document. */
+  async inTextEditor(): Promise<boolean> {
+    return this.page.evaluate(() => !!(window as unknown as { textEditor?: { state(): unknown } }).textEditor?.state());
+  }
+
   async focus(): Promise<void> {
+    if (await this.inTextEditor()) {
+      await this.page.locator('.wm-large-input').evaluate((el) => {
+        el.blur();
+        el.focus({ preventScroll: true });
+      });
+      return;
+    }
     // After a modal dialog closes, #input is the active element but Chromium has dropped its text-input
     // connection, so typed characters vanish (keys still work). Focusing from scratch restores it.
     await this.editor.evaluate((el) => {
@@ -68,6 +80,7 @@ export class App {
 
   /** The whole document's text (selects all, reads what the selection holds, then leaves the caret at the end of the document). */
   async text(): Promise<string> {
+    if (await this.inTextEditor()) return this.page.evaluate(() => (window as unknown as { textEditor: { text(): string } }).textEditor.text());
     await this.focus();
     await this.page.keyboard.press(`${MOD}+a`);
     await this.settle();

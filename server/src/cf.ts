@@ -31,7 +31,7 @@ export interface R2ObjectBody {
 export interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
   /** The object's metadata without its body; null if there is none. */
-  head(key: string): Promise<{ etag: string } | null>;
+  head(key: string): Promise<{ etag: string; size: number; customMetadata?: Record<string, string> } | null>;
   /** With `onlyIf`, answers null (and writes nothing) unless the object's etag still matches. */
   put(
     key: string,

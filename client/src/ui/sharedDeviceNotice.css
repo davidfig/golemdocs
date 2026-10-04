@@ -10,10 +10,10 @@
   max-width: calc(100vw - 32px);
   box-sizing: border-box;
   padding: 10px 12px;
-  border: 1px solid var(--wm-border, #b9b9b9);
-  border-radius: 6px;
-  background: var(--wm-face, #f0f0f0);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+  border: 1px solid var(--wm-menu-border);
+  border-radius: var(--wm-radius);
+  background: var(--wm-face);
+  box-shadow: var(--wm-float-shadow);
   font: 12px/1.4 var(--wm-font, system-ui, sans-serif);
   color: var(--wm-text, #000);
 }

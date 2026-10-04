@@ -28,11 +28,9 @@ export interface VectorSessionHost {
   /** The drawing was changed: its file is to be opened in place of the open one and saved. */
   reopen(bytes: Uint8Array): void;
   /** Offered the drawing itself after each change: true if it was taken (a drawing edited together sends the change to the room). */
-  sceneCommitted?(scene: Scene): boolean;
+  sceneCommitted?(scene: Scene, base?: Scene): boolean;
   /** Undo and redo of a drawing edited together are the room's: true if the step was taken. */
   step?(direction: 'undo' | 'redo'): boolean;
-  /** Offered the drawing's SVG text first after each change: true if it was taken (put in a room instead of the file being opened again). */
-  committed?(svg: string): boolean;
   notice(message: string): void;
   focusEditor(): void;
   toggleLayers(): void;
@@ -46,17 +44,15 @@ export interface VectorSession {
   openEmbedded(bytes: Uint8Array, hooks: { changed(svg: string): void; leave(): void }): Promise<void>;
   /** The picture a document shows for the drawing in this SVG text, and the drawing's size. */
   picture(svg: string): Promise<{ png: Uint8Array; width: number; height: number }>;
-  /** Shows another version of the drawing being edited (someone else changed it, in a room). */
-  reload(bytes: Uint8Array): Promise<void>;
   /** The drawing as it now stands after changes from others (or an undo) in a drawing edited together; the selection stays. */
   syncScene(scene: Scene): void;
-  /** The drawing can be looked at but not changed. */
-  setReadOnly(on: boolean): void;
   /** The SVG text of a new blank drawing. */
   blank(width: number, height: number): string;
   /** Stops editing the embedded drawing. */
   closeEmbedded(): void;
   readonly embedded: boolean;
+  /** Paints the drawing being edited (not one in the text) into its page's thumbnail; false when there is none. */
+  paintThumbnail(ctx: CanvasRenderingContext2D, width: number, height: number): boolean;
   /** Paints the drawing and the layers panel, where the view has them. */
   position(layersOpen: boolean): void;
   /** What the chrome shows of the editor. */
@@ -79,11 +75,11 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
   const editor: VectorEditor = new VectorEditor({
     canvas: host.canvas,
     layer,
-    changed: (scene) => {
-      if (!embedded && host.sceneCommitted?.(scene)) return;
+    changed: (scene, base) => {
+      if (!embedded && host.sceneCommitted?.(scene, base)) return;
       const text = writeSvg(scene);
       if (embedded) embedded.changed(text);
-      else if (!host.committed?.(text)) void svgBytes(text, compressed.value).then(host.reopen);
+      else void svgBytes(text, compressed.value).then(host.reopen);
     },
     stateChanged: host.changed,
     notice: host.notice,
@@ -123,12 +119,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
       const { scene } = await svgText(new TextEncoder().encode(svg));
       return { png: await sceneToPng(scene), width: scene.width, height: scene.height };
     },
-    async reload(bytes) {
-      const { scene } = await svgText(bytes);
-      if (editor.active) editor.open(scene);
-    },
     syncScene: (scene) => editor.sync(scene),
-    setReadOnly: (on) => (editor.readOnly = on),
     blank: (width, height) => writeSvg(emptyScene(width, height)),
     closeEmbedded() {
       if (!embedded) return;
@@ -138,6 +129,9 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
     },
     get embedded() {
       return !!embedded;
+    },
+    paintThumbnail(ctx, width, height) {
+      return !embedded && editor.active && layer.paintInto(ctx, width, height);
     },
     position(layersOpen) {
       layer.position();

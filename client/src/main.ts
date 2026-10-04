@@ -1,15 +1,17 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
-import type { MoveTarget } from '@golemdocs/editor';
+import { replacementFor } from '@golemdocs/editor/pattern';
 import { deskColor, onThemeChange, pagesDark } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, renameCloudDocument, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, renameCloudDocument, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
+import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { zipDocuments } from './storage/archive.ts';
 import { pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
+import { rememberNewKind } from './ui/newKinds.ts';
 import { appTools } from './assistant/appTools.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, setLinkKeeper } from './folderOps.ts';
@@ -38,7 +40,7 @@ import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
 import { stopSettingsSync, syncSettings } from './settingsSync.ts';
 import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
-import { capturePageThumbnail, drawPages, pictureLayout, readPage } from './thumbnail.ts';
+import { capturePageThumbnail, drawPages, pictureLayout, readPage, textThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
 import { FilesPanel } from './ui/filesPanel.ts';
@@ -66,6 +68,8 @@ import { LoadingScreen } from './ui/loadingScreen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
+import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
+import type { TextRoom } from './textEditor/view.ts';
 import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand, type WordStats } from './layout/protocol.ts';
 import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from './webgl/text/gpuFace.ts';
@@ -81,7 +85,9 @@ import { SpellMenu } from './ui/spellMenu.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
-import { readClipboard, showPasteSpecialDialog, type Clipboard } from './ui/pasteSpecialDialog.ts';
+import { readClipboard, type Clipboard } from './ui/clipboard.ts';
+import { showPasteSpecialDialog } from './ui/pasteSpecialDialog.ts';
+import { attachTextInput, editKey, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
@@ -94,8 +100,13 @@ import { DrawLayer, isDrawTool } from './ui/drawLayer.ts';
 import type { VectorSession } from './ui/vectorSession.ts';
 import { askDropChoice } from './ui/dropChoice.ts';
 import { askDuplicate } from './ui/duplicateDialog.ts';
-import { LargeTextView } from './largeText/view.ts';
-import { showAdjustDialog, showResizeDialog } from './ui/pictureDialogs.ts';
+import type { DocumentEngine } from './documentEngine.ts';
+import { TextEditor } from './textEditor/handle.ts';
+import { showAdjustDialog, showBackgroundDialog, showPictureCanvasDialog, showResizeDialog } from './ui/pictureDialogs.ts';
+import { PictureLayersPanel } from './ui/pictureLayersPanel.ts';
+import { samplePicture } from './formats/imageSample.ts';
+import { DEFAULT_DRAW_STYLE, paintOf } from './formats/imageDraw.ts';
+import type { DrawStyle, Shape } from './formats/imageDraw.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, ImageOp } from './ui/actions.ts';
 import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
@@ -104,18 +115,18 @@ import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
-import { hasExtension, opensAsLargeText, toUtf8 } from './formats/textFiles.ts';
+import { LARGE_TEXT_BYTES, hasExtension, isProseName, textFileName, usesTextEngine, toUtf8WithEncoding } from './formats/textFiles.ts';
 import { isVectorFormat, roomable } from './formats/roomDoc.ts';
 import { ensureUids } from './vector/nodes.ts';
 import type { Scene } from './vector/model.ts';
-import { LeaseBanner, type LeaseState } from './ui/leaseBanner.ts';
 import type { Collaboration } from './assistant/appTools.ts';
 import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
 import { rewriteDocumentLinks } from './formats/docLinks.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
-import { encodeCanvas, toPng } from './formats/imageCodec.ts';
+import { decodeImage, encodeCanvas, makeCanvas, toPng } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import { modalOpen } from './ui/dom.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -335,8 +346,19 @@ function openTicket(): () => boolean {
   return () => ticket === openRequests;
 }
 
-function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean } = {}): void {
+function open(source: DocumentSource, options: { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean; asDocument?: boolean } = {}): void {
+  // Plain text is edited in the text editor, not as a document (`asDocument`: for the things only a document does, such as printing).
+  if (source.kind === 'txt' && !options.asDocument) {
+    void openLarge(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
   openRequests++;
+  // A changed drawing in the text is put back in its document first, so the change is saved with it; then this opens (unless another was asked for meanwhile).
+  if (embeddedDrawing?.latest != null && !options.pictureEdit) {
+    const still = openTicket();
+    void leaveEmbeddedDrawing(false).then(() => still() && open(source, options));
+    return;
+  }
   keepCamera = !!options.pictureEdit && source.kind === 'svg';
   const start = performance.now();
   let name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
@@ -349,7 +371,8 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
   commandsAtOpen = commandsSent;
   viewRestored = false;
   cropLayer.cancel();
-  largeView.close();
+  leaveTextRoom();
+  textView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
   if (!options.pictureEdit) {
@@ -370,6 +393,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     name,
     kind: kindOfSource(source),
   };
+  if (!current.builtIn) rememberNewKind(current.kind);
   // Meant for this document only: a later one isn't filed there by mistake.
   newDocumentFolder = null;
   const opening = current;
@@ -413,17 +437,19 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
 
   const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
   current.roomRequested = requestedRoom !== undefined;
-  shownDrawingPart = null;
   layerSteps = { canUndo: false, canRedo: false };
   vectorSteps = { canUndo: false, canRedo: false };
   latestVectorScene = null;
   drawLayer.unbind();
-  leaseChanged(NO_LEASE);
+  drawLayer.setBase(null);
+  baseFor = null;
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;
       opening.kind = format;
       annotating = fixedPages;
+      // A document saved by an older version as plain text (a .wdoc of the text lens): the text editor takes it from here.
+      if (format === 'txt' && !options.asDocument && !options.pictureEdit) void migrateText(current, docName, options);
       if (outdated) pendingNotice = outdatedPages();
       spellDialog.sendLive();
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
@@ -475,22 +501,7 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       if (doc.localId && doc.unsavedSince === 0) void openLocal(doc.localId);
     },
     roomState(state) {
-      const doc = current;
-      const was = doc.room;
-      doc.room = state;
-      const text = describeRoom(state);
-      if (text !== lastRoomText) notify(text || t('app.editingAlone'));
-      lastRoomText = text;
-      // The server saves while several people are editing: an upload from here would be refused.
-      if (state.mode !== 'solo' && doc.localId) void uploads.forget([doc.localId]);
-      // Back to saving from here: the server's last version is what this copy now continues from.
-      if (was && was.mode !== 'solo' && state.mode === 'solo') void resumeAfterRoom(doc);
-      if (state.mode === 'offline') {
-        notify(t('app.roomLost'));
-        if (was?.mode !== 'offline') rejoinWhenBack(doc);
-      }
-      showSync();
-      requestRender();
+      roomStateChanged(state);
     },
     pointers(list) {
       pointerLayer.update(list);
@@ -509,18 +520,19 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
       reportError(t('app.documentError', { name, message }));
     },
     notice: (message) => reportError(message),
-    lease: (state) => leaseChanged(state),
     vectorScene(state) {
       vectorSteps = { canUndo: state.canUndo, canRedo: state.canRedo };
       if (state.scene) {
         latestVectorScene = state.scene;
         if (vector?.editor.active) vector.syncScene(state.scene);
+        pagesPanel.refresh();
       }
       requestRender();
     },
     shapes(state) {
       layerSteps = { canUndo: state.canUndo, canRedo: state.canRedo };
-      drawLayer.bind(state.width, state.height, state.shapes, state.canUndo);
+      drawLayer.bind(state.width, state.height, state.shapes);
+      if (isPicture()) void loadPictureBase();
       requestRender();
       const echo = shapesEcho;
       shapesEcho = null;
@@ -528,6 +540,86 @@ function open(source: DocumentSource, options: { grid?: boolean; localId?: strin
     },
   }, requestedRoom);
   focusInput();
+}
+
+/** A plain text document opened by the layout worker (one saved by an older version) is given to the text editor, as the text it says. */
+async function migrateText(doc: OpenDocument, name: string, options: { localId?: string; shared?: CloudDocument }): Promise<void> {
+  try {
+    const notice = pendingNotice; // the switch that made it text says what it left out
+    const bytes = await worker.convert('txt');
+    if (current !== doc) return;
+    await openLarge(name, bytes, { localId: options.localId, shared: options.shared });
+    pendingNotice = notice ?? pendingNotice;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/** Where the document stands in its room changed (from the layout worker for a document, from the text editor's own room for a text file). */
+function roomStateChanged(state: RoomState): void {
+  const doc = current;
+  const was = doc.room;
+  doc.room = state;
+  const text = describeRoom(state);
+  if (text !== lastRoomText) notify(text || t('app.editingAlone'));
+  lastRoomText = text;
+  // The server saves while several people are editing: an upload from here would be refused.
+  if (state.mode !== 'solo' && doc.localId) void uploads.forget([doc.localId]);
+  // Back to saving from here: the server's last version is what this copy now continues from.
+  if (was && was.mode !== 'solo' && state.mode === 'solo') void resumeAfterRoom(doc);
+  if (state.mode === 'offline') {
+    notify(t('app.roomLost'));
+    if (was?.mode !== 'offline') rejoinWhenBack(doc);
+  }
+  showSync();
+  requestRender();
+}
+
+let textRoomHandle: TextRoom | null = null;
+
+function leaveTextRoom(): void {
+  textRoomHandle?.client.leave();
+  textRoomHandle = null;
+}
+
+/** A big text file in the account is edited together with others in a room of its own (see textEditor/textSync.ts), joined here like a document's room is joined by the layout worker. */
+async function joinTextRoom(doc: OpenDocument, cloudId: string): Promise<void> {
+  const view = textView.editor;
+  const room = networkRoom(cloudId);
+  if (!view || !room || doc.roomRequested || current !== doc) return;
+  if (textView.size > MAX_SHARED_TEXT_BYTES) return notify(t('textEditor.tooBigToShare', { max: '16 MB' }));
+  doc.roomRequested = true;
+  const handle = await textView.room({
+    docId: cloudId,
+    client: crypto.randomUUID(),
+    name: room.user,
+    color: room.color,
+    view: () => (textView.editor === view ? view : null),
+    changed: (state) => {
+      if (current !== doc) return;
+      view.readOnly = state.role === 'viewer';
+      roomStateChanged(state);
+    },
+    remoteEdit: () => {
+      if (current === doc) documentEdited();
+    },
+    upload: async (bytes) => {
+      await saveDocument(cloudId, bytes);
+    },
+  });
+  textRoomHandle = handle;
+  try {
+    const start = await handle.client.join();
+    if (current !== doc || textView.editor !== view) return handle.client.leave();
+    // Others are editing: the room's file is the one to open (as UTF-8: a room keeps it so whatever the file was).
+    if (start.kind === 'room') textView.open(textView.fileName, start.bytes, { encoding: 'utf-8', bom: false, original: null });
+    handle.client.ready(start);
+  } catch {
+    // No room to be had: the file is edited alone, and saved as usual.
+    handle.client.leave();
+    if (textRoomHandle === handle) textRoomHandle = null;
+    doc.roomRequested = false;
+  }
 }
 
 // --- Collaboration ---------------------------------------------------------------------
@@ -586,9 +678,14 @@ function describeRoom(state: RoomState): string {
 }
 
 /** Others may be editing the open document with this person now (a room). */
-const sharedLive = (): boolean => !!new URLSearchParams(location.search).get('room') || (current.room !== null && current.room.mode !== 'solo');
+const sharedLive = (): boolean => {
+  // Once the room has said how it is, that is what counts: `shared` means others are in it; alone (`solo`), or cut off for good (`offline`), nobody else is editing.
+  if (current.room) return current.room.mode === 'shared';
+  // A room is being joined (the address names one): until it answers, others may be there.
+  return !!new URLSearchParams(location.search).get('room');
+};
 
-/** Whether the open document can be edited together with others: any document except a picture. */
+/** Whether the open document can be edited together with others: a document in any format can (see `roomable`). */
 const sharable = (): boolean => isFormat(current.kind) && roomable(current.kind);
 
 /**
@@ -645,7 +742,6 @@ function applyLayout(update: LayoutUpdate): void {
   }
   pagesPanel.setPages(pages);
   arrange();
-  showRoomDrawing();
   if (newDrawingSince) {
     for (const page of pages) {
       const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
@@ -660,6 +756,8 @@ function applyLayout(update: LayoutUpdate): void {
 
 /** Positions pages; places the camera the first time, and keeps a grid fitted while it grows. */
 function arrange(): void {
+  // A big text file draws itself, on this camera: the empty document under it must not move it.
+  if (textView.active) return;
   const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
   const gap = reflowing() ? 0 : PAGE_GAP;
   bounds = arrangePages(pages, grid ? columnsToFill(pages, aspect, gap) : 1, gap);
@@ -809,7 +907,7 @@ interface OpenDocument {
    * A document someone else owns, opened straight from the cloud: it has no copy in this browser
    * and edits go to the cloud directly (or through the room), never to a copy of it here.
    */
-  shared: { id: string; role: 'editor' | 'viewer'; dirty: boolean; uploading: boolean; error: string | null } | null;
+  shared: { id: string; role: 'editor' | 'viewer'; dirty: boolean; uploading: boolean; error: string | null; known?: Set<string> } | null;
   /** The folder a new document goes in when it is first saved (null: the top level). */
   newFolder: string | null;
   /** Its name, as the title shows it and it is saved under. */
@@ -874,7 +972,17 @@ async function uploadShared(): Promise<void> {
   try {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
-    putDocInCatalogue(await saveDocument(shared.id, await worker.save()));
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (await worker.save());
+    if (bytes.length >= CHUNK_MIN_FILE) {
+      // A big document goes as chunks, and after the first save of this session only those that changed.
+      const { manifest, fresh } = await chunkBytes(bytes);
+      const byHash = new Map(fresh.map((c) => [c.hash, c.bytes]));
+      putDocInCatalogue(await saveChunked(shared.id, manifest, async (hashes) => hashes.map((hash) => ({ hash, bytes: byHash.get(hash)! })), shared.known ?? new Set()));
+      shared.known = new Set(manifest.chunks.map((c) => c.h));
+    } else {
+      putDocInCatalogue(await saveDocument(shared.id, bytes));
+      shared.known = undefined;
+    }
     library.refreshSoon();
   } catch (e) {
     // Refused because the room started saving: the edits are in the room's hands now.
@@ -1103,10 +1211,13 @@ async function upload(id: string): Promise<void> {
   const { doc, conflictCopy } = await uploadToCloud(id);
   // A document made in this session gets its room once it is in the account.
   if (id === current.localId && !current.roomRequested && !conflictCopy) {
-    const room = networkRoom(doc.id);
-    if (room) {
-      current.roomRequested = true;
-      worker.joinRoom(room);
+    if (textView.active) void joinTextRoom(current, doc.id);
+    else {
+      const room = networkRoom(doc.id);
+      if (room) {
+        current.roomRequested = true;
+        worker.joinRoom(room);
+      }
     }
   }
   library.putCloud(doc);
@@ -1200,7 +1311,7 @@ function renameDocument(input: string): string | null {
 }
 
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
-const fileName = () => (current.kind === 'txt' && hasExtension(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
+const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
@@ -1391,9 +1502,11 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
  */
 async function makeThumbnail(info: SavedInfo): Promise<void> {
   const page = pages[0];
-  if (!page || !gl) return;
+  const text = textView.active;
+  if (!text && (!page || !gl)) return;
   try {
-    const blob = await capturePageThumbnail(gl, renderer, page);
+    // A text file has no page: its first lines are drawn on one.
+    const blob = text ? await textThumbnail(textView.headLines()) : await capturePageThumbnail(gl!, renderer, page!, paintEdits);
     if (blob) await saveThumbnail(info.id, blob, info.updatedAt);
   } catch {
     // no thumbnail this time
@@ -1427,8 +1540,9 @@ function saveInBrowser(): Promise<string | null> {
   const doc = current;
   doc.unsavedSince = 0;
   const name = fileName();
-  // Asked for now, while the worker still has this document.
-  const bytes = worker.save();
+  // Asked for now, while the worker (or the large-text editor) still has this document.
+  const large = textView.active;
+  const bytes = large ? Promise.resolve(textView.snapshot()!) : worker.save();
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -1474,7 +1588,7 @@ function saveInBrowser(): Promise<string | null> {
       return info.id;
     } catch (e) {
       if (!doc.unsavedSince) doc.unsavedSince = performance.now(); // still unsaved: the next edit tries again
-      if (doc === current) reportError(t('app.saveFailed', { message: (e as Error).message }));
+      if (doc === current) reportError((e as DOMException).name === 'QuotaExceededError' ? t('textEditor.quota') : t('app.saveFailed', { message: (e as Error).message }));
       return null;
     }
   });
@@ -1755,7 +1869,7 @@ async function openLocal(id: string): Promise<void> {
   const cloudId = saved.info.cloudId;
   const source = sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes };
   // A huge text file (imported in a ZIP, say) opens in the viewer, as it does from the computer.
-  if (opensAsLargeText(source.kind, saved.bytes.byteLength)) return openLarge(saved.info.name, new Uint8Array(saved.bytes));
+  if (usesTextEngine(source.kind, saved.bytes.byteLength)) return openLarge(saved.info.name, new Uint8Array(saved.bytes), { localId: id });
   open(source, { localId: id, cloudId });
   const doc = current;
   if (cloudId && !doc.roomRequested) {
@@ -1904,7 +2018,8 @@ async function openCloud(id: string): Promise<void> {
   await accountKnown;
   try {
     if (!library.cloud.some((d) => d.id === id)) await refreshLibrary(); // only for an address opened before the list arrived
-    const cloud = library.cloud.find((d) => d.id === id);
+    // A listing that another one overtook leaves the list empty: ask for it directly (the name says what kind of file it is).
+    const cloud = library.cloud.find((d) => d.id === id) ?? (await listDocuments().catch(() => [])).find((d) => d.id === id);
     const name = cloud?.name ?? t('app.cloudDocumentName');
     setStatus(t('app.opening', { name }));
     // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest. So
@@ -1914,7 +2029,9 @@ async function openCloud(id: string): Promise<void> {
     // Listed at once: what asks about the open document's copy (File › Share, say) finds it.
     if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
     if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
-    open(sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes }, { localId: info.id, cloudId: info.cloudId });
+    const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
+    if (usesTextEngine(source.kind, bytes.byteLength)) openLarge(info.name, new Uint8Array(bytes), { localId: info.id });
+    else open(source, { localId: info.id, cloudId: info.cloudId });
     rememberInUrl(`local:${info.id}`);
     // Only the lists need the new browser copy, so they catch up after the document is on screen.
     window.setTimeout(() => void refreshLibrary(), 1000);
@@ -1927,10 +2044,10 @@ async function openCloud(id: string): Promise<void> {
 /** Downloads a copy of the document as a file of the format it is edited as (an export: only what that format holds). */
 async function download(): Promise<void> {
   try {
-    // The large-text viewer holds the file as it was, and gives it back as it was.
-    const large = largeView.active ? largeView.bytes : null;
+    // The large-text editor holds the text, and gives it back in the encoding it came in.
+    const large = textView.active ? textView.snapshot() : null;
     // Named now: another document may be open by the time the bytes come back.
-    const name = large ? largeView.fileName : fileName();
+    const name = large ? textView.fileName : fileName();
     const type = large ? 'text/plain' : FORMATS[current.kind].mime;
     const bytes = large ?? (await worker.convert(current.kind as Format));
     const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
@@ -1948,6 +2065,7 @@ async function download(): Promise<void> {
  * Download), then printed from a hidden frame, or opened in a new tab to look at first.
  */
 async function print(preview: boolean): Promise<void> {
+  if (!(await openAsDocument())) return;
   const bytes = await worker.convert('pdf');
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
@@ -1992,6 +2110,7 @@ function switchedNotice(to: Format): string {
  * the original pages are kept, and shown again as PDF (with a warning once the text is edited).
  */
 async function convertTo(to: DocumentKind): Promise<void> {
+  if (!(await openAsDocument())) return;
   const from = current.kind;
   if (to === from) return;
   // A drawing's pictures are made from the drawing itself (at full resolution), as a document's pages are drawn into one.
@@ -2096,6 +2215,27 @@ const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
 /** A vector drawing is open: a page showing it, looked at as a whole like a picture. */
 const isDrawing = (): boolean => VECTOR_KINDS.includes(current.kind);
 
+/** The picture whose own pixels the Draw layer has been given (a fill finds its region in them), or null. */
+let baseFor: object | null = null;
+
+/** Gives the Draw layer the open picture's own pixels, without the shapes over it, once per picture. */
+async function loadPictureBase(): Promise<void> {
+  const doc = current;
+  if (baseFor === doc) return;
+  baseFor = doc;
+  try {
+    const bitmap = await decodeImage(await worker.pictureBase());
+    const { context } = makeCanvas(bitmap.width, bitmap.height);
+    context.drawImage(bitmap, 0, 0);
+    const data = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    bitmap.close();
+    if (doc === current) drawLayer.setBase({ width: data.width, height: data.height, data: data.data });
+  } catch {
+    // Without them a fill is not shown, and the next change of the picture tries again.
+    if (baseFor === doc) baseFor = null;
+  }
+}
+
 /** The open picture as a file, of the type it is edited as. */
 const pictureBytes = (): Promise<Uint8Array> => worker.convert(current.kind as Format);
 
@@ -2125,7 +2265,7 @@ async function changePicture(edit: ImageEdit): Promise<void> {
 async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
   if (isDrawing() || embeddedDrawing) return direction === 'undo' ? vector?.editor.undo() : vector?.editor.redo();
   // What was drawn over the picture is stepped back over first; then the picture's own changes.
-  if (isPicture() && (direction === 'undo' ? layerSteps.canUndo : layerSteps.canRedo)) return worker.stepShapes(direction);
+  if (isPicture() && (direction === 'undo' ? layerSteps.canUndo : layerSteps.canRedo)) return stepShapes(direction);
   const from = direction === 'undo' ? pictureHistory.undo : pictureHistory.redo;
   const to = direction === 'undo' ? pictureHistory.redo : pictureHistory.undo;
   const target = from.pop();
@@ -2146,10 +2286,74 @@ async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
 }
 
 /** What the Draw tools draw with; the colour is CSS, the size a step from thin (0) to extra thick (3). */
-const drawStyle = { color: '#e5322d', size: 1, fill: false };
+const drawStyle: DrawStyle = { ...DEFAULT_DRAW_STYLE };
 
+/** Changes what the Draw tools draw with (the toolbar, the eyedropper, a key); the picked shapes are not restyled, only the next ones. */
+function setDrawStyle(change: Partial<DrawStyle>): void {
+  Object.assign(drawStyle, change);
+  drawStyle.size = Math.min(3, Math.max(0, Math.round(drawStyle.size)));
+  requestRender();
+}
+
+/** The Draw toolbar's tools, and the commands on the picked shapes and layers. `at` is where the paint bucket was clicked. */
 async function pictureAction(op: ImageOp): Promise<void> {
   if (!isPicture()) return;
+  if (op === 'sizeUp' || op === 'sizeDown') return setDrawStyle({ size: drawStyle.size + (op === 'sizeUp' ? 1 : -1) });
+  if (op === 'layers') return toggleLayers();
+  if (op.startsWith('shape:') || op === 'shape') {
+    if (op !== 'shape') setDrawStyle({ shape: op.slice(6) as DrawStyle['shape'] });
+    cropLayer.cancel();
+    if (drawLayer.active) return drawLayer.setTool('shape');
+    return drawLayer.start('shape');
+  }
+  // Commands on the shapes drawn over the picture.
+  switch (op) {
+    case 'selectAll':
+      if (!drawLayer.active) drawLayer.start('move');
+      return drawLayer.selectAll();
+    case 'deselect':
+      return drawLayer.select([]);
+    case 'duplicate':
+      return drawLayer.duplicate();
+    case 'group':
+      return drawLayer.group();
+    case 'ungroup':
+      return drawLayer.ungroup();
+    case 'newLayer':
+      return drawLayer.newLayer();
+    case 'delete':
+      return drawLayer.deleteSelection();
+    case 'front':
+    case 'forward':
+    case 'backward':
+    case 'back':
+      return drawLayer.order(op === 'front' || op === 'forward' ? 'forward' : 'backward', op === 'front' || op === 'back');
+  }
+  if (op === 'bucket') {
+    // The bucket adds a fill layer (see ui/drawLayer.ts): the picture's own pixels are not changed.
+    cropLayer.cancel();
+    if (drawLayer.active) return drawLayer.setTool('bucket');
+    return drawLayer.start('bucket');
+  }
+  if (op === 'background' || op === 'canvasSize') {
+    drawLayer.apply();
+    const doc = current;
+    try {
+      const size = sniffImage(await pictureBytes());
+      if (!size || doc !== current) return;
+      if (op === 'background') {
+        const paint = await showBackgroundDialog(paintOf(drawStyle));
+        if (paint) await changePicture({ op: 'background', paint });
+      } else {
+        const choice = await showPictureCanvasDialog(size.width, size.height, paintOf({ ...drawStyle, fillType: 'solid', fillColor: drawStyle.fillColor ?? '#ffffff' }));
+        if (choice && (choice.width !== size.width || choice.height !== size.height)) await changePicture({ op: 'canvas', ...choice });
+      }
+      focusInput();
+    } catch (e) {
+      reportError(t('picture.editFailed', { message: (e as Error).message }));
+    }
+    return;
+  }
   if (isDrawTool(op)) {
     cropLayer.cancel();
     if (drawLayer.active) return drawLayer.setTool(op);
@@ -2192,17 +2396,68 @@ async function pictureAction(op: ImageOp): Promise<void> {
 }
 
 // --- Text too big to be a document ---------------------------------------------------------------
-// A file of many megabytes would need gigabytes as paragraphs (docs/large-text-files.md), so it opens in a
+// A file of many megabytes would need gigabytes as paragraphs (docs/text-files.md), so it opens in a
 // viewer over the page instead: the file stays bytes, and only the lines in view are drawn. An empty document
 // is opened under it (with the file's name) so that the rest of the app has something to stand on.
 
-function openLarge(name: string, bytes: Uint8Array): void {
-  open({ kind: 'blank', name });
-  largeView.open(name, toUtf8(bytes));
+async function openLarge(name: string, bytes: Uint8Array, options: { localId?: string; cloudId?: string; shared?: CloudDocument; store?: boolean } = {}): Promise<void> {
+  // The editor is fetched the first time a text file is opened (it is about 60 kB that sessions of Word documents never need).
+  const latest = openTicket();
+  try {
+    await textView.load();
+  } catch (e) {
+    return reportError(t('app.openFailed', { message: (e as Error).message }));
+  }
+  if (!latest()) return;
+  // Never with the account's id: the layout worker would join a room for a Word document. The text editor joins its own (`joinTextRoom`).
+  open({ kind: 'blank', name }, { localId: options.localId, shared: options.shared });
+  const text = toUtf8WithEncoding(bytes);
+  textView.open(name, text.bytes, { encoding: text.encoding, bom: text.bom, original: bytes });
+  textView.editor!.readOnly = options.shared?.role === 'viewer';
   current.name = name;
-  pendingNotice = t('largeText.notice', { name, size: `${(bytes.length / (1 << 20)).toFixed(bytes.length < 10 << 20 ? 1 : 0)} MB` });
+  const big = bytes.length >= LARGE_TEXT_BYTES;
+  pendingNotice = (big ? t('textEditor.notice', { name, size: `${(bytes.length / (1 << 20)).toFixed(bytes.length < 10 << 20 ? 1 : 0)} MB` }) : '') + (text.encoding === 'windows-1252' ? `${big ? ' ' : ''}${t('textEditor.latin1Note')}` : '') || null;
   focusInput();
+  // A file that came from somewhere is kept in this browser at once, as a document is (a big one only once it is edited, so looking costs nothing).
+  if (!options.localId && !big && !options.shared) documentEdited();
+  const doc = current;
+  const cloudId = options.shared?.id ?? (options.localId ? library.local.find((d) => d.id === options.localId)?.cloudId : undefined);
+  if (cloudId) void accountKnown.then(() => joinTextRoom(doc, cloudId));
 }
+
+/** The most of a big file that opens as an ordinary document: past this the document model costs too much (see docs/text-files.md). */
+const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
+
+/**
+ * What only a document does (printing, converting to another format): a text file in the text editor is opened as a document first, in place
+ * of the file (it is the same file: the editor shows it again when it is opened next). True when there is a document to go on with.
+ */
+async function openAsDocument(): Promise<boolean> {
+  if (!textView.active) return true;
+  const bytes = textView.snapshot();
+  if (!bytes || bytes.length > MAX_SELECTION_BYTES) {
+    notify(t('textEditor.fileTooBig', { max: '5 MB' }));
+    return false;
+  }
+  const before = current;
+  await saveNow();
+  const ready = nextDocumentReady();
+  open({ kind: 'txt', name: textView.fileName, bytes: bytes.slice().buffer }, { asDocument: true, localId: before.localId ?? undefined });
+  await ready;
+  return true;
+}
+
+/** File › Open Selection as Document: the selected lines of a big text file, as a text document that can be formatted and converted. */
+function openSelection(): void {
+  if (!textView.hasSelection) return notify(t('textEditor.nothingSelected'));
+  const text = textView.selectedText;
+  const bytes = text === null ? null : new TextEncoder().encode(text);
+  if (!bytes || bytes.length > MAX_SELECTION_BYTES) return notify(t('textEditor.selectionTooBig', { max: '5 MB' }));
+  open({ kind: 'txt', name: `${t('textEditor.selectionName', { name: stem(textView.fileName) })}.txt`, bytes: bytes.buffer as ArrayBuffer }, { asDocument: true });
+}
+
+/** The name a big text file is saved under: one that opens as text again (a file with no extension gets `.txt`). */
+const textFileNameOf = (name: string): string => textFileName(name, sourceFromFile(name, new ArrayBuffer(0)) !== null);
 
 // --- Links to other documents ----------------------------------------------------------------
 // A link to `doc:Title` (what [[Title]] is in wiki markup) opens the stored document of that title,
@@ -2536,7 +2791,7 @@ function send(command: WireCommand): void {
 }
 
 function focusInput(): void {
-  if (largeView.active) return largeView.focus();
+  if (textView.active) return textEngine.focus();
   input.focus({ preventScroll: true });
 }
 
@@ -2670,9 +2925,18 @@ function render(): void {
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   syncReflow();
   renderer.flat = reflowing();
-  if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
-  if (renderer.flat) camera.x = bounds.x;
-  lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
+  if (textView.active) {
+    // A big text file: its own bounds, left-aligned when narrower than the window, and drawn by the large-text editor.
+    const area = textView.bounds();
+    camera.clamp(area, canvas.clientWidth, canvas.clientHeight);
+    if (area.width * camera.zoom * CSS_PX_PER_POINT <= canvas.clientWidth) camera.x = area.x;
+    const frame = textView.draw(pagesDark(), caretOn && document.hasFocus());
+    lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
+  } else {
+    if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
+    if (renderer.flat) camera.x = bounds.x;
+    lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
+  }
   const end = performance.now();
   // The caret blinks on an idle document; counting that would make idle read as a steady frame rate.
   if (!caretOnly) {
@@ -2683,19 +2947,19 @@ function render(): void {
     documentName: current.name,
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
-    kind: largeView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
-    hasSelection: selection.text.length > 0,
+    kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
+    hasSelection: textView.active ? textEngine.hasSelection : selection.text.length > 0,
     zoom: camera.zoom,
-    pagesPanel: pagesOpen() && !largeView.active && !reflowing(),
+    pagesPanel: pagesOpen() && !textView.active && !reflowing(),
     filesPanel: filesOpen,
     footer: footerOn,
     rulerVisible: rulerOn,
     format: selectionFormat,
-    canUndo: isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    canUndo: textView.active ? textEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: textView.active ? textEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
-    draw: { tool: drawLayer.tool, color: drawStyle.color, size: drawStyle.size, fill: drawStyle.fill },
+    draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
     vector: vector ? vector.state(layersOpen) : { ...DEFAULT_STATE.vector, layers: layersOpen },
     inTable,
     formattingMarks,
@@ -2711,12 +2975,13 @@ function render(): void {
   updateRuler();
   cropLayer.position();
   drawLayer.position();
+  pictureLayers.setVisible(layersOpen && isPicture() && loaded);
   vector?.position(layersOpen);
   // The layers panel takes room from the view: a drawing still fitted to the window is fitted again.
-  const layersShown = layersOpen && !!vector?.editor.active;
+  const layersShown = (layersOpen && !!vector?.editor.active) || (layersOpen && isPicture() && loaded);
   if (layersShown !== layersWereShown) {
     layersWereShown = layersShown;
-    if (isDrawing() && loaded && !userMoved) placeCamera();
+    if ((isDrawing() || isPicture()) && loaded && !userMoved) placeCamera();
   }
   updateDebug();
   // Keep the (invisible) input at the caret, so IME candidate windows appear next to it.
@@ -2812,6 +3077,10 @@ type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 
 
 function press(e: Press): void {
   focusInput();
+  if (textView.active) {
+    textView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e));
+    return;
+  }
   const hit = pageAt(e.offsetX, e.offsetY);
   // Editing a PDF: a click picks the text under it to edit there (or, over nothing, puts the text down).
   if (annotating && formMode === 'edit') {
@@ -2989,6 +3258,8 @@ let linkKeyDown = false;
 function updateCursor(): void {
   // The vector editor sets the cursor itself, from what is under the pointer.
   if (isDrawing() && vector?.editor.active) return;
+  // The picture tools do the same.
+  if (isPicture() && drawLayer.active) return;
   const cursor = painting ? 'copy' : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
   if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
 }
@@ -3033,6 +3304,16 @@ canvas.addEventListener('pointermove', (e) => {
   pointerMoved(e.offsetX, e.offsetY);
   hoverInside = true;
   linkKeyChanged(e);
+  if (textView.active) {
+    // A big text file: a drag selects (or pans, with the middle button), and there are no links to hover.
+    if (pan) {
+      userMoved = true;
+      camera.panBy(pan.x - e.clientX, pan.y - e.clientY);
+      pan = { x: e.clientX, y: e.clientY };
+      requestRender();
+    } else textView.drag(e.offsetX, e.offsetY);
+    return;
+  }
   if (!pan && !selecting) hoverLink({ x: e.offsetX, y: e.offsetY, clientX: e.clientX, clientY: e.clientY });
   if (pan) {
     userMoved = true;
@@ -3056,6 +3337,7 @@ canvas.addEventListener('pointermove', (e) => {
 const endPointer = () => {
   pan = null;
   selecting = false;
+  textView.release();
 };
 canvas.addEventListener('pointerup', (e) => {
   if (e.pointerType === 'touch') return touchUp(e);
@@ -3095,41 +3377,24 @@ canvas.addEventListener(
 
 // --- Keyboard and text input -----------------------------------------------------------
 
-/** Editing keys, as Word (Windows) and macOS text fields map them. */
-function editingCommand(e: KeyboardEvent): WireCommand[] | null {
-  const extend = e.shiftKey;
-  const word = MAC ? e.altKey : e.ctrlKey;
-  const line = MAC && e.metaKey;
-  const move = (to: MoveTarget): WireCommand[] => [{ kind: 'move', to, extend }];
-  switch (e.key) {
-    case 'ArrowLeft':
-      return move(line ? 'lineStart' : word ? 'wordLeft' : 'left');
-    case 'ArrowRight':
-      return move(line ? 'lineEnd' : word ? 'wordRight' : 'right');
-    case 'ArrowUp':
-      return move(line ? 'documentStart' : 'up');
-    case 'ArrowDown':
-      return move(line ? 'documentEnd' : 'down');
-    case 'Home':
-      return move(e.ctrlKey || e.metaKey ? 'documentStart' : 'lineStart');
-    case 'End':
-      return move(e.ctrlKey || e.metaKey ? 'documentEnd' : 'lineEnd');
-    case 'Backspace':
-      if (line) return [{ kind: 'move', to: 'lineStart', extend: true }, { kind: 'delete', direction: 'backward' }];
-      return [{ kind: 'delete', direction: 'backward', unit: word ? 'word' : 'character' }];
-    case 'Delete':
-      return [{ kind: 'delete', direction: 'forward', unit: word ? 'word' : 'character' }];
-    case 'Enter':
-      return [{ kind: e.shiftKey ? 'insertLineBreak' : 'insertParagraph' }];
-    case 'Tab':
+/** An editing key (see ui/textInput.ts) as commands for the document (page keys are the view's: see `viewKey`). */
+function editingCommand(key: EditKey | null): WireCommand[] | null {
+  if (!key) return null;
+  switch (key.kind) {
+    case 'move':
+      return key.to === 'pageUp' || key.to === 'pageDown' ? null : [{ kind: 'move', to: key.to, extend: key.extend }];
+    case 'delete':
+      // A Mac's Cmd+Backspace deletes back to the start of the line.
+      if (key.unit === 'line') return [{ kind: 'move', to: 'lineStart', extend: true }, { kind: 'delete', direction: 'backward' }];
+      return [{ kind: 'delete', direction: key.direction, unit: key.unit }];
+    case 'enter':
+      return [{ kind: key.shift ? 'insertLineBreak' : 'insertParagraph' }];
+    case 'tab':
       // Between a table's cells, or a tab character.
-      return [{ kind: 'tab', backward: e.shiftKey }];
+      return [{ kind: 'tab', backward: key.backward }];
+    default:
+      return [{ kind: key.kind }];
   }
-  const mod = e.metaKey || e.ctrlKey;
-  if (mod && e.key.toLowerCase() === 'a') return [{ kind: 'selectAll' }];
-  if (mod && e.key.toLowerCase() === 'z') return [{ kind: e.shiftKey ? 'redo' : 'undo' }];
-  if (e.ctrlKey && !MAC && e.key.toLowerCase() === 'y') return [{ kind: 'redo' }];
-  return null;
 }
 
 /** Scrolls to a page: its top at the top of the view, and the page centered across it. */
@@ -3227,6 +3492,14 @@ function viewKey(e: KeyboardEvent): boolean {
   return true;
 }
 
+/** Ctrl/Cmd+S: documents save themselves; the habit just saves a little sooner. */
+function saveKey(): void {
+  if (current.shared) void uploadShared();
+  else if (current.unsavedSince || (!current.localId && !current.builtIn)) void saveInBrowser();
+  else if (account) void flushUploads();
+  else setStatus(t('app.allSaved'));
+}
+
 window.addEventListener('keydown', (e) => {
   if (painting && e.key === 'Escape') {
     e.preventDefault();
@@ -3240,12 +3513,8 @@ window.addEventListener('keydown', (e) => {
   if (e.isComposing) return;
   const inEditableBox = e.target instanceof HTMLElement && e.target.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-    // Documents save themselves; the habit just saves a little sooner.
     e.preventDefault();
-    if (current.shared) void uploadShared();
-    else if (current.unsavedSince || (!current.localId && !current.builtIn)) void saveInBrowser();
-    else if (account) void flushUploads();
-    else setStatus(t('app.allSaved'));
+    saveKey();
     return;
   }
   // Editing text in a box over a PDF page: the caret keys, selection and the rest are the browser's.
@@ -3254,36 +3523,29 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
-  const commands = editingCommand(e);
+  // A dialog keeps its keys, and Enter or Space on a button reached with the keyboard (in a dialog-like list, the Files sidebar) is its click, not a new paragraph.
+  if (e.defaultPrevented || modalOpen()) return;
+  if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof HTMLElement && e.target.tabIndex >= 0 && e.target.matches('button, a[href], [role="button"], [role="treeitem"]')) return;
+  const commands = editingCommand(editKey(e, MAC));
   if (!commands) return;
   e.preventDefault();
   if (document.activeElement !== input) focusInput();
   for (const command of commands) send(command);
 });
 
-// Typed text arrives as input events on the hidden textarea (after keyboard layouts, dead
-// keys and IMEs have done their work), never as raw key presses.
-input.addEventListener('beforeinput', (e) => {
-  if (e.isComposing || e.inputType === 'insertCompositionText') return;
-  if (e.inputType === 'insertText' || e.inputType === 'insertReplacementText') {
-    e.preventDefault();
-    const text = e.data ?? e.dataTransfer?.getData('text/plain') ?? '';
-    if (text) send({ kind: 'insertText', text });
-  }
+// Typed text, input methods, copy, cut and paste in the hidden textarea (ui/textInput.ts).
+attachTextInput(input, {
+  insert: (text) => send({ kind: 'insertText', text }),
+  key: (key) => {
+    for (const command of editingCommand(key) ?? []) send(command);
+  },
+  copy: () => selection.text,
+  cut: () => {
+    if (selection.text) send({ kind: 'delete', direction: 'backward' });
+  },
+  paste: (clip) => pasteClipboard(clip),
 });
-input.addEventListener('compositionend', (e) => {
-  if (e.data) send({ kind: 'insertText', text: e.data });
-  input.value = '';
-});
-input.addEventListener('copy', (e) => {
-  e.preventDefault();
-  e.clipboardData?.setData('text/plain', selection.text);
-});
-input.addEventListener('cut', (e) => {
-  e.preventDefault();
-  e.clipboardData?.setData('text/plain', selection.text);
-  if (selection.text) send({ kind: 'delete', direction: 'backward' });
-});
+
 /** HTML larger than this is pasted as plain text (reading it would take too long). */
 const MAX_PASTED_HTML = 2_000_000;
 
@@ -3293,11 +3555,6 @@ function pasteClipboard(clip: Clipboard, form: 'auto' | 'html' | 'text' = 'auto'
   if (clip.html && form !== 'text' && formatted && clip.html.length <= MAX_PASTED_HTML) send({ kind: 'pasteHtml', html: clip.html, text: clip.text ?? '' });
   else if (clip.text) send({ kind: 'insertText', text: clip.text });
 }
-
-input.addEventListener('paste', (e) => {
-  e.preventDefault();
-  pasteClipboard({ html: e.clipboardData?.getData('text/html') || undefined, text: e.clipboardData?.getData('text/plain') || undefined });
-});
 
 // --- Navigation ------------------------------------------------------------------------
 
@@ -3330,7 +3587,7 @@ const chromeHost = createChromeHost({
   canvas,
   camera,
   pages: () => pages,
-  bounds: () => bounds,
+  bounds: () => (textView.active ? textEngine.bounds() : bounds),
   open: (source) => {
     setUrl(new URLSearchParams(), true);
     open(source, { store: true });
@@ -3345,7 +3602,7 @@ const chromeHost = createChromeHost({
   toggleClip: () => assistant.setVisible(!assistant.visible),
   print,
   showSearchAll: () => searchPanel.show(),
-  showFind: (tab) => (largeView.active ? (tab === 'goTo' ? largeView.goTo() : largeView.find()) : findDialog.show(tab)),
+  showFind: (tab) => (textView.active ? textEngine.find(tab) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
   showWordCount: () => wordCountDialog.open(),
   showOptions: () => showOptions(focusInput),
@@ -3410,20 +3667,12 @@ const chromeHost = createChromeHost({
       });
   },
   convert: convertTo,
+  documentReady: nextDocumentReady,
   imageAction: pictureAction,
-  isLargeText: () => largeView.active,
+  engine: () => (textView.active ? textEngine : null),
+  openSelection,
   openLarge,
-  largeZoom: (factor, reset) => largeView.zoomBy(factor, reset),
-  largeCopy: async () => {
-    const text = await largeView.copy();
-    if (text !== null) setStatus(t('largeText.copied', { count: text.split('\n').length.toLocaleString() }));
-  },
-  drawStyle: (color, size, fill) => {
-    if (color !== undefined) drawStyle.color = color;
-    if (size !== undefined) drawStyle.size = size;
-    if (fill !== undefined) drawStyle.fill = fill;
-    requestRender();
-  },
+  drawStyle: (change) => setDrawStyle(change),
   vectorAction: (op) => (op === 'layers' ? toggleLayers() : vector?.action(op)),
   vectorStyle: (change) => vector?.style(change),
   vectorGradient: (change) => vector?.gradient(change),
@@ -3477,15 +3726,13 @@ const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHos
 
 // Edit ▸ Find, Replace and Go To.
 const findDialog = new FindDialog(document.body, {
-  find: (text, matchCase, backward) => send({ kind: 'find', text, matchCase, backward }),
-  replace: (text, replacement, matchCase) => {
-    const selected = selection.text;
-    if (matchCase ? selected === text : selected.toLowerCase() === text.toLowerCase()) {
-      send(replacement ? { kind: 'insertText', text: replacement } : { kind: 'delete', direction: 'backward' });
-    }
-    send({ kind: 'find', text, matchCase });
+  find: (query, backward) => send({ kind: 'find', ...query, backward }),
+  replace: (query, replacement) => {
+    const put = replacementFor(selection.text, { text: query.text, caseSensitive: query.matchCase, wholeWord: query.wholeWord, regex: query.regex }, replacement);
+    if (put !== null) send(put ? { kind: 'insertText', text: put } : { kind: 'delete', direction: 'backward' });
+    send({ kind: 'find', ...query });
   },
-  replaceAll: (text, replacement, matchCase) => send({ kind: 'replaceAll', text, with: replacement, matchCase }),
+  replaceAll: (query, replacement) => send({ kind: 'replaceAll', ...query, with: replacement }),
   selectedText: () => selection.text,
   pageCount: () => pages.length,
   pageIndex: () => {
@@ -3525,9 +3772,25 @@ const addUserWord = (word: string): void => {
     // Storage unavailable: the word is accepted for this session only.
   }
 };
-const spellDialog = new SpellDialog(document.body, {
-  send,
-  selectedText: () => selection.text,
+const spellDialog: SpellDialog = new SpellDialog(document.body, {
+  send: (command) => {
+    // A plain text file is checked by the text editor (the layout worker still holds the dictionaries and the words that were added or ignored).
+    if (textView.active) {
+      if (command.kind === 'spellNext') {
+        void textView.spellNext(command.from, command.grammar).then((issue) => spellDialog.report({ issue }));
+        return;
+      }
+      if (command.kind === 'insertText') return textEngine.insert(command.text);
+      if (command.kind === 'replaceAll') {
+        void textView.editor?.replaceFile({ text: command.text, caseSensitive: command.matchCase ?? false, wholeWord: command.wholeWord ?? false, regex: false }, command.with);
+        return;
+      }
+    }
+    send(command);
+    // What counts as a mistake changed: a plain text file in the text editor is checked again.
+    if (command.kind === 'spellCheck' || command.kind === 'spellWords') textView.spellReset();
+  },
+  selectedText: () => (textView.active ? (textView.selectedText ?? '') : selection.text),
   userWords,
   addUserWord,
   focusEditor: focusInput,
@@ -3535,7 +3798,12 @@ const spellDialog = new SpellDialog(document.body, {
 
 // Right click on an underlined word: change it, or ignore it.
 const spellMenu = new SpellMenu({
-  send,
+  send: (command) => {
+    // In a plain text file the problem is selected: the suggestion types over it.
+    if (textView.active && command.kind === 'insertText') textEngine.insert(command.text);
+    else send(command);
+    if (command.kind === 'spellWords') textView.spellReset();
+  },
   addUserWord,
   focusEditor: focusInput,
 });
@@ -3553,6 +3821,16 @@ function toggleFilesPanel(): void {
 
 let spellMenuAt: { x: number; y: number } | null = null;
 canvas.addEventListener('contextmenu', (e) => {
+  if (textView.active) {
+    // A plain text file: the same menu, from the text editor's own marks.
+    if (!spellDialog.checkingLive) return;
+    e.preventDefault();
+    const at = { x: e.clientX, y: e.clientY };
+    void textView.spellIssueAt(e.offsetX, e.offsetY).then((issue) => {
+      if (issue) spellMenu.show(issue, at.x, at.y);
+    });
+    return;
+  }
   if (annotating || !spellDialog.checkingLive) return;
   const hit = pageAt(e.offsetX, e.offsetY);
   if (!hit) return;
@@ -3574,8 +3852,8 @@ const libraryHost = {
   warm: (entry: LibraryEntry) => {
     if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });
   },
-  newDocument: (folderId: string | null) => {
-    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId })).then(focusInput);
+  newDocument: (folderId: string | null, docKind?: DocumentKind) => {
+    void Promise.resolve(chromeHost.perform({ kind: 'new', folderId, docKind })).then(focusInput);
   },
   importFile: (folderId: string | null) => void chromeHost.perform({ kind: 'import', folderId }),
   importFolder: (folderId: string | null) => void chromeHost.perform({ kind: 'importFolder', folderId }),
@@ -3751,20 +4029,11 @@ function collaboration(): Collaboration {
   const net = current.room;
   const people = net ? net.people.map((p) => (p.me ? `${p.name} (you)` : p.name)) : [];
   const count = net ? net.people.length : devRoom ? devRoom.people : 1;
-  return { shared: sharedLive() && count > 1, people, count, exclusive: lease.exclusive, mine: lease.mine, holder: lease.holder };
-}
-
-/** Asks for, or lets go of, the lease of a drawing in a room, and waits for the room's answer. */
-async function leaseAction(action: 'request' | 'release'): Promise<Collaboration> {
-  worker.lease(action);
-  for (let waited = 0; waited < 3000; waited += 100) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    if (action === 'request' ? lease.mine : !lease.mine) break;
-  }
-  return collaboration();
+  return { shared: sharedLive() && count > 1, people, count };
 }
 
 const assistantTools = appTools({
+  textEditor: () => textView.editor,
   current: () => current,
   documentName: () => current.name,
   documentKind: () => current.kind,
@@ -3788,9 +4057,9 @@ const assistantTools = appTools({
     openSource(sourceOf(entry));
     await ready;
   },
-  newDocument: async (folderId) => {
+  newDocument: async (folderId, docKind) => {
     const ready = nextDocumentReady();
-    await chromeHost.perform({ kind: 'new', folderId });
+    await chromeHost.perform({ kind: 'new', folderId, docKind });
     await ready;
   },
   perform: (action) => chromeHost.perform(action),
@@ -3803,7 +4072,6 @@ const assistantTools = appTools({
   closeTextDrawing,
   insertTextDrawing,
   collaboration,
-  lease: leaseAction,
   pictureShapes: () => drawLayer.shapes,
   setPictureShapes: (shapes) =>
     new Promise<void>((resolve) => {
@@ -3812,7 +4080,7 @@ const assistantTools = appTools({
         clearTimeout(timer);
         resolve();
       };
-      worker.setShapes(shapes);
+      changeShapes(shapes);
     }),
   sharedLive,
   drawing: async () => {
@@ -3831,8 +4099,63 @@ chrome.update({ clip: assistant.visible });
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
 // Cropping a picture (see ui/cropLayer.ts).
 const cropLayer = new CropLayer(document.getElementById('viewport')!, { camera, page: () => pages[0] });
-// Text files too big to be documents (see largeText/view.ts).
-const largeView = new LargeTextView(document.getElementById('viewport')!);
+// Text files too big to be documents (see textEditor/view.ts).
+const textView: TextEditor = new TextEditor(document.getElementById('viewport')!, {
+  camera,
+  gl,
+  atlases,
+  fontBase: FONT_BASE,
+  locale: getLocale,
+  render: () => requestRender(),
+  viewKey: (e) => viewKey(e),
+  spell: {
+    enabled: (name) => (isProseName(name) ? spellDialog.liveChecks : null),
+    check: (texts, sample, what, at) => worker.spellText(texts, sample, what, at),
+    redraw: () => requestRender(),
+  },
+});
+/** The text editor as the chrome sees it (see documentEngine.ts). */
+const textEngine: DocumentEngine = {
+  get canUndo() {
+    return textView.canUndo;
+  },
+  get canRedo() {
+    return textView.canRedo;
+  },
+  get hasSelection() {
+    return textView.hasSelection;
+  },
+  snapshot: () => textView.snapshot(),
+  bounds: () => textView.bounds(),
+  undo: () => textView.undo(),
+  redo: () => textView.redo(),
+  selectAll: () => textView.selectAll(),
+  insert: (text) => textView.editor?.insert(text),
+  copy: async () => {
+    const text = await textView.copy();
+    if (text !== null) setStatus(t('textEditor.copied', { count: text.split('\n').length.toLocaleString() }));
+  },
+  cut: () => textView.cut().catch((e) => reportError((e as Error).message)),
+  paste: () => textView.paste().catch((e) => reportError((e as Error).message)),
+  find: (tab) => (tab === 'goTo' ? textView.goTo() : textView.find(tab === 'replace')),
+  focus: () => textView.focus(),
+};
+textView.onEdit = () => {
+  textRoomHandle?.refresh();
+  documentEdited();
+  requestRender();
+};
+textView.onSave = () => saveKey();
+// What the large-text editor shows, as text, for the end-to-end tests (it is drawn by the GPU, so the page has no text to read).
+Object.assign(window, {
+  textEditor: {
+    state: () => textView.debugState(),
+    text: () => new TextDecoder().decode(textView.editor?.flatten() ?? new Uint8Array(0)),
+    pointOf: (line: number, col: number) => textView.pointOf({ line, col }),
+    numberPoint: (line: number) => textView.numberPoint(line),
+  },
+});
+textView.onState = () => requestRender();
 // The vector editor (see ui/vectorSession.ts): a chunk of its own, fetched when the first drawing is opened.
 let vector: VectorSession | null = null;
 let vectorLoading: Promise<VectorSession> | null = null;
@@ -3848,10 +4171,11 @@ async function loadVector(): Promise<VectorSession> {
       changed: () => requestRender(),
       // The editor changed the drawing: its file is opened in place of the open one (the same saved document, the same name), then saved soon.
       // A drawing edited together sends each change to the room as changes to its nodes, and undoes through the room.
-      sceneCommitted: (scene) => {
+      sceneCommitted: (scene, base) => {
+        pagesPanel.refresh(); // the thumbnail shows the drawing as it is now (see thumbnailPixels), whichever way it is saved
         if (!isDrawing() || !isVectorFormat(current.kind as Format) || !sharedLive()) return false;
         ensureUids(scene);
-        worker.setVectorScene(scene);
+        worker.setVectorScene(scene, base);
         documentEdited();
         return true;
       },
@@ -3860,7 +4184,6 @@ async function loadVector(): Promise<VectorSession> {
         worker.stepVector(direction);
         return true;
       },
-      committed: (svg) => commitToRoom(svg),
       reopen(bytes) {
         const doc = current;
         open({ kind: 'svg', name: doc.name, bytes: bytes.slice().buffer }, { grid, localId: doc.localId ?? undefined, pictureEdit: true });
@@ -3939,8 +4262,15 @@ async function saveEmbeddedDrawing(body: string, svg: string): Promise<boolean> 
   }
 }
 
-/** Done with the embedded drawing: if it changed, the document gets the new version. */
-async function leaveEmbeddedDrawing(): Promise<void> {
+let leavingDrawing: Promise<void> | null = null;
+
+/** Done with the embedded drawing: if it changed, the document gets the new version (and is opened again to show it, unless `reopen` is false: another document is opening). */
+function leaveEmbeddedDrawing(reopen = true): Promise<void> {
+  leavingDrawing ??= putBackDrawing(reopen).finally(() => (leavingDrawing = null));
+  return leavingDrawing;
+}
+
+async function putBackDrawing(reopen: boolean): Promise<void> {
   const e = embeddedDrawing;
   const session = vector;
   if (!e || !session) return;
@@ -3952,6 +4282,7 @@ async function leaveEmbeddedDrawing(): Promise<void> {
       const height = Math.round((width * picture.height) / Math.max(picture.width, 1));
       // A drawing embedded from another document (`![[...]]`) is that document's: the change goes into it, and this one is opened again to show it.
       if (e.embed !== undefined && (await saveEmbeddedDrawing(e.embed, e.latest))) {
+        if (!reopen) return;
         if (current.localId) {
           await saveNow();
           openSource(`local:${current.localId}`, false, 'replace');
@@ -3974,49 +4305,8 @@ async function leaveEmbeddedDrawing(): Promise<void> {
 }
 
 // --- A drawing edited together --------------------------------------------------------------------------------------------
-// Only one person at a time may edit a drawing in a room (see the lease in @golemdocs/ops multiplayer.ts): the others see each
-// change as it is made, and can ask to take over.
-
-const leaseBanner = new LeaseBanner(document.getElementById('viewport')!, () => worker.lease('request'));
-const NO_LEASE: LeaseState = { exclusive: false, mine: false, holder: null, shared: false };
-let lease: LeaseState = NO_LEASE;
-/** The drawing can be looked at, not changed: someone else may edit it. */
-const lockedOut = (): boolean => lease.exclusive && lease.shared && !lease.mine;
-
-function leaseChanged(state: LeaseState): void {
-  lease = state;
-  leaseBanner.update(state);
-  vector?.setReadOnly(lockedOut());
-  requestRender();
-}
-
-/** Each change the one who may edit makes goes into the room, one after another so they arrive in the order they were made. */
-let commits: Promise<unknown> = Promise.resolve();
-function commitToRoom(svg: string): boolean {
-  if (!(lease.exclusive && lease.shared && lease.mine) || !vector) return false;
-  const session = vector;
-  commits = commits
-    .then(() => session.picture(svg))
-    .then((picture) => {
-      // Its size stays what it was (0): the page is that size.
-      worker.putDrawing({ svg, png: picture.png, width: 0, height: 0 }, '*');
-      documentEdited();
-    })
-    .catch((e: Error) => reportError(e.message));
-  return true;
-}
-
-/** The part of the SVG the page last showed, to see that someone else changed the drawing. */
-let shownDrawingPart: string | null = null;
-function showRoomDrawing(): void {
-  if (!isDrawing() || !vector?.editor.active) return;
-  const part = pages[0]?.images.find((i) => i.svg)?.svg ?? null;
-  if (part === null || part === shownDrawingPart) return;
-  const first = shownDrawingPart === null;
-  shownDrawingPart = part;
-  // Changed by the one who may edit: this one's editor shows it. (What this one did itself is in the editor already.)
-  if (!first && lease.exclusive && lease.shared && !lease.mine) void worker.media(part).then((bytes) => vector?.reload(new Uint8Array(bytes)));
-}
+// Everyone in a room edits a drawing at once: each change goes to the room as changes to its nodes (`sceneCommitted` in
+// loadVector), and what others change comes back as the drawing as it now stands (`vectorScene`).
 
 /** Starts editing the open drawing: reads its SVG from the document. A drawing that comes back after a change is the editor's already. */
 async function showDrawing(): Promise<void> {
@@ -4025,11 +4315,8 @@ async function showDrawing(): Promise<void> {
     const session = await loadVector();
     if (session.editor.active || doc !== current) return;
     await session.open(await worker.convert(doc.kind as Format));
-    session.setReadOnly(lockedOut());
     // A drawing edited together: the editor is given the drawing with the ids its nodes have in the room.
     if (latestVectorScene) session.syncScene(latestVectorScene);
-    // What the page shows of the drawing now: a different one later is somebody else's change.
-    shownDrawingPart = pages[0]?.images.find((i) => i.svg)?.svg ?? null;
   } catch {
     // The page's own picture of the drawing stays.
   }
@@ -4057,20 +4344,42 @@ function toggleLayers(): void {
 }
 
 // Drawing on a picture (see ui/drawLayer.ts).
-const drawLayer = new DrawLayer(document.getElementById('viewport')!, {
+const drawLayer: DrawLayer = new DrawLayer(document.getElementById('viewport')!, {
   camera,
   canvas,
   page: () => pages[0],
   style: () => drawStyle,
+  setStyle: (change) => setDrawStyle(change),
+  sample: async (at): Promise<string | null> => samplePicture(await worker.pictureBase(), drawLayer.shapes, at),
   changed: () => requestRender(),
-  shapesChanged: (shapes) => worker.setShapes(shapes),
-  undo: () => worker.stepShapes('undo'),
+  shapesChanged: changeShapes,
+  undo: () => stepShapes('undo'),
+});
+
+/** The shapes drawn over the picture changed (from `base`, when drawn here): the worker keeps them, and the picture is saved with them. */
+function changeShapes(shapes: Shape[], base?: Shape[]): void {
+  worker.setShapes(shapes, base);
+  documentEdited();
+}
+
+/** Undo or redo of the person's own changes to the shapes; saved like any change. */
+function stepShapes(direction: 'undo' | 'redo'): void {
+  worker.stepShapes(direction);
+  documentEdited();
+}
+
+// The picture's shapes as layers in a list beside it (see ui/pictureLayersPanel.ts); it shares the vector panel's open or closed setting.
+const pictureLayers = new PictureLayersPanel(document.getElementById('workspace')!, drawLayer, {
+  close: toggleLayers,
+  focusEditor: focusInput,
+  background: () => void pictureAction('background'),
+  canvasSize: () => void pictureAction('canvasSize'),
 });
 
 // The thumbnails of the pages beside the document; for a PDF's pages, drag them into order or delete them (see ui/pagesPanel.ts).
 const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
   go: goToPage,
-  draw: (page, width, height) => (gl ? readPage(gl, renderer, page as GpuPage, width, height, pagesDark()) : null),
+  draw: (page, width, height) => thumbnailPixels(page as GpuPage, width, height),
   move: (index, to) => changePages(index, { op: 'move', to }),
   remove: (index) => changePages(index, { op: 'delete' }),
   close: togglePagesPanel,
@@ -4078,6 +4387,29 @@ const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
 });
 document.getElementById('workspace')!.prepend(pagesPanel.el);
 onThemeChange(() => pagesPanel.recolor()); // the thumbnails turn dark or light with Dark Pages
+drawLayer.onUpdate(() => pagesPanel.refresh()); // a picture's shapes are in its thumbnail
+
+/**
+ * A page's thumbnail: the page as laid out, with what is painted over it while it is edited (a picture's shapes, the drawing being
+ * edited, which the laid-out page only catches up with when the drawing is opened again).
+ */
+function thumbnailPixels(page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
+  const pixels = gl ? readPage(gl, renderer, page, width, height, pagesDark()) : null;
+  if (page !== pages[0] || (!isPicture() && !isDrawing())) return pixels;
+  const thumb = document.createElement('canvas');
+  thumb.width = width;
+  thumb.height = height;
+  const ctx = thumb.getContext('2d');
+  if (!ctx) return pixels;
+  if (pixels) ctx.putImageData(new ImageData(pixels, width, height), 0, 0);
+  return paintEdits(ctx, width, height) ? ctx.getImageData(0, 0, width, height).data : pixels;
+}
+
+/** Paints what is drawn over the first page while it is edited (a picture's shapes, the drawing being edited) into a picture of that page; false when nothing is. */
+function paintEdits(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+  if (isDrawing()) return !!vector?.paintThumbnail(ctx, width, height);
+  return isPicture() && drawLayer.paintOver(ctx, width, height);
+}
 
 // The account's folders and documents as a tree, left of everything else (see ui/filesPanel.ts).
 const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
@@ -4113,6 +4445,7 @@ const footer = new Footer(document.getElementById('footer')!, {
   wordCount: () => chrome.registry.execute('tools.wordCount'),
   zoom: (anchor) => chrome.showZoomList(anchor),
   canvasSize: () => chrome.registry.execute('vector.canvasSize'),
+  wrap: () => textView.toggleWrap(),
   label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : action === 'canvasSize' ? chrome.registry.get('vector.canvasSize').plainLabel : chrome.registry.get(action === 'goTo' ? 'edit.goTo' : 'tools.wordCount').plainLabel),
 });
 
@@ -4123,7 +4456,7 @@ function refreshFooterSoon(): void {
 }
 
 function refreshFooter(): void {
-  if (!footerOn || !loaded || isPicture() || isDrawing() || largeView.active) return;
+  if (!footerOn || !loaded || isPicture() || isDrawing() || textView.active) return;
   send({ kind: 'countWords', whole: true, footer: true });
   if (selection.text.length > 0) send({ kind: 'countWords', footer: true });
   else footerSelection = null;
@@ -4160,7 +4493,7 @@ function rulerIndents(): { left: number; right: number; firstLine: number } {
 /** The rulers measure the page in view, so they are shown for pages that print: not in Flow, the page grid, a PDF or a picture. */
 function updateRuler(): void {
   const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
-  const page = rulerOn && !largeView.active && !reflowing() && !grid && !annotating && !isPicture() ? nearestPage(pages, center.x, center.y) : null;
+  const page = rulerOn && !textView.active && !reflowing() && !grid && !annotating && !isPicture() ? nearestPage(pages, center.x, center.y) : null;
   ruler.setVisible(page !== null);
   verticalRuler.setVisible(page !== null);
   if (!page) return;
@@ -4194,9 +4527,13 @@ function updateRuler(): void {
 
 /** Shows or hides the bar and says what it says, for the kind of document open. */
 function updateFooter(): void {
-  const visible = footerOn && !largeView.active;
+  const visible = footerOn;
   footer.setVisible(visible);
   if (!visible) return;
+  if (textView.active) {
+    footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: textView.footerInfo() });
+    return;
+  }
   let picture = null;
   if (isDrawing() && pages[0]) {
     // The page is the drawing's size at 96 dpi.
@@ -4225,13 +4562,14 @@ function updateFooter(): void {
     picture,
     view: grid ? 'grid' : reflowing() ? 'flow' : 'print',
     canFlow: !annotating && !isPicture() && !isDrawing(),
+    text: null,
   });
 }
 
 /** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
 function syncPagesPanel(): void {
   // While a document opens it has no pages yet: a panel already showing stays, empty, rather than closing and opening again.
-  const shown = pagesOpen() && !largeView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
+  const shown = pagesOpen() && !textView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
   pagesPanel.setVisible(shown);
   if (!shown) return;
   pagesPanel.setEditable(annotating);

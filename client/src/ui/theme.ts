@@ -57,6 +57,7 @@ let darkPages = read(PAGES_KEY) === 'on';
 }
 
 let desk: [number, number, number] | null = null;
+let accent: string | null = null;
 const listeners = new Set<() => void>();
 
 export function currentScheme(): SchemeId {
@@ -87,6 +88,7 @@ function setRootData(): void {
 
 function apply(): void {
   desk = null;
+  accent = null;
   setRootData();
   for (const listener of listeners) listener();
 }
@@ -145,4 +147,10 @@ export function deskColor(): readonly [number, number, number] {
     desk = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
   }
   return desk;
+}
+
+/** The scheme's accent (--wm-hot-border): what selections, handles and focus are drawn in, for what is drawn on a canvas. */
+export function accentColor(): string {
+  accent ??= getComputedStyle(document.documentElement).getPropertyValue('--wm-hot-border').trim() || '#316ac5';
+  return accent;
 }

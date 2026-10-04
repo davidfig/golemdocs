@@ -3,7 +3,7 @@
 // holds the one ordered log, is the only writer. Application is deterministic (see @golemdocs/ops), so
 // the result is exactly what every client shows.
 
-import { applyObjectOps, Engine, layersOf, objectOps, type ObjectLayers, type RoomKind, type Transaction } from '@golemdocs/ops';
+import { applyObjectOps, applyTextOps, Engine, layersOf, MAX_SHARED_TEXT_BYTES, objectOps, textOps, type ObjectLayers, type RoomKind, type Transaction } from '@golemdocs/ops';
 import { SHARED_MEDIA_IN_TEXT, sharedMediaHash, WordDocument, writeZip, ZipArchive } from '@golemdocs/docx';
 import { replaceStoredDocx, storedDocx } from './stored.ts';
 
@@ -12,7 +12,7 @@ export type MediaLookup = (hash: string) => Promise<Uint8Array | null>;
 
 /** `base` (a .docx, or a .wdoc holding one) with `transactions` applied in order, and the pictures they refer to put into it. */
 export async function applyLog(base: Uint8Array, transactions: readonly Transaction[], media?: MediaLookup, kind: RoomKind = 'doc'): Promise<Uint8Array> {
-  const apply = kind === 'doc' ? (b: Uint8Array, txs: readonly Transaction[]) => applyAll(b, txs, media) : (b: Uint8Array, txs: readonly Transaction[]) => applyObjects(b, txs, kind);
+  const apply = kind === 'doc' ? (b: Uint8Array, txs: readonly Transaction[]) => applyAll(b, txs, media) : kind === 'text' ? (b: Uint8Array, txs: readonly Transaction[]) => applyText(b, txs) : (b: Uint8Array, txs: readonly Transaction[]) => applyObjects(b, txs, kind);
   try {
     return await apply(base, transactions);
   } catch {
@@ -23,6 +23,13 @@ export async function applyLog(base: Uint8Array, transactions: readonly Transact
     for (const tx of transactions) bytes = await apply(bytes, [tx]).catch(() => bytes);
     return bytes;
   }
+}
+
+/** `base` (the text file itself, as UTF-8) with changes to its bytes applied in order. A change that would make it far bigger than a file may be is left out. */
+async function applyText(base: Uint8Array, transactions: readonly Transaction[]): Promise<Uint8Array> {
+  const bytes = applyTextOps(base, transactions.flatMap(textOps));
+  if (bytes.length > MAX_SHARED_TEXT_BYTES * 2) throw new Error('the text is too big');
+  return bytes;
 }
 
 async function applyAll(base: Uint8Array, transactions: readonly Transaction[], media?: MediaLookup): Promise<Uint8Array> {
@@ -55,7 +62,7 @@ const OBJECT_ENTRIES = {
  * `base` (a .wdoc) with changes to the objects of its lists applied. Only the one entry that holds the lists is written again: the
  * PDF or picture itself, and everything else, are copied as they are.
  */
-async function applyObjects(base: Uint8Array, transactions: readonly Transaction[], kind: Exclude<RoomKind, 'doc'>): Promise<Uint8Array> {
+async function applyObjects(base: Uint8Array, transactions: readonly Transaction[], kind: Exclude<RoomKind, 'doc' | 'text'>): Promise<Uint8Array> {
   const { entry: entryName, layers: names } = OBJECT_ENTRIES[kind];
   const zip = ZipArchive.read(base);
   const entry = zip.entries.get(entryName);

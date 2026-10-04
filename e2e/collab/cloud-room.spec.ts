@@ -270,9 +270,7 @@ test.describe('a cloud drawing in a room', () => {
     await openCloud(page, doc.id);
     await expect(layers(page)).toHaveCount(1, { timeout: 30_000 });
 
-    // Nobody waits for the other: no lease.
-    await expect(page.locator('.wm-lease')).toBeHidden();
-    await expect(a.page.locator('.wm-lease')).toBeHidden();
+    // Nobody waits for their turn: a shape drawn by one reaches the other.
     await a.app.toolbarButton('Rectangle').click();
     const box = await a.page.locator('.wm-vector-canvas').boundingBox();
     await a.page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);

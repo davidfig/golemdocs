@@ -4,8 +4,10 @@
 // of a copy that started from an older version than the cloud's becomes a separate
 // "(conflicted copy)" document instead.
 
-import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, createDocument, createDocuments, downloadDocument, saveDocument, uploadThumbnail, type CloudDocument } from './cloud.ts';
-import { getSaved, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
+import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, saveChunked, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
+import { CHUNK_ALGO } from './storage/chunker.ts';
+import type { Manifest } from './storage/chunker.ts';
+import { getChunks, getSaved, getSavedManifest, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
 
 export interface Uploaded {
@@ -14,33 +16,52 @@ export interface Uploaded {
   conflictCopy: boolean;
 }
 
-/** "Report.docx" → "Report (conflicted copy).docx". */
+/** "Report.docx" → "Report (conflicted copy).docx"; a conflicted copy that conflicts again keeps that name rather than growing another. */
 export function conflictCopyName(name: string): string {
   const dot = name.lastIndexOf('.');
   const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
-  return t('app.conflictedCopy', { stem, ext });
+  const mark = t('app.conflictedCopy', { stem: '', ext: '' });
+  let base = stem;
+  while (mark && base.endsWith(mark)) base = base.slice(0, -mark.length);
+  return t('app.conflictedCopy', { stem: base, ext });
 }
 
 /** Uploads the saved browser copy to the cloud (creating the cloud document the first time). */
 export async function uploadToCloud(localId: string, retry = true): Promise<Uploaded> {
-  const saved = await getSaved(localId);
-  if (!saved) throw new Error(t('app.noLongerSaved'));
-  const { info } = saved;
-  const bytes = new Uint8Array(saved.bytes);
+  // A document this browser keeps as chunks goes as chunks, and only those the cloud does not have yet are sent; one kept whole goes whole.
+  const chunked = await getSavedManifest(localId);
+  const saved = chunked ? null : await getSaved(localId);
+  const info = (chunked ?? saved)?.info;
+  if (!info) throw new Error(t('app.noLongerSaved'));
+  // The server would refuse it: say so here (a big text file that grew past the limit stays in this browser).
+  if (info.size > MAX_DOCUMENT_BYTES) throw new CloudError(413, t('textEditor.tooBigToSync'));
+  const bytes = saved ? new Uint8Array(saved.bytes) : null;
+  const manifest: Manifest | null = chunked && { algo: CHUNK_ALGO, size: chunked.manifest.size, chunks: chunked.manifest.hashes.map((h, i) => ({ h, n: chunked.manifest.lengths[i]! })) };
+  const source: ChunkSource = async (hashes) => {
+    const found = await getChunks(hashes);
+    return hashes.map((hash) => {
+      const chunk = found.get(hash);
+      if (!chunk) throw new Error(t('app.noLongerSaved'));
+      return { hash, bytes: chunk };
+    });
+  };
+  /** What the cloud copy has of this one's chunks: those of the version uploaded or downloaded last. */
+  const known = new Set(info.cloudId ? chunked?.manifest.syncedHashes : undefined);
   let doc: CloudDocument;
   let conflictCopy = false;
+  const make = (name: string, folderId?: string) => (manifest ? createChunked(name, manifest, source, folderId) : createDocument(name, bytes!, folderId));
   // A new cloud document goes in the folder it is in here. If the account doesn't have that folder
   // (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
   const create = async (name: string) => {
     try {
-      return await createDocument(name, bytes, info.folderId);
+      return await make(name, info.folderId);
     } catch (error) {
-      if (info.folderId && error instanceof CloudError && error.status === 400) return createDocument(name, bytes);
+      if (info.folderId && error instanceof CloudError && error.status === 400) return make(name);
       throw error;
     }
   };
   try {
-    doc = info.cloudId ? await saveDocument(info.cloudId, bytes, info.name, info.cloudUpdatedAt) : await create(info.name);
+    doc = info.cloudId ? await (manifest ? saveChunked(info.cloudId, manifest, source, known, info.name, info.cloudUpdatedAt) : saveDocument(info.cloudId, bytes!, info.name, info.cloudUpdatedAt)) : await create(info.name);
   } catch (error) {
     if (!info.cloudId || !(error instanceof CloudError)) throw error;
     if (error.status === 404) {
@@ -57,7 +78,7 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
       throw error;
     }
   }
-  await markSynced(localId, { cloudId: doc.id, syncedAt: info.updatedAt, cloudUpdatedAt: doc.updatedAt, name: conflictCopy ? doc.name : undefined });
+  await markSynced(localId, { cloudId: doc.id, syncedAt: info.updatedAt, cloudUpdatedAt: doc.updatedAt, name: conflictCopy ? doc.name : undefined, ...(manifest && { syncedHashes: manifest.chunks.map((c) => c.h) }) });
   // The thumbnail goes with the document, so other computers can show it without downloading the
   // document. Not worth failing the save over; the next save sends another.
   const thumbnail = await getThumbnail(localId).catch(() => null);
@@ -99,6 +120,8 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
     }
   };
   for (const id of localIds) {
+    // One kept as chunks is not sent whole in a batch (the next save would send it all again as chunks): it goes the single way.
+    if (await getSavedManifest(id)) continue;
     const saved = await getSaved(id);
     if (!saved || saved.info.cloudId) continue;
     const bytes = new Uint8Array(saved.bytes);

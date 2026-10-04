@@ -16,11 +16,12 @@ import {
   type ZoomTarget,
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
-import { h, isFormField, segmented } from './dom.ts';
+import { h, isFormField, modalOpen, segmented } from './dom.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
+import { dropdown, lineSample } from './dropdown.ts';
 import { shapePreview } from './shapePreview.ts';
 import { SHAPE_IDS } from '../vector/shapes.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, VECTOR_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
@@ -74,7 +75,7 @@ const zoomPresets = (): { label: string; to: ZoomTarget }[] => [
   { label: t('chrome.zoom.wholePage'), to: 'wholePage' },
   { label: t('chrome.zoom.allPages'), to: 'allPages' },
 ];
-const DEFAULT_FONTS = ['Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Courier New', 'Georgia', 'Segoe UI', 'Times New Roman'];
+const DEFAULT_FONTS = ['Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Courier New', 'Georgia', 'JetBrains Mono', 'Segoe UI', 'Times New Roman'];
 const symbols = (): [string, string][] => [
   ['©', t('chrome.symbol.copyright')],
   ['®', t('chrome.symbol.registered')],
@@ -234,14 +235,15 @@ export class Chrome {
 
   private shortcut(e: KeyboardEvent): void {
     if (e.defaultPrevented || e.isComposing || this.menuBar.active) return;
-    if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
+    if (isFormField(e.target) || modalOpen()) return;
     // The Documents screen covers the editor and has its own keys (Ctrl/Cmd+A selects its cards).
     if (document.querySelector('.wm-dashboard:not([hidden])')) return;
     // The vector editor's own keys come first and may be bare letters (V, P…); they only claim a
     // key they can act on, so typing elsewhere is never swallowed.
-    if (FORMATS[this.state.kind].vectorTools && !e.repeat) {
+    const scope = FORMATS[this.state.kind].vectorTools ? 'vector' : FORMATS[this.state.kind].imageTools ? 'picture' : null;
+    if (scope && !e.repeat) {
       for (const command of this.registry.all()) {
-        if (command.scope !== 'vector' || !command.shortcutParsed || !matches(command.shortcutParsed, e)) continue;
+        if (command.scope !== scope || !command.shortcutParsed || !matches(command.shortcutParsed, e)) continue;
         if (!this.registry.isAvailable(command) || !this.registry.isEnabled(command)) continue;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -251,7 +253,7 @@ export class Chrome {
     }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
     for (const command of this.registry.all()) {
-      if (command.scope === 'vector' || !command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;
+      if (command.scope || !command.shortcutParsed || command.nativeShortcut || !matches(command.shortcutParsed, e)) continue;
       // The key belongs to the command even when it's disabled: the browser mustn't act on it
       // (Ctrl+B, Ctrl+P…) and neither must the document (Ctrl+Enter isn't a paragraph break).
       e.preventDefault();
@@ -277,6 +279,7 @@ export class Chrome {
       a('file.importFolder', t('chrome.file.importFolder'), { kind: 'importFolder' }, { tooltip: t('chrome.file.importFolder.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
       a('file.downloadAll', t('chrome.file.downloadAll'), { kind: 'downloadAll' }, { tooltip: t('chrome.file.downloadAll.tip') }),
+      a('file.openSelection', t('chrome.file.openSelection'), { kind: 'openSelection' }, { tooltip: t('chrome.file.openSelection.tip'), visible: (s) => s.kind === 'largetext', enabled: (s) => s.hasSelection }),
       a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
       dialog('file.pageSetup', t('chrome.file.pageSetup'), 'pageSetup'),
       a('file.printPreview', t('chrome.file.printPreview'), { kind: 'printPreview' }, { icon: 'printPreview' }),
@@ -465,28 +468,50 @@ export class Chrome {
     );
 
     // Picture
-    const picture = (op: ImageOp, label: string, icon: string) => a(`image.${op}`, label, { kind: 'image', op }, { icon });
+    const picture = (op: ImageOp, label: string, icon: string, extra: Partial<CommandSpec> = {}) => a(`image.${op}`, label, { kind: 'image', op }, { icon, ...extra });
     r.add(
       picture('rotateLeft', t('picture.rotateLeft'), 'rotateLeft'),
       picture('rotateRight', t('picture.rotateRight'), 'rotateRight'),
       picture('rotate180', t('picture.rotate180'), 'rotate180'),
       picture('flipHorizontal', t('picture.flipHorizontal'), 'flipHorizontal'),
       picture('flipVertical', t('picture.flipVertical'), 'flipVertical'),
-      picture('crop', t('picture.crop'), 'crop'),
-      picture('resize', t('picture.resize'), 'resize'),
+      picture('crop', t('picture.crop'), 'crop', { scope: 'picture', shortcut: PICTURE_KEYS.crop }),
+      picture('resize', t('picture.resize'), 'resize', { scope: 'picture', shortcut: PICTURE_KEYS.resize }),
+      picture('canvasSize', t('picture.canvas.menu'), 'resize', { scope: 'picture', shortcut: PICTURE_KEYS.canvasSize }),
+      picture('background', t('picture.background.menu'), 'background', { scope: 'picture' }),
       picture('adjust', t('picture.adjust'), 'adjust'),
       picture('autoLevels', t('picture.autoLevels'), 'autoLevels'),
       picture('grayscale', t('picture.grayscale'), 'grayscale'),
       picture('sepia', t('picture.sepia'), 'sepia'),
-      picture('invert', t('picture.invert'), 'invert'),
+      picture('invert', t('picture.invert'), 'invert', { scope: 'picture', shortcut: PICTURE_KEYS.invert }),
       picture('blur', t('picture.blur'), 'blur'),
       picture('sharpen', t('picture.sharpen'), 'sharpen'),
     );
 
-    // Draw: the tools stay picked until Done, so they show as pressed.
-    for (const tool of ['pen', 'marker', 'line', 'arrow', 'rectangle', 'ellipse', 'text', 'bubble', 'step', 'pixelate', 'eraser', 'move'] as const) {
-      r.add(a(`image.${tool}`, t(`picture.draw.${tool}`), { kind: 'image', op: tool }, { icon: tool, checked: (s) => s.draw.tool === tool }));
+    // Draw: the tools stay picked until Done, so they show as pressed. The keys are Photoshop's.
+    for (const tool of ['move', 'pen', 'marker', 'smudge', 'mixer', 'blurBrush', 'sharpenBrush', 'dodge', 'burn', 'eraser', 'line', 'arrow', 'rectangle', 'ellipse', 'shape', 'text', 'bubble', 'step', 'pixelate', 'eyedropper', 'bucket'] as const) {
+      r.add(a(`image.${tool}`, t(`picture.draw.${tool}`), { kind: 'image', op: tool }, { icon: tool === 'shape' ? 'shapes' : tool, scope: 'picture', shortcut: PICTURE_KEYS[tool], checked: (s) => s.draw.tool === tool }));
     }
+    // What the picked shapes and layers can be given (the Layers panel's buttons and menu).
+    const onShapes = (s: ChromeState): boolean => s.draw.hasSelection;
+    for (const [op, label, icon, enabled] of [
+      ['newLayer', t('vector.newLayer'), 'newLayer', undefined],
+      ['duplicate', t('vector.duplicate'), 'copy', onShapes],
+      ['group', t('vector.group'), 'group', onShapes],
+      ['ungroup', t('vector.ungroup'), 'ungroup', onShapes],
+      ['front', t('vector.front'), 'toFront', onShapes],
+      ['forward', t('vector.forward'), 'forward', onShapes],
+      ['backward', t('vector.backward'), 'backward', onShapes],
+      ['back', t('vector.back'), 'toBack', onShapes],
+      ['delete', t('vector.delete'), 'trash', onShapes],
+      ['selectAll', t('vector.selectAll'), undefined, undefined],
+      ['deselect', t('picture.deselect'), undefined, onShapes],
+      ['sizeUp', t('picture.draw.sizeUp'), undefined, undefined],
+      ['sizeDown', t('picture.draw.sizeDown'), undefined, undefined],
+    ] as const) {
+      r.add(a(`image.${op}`, label, { kind: 'image', op }, { ...(icon && { icon }), scope: 'picture', shortcut: PICTURE_KEYS[op], ...(enabled && { enabled }) }));
+    }
+    r.add(a('image.layers', t('vector.layers'), { kind: 'image', op: 'layers' }, { icon: 'layersStack', scope: 'picture', shortcut: PICTURE_KEYS.layers, checked: (s) => s.draw.layers }));
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
     for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text'], ['canvas', 'canvasTool']] as const) {
@@ -520,6 +545,8 @@ export class Chrome {
     r.add(a('vector.selectAll', t('vector.selectAll'), { kind: 'vector', op: 'selectAll' }, { scope: 'vector', shortcut: 'Mod+A' }));
 
     r.add({ id: 'image.fill', label: t('picture.draw.fill'), icon: 'fill', action: (s) => ({ kind: 'drawStyle', fill: !s.draw.fill }), checked: (s) => s.draw.fill });
+    r.add({ id: 'image.noStroke', label: t('picture.draw.noStroke'), action: (s) => ({ kind: 'drawStyle', noStroke: !s.draw.noStroke }), checked: (s) => s.draw.noStroke });
+    r.add({ id: 'image.contiguous', label: t('picture.draw.contiguous'), action: (s) => ({ kind: 'drawStyle', contiguous: !s.draw.contiguous }), checked: (s) => s.draw.contiguous });
 
     // Help
     r.add(
@@ -577,6 +604,7 @@ export class Chrome {
       this.convertToItem(),
       cmd('file.download'),
       cmd('file.downloadAll'),
+      cmd('file.openSelection'),
       cmd('file.subscribe'),
       cmd('file.manageSubscription'),
       cmd('file.print'),
@@ -653,6 +681,7 @@ export class Chrome {
           this.convertToItem(),
           cmd('file.download'),
           cmd('file.downloadAll'),
+          cmd('file.openSelection'),
           sep,
           cmd('file.rename'),
           sep,
@@ -830,6 +859,8 @@ export class Chrome {
           sep,
           cmd('image.crop'),
           cmd('image.resize'),
+          cmd('image.canvasSize'),
+          cmd('image.background'),
           cmd('image.adjust'),
           sep,
           cmd('image.autoLevels'),
@@ -839,19 +870,43 @@ export class Chrome {
           cmd('image.blur'),
           cmd('image.sharpen'),
           sep,
+          cmd('image.move'),
           cmd('image.pen'),
           cmd('image.marker'),
+          cmd('image.smudge'),
+          cmd('image.mixer'),
+          cmd('image.blurBrush'),
+          cmd('image.sharpenBrush'),
+          cmd('image.dodge'),
+          cmd('image.burn'),
+          cmd('image.eraser'),
           cmd('image.line'),
           cmd('image.arrow'),
           cmd('image.rectangle'),
           cmd('image.ellipse'),
+          cmd('image.shape'),
           cmd('image.fill'),
+          cmd('image.noStroke'),
           cmd('image.text'),
           cmd('image.bubble'),
           cmd('image.step'),
           cmd('image.pixelate'),
-          cmd('image.eraser'),
-          cmd('image.move'),
+          cmd('image.eyedropper'),
+          cmd('image.bucket'),
+          cmd('image.contiguous'),
+          sep,
+          cmd('image.layers'),
+          cmd('image.newLayer'),
+          cmd('image.selectAll'),
+          cmd('image.deselect'),
+          cmd('image.duplicate'),
+          cmd('image.group'),
+          cmd('image.ungroup'),
+          cmd('image.front'),
+          cmd('image.forward'),
+          cmd('image.backward'),
+          cmd('image.back'),
+          cmd('image.delete'),
         ],
       },
       {
@@ -1073,6 +1128,115 @@ export class Chrome {
     define('control.vectorStrokeStyle', t('vector.strokeStyle'), t('vector.toolbar'), 'line', () => gated(this.vectorStrokeStyleBox(), () => profile().vectorTools));
     define('control.vectorStrokeWidth', t('vector.strokeWidth'), t('vector.toolbar'), 'line', () => gated(this.vectorWidthBox(), () => profile().vectorTools));
     define('control.drawSize', t('picture.draw.size'), t('picture.menu').replace('&', ''), 'line', () => gated(this.drawSizeBox(), () => profile().imageTools));
+    const draw = t('picture.draw.toolbar');
+    define('control.drawFill', t('picture.draw.fillColor'), draw, 'fill', () =>
+      gated(
+        colorButton({
+          label: t('picture.draw.fillColor'),
+          icon: 'vectorFill',
+          noneLabel: t('picture.draw.fillSame'),
+          initial: '#5B8DEF',
+          palette: 'full',
+          shown: (state) => ({ color: state.draw.fillColor ?? state.draw.color, gradient: state.draw.fillType === 'solid' ? undefined : [state.draw.fillColor ?? state.draw.color, state.draw.gradientTo] }),
+          header: (_state, palette) => this.drawFillHeader(palette),
+          keepOpen: (state) => state.draw.fillType !== 'solid',
+          // With a gradient, the palette colours whichever end is picked in the popup's header.
+          action: (color) => (this.fillEnd === 'to' && this.state.draw.fillType !== 'solid' ? { kind: 'drawStyle', gradientTo: color ?? '#ffffff', fill: true } : { kind: 'drawStyle', fillColor: color, fill: true }),
+        }, r),
+        () => profile().imageTools,
+      ),
+    );
+    define('control.drawOpacity', t('picture.draw.opacity'), draw, 'fill', () =>
+      gated(
+        this.drawSelect(t('picture.draw.opacity'), ['100', '75', '50', '25', '10'].map((v): [string, string] => [v, `${v}%`]), (s) => String(s.draw.opacity), (value) => ({ kind: 'drawStyle', opacity: Number(value) })),
+        () => profile().imageTools,
+      ),
+    );
+    define('control.drawDash', t('picture.draw.dash'), draw, 'line', () =>
+      gated(this.strokeStyleList(t('picture.draw.dash'), (state) => state.draw.strokeStyle, (value) => ({ kind: 'drawStyle', strokeStyle: value })), () => profile().imageTools),
+    );
+    define('control.drawStrength', t('picture.draw.strength'), draw, 'smudge', () =>
+      gated(
+        this.drawSelect(t('picture.draw.strength'), ['10', '25', '50', '75', '100'].map((v): [string, string] => [v, `${v}%`]), (s) => String(s.draw.strength), (value) => ({ kind: 'drawStyle', strength: Number(value) })),
+        () => profile().imageTools,
+      ),
+    );
+    define('control.drawTolerance', t('picture.draw.tolerance'), draw, 'bucket', () =>
+      gated(
+        this.drawSelect(t('picture.draw.tolerance'), ['0', '10', '20', '35', '50', '75'].map((v): [string, string] => [v, `${t('picture.draw.toleranceShort')} ${v}%`]), (s) => String(s.draw.tolerance), (value) => ({ kind: 'drawStyle', tolerance: Number(value) })),
+        () => profile().imageTools,
+      ),
+    );
+    define('control.drawShape', t('vector.shapes'), draw, 'shapes', () => gated(this.drawShapeBox(), () => profile().imageTools));
+  }
+
+  /** Which end of a picture shape's gradient the Fill popup's palette colours. */
+  private fillEnd: 'from' | 'to' = 'from';
+
+  /**
+   * The top of the picture's fill popup, like the vector editor's: Solid, Linear or Radial, and for a gradient a bar showing the two
+   * colours with a marker at each end (click one to colour it from the palette under it), the angle of a linear one, and a button
+   * that swaps the two colours.
+   */
+  private drawFillHeader(palette: PaletteControl): HTMLElement {
+    const r = this.registry;
+    const box = h('div', { class: 'wm-fill-gradient' });
+    const change = (action: Extract<Action, { kind: 'drawStyle' }>) => r.perform(action, t('picture.draw.fillType'));
+    const render = (): void => {
+      const state = this.state.draw;
+      box.replaceChildren();
+      const types = segmented(
+        t('picture.draw.fillType'),
+        (['solid', 'linear', 'radial'] as const).map((type) => ({ value: type, text: t(`vector.fill.${type}`), title: t(`vector.fillType.${type}`), icon: h('span', { class: `wm-fill-sample wm-fill-sample-${type}`, attrs: { 'aria-hidden': 'true' } }) })),
+        (type) => change({ kind: 'drawStyle', fillType: type, fill: true }),
+      );
+      types.set(state.fillType);
+      types.el.classList.add('wm-fill-types');
+      box.append(types.el);
+      if (state.fillType === 'solid') {
+        this.fillEnd = 'from';
+        return;
+      }
+      const from = state.fillColor ?? state.color;
+      palette.setColor(this.fillEnd === 'to' ? state.gradientTo : from);
+      const bar = h('div', { class: 'wm-grad-bar' });
+      bar.style.backgroundImage = state.fillType === 'linear' ? `linear-gradient(to right, ${from}, ${state.gradientTo})` : `radial-gradient(circle, ${from}, ${state.gradientTo})`;
+      const track = h('div', { class: 'wm-grad-track', attrs: { 'aria-label': t('vector.gradientBar') } });
+      (['from', 'to'] as const).forEach((end, index) => {
+        const marker = h('button', { class: this.fillEnd === end ? 'wm-grad-stop current' : 'wm-grad-stop', attrs: { type: 'button', 'aria-label': t('vector.stopN', { n: index + 1 }), 'aria-pressed': String(this.fillEnd === end) } });
+        marker.style.left = `${index * 100}%`;
+        marker.style.setProperty('--stop', end === 'from' ? from : state.gradientTo);
+        marker.addEventListener('click', () => {
+          this.fillEnd = end;
+          render();
+        });
+        track.append(marker);
+      });
+      const parts: (HTMLElement | string)[] = [];
+      if (state.fillType === 'linear') {
+        const angle = h('input', { class: 'wm-grad-position', attrs: { type: 'number', min: '0', max: '360', step: '15', 'aria-label': t('picture.paint.angle') } });
+        angle.value = String(state.gradientAngle);
+        angle.addEventListener('change', () => {
+          const value = Number(angle.value);
+          if (Number.isFinite(value)) change({ kind: 'drawStyle', gradientAngle: ((Math.round(value) % 360) + 360) % 360 });
+        });
+        parts.push(h('label', { class: 'wm-grad-label' }, t('picture.paint.angle'), angle, '°'));
+      }
+      const reverse = h('button', { class: 'wm-fill-action', text: t('vector.gradientReverse'), attrs: { type: 'button' } });
+      reverse.addEventListener('click', () => change({ kind: 'drawStyle', fillColor: state.gradientTo, gradientTo: from }));
+      parts.push(reverse);
+      box.append(h('div', { class: 'wm-fill-stops' }, bar, track, h('div', { class: 'wm-grad-row' }, ...parts)), h('div', { class: 'wm-palette-label', text: t('vector.stopColor') }));
+    };
+    const shown = () => JSON.stringify([this.state.draw.fillType, this.state.draw.fillColor ?? this.state.draw.color, this.state.draw.gradientTo, this.state.draw.gradientAngle]);
+    let drawn = shown();
+    this.onFillChange = () => {
+      if (!box.isConnected) return void (this.onFillChange = null);
+      if (shown() === drawn) return;
+      drawn = shown();
+      render();
+    };
+    render();
+    return box;
   }
 
   /**
@@ -1197,25 +1361,18 @@ export class Chrome {
 
   /** Solid colour, or a linear or radial gradient. */
   private vectorFillTypeBox(): Control {
-    const r = this.registry;
-    const label = t('vector.fillType');
-    const select = h('select', { class: 'wm-draw-size', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
-    for (const type of ['solid', 'linear', 'radial'] as const) {
-      const option = h('option', { text: t(`vector.fillType.${type}`) });
-      option.value = type;
-      select.append(option);
-    }
-    select.addEventListener('change', () => {
-      r.perform({ kind: 'vectorStyle', fillType: select.value as 'solid' | 'linear' | 'radial' }, label);
-      r.focusEditor();
-    });
-    return {
-      el: select,
-      refresh: (state) => {
-        select.value = state.vector.fillType;
-        select.disabled = !r.allows({ kind: 'vectorStyle', fillType: state.vector.fillType });
+    return dropdown(
+      {
+        label: t('vector.fillType'),
+        groups: () => [{ values: ['solid', 'linear', 'radial'] }],
+        current: (state) => state.vector.fillType,
+        name: (value) => t(`vector.fillType.${value}` as MessageKey),
+        sample: (value) => h('span', { class: `wm-fill-sample wm-fill-sample-${value}`, attrs: { 'aria-hidden': 'true' } }),
+        action: (value) => ({ kind: 'vectorStyle', fillType: value as 'solid' | 'linear' | 'radial' }),
+        width: 110,
       },
-    };
+      this.registry,
+    );
   }
 
   /** The list of ways a line can be drawn: dashes, then the brushes in groups, each drawn as a sample. */
@@ -1261,120 +1418,106 @@ export class Chrome {
   }
 
   private vectorStrokeStyleBox(): Control {
-    const r = this.registry;
-    const label = t('vector.strokeStyle');
-    const name = (value: string): string => (value.startsWith('dash:') ? t(`vector.dash.${value.slice(5)}` as MessageKey) : t(`vector.brush.${value.slice(6)}` as MessageKey));
-    const text = h('span', { class: 'wm-stroke-name' });
-    const sample = h('span', { class: 'wm-stroke-sample' });
-    const button = h('button', { class: 'wm-draw-size wm-stroke-style', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-stroke-caret' }));
-    let current = 'dash:solid';
-    const groups: [string, string[]][] = [
-      [t('vector.brushGroup.dashes'), DASHES.map((d) => `dash:${d.id}`)],
-      ...BRUSH_GROUPS.map((g): [string, string[]] => [t(`vector.brushGroup.${g}`), BRUSH_PRESETS.filter((p) => p.group === g).map((p) => `brush:${p.id}`)]),
-    ];
-    const open = (): void => {
-      if (popupOpenFor(button)) return closePopup();
-      const list = h('div', { class: 'wm-list wm-stroke-list', attrs: { role: 'listbox', 'aria-label': label } });
-      let chosenRow: HTMLElement | null = null;
-      for (const [heading, values] of groups) {
-        list.append(h('div', { class: 'wm-list-heading', text: heading }));
-        for (const value of values) {
-          const chosen = value === current;
-          const row = h('div', { class: chosen ? 'wm-option wm-stroke-row chosen' : 'wm-option wm-stroke-row', attrs: { role: 'option', 'aria-selected': String(chosen) } }, brushPreview(value), h('span', { text: name(value) }));
-          if (chosen) chosenRow = row;
-          row.addEventListener('click', () => {
-            closePopup();
-            r.perform({ kind: 'vectorStyle', strokeStyle: value }, label);
-            r.focusEditor();
-          });
-          list.append(row);
-        }
-      }
-      openPopup(button, list);
-      (chosenRow as HTMLElement | null)?.scrollIntoView({ block: 'center' });
-    };
-    button.addEventListener('click', open);
-    return {
-      el: button,
-      refresh: (state) => {
-        current = state.vector.strokeStyle;
-        text.textContent = name(current);
-        sample.replaceChildren(brushPreview(current));
-        button.disabled = !r.allows({ kind: 'vectorStyle', strokeStyle: current });
+    return this.strokeStyleList(t('vector.strokeStyle'), (state) => state.vector.strokeStyle, (value) => ({ kind: 'vectorStyle', strokeStyle: value }));
+  }
+
+  /** The list of ways a line can be drawn, the same one for a drawing and for a picture: dashes, then the brushes in groups, each drawn as a sample. */
+  private strokeStyleList(label: string, current: (state: ChromeState) => string, action: (value: string) => Action): Control {
+    return dropdown(
+      {
+        label,
+        groups: () => [
+          { heading: t('vector.brushGroup.dashes'), values: DASHES.map((d) => `dash:${d.id}`) },
+          ...BRUSH_GROUPS.map((g) => ({ heading: t(`vector.brushGroup.${g}`), values: BRUSH_PRESETS.filter((p) => p.group === g).map((p) => `brush:${p.id}`) })),
+        ],
+        current,
+        name: (value) => (value.startsWith('dash:') ? t(`vector.dash.${value.slice(5)}` as MessageKey) : t(`vector.brush.${value.slice(6)}` as MessageKey)),
+        sample: (value) => brushPreview(value),
+        action,
       },
-    };
+      this.registry,
+    );
   }
 
   /** The outline width of the selected shapes: a list of widths, each drawn as a line (the same list as the stroke style's), and the shape's own when it is another. */
   private vectorWidthBox(): Control {
-    const r = this.registry;
-    const label = t('vector.strokeWidth');
     const widths = [0.5, 1, 2, 4, 8, 16, 32];
-    // A line as thick as the width, up to what fits in the sample.
-    const sample = (width: number): SVGSVGElement => {
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('viewBox', '0 0 42 10');
-      svg.setAttribute('aria-hidden', 'true');
-      svg.classList.add('wm-brush-preview');
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      line.setAttribute('d', 'M2 5H40');
-      line.setAttribute('stroke', 'currentColor');
-      line.setAttribute('stroke-width', String(Math.min(width, 10)));
-      svg.append(line);
-      return svg;
-    };
-    const text = h('span', { class: 'wm-stroke-name' });
-    const preview = h('span', { class: 'wm-stroke-sample' });
-    const button = h('button', { class: 'wm-draw-size wm-stroke-style wm-stroke-width', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, preview, text, h('span', { class: 'wm-stroke-caret' }));
-    let current = 1;
-    const open = (): void => {
-      if (popupOpenFor(button)) return closePopup();
-      const list = h('div', { class: 'wm-list wm-stroke-list', attrs: { role: 'listbox', 'aria-label': label } });
-      for (const width of widths.includes(current) ? widths : [...widths, current].sort((x, y) => x - y)) {
-        const chosen = width === current;
-        const row = h('div', { class: chosen ? 'wm-option wm-stroke-row chosen' : 'wm-option wm-stroke-row', attrs: { role: 'option', 'aria-selected': String(chosen) } }, h('span', { class: 'wm-stroke-sample' }, sample(width)), h('span', { text: String(width) }));
+    return dropdown(
+      {
+        label: t('vector.strokeWidth'),
+        groups: (current) => [{ values: (widths.includes(Number(current)) ? widths : [...widths, Number(current)].sort((x, y) => x - y)).map(String) }],
+        current: (state) => String(Math.round(state.vector.strokeWidth * 100) / 100),
+        name: (value) => value,
+        sample: (value) => lineSample(Number(value)),
+        action: (value) => ({ kind: 'vectorStyle', strokeWidth: Number(value) }),
+        width: 96,
+      },
+      this.registry,
+    );
+  }
+
+  /** A drop-down list of choices for one of the Draw tools' settings: it shows the current one and sends the picked one. */
+  private drawSelect(label: string, options: readonly (readonly [string, string])[], current: (state: ChromeState) => string, action: (value: string) => Action, sample?: (value: string) => Node | null): Control {
+    const names = new Map(options);
+    return dropdown({ label, groups: () => [{ values: options.map(([value]) => value) }], current, name: (value) => names.get(value) ?? value, action, width: 100, ...(sample && { sample }) }, this.registry);
+  }
+
+  /** The picture's Shapes tool as a split button, like the vector editor's: the picture picks the tool, the arrow opens the list of shapes. */
+  private drawShapeBox(): Control {
+    const r = this.registry;
+    const label = t('vector.shapes');
+    const main = h('button', { class: 'wm-tbutton wm-split-main', attrs: { type: 'button', tabindex: '-1', 'aria-label': label } });
+    const caret = h('button', { class: 'wm-tbutton wm-split-arrow', title: label, attrs: { type: 'button', tabindex: '-1', 'aria-label': label, 'aria-haspopup': 'listbox' } });
+    caret.innerHTML = ICONS.dropdown;
+    const el = h('span', { class: 'wm-split' }, main, caret);
+    let current: string = SHAPE_IDS[0];
+    main.addEventListener('click', () => {
+      r.perform({ kind: 'image', op: 'shape' }, label);
+      r.focusEditor();
+    });
+    caret.addEventListener('click', () => {
+      if (popupOpenFor(el)) return closePopup();
+      const list = h('div', { class: 'wm-list wm-shape-list', attrs: { role: 'listbox', 'aria-label': label } });
+      for (const id of SHAPE_IDS) {
+        const chosen = id === current;
+        const name = t(`vector.shape.${id}` as MessageKey);
+        const row = h('div', { class: chosen ? 'wm-option wm-shape-row chosen' : 'wm-option wm-shape-row', title: name, attrs: { role: 'option', 'aria-selected': String(chosen), 'aria-label': name } }, shapePreview(id));
         row.addEventListener('click', () => {
           closePopup();
-          r.perform({ kind: 'vectorStyle', strokeWidth: width }, label);
+          r.perform({ kind: 'image', op: `shape:${id}` }, label);
           r.focusEditor();
         });
         list.append(row);
       }
-      openPopup(button, list);
-    };
-    button.addEventListener('click', open);
+      openPopup(el, list);
+    });
     return {
-      el: button,
+      el,
       refresh: (state) => {
-        current = Math.round(state.vector.strokeWidth * 100) / 100;
-        text.textContent = String(current);
-        preview.replaceChildren(sample(current));
-        button.disabled = !r.allows({ kind: 'vectorStyle', strokeWidth: current });
+        current = state.draw.shape;
+        main.replaceChildren(shapePreview(current as (typeof SHAPE_IDS)[number]));
+        main.title = `${label}: ${t(`vector.shape.${current}` as MessageKey)}`;
+        main.setAttribute('aria-pressed', String(state.draw.tool === 'shape'));
+        main.disabled = caret.disabled = !r.allows({ kind: 'image', op: 'shape' });
       },
     };
   }
 
   /** The line thickness to draw with: a small list of steps. */
   private drawSizeBox(): Control {
-    const r = this.registry;
-    const label = t('picture.draw.size');
-    const select = h('select', { class: 'wm-draw-size', title: label, attrs: { 'aria-label': label, tabindex: '-1' } });
-    (['thin', 'medium', 'thick', 'huge'] as const).forEach((name, step) => {
-      const option = h('option', { text: t(`picture.draw.size.${name}`) });
-      option.value = String(step);
-      select.append(option);
-    });
-    select.addEventListener('change', () => {
-      r.perform({ kind: 'drawStyle', size: Number(select.value) }, label);
-      r.focusEditor();
-    });
-    return {
-      el: select,
-      refresh: (state) => {
-        select.value = String(state.draw.size);
-        select.disabled = !r.allows({ kind: 'drawStyle', size: state.draw.size });
+    const names = ['thin', 'medium', 'thick', 'huge'] as const;
+    return dropdown(
+      {
+        label: t('picture.draw.size'),
+        groups: () => [{ values: names.map((_, step) => String(step)) }],
+        current: (state) => String(state.draw.size),
+        name: (value) => t(`picture.draw.size.${names[Number(value)]}`),
+        sample: (value) => lineSample([1.5, 3, 6, 10][Number(value)]),
+        action: (value) => ({ kind: 'drawStyle', size: Number(value) }),
+        width: 130,
       },
-    };
+      this.registry,
+    );
   }
 
   // --- Format selector ---------------------------------------------------------------------
@@ -1607,16 +1750,17 @@ export class Chrome {
       recording = null;
       table.replaceChildren();
       const commands = [...this.registry.all()];
-      const rows = [...commands.filter((c) => c.scope !== 'vector'), ...commands.filter((c) => c.scope === 'vector')];
-      let vectorHeader = false;
+      const rows = [...commands.filter((c) => !c.scope), ...commands.filter((c) => c.scope === 'vector'), ...commands.filter((c) => c.scope === 'picture')];
+      const headers = new Set<string>();
       for (const command of rows) {
-        const vector = command.scope === 'vector';
-        // The vector editor's section lists every command, so any of them can be given a key.
+        const vector = command.scope !== undefined;
+        // The vector editor's and the picture tools' sections list every command, so any of them can be given a key.
         if (!vector && !command.shortcutParsed && !command.defaultShortcut) continue;
-        if (vector && !vectorHeader) {
-          vectorHeader = true;
-          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: t('chrome.shortcuts.vector'), attrs: { colspan: '2', scope: 'colgroup' } })));
-          table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t('chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
+        if (command.scope && !headers.has(command.scope)) {
+          headers.add(command.scope);
+          const picture = command.scope === 'picture';
+          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: t(picture ? 'chrome.shortcuts.picture' : 'chrome.shortcuts.vector'), attrs: { colspan: '2', scope: 'colgroup' } })));
+          table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t(picture ? 'chrome.shortcuts.pictureHint' : 'chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
         }
         const key = h('button', {
           class: 'wm-shortcut-key',
@@ -1688,6 +1832,48 @@ export class Chrome {
     showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
   }
 }
+
+/** The picture tools' built-in keys, as in Photoshop (a tool is a bare key; Mod is ⌘ or Ctrl). */
+const PICTURE_KEYS: Partial<Record<string, string>> = {
+  move: 'V',
+  pen: 'B',
+  marker: 'Shift+B',
+  eraser: 'E',
+  line: 'L',
+  arrow: 'Shift+L',
+  rectangle: 'U',
+  ellipse: 'Shift+U',
+  shape: 'Alt+U',
+  text: 'T',
+  bubble: 'Shift+T',
+  step: 'Shift+I',
+  pixelate: 'X',
+  smudge: 'R',
+  blurBrush: 'Shift+R',
+  sharpenBrush: 'Alt+R',
+  mixer: 'Alt+B',
+  dodge: 'O',
+  burn: 'Shift+O',
+  eyedropper: 'I',
+  bucket: 'G',
+  crop: 'C',
+  resize: 'Alt+Mod+I',
+  canvasSize: 'Alt+Mod+C',
+  invert: 'Mod+I',
+  layers: 'F7',
+  newLayer: 'Shift+Mod+N',
+  duplicate: 'Mod+J',
+  group: 'Mod+G',
+  ungroup: 'Shift+Mod+G',
+  front: 'Shift+Mod+]',
+  forward: 'Mod+]',
+  backward: 'Mod+[',
+  back: 'Shift+Mod+[',
+  selectAll: 'Mod+A',
+  deselect: 'Mod+D',
+  sizeDown: '[',
+  sizeUp: ']',
+};
 
 /** The vector editor's built-in keys, as in Illustrator (a tool is a bare key; Mod is ⌘ or Ctrl). */
 const VECTOR_TOOL_KEYS: Partial<Record<ChromeState['vector']['tool'], string>> = { select: 'V', rect: 'M', ellipse: 'L', shape: 'S', line: '\\', pen: 'P', pencil: 'N', nudge: 'B', text: 'T', canvas: 'C' };

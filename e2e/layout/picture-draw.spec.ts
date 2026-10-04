@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures';
 import type { App } from '../fixtures';
-import { currentPicture, expectPicture, isReddish, isWhite, makePng, openPicture, pictureToScreen, pixelAt, pngSize } from './helpers';
+import { currentPicture, expectPicture, isReddish, isWhite, makePng, openPicture, penEraser, penStroke, pictureToScreen, pixelAt, pngSize } from './helpers';
 
 const W = 400;
 const H = 300;
@@ -37,7 +37,8 @@ async function click(app: App, at: [number, number]): Promise<void> {
   await app.page.mouse.click(s.x, s.y);
 }
 
-const done = (app: App) => app.page.locator('.wm-draw').getByRole('button', { name: 'Done' }).click();
+/** Puts the tools down: Enter (there is no Done button; the shapes stay on the picture as its layers). */
+const done = (app: App) => app.page.keyboard.press('Enter');
 
 /** Any non-white pixel in the box (picture pixels). */
 function inked(img: { width: number; data: Uint8Array }, x0: number, y0: number, x1: number, y1: number): number {
@@ -47,13 +48,11 @@ function inked(img: { width: number; data: Uint8Array }, x0: number, y0: number,
 }
 
 test.describe('the Draw toolbar', () => {
-  test('picking a tool shows the drawing bar, Done closes it, and only one tool is pressed at a time', async ({ app }) => {
+  test('picking a tool shows the drawing layer, Enter puts the tools down, and only one tool is pressed at a time', async ({ app }) => {
     await start(app, 'Pen');
-    await expect(app.page.locator('.wm-draw').getByRole('button', { name: 'Undo' })).toBeDisabled();
     await pickTool(app, 'Line');
     await expect(app.toolbarButton(/^Pen$/)).toHaveAttribute('aria-pressed', 'false');
     await done(app);
-    await expect(app.page.locator('.wm-draw-bar')).toBeHidden();
     await expect(app.toolbarButton(/^Line$/)).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -68,7 +67,7 @@ test.describe('the Draw toolbar', () => {
 
   test('Drawing Color and Line Thickness are offered', async ({ app }) => {
     await openPicture(app, CANVAS);
-    await expect(app.page.getByRole('combobox', { name: 'Line Thickness' })).toBeVisible();
+    await expect(app.page.getByRole('button', { name: 'Line Thickness' })).toBeVisible();
     await expect(app.toolbarButton(/Drawing Color/).first()).toBeVisible();
     await expect(app.toolbarButton(/^Fill Shapes$/)).toBeVisible();
   });
@@ -174,18 +173,7 @@ test.describe('drawing shapes', () => {
   });
 });
 
-test.describe('editing a sketch before Done', () => {
-  test('the Undo button takes back the last shape, one at a time', async ({ app }) => {
-    await start(app, 'Rectangle');
-    await drag(app, [40, 40], [120, 100]);
-    await drag(app, [200, 40], [280, 100]);
-    const undo = app.page.locator('.wm-draw').getByRole('button', { name: 'Undo' });
-    await expect(undo).toBeEnabled();
-    await undo.click();
-    await done(app);
-    await expectPicture(app, (i) => isReddish(pixelAt(i, 40, 70)) && isWhite(pixelAt(i, 200, 70)));
-  });
-
+test.describe('editing a sketch', () => {
   test('Ctrl+Z undoes a shape while drawing', async ({ app }) => {
     await start(app, 'Line');
     await drag(app, [40, 40], [200, 40]);
@@ -227,8 +215,9 @@ test.describe('editing a sketch before Done', () => {
     await start(app, 'Rectangle');
     await drag(app, [40, 40], [120, 100]);
     await app.page.keyboard.press('Escape');
-    await expect(app.page.locator('.wm-draw-bar')).toBeHidden();
-    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(1);
+    await expect(app.toolbarButton(/^Rectangle$/)).toHaveAttribute('aria-pressed', 'false');
+    // The rectangle, and the layer it was put in when the tool was picked.
+    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.map((s) => s.tool).sort())).toEqual(['group', 'rectangle']);
     await expectPicture(app, (i) => inked(i, 0, 0, W, H) > 0);
   });
 
@@ -236,7 +225,7 @@ test.describe('editing a sketch before Done', () => {
     await start(app, 'Line');
     await drag(app, [40, 40], [200, 40]);
     await app.page.keyboard.press('Enter');
-    await expect(app.page.locator('.wm-draw-bar')).toBeHidden();
+    await expect(app.toolbarButton(/^Line$/)).toHaveAttribute('aria-pressed', 'false');
     await expectPicture(app, (i) => isReddish(pixelAt(i, 120, 40)));
   });
 
@@ -261,7 +250,8 @@ test.describe('editing a sketch before Done', () => {
     await start(app, 'Rectangle');
     await drag(app, [40, 40], [120, 100]);
     await done(app);
-    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(1);
+    // The rectangle, and the layer it was put in when the tool was picked.
+    await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: { tool: string }[] }).pictureShapes.map((s) => s.tool).sort())).toEqual(['group', 'rectangle']);
     // A change to the picture itself takes the shapes into it: they are not layers any more.
     await app.menu('Picture', 'Rotate Right');
     await expect.poll(() => app.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(0);
@@ -275,9 +265,61 @@ test.describe('editing a sketch before Done', () => {
     let thin = 0;
     await expectPicture(app, (i) => ((thin = inked(i, 100, 20, 120, 60)) > 0));
     await pickTool(app, 'Line');
-    await app.page.getByRole('combobox', { name: 'Line Thickness' }).selectOption({ label: 'Extra thick' });
+    await app.page.getByRole('button', { name: 'Line Thickness' }).click();
+    await app.page.getByRole('option', { name: 'Extra thick' }).click();
     await drag(app, [40, 200], [200, 200]);
     await done(app);
     await expectPicture(app, (i) => inked(i, 100, 180, 120, 220) > thin * 2);
+  });
+});
+
+test.describe('a drawing tablet’s pen', () => {
+  test('the Pen draws a thicker line where the pen is pressed harder', async ({ app }) => {
+    await start(app, 'Pen');
+    await app.page.getByRole('button', { name: 'Line Thickness' }).click();
+    await app.page.getByRole('option', { name: 'Extra thick' }).click();
+    // From a light touch at the left to pressed hard at the right.
+    const points = [];
+    for (let i = 0; i <= 32; i++) points.push({ ...(await pictureToScreen(app.page, W, 40 + i * 10, 100)), pressure: 0.08 + (0.92 * i) / 32 });
+    await penStroke(app.page, points);
+    await done(app);
+    await expectPicture(app, (i) => {
+      const light = inked(i, 60, 70, 80, 130);
+      const hard = inked(i, 320, 70, 340, 130);
+      return light > 0 && hard > light * 3;
+    });
+  });
+
+  test('with pen pressure turned off in Tools ▸ Options, the Pen draws one width however hard it is pressed', async ({ app }) => {
+    await openPicture(app, CANVAS);
+    await app.menu('Tools', 'Options');
+    const options = app.page.getByRole('dialog', { name: 'Options' });
+    await options.getByRole('checkbox', { name: /harder a tablet’s pen is pressed/ }).uncheck();
+    await options.getByRole('button', { name: 'OK' }).click();
+    await pickTool(app, 'Pen');
+    await app.page.getByRole('button', { name: 'Line Thickness' }).click();
+    await app.page.getByRole('option', { name: 'Extra thick' }).click();
+    const points = [];
+    for (let i = 0; i <= 32; i++) points.push({ ...(await pictureToScreen(app.page, W, 40 + i * 10, 100)), pressure: 0.08 + (0.92 * i) / 32 });
+    await penStroke(app.page, points);
+    await done(app);
+    await expectPicture(app, (i) => {
+      const light = inked(i, 60, 70, 80, 130);
+      const hard = inked(i, 320, 70, 340, 130);
+      return light > 0 && Math.abs(hard - light) < light * 0.3;
+    });
+    await app.page.evaluate(() => localStorage.removeItem('vector.penPressure'));
+  });
+
+  test('the pen’s eraser end erases what it passes over, whatever tool is picked', async ({ app }) => {
+    await start(app, 'Rectangle');
+    await drag(app, [40, 40], [140, 120]);
+    await drag(app, [200, 40], [300, 120]);
+    // Across the first rectangle's left edge.
+    await penEraser(app.page, [await pictureToScreen(app.page, W, 30, 80), await pictureToScreen(app.page, W, 40, 80), await pictureToScreen(app.page, W, 50, 80)]);
+    // Still the Rectangle tool afterwards.
+    await expect(app.toolbarButton(/^Rectangle$/)).toHaveAttribute('aria-pressed', 'true');
+    await done(app);
+    await expectPicture(app, (i) => isWhite(pixelAt(i, 40, 80)) && isReddish(pixelAt(i, 200, 80)));
   });
 });

@@ -305,4 +305,8 @@ export const chrome: Partial<Messages> = {
   'chrome.title.tip': 'Clique para renomear',
   'chrome.rename.title': 'Renomear documento',
   'chrome.rename.action': 'Renomear',
+  'chrome.shortcuts.picture': 'Ferramentas de imagem',
+  'chrome.shortcuts.pictureHint': 'Teclas das ferramentas de desenho, como no Photoshop. Uma ferramenta pode ter uma única tecla de letra, número ou símbolo.',
+  'chrome.file.openSelection': 'Abrir seleção como &documento',
+  'chrome.file.openSelection.tip': 'Abrir as linhas selecionadas como um documento comum que pode ser formatado e convertido',
 };

@@ -20,7 +20,7 @@
   margin: -2px;
   padding: 2px;
   background: transparent;
-  outline: 1px dashed #316ac5;
+  outline: 1px dashed var(--wm-hot-border);
   outline-offset: 0;
   caret-color: currentColor;
   pointer-events: auto;
@@ -29,7 +29,7 @@
 }
 
 .wm-pdftext-editor:focus {
-  outline: 1px solid #316ac5;
+  outline: 1px solid var(--wm-hot-border);
 }
 
 /* The handle to drag the text by, at the top left of its box. */
@@ -41,7 +41,7 @@
   height: 14px;
   box-sizing: border-box;
   background: #fff;
-  border: 1px solid #316ac5;
+  border: 1px solid var(--wm-hot-border);
   border-radius: 2px;
   cursor: move;
   pointer-events: auto;
@@ -52,8 +52,8 @@
   content: '';
   position: absolute;
   inset: 3px;
-  border-top: 1px solid #316ac5;
-  border-bottom: 1px solid #316ac5;
+  border-top: 1px solid var(--wm-hot-border);
+  border-bottom: 1px solid var(--wm-hot-border);
 }
 
 /* Measures where a font's baseline is (see baselineOffset): never seen. */

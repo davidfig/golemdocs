@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': '鉛筆のストロークを描き終えたら選択する',
   'dialogs.options.returnToSelect': '図形またはペンのパスを描いた後に選択ツールへ戻る',
   'dialogs.options.pencilSmoothing': '鉛筆のスムージング',
+  'dialogs.options.penPressure': 'タブレットのペンを強く押すほど線を太く描く',
   'dialogs.options.off': 'なし',
   'dialogs.options.low': '弱',
   'dialogs.options.medium': '中',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': 'ガイド',
   'dialogs.options.showGuides': 'ガイドを表示',
   'dialogs.options.lockGuides': 'ガイドをロック',
+  'dialogs.find.wholeWord': '単語単位',
+  'dialogs.find.regex': '正規表現',
 };

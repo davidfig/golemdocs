@@ -23,7 +23,9 @@ function recorder() {
   const record = (name: string) => (...args: unknown[]) => void calls.push([name, ...args, ...(['delete', 'duplicate', 'group', 'ungroup', 'order', 'transformSelection', 'applyStyle', 'applyStrokeStyle', 'applyFillType', 'makeClip', 'releaseClip', 'makeMask', 'releaseMask', 'clearGuides'].includes(name) ? [selection.map((p) => p[0])] : [])]);
   const editor: DrawingEditor = {
     drawing: s,
-    readOnly: false,
+    get selection() {
+      return selection;
+    },
     select: (paths) => void (selection = paths),
     delete: record('delete'),
     duplicate: record('duplicate'),
@@ -46,7 +48,8 @@ function recorder() {
     newGroup: (name) => void calls.push(['newGroup', name]),
     makeMask: record('makeMask'),
     releaseMask: record('releaseMask'),
-    addShape: record('addShape'),
+    // The editor picks a new shape; at the top of the drawing, it is the last one.
+    addShape: (node) => void (calls.push(['addShape', node]), (selection = [[s.children.length]])),
     pushLines: (at, by, radius) => (calls.push(['pushLines', at, by, radius]), true),
   };
   return { editor, calls };
@@ -59,7 +62,9 @@ test('the drawing is described as numbered shapes from back to front', () => {
   assert.match(lines[1], /^0: rect "back" at x=10 y=10 width=80 height=40; fill #e44; stroke #000; stroke-width 2$/);
   assert.match(lines[2], /^1: circle at x=120 y=20 width=60 height=60; fill #0a0$/);
   assert.match(lines[3], /^2: group at .*; 2 shapes inside$/);
-  assert.match(lines[4], /^3: text at .*; text "Hello there"$/);
+  assert.match(lines[4], /^  2\.0: rect at /, 'the shapes in a group are listed under it');
+  assert.match(lines[5], /^  2\.1: rect at /);
+  assert.match(lines[6], /^3: text at .*; text "Hello there"$/);
   assert.match(describeDrawing(readSvg('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>')), /\(nothing yet\)/);
 });
 
@@ -163,4 +168,20 @@ test('add_shape draws a ready-made shape into the box, and refuses an unknown on
   const node = calls[0][1] as { kind: string; commands: unknown[]; style: Record<string, string> };
   assert.deepEqual([node.kind, node.commands.length, node.style.fill], ['path', 11, '#ffcc00']);
   await assert.rejects(() => editDrawing(editor, { op: 'add_shape', shape: 'blob', x: 0, y: 0, width: 5, height: 5 }), /shape/);
+});
+
+test('a shape added into a layer is named by its place in it, and shapes in groups are picked by that name', async () => {
+  const { editor, calls } = recorder();
+  editor.addShape = (node) => void (calls.push(['addShape', node]), editor.select([[2, 2]]));
+  assert.match(await editDrawing(editor, { op: 'add_rect', x: 0, y: 0, width: 5, height: 5 }), /as shape 2\.2\./);
+  calls.length = 0;
+  assert.match(await editDrawing(editor, { op: 'move', shapes: ['2.1'], dx: 1, dy: 0 }), /Moved shape 2\.1/);
+  assert.deepEqual(editor.selection, [[2, 1]]);
+  await assert.rejects(editDrawing(editor, { op: 'delete', shapes: ['2.7'] }), /no shape 2\.7/);
+  await assert.rejects(editDrawing(editor, { op: 'delete', shapes: ['two'] }), /no shape two/);
+});
+
+test('the page background is marked, so it is not taken for a shape to change', () => {
+  const s = readSvg('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect data-golem-background="true" width="10" height="10" fill="#fff"/><circle cx="5" cy="5" r="2"/></svg>');
+  assert.match(describeDrawing(s).split('\n')[1]!, /^0: rect .*the page background/);
 });

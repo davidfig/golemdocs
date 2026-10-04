@@ -4,6 +4,7 @@
 // who else may open it is kept in the directory (see sharing.ts).
 
 import { documentIndex } from './docIndex.ts';
+import { CHUNKED_FROM, DELTA, applyDelta, deleteChunkList, deleteChunks, documentResponse, isChunked, previousManifest } from './fileStore.ts';
 import { DOCX, docxKey, indexKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
@@ -115,6 +116,8 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
     const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
     for (const row of rows) await deleteMedia(env, ownerId, row.id);
+    // Only a document the client keeps as chunks has any (it does so from CHUNKED_FROM bytes; a save that makes one whole removes them), so a small one is not looked for.
+    for (const row of rows) if (row.size >= CHUNKED_FROM) await deleteChunks(env, ownerId, row.id);
   };
   if (defer) defer(cleanup().catch((error) => console.error('delete cleanup failed', error)));
   else await cleanup();
@@ -212,6 +215,21 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
 
 const readDocx = (request: Request) => readBody(request, MAX_BYTES, 'document', true);
 
+/** A save that sends only the chunks the server lacks (see fileStore.ts). */
+const isDelta = (request: Request): boolean => (request.headers.get('content-type') ?? '').startsWith(DELTA);
+/** The most a delta upload carries: every chunk of a document of the greatest size, and its manifest. */
+const MAX_DELTA_BYTES = MAX_BYTES + 1024 * 1024;
+
+/** Deletes the chunks a save brought that no copy of the file names, after the save failed (best effort: a stray chunk is only wasted space until the document goes). */
+async function dropUnused(env: Env, ownerId: string, docId: string, key: string, hashes: readonly string[]): Promise<void> {
+  try {
+    const keep = new Set((await previousManifest(env, key))?.chunks.map((c) => c.h));
+    await deleteChunkList(env, ownerId, docId, hashes.filter((h) => !keep.has(h)));
+  } catch (error) {
+    console.error('removing unused chunks failed', error);
+  }
+}
+
 /** The room object for a document. */
 export const roomFor = (env: Env, docId: string) => env.ROOMS.get(env.ROOMS.idFromName(docId));
 
@@ -269,20 +287,23 @@ export async function handleDocuments(request: Request, env: Env, userId: string
   if (earlyAccess && id !== undefined && request.method === 'GET' && (sub === undefined || sub === 'thumbnail')) {
     const access = await earlyAccess;
     if (access && (access.ownerId === userId || (await hasSync(env, access.ownerId)))) {
-      const thumb = sub === 'thumbnail';
-      const object = await env.FILES.get(thumb ? thumbKey(access.ownerId, id) : docxKey(access.ownerId, id));
-      if (object) {
-        return new Response(object.body, {
-          headers: thumb
-            ? {
-                'content-type': object.httpMetadata?.contentType ?? 'image/webp',
-                'content-length': String(object.size),
-                etag: object.httpEtag,
-                'cache-control': url.searchParams.has('v') ? 'private, max-age=31536000, immutable' : 'private, no-cache',
-                'x-content-type-options': 'nosniff',
-              }
-            : { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache', 'x-content-type-options': 'nosniff' },
-        });
+      if (sub === 'thumbnail') {
+        const object = await env.FILES.get(thumbKey(access.ownerId, id));
+        if (object) {
+          return new Response(object.body, {
+            headers: {
+              'content-type': object.httpMetadata?.contentType ?? 'image/webp',
+              'content-length': String(object.size),
+              etag: object.httpEtag,
+              'cache-control': url.searchParams.has('v') ? 'private, max-age=31536000, immutable' : 'private, no-cache',
+              'x-content-type-options': 'nosniff',
+            },
+          });
+        }
+      } else {
+        // The file, whole or put together from its chunks (see fileStore.ts).
+        const response = await documentResponse(env, docxKey(access.ownerId, id), access.ownerId, id, DOCX);
+        if (response) return response;
       }
     }
   }
@@ -323,25 +344,20 @@ export async function handleDocuments(request: Request, env: Env, userId: string
   // POST /api/documents?name=…: a new document from the request body (.docx bytes).
   if (!id && request.method === 'POST') {
     if (!ownDb || !syncing) throw subscriptionRequired();
-    const bytes = await readDocx(request);
+    const delta = isDelta(request);
+    const bytes = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
     const docId = crypto.randomUUID();
     const name = cleanName(url.searchParams.get('name')) ?? 'Untitled.docx';
     const folderId = url.searchParams.get('folder');
     if (folderId !== null && !(await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
     const now = Date.now();
     // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
-    await env.FILES.put(docxKey(userId, docId), bytes, { httpMetadata: { contentType: DOCX } });
-    await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [
-      docId,
-      name,
-      bytes.byteLength,
-      docxKey(userId, docId),
-      now,
-      now,
-      folderId,
-    ]);
+    let size = bytes.byteLength;
+    if (delta) size = (await applyDelta(env, userId, docId, docxKey(userId, docId), bytes, null, { maxBytes: MAX_BYTES })).manifest.size;
+    else await env.FILES.put(docxKey(userId, docId), bytes, { httpMetadata: { contentType: DOCX } });
+    await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(userId, docId), now, now, folderId]);
     await registerOwner(env, docId, userId);
-    return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null, folderId }, 201);
+    return json({ role: 'owner', id: docId, name, size, createdAt: now, updatedAt: now, thumbAt: null, folderId }, 201);
   }
 
   // DELETE /api/documents { ids?, folders? } and PATCH /api/documents { ids, folderId }: the same
@@ -536,11 +552,9 @@ export async function handleDocuments(request: Request, env: Env, userId: string
 
   // GET /api/documents/:id: the .docx bytes.
   if (request.method === 'GET') {
-    const object = await env.FILES.get(row.r2_key);
-    if (!object) throw new HttpError(404, 'document file is missing');
-    return new Response(object.body, {
-      headers: { 'content-type': DOCX, 'content-length': String(object.size), etag: object.httpEtag, 'cache-control': 'private, no-cache', 'x-content-type-options': 'nosniff' },
-    });
+    const response = await documentResponse(env, row.r2_key, ownerId, id, DOCX);
+    if (!response) throw new HttpError(404, 'document file is missing');
+    return response;
   }
 
   // PUT /api/documents/:id[?name=…][&base=…]: replace the bytes (and optionally rename). With
@@ -556,28 +570,52 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     }
     const base = url.searchParams.get('base');
     if (base !== null && Number(base) !== row.updated_at) throw new HttpError(409, 'changed elsewhere');
-    const bytes = await readDocx(request);
+    const delta = isDelta(request);
+    const body = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
     const name = cleanName(url.searchParams.get('name')) ?? row.name;
     // With a base, the bytes go in only if nobody else's did since the row was read: two saves
     // from the same base both pass the check above, and without this the later one's bytes would
     // replace the earlier one's while the row still described the earlier one.
     const current = base === null ? null : row.r2_key === savedKey ? (fileBefore ?? null) : await env.FILES.head(row.r2_key);
-    const written = await env.FILES.put(row.r2_key, bytes, { httpMetadata: { contentType: DOCX }, ...(current ? { onlyIf: { etagMatches: current.etag } } : {}) });
-    if (current && written === null) throw new HttpError(409, 'changed elsewhere');
+    // Was the file kept as chunks? Those are removed once a whole file replaces it (and a delta drops the ones it no longer names).
+    const before = current ?? (await env.FILES.head(row.r2_key));
+    let size = body.byteLength;
+    let added: string[] = [];
+    let dropped: string[] = [];
+    if (delta) {
+      const saved = await applyDelta(env, ownerId, id, row.r2_key, body, await previousManifest(env, row.r2_key), { maxBytes: MAX_BYTES, ...(current ? { etagMatches: current.etag } : {}) });
+      ({ added, dropped } = saved);
+      size = saved.manifest.size;
+      if (current && saved.written === null) {
+        await dropUnused(env, ownerId, id, row.r2_key, added);
+        throw new HttpError(409, 'changed elsewhere');
+      }
+    } else {
+      const written = await env.FILES.put(row.r2_key, body, { httpMetadata: { contentType: DOCX }, ...(current ? { onlyIf: { etagMatches: current.etag } } : {}) });
+      if (current && written === null) throw new HttpError(409, 'changed elsewhere');
+    }
     // Strictly increasing, so two saves in the same millisecond still tell versions apart. With a
     // base it also has to be the version the save started from; and the row may be gone (deleted
     // meanwhile), which RETURNING tells apart from success.
     const updated = await db.run<{ updated_at: number }>(
       `UPDATE documents SET name = ?, size = ?, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
-      [name, bytes.byteLength, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
+      [name, size, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
     );
     if (!updated[0]) {
-      if (base !== null && (await db.first('SELECT 1 FROM documents WHERE id = ?', [id]))) throw new HttpError(409, 'changed elsewhere');
+      if (base !== null && (await db.first('SELECT 1 FROM documents WHERE id = ?', [id]))) {
+        if (delta) await dropUnused(env, ownerId, id, row.r2_key, added);
+        throw new HttpError(409, 'changed elsewhere');
+      }
       // Deleted while this save was on its way: the bytes just written belong to nothing.
       await env.FILES.delete(row.r2_key);
+      await deleteChunks(env, ownerId, id).catch((error) => console.error('removing chunks failed', error));
       throw new HttpError(404, 'not found');
     }
-    return json(describe({ ...row, name, size: bytes.byteLength, updated_at: updated[0].updated_at }, role));
+    // The save is in: what it replaced is cleanup, which can wait until after the response.
+    const cleanup = (delta ? deleteChunkList(env, ownerId, id, dropped) : isChunked(before) ? deleteChunks(env, ownerId, id) : Promise.resolve()).catch((error) => console.error('chunk cleanup failed', error));
+    if (defer) defer(cleanup);
+    else await cleanup;
+    return json(describe({ ...row, name, size, updated_at: updated[0].updated_at }, role));
   }
 
   // PATCH /api/documents/:id { folderId?, name? }: moves it to a folder (null: the top level),

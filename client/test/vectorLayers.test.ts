@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isHidden, isLocked, moveNodeTo, nodeAt, setLocked, setName, setVisible, NAME_ATTR } from '../src/vector/edit.ts';
+import { isHidden, isLocked, lockedIn, moveNodeTo, nodeAt, setLocked, setName, setVisible, NAME_ATTR } from '../src/vector/edit.ts';
 import { hitTest, nodesInRect } from '../src/vector/hit.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 import { writeSvg } from '../src/vector/svgWrite.ts';
@@ -37,6 +37,19 @@ test('a locked node can be seen but not picked; a hidden one is neither painted 
   assert.match(text, /data-golem-locked="true"/);
   assert.match(text, /display="none"/);
   assert.ok(isLocked(readSvg(text).children[0]));
+});
+
+test('a node in a locked group counts as locked, and with `hidden`, one in a hidden group counts too', () => {
+  const s = scene();
+  assert.equal(lockedIn(s, [2, 0]), false);
+  setLocked(s, [[2]], true);
+  assert.equal(lockedIn(s, [2, 0]), true, 'the group’s lock reaches its children');
+  assert.equal(lockedIn(s, [0]), false);
+  setLocked(s, [[2]], false);
+  setVisible(s, [[2]], false);
+  assert.equal(lockedIn(s, [2, 1]), false, 'hidden is not locked');
+  assert.equal(lockedIn(s, [2, 1], true), true);
+  assert.equal(lockedIn(s, [9]), false, 'a path to nothing');
 });
 
 test('names are kept in an attribute', () => {

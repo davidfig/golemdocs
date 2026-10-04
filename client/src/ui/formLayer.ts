@@ -13,7 +13,7 @@ import { t } from '../i18n/index.ts';
 import type { WireField } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import type { FormMode } from './actions.ts';
-import { h, isFormField, makeDraggable, segmented } from './dom.ts';
+import { h, isFormField, modalOpen, makeDraggable, segmented } from './dom.ts';
 import './formLayer.css';
 
 export interface FormPage {
@@ -509,7 +509,7 @@ export class FormLayer {
   private key(e: KeyboardEvent): void {
     if (!this.fields || this.mode !== 'edit') return;
     // Keys typed in a box (a field's name, the text of a PDF being edited) or a dialog are theirs.
-    if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
+    if (isFormField(e.target) || modalOpen()) return;
     if (e.key === 'Escape' && (this.placing || this.selected)) {
       this.placing = null;
       this.selected = null;

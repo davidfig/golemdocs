@@ -5,6 +5,7 @@
 // The Worker authenticates the request and works out the user's role before forwarding it here, so
 // the object trusts the x-* headers (it can only be reached through the Worker's binding).
 
+import { deleteChunks, isChunked, readDocument } from './fileStore.ts';
 import { DOCX, docxKey } from './keys.ts';
 import { ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Transaction } from '@golemdocs/ops';
 import type { DurableObjectState, Env, SqlStorage, WebSocketHandle } from './cf.ts';
@@ -110,16 +111,20 @@ export class CloudFiles implements RoomFiles {
   private key = () => docxKey(this.owner(), this.doc());
 
   async read(): Promise<Uint8Array | null> {
-    const object = await this.env.FILES.get(this.key());
-    return object ? new Uint8Array(await new Response(object.body).arrayBuffer()) : null;
+    // Whole, however the file is kept (see fileStore.ts).
+    const bytes = await readDocument(this.env, this.key(), this.owner(), this.doc());
+    return bytes === 'too-large' ? null : bytes;
   }
 
   async write(bytes: Uint8Array): Promise<boolean> {
     const db = await userDb(this.env, this.owner());
     const row = await db.first<{ updated_at: number }>('SELECT updated_at FROM documents WHERE id = ?', [this.doc()]);
     if (!row) return false;
+    // A room saves the file whole, and chunks it was kept as before are of no use any more.
+    const before = await this.env.FILES.head(this.key());
     // Bytes first: a failure leaves an old file with a row that is merely out of date.
     await this.env.FILES.put(this.key(), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, { httpMetadata: { contentType: DOCX } });
+    if (isChunked(before)) await deleteChunks(this.env, this.owner(), this.doc()).catch((error) => console.error('removing chunks failed', error));
     // Strictly increasing, like an upload's: clients tell versions apart by it.
     await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, Math.max(Date.now(), row.updated_at + 1), this.doc()]);
     return true;

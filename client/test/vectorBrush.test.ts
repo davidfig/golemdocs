@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BRUSH_ATTR, CENTERLINE_ATTR, applyBrush, brushOf, brushOutline, editableCommands, profileAt, random, regenerate, setEditableCommands, strokeWidthOf } from '../src/vector/brush.ts';
+import { BRUSH_ATTR, CENTERLINE_ATTR, applyBrush, brushOf, brushOutline, editableCommands, pressureProfile, pressureVaries, profileAt, random, regenerate, setEditableCommands, strokeWidthOf } from '../src/vector/brush.ts';
 import { BRUSH_PRESETS, presetById } from '../src/vector/brushPresets.ts';
 import { flatten, insideFill } from '../src/vector/hit.ts';
 import type { PathNode } from '../src/vector/model.ts';
@@ -180,4 +180,31 @@ test('a bristle stroke is made of streaks, tapers at its ends and is the same ev
   const ink = brushOutline(parsePath('M0 0 L200 0'), presetById('dryInk')!.make(14));
   assert.ok(heightAt(ink, 60) > heightAt(ink, 4) + 3);
   assert.ok(heightAt(ink, 60) > heightAt(ink, 196) + 3);
+});
+
+test('a pen pressed harder draws a wider line, following the pressure along the stroke', () => {
+  const points = Array.from({ length: 11 }, (_, i) => ({ x: i * 10, y: 0 }));
+  const pressures = points.map((_, i) => (i < 5 ? 0.2 : 1));
+  const profile = pressureProfile(points, pressures)!;
+  assert.equal(profile[0][0], 0);
+  assert.equal(profile[profile.length - 1][0], 1);
+  assert.ok(profileAt(profile, 0.1) < 0.3 && profileAt(profile, 0.9) > 0.9);
+  const out = brushOutline(line, { kind: 'profile', width: 20, profile });
+  assert.ok(heightAt(out, 90) > heightAt(out, 10) * 2.5);
+});
+
+test('a pressure profile never falls to nothing, is kept short, and needs a stroke with length', () => {
+  const points = Array.from({ length: 300 }, (_, i) => ({ x: i, y: 0 }));
+  const profile = pressureProfile(points, points.map(() => 0))!;
+  assert.ok(profile.length <= 48);
+  assert.ok(profile.every(([, f]) => f >= 0.05));
+  assert.equal(pressureProfile([{ x: 0, y: 0 }], [0.5]), null);
+  assert.equal(pressureProfile([{ x: 3, y: 3 }, { x: 3, y: 3 }], [0.5, 0.5]), null);
+});
+
+test('pressure counts only when it changes: a pen with pressure turned off reports the same every time', () => {
+  assert.equal(pressureVaries(undefined), false);
+  assert.equal(pressureVaries([0.5, 0.5, 0.5]), false);
+  assert.equal(pressureVaries([0.5, 0.52, 0.49]), false);
+  assert.equal(pressureVaries([0.2, 0.5, 0.9]), true);
 });

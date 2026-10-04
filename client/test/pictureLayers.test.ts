@@ -96,3 +96,45 @@ test('a picture’s shapes are kept in its extension in a .wdoc and come back', 
   assert.deepEqual(read.extensions.img?.shapes, shapes);
   assert.equal(read.manifest.lens, 'png');
 });
+
+test('shapes changed from an older list (a drag while others drew) keep what others did meanwhile', () => {
+  const server = new CollabServer();
+  const make = (client: string) => {
+    const inbox: any[] = [];
+    const layers = new PictureLayers([line('a'), line('b')]);
+    const sync = new ObjectSync(layers, client);
+    const connection = server.connect((m) => inbox.push(m));
+    sync.connect((m) => void connection.submit(m), 0);
+    return { layers, sync, inbox };
+  };
+  const ann = make('ann');
+  const ben = make('ben');
+  const deliver = () => {
+    for (let round = 0; round < 10; round++) {
+      let any = false;
+      for (const p of [ann, ben]) for (const m of p.inbox.splice(0)) (any = true), p.sync.receive(m);
+      if (!any) break;
+    }
+  };
+  // Ann starts moving a; meanwhile Ben draws c and erases b.
+  const base = [...ann.layers.shapes];
+  ben.layers.set([line('a'), line('c')]);
+  ben.sync.local();
+  deliver();
+  const moved = [line('a', 5), line('b')];
+  assert.equal(ann.sync.localFrom(PictureLayers.objectsOf(base), PictureLayers.objectsOf(moved), () => ann.layers.set(moved)), true);
+  deliver();
+  for (const p of [ann, ben]) assert.deepEqual(p.layers.shapes.map((s) => [s.id, s.points[0].x]), [['a', 5], ['c', 0]], 'the move, ben’s new shape, and b still erased');
+  ann.sync.undo();
+  deliver();
+  assert.deepEqual(ben.layers.shapes.map((s) => [s.id, s.points[0].x]), [['a', 0], ['c', 0]], 'her undo takes back only the move');
+});
+
+test('shapes changed from the list the picture still has are kept in the order given (a layer moved)', () => {
+  const layers = new PictureLayers([line('a'), line('b'), line('c')]);
+  const sync = new ObjectSync(layers, 'me');
+  const base = [...layers.shapes];
+  const reordered = [line('c'), line('a'), line('b')];
+  assert.equal(sync.localFrom(PictureLayers.objectsOf(base), PictureLayers.objectsOf(reordered), () => layers.set(reordered)), false);
+  assert.deepEqual(layers.shapes.map((s) => s.id), ['c', 'a', 'b']);
+});

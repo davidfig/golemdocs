@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': 'Seleccionar el trazo del lápiz al terminarlo',
   'dialogs.options.returnToSelect': 'Volver a la herramienta Seleccionar tras dibujar una forma o un trazado de pluma',
   'dialogs.options.pencilSmoothing': 'Suavizado del lápiz',
+  'dialogs.options.penPressure': 'Dibujar líneas más gruesas cuanto más se presione el lápiz de la tableta',
   'dialogs.options.off': 'Desactivado',
   'dialogs.options.low': 'Bajo',
   'dialogs.options.medium': 'Medio',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': 'Guías',
   'dialogs.options.showGuides': 'Mostrar guías',
   'dialogs.options.lockGuides': 'Bloquear guías',
+  'dialogs.find.wholeWord': 'Palabra completa',
+  'dialogs.find.regex': 'Expresión regular',
 };

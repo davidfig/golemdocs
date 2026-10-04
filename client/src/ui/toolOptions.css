@@ -10,12 +10,12 @@
   gap: 16px;
   padding: 4px 12px;
   transform: translateX(-50%);
-  border: 1px solid var(--wm-border);
-  border-radius: 4px;
+  border: 1px solid var(--wm-menu-border);
+  border-radius: var(--wm-radius);
   background: var(--wm-face);
   color: var(--wm-text);
   font: 12px/1.4 var(--wm-font);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+  box-shadow: var(--wm-float-shadow);
 }
 
 .wm-tool-options[hidden] {

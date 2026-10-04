@@ -13,7 +13,8 @@
 // Documents shared with a person aren't in the index (it could only be searched through the
 // owner's namespace); the page looks through those itself.
 
-import { WordDocument, paragraphSegments, type Segment } from '@golemdocs/docx';
+import { readDocument } from './fileStore.ts';
+import { WordDocument, isPlainText, paragraphSegments, textSegments, type Segment } from '@golemdocs/docx';
 import type { AiBinding, Env } from './cf.ts';
 import { HttpError } from './http.ts';
 import { docxKey } from './keys.ts';
@@ -101,8 +102,9 @@ const vectorId = (doc: string, chunk: number) => `${doc}:${chunk}`;
 export async function indexDocument(env: Env, ownerId: string, doc: IndexedDocument, bytes: Uint8Array): Promise<void> {
   const index = env.VECTORS!;
   // The app saves its own wrapper around the .docx: one with no document in it has no text to index.
-  const docx = await storedDocx(bytes);
-  const chunks = docx ? chunkSegments(paragraphSegments(await WordDocument.read(docx))) : [];
+  // A plain text file is kept as it is: its lines are its paragraphs.
+  const docx = isPlainText(bytes) ? null : await storedDocx(bytes);
+  const chunks = isPlainText(bytes) ? chunkSegments(textSegments(bytes)) : docx ? chunkSegments(paragraphSegments(await WordDocument.read(docx))) : [];
   // The name is part of what each chunk is about, and what finds a document by its title.
   const vectors = chunks.length ? await embed(env.AI!, chunks.map((c) => `${doc.name}\n${c.text}`)) : [];
   if (vectors.length) {
@@ -190,8 +192,9 @@ export async function handleSearch(env: Env, userId: string, query: string, db: 
     text,
     rows.map((r) => ({ id: r.id, name: r.name, updatedAt: r.updated_at })),
     async (id) => {
-      const object = await env.FILES.get(docxKey(userId, id));
-      return object && object.size <= MAX_BYTES ? new Uint8Array(await new Response(object.body).arrayBuffer()) : null;
+      // The file whole, however it is kept (see fileStore.ts); a big one is left out.
+      const bytes = await readDocument(env, docxKey(userId, id), userId, id, MAX_BYTES);
+      return bytes === 'too-large' ? null : bytes;
     },
   );
 }

@@ -78,11 +78,11 @@ test('markup characters are plain text', async () => {
 
 test('default font is monospace and paragraph spacing is tight', async () => {
   const doc = await textToDocument('x');
-  assert.equal(doc.styles.defaultRunProperties?.fonts?.ascii, 'Courier New');
+  assert.equal(doc.styles.defaultRunProperties?.fonts?.ascii, 'JetBrains Mono');
   assert.equal(doc.styles.defaultParagraphProperties?.spacing?.after, 0);
   // Survives a save.
   const back = await WordDocument.read(await doc.write());
-  assert.equal(back.styles.defaultRunProperties?.fonts?.ascii, 'Courier New');
+  assert.equal(back.styles.defaultRunProperties?.fonts?.ascii, 'JetBrains Mono');
   assert.equal(documentToText(back), 'x');
 });
 

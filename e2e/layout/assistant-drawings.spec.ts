@@ -100,7 +100,6 @@ test.describe('who is editing', () => {
     await b.page.goto(url);
     await b.ready();
     await expect.poll(() => tool(a, 'collaboration_status'), { timeout: 30_000 }).toMatch(/people are editing now\. Everyone can edit at once\./);
-    expect(await tool(a, 'take_over_editing')).toContain('Nothing to take over');
     await context.close();
   });
 });
@@ -120,7 +119,6 @@ test.describe('a drawing in a room', () => {
     await b.page.goto(url);
     await b.ready();
     await b.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem').first().waitFor({ timeout: 30_000 });
-    await expect(b.page.locator('.wm-lease')).toBeHidden();
     expect(await tool(a, 'edit_drawing', { op: 'add_rect', x: 200, y: 20, width: 50, height: 50 })).not.toContain('Error');
     expect(await tool(b, 'edit_drawing', { op: 'add_rect', x: 0, y: 0, width: 5, height: 5 })).not.toContain('Error');
     const rows = (app: InstanceType<typeof AppClass>) => app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');

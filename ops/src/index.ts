@@ -7,3 +7,4 @@ export * from './collab.ts';
 export * from './replica.ts';
 export * from './multiplayer.ts';
 export * from './objects.ts';
+export * from './textOps.ts';

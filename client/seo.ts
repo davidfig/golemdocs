@@ -25,7 +25,7 @@ const FEATURE_PAGES = [
   { name: 'customize', label: 'Make it yours', blurb: 'Word 2003 menus, five color schemes, dark mode, and 11 languages.', description: 'A Word 2003-style editor you can make your own: color schemes, dark mode, customizable toolbars, and 11 languages.' },
   { name: 'import', label: 'Import files and folders', blurb: 'Bring in files, whole folders, and ZIP archives, keeping their folders.', description: 'Import files, folders, and ZIP archives into Golem Docs. Documents land in the same folders they came from, names never collide, and nothing is uploaded.' },
   { name: 'obsidian', label: 'Import an Obsidian vault', blurb: 'Move your notes from Obsidian, folders and all.', description: 'Import an Obsidian vault into Golem Docs as a folder or ZIP: your notes arrive in their folders, with properties kept and nothing uploaded.' },
-  { name: 'large-files', label: 'Huge text files', blurb: 'Open, search, and filter 50 MB log files without freezing.', description: 'Open text and log files of 50 MB and more in your browser, then scroll, search, filter, and copy without freezing.' },
+  { name: 'large-files', label: 'Huge text files', blurb: 'Open, search, edit, and replace in 50 MB log files without freezing.', description: 'Open text and log files of 50 MB and more in your browser, then scroll, search, filter, edit, replace, and copy without freezing.' },
 ];
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

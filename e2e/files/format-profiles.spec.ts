@@ -37,15 +37,12 @@ test('HTML: pictures and code blocks, but no comments or footnotes', async ({ ap
   for (const item of ['Comment', 'Footnote', 'Page Numbers']) expect(hasItem(insert, item, true), item).toBe(false);
 });
 
-test('plain text: no formatting at all, and no tables or pictures', async ({ app }) => {
+test('plain text: edited in the text editor, which has no formatting, tables or pictures', async ({ app }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('a.txt', 'hello'));
-  const insert = await menuContents(app, 'Insert');
-  for (const item of ['Table', 'Picture', 'Hyperlink', 'Horizontal Line', 'Code Block', 'Comment']) expect(hasItem(insert, item, true), item).toBe(false);
-  expect(hasItem(insert, 'Date and Time')).toBe(true);
-  expect((await menuContents(app, 'Format'))?.items).toEqual(['Change Case']);
-  expect(await menuContents(app, 'Table')).toBeNull();
-  // The menus still open documents, find text and download.
+  for (const name of ['Format', 'Table']) expect(await menuContents(app, name), name).toBeNull();
+  expect((await menuContents(app, 'Insert'))?.items).toEqual(['Date and Time', 'ΩSymbol']);
+  // The menus still open documents, find text, print and download.
   for (const item of ['Download', 'Convert To', 'Print']) expect(hasItem(await menuContents(app, 'File'), item)).toBe(true);
   expect(hasItem(await menuContents(app, 'Edit'), 'Find')).toBe(true);
 });

@@ -6,7 +6,7 @@
 import { isMathInline, ListCounter, readMathInline, StyleResolver, toLatex, WordDocument } from '@golemdocs/docx';
 import type { Block, Inline, Paragraph, RunContent, Table } from '@golemdocs/docx';
 
-const MONOSPACE = 'Courier New';
+const MONOSPACE = 'JetBrains Mono';
 
 /**
  * A document with one paragraph per line of `source`. Blank lines are empty paragraphs, tabs stay

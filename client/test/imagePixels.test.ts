@@ -146,3 +146,119 @@ test('pages stacked in one picture: full scale when they fit, smaller when they 
   assert.ok(lots.count < 200 && lots.count >= 1 && lots.scale >= 0.5 - 1e-9 && lots.height <= 16384);
   assert.equal(pictureLayout([], limits).count, 1);
 });
+
+import { anchorOffset, floodMask } from '../src/formats/imagePixels.ts';
+
+/** RGBA pixels from rows of letters: . is white, # is black, o is grey. */
+const picture = (...rows: string[]): Uint8ClampedArray => {
+  const colors: Record<string, number[]> = { '.': [255, 255, 255, 255], '#': [0, 0, 0, 255], o: [128, 128, 128, 255] };
+  return Uint8ClampedArray.from(rows.flatMap((row) => [...row].flatMap((c) => colors[c])));
+};
+const filled = (mask: Uint8Array, width: number): string[] => Array.from({ length: mask.length / width }, (_, y) => [...mask.slice(y * width, y * width + width)].map((v) => (v ? 'x' : '-')).join(''));
+
+test('the bucket floods the connected pixels of the clicked colour and stops at other colours', () => {
+  const data = picture('..#..', '..#..', '..#..');
+  assert.deepEqual(filled(floodMask(data, 5, 3, 0, 0, 0), 5), ['xx---', 'xx---', 'xx---']);
+  // Not connected to the right-hand side, unless every pixel of that colour is taken.
+  assert.deepEqual(filled(floodMask(data, 5, 3, 0, 0, 0, false), 5), ['xx-xx', 'xx-xx', 'xx-xx']);
+});
+
+test('tolerance lets the bucket cross near colours', () => {
+  const data = picture('.o#');
+  assert.deepEqual(filled(floodMask(data, 3, 1, 0, 0, 0), 3), ['x--']);
+  assert.deepEqual(filled(floodMask(data, 3, 1, 0, 0, 130), 3), ['xx-']);
+  assert.deepEqual(filled(floodMask(data, 3, 1, 0, 0, 255), 3), ['xxx']);
+});
+
+test('a click outside the picture floods nothing, and a large flood does not overflow the stack', () => {
+  assert.equal(floodMask(picture('..'), 2, 1, 5, 0, 0).some(Boolean), false);
+  const size = 600;
+  const big = new Uint8ClampedArray(size * size * 4).fill(255);
+  assert.equal(floodMask(big, size, size, 0, 0, 0).every(Boolean), true);
+});
+
+test('the picture sits where its anchor says on a canvas of another size', () => {
+  const from = { width: 100, height: 50 };
+  const to = { width: 200, height: 150 };
+  assert.deepEqual(anchorOffset(from, to, 'nw'), { x: 0, y: 0 });
+  assert.deepEqual(anchorOffset(from, to, 'center'), { x: 50, y: 50 });
+  assert.deepEqual(anchorOffset(from, to, 'se'), { x: 100, y: 100 });
+  assert.deepEqual(anchorOffset(from, to, 'n'), { x: 50, y: 0 });
+  assert.deepEqual(anchorOffset(from, { width: 60, height: 50 }, 'e'), { x: -40, y: 0 });
+});
+
+import { growMask } from '../src/formats/imagePixels.ts';
+
+test('a fill is grown into the soft edge of a line, but not into the line itself', () => {
+  // White, then two soft pixels (a light and a dark mix), then the black line.
+  const colors = [[255, 255, 255], [255, 255, 255], [200, 200, 200], [90, 90, 90], [0, 0, 0], [0, 0, 0]];
+  const data = Uint8ClampedArray.from(colors.flatMap((c) => [...c, 255]));
+  const flooded = floodMask(data, 6, 1, 0, 0, 10);
+  assert.deepEqual([...flooded].map((v) => (v ? 1 : 0)), [1, 1, 0, 0, 0, 0]);
+  // The first ring takes the light mix (within 191 of white); the dark mix and the line are left.
+  assert.deepEqual([...growMask(data, 6, 1, flooded, 0, 0)].map((v) => (v ? 1 : 0)), [1, 1, 1, 0, 0, 0]);
+  // With more rings, still not the dark mix (165 away, over the limit of the second ring).
+  assert.deepEqual([...growMask(data, 6, 1, flooded, 0, 0, [191, 191])].map((v) => (v ? 1 : 0)), [1, 1, 1, 1, 0, 0]);
+  // A click outside changes nothing.
+  assert.equal(growMask(data, 6, 1, flooded, 9, 0), flooded);
+});
+
+import { brushStroke, stampPoints } from '../src/formats/imagePixels.ts';
+
+/** A row of `n` pixels, black on the left half and white on the right half. */
+const halves = (n: number, height = 1): Uint8ClampedArray => Uint8ClampedArray.from(Array.from({ length: n * height }, (_, i) => (i % n < n / 2 ? [0, 0, 0, 255] : [255, 255, 255, 255])).flat());
+const red = (data: Uint8ClampedArray, width: number, x: number, y = 0): number => data[(y * width + x) * 4];
+
+test('stamps are spaced evenly along a path, round corners too', () => {
+  const stamps = stampPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], 8);
+  // A radius of 8 puts stamps 2 pixels apart: the first, then every 2 along 20 pixels of path.
+  assert.equal(stamps.length, 11);
+  assert.deepEqual(stamps[5], { x: 10, y: 0 });
+  assert.deepEqual(stampPoints([{ x: 3, y: 3 }], 8), [{ x: 3, y: 3 }]);
+  assert.deepEqual(stampPoints([], 8), []);
+});
+
+test('smudge drags the colour from where the stroke began along its path', () => {
+  const [w, h] = [40, 9];
+  const data = halves(w, h);
+  // From inside the black half across the edge into the white half.
+  brushStroke(data, w, h, 'smudge', [{ x: 10, y: 4 }, { x: 30, y: 4 }], 4, 1);
+  // Past the edge the white has been pulled darker, and far from the stroke nothing changed.
+  assert.ok(red(data, w, 24, 4) < 200);
+  assert.equal(red(data, w, 38, 4), 255);
+  assert.equal(red(data, w, 2, 4), 0);
+  // A weaker strength drags less far.
+  const weak = halves(w, h);
+  brushStroke(weak, w, h, 'smudge', [{ x: 10, y: 4 }, { x: 30, y: 4 }], 4, 0.2);
+  assert.ok(red(weak, w, 24, 4) > red(data, w, 24, 4));
+});
+
+test('the mixer lays its colour down and mixes it with what it passes over', () => {
+  const [w, h] = [40, 9];
+  const data = new Uint8ClampedArray(w * h * 4).fill(255);
+  brushStroke(data, w, h, 'mixer', [{ x: 5, y: 4 }, { x: 35, y: 4 }], 4, 0.5, '#ff0000');
+  const at = (x: number): number[] => [...data.slice((4 * w + x) * 4, (4 * w + x) * 4 + 3)];
+  // Red where it began, and fading toward the white it passes over.
+  assert.ok(at(6)[0] > 200 && at(6)[1] < 120);
+  assert.ok(at(30)[1] > at(6)[1]);
+});
+
+test('blur softens a hard edge, sharpen hardens a soft one, dodge lightens and burn darkens', () => {
+  const [w, h] = [40, 15];
+  const blurred = halves(w, h);
+  brushStroke(blurred, w, h, 'blurBrush', [{ x: 12, y: 7 }, { x: 28, y: 7 }], 8, 1);
+  assert.ok(red(blurred, w, 19, 7) > 0 && red(blurred, w, 20, 7) < 255);
+  const sharp = halves(w, h);
+  brushStroke(sharp, w, h, 'sharpenBrush', [{ x: 12, y: 7 }, { x: 28, y: 7 }], 8, 1);
+  // Sharpening overshoots at an edge: clamped to the ends, never in between.
+  assert.equal(red(sharp, w, 18, 7), 0);
+  assert.equal(red(sharp, w, 22, 7), 255);
+  const grey = new Uint8ClampedArray(w * h * 4).fill(128);
+  const lighter = grey.slice();
+  const darker = grey.slice();
+  brushStroke(lighter, w, h, 'dodge', [{ x: 20, y: 7 }], 6, 1);
+  brushStroke(darker, w, h, 'burn', [{ x: 20, y: 7 }], 6, 1);
+  assert.ok(red(lighter, w, 20, 7) > 128 && red(darker, w, 20, 7) < 128);
+  // Far from the brush, nothing changes.
+  assert.equal(red(lighter, w, 2, 1), 128);
+});

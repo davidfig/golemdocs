@@ -66,7 +66,7 @@ export const app: Partial<Messages> = {
   'app.roomViewOnly': 'lecture seule',
   'app.roomPeople.one': '{count} personne ici',
   'app.roomPeople': '{count} personnes ici',
-  'app.collabNotHere': 'Les images ne peuvent pas encore être modifiées à plusieurs',
+  'app.collabNotHere': 'Ce document ne peut pas être partagé',
   'app.collabFailed': 'Impossible de collaborer : {message}',
   'app.leaveRoomToSwitch': 'Quittez la salle de collaboration pour changer de format',
 
@@ -173,10 +173,6 @@ export const app: Partial<Messages> = {
   'app.docTooOld': 'Ce fichier a été enregistré avec Word 6 ou 95, ce qui n’est pas pris en charge. Ouvrez-le dans Word et enregistrez-le dans un format plus récent.',
   'app.docEncrypted': 'Ce document Word est protégé par un mot de passe. Supprimez le mot de passe dans Word, puis réessayez.',
   'app.docDamaged': 'Ce document Word est endommagé ou utilise une mise en page que nous ne pouvons pas lire.',
-  'room.leaseHeld': '{name} modifie ce dessin.',
-  'room.leaseFree': 'Personne ne modifie ce dessin.',
-  'room.leaseTakeOver': 'Prendre la main',
-  'room.leaseEdit': 'Modifier',
   'room.pdfPageOps': 'Il n’est pas encore possible de déplacer, supprimer ou pivoter des pages pendant que d’autres personnes modifient ce PDF.',
   'room.pdfImageTooBig': 'Cette image est trop grande pour être ajoutée pendant que d’autres personnes modifient ce PDF.',
 };

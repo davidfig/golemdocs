@@ -46,7 +46,7 @@ test('Markdown keeps its front matter through a trip via Word and back', async (
   expect(file.text).toContain('Body');
 });
 
-test('bold text downloads as ** in Markdown, is dropped in plain text, and is still there after switching back to Word', async ({ app }) => {
+test('bold text downloads as ** in Markdown, and is dropped in plain text for good (a text file is just text)', async ({ app }) => {
   await app.blank();
   await app.press(`${MOD}+b`);
   await app.type('strong');
@@ -62,7 +62,9 @@ test('bold text downloads as ** in Markdown, is dropped in plain text, and is st
 
   await convertTo(app, 'Word Document (.docx)', 'Word Document');
   const docx = await app.download(() => app.menu('File', 'Download'));
-  expect(readZip(docx.bytes).find((f) => f.name === 'word/document.xml')!.bytes.toString()).toMatch(/<w:b\b/);
+  const xml = readZip(docx.bytes).find((f) => f.name === 'word/document.xml')!.bytes.toString();
+  expect(xml).toContain('strong plain');
+  expect(xml).not.toMatch(/<w:b\b/);
 });
 
 test('a text file keeps its own name and extension on download', async ({ app }) => {

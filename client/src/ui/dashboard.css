@@ -42,8 +42,9 @@
   flex: 1;
   max-width: 360px;
   padding: 5px 8px;
-  border: 1px solid var(--wm-field-border, #7f9db9);
-  background: #fff;
+  border: 1px solid var(--wm-field-border);
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
 }
 
 .wm-dash-actions {
@@ -64,7 +65,7 @@
 }
 
 .wm-dashboard button:hover:not(:disabled) {
-  border-color: var(--wm-hot-border, #316ac5);
+  border-color: var(--wm-hot-border);
   background: var(--wm-hot, #c1d2ee);
 }
 
@@ -74,7 +75,7 @@
 }
 
 .wm-dashboard :focus-visible {
-  outline: 2px solid var(--wm-hot-border, #316ac5);
+  outline: 2px solid var(--wm-hot-border);
   outline-offset: 2px;
 }
 
@@ -83,11 +84,20 @@
   min-height: 0;
   overflow-y: auto;
   padding: 14px 20px 24px;
+  position: relative;
+}
+
+.wm-dash-marquee {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  border: 1px solid var(--wm-hot-border);
+  background: color-mix(in srgb, var(--wm-hot-border) 18%, transparent);
 }
 
 .wm-dash-notice {
   margin: 0 0 12px;
-  color: #8a4b00;
+  color: var(--wm-warning);
 }
 
 .wm-dash-notice:empty {
@@ -136,7 +146,7 @@
 
 .wm-card-open:hover .wm-thumb,
 .wm-card-open:focus-visible .wm-thumb {
-  border-color: var(--wm-hot-border, #316ac5);
+  border-color: var(--wm-hot-border);
 }
 
 .wm-thumb img {
@@ -193,7 +203,7 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 }
 
 .wm-card-meta {
-  color: #666;
+  color: var(--wm-muted);
   font-size: 12px;
 }
 
@@ -243,7 +253,7 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 .wm-dash-empty {
   grid-column: 1 / -1;
   margin: 8px 0;
-  color: #666;
+  color: var(--wm-muted);
 }
 
 @media (max-width: 640px) {
@@ -302,7 +312,7 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 }
 
 .wm-crumb-sep {
-  color: #666;
+  color: var(--wm-muted);
 }
 
 .wm-folder-art {
@@ -364,8 +374,9 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   width: 100%;
   box-sizing: border-box;
   padding: 3px 6px;
-  border: 1px solid var(--wm-field-border, #7f9db9);
-  background: #fff;
+  border: 1px solid var(--wm-field-border);
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
   font-weight: 600;
 }
 
@@ -378,13 +389,13 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 }
 
 .wm-card.wm-drop {
-  outline: 2px solid var(--wm-hot-border, #316ac5);
+  outline: 2px solid var(--wm-hot-border);
   outline-offset: 4px;
   background: var(--wm-hot, #c1d2ee);
 }
 
 .wm-dashboard .wm-crumb.wm-drop {
-  border-color: var(--wm-hot-border, #316ac5);
+  border-color: var(--wm-hot-border);
   background: var(--wm-hot, #c1d2ee);
 }
 
@@ -471,7 +482,7 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 }
 
 .wm-card.wm-selected .wm-thumb {
-  outline: 3px solid var(--wm-accent, #316ac5);
+  outline: 3px solid var(--wm-hot-border);
   outline-offset: 1px;
 }
 
@@ -513,4 +524,21 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 
 .wm-delete .wm-move-actions {
   gap: 8px;
+}
+
+/* New and the arrow listing the types to make, one control. */
+.wm-dash-split {
+  display: inline-flex;
+}
+
+.wm-dash-split .wm-dash-action:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.wm-dash-new-arrow {
+  margin-left: -1px;
+  padding-inline: 6px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }

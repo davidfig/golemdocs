@@ -41,7 +41,6 @@ export const menus: Catalog = {
   'menus.format.txt': 'Обычный текст',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Сообщение электронной почты',
-  'menus.format.largetext': 'Большой текст',
   'menus.format.png': 'Изображение PNG',
   'menus.format.jpeg': 'Изображение JPEG',
   'menus.format.webp': 'Изображение WebP',

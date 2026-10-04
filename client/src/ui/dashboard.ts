@@ -23,7 +23,10 @@ import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
-import { iconElement } from './icons.ts';
+import { ICONS, iconElement } from './icons.ts';
+import { showPopupMenu } from './popupMenu.ts';
+import { newKindItems } from './newKinds.ts';
+import type { DocumentKind } from './actions.ts';
 import './dashboard.css';
 
 const SIZE_KEY = 'golemdocs.dashboardIconSize';
@@ -34,7 +37,7 @@ const SIZE_DEFAULT = 120;
 /** What the dashboard asks of the application. */
 export interface DashboardHost {
   /** Starts a blank document, to be filed in `folderId` (null: the top level) when it is first saved. */
-  newDocument(folderId: string | null): void;
+  newDocument(folderId: string | null, docKind?: DocumentKind): void;
   /** The document open behind the dashboard (its ids in this browser and in the account), whose folder the dashboard starts in. */
   currentDocument(): { localId: string | null; cloudId: string | null };
   open(entry: LibraryEntry): void;
@@ -120,6 +123,28 @@ export class Dashboard {
     this.sharedGrid = h('div', { class: 'wm-dash-grid' });
     this.scroller = h('div', { class: 'wm-dash-scroll' }, this.notice, this.crumbs, this.grid, this.sharedTitle, this.sharedGrid);
     this.thumbnails = new Thumbnails(this.scroller);
+    // Right click on the screen: a new document (of the type chosen), or an import, in the folder shown.
+    this.scroller.addEventListener('contextmenu', (e) => {
+      if (e.target instanceof Element && e.target.closest('input, textarea')) return;
+      e.preventDefault();
+      const folderId = this.folderId;
+      showPopupMenu(
+        [
+          {
+            label: t('panels.dashboard.newBlank'),
+            items: newKindItems((kind) => {
+              this.hide();
+              this.host.newDocument(folderId, kind);
+            }),
+          },
+          { label: t('panels.dashboard.import'), run: () => this.host.importFile(folderId) },
+          { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folderId) },
+        ],
+        e.clientX,
+        e.clientY,
+        t('panels.dashboard.newBlank'),
+      );
+    });
     const action = (icon: string, label: string, aria: string, onClick: () => void): HTMLButtonElement => {
       const button = h('button', { class: 'wm-dash-action', attrs: { type: 'button', 'aria-label': aria } });
       this.setLabel(button, label, icon);
@@ -148,7 +173,25 @@ export class Dashboard {
     this.selectionCount = h('span', { class: 'wm-dash-selected', attrs: { role: 'status' } });
     this.selectionBar = h('div', { class: 'wm-dash-selection' }, this.selectionCount, moveSelected, deleteSelected, clearSelection);
     this.selectionBar.hidden = true;
-    const actions = h('div', { class: 'wm-dash-actions' }, blank, importButton, importFolderButton, this.newFolderButton, this.selectionBar);
+    // The arrow beside New lists the types, last used first; New itself makes the one used last.
+    const typeLabel = t('panels.dashboard.newBlank');
+    const typeButton = h('button', { class: 'wm-dash-action wm-dash-new-arrow', title: typeLabel, attrs: { type: 'button', 'aria-label': typeLabel, 'aria-haspopup': 'true' } });
+    typeButton.innerHTML = ICONS.dropdown;
+    typeButton.addEventListener('click', () => {
+      const box = typeButton.getBoundingClientRect();
+      const folderId = this.folderId;
+      showPopupMenu(
+        newKindItems((kind) => {
+          this.hide();
+          this.host.newDocument(folderId, kind);
+        }),
+        box.left,
+        box.bottom,
+        typeLabel,
+      );
+    });
+    const newSplit = h('span', { class: 'wm-dash-split' }, blank, typeButton);
+    const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.selectionBar);
     const size = this.sizeSlider();
     this.root = h(
       'section',
@@ -159,6 +202,7 @@ export class Dashboard {
     );
     this.root.hidden = true;
     this.takeFiles(this.root);
+    this.marqueeSelect(this.scroller);
     parent.append(this.root);
 
     this.search.addEventListener('input', () => {
@@ -489,6 +533,75 @@ export class Dashboard {
       },
       true,
     );
+  }
+
+  /** Dragging a box on the background ticks every card it touches (Ctrl/Cmd/Shift adds to what is ticked already). */
+  private marqueeSelect(scroller: HTMLElement): void {
+    scroller.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.pointerType !== 'mouse' || !(e.target instanceof Element)) return;
+      if (e.target.closest('[data-select], button, input, a, select, textarea, .wm-dash-crumbs')) return;
+      // Not on the scroll bar.
+      if (e.clientX >= scroller.getBoundingClientRect().left + scroller.clientWidth) return;
+      const bounds = (): DOMRect => scroller.getBoundingClientRect();
+      const point = (ev: PointerEvent): { x: number; y: number } => ({ x: ev.clientX - bounds().left + scroller.scrollLeft, y: ev.clientY - bounds().top + scroller.scrollTop });
+      const start = point(e);
+      const base = e.ctrlKey || e.metaKey || e.shiftKey ? new Set(this.selected) : new Set<string>();
+      let box: HTMLElement | null = null;
+      let last = e;
+      const update = (): void => {
+        const now = point(last);
+        const left = Math.min(start.x, now.x);
+        const top = Math.min(start.y, now.y);
+        const width = Math.abs(now.x - start.x);
+        const height = Math.abs(now.y - start.y);
+        if (!box) {
+          if (width < 4 && height < 4) return;
+          box = h('div', { class: 'wm-dash-marquee' });
+          scroller.append(box);
+        }
+        Object.assign(box.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+        const keys = new Set(base);
+        for (const card of this.grid.querySelectorAll<HTMLElement>('[data-select]')) {
+          const r = card.getBoundingClientRect();
+          const x = r.left - bounds().left + scroller.scrollLeft;
+          const y = r.top - bounds().top + scroller.scrollTop;
+          if (x < left + width && x + r.width > left && y < top + height && y + r.height > top) keys.add(card.dataset.select!);
+        }
+        this.selected.clear();
+        for (const key of keys) this.selected.add(key);
+        this.syncSelection();
+      };
+      // Near the top or bottom edge the list scrolls under the box.
+      const scroll = window.setInterval(() => {
+        const r = bounds();
+        const dy = last.clientY < r.top + 30 ? -16 : last.clientY > r.bottom - 30 ? 16 : 0;
+        if (dy) {
+          scroller.scrollTop += dy;
+          update();
+        }
+      }, 30);
+      const move = (ev: PointerEvent): void => {
+        last = ev;
+        update();
+      };
+      const end = (): void => {
+        window.clearInterval(scroll);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', end);
+        window.removeEventListener('pointercancel', end);
+        if (box) {
+          box.remove();
+          // The click that ends a drag must not also clear the selection.
+          const swallow = (ev: Event): void => ev.stopPropagation();
+          scroller.addEventListener('click', swallow, { capture: true, once: true });
+          window.setTimeout(() => scroller.removeEventListener('click', swallow, true), 0);
+        } else if (!base.size && this.selected.size) this.setSelection([]);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+      e.preventDefault();
+    });
   }
 
   /** Ticks every card from `from` to `to`, in the order shown (keeping what is ticked already). */

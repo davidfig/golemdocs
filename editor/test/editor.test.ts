@@ -362,6 +362,17 @@ test('whole-word find and replace, and replace all staying at the selected match
   assert.equal(`${editor.paragraphs().indexOf(editor.selection.focus.paragraph)}:${editor.selection.focus.offset}`, '0:11');
 });
 
+test('regular-expression find and replace all read $1, and an invalid expression finds nothing', skip, async () => {
+  const { editor, apply, texts } = await setup(['order 12-34', 'item 5-6']);
+  await apply({ kind: 'move', to: 'documentStart' });
+  assert.equal(editor.apply({ kind: 'find', text: '\\d+-\\d+', regex: true }).found, true);
+  assert.equal(editor.selection.focus.offset, 11);
+  assert.equal(editor.apply({ kind: 'find', text: '(', regex: true }).found, false);
+  editor.apply({ kind: 'replaceAll', text: '(\\d+)-(\\d+)', with: '$2/$1', regex: true });
+  await apply();
+  assert.deepEqual(texts(), ['order 34/12', 'item 6/5']);
+});
+
 test('insertTable adds a grid of empty cells, with a paragraph after it, and undoes', skip, async () => {
   const { doc, editor, apply, texts } = await setup(['Before']);
   await apply({ kind: 'move', to: 'documentEnd' });

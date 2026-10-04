@@ -9,6 +9,7 @@ import { h, keepFocus, setAttr, toggleClass } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 import { toolbarTitle } from './toolbarLayout.ts';
+import { newKindLabel, newKindOrder } from './newKinds.ts';
 
 export interface Control {
   el: HTMLElement;
@@ -57,7 +58,7 @@ export class Toolbar {
         this.el.append(el);
         continue;
       }
-      const c = item.type === 'button' ? commandButton(registry, item.id) : item.create();
+      const c = item.type === 'button' ? (item.id === 'file.new' ? newButton(registry) : commandButton(registry, item.id)) : item.create();
       this.controls.push(c);
       this.entries.push({ el: c.el, control: c });
       this.el.append(c.el);
@@ -157,6 +158,43 @@ export function commandButton(registry: CommandRegistry, id: string): Control {
       el.disabled = !registry.isEnabled(command);
       el.title = tooltip(command.tooltip ?? command.plainLabel, command.shortcutText);
       if (command.checked) setAttr(el, 'aria-pressed', String(registry.isChecked(command)));
+    },
+  };
+}
+
+/** File › New as a split button: the picture makes a document of the type used last; the arrow lists the types, last used first. */
+export function newButton(registry: CommandRegistry): Control {
+  const command = registry.get('file.new');
+  const main = h('button', { class: 'wm-tbutton wm-split-main', title: tooltip(command.tooltip ?? command.plainLabel, command.shortcutText), attrs: { type: 'button', tabindex: '-1', 'aria-label': command.plainLabel } }, command.icon ? iconElement(command.icon) : null);
+  const arrow = h('button', { class: 'wm-tbutton wm-split-arrow', title: command.plainLabel, attrs: { type: 'button', tabindex: '-1', 'aria-label': t('menus.split.options', { label: command.plainLabel }), 'aria-haspopup': 'listbox' } });
+  arrow.innerHTML = ICONS.dropdown;
+  keepFocus(main);
+  keepFocus(arrow);
+  const el = h('div', { class: 'wm-split' }, main, arrow);
+  main.addEventListener('click', () => registry.execute(command));
+  arrow.addEventListener('click', () => {
+    if (popupOpenFor(el)) return closePopup();
+    const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': command.plainLabel } });
+    for (const kind of newKindOrder()) {
+      const row = h('div', { class: 'wm-option', text: newKindLabel(kind), attrs: { role: 'option' } });
+      row.addEventListener('pointerenter', () => {
+        list.querySelector('.active')?.classList.remove('active');
+        row.classList.add('active');
+      });
+      row.addEventListener('click', () => {
+        closePopup();
+        registry.perform({ kind: 'new', docKind: kind }, command.plainLabel);
+        registry.focusEditor();
+      });
+      list.append(row);
+    }
+    openPopup(el, list);
+  });
+  return {
+    el,
+    available: () => registry.isAvailable(command),
+    refresh() {
+      main.disabled = arrow.disabled = !registry.isEnabled(command);
     },
   };
 }

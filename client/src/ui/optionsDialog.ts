@@ -2,7 +2,7 @@
 // kept (see drawingOptions.ts). So far: how the vector editor draws.
 
 import { t } from '../i18n/index.ts';
-import { SMOOTHING_LEVELS, lockGuidesOn, pencilSmoothing, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, type Smoothing } from './drawingOptions.ts';
+import { SMOOTHING_LEVELS, lockGuidesOn, penPressureOn, pencilSmoothing, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPenPressure, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, type Smoothing } from './drawingOptions.ts';
 import { h } from './dom.ts';
 import { showDialog } from './popup.ts';
 
@@ -29,6 +29,7 @@ export function optionsPanel(): HTMLElement {
       check(t('dialogs.options.selectAfterPencil'), selectAfterPencilOn(), setSelectAfterPencil),
       check(t('dialogs.options.returnToSelect'), returnToSelectOn(), setReturnToSelect),
       h('label', {}, t('dialogs.options.pencilSmoothing'), smoothing),
+      check(t('dialogs.options.penPressure'), penPressureOn(), setPenPressure),
     ),
     h(
       'fieldset',

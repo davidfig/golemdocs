@@ -34,7 +34,9 @@ test('the job turns a document\'s bytes into its index, empty when there is no t
   const index = await indexFromBytes(await docx('# Plan\n\nBuy cabinets #renovation'));
   assert.equal(searchIndex(index, parseQuery('cabinets'))?.paragraph, 1);
   assert.equal(searchIndex(index, parseQuery('#renovation'))?.paragraph, 1);
-  await assert.rejects(() => indexFromBytes(new Uint8Array([1, 2, 3]).buffer));
+  // A plain text file is kept as it is: its lines are its paragraphs. Bytes that are neither text nor a document are an error.
+  assert.equal(searchIndex(await indexFromBytes(new TextEncoder().encode('first\nsecond line').buffer as ArrayBuffer), parseQuery('second'))?.paragraph, 1);
+  await assert.rejects(() => indexFromBytes(new Uint8Array([1, 0, 3]).buffer));
 });
 
 /** A Worker that does the job in this thread, and records what happened to it. */

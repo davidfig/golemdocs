@@ -16,5 +16,11 @@ export const indexKey = (ownerId: string, docId: string): string => `${ownerId}/
 /** A picture people editing a document together added, kept by the hash of its bytes (see room.ts, roomMedia.ts). */
 export const mediaKey = (ownerId: string, docId: string, hash: string): string => `${ownerId}/${docId}.media/${hash}`;
 
+/** One chunk of a document kept as chunks, named by the SHA-256 of its bytes (see fileStore.ts). Chunks belong to one document: nothing is shared across documents or people. */
+export const chunkKey = (ownerId: string, docId: string, hash: string): string => `${ownerId}/${docId}.chunks/${hash}`;
+
+/** What every one of a document's chunks' keys starts with. */
+export const chunkPrefix = (ownerId: string, docId: string): string => `${ownerId}/${docId}.chunks/`;
+
 /** What every one of a document's pictures' keys starts with. */
 export const mediaPrefix = (ownerId: string, docId: string): string => `${ownerId}/${docId}.media/`;

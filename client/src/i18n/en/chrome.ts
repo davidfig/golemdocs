@@ -303,4 +303,8 @@ export const chrome = {
   'chrome.title.tip': 'Click to rename',
   'chrome.rename.title': 'Rename Document',
   'chrome.rename.action': 'Rename',
+  'chrome.shortcuts.picture': 'Picture Tools',
+  'chrome.shortcuts.pictureHint': 'Keys for the Draw tools, as in Photoshop. A tool can be a single letter, digit or symbol key.',
+  'chrome.file.openSelection': 'Open Selection as &Document',
+  'chrome.file.openSelection.tip': 'Open the selected lines as an ordinary document you can format and convert',
 } as const;

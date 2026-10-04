@@ -299,6 +299,7 @@ test('conflicted copies are named beside the original', async () => {
   const { conflictCopyName } = await import('../src/library.ts');
   assert.equal(conflictCopyName('Report.docx'), 'Report (conflicted copy).docx');
   assert.equal(conflictCopyName('notes'), 'notes (conflicted copy)');
+  assert.equal(conflictCopyName('Report (conflicted copy) (conflicted copy).docx'), 'Report (conflicted copy).docx', 'a copy of a copy does not grow the name');
   assert.equal(conflictCopyName('.hidden'), '.hidden (conflicted copy)');
 });
 
@@ -370,9 +371,9 @@ test('new documents are uploaded in one request, and one the server refused is l
 
 test('a batch the server refuses as a whole does not stop the next, and a document bigger than a batch is left out', async () => {
   const { BATCH_MAX_BYTES } = await import('../src/cloud.ts');
-  const half = new Uint8Array(Math.floor(BATCH_MAX_BYTES / 2) + 1); // two of these don't fit in one batch
-  const a = await local.saveSaved({ name: 'A.md', bytes: half });
-  const b = await local.saveSaved({ name: 'B.md', bytes: half });
+  // Just under the size from which a document is kept as chunks (and goes the single way, not in a batch): 13 of these don't fit in one batch.
+  const docs = [];
+  for (let i = 0; i < 13; i++) docs.push(await local.saveSaved({ name: `D${i}.md`, bytes: new Uint8Array(2_000_000) }));
   const huge = await local.saveSaved({ name: 'Huge.md', bytes: new Uint8Array(BATCH_MAX_BYTES + 1) });
   let requests = 0;
   globalThis.fetch = (async (_input: unknown, init?: { body?: Uint8Array }) => {
@@ -384,9 +385,9 @@ test('a batch the server refuses as a whole does not stop the next, and a docume
     return new Response(JSON.stringify({ results: documents.map((d: { name: string }) => ({ document: { id: `n-${d.name}`, name: d.name, size: 1, createdAt: 1, updatedAt: 5, thumbAt: null } })) }), { status: 201 });
   }) as typeof fetch;
   const { uploadNewToCloud } = await import('../src/library.ts');
-  const made = await uploadNewToCloud([a.id, b.id, huge.id]);
-  assert.equal(requests, 2, 'one batch each for A and B; none for the huge one');
-  assert.deepEqual([...made.keys()], [b.id]);
+  const made = await uploadNewToCloud([...docs.map((d) => d.id), huge.id]);
+  assert.equal(requests, 2, 'one batch for the first twelve (refused), one for the last; none for the huge one');
+  assert.deepEqual([...made.keys()], [docs[12]!.id]);
 });
 
 test('a request the server answers with 429 waits as long as it asked, then is sent again', async () => {

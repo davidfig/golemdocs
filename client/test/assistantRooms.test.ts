@@ -16,7 +16,7 @@ function png(width: number, height: number): Uint8Array {
   return bytes;
 }
 
-const ALONE: Collaboration = { shared: false, people: [], count: 1, exclusive: false, mine: false, holder: null };
+const ALONE: Collaboration = { shared: false, people: [], count: 1 };
 
 function setup(overrides: Partial<AppToolsHost> = {}) {
   const document = {};
@@ -38,8 +38,7 @@ function setup(overrides: Partial<AppToolsHost> = {}) {
     closeTextDrawing: async () => (log.push('close'), null),
     insertTextDrawing: async (size: { width?: number; height?: number }) => (log.push(`insert ${size.width ?? '-'}x${size.height ?? '-'}`), null),
     collaboration: () => collab,
-    lease: async (action: 'request' | 'release') => (log.push(`lease ${action}`), collab),
-    drawing: async () => ({ drawing: readSvg('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>'), readOnly: true }),
+    drawing: async () => ({ drawing: readSvg('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>') }),
     ...overrides,
   } as unknown as AppToolsHost;
   const tools = appTools(host);
@@ -104,29 +103,22 @@ test('drawings in the text are listed, inserted, opened and closed, and the reas
   assert.match(await setup().run('insert_text_drawing', { width: 5 }), /^Error: `width` must be/);
 });
 
-test('a drawing someone else is editing cannot be changed, and the answer says who and what to do', async () => {
-  const t = setup();
-  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2, exclusive: true, mine: false, holder: 'Ann' };
-  const answer = await t.run('edit_drawing', { op: 'add_rect', x: 0, y: 0, width: 5, height: 5 });
-  assert.match(answer, /^Error: Ann is editing this drawing now\./);
-  assert.match(answer, /collaboration \(take_over\)/);
-});
-
-test('collaboration says who is here and who may edit, takes over when it can, and does not keep asking when it cannot', async () => {
+test('collaboration says who is here, and that everyone edits at once', async () => {
   const t = setup();
   assert.equal(await t.run('collaboration_status'), 'Nobody else is editing this document now.');
-  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2, exclusive: false, mine: false, holder: null };
-  assert.match(await t.run('collaboration_status'), /Editing now: Ann, Ben \(you\)\. Everyone can edit at once\./);
-  assert.match(await t.run('take_over_editing'), /Nothing to take over/);
+  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2 };
+  assert.equal(await t.run('collaboration_status'), 'Editing now: Ann, Ben (you). Everyone can edit at once.');
+  t.collab = { shared: true, people: [], count: 3 };
+  assert.equal(await t.run('collaboration_status'), '3 people are editing now. Everyone can edit at once.');
+});
 
-  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2, exclusive: true, mine: false, holder: 'Ann' };
-  assert.match(await t.run('collaboration_status'), /Ann is editing this drawing now\./);
-  assert.match(await t.run('take_over_editing'), /^Refused: Ann is editing this drawing now\./);
-  assert.deepEqual(t.log, ['lease request']);
-  t.collab = { shared: true, people: [], count: 2, exclusive: true, mine: true, holder: 'Ben' };
-  assert.match(await t.run('take_over_editing'), /already may edit/);
-  assert.match(await t.run('release_editing'), /Let go|could not be let go/);
-  t.collab = { shared: true, people: [], count: 3, exclusive: true, mine: false, holder: null };
-  assert.match(await t.run('release_editing'), /nothing to let go of/);
-  assert.match(await t.run('collaboration_status'), /3 people are editing now\. Nobody holds the right/);
+test('once another document is open, a tool on the open document is refused, and one about other documents is not', async () => {
+  let open: object = {};
+  const t = setup({ current: () => open });
+  open = {};
+  assert.match(await t.run('edit_picture', { op: 'draw', tool: 'line', x: 1, y: 1, to_x: 9, to_y: 9 }), /no longer open/);
+  assert.match(await t.run('get_document_info'), /no longer open/);
+  assert.match(await t.run('set_view', { mode: 'pages' }), /no longer open/);
+  assert.equal(t.shapes.length, 0, 'nothing was drawn on the other document');
+  assert.doesNotMatch(await t.run('set_drawing_options', {}), /no longer open/);
 });

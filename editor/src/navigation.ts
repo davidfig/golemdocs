@@ -1,11 +1,11 @@
 // Moving the caret, and caret and selection geometry from the laid-out lines.
 import { type Position, type MoveTarget, type Rect, type Caret, type SelectionGeometry } from './types.ts';
 import type { Selection as OpSelection } from '@golemdocs/ops';
-import { WORD, SPACE } from './segment.ts';
 
 import { paragraphLength, paragraphText, plainText, type Paragraph } from '@golemdocs/docx';
 import { type Pos } from '@golemdocs/ops';
-import { cjkWords, graphemeAt, segmentAt } from './segment.ts';
+import { graphemeAt } from './segment.ts';
+import { charAfter, charBefore, wordLeft, wordRange, wordRight } from './textUnits.ts';
 import { toModel, toVisible, visibleLength, type LineRecord, type PageLayout, type SourceSpan } from '@golemdocs/layout';
 import { EditorBase } from './base.ts';
 
@@ -126,8 +126,7 @@ export abstract class EditorNavigation extends EditorBase {
     const text = paragraphText(pos.paragraph);
     if (!spans) {
       if (pos.offset <= 0) return null;
-      const from = pos.offset >= 2 && isLow(text.charCodeAt(pos.offset - 1)) && isHigh(text.charCodeAt(pos.offset - 2)) ? pos.offset - 2 : pos.offset - 1;
-      return [Math.min(from, graphemeAt(text, pos.offset - 1)?.[0] ?? from), pos.offset];
+      return [charBefore(text, pos.offset), pos.offset];
     }
     const v = toVisible(spans, pos.offset);
     if (v <= 0) return null;
@@ -143,8 +142,7 @@ export abstract class EditorNavigation extends EditorBase {
     const text = paragraphText(pos.paragraph);
     if (!spans) {
       if (pos.offset >= text.length) return null;
-      const to = isHigh(text.charCodeAt(pos.offset)) && isLow(text.charCodeAt(pos.offset + 1)) ? pos.offset + 2 : pos.offset + 1;
-      return [pos.offset, Math.max(to, graphemeAt(text, pos.offset)?.[1] ?? to)];
+      return [pos.offset, charAfter(text, pos.offset)];
     }
     const v = toVisible(spans, pos.offset);
     if (v >= visibleLength(spans)) return null;
@@ -156,54 +154,20 @@ export abstract class EditorNavigation extends EditorBase {
 
   /** Start of this or the previous word (across a paragraph start). */
   protected wordLeft(pos: Position): Position {
-    const text = paragraphText(pos.paragraph);
-    let i = pos.offset;
-    if (i === 0) return this.paragraphEdge(pos, -1) ?? pos;
-    while (i > 0 && SPACE.test(text[i - 1])) i--;
-    const cjk = cjkWords(text);
-    if (cjk) {
-      const s = i > 0 ? segmentAt(cjk, i - 1) : undefined;
-      return { paragraph: pos.paragraph, offset: s ? s.start : i };
-    }
-    if (i > 0 && WORD.test(text[i - 1])) while (i > 0 && WORD.test(text[i - 1])) i--;
-    else if (i > 0) i--;
-    return { paragraph: pos.paragraph, offset: i };
+    if (pos.offset === 0) return this.paragraphEdge(pos, -1) ?? pos;
+    return { paragraph: pos.paragraph, offset: wordLeft(paragraphText(pos.paragraph), pos.offset) };
   }
 
   /** Start of the next word (across a paragraph end). */
   protected wordRight(pos: Position): Position {
     const text = paragraphText(pos.paragraph);
-    let i = pos.offset;
-    if (i >= text.length) return this.paragraphEdge(pos, 1) ?? pos;
-    const cjk = cjkWords(text);
-    if (cjk) {
-      const s = segmentAt(cjk, i);
-      if (s && !/^\s/u.test(text[s.start])) i = s.end;
-      while (i < text.length && SPACE.test(text[i])) i++;
-      return { paragraph: pos.paragraph, offset: i };
-    }
-    if (WORD.test(text[i])) while (i < text.length && WORD.test(text[i])) i++;
-    else if (!SPACE.test(text[i])) i++;
-    while (i < text.length && SPACE.test(text[i])) i++;
-    return { paragraph: pos.paragraph, offset: i };
+    if (pos.offset >= text.length) return this.paragraphEdge(pos, 1) ?? pos;
+    return { paragraph: pos.paragraph, offset: wordRight(text, pos.offset) };
   }
 
   /** The word (or run of spaces, or single character) around a position. */
   protected wordAt(pos: Position): [Position, Position] {
-    const text = paragraphText(pos.paragraph);
-    let a = pos.offset;
-    let b = pos.offset;
-    const cjk = cjkWords(text);
-    if (cjk && text.length > 0) {
-      const s = segmentAt(cjk, a < text.length ? a : a - 1);
-      if (s && !/^\s/u.test(text[s.start])) return [{ paragraph: pos.paragraph, offset: s.start }, { paragraph: pos.paragraph, offset: s.end }];
-    }
-    const kind = (ch: string | undefined) => (ch === undefined ? 0 : WORD.test(ch) ? 1 : SPACE.test(ch) ? 2 : 3);
-    const k = kind(text[a]) || kind(text[a - 1]);
-    if (k === 1 || k === 2) {
-      while (a > 0 && kind(text[a - 1]) === k) a--;
-      while (b < text.length && kind(text[b]) === k) b++;
-    } else if (b < text.length) b++;
+    const [a, b] = wordRange(paragraphText(pos.paragraph), pos.offset);
     return [
       { paragraph: pos.paragraph, offset: a },
       { paragraph: pos.paragraph, offset: b },

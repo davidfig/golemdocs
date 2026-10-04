@@ -41,7 +41,6 @@ export const menus: Partial<Messages> = {
   'menus.format.txt': 'Texto sin formato',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Mensaje de correo electrónico',
-  'menus.format.largetext': 'Texto grande',
   'menus.format.png': 'Imagen PNG',
   'menus.format.jpeg': 'Imagen JPEG',
   'menus.format.webp': 'Imagen WebP',

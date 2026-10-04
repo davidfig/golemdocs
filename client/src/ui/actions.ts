@@ -5,6 +5,8 @@
 // format profile (formats.ts) decides which ones make sense for that kind of document at all.
 // Nothing here knows about .docx XML, the editor's model or the layout worker.
 
+import { DEFAULT_DRAW_STYLE } from '../formats/imageDraw.ts';
+import type { DrawStyle, DrawTool } from '../formats/imageDraw.ts';
 import type { ShapeId } from '../vector/shapes.ts';
 
 export type Mark = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'superscript' | 'subscript' | 'code';
@@ -38,13 +40,13 @@ export type TableOp =
   | 'properties';
 
 /** The tools of the Draw toolbar: each picks what the next stroke draws. */
-export type DrawToolName = 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'bubble' | 'step' | 'pixelate' | 'eraser' | 'move';
+export type DrawToolName = DrawTool;
 
 /** The vector editor's tools and commands (the Drawing menu): the tools pick what a drag draws or does; the rest act on the selection. */
 export type VectorOp = 'select' | 'rect' | 'ellipse' | 'shape' | `shape:${ShapeId}` | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas' | 'delete' | 'duplicate' | 'group' | 'ungroup' | 'front' | 'forward' | 'backward' | 'back' | 'selectAll' | 'unite' | 'intersect' | 'subtract' | 'exclude' | 'makeClip' | 'releaseClip' | 'makeMask' | 'releaseMask' | 'canvasSize' | 'newLayer' | 'newGroup' | 'guideV' | 'guideH' | 'clearGuides' | 'layers' | 'snap';
 
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
-export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | DrawToolName;
+export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | 'background' | 'canvasSize' | 'selectAll' | 'deselect' | 'duplicate' | 'group' | 'ungroup' | 'newLayer' | 'front' | 'forward' | 'backward' | 'back' | 'delete' | 'layers' | 'sizeUp' | 'sizeDown' | `shape:${ShapeId}` | DrawToolName;
 
 export type DialogName =
   | 'font'
@@ -70,8 +72,8 @@ export type DialogName =
 export type Action =
   // File
   /** The screen of thumbnails of every document. */
-  /** A blank document. `folderId` is where it is filed (null: the top level); left out, the folder of the open document. */
-  | { kind: 'new'; folderId?: string | null }
+  /** A blank document. `folderId` is where it is filed (null: the top level); left out, the folder of the open document. `docKind` is its type; left out, the one used last. */
+  | { kind: 'new'; folderId?: string | null; docKind?: DocumentKind }
   | { kind: 'open' }
   /** `folderId`: where the file goes (null: the top level); a ZIP's top level goes there. */
   | { kind: 'import'; folderId?: string | null }
@@ -97,6 +99,8 @@ export type Action =
   | { kind: 'download' }
   /** Download every saved document as one ZIP. */
   | { kind: 'downloadAll' }
+  /** In the large-text editor: open the selected lines as an ordinary document (formatting, converting), too long a selection being refused. */
+  | { kind: 'openSelection' }
   /**
    * Make a copy of the document in another format (Word ⇄ PDF ⇄ Markdown ⇄ text), saved next to
    * the original, and open it. The original is kept as it is.
@@ -167,7 +171,7 @@ export type Action =
   // Picture
   | { kind: 'image'; op: ImageOp }
   /** The colour (CSS) and line thickness step (0 thin to 3 extra thick) the Draw tools use. */
-  | { kind: 'drawStyle'; color?: string; size?: number; fill?: boolean }
+  | ({ kind: 'drawStyle' } & Partial<DrawStyle>)
   // Drawing (vector)
   | { kind: 'vector'; op: VectorOp }
   /** How the selected shapes (and the next ones) look; null is none. */
@@ -254,7 +258,7 @@ export interface ChromeState {
   /** The Format Painter has picked up formatting and is waiting for a selection to paint. */
   painting: boolean;
   /** The Draw toolbar: the tool picked (if any), its colour and its thickness step. */
-  draw: { tool: DrawToolName | null; color: string; size: number; fill: boolean };
+  draw: DrawStyle & { tool: DrawToolName | null; hasSelection: boolean; layers: boolean };
   /** The vector editor: the tool picked, whether anything is selected, and the look of the selection (or of the next shape). */
   vector: { tool: 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas'; shape: ShapeId; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string; gradient: { stops: { offset: number; color: string }[]; stop: number; type: 'linear' | 'radial' } | null; documentColors: string[] };
   /** Whether the open document is saved, for the button at the top right. */
@@ -307,7 +311,7 @@ export const DEFAULT_STATE: ChromeState = {
   format: {},
   formMode: null,
   painting: false,
-  draw: { tool: null, color: '#e5322d', size: 1, fill: false },
+  draw: { ...DEFAULT_DRAW_STYLE, tool: null, hasSelection: false, layers: false },
   vector: { tool: 'select', shape: 'star', hasSelection: false, multiple: false, clipped: false, masked: false, layers: false, snap: true, fill: null, stroke: null, strokeWidth: 1, fillType: 'solid', strokeStyle: 'dash:solid', gradient: null, documentColors: [] },
   inTable: false,
   sync: { user: null, document: 'guest', error: null },

@@ -4,7 +4,7 @@
 
 import { CHECKBOX, type Style } from '@golemdocs/docx';
 
-const MONO = 'Courier New';
+const MONO = 'JetBrains Mono';
 export const MONO_FONTS = { ascii: MONO, hAnsi: MONO, eastAsia: MONO, cs: MONO };
 
 /** Definitions of the styles Markdown documents use (headings, quotes, code, lists…), by id. */

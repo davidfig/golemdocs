@@ -14,17 +14,19 @@ import type { ResizeMode } from '../vector/canvas.ts';
 import { readGuides, snapBox, snapPoint, snapTargets, writeGuides } from '../vector/snap.ts';
 import type { SnapTargets } from '../vector/snap.ts';
 import { isClipped, isMasked, makeClippingMask, makeOpacityMask, releaseClippingMask, releaseOpacityMask } from '../vector/clipEdit.ts';
-import { applyBrush, brushOf, brushOutline, editableCommands, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
+import { applyBrush, brushOf, brushOutline, editableCommands, pressureProfile, pressureVaries, regenerate, setEditableCommands, strokeWidthOf, BRUSH_ATTR } from '../vector/brush.ts';
+import type { Brush } from '../vector/brush.ts';
 import { DASHES, presetById } from '../vector/brushPresets.ts';
 import { nudgeScene } from '../vector/nudge.ts';
-import { addEmptyGroup, isLayer, nextLayerName, isHidden, isLocked, moveNodeTo, setLocked, setName, setVisible, addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
+import { addEmptyGroup, isLayer, nextLayerName, isHidden, isLocked, lockedIn, moveNodeTo, setLocked, setName, setVisible, addNode, cloneScene, duplicateNodes, groupNodes, nodeAt, outermost, removeNodes, reorderNodes, selectionBounds, setStyle, styleOf, transformNodes, translateNodes, ungroupNode, worldMatrix } from '../vector/edit.ts';
 import type { NodePath, Order } from '../vector/edit.ts';
 import { outline } from '../vector/geometry.ts';
 import type { Bounds } from '../vector/geometry.ts';
 import { hitTest, hitTestAll, nodesInRect } from '../vector/hit.ts';
 import { apply, fmt, invert, multiply, rotation, scaling, translation } from '../vector/matrix.ts';
 import { freehandPath } from '../vector/freehand.ts';
-import { lockGuidesOn, nudgeSize, nudgeStrength, onDrawingOptions, pencilTolerance, returnToSelectOn, selectAfterPencilOn, setNudgeSize, setShowGuides, showGuidesOn } from './drawingOptions.ts';
+import { isPen, movesOf } from './pen.ts';
+import { lockGuidesOn, nudgeSize, nudgeStrength, onDrawingOptions, penPressureOn, pencilTolerance, returnToSelectOn, selectAfterPencilOn, setNudgeSize, setShowGuides, showGuidesOn } from './drawingOptions.ts';
 import { anchorOf, isSmooth, moveAnchor, moveHandle, nearestSegment, penPath, removeAnchor, splitSegment } from '../vector/pathEdit.ts';
 import type { PenPoint } from '../vector/pathEdit.ts';
 import type { GradientStop } from '../vector/gradientEdit.ts';
@@ -35,15 +37,18 @@ import { localBounds } from '../vector/geometry.ts';
 import { DEFAULT_SHAPE, shapePath, type ShapeId } from '../vector/shapes.ts';
 import { parseColor, parseLength, colorText, urlReference } from '../vector/style.ts';
 import { t } from '../i18n/index.ts';
-import { isFormField } from './dom.ts';
+import { PENCIL_CURSOR, RESIZE_CURSORS, ROTATE_CURSOR, badgedCursor } from './cursors.ts';
+import { isFormField, modalOpen } from './dom.ts';
+import { accentColor } from './theme.ts';
+import { drawHandle, drawKnob } from './handles.ts';
 import { pathsByUid } from '../vector/nodes.ts';
 import type { VectorFrame, VectorLayer } from './vectorLayer.ts';
 
 export interface VectorEditorHost {
   canvas: HTMLCanvasElement;
   layer: VectorLayer;
-  /** The drawing was changed: save it. */
-  changed(scene: Scene): void;
+  /** The drawing was changed (from `base`, when it is a change made here): save it. */
+  changed(scene: Scene, base?: Scene): void;
   /** Selection, tool or undo state changed (for the toolbar). */
   stateChanged(): void;
   /** Says something is not possible (a message for the person). */
@@ -77,27 +82,10 @@ const HANDLE_REACH = 7;
 const LINE_REACH = 4;
 /** How far the rotate handle stands above the box, in CSS pixels. */
 const ROTATE_OFFSET = 24;
-const ACCENT = '#316ac5';
 /** Two clicks this close in time and place are a double click. */
 const DOUBLE_CLICK_MS = 400;
 const DEFAULT_STYLE: ShapeStyle = { fill: '#5b8def', stroke: '#2e3148', strokeWidth: 2, fillType: 'solid', strokeStyle: 'dash:solid' };
 const DEFAULT_FONT_SIZE = 24;
-/** A curved arrow, as a cursor (browsers have none for turning), with its point in the middle; a grab hand where cursor images aren't used. */
-const ROTATE_CURSOR = (() => {
-  const arrow = "<path d='M5 13a7 7 0 0 1 12-5' fill='none'/><path d='M19 13a7 7 0 0 1-12 5' fill='none'/><path d='M14 3.5l4.5 3.5-5.5 1.5z' stroke-linejoin='round'/><path d='M10 20.5l-4.5-3.5 5.5-1.5z' stroke-linejoin='round'/>";
-  // A white outline under a dark one, so that it shows on any background.
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='white' stroke-width='4.2' fill='white'>${arrow}</g><g stroke='black' stroke-width='1.8' fill='black'>${arrow}</g></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, grab`;
-})();
-/** A pencil, as a cursor, with its point (the bottom left) where the line is drawn. */
-const PENCIL_CURSOR = (() => {
-  const body = "<path d='M3 21l1.200-4.200L16 5a2.100 2.100 0 0 1 3 3L7.200 19.800z'/><path d='M14 7l3 3'/>";
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='white' stroke-width='4' stroke-linejoin='round' fill='white'>${body}</g><g stroke='black' stroke-width='1.600' stroke-linejoin='round' fill='#ffd66b'>${body}</g></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 3 21, crosshair`;
-})();
-/** The cursor over each handle of the selection's box. */
-const RESIZE_CURSORS: Record<Exclude<Handle, 'rotate'>, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
-
 /** The area of the drawing's coordinates a page shows: its left, top, right and bottom. */
 interface PageBox {
   x0: number;
@@ -115,7 +103,7 @@ type Gesture =
   | { kind: 'band'; start: [number, number]; to: [number, number]; add: boolean; before: NodePath[] }
   | { kind: 'create'; tool: 'rect' | 'ellipse' | 'shape' | 'line'; start: [number, number]; to: [number, number]; square: boolean }
   | { kind: 'penHandle'; origin: [number, number] }
-  | { kind: 'pencil'; points: [number, number][]; /** The brush outline drawn for the first `count` points, kept until another point is added. */ outline?: { count: number; commands: PathCommand[] } }
+  | { kind: 'pencil'; points: [number, number][]; /** How hard a pen pressed at each point (0 to 1); none when drawn with a mouse or a finger. */ pressures?: number[]; /** The brush outline drawn for the first `count` points, kept until another point is added. */ outline?: { count: number; commands: PathCommand[] } }
   | { kind: 'nudge'; base: Scene; last: [number, number]; moved: boolean }
   | { kind: 'canvas'; handle: Exclude<Handle, 'rotate'>; from: PageBox; box: PageBox }
   | { kind: 'guide'; base: Scene; axis: 'v' | 'h'; index: number; moved: boolean }
@@ -174,8 +162,10 @@ export class VectorEditor {
         return PENCIL_CURSOR;
       case 'select':
         return '';
+      case 'rect':
+        return badgedCursor('rectangle');
       default:
-        return 'crosshair';
+        return badgedCursor(this._tool);
     }
   }
 
@@ -196,7 +186,7 @@ export class VectorEditor {
       case 'pencil':
         return PENCIL_CURSOR;
       default:
-        return 'crosshair';
+        return this.toolCursor();
     }
   }
 
@@ -212,7 +202,7 @@ export class VectorEditor {
         // Closing the path.
         if (Math.hypot(fx - sx, fy - sy) <= HANDLE_REACH) return 'pointer';
       }
-      return 'crosshair';
+      return badgedCursor('pen');
     }
     if (this._tool === 'text') return 'text';
     if (this._tool === 'pencil') return PENCIL_CURSOR;
@@ -220,7 +210,7 @@ export class VectorEditor {
       const edge = this.pageHandleAt(frame, sx, sy);
       return edge ? RESIZE_CURSORS[edge] : '';
     }
-    if (this._tool !== 'select') return 'crosshair';
+    if (this._tool !== 'select') return this.toolCursor();
     // Points and handles of the path being edited.
     if (this.nodes) {
       if (this.nodeAt(frame, sx, sy)) return 'move';
@@ -251,12 +241,16 @@ export class VectorEditor {
   /** The layer new shapes go on when nothing else says (the last one made or picked). */
   private activeLayer: NodePath | null = null;
 
-  /** Where a new shape goes: the group being worked in, else the layer of what is picked, else the layer last made or picked, else the top of the drawing. */
+  /**
+   * Where a new shape goes: the group being worked in, else the layer of what is picked, else the layer last made or picked, else the
+   * top of the drawing. Never into a locked or hidden one, where it could not be seen or changed.
+   */
   private container(scene: Scene): NodePath {
-    if (this.entered && nodeAt(scene, this.entered)?.kind === 'group') return this.entered;
+    const open = (path: NodePath): boolean => !lockedIn(scene, path, true);
+    if (this.entered && nodeAt(scene, this.entered)?.kind === 'group' && open(this.entered)) return this.entered;
     const first = this._selection[0];
-    if (first && isLayer(nodeAt(scene, [first[0]]))) return [first[0]];
-    if (this.activeLayer && isLayer(nodeAt(scene, this.activeLayer))) return this.activeLayer;
+    if (first && isLayer(nodeAt(scene, [first[0]])) && open([first[0]])) return [first[0]];
+    if (this.activeLayer && isLayer(nodeAt(scene, this.activeLayer)) && open(this.activeLayer)) return this.activeLayer;
     return [];
   }
 
@@ -293,7 +287,7 @@ export class VectorEditor {
   private newStop = 0;
 
   private readonly keys = (e: KeyboardEvent) => {
-    if (!this.scene || this._readOnly || isFormField(e.target)) return;
+    if (!this.scene || isFormField(e.target) || modalOpen()) return;
     if (this.key(e)) {
       e.preventDefault();
       e.stopPropagation();
@@ -319,20 +313,6 @@ export class VectorEditor {
   /** Whether a drawing is open for editing. */
   get active(): boolean {
     return this.scene !== null;
-  }
-
-  /** The drawing can be looked at but not changed (someone else is editing it, in a room). */
-  private _readOnly = false;
-
-  get readOnly(): boolean {
-    return this._readOnly;
-  }
-
-  set readOnly(on: boolean) {
-    if (on === this._readOnly) return;
-    this._readOnly = on;
-    if (on) this.cancelGesture();
-    this.host.stateChanged();
   }
 
   get selection(): readonly NodePath[] {
@@ -464,8 +444,8 @@ export class VectorEditor {
   sync(scene: Scene): void {
     if (!this.scene) return;
     if (this.gesture || this.typing || this.pen) {
+      if (!this.syncLater) window.setTimeout(() => this.syncPending(), 150);
       this.syncLater = scene;
-      window.setTimeout(() => this.syncPending(), 150);
       return;
     }
     const uids = this._selection.map((path) => nodeAt(this.scene!, path)?.uid).filter((uid): uid is string => !!uid);
@@ -517,7 +497,10 @@ export class VectorEditor {
 
   /** Keeps `scene` as the current drawing, the earlier one for undo, and tells the host. */
   private commit(scene: Scene, selection: NodePath[]): void {
-    if (!this.scene || this._readOnly) return;
+    if (!this.scene) return;
+    const base = this.scene;
+    // What others changed while this was being made is put together with it by the room's copy, which then comes back here.
+    this.syncLater = null;
     this.history.undo.push(this.scene);
     if (this.history.undo.length > HISTORY) this.history.undo.shift();
     this.history.redo = [];
@@ -526,7 +509,7 @@ export class VectorEditor {
     this.keepGroup();
     this.host.layer.update(scene);
     this.refresh();
-    this.host.changed(scene);
+    this.host.changed(scene, base);
   }
 
   /** The group being worked in is let go of when it is no longer one (it was deleted or taken apart). */
@@ -543,7 +526,7 @@ export class VectorEditor {
   }
 
   undo(): void {
-    if (this._readOnly || this.host.step?.('undo')) return;
+    if (this.host.step?.('undo')) return;
     const before = this.history.undo.pop();
     if (!before || !this.scene) return;
     this.history.redo.push(this.scene);
@@ -551,7 +534,7 @@ export class VectorEditor {
   }
 
   redo(): void {
-    if (this._readOnly || this.host.step?.('redo')) return;
+    if (this.host.step?.('redo')) return;
     const after = this.history.redo.pop();
     if (!after || !this.scene) return;
     this.history.undo.push(this.scene);
@@ -750,7 +733,7 @@ export class VectorEditor {
   pushLines(at: readonly [number, number], by: readonly [number, number], radius: number): boolean {
     if (!this.scene) return false;
     const next = cloneScene(this.scene);
-    if (!nudgeScene(next, { x: at[0], y: at[1] }, { x: by[0], y: by[1] }, radius)) return false;
+    if (!nudgeScene(next, { x: at[0], y: at[1] }, { x: by[0], y: by[1] }, radius, this._selection)) return false;
     this.commit(next, this._selection);
     return true;
   }
@@ -1052,7 +1035,7 @@ export class VectorEditor {
   }
 
   /** Sets a node's stroke style (see `ShapeStyle.strokeStyle`). */
-  private styleLine(scene: Scene, path: NodePath, value: string): void {
+  private styleLine(scene: Scene, path: NodePath, value: string, brushed: (brush: Brush) => Brush = (brush) => brush): void {
     let node = nodeAt(scene, path);
     if (!node || node.kind === 'raw' || node.kind === 'group' || node.kind === 'text' || node.kind === 'image' || node.kind === 'use') return;
     const [kind, id] = value.split(':');
@@ -1067,7 +1050,7 @@ export class VectorEditor {
     const width = node.kind === 'path' ? strokeWidthOf(node) : (parseLength(node.style['stroke-width']) ?? 1);
     if (kind === 'brush') {
       const preset = presetById(id);
-      if (preset && node.kind === 'path') applyBrush(node, preset.make(Math.max(width, 1)));
+      if (preset && node.kind === 'path') applyBrush(node, brushed(preset.make(Math.max(width, 1))));
       return;
     }
     if (node.kind === 'path') applyBrush(node, null);
@@ -1092,7 +1075,8 @@ export class VectorEditor {
   pick(paths: NodePath[], add: boolean): void {
     if (!this.scene) return;
     const kept = add ? [...this._selection] : [];
-    for (const p of paths) {
+    // What is locked, or in a locked layer, can be seen but not picked.
+    for (const p of paths.filter((path) => !lockedIn(this.scene!, path))) {
       const at = kept.findIndex((q) => q.join() === p.join());
       if (at >= 0 && add) kept.splice(at, 1);
       else if (at < 0) kept.push(p);
@@ -1140,7 +1124,8 @@ export class VectorEditor {
 
   selectAll(): void {
     if (!this.scene) return;
-    this.select(this.scene.children.map((_, i) => [i] as NodePath).filter((p) => this.scene!.children[p[0]].kind !== 'raw'));
+    const scene = this.scene;
+    this.select(scene.children.map((_, i) => [i] as NodePath).filter((p) => scene.children[p[0]].kind !== 'raw' && !lockedIn(scene, p, true)));
   }
 
   select(paths: NodePath[]): void {
@@ -1315,7 +1300,7 @@ export class VectorEditor {
   private down(e: PointerEvent): void {
     const scene = this.scene;
     // Alt alone pans the view; with Ctrl or Cmd it picks what is underneath.
-    if (!scene || this._readOnly || e.button !== 0 || (e.altKey && !(e.ctrlKey || e.metaKey))) return;
+    if (!scene || e.button !== 0 || (e.altKey && !(e.ctrlKey || e.metaKey))) return;
     const frame = this.host.layer.frame();
     if (!frame) return;
     // A press outside a drawing embedded in a document goes on to the document.
@@ -1335,7 +1320,7 @@ export class VectorEditor {
       case 'pen':
         return this.penDown(at, frame, double);
       case 'pencil':
-        this.gesture = { kind: 'pencil', points: [at] };
+        this.gesture = { kind: 'pencil', points: [at], ...(isPen(e) && { pressures: [e.pressure] }) };
         return;
       case 'canvas': {
         const [sx, sy] = this.screen(e);
@@ -1554,7 +1539,7 @@ export class VectorEditor {
       // Whatever is under the brush is pushed along with the pointer; the push so far is kept on the drawing as it goes.
       const next = cloneScene(this.scene!);
       const strength = nudgeStrength();
-      const pushed = nudgeScene(next, { x: gesture.last[0], y: gesture.last[1] }, { x: (at[0] - gesture.last[0]) * strength, y: (at[1] - gesture.last[1]) * strength }, nudgeSize() / (frame.unit || 1));
+      const pushed = nudgeScene(next, { x: gesture.last[0], y: gesture.last[1] }, { x: (at[0] - gesture.last[0]) * strength, y: (at[1] - gesture.last[1]) * strength }, nudgeSize() / (frame.unit || 1), this._selection);
       gesture.last = at;
       this.nudgeAt = at;
       if (pushed) {
@@ -1585,8 +1570,13 @@ export class VectorEditor {
     }
     if (gesture.kind === 'pencil') {
       // Every few pixels the pointer moves is a point of the stroke; they become a smooth path when it is let go.
-      const previous = gesture.points[gesture.points.length - 1];
-      if (Math.hypot(at[0] - previous[0], at[1] - previous[1]) * frame.unit >= 1.5) gesture.points.push(at);
+      for (const m of movesOf(e)) {
+        const p = this.point(m, frame);
+        const previous = gesture.points[gesture.points.length - 1];
+        if (Math.hypot(p[0] - previous[0], p[1] - previous[1]) * frame.unit < 1.5) continue;
+        gesture.points.push(p);
+        gesture.pressures?.push(m.pressure);
+      }
       return this.refresh();
     }
     if (gesture.kind === 'penHandle') {
@@ -1736,7 +1726,7 @@ export class VectorEditor {
       }, false);
     }
     if (gesture.kind === 'create') return this.create(gesture);
-    if (gesture.kind === 'pencil') return this.drawn(gesture.points);
+    if (gesture.kind === 'pencil') return this.drawn(gesture);
     if (gesture.kind === 'nudge' && !gesture.moved) return this.refresh();
     if (!gesture.moved || !this.scene) return;
     // The drawing as moved is the new one; the one before the gesture is what undo comes back to.
@@ -1767,14 +1757,14 @@ export class VectorEditor {
   }
 
   /** Puts a node on the drawing and selects it (unless `select` is false). Goes back to the select tool unless the options keep the drawing tool or `keepTool` does. */
-  private place(node: SceneNode, keepTool = !returnToSelectOn(), select = true, closedShape = false): void {
+  private place(node: SceneNode, keepTool = !returnToSelectOn(), select = true, closedShape = false, line?: { style?: string; brushed?: (brush: Brush) => Brush }): void {
     if (!this.scene) return;
     const next = cloneScene(this.scene);
     const path = addNode(next, node, this.container(next));
     if (this.shape.fillType !== 'solid' && node.kind !== 'text' && node.style.fill && node.style.fill !== 'none') this.fillWithGradient(next, path);
     // What the line is drawn with: dashes for any shape, a brush for a line.
-    const style = this.shape.strokeStyle;
-    if (style !== 'dash:solid' && ((node.kind === 'path' && !closedShape) || style.startsWith('dash:'))) this.styleLine(next, path, style);
+    const style = line?.style ?? this.shape.strokeStyle;
+    if (style !== 'dash:solid' && ((node.kind === 'path' && !closedShape) || style.startsWith('dash:'))) this.styleLine(next, path, style, line?.brushed);
     if (!keepTool) {
       this._tool = 'select';
       this.setCursor('');
@@ -1784,26 +1774,44 @@ export class VectorEditor {
 
   /** The outline the selected brush draws along the pencil stroke so far, or null when no brush is selected. */
   private pencilBrush(g: Extract<Gesture, { kind: 'pencil' }>, frame: VectorFrame): PathCommand[] | null {
-    const [kind, id] = this.shape.strokeStyle.split(':');
+    const [kind, id] = this.pencilStyle(g, false).split(':');
     const preset = kind === 'brush' ? presetById(id) : null;
     if (!preset) return null;
     if (g.outline?.count === g.points.length) return g.outline.commands;
     const line = freehandPath(g.points.map(([x, y]) => ({ x, y })), pencilTolerance() / frame.unit);
     const width = this.shape.stroke ? this.shape.strokeWidth : 1;
-    const commands = line.length ? brushOutline(line, preset.make(Math.max(width, 1))) : [];
+    const commands = line.length ? brushOutline(line, this.pencilStroke(g, preset.make(Math.max(width, 1)))) : [];
     g.outline = { count: g.points.length, commands };
     return commands;
   }
 
+  /**
+   * How a pencil stroke is drawn: the stroke style picked, except that a plain line drawn with a tablet's
+   * pen, pressed harder and lighter, becomes the Pen Pressure stroke (unless Tools › Options turns pen
+   * pressure off). A closed loop stays a plain line, as its inside is filled with the fill colour.
+   */
+  private pencilStyle(g: Extract<Gesture, { kind: 'pencil' }>, closed: boolean): string {
+    const style = this.shape.strokeStyle;
+    if (style !== 'dash:solid' || closed || !this.shape.stroke || !penPressureOn() || !pressureVaries(g.pressures)) return style;
+    return 'brush:pressure';
+  }
+
+  /** The Pen Pressure brush drawn with a pen follows how hard it was pressed, rather than its ready-made swell. */
+  private pencilStroke(g: Extract<Gesture, { kind: 'pencil' }>, brush: Brush): Brush {
+    if (brush.preset !== 'pressure' || !g.pressures || !penPressureOn()) return brush;
+    const profile = pressureProfile(g.points.map(([x, y]) => ({ x, y })), g.pressures);
+    return profile ? { ...brush, profile } : brush;
+  }
+
   /** A stroke drawn freehand becomes a smooth path, kept in the pencil tool for the next one. */
-  private drawn(points: readonly [number, number][]): void {
+  private drawn(g: Extract<Gesture, { kind: 'pencil' }>): void {
     const frame = this.host.layer.frame();
     if (!frame) return this.refresh();
     // How far the path may stray from the hand, in the drawing's units: a few pixels on screen.
-    const commands = freehandPath(points.map(([x, y]) => ({ x, y })), pencilTolerance() / frame.unit);
+    const commands = freehandPath(g.points.map(([x, y]) => ({ x, y })), pencilTolerance() / frame.unit);
     if (!commands.length) return this.refresh();
     const closed = commands[commands.length - 1][0] === 'Z';
-    this.place({ kind: 'path', commands, style: this.newStyle(closed), attrs: {} }, true, selectAfterPencilOn());
+    this.place({ kind: 'path', commands, style: this.newStyle(closed), attrs: {} }, true, selectAfterPencilOn(), false, { style: this.pencilStyle(g, closed), brushed: (brush) => this.pencilStroke(g, brush) });
   }
 
   private create(g: Extract<Gesture, { kind: 'create' }>): void {
@@ -2037,7 +2045,7 @@ export class VectorEditor {
       ctx.stroke();
     }
     ctx.lineWidth = 1;
-    ctx.strokeStyle = ACCENT;
+    ctx.strokeStyle = accentColor();
     ctx.fillStyle = '#fff';
     if (this.entered) {
       // The group being worked in, outlined, so that it is clear what clicks pick.
@@ -2090,7 +2098,7 @@ export class VectorEditor {
     const textWidth = ctx.measureText(label).width;
     const lx = left + Math.abs(x1 - x0) / 2 - textWidth / 2 - 6;
     const ly = top + Math.abs(y1 - y0) + 8;
-    ctx.fillStyle = ACCENT;
+    ctx.fillStyle = accentColor();
     ctx.fillRect(lx, ly, textWidth + 12, 20);
     ctx.fillStyle = '#fff';
     ctx.textBaseline = 'middle';
@@ -2121,14 +2129,10 @@ export class VectorEditor {
     ctx.moveTo((x0 + x1) / 2 + 0.5, top);
     ctx.lineTo(rx + 0.5, ry);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(rx + 0.5, ry, 4.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    drawKnob(ctx, rx + 0.5, ry);
     for (const [fx, fy] of Object.values(HANDLE_POSITION)) {
       const [hx, hy] = frame.toScreen(box.x + box.width * fx, box.y + box.height * fy);
-      ctx.fillRect(hx - 3.5, hy - 3.5, 7, 7);
-      ctx.strokeRect(hx - 3.5, hy - 3.5, 7, 7);
+      drawHandle(ctx, hx, hy);
     }
     this.decorateGradient(ctx, frame, scene);
   }
@@ -2149,7 +2153,7 @@ export class VectorEditor {
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
     ctx.stroke();
-    ctx.strokeStyle = ACCENT;
+    ctx.strokeStyle = accentColor();
     ctx.lineWidth = 1;
     ctx.stroke();
     // A radial gradient's stops are rings around its centre.
@@ -2164,7 +2168,7 @@ export class VectorEditor {
         ctx.strokeStyle = 'rgba(255,255,255,0.9)';
         ctx.stroke();
         ctx.lineWidth = i === this.stop ? 1.5 : 1;
-        ctx.strokeStyle = i === this.stop ? ACCENT : '#2e3148';
+        ctx.strokeStyle = i === this.stop ? accentColor() : '#2e3148';
         ctx.stroke();
       });
       ctx.setLineDash([]);
@@ -2180,7 +2184,7 @@ export class VectorEditor {
       ctx.strokeStyle = '#2e3148';
       ctx.stroke();
       ctx.lineWidth = i === this.stop ? 2.5 : 2;
-      ctx.strokeStyle = i === this.stop ? ACCENT : '#fff';
+      ctx.strokeStyle = i === this.stop ? accentColor() : '#fff';
       ctx.stroke();
     });
     ctx.restore();
@@ -2216,7 +2220,7 @@ export class VectorEditor {
       const a = anchorOf(c);
       if (!a) return;
       const [x, y] = screen(a.x, a.y);
-      ctx.fillStyle = mode.selected === i ? ACCENT : '#fff';
+      ctx.fillStyle = mode.selected === i ? accentColor() : '#fff';
       ctx.fillRect(x - 3.5, y - 3.5, 7, 7);
       ctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
     });
@@ -2249,7 +2253,7 @@ export class VectorEditor {
       const [x, y] = frame.toScreen(this.nudgeAt[0], this.nudgeAt[1]);
       ctx.save();
       ctx.lineWidth = 1;
-      ctx.strokeStyle = ACCENT;
+      ctx.strokeStyle = accentColor();
       ctx.fillStyle = 'rgba(49,106,197,0.08)';
       ctx.beginPath();
       ctx.arc(x, y, nudgeSize(), 0, Math.PI * 2);

@@ -89,7 +89,7 @@ test('emphasis, strong, strikethrough and code become run properties', async () 
   assert.equal(by('plain ').properties.bold, undefined);
   const code = by('code');
   assert.equal(code.properties.style, 'InlineCode');
-  assert.equal(code.properties.fonts?.ascii, 'Courier New');
+  assert.equal(code.properties.fonts?.ascii, 'JetBrains Mono');
   const boldCode = rs.filter((r) => r.properties.style === 'InlineCode' && r.properties.bold);
   assert.equal(boldCode.length, 1);
   assert.ok(doc.styles.styles.some((s) => s.id === 'InlineCode' && s.type === 'character'));

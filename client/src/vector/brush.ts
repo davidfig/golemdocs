@@ -224,6 +224,40 @@ export function profileAt(profile: readonly [number, number][], t: number): numb
   return profile[profile.length - 1][1];
 }
 
+/**
+ * A width profile from how hard a pen was pressed at each point of a freehand stroke (0 to 1, as a
+ * pointer event's `pressure`): positions by distance along the stroke, smoothed a little and cut down
+ * to at most `max` points. Null when there is nothing to go on (one point, or no length).
+ */
+export function pressureProfile(points: readonly { x: number; y: number }[], pressures: readonly number[], max = 48): [number, number][] | null {
+  const n = Math.min(points.length, pressures.length);
+  if (n < 2) return null;
+  const along = [0];
+  for (let i = 1; i < n; i++) along.push(along[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+  const length = along[n - 1];
+  if (length <= 0) return null;
+  // A pen's reading jitters from one event to the next: averaged with its neighbours.
+  const smooth = Array.from({ length: n }, (_, i) => (pressures[Math.max(0, i - 1)] + pressures[i] * 2 + pressures[Math.min(n - 1, i + 1)]) / 4);
+  const count = Math.min(max, n);
+  const out: [number, number][] = [];
+  let seg = 0;
+  for (let k = 0; k < count; k++) {
+    const s = (length * k) / (count - 1);
+    while (seg < n - 2 && along[seg + 1] < s) seg++;
+    const u = Math.max(0, Math.min(1, (s - along[seg]) / (along[seg + 1] - along[seg] || 1)));
+    const p = smooth[seg] + (smooth[seg + 1] - smooth[seg]) * u;
+    // Never quite nothing, so a light touch still leaves a line.
+    out.push([Math.round((s / length) * 1000) / 1000, Math.round(Math.max(0.05, Math.min(1, p)) * 1000) / 1000]);
+  }
+  return out;
+}
+
+/** Whether a stroke's pen pressures change enough to show: a pen whose pressure is turned off reports the same every time. */
+export function pressureVaries(pressures: readonly number[] | undefined): boolean {
+  if (!pressures?.length) return false;
+  return Math.max(...pressures) - Math.min(...pressures) > 0.05;
+}
+
 /** Smooth random numbers along a path: value noise with a point every `cell` units. */
 function noise(seed: number, cell: number): (s: number) => number {
   const values = new Map<number, number>();

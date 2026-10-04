@@ -75,7 +75,7 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
     },
     async head(key: string) {
       const o = objects.get(key);
-      return o ? { etag: o.etag } : null;
+      return o ? { etag: o.etag, size: o.bytes.byteLength, customMetadata: o.customMetadata } : null;
     },
     async put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string>; onlyIf?: { etagMatches?: string } }) {
       const match = options?.onlyIf?.etagMatches;

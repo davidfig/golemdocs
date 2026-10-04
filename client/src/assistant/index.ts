@@ -22,7 +22,7 @@ const COS_TILT = Math.cos(TILT);
 const SIN_TILT = Math.sin(TILT);
 
 /** Tools that change the document (the reply reminds the person that Undo takes their changes back). */
-const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'edit_drawing', 'insert_text_drawing', 'close_text_drawing', 'convert_document']);
+const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'edit_drawing', 'insert_text_drawing', 'close_text_drawing', 'convert_document', 'text_file_replace', 'text_file_edit_lines', 'text_file_insert_lines', 'text_file_delete_lines', 'text_file_undo', 'text_file_redo']);
 
 /** What Clip says it is doing while a tool runs. */
 function toolNote(name: string): string {
@@ -84,9 +84,19 @@ function toolNote(name: string): string {
     case 'open_text_drawing':
     case 'close_text_drawing':
       return t('assistant.tool.drawing');
+    case 'text_file_info':
+    case 'text_file_read':
+      return t('assistant.tool.largeRead');
+    case 'text_file_find':
+      return t('assistant.tool.largeFind');
+    case 'text_file_replace':
+    case 'text_file_edit_lines':
+    case 'text_file_insert_lines':
+    case 'text_file_delete_lines':
+    case 'text_file_undo':
+    case 'text_file_redo':
+      return t('assistant.tool.largeEdit');
     case 'collaboration_status':
-    case 'take_over_editing':
-    case 'release_editing':
       return t('assistant.tool.collaboration');
     default:
       return t('assistant.tool.other');
@@ -195,12 +205,22 @@ export class Assistant {
     });
     this.watchDrops();
     this.watchPointer();
+    this.keepOverDocument();
     parent.append(this.el);
     this.setVisible(!this.storedHidden(), false);
   }
 
   get visible(): boolean {
     return !this.el.hidden;
+  }
+
+  /** Clip stays over the document, clear of the panels at its right (Layers, a picture's layers) as they open, close or change width. */
+  private keepOverDocument(): void {
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return;
+    const place = (): void => this.el.style.setProperty('--wm-clip-right', `${Math.max(0, Math.round(window.innerWidth - viewport.getBoundingClientRect().right))}px`);
+    new ResizeObserver(place).observe(viewport);
+    window.addEventListener('resize', place);
   }
 
   setVisible(visible: boolean, remember = true): void {

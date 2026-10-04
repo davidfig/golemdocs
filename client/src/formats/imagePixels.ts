@@ -260,3 +260,219 @@ export function applyEffect(data: Uint8ClampedArray, width: number, height: numb
     }
   }
 }
+
+/**
+ * The pixels the paint bucket reaches from (x, y): a mask of 255 where a pixel's colour is within `tolerance` (0 to 255, the
+ * largest difference in any channel, alpha included) of the one clicked. `contiguous` takes only pixels connected to the click
+ * (a flood fill); otherwise every pixel of that colour in the picture.
+ */
+export function floodMask(data: Uint8ClampedArray, width: number, height: number, x: number, y: number, tolerance: number, contiguous = true): Uint8Array {
+  const mask = new Uint8Array(width * height);
+  const sx = Math.floor(x);
+  const sy = Math.floor(y);
+  if (sx < 0 || sy < 0 || sx >= width || sy >= height) return mask;
+  const at = (sy * width + sx) * 4;
+  const [r, g, b, a] = [data[at], data[at + 1], data[at + 2], data[at + 3]];
+  const near = (i: number): boolean => {
+    const o = i * 4;
+    return Math.abs(data[o] - r) <= tolerance && Math.abs(data[o + 1] - g) <= tolerance && Math.abs(data[o + 2] - b) <= tolerance && Math.abs(data[o + 3] - a) <= tolerance;
+  };
+  if (!contiguous) {
+    for (let i = 0; i < width * height; i++) if (near(i)) mask[i] = 255;
+    return mask;
+  }
+  // Spans of a row are filled at once, and the rows above and below are searched for more.
+  const stack: number[] = [sy * width + sx];
+  while (stack.length) {
+    const start = stack.pop()!;
+    const row = Math.floor(start / width);
+    if (mask[start] || !near(start)) continue;
+    let left = start % width;
+    let right = left;
+    while (left > 0 && !mask[row * width + left - 1] && near(row * width + left - 1)) left--;
+    while (right < width - 1 && !mask[row * width + right + 1] && near(row * width + right + 1)) right++;
+    for (let c = left; c <= right; c++) mask[row * width + c] = 255;
+    for (const next of [row - 1, row + 1]) {
+      if (next < 0 || next >= height) continue;
+      let open = false;
+      for (let c = left; c <= right; c++) {
+        const i = next * width + c;
+        const can = !mask[i] && near(i);
+        if (can && !open) stack.push(i);
+        open = can;
+      }
+    }
+  }
+  return mask;
+}
+
+/** Where the old picture goes on a canvas of another size: pinned to a side or corner, or in the middle. */
+export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'center' | 'e' | 'sw' | 's' | 'se';
+
+export const ANCHORS: readonly Anchor[] = ['nw', 'n', 'ne', 'w', 'center', 'e', 'sw', 's', 'se'];
+
+/** The top-left of a `from`-sized picture on a `to`-sized canvas, in whole pixels (it may be negative, which crops). */
+export function anchorOffset(from: { width: number; height: number }, to: { width: number; height: number }, anchor: Anchor): { x: number; y: number } {
+  const spare = { x: to.width - from.width, y: to.height - from.height };
+  // 'center' has letters of its own, so a side is read from the compass letters only.
+  const compass = anchor === 'center' ? '' : anchor;
+  const x = compass.endsWith('w') ? 0 : compass.endsWith('e') ? spare.x : Math.round(spare.x / 2);
+  const y = compass.startsWith('n') ? 0 : compass.startsWith('s') ? spare.y : Math.round(spare.y / 2);
+  return { x, y };
+}
+
+/**
+ * The region of a fill grown into the soft edge of what bounds it. A line drawn with anti-aliasing has pixels along it that are a mix of its
+ * colour and the colour beside it, further from the clicked colour than the tolerance allows, so a flood stops a pixel or two short and
+ * leaves a gap. Each ring of `limits` adds the pixels touching the region that are within that distance (0 to 255) of the clicked colour:
+ * the first ring takes most of the mix, the next only what is nearly the clicked colour, and the line's own colour is never reached.
+ */
+export function growMask(data: Uint8ClampedArray, width: number, height: number, mask: Uint8Array, x: number, y: number, limits: readonly number[] = [191, 127]): Uint8Array {
+  const sx = Math.floor(x);
+  const sy = Math.floor(y);
+  if (sx < 0 || sy < 0 || sx >= width || sy >= height) return mask;
+  const o = (sy * width + sx) * 4;
+  const seed = [data[o], data[o + 1], data[o + 2], data[o + 3]];
+  const near = (i: number, limit: number): boolean => {
+    const p = i * 4;
+    return Math.abs(data[p] - seed[0]) <= limit && Math.abs(data[p + 1] - seed[1]) <= limit && Math.abs(data[p + 2] - seed[2]) <= limit && Math.abs(data[p + 3] - seed[3]) <= limit;
+  };
+  let current = mask;
+  for (const limit of limits) {
+    const next = current.slice();
+    for (let py = 0; py < height; py++) {
+      for (let px = 0; px < width; px++) {
+        const i = py * width + px;
+        if (current[i]) continue;
+        const touching = (px > 0 && current[i - 1]) || (px < width - 1 && current[i + 1]) || (py > 0 && current[i - width]) || (py < height - 1 && current[i + width]);
+        if (touching && near(i, limit)) next[i] = 255;
+      }
+    }
+    current = next;
+  }
+  return current;
+}
+
+/** The brushes that change the pixels they pass over (see imageDraw.ts `EFFECT_TOOLS`). */
+export type BrushEffect = 'smudge' | 'blurBrush' | 'sharpenBrush' | 'mixer' | 'dodge' | 'burn';
+
+/** How much of its full effect a brush has at a distance from its centre: full in the middle, none at the edge, smooth between. */
+const falloff = (distance: number, radius: number): number => {
+  const t = 1 - distance / radius;
+  return t <= 0 ? 0 : t * t * (3 - 2 * t);
+};
+
+/** The points a brush is stamped at along a path: close enough (a quarter of the radius apart) that the stamps run together. */
+export function stampPoints(points: readonly { x: number; y: number }[], radius: number): { x: number; y: number }[] {
+  const step = Math.max(1, radius / 4);
+  const out: { x: number; y: number }[] = [];
+  if (!points.length) return out;
+  out.push(points[0]);
+  // How far the path has run since the last stamp, carried round corners so the spacing stays even.
+  let since = 0;
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1], points[i]];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!length) continue;
+    let at = step - since;
+    while (at <= length) {
+      out.push({ x: a.x + ((b.x - a.x) * at) / length, y: a.y + ((b.y - a.y) * at) / length });
+      at += step;
+    }
+    since = length - (at - step);
+  }
+  return out;
+}
+
+/** The colour `#rrggbb` as red, green and blue. */
+const rgbOf = (color: string): [number, number, number] => {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0];
+};
+
+/**
+ * Drags a brush along `points` over RGBA pixels, in place. `radius` is how far it reaches and `strength` (0 to 1) how strongly it works.
+ * smudge: picks up the colour under the first stamp and drags it, losing some of it at each stamp the weaker the strength is.
+ * mixer: the same, but what it starts with is `color`, so the paint spreads and mixes with what it passes over.
+ * blurBrush and sharpenBrush: soften or sharpen under each stamp. dodge and burn: lighten or darken.
+ */
+export function brushStroke(data: Uint8ClampedArray, width: number, height: number, effect: BrushEffect, points: readonly { x: number; y: number }[], radius: number, strength: number, color = '#000000'): void {
+  const r = Math.max(1, radius);
+  const size = Math.ceil(r) * 2 + 1;
+  const amount = Math.min(Math.max(strength, 0), 1);
+  const carry = effect === 'smudge' || effect === 'mixer' ? new Float32Array(size * size * 4) : null;
+  const [cr, cg, cb] = rgbOf(color);
+  let first = true;
+  for (const stamp of stampPoints(points, r)) {
+    const x0 = Math.round(stamp.x) - Math.ceil(r);
+    const y0 = Math.round(stamp.y) - Math.ceil(r);
+    // The pixels under the stamp as they are now (for the effects that look at their neighbours).
+    const before = effect === 'blurBrush' || effect === 'sharpenBrush' ? blurredPatch(data, width, height, x0, y0, size, Math.max(1, Math.round(r / 5))) : null;
+    for (let py = 0; py < size; py++) {
+      const y = y0 + py;
+      if (y < 0 || y >= height) continue;
+      for (let px = 0; px < size; px++) {
+        const x = x0 + px;
+        if (x < 0 || x >= width) continue;
+        const w = falloff(Math.hypot(px - size / 2 + 0.5, py - size / 2 + 0.5), r);
+        if (w <= 0) continue;
+        const i = (y * width + x) * 4;
+        const c = (py * size + px) * 4;
+        if (carry) {
+          if (first) {
+            // Picked up where the stroke starts (a mixer starts with its own colour instead).
+            if (effect === 'mixer') [carry[c], carry[c + 1], carry[c + 2], carry[c + 3]] = [cr, cg, cb, 255];
+            else for (let k = 0; k < 4; k++) carry[c + k] = data[i + k];
+            continue;
+          }
+          const give = w * (effect === 'mixer' ? 0.5 + amount / 2 : amount);
+          for (let k = 0; k < 4; k++) {
+            const here = data[i + k];
+            const held = carry[c + k];
+            data[i + k] = here + (held - here) * give;
+            // What is carried on takes up some of what it passed over: the weaker the strength, the more.
+            carry[c + k] = held + (here - held) * (1 - amount) * w * 0.5;
+          }
+        } else if (before) {
+          for (let k = 0; k < 3; k++) {
+            const soft = before[(py * size + px) * 4 + k];
+            const here = data[i + k];
+            data[i + k] = effect === 'blurBrush' ? here + (soft - here) * w * amount : here + (here - soft) * w * amount * 2;
+          }
+        } else {
+          // dodge lightens, burn darkens: a share of the way to white or black.
+          const target = effect === 'dodge' ? 255 : 0;
+          for (let k = 0; k < 3; k++) data[i + k] += (target - data[i + k]) * w * amount * 0.25;
+        }
+      }
+    }
+    first = false;
+  }
+}
+
+/** A box blur of a square patch of the pixels (the colours only, 4 values to a pixel with the last unused), for the blur and sharpen brushes. */
+function blurredPatch(data: Uint8ClampedArray, width: number, height: number, x0: number, y0: number, size: number, radius: number): Float32Array {
+  const out = new Float32Array(size * size * 4);
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const sums = [0, 0, 0];
+      let n = 0;
+      for (let dy = -radius; dy <= radius; dy++) {
+        const y = y0 + py + dy;
+        if (y < 0 || y >= height) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const x = x0 + px + dx;
+          if (x < 0 || x >= width) continue;
+          const i = (y * width + x) * 4;
+          sums[0] += data[i];
+          sums[1] += data[i + 1];
+          sums[2] += data[i + 2];
+          n++;
+        }
+      }
+      const o = (py * size + px) * 4;
+      if (n) [out[o], out[o + 1], out[o + 2]] = [sums[0] / n, sums[1] / n, sums[2] / n];
+    }
+  }
+  return out;
+}

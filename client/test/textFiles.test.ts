@@ -83,3 +83,13 @@ test('Excel\'s "Unicode Text" (UTF-16, tab-delimited) opens as a table and is wr
   const commas = encodeText('a,b\n1,2\n', 'utf-16le');
   assert.deepEqual([...(await roundTrip(csv as never, commas))], [...commas]);
 });
+
+test('a stored plain text file is searched by its lines, in any of its encodings', async () => {
+  const { textSegments, isPlainText } = await import('@golemdocs/docx');
+  assert.equal(isPlainText(new TextEncoder().encode('hello')), true);
+  assert.equal(isPlainText(new Uint8Array([0x50, 0x4b, 3, 4])), false);
+  assert.deepEqual(textSegments(new TextEncoder().encode('one\r\ntwo\nthree\r\r')).map((s) => s.text), ['one', 'two', 'three', '', '']);
+  assert.deepEqual(textSegments(new Uint8Array([0x63, 0x61, 0x66, 0xe9])).map((s) => s.text), ['café'], 'Windows-1252');
+  assert.deepEqual(textSegments(new Uint8Array([0xff, 0xfe, 0x68, 0x00, 0x69, 0x00])).map((s) => s.text), ['hi'], 'UTF-16');
+  assert.deepEqual(textSegments(new Uint8Array(0)).map((s) => s.text), ['']);
+});

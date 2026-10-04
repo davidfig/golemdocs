@@ -305,4 +305,8 @@ export const chrome: Partial<Messages> = {
   'chrome.title.tip': 'クリックして名前を変更',
   'chrome.rename.title': 'ドキュメントの名前の変更',
   'chrome.rename.action': '名前を変更',
+  'chrome.shortcuts.picture': '画像ツール',
+  'chrome.shortcuts.pictureHint': 'お絵かきツールのキーです（Photoshop と同様）。ツールには、文字・数字・記号のキー1つを割り当てられます。',
+  'chrome.file.openSelection': '選択範囲をドキュメントとして開く(&D)',
+  'chrome.file.openSelection.tip': '選択した行を、書式設定や変換ができる通常のドキュメントとして開きます',
 };

@@ -5,7 +5,8 @@
   "version": "0.9.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./textOps": "./src/textOps.ts"
   },
   "scripts": {
     "test": "tsx --test \"test/**/*.test.ts\"",

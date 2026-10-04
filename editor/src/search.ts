@@ -1,53 +1,54 @@
 // Find and replace.
 import { type CommandResult, NO_CHANGE } from './types.ts';
-import { WORD } from './segment.ts';
 
 import { paragraphText, type Paragraph } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
-import { cjkWords, isWordBoundary } from './segment.ts';
+import { compileSearch, escapeReplacement, expandReplacement, findInText, type SearchOptions } from './pattern.ts';
 import { EditorLinks } from './links.ts';
 
+/** What a command asks to find: the text, and how it is read. */
+export interface FindOptions {
+  text: string;
+  matchCase?: boolean;
+  wholeWord?: boolean;
+  regex?: boolean;
+}
+
+const optionsOf = (o: FindOptions): SearchOptions => ({ text: o.text, caseSensitive: o.matchCase ?? false, wholeWord: o.wholeWord ?? false, regex: o.regex ?? false });
+
 export abstract class EditorSearch extends EditorLinks {
-  /** Where each match of `text` starts in a paragraph (model offsets), not overlapping. */
-  protected matches(paragraph: Paragraph, text: string, matchCase: boolean, wholeWord = false): number[] {
-    if (!text) return [];
-    const original = paragraphText(paragraph);
-    const haystack = matchCase ? original : original.toLowerCase();
-    const needle = matchCase ? text : text.toLowerCase();
-    // Lower-casing can change a string's length (İ): then offsets no longer line up, so skip it.
-    if (haystack.length !== original.length) return [];
-    const found: number[] = [];
-    const cjk = wholeWord ? cjkWords(original) : null;
-    for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) {
-      // Whole words only: what's either side isn't part of a word.
-      if (cjk) {
-        if (isWordBoundary(cjk, at) && isWordBoundary(cjk, at + needle.length)) found.push(at);
-      } else if (!wholeWord || (!WORD.test(original[at - 1] ?? ' ') && !WORD.test(original[at + needle.length] ?? ' '))) found.push(at);
-    }
-    return found;
+  /** The matches in a paragraph (model offsets), not overlapping. */
+  protected matches(paragraph: Paragraph, regex: RegExp, wholeWord: boolean): RegExpExecArray[] {
+    return findInText(paragraphText(paragraph), regex, wholeWord);
   }
 
-  protected find(text: string, matchCase: boolean, backward: boolean, wholeWord: boolean): boolean {
+  protected find(query: FindOptions, backward: boolean): boolean {
+    const options = optionsOf(query);
+    const regex = compileSearch(options);
     const list = this.paragraphs();
-    if (!text || !list.length) return false;
+    if (!regex || !list.length) return false;
     const [start, end] = this.ordered();
     const from = this.indexOf(backward ? start.paragraph : end.paragraph);
     // Every paragraph once from the selection, then the one it began in again for matches before it.
     for (let step = 0; step <= list.length; step++) {
       const k = (backward ? from - step : from + step) % list.length;
       const paragraph = list[(k + list.length) % list.length];
-      let offsets = this.matches(paragraph, text, matchCase, wholeWord);
-      if (step === 0) offsets = offsets.filter((o) => (backward ? o + text.length <= start.offset : o >= end.offset));
-      else if (step === list.length) offsets = offsets.filter((o) => (backward ? o + text.length > start.offset : o < end.offset));
-      const at = backward ? offsets[offsets.length - 1] : offsets[0];
-      if (at === undefined) continue;
-      this.selection = { anchor: { paragraph, offset: at }, focus: { paragraph, offset: at + text.length } };
+      let found = this.matches(paragraph, regex, options.wholeWord);
+      if (step === 0) found = found.filter((m) => (backward ? m.index + m[0].length <= start.offset : m.index >= end.offset));
+      else if (step === list.length) found = found.filter((m) => (backward ? m.index + m[0].length > start.offset : m.index < end.offset));
+      const m = backward ? found[found.length - 1] : found[0];
+      if (!m) continue;
+      this.selection = { anchor: { paragraph, offset: m.index }, focus: { paragraph, offset: m.index + m[0].length } };
       return true;
     }
     return false;
   }
 
-  protected replaceAll(text: string, replacement: string, matchCase: boolean, wholeWord: boolean): CommandResult {
+  protected replaceAll(query: FindOptions, replacement: string): CommandResult {
+    const options = optionsOf(query);
+    const regex = compileSearch(options);
+    if (!regex) return { ...NO_CHANGE, replaced: 0 };
+    const pattern = options.regex ? replacement : escapeReplacement(replacement);
     const ops: Operation[] = [];
     let count = 0;
     let after: Pos | null = null;
@@ -56,17 +57,20 @@ export abstract class EditorSearch extends EditorLinks {
     let staysAt: Pos | null = null;
     for (const paragraph of this.paragraphs()) {
       const id = this.replica.id(paragraph);
-      const found = this.matches(paragraph, text, matchCase, wholeWord);
-      if (found.length && !after) after = { paragraph: id, offset: found[0] + replacement.length };
+      const found = this.matches(paragraph, regex, options.wholeWord).map((m) => ({ at: m.index, length: m[0].length, text: expandReplacement(m, pattern) }));
+      if (found.length && !after) after = { paragraph: id, offset: found[0].at + found[0].text.length };
       if (paragraph === start.paragraph && start.paragraph === end.paragraph) {
-        const index = found.indexOf(start.offset);
-        if (index >= 0 && end.offset === start.offset + text.length) staysAt = { paragraph: id, offset: start.offset + index * (replacement.length - text.length) + replacement.length };
+        const index = found.findIndex((f) => f.at === start.offset && f.length === end.offset - start.offset);
+        if (index >= 0) {
+          const shift = found.slice(0, index).reduce((n, f) => n + f.text.length - f.length, 0);
+          staysAt = { paragraph: id, offset: start.offset + shift + found[index].text.length };
+        }
       }
       // From the end, so earlier offsets stay valid as the text changes length.
-      for (const at of found.reverse()) {
+      for (const f of found.reverse()) {
         // Inserted at the end of the match first, so the replacement looks like the last of the words it replaces.
-        if (replacement) ops.push({ type: 'insertText', paragraph: id, offset: at + text.length, text: replacement });
-        ops.push({ type: 'delete', paragraph: id, from: at, to: at + text.length });
+        if (f.text) ops.push({ type: 'insertText', paragraph: id, offset: f.at + f.length, text: f.text });
+        ops.push({ type: 'delete', paragraph: id, from: f.at, to: f.at + f.length });
         count++;
       }
     }

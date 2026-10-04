@@ -5,7 +5,7 @@
 //    depth > 1 adds 720 twips of direct left indent per level); code blocks: one paragraph per
 //    line in the "Code" paragraph style (monospace, shaded); horizontal rule: an empty paragraph
 //    with a bottom border.
-//  - Inline code: character style "InlineCode" plus a direct Courier New font. Export also treats
+//  - Inline code: character style "InlineCode" plus a direct JetBrains Mono font (the default monospace). Export also treats
 //    any run in a monospace font as code.
 //  - Lists: real numbering. Every Markdown list gets its own abstract numbering + instance (so
 //    numbers restart), 9 levels all of one kind (bullet or decimal/lowerLetter/lowerRoman); an

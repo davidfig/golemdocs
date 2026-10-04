@@ -198,7 +198,7 @@ test('deleting documents together removes each from the index and from results t
 test('a document that cannot be read is skipped, not fatal', async () => {
   const me = 'sub@example.com';
   await w.signUp(me, 'Sub', { subscribed: true });
-  await w.call(me, 'POST', '/api/documents?name=Bad.docx', { body: new Uint8Array([1, 2, 3]), type: DOCX });
+  await w.call(me, 'POST', '/api/documents?name=Bad.docx', { body: new Uint8Array([0, 1, 2, 3]), type: DOCX });
   await upload(me, 'Good.docx', await docx('# Fine', 'readable words'));
   const found = (await (await search(me, 'readable')).json()) as { hits: { name: string }[]; pending: number };
   assert.equal(found.hits[0]!.name, 'Good.docx');

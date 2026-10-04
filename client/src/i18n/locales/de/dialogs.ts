@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': 'Strich nach dem Zeichnen mit dem Stift auswählen',
   'dialogs.options.returnToSelect': 'Nach einer Form oder einem Zeichenstiftpfad zum Auswahlwerkzeug zurückwechseln',
   'dialogs.options.pencilSmoothing': 'Stiftglättung',
+  'dialogs.options.penPressure': 'Linien dicker zeichnen, je fester der Stift eines Grafiktabletts aufgedrückt wird',
   'dialogs.options.off': 'Aus',
   'dialogs.options.low': 'Niedrig',
   'dialogs.options.medium': 'Mittel',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': 'Hilfslinien',
   'dialogs.options.showGuides': 'Hilfslinien anzeigen',
   'dialogs.options.lockGuides': 'Hilfslinien sperren',
+  'dialogs.find.wholeWord': 'Ganzes Wort',
+  'dialogs.find.regex': 'Regulärer Ausdruck',
 };

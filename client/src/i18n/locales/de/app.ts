@@ -66,7 +66,7 @@ export const app: Partial<Messages> = {
   'app.roomViewOnly': 'nur Ansicht',
   'app.roomPeople.one': '{count} Person anwesend',
   'app.roomPeople': '{count} Personen anwesend',
-  'app.collabNotHere': 'Bilder lassen sich noch nicht gemeinsam bearbeiten',
+  'app.collabNotHere': 'Dieses Dokument kann nicht geteilt werden',
   'app.collabFailed': 'Zusammenarbeit nicht möglich: {message}',
   'app.leaveRoomToSwitch': 'Verlassen Sie den Zusammenarbeitsraum, um das Format zu wechseln',
 
@@ -173,10 +173,6 @@ export const app: Partial<Messages> = {
   'app.storageOpenFailed': 'Der Browserspeicher konnte nicht geöffnet werden.',
   'app.storageAborted': 'Die Speichertransaktion wurde abgebrochen.',
   'app.storageClearFailed': 'Der Browserspeicher konnte nicht geleert werden.',
-  'room.leaseHeld': '{name} bearbeitet diese Zeichnung.',
-  'room.leaseFree': 'Niemand bearbeitet diese Zeichnung.',
-  'room.leaseTakeOver': 'Übernehmen',
-  'room.leaseEdit': 'Bearbeiten',
   'room.pdfPageOps': 'Seiten lassen sich noch nicht verschieben, löschen oder drehen, während andere dieses PDF bearbeiten.',
   'room.pdfImageTooBig': 'Dieses Bild ist zu groß, um es hinzuzufügen, während andere dieses PDF bearbeiten.',
 };

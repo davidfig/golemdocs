@@ -180,7 +180,7 @@ test('inline tags become run properties', async () => {
   assert.equal(runOf(p, 'sup').properties.vertAlign, 'superscript');
   assert.equal(runOf(p, 'sub').properties.vertAlign, 'subscript');
   assert.equal(runOf(p, 'code').properties.style, 'InlineCode');
-  assert.equal(runOf(p, 'code').properties.fonts?.ascii, 'Courier New');
+  assert.equal(runOf(p, 'code').properties.fonts?.ascii, 'JetBrains Mono');
   assert.equal(runOf(p, 'kbd').properties.style, 'InlineCode');
   assert.equal(runOf(p, 'mark').properties.highlight, 'yellow');
   assert.deepEqual([runOf(p, 'both').properties.bold, runOf(p, 'both').properties.italic], [true, true]);

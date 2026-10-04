@@ -7,7 +7,7 @@ import { boxWithAspect, clampBox, dragBox } from '../formats/imagePixels.ts';
 import type { Box, Handle } from '../formats/imagePixels.ts';
 import { t } from '../i18n/index.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
-import { h, isFormField } from './dom.ts';
+import { h, isFormField, modalOpen } from './dom.ts';
 import './pictureTools.css';
 
 export interface CropHost {
@@ -43,12 +43,12 @@ export class CropLayer {
   readonly el = h('div', { class: 'wm-crop', attrs: { hidden: '' } });
   private readonly box = h('div', { class: 'wm-crop-box' });
   private readonly size = h('div', { class: 'wm-crop-size', attrs: { 'aria-live': 'polite' } });
-  private readonly shape = h('select', { attrs: { 'aria-label': t('picture.crop.shape') } });
+  private readonly shape = h('select', { class: 'wm-input', attrs: { 'aria-label': t('picture.crop.shape') } });
   private session: Session | null = null;
   private readonly keys = (e: KeyboardEvent) => {
     if (!this.session) return;
-    // Keys typed in a box elsewhere (a dialog, a comment) are that box's.
-    if (isFormField(e.target) && !this.el.contains(e.target as Node)) return;
+    // Keys typed in a box elsewhere (a comment), or pressed in a dialog, are theirs.
+    if ((isFormField(e.target) && !this.el.contains(e.target as Node)) || modalOpen()) return;
     if (e.key === 'Escape') this.finish(false);
     else if (e.key === 'Enter') this.finish(true);
     else return;

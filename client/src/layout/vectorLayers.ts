@@ -3,7 +3,7 @@
 // for objectSync.ts, and `scene` gives the drawing back as it stands.
 
 import { applyObjectOps, layersOf, type Keyed, type ObjectLayers, type ObjectOp } from '@golemdocs/ops';
-import type { Scene } from '../vector/model.ts';
+import type { Scene, SceneNode } from '../vector/model.ts';
 import { ensureUids, objectsToScene, sceneToObjects, type DefObject, type MetaObject, type NodeObject, type VectorObjects } from '../vector/nodes.ts';
 import type { VecExtension } from '../formats/wdoc.ts';
 import type { ObjectHost } from './objectSync.ts';
@@ -16,6 +16,8 @@ function positional(scene: Scene): Scene {
   return scene;
 }
 
+const allHaveUids = (nodes: readonly SceneNode[]): boolean => nodes.every((n) => !!n.uid && (n.kind !== 'group' || allHaveUids(n.children)));
+
 export class VectorLayers implements ObjectHost {
   private current: VectorObjects;
   private layers: ObjectLayers;
@@ -26,8 +28,19 @@ export class VectorLayers implements ObjectHost {
     this.layers = this.build();
   }
 
-  private build(): ObjectLayers {
-    return layersOf<Keyed>({ meta: [this.current.meta], nodes: this.current.nodes, defs: this.current.defs });
+  private build(objects: VectorObjects = this.current): ObjectLayers {
+    return layersOf<Keyed>({ meta: [objects.meta], nodes: objects.nodes, defs: objects.defs });
+  }
+
+  /**
+   * A change the person made from `base` to `scene`, as objects (for `ObjectSync.localFrom`): nodes it didn't touch keep their ranks
+   * here, so they are unchanged objects. Null when `base` has nodes without ids (a drawing the page read from its file itself): new
+   * ids would make every node look new.
+   */
+  change(base: Scene, scene: Scene): { from: ObjectLayers; to: ObjectLayers } | null {
+    if (!allHaveUids(base.children)) return null;
+    const from = sceneToObjects(base, this.current);
+    return { from: this.build(from), to: this.build(sceneToObjects(scene, from)) };
   }
 
   get objects(): ObjectLayers {

@@ -250,22 +250,31 @@ export type ToWorker =
   | { type: 'insertImage'; doc: number; bytes: ArrayBuffer; ext: string; width: number; height: number; description?: string }
   /** A vector drawing at the caret, or (`replace`: the part of the SVG it replaces) in place of the one it is an edited version of; sizes in EMUs. */
   /** A picture's shapes are now these (the person drew, erased or moved something); or step back over (undo) or forward again (redo) over the person's own changes to them. */
-  | { type: 'shapes'; doc: number; shapes: Shape[] }
+  | { type: 'shapes'; doc: number; shapes: Shape[]; base?: Shape[] }
   | { type: 'shapesStep'; doc: number; action: 'undo' | 'redo' }
   /** A drawing edited together is now this (the person changed it); or step back over, or forward again over, the person's own changes to it. */
-  | { type: 'vectorScene'; doc: number; scene: Scene }
+  | { type: 'vectorScene'; doc: number; scene: Scene; base?: Scene }
   | { type: 'vectorStep'; doc: number; action: 'undo' | 'redo' }
-  /** Asks for, or lets go of, the right to edit a document that only one person at a time may (a drawing in a room). */
-  | { type: 'lease'; doc: number; action: 'request' | 'release' }
   | { type: 'putDrawing'; doc: number; svg: string; png: ArrayBuffer; width: number; height: number; description?: string; replace?: string }
   /** The whole document as a .wdoc; `lens` records a different format to edit it as next time. */
   | { type: 'save'; doc: number; request: number; lens?: Format }
   /** The document exported as a file of a format (the open document is left as it is). */
   | { type: 'convert'; doc: number; request: number; to: Format }
+  /** The open picture's own file, without the shapes drawn over it. */
+  | { type: 'pictureBase'; doc: number; request: number }
   /** The assistant uses a tool on the open document (see agentTools.ts): `args` is the JSON the model wrote. */
   | { type: 'agent'; doc: number; request: number; name: string; args: string }
   /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
-  | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null };
+  | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null }
+  /** What is wrong in each of some lines of a plain text file (no document is involved): `sample` is the beginning of the file, which says its language. `at` asks instead for the problem under an offset of the line `texts[at.index]`. */
+  | { type: 'spellText'; request: number; texts: string[]; sample: string; spelling: boolean; grammar: boolean; at?: { index: number; offset: number } };
+
+/** A mistake in a line of text: where it is, and whether it is spelling (0) or grammar (1). */
+export interface TextMark {
+  start: number;
+  end: number;
+  kind: 0 | 1;
+}
 
 export interface LayoutTimings {
   /** Reading and parsing the file. */
@@ -373,8 +382,6 @@ export type FromWorker =
   | { type: 'shapes'; doc: number; shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }
   /** A drawing being edited together: as it stands now (null: it has not changed, only what can be undone) after others' changes or an undo, and whether the person's own changes can be undone or redone. */
   | { type: 'vectorScene'; doc: number; scene: Scene | null; canUndo: boolean; canRedo: boolean }
-  /** Who may edit a document that only one person at a time may: `mine` is whether this person may now, `holder` the name of whoever does (null: nobody), `shared` whether others are there. */
-  | { type: 'lease'; doc: number; exclusive: boolean; mine: boolean; holder: string | null; shared: boolean }
   /** Collaboration status: people in the room, and edits not yet confirmed by the server. */
   | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */
@@ -391,7 +398,9 @@ export type FromWorker =
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
   /** What an assistant tool did or found. */
   /** `images` are pictures the tool fetched for the model to look at (data: URIs). */
-  | { type: 'agentResult'; request: number; result: string; images?: string[] };
+  | { type: 'agentResult'; request: number; result: string; images?: string[] }
+  /** The answer to a `spellText`: the marks of every line (a language whose dictionary is still loading has none yet, and `loading` says so), or the problem at `at`. */
+  | { type: 'spellText'; request: number; marks: TextMark[][]; issue: SpellIssue | null; loading: boolean };
 
 /** What Tools ▸ Word Count shows. `selection`: they are for the selected text, not the document. */
 export interface WordStats {

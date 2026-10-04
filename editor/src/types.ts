@@ -69,9 +69,9 @@ export type Command =
   /** Selects the text a comment is on. */
   | { kind: 'selectComment'; id: string }
   /** Selects the next (or previous) match of `text` after the selection, wrapping around the document. */
-  | { kind: 'find'; text: string; matchCase?: boolean; backward?: boolean; wholeWord?: boolean }
+  | { kind: 'find'; text: string; matchCase?: boolean; backward?: boolean; wholeWord?: boolean; regex?: boolean }
   /** Replaces every match of `text` in the document. */
-  | { kind: 'replaceAll'; text: string; with: string; matchCase?: boolean; wholeWord?: boolean }
+  | { kind: 'replaceAll'; text: string; with: string; matchCase?: boolean; wholeWord?: boolean; regex?: boolean }
   /** Selects positions [from, to) of the paragraph at `paragraph` (its index among the document's paragraphs); with `until`, from `from` there to the start of paragraph `until`. */
   | { kind: 'select'; paragraph: number; from: number; to: number; until?: number }
   /**

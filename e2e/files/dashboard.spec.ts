@@ -52,7 +52,7 @@ test('saved documents appear as cards, newest first, with their size and age', a
   await expect(dashboard(page).getByText('Documents you save will show up here.')).toHaveCount(0);
 });
 
-test('every card shows a thumbnail of its first page', async ({ app, page }) => {
+test('every card shows a thumbnail of its first page (a text file\'s is its first lines)', async ({ app, page }) => {
   await saveThree(app);
   await app.menu('File', 'Open…');
   const images = dashboard(page).locator('.wm-thumb img');

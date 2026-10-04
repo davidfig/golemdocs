@@ -3,6 +3,7 @@
 import { decodeIndex, type DocIndex } from '@golemdocs/docx';
 import type { Folder } from './folders.ts';
 import { t } from './i18n/index.ts';
+import type { Manifest } from './storage/chunker.ts';
 
 export interface CloudDocument {
   id: string;
@@ -36,9 +37,12 @@ const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 /** A failed cloud request. `status` 401 means the user isn't signed in. */
 export class CloudError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's name for why, when the client needs to tell this refusal from others (see server/src/http.ts). */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -62,8 +66,8 @@ export async function send(input: string, init?: RequestInit): Promise<Response>
 
 async function check(response: Response): Promise<Response> {
   if (response.ok) return response;
-  const message = await response.json().then((b: { error?: string }) => b.error, () => undefined);
-  throw new CloudError(response.status, message ?? t('app.requestFailed', { status: response.status }));
+  const body = await response.json().then((b: { error?: string; code?: string }) => b, () => undefined);
+  throw new CloudError(response.status, body?.error ?? t('app.requestFailed', { status: response.status }), body?.code);
 }
 
 /** Where a document's .docx bytes can be fetched (usable as a `docx-url` document source). */
@@ -134,6 +138,52 @@ export async function createDocument(name: string, bytes: Uint8Array, folderId?:
   return (await check(response)).json();
 }
 
+/** The content type of a save that sends only the chunks the server lacks (see server/src/fileStore.ts). */
+const DELTA = 'application/vnd.golemdocs.delta';
+
+/** Gives the bytes of chunks, by hash. */
+export type ChunkSource = (hashes: string[]) => Promise<{ hash: string; bytes: Uint8Array }[]>;
+
+/** A delta upload's body: a 4-byte length, that many bytes of JSON `{ manifest, supplied }`, then the supplied chunks one after the other. */
+function deltaBody(manifest: Manifest, supplied: { hash: string; bytes: Uint8Array }[]): Uint8Array {
+  const header = new TextEncoder().encode(JSON.stringify({ manifest, supplied: supplied.map((c) => c.hash) }));
+  const body = new Uint8Array(4 + header.byteLength + supplied.reduce((sum, c) => sum + c.bytes.byteLength, 0));
+  new DataView(body.buffer).setUint32(0, header.byteLength);
+  body.set(header, 4);
+  let at = 4 + header.byteLength;
+  for (const { bytes } of supplied) {
+    body.set(bytes, at);
+    at += bytes.byteLength;
+  }
+  return body;
+}
+
+/**
+ * Sends a document as its chunks, leaving out the `known` ones (what the server has of the version this one started from). If the
+ * server says it lacks some of them after all (its copy was made whole by a room, say), everything goes, once.
+ */
+async function sendChunked(method: 'POST' | 'PUT', url: string, manifest: Manifest, source: ChunkSource, known: ReadonlySet<string>): Promise<CloudDocument> {
+  const all = [...new Set(manifest.chunks.map((c) => c.h))];
+  const attempt = async (hashes: string[]) => send(url, { method, headers: { 'content-type': DELTA }, body: deltaBody(manifest, await source(hashes)) as Uint8Array<ArrayBuffer> });
+  let response = await attempt(all.filter((h) => !known.has(h)));
+  if (response.status === 400 && all.some((h) => known.has(h)) && (await response.clone().json().catch(() => null))?.code === 'missing-chunks') response = await attempt(all);
+  return (await check(response)).json();
+}
+
+/** A new document from its chunks (all of them are sent). */
+export function createChunked(name: string, manifest: Manifest, source: ChunkSource, folderId?: string): Promise<CloudDocument> {
+  const folder = folderId ? `&folder=${encodeURIComponent(folderId)}` : '';
+  return sendChunked('POST', `/api/documents?name=${encodeURIComponent(name)}${folder}`, manifest, source, new Set());
+}
+
+/** Replaces a document's bytes with its chunks, sending those not in `known` (see `saveDocument` for `base`). */
+export function saveChunked(id: string, manifest: Manifest, source: ChunkSource, known: ReadonlySet<string>, name?: string, base?: number): Promise<CloudDocument> {
+  const params = new URLSearchParams();
+  if (name) params.set('name', name);
+  if (base !== undefined) params.set('base', String(base));
+  return sendChunked('PUT', `/api/documents/${id}${params.size ? `?${params}` : ''}`, manifest, source, known);
+}
+
 /** A document to upload in a batch: where it goes, and what happened to it. */
 export interface NewDocument {
   name: string;
@@ -144,6 +194,8 @@ export interface NewDocument {
 /** Most documents, and most bytes, in one batch (the server takes up to 500 documents and 51 MB; see server/src/worker.ts). A larger document goes in a batch of its own. */
 export const BATCH_MAX_DOCUMENTS = 200;
 export const BATCH_MAX_BYTES = 24 * 1024 * 1024;
+/** The most the server keeps of one document (it refuses more with 413; see server/src/documents.ts). */
+export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 
 /**
  * Uploads several documents in one request: the server answers for each, in order, with the new

@@ -54,7 +54,7 @@ async function setup(options: { graceMs?: number } = {}) {
   );
 
   const peers: (Peer & { inbox: MultiplayerServerMessage[]; closed: number | null; name: string })[] = [];
-  const join = async (name: string, role: 'owner' | 'editor' | 'viewer' = 'editor', exclusive = false, kind?: 'objects') => {
+  const join = async (name: string, role: 'owner' | 'editor' | 'viewer' = 'editor', kind?: 'objects') => {
     const peer: Peer & { inbox: MultiplayerServerMessage[]; closed: number | null; name: string } = {
       name,
       inbox: [],
@@ -71,7 +71,7 @@ async function setup(options: { graceMs?: number } = {}) {
     };
     peers.push(peer);
     core.add(peer);
-    await core.message(peer, { type: 'hello', client: name, name, color: 1, ...(exclusive && { exclusive }), ...(kind && { kind }) });
+    await core.message(peer, { type: 'hello', client: name, name, color: 1, ...(kind && { kind }) });
     return peer;
   };
   const types = (p: { inbox: MultiplayerServerMessage[] }) => p.inbox.map((m) => m.type);
@@ -340,105 +340,32 @@ test('a malformed pointer closes the connection', async () => {
   }
 });
 
-// --- Exclusive rooms: one person edits at a time ---------------------------------------------------------------------------
+// --- Older clients ------------------------------------------------------------------------------------------------------
 
-/** Two editors in a shared exclusive room (a drawing), synced at version 0. Nobody holds the lease yet. */
-async function exclusive() {
+test('what an older client says about a drawing being edited by one person at a time is ignored, and does not close it', async () => {
   const t = await setup();
-  const a = await t.join('a', 'editor', true);
-  const b = await t.join('b', 'editor', true);
+  // A room an older server saved that way.
+  t.store.setMeta({ exclusive: true, holder: null } as any);
+  const a = await t.join('a');
+  const b = await t.join('b');
   await t.core.message(a, { type: 'flushed', epoch: 0 });
   await t.core.message(a, { type: 'sync', epoch: 0, version: 0 });
   await t.core.message(b, { type: 'sync', epoch: 0, version: 0 });
-  a.inbox.length = b.inbox.length = 0;
-  return { ...t, a, b };
-}
-const leaseMessages = (p: { inbox: MultiplayerServerMessage[] }) => p.inbox.filter((m) => m.type === 'lease');
-
-test('the first to join says the room is exclusive, and everyone is told so with who holds the lease', async () => {
-  const t = await setup();
-  const a = await t.join('a', 'editor', true);
-  assert.equal((a.inbox[0] as any).exclusive, true);
-  assert.equal((a.inbox[0] as any).holder, null);
-  // Whatever a later one says, the room’s answer is the document’s.
-  const b = await t.join('b', 'editor', false);
-  assert.equal((b.inbox[0] as any).exclusive, true);
-  const plain = await setup();
-  assert.equal(((await plain.join('x')).inbox[0] as any).exclusive, false);
-});
-
-test('an exclusive room takes edits only from the one who holds the lease, and tells the others who does', async () => {
-  const t = await exclusive();
-  const { a, b } = t;
-  // Nobody holds it: a submit is refused (nothing logged), the sender is told nobody does.
+  await t.core.message(b, { type: 'lease' } as any);
+  await t.core.message(b, { type: 'release' } as any);
+  assert.equal(b.closed, null);
+  assert.ok(!t.types(a).includes('lease' as any) && !t.types(b).includes('lease' as any));
+  // Both edit, as in any room.
   await t.core.message(a, { type: 'submit', epoch: 0, version: 0, transactions: [t.tx('a:0', t.insert(0, 'x'))] });
-  assert.equal(t.store.length(), 0);
-  assert.deepEqual(leaseMessages(a), [{ type: 'lease', holder: null }]);
-
-  await t.core.message(a, { type: 'lease' });
-  assert.deepEqual(leaseMessages(a).at(-1), { type: 'lease', holder: 'a' });
-  assert.deepEqual(leaseMessages(b).at(-1), { type: 'lease', holder: 'a' }, 'everyone is told');
-  await t.core.message(a, { type: 'submit', epoch: 0, version: 0, transactions: [t.tx('a:0', t.insert(0, 'x'))] });
-  assert.equal(t.store.length(), 1);
   await t.core.message(b, { type: 'submit', epoch: 0, version: 1, transactions: [t.tx('b:0', t.insert(0, 'y'))] });
-  assert.equal(t.store.length(), 1, 'b does not hold it');
-  assert.deepEqual(leaseMessages(b).at(-1), { type: 'lease', holder: 'a' });
-});
-
-test('the lease cannot be taken from someone who is working, but is free once they let go, leave, or stop for a while', async () => {
-  const t = await exclusive();
-  const { a, b } = t;
-  await t.core.message(a, { type: 'lease' });
-  b.inbox.length = 0;
-  await t.core.message(b, { type: 'lease' });
-  assert.deepEqual(b.inbox, [{ type: 'lease', holder: 'a' }], 'refused, and told who has it');
-  assert.equal(t.store.m.holder, 'a');
-
-  await t.core.message(a, { type: 'release' });
-  assert.equal(t.store.m.holder, null);
-  assert.deepEqual(leaseMessages(b).at(-1), { type: 'lease', holder: null });
-  await t.core.message(b, { type: 'lease' });
-  assert.equal(t.store.m.holder, 'b');
-
-  // b stops doing anything: after the lease time a can take it.
-  await t.core.message(a, { type: 'lease' });
-  assert.equal(t.store.m.holder, 'b', 'not yet');
-  t.clock.now += 31_000;
-  await t.core.message(a, { type: 'lease' });
-  assert.equal(t.store.m.holder, 'a');
-  assert.deepEqual(leaseMessages(b).at(-1), { type: 'lease', holder: 'a' });
-
-  // Submitting counts as doing something.
-  t.clock.now += 20_000;
-  await t.core.message(a, { type: 'submit', epoch: 0, version: 0, transactions: [t.tx('a:1', t.insert(0, 'x'))] });
-  t.clock.now += 20_000;
-  await t.core.message(b, { type: 'lease' });
-  assert.equal(t.store.m.holder, 'a', 'a was working 20 seconds ago');
-
-  // The holder leaves: it is free at once.
-  a.close(1000, '');
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(t.store.m.holder, null);
-});
-
-test('a viewer cannot hold the lease, and a room that is not exclusive ignores lease messages', async () => {
-  const t = await setup();
-  const a = await t.join('a', 'editor', true);
-  const v = await t.join('v', 'viewer', true);
-  await t.core.message(a, { type: 'flushed', epoch: 0 });
-  await t.core.message(v, { type: 'lease' });
-  assert.equal(t.store.m.holder, null);
-  const plain = await shared();
-  await plain.core.message(plain.a, { type: 'lease' });
-  assert.equal(plain.store.m.holder, null);
-  assert.deepEqual(leaseMessages(plain.b), []);
+  assert.equal(t.store.length(), 2);
 });
 
 // --- Rooms of objects (a PDF) ---------------------------------------------------------------------------------------------
 
 test('the first to join says what the changes are, and the room takes those and no others', async () => {
   const t = await setup();
-  const a = await t.join('a', 'editor', false, 'objects');
+  const a = await t.join('a', 'editor', 'objects');
   assert.equal((a.inbox[0] as any).kind, 'objects');
   const b = await t.join('b');
   assert.equal((b.inbox[0] as any).kind, 'objects', 'whatever a later one says, the room’s answer is the document’s');
@@ -466,7 +393,7 @@ test('in a room of text, a change to an object is refused', async () => {
 
 test('a change that is too big, or a transaction with too many of them, is refused', async () => {
   const t = await setup();
-  const a = await t.join('a', 'editor', false, 'objects');
+  const a = await t.join('a', 'editor', 'objects');
   await t.join('b');
   await t.core.message(a, { type: 'flushed', epoch: 0 });
   await t.core.message(a, { type: 'sync', epoch: 0, version: 0 });

@@ -66,7 +66,7 @@ export const app: Partial<Messages> = {
   'app.roomViewOnly': 'sola lettura',
   'app.roomPeople.one': '{count} persona presente',
   'app.roomPeople': '{count} persone presenti',
-  'app.collabNotHere': 'Le immagini non possono ancora essere modificate insieme',
+  'app.collabNotHere': 'Questo documento non può essere condiviso',
   'app.collabFailed': 'Impossibile collaborare: {message}',
   'app.leaveRoomToSwitch': 'Esci dalla stanza di collaborazione per cambiare formato',
 
@@ -170,10 +170,6 @@ export const app: Partial<Messages> = {
   'app.linksUpdateFailed': 'Impossibile aggiornare i collegamenti a ciò che hai rinominato o spostato: {message}',
   'app.createLinkedTitle': 'Documento non trovato',
   'app.createLinkedAction': 'Crea',
-  'room.leaseHeld': '{name} sta modificando questo disegno.',
-  'room.leaseFree': 'Nessuno sta modificando questo disegno.',
-  'room.leaseTakeOver': 'Prendi il controllo',
-  'room.leaseEdit': 'Modifica',
   'room.pdfPageOps': 'Non è ancora possibile spostare, eliminare o ruotare le pagine mentre altri modificano questo PDF.',
   'room.pdfImageTooBig': 'Questa immagine è troppo grande per essere aggiunta mentre altri modificano questo PDF.',
 };

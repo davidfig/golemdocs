@@ -2,8 +2,10 @@
 // and saturation, with a preview). Modal dialogs like the others.
 
 import { decodeImage, makeCanvas } from '../formats/imageCodec.ts';
-import { MAX_SIDE, NO_ADJUSTMENTS, adjustPixels, isNeutral, resizedTo } from '../formats/imagePixels.ts';
-import type { Adjustments } from '../formats/imagePixels.ts';
+import { paintBackground } from '../formats/imageDraw.ts';
+import type { Background } from '../formats/imageDraw.ts';
+import { ANCHORS, MAX_SIDE, NO_ADJUSTMENTS, adjustPixels, isNeutral, resizedTo } from '../formats/imagePixels.ts';
+import type { Adjustments, Anchor } from '../formats/imagePixels.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import './pictureTools.css';
@@ -142,5 +144,130 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
     }, () => {
       // A picture the browser can't decode: no preview, the sliders still work.
     });
+  });
+}
+
+/** The controls that make a background: solid, linear or radial, its colours and the angle, with a swatch showing the result. */
+function paintControls(initial: Background): { el: HTMLElement[]; value(): Background } {
+  const type = h('select', { class: 'wm-input', attrs: { 'aria-label': t('picture.paint.type') } });
+  for (const kind of ['solid', 'linear', 'radial'] as const) {
+    const option = h('option', { text: t(`picture.paint.${kind}`) });
+    option.value = kind;
+    type.append(option);
+  }
+  const color = (label: string, value: string) => {
+    const el = h('input', { attrs: { type: 'color', 'aria-label': label } });
+    el.value = /^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff';
+    return el;
+  };
+  const from = color(t('picture.paint.from'), initial.color);
+  const to = color(t('picture.paint.to'), initial.gradient?.to ?? '#ffffff');
+  const angle = h('input', { class: 'wm-input', attrs: { type: 'number', min: '0', max: '360', step: '1', 'aria-label': t('picture.paint.angle') } });
+  angle.value = String(initial.gradient?.angle ?? 90);
+  type.value = initial.gradient?.type ?? 'solid';
+  const swatch = h('canvas', { class: 'wm-picture-preview wm-picture-wide', attrs: { width: '240', height: '60' } });
+  const value = (): Background => (type.value === 'solid' ? { color: from.value } : { color: from.value, gradient: { type: type.value as 'linear' | 'radial', to: to.value, angle: Number(angle.value) || 0 } });
+  const show = (): void => {
+    to.disabled = type.value === 'solid';
+    angle.disabled = type.value !== 'linear';
+    const ctx = swatch.getContext('2d')!;
+    ctx.clearRect(0, 0, swatch.width, swatch.height);
+    paintBackground(ctx, value(), swatch.width, swatch.height);
+  };
+  for (const input of [type, from, to, angle]) input.addEventListener('input', show);
+  show();
+  return { el: [h('label', { text: t('picture.paint.type') }), type, h('label', { text: t('picture.paint.from') }), from, h('label', { text: t('picture.paint.to') }), to, h('label', { text: t('picture.paint.angle') }), angle, swatch], value };
+}
+
+/** Asks for a colour or gradient to lay behind the picture (it shows where the picture is see-through): resolves with it, or `undefined` on Cancel. */
+export function showBackgroundDialog(initial: Background): Promise<Background | undefined> {
+  return new Promise((resolve) => {
+    const paint = paintControls(initial);
+    const body = h('div', { class: 'wm-dialog-body wm-link-body' }, h('div', { class: 'wm-picture-wide', text: t('picture.background.note') }), ...paint.el);
+    const ok = h('button', { class: 'wm-button', text: t('picture.ok'), attrs: { type: 'submit' } });
+    const { dialog, form } = dialogShell(t('picture.background.title'), body, ok);
+    let result: Background | undefined;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      result = paint.value();
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(result);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+}
+
+export interface CanvasChoice {
+  width: number;
+  height: number;
+  anchor: Anchor;
+  /** What the new area is filled with; none leaves it see-through. */
+  paint?: Background;
+}
+
+/** Asks for a new canvas size around the picture, where the picture sits on it, and what the new area is filled with. */
+export function showPictureCanvasDialog(width: number, height: number, paint: Background): Promise<CanvasChoice | undefined> {
+  return new Promise((resolve) => {
+    const number = (label: string, value: number) => {
+      const el = h('input', { class: 'wm-input', attrs: { type: 'number', min: '1', max: String(MAX_SIDE), step: '1', 'aria-label': label } });
+      el.value = String(value);
+      return el;
+    };
+    const w = number(t('picture.resize.width'), width);
+    const hh = number(t('picture.resize.height'), height);
+    let anchor: Anchor = 'center';
+    const grid = h('div', { class: 'wm-anchor-grid', attrs: { role: 'radiogroup', 'aria-label': t('picture.canvas.anchor') } });
+    const cells = ANCHORS.map((a) => {
+      const cell = h('button', { class: 'wm-anchor-cell', attrs: { type: 'button', role: 'radio', 'aria-label': t(`picture.canvas.anchor.${a}`), 'aria-checked': String(a === anchor) } });
+      cell.addEventListener('click', () => {
+        anchor = a;
+        for (const c of cells) c.setAttribute('aria-checked', String(c === cell));
+      });
+      grid.append(cell);
+      return cell;
+    });
+    const fill = h('input', { attrs: { type: 'checkbox' } });
+    fill.checked = true;
+    const controls = paintControls(paint);
+    const message = h('div', { class: 'wm-find-message wm-picture-wide', attrs: { role: 'alert' } });
+    const body = h(
+      'div',
+      { class: 'wm-dialog-body wm-link-body' },
+      h('div', { class: 'wm-picture-wide', text: t('picture.resize.original', { width, height }) }),
+      h('label', { text: t('picture.resize.width') }),
+      h('span', {}, w, ' ', t('picture.resize.pixels')),
+      h('label', { text: t('picture.resize.height') }),
+      h('span', {}, hh, ' ', t('picture.resize.pixels')),
+      h('label', { text: t('picture.canvas.anchor') }),
+      grid,
+      h('label', { class: 'wm-picture-wide' }, fill, ' ', t('picture.canvas.fillNew')),
+      ...controls.el,
+      message,
+    );
+    const ok = h('button', { class: 'wm-button', text: t('picture.ok'), attrs: { type: 'submit' } });
+    const { dialog, form } = dialogShell(t('picture.canvas.title'), body, ok);
+    let result: CanvasChoice | undefined;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const size = { width: Number(w.value), height: Number(hh.value) };
+      const valid = (n: number) => Number.isInteger(n) && n >= 1 && n <= MAX_SIDE;
+      if (!valid(size.width) || !valid(size.height)) {
+        message.textContent = t('picture.resize.bad', { max: MAX_SIDE });
+        return;
+      }
+      result = { ...size, anchor, ...(fill.checked && { paint: controls.value() }) };
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(result);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    w.select();
   });
 }

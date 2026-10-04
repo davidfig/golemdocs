@@ -4,6 +4,8 @@
 import type { DocIndex } from '@golemdocs/docx';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
+import { CHUNK_ALGO, CHUNK_MIN_FILE, assemble, chunkBytes } from './chunker.ts';
+import type { Chunked } from './chunker.ts';
 
 export interface SavedInfo {
   id: string;
@@ -37,13 +39,29 @@ const BYTES = 'bytes';
 const THUMBS = 'thumbs';
 const FOLDERS = 'folders';
 const SEARCH = 'search';
+// A document of CHUNK_MIN_FILE bytes or more is kept as chunks (see chunker.ts) rather than as one value in BYTES: its manifest
+// (the chunks in order), the chunks by hash, and how many documents hold each (so a chunk goes when the last one lets go).
+const MANIFESTS = 'manifests';
+const CHUNKS = 'chunks';
+const CHUNK_REFS = 'chunkRefs';
+
+/** What is stored of a document kept as chunks. */
+export interface StoredManifest {
+  algo: string;
+  size: number;
+  /** The chunks in order (a hash may repeat), and the length of each. */
+  hashes: string[];
+  lengths: number[];
+  /** The chunks the cloud copy is known to have, as of the last upload or download (see library.ts). */
+  syncedHashes?: string[];
+}
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 4);
+      const request = indexedDB.open(DB_NAME, 5);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -53,6 +71,11 @@ function openDb(): Promise<IDBDatabase> {
         if (from < 2) request.result.createObjectStore(THUMBS);
         if (from < 3) request.result.createObjectStore(FOLDERS, { keyPath: 'id' });
         if (from < 4) request.result.createObjectStore(SEARCH);
+        if (from < 5) {
+          request.result.createObjectStore(MANIFESTS);
+          request.result.createObjectStore(CHUNKS);
+          request.result.createObjectStore(CHUNK_REFS);
+        }
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -95,12 +118,36 @@ export async function listSaved(): Promise<SavedInfo[]> {
 
 export async function getSaved(id: string): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES]);
-  const [info, bytes] = await Promise.all([
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS]);
+  const [info, bytes, manifest] = await Promise.all([
     done(tx.objectStore(META).get(id) as IDBRequest<SavedInfo | undefined>),
     done(tx.objectStore(BYTES).get(id) as IDBRequest<ArrayBuffer | undefined>),
+    done(tx.objectStore(MANIFESTS).get(id) as IDBRequest<StoredManifest | undefined>),
   ]);
-  return info && bytes ? { info, bytes } : null;
+  if (!info) return null;
+  if (!manifest) return bytes ? { info, bytes } : null;
+  // Kept as chunks: put back together (a missing chunk means the copy is damaged, which reads as no copy).
+  const chunks = tx.objectStore(CHUNKS);
+  const found = await Promise.all([...new Set(manifest.hashes)].map(async (h) => [h, await done(chunks.get(h) as IDBRequest<ArrayBuffer | undefined>)] as const));
+  const byHash = new Map(found.flatMap(([h, bytes]) => (bytes ? [[h, new Uint8Array(bytes)] as const] : [])));
+  const whole = assemble({ algo: CHUNK_ALGO, size: manifest.size, chunks: manifest.hashes.map((h, i) => ({ h, n: manifest.lengths[i]! })) }, (h) => byHash.get(h));
+  return whole ? { info, bytes: whole.buffer as ArrayBuffer } : null;
+}
+
+/** A document kept as chunks: what it is made of, without the chunks (null for one kept whole, or no document). */
+export async function getSavedManifest(id: string): Promise<{ info: SavedInfo; manifest: StoredManifest } | null> {
+  const db = await openDb();
+  const tx = db.transaction([META, MANIFESTS]);
+  const [info, manifest] = await Promise.all([done(tx.objectStore(META).get(id) as IDBRequest<SavedInfo | undefined>), done(tx.objectStore(MANIFESTS).get(id) as IDBRequest<StoredManifest | undefined>)]);
+  return info && manifest ? { info, manifest } : null;
+}
+
+/** Chunks by hash (those that are stored). */
+export async function getChunks(hashes: readonly string[]): Promise<Map<string, Uint8Array>> {
+  const db = await openDb();
+  const store = db.transaction(CHUNKS).objectStore(CHUNKS);
+  const found = await Promise.all([...new Set(hashes)].map(async (h) => [h, await done(store.get(h) as IDBRequest<ArrayBuffer | undefined>)] as const));
+  return new Map(found.flatMap(([h, bytes]) => (bytes ? [[h, new Uint8Array(bytes)] as const] : [])));
 }
 
 interface WriteInput {
@@ -113,19 +160,103 @@ interface WriteInput {
   folderId?: string;
 }
 
+/** A copy of bytes that owns its buffer exactly (a view of a bigger buffer would take all of it into the database). */
+const own = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
+
 async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES], 'readwrite');
+  const view = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes);
+  const id = input.id ?? crypto.randomUUID();
+  // Chunking is done before the transaction (it is not database work, and a transaction ends when it waits for anything else).
+  let plan: Chunked | null = null;
+  if (view.length >= CHUNK_MIN_FILE) {
+    const before = input.id ? await readManifest(db, input.id) : undefined;
+    plan = await chunkBytes(view, new Set(before?.hashes));
+  }
+  for (;;) {
+    const info = await commit(db, id, input, view, plan, cloud);
+    if (info) return info;
+    // What was stored changed while this was being made ready (another tab saved it): everything is sent again, nothing assumed.
+    plan = await chunkBytes(view, new Set());
+  }
+}
+
+async function readManifest(db: IDBDatabase, id: string): Promise<StoredManifest | undefined> {
+  return (await done(db.transaction(MANIFESTS).objectStore(MANIFESTS).get(id))) as StoredManifest | undefined;
+}
+
+/** Lets go of the chunks a stored manifest holds (those nobody else holds are deleted), and forgets the manifest. */
+async function release(tx: IDBTransaction, id: string, manifest?: StoredManifest): Promise<void> {
+  const manifests = tx.objectStore(MANIFESTS);
+  const stored = manifest ?? ((await done(manifests.get(id))) as StoredManifest | undefined);
+  if (!stored) return;
+  await letGo(tx, new Set(stored.hashes));
+  manifests.delete(id);
+}
+
+/** One document's hold on each of these chunks ends. */
+async function letGo(tx: IDBTransaction, hashes: Iterable<string>): Promise<void> {
+  const refs = tx.objectStore(CHUNK_REFS);
+  const chunks = tx.objectStore(CHUNKS);
+  const list = [...hashes];
+  const counts = await Promise.all(list.map(async (h) => ((await done(refs.get(h))) as number | undefined) ?? 1));
+  list.forEach((h, i) => {
+    if (counts[i]! <= 1) {
+      refs.delete(h);
+      chunks.delete(h);
+    } else refs.put(counts[i]! - 1, h);
+  });
+}
+
+/** Writes a document in one transaction: null (having written nothing) if a chunk the plan counted on is not there. */
+async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo | null> {
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS], 'readwrite');
   const meta = tx.objectStore(META);
+  const manifests = tx.objectStore(MANIFESTS);
   const existing = input.id ? ((await done(meta.get(input.id))) as SavedInfo | undefined) : undefined;
-  const buffer = input.bytes instanceof Uint8Array ? input.bytes.slice().buffer : input.bytes.slice(0);
+  const old = input.id ? ((await done(manifests.get(input.id))) as StoredManifest | undefined) : undefined;
+  let write: (() => void) | null = null;
+  if (plan) {
+    const wanted = new Set(plan.manifest.chunks.map((c) => c.h));
+    const had = new Set(old?.hashes);
+    const fresh = new Map(plan.fresh.map((f) => [f.hash, f.bytes]));
+    const adds = [...wanted].filter((h) => !had.has(h));
+    const drops = [...had].filter((h) => !wanted.has(h));
+    const refs = tx.objectStore(CHUNK_REFS);
+    const held = await Promise.all(adds.map(async (h) => ((await done(refs.get(h))) as number | undefined) ?? 0));
+    // A chunk nobody holds and the plan did not bring: it was counted on from an earlier copy that has changed since.
+    if (adds.some((h, i) => held[i] === 0 && !fresh.has(h))) {
+      await finished(tx);
+      return null;
+    }
+    // What was stored of the cloud copy still is; a copy that has just come from the cloud is the cloud copy.
+    const synced = cloud ? [...wanted] : old?.syncedHashes;
+    write = () => {
+      adds.forEach((h, i) => {
+        if (held[i] === 0) tx.objectStore(CHUNKS).put(own(fresh.get(h)!), h);
+        refs.put(held[i]! + 1, h);
+      });
+      manifests.put(
+        {
+          algo: plan.manifest.algo,
+          size: plan.manifest.size,
+          hashes: plan.manifest.chunks.map((c) => c.h),
+          lengths: plan.manifest.chunks.map((c) => c.n),
+          ...(synced && { syncedHashes: synced }),
+        } satisfies StoredManifest,
+        id,
+      );
+      tx.objectStore(BYTES).delete(id);
+    };
+    if (drops.length) await letGo(tx, drops);
+  } else if (old) await release(tx, id, old);
   const info: SavedInfo = {
     ...existing,
-    id: input.id ?? crypto.randomUUID(),
+    id,
     ...(input.owner !== undefined && { owner: input.owner }),
     ...(input.folderId !== undefined && { folderId: input.folderId }),
     name: input.name,
-    size: buffer.byteLength,
+    size: view.length,
     // Strictly increasing per document, so "saved after the last sync" is always decidable.
     updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1),
   };
@@ -135,7 +266,8 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
     if (cloud.updatedAt !== undefined) info.cloudUpdatedAt = cloud.updatedAt;
   }
   meta.put(info);
-  tx.objectStore(BYTES).put(buffer, info.id);
+  if (write) write();
+  else tx.objectStore(BYTES).put(own(view), id);
   await finished(tx);
   return info;
 }
@@ -154,11 +286,14 @@ export function saveFromCloud(input: WriteInput & { cloudId: string; cloudUpdate
  * Records that the saved copy as of `syncedAt` (its `updatedAt` when it was read for upload) is
  * what's in the cloud. Saves made while it was uploading stay out of sync. A `name` renames it.
  */
-export async function markSynced(id: string, sync: { cloudId: string; syncedAt: number; cloudUpdatedAt?: number; name?: string }): Promise<void> {
+export async function markSynced(id: string, sync: { cloudId: string; syncedAt: number; cloudUpdatedAt?: number; name?: string; syncedHashes?: readonly string[] }): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(META, 'readwrite');
+  const tx = db.transaction([META, MANIFESTS], 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
   if (info) {
+    // The chunks the cloud copy now has, for the next upload to leave out.
+    const manifest = sync.syncedHashes ? ((await done(tx.objectStore(MANIFESTS).get(id))) as StoredManifest | undefined) : undefined;
+    if (manifest) tx.objectStore(MANIFESTS).put({ ...manifest, syncedHashes: [...sync.syncedHashes!] }, id);
     tx.objectStore(META).put({
       ...info,
       ...(sync.name !== undefined && { name: sync.name }),
@@ -284,7 +419,8 @@ export async function deleteOwnedBy(owner: string): Promise<void> {
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS], 'readwrite');
+  await release(tx, id);
   tx.objectStore(META).delete(id);
   tx.objectStore(BYTES).delete(id);
   tx.objectStore(THUMBS).delete(id);
@@ -299,10 +435,11 @@ export async function deleteSaved(id: string): Promise<void> {
  */
 export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS], 'readwrite');
   const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
   const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
   if (unchanged) {
+    await release(tx, seen.id);
     tx.objectStore(META).delete(seen.id);
     tx.objectStore(BYTES).delete(seen.id);
     tx.objectStore(THUMBS).delete(seen.id);

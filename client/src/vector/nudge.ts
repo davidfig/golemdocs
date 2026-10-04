@@ -9,6 +9,7 @@ import { apply, invert, meanScale, multiply } from './matrix.ts';
 import type { Matrix, PathCommand, PathNode, Scene, SceneNode } from './model.ts';
 import { IDENTITY } from './model.ts';
 import { isHidden, isLocked } from './edit.ts';
+import type { NodePath } from './edit.ts';
 
 interface Pt {
   x: number;
@@ -168,15 +169,20 @@ function asPath(node: SceneNode): PathNode | null {
 /**
  * Pushes every line of the drawing under the brush, changing the scene in place: `center` and
  * `delta` are in the drawing's coordinates. Hidden and locked nodes (and what is inside them) are
- * left alone. Returns whether anything moved.
+ * left alone. With a non-empty `only` (the selection), just those nodes, and what is inside
+ * them, are pushed. Returns whether anything moved.
  */
-export function nudgeScene(scene: Scene, center: Pt, delta: Pt, radius: number): boolean {
+export function nudgeScene(scene: Scene, center: Pt, delta: Pt, radius: number, only: readonly NodePath[] = []): boolean {
   let moved = false;
-  const visit = (list: SceneNode[], parent: Matrix): void => {
+  const chosen = new Set(only.map((p) => p.join(',')));
+  const visit = (list: SceneNode[], parent: Matrix, path: readonly number[], inside: boolean): void => {
     list.forEach((child, i) => {
       if (isHidden(child) || isLocked(child)) return;
+      const here = [...path, i];
+      const allowed = inside || !chosen.size || chosen.has(here.join(','));
       const world = child.transform ? multiply(parent, child.transform) : parent;
-      if (child.kind === 'group') return visit(child.children, world);
+      if (child.kind === 'group') return visit(child.children, world, here, allowed);
+      if (!allowed) return;
       if (child.kind !== 'path' && child.kind !== 'rect' && child.kind !== 'ellipse') return;
       const inverse = invert(world);
       if (!inverse) return;
@@ -192,6 +198,6 @@ export function nudgeScene(scene: Scene, center: Pt, delta: Pt, radius: number):
       moved = true;
     });
   };
-  visit(scene.children, IDENTITY);
+  visit(scene.children, IDENTITY, [], false);
   return moved;
 }

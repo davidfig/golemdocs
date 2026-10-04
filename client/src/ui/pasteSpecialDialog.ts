@@ -2,30 +2,9 @@
 // of formats, here the two the browser gives: formatted text as HTML, and plain text).
 
 import { t } from '../i18n/index.ts';
+import type { Clipboard } from './clipboard.ts';
 import { h } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
-
-export interface Clipboard {
-  html?: string;
-  text?: string;
-}
-
-/** What is on the clipboard now, or null if the browser won't let the page look. */
-export async function readClipboard(): Promise<Clipboard | null> {
-  try {
-    if (navigator.clipboard.read) {
-      const clip: Clipboard = {};
-      for (const item of await navigator.clipboard.read()) {
-        if (item.types.includes('text/html')) clip.html ??= await (await item.getType('text/html')).text();
-        if (item.types.includes('text/plain')) clip.text ??= await (await item.getType('text/plain')).text();
-      }
-      return clip;
-    }
-    return { text: await navigator.clipboard.readText() };
-  } catch {
-    return null;
-  }
-}
 
 /** Asks how to paste: resolves with the form chosen, or `undefined` on Cancel. */
 export async function showPasteSpecialDialog(clip: Clipboard | null): Promise<'html' | 'text' | undefined> {

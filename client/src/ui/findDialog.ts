@@ -11,11 +11,19 @@ export type FindTab = 'find' | 'replace' | 'goTo';
 /** What Go To can go to. */
 type Target = 'page' | 'comment';
 
+/** What is searched for and how it is read. */
+export interface FindQuery {
+  text: string;
+  matchCase: boolean;
+  wholeWord: boolean;
+  regex: boolean;
+}
+
 export interface FindHost {
-  find(text: string, matchCase: boolean, backward: boolean): void;
-  /** Replace the selection with `replacement` when it is a match of `text`; then find the next. */
-  replace(text: string, replacement: string, matchCase: boolean): void;
-  replaceAll(text: string, replacement: string, matchCase: boolean): void;
+  find(query: FindQuery, backward: boolean): void;
+  /** Replace the selection with `replacement` when it is a match of the query; then find the next. */
+  replace(query: FindQuery, replacement: string): void;
+  replaceAll(query: FindQuery, replacement: string): void;
   /** The selected text, to start a search from. */
   selectedText(): string;
   pageCount(): number;
@@ -56,6 +64,8 @@ export class FindDialog {
   private readonly query: HTMLInputElement;
   private readonly replacement: HTMLInputElement;
   private readonly matchCase: HTMLInputElement;
+  private readonly wholeWord: HTMLInputElement;
+  private readonly regex: HTMLInputElement;
   private readonly replaceFields: HTMLElement[];
   private readonly replaceButtons: HTMLElement[];
   private readonly findMessage: HTMLElement;
@@ -81,6 +91,8 @@ export class FindDialog {
     this.query = field(t('dialogs.find.findWhatLabel'));
     this.replacement = field(t('dialogs.find.replaceWithLabel'));
     this.matchCase = h('input', { attrs: { type: 'checkbox' } });
+    this.wholeWord = h('input', { attrs: { type: 'checkbox' } });
+    this.regex = h('input', { attrs: { type: 'checkbox' } });
     this.findMessage = h('div', { class: 'wm-find-message', attrs: { role: 'status' } });
     const replaceLabel = h('label', { text: t('dialogs.find.replaceWithField') });
     this.replaceFields = [replaceLabel, this.replacement];
@@ -98,6 +110,8 @@ export class FindDialog {
         replaceLabel,
         this.replacement,
         h('label', { class: 'wm-find-case' }, this.matchCase, t('dialogs.find.matchCase')),
+        h('label', { class: 'wm-find-case' }, this.wholeWord, t('dialogs.find.wholeWord')),
+        h('label', { class: 'wm-find-case' }, this.regex, t('dialogs.find.regex')),
         this.findMessage,
       ),
       h(
@@ -191,7 +205,7 @@ export class FindDialog {
     // Editing what is searched for starts again from the selection.
     this.query.addEventListener('input', () => {
       this.findMessage.textContent = '';
-      if (this.query.value) this.host.find(this.query.value, this.matchCase.checked, false);
+      if (this.query.value) this.host.find(this.queryNow(), false);
     });
     this.what.addEventListener('change', () => {
       this.entryLabel.textContent = targets().find((x) => x.target === this.what.value)?.entry ?? '';
@@ -236,16 +250,20 @@ export class FindDialog {
     else this.findMessage.textContent = result.found === false ? t('dialogs.find.noMatches') : '';
   }
 
+  private queryNow(): FindQuery {
+    return { text: this.query.value, matchCase: this.matchCase.checked, wholeWord: this.wholeWord.checked, regex: this.regex.checked };
+  }
+
   private next(backward: boolean): void {
-    if (this.query.value) this.host.find(this.query.value, this.matchCase.checked, backward);
+    if (this.query.value) this.host.find(this.queryNow(), backward);
   }
 
   private replaceOne(): void {
-    if (this.query.value) this.host.replace(this.query.value, this.replacement.value, this.matchCase.checked);
+    if (this.query.value) this.host.replace(this.queryNow(), this.replacement.value);
   }
 
   private replaceEvery(): void {
-    if (this.query.value) this.host.replaceAll(this.query.value, this.replacement.value, this.matchCase.checked);
+    if (this.query.value) this.host.replaceAll(this.queryNow(), this.replacement.value);
   }
 
   // --- Go To -------------------------------------------------------------------------------

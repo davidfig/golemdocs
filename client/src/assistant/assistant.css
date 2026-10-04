@@ -3,8 +3,8 @@
 
 .wm-clip {
   position: fixed;
-  right: 16px;
-  /* Above the status bar when it is shown (see ui/footer.ts). */
+  /* Over the document, left of any panel at its right (see keepOverDocument), and above the status bar when it is shown (see ui/footer.ts). */
+  right: calc(16px + var(--wm-clip-right, 0px));
   bottom: calc(16px + var(--wm-footer-height, 0px));
   z-index: 15;
   width: 85px;
@@ -42,7 +42,7 @@
 }
 
 .wm-clip-body:focus-visible {
-  outline: 2px solid var(--wm-hot-border, #316ac5);
+  outline: 2px solid var(--wm-hot-border);
   outline-offset: 4px;
   border-radius: 12px;
 }
@@ -181,7 +181,7 @@
   display: flex;
   flex-direction: column;
   width: 340px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - 32px - var(--wm-clip-right, 0px));
   height: min(460px, 70vh);
   box-sizing: border-box;
   border: 1px solid var(--wm-border, #b9b9b9);
@@ -250,7 +250,7 @@
 
 .wm-clip-msg.user {
   align-self: flex-end;
-  border-color: var(--wm-hot-border, #316ac5);
+  border-color: var(--wm-hot-border);
   background: var(--wm-hot, #c1d2ee);
 }
 
@@ -261,7 +261,7 @@
 
 .wm-clip-note {
   align-self: flex-start;
-  color: var(--wm-muted, #666);
+  color: var(--wm-muted);
   font-size: 12px;
   font-style: italic;
 }
@@ -319,7 +319,7 @@
 
 .wm-clip-credits {
   margin: 6px 0 0;
-  color: var(--wm-muted, #666);
+  color: var(--wm-muted);
   font-size: 11px;
 }
 
@@ -454,7 +454,7 @@
 }
 
 .wm-clip-panel[data-drop] {
-  outline: 2px dashed var(--wm-hot-border, #316ac5);
+  outline: 2px dashed var(--wm-hot-border);
   outline-offset: -6px;
 }
 

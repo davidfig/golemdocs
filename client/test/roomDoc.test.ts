@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { WordDocument } from '@golemdocs/docx';
 import { isWdoc } from '../src/formats/wdoc.ts';
-import { exclusiveRoom, isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../src/formats/roomDoc.ts';
+import { isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../src/formats/roomDoc.ts';
 import { sourceFromFile } from '../src/formats/source.ts';
 
 const docx = async (): Promise<Uint8Array> => (await WordDocument.create()).write();
@@ -50,7 +50,6 @@ test('a PDF’s changes are to its objects; those of everything else, to its tex
 });
 
 test('nobody has to wait to edit: a drawing is shared node by node', () => {
-  for (const format of ['svg', 'svgz', 'docx', 'md', 'txt', 'html', 'csv', 'png'] as const) assert.equal(exclusiveRoom(format), false, format);
   for (const format of ['svg', 'svgz'] as const) {
     assert.equal(roomKind(format), 'nodes', format);
     assert.equal(isVectorFormat(format), true, format);

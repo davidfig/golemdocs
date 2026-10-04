@@ -83,7 +83,7 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
   {
     name: 'Draw',
     visible: true,
-    items: ['image.pen', 'image.marker', SEPARATOR, 'image.line', 'image.arrow', 'image.rectangle', 'image.ellipse', 'image.fill', SEPARATOR, 'image.text', 'image.bubble', 'image.step', 'image.pixelate', 'image.eraser', 'image.move', SEPARATOR, 'control.drawColor', 'control.drawSize'],
+    items: ['image.move', SEPARATOR, 'control.drawColor', 'control.drawFill', SEPARATOR, 'image.pen', 'image.marker', 'image.eraser', SEPARATOR, 'image.smudge', 'image.mixer', 'image.blurBrush', 'image.sharpenBrush', 'image.dodge', 'image.burn', 'control.drawStrength', SEPARATOR, 'image.line', 'image.arrow', 'image.rectangle', 'image.ellipse', 'control.drawShape', SEPARATOR, 'image.text', 'image.bubble', 'image.step', 'image.pixelate', SEPARATOR, 'image.eyedropper', 'image.bucket', 'control.drawTolerance', SEPARATOR, 'control.drawSize', 'image.fill', 'control.drawOpacity', 'control.drawDash', SEPARATOR, 'image.background', 'image.layers'],
   },
   // The vector editor's tools and commands; only there for vector drawings.
   {

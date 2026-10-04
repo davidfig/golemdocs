@@ -3,12 +3,14 @@
 // edits. The rest run in the layout worker (../layout/agentTools.ts). The app's state comes through
 // the host, so these use the same functions the menus do.
 
+import type { SearchOptions } from '@golemdocs/editor/pattern';
 import { describeDrawing, editDrawing } from './drawingTools.ts';
-import { SMOOTHING_LEVELS, setLockGuides, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides } from '../ui/drawingOptions.ts';
+import { SMOOTHING_LEVELS, setLockGuides, setPenPressure, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides } from '../ui/drawingOptions.ts';
 import type { DrawingEditor } from './drawingTools.ts';
 import type { ImageEdit } from '../formats/imageEdit.ts';
-import { shiftShape } from '../formats/imageDraw.ts';
-import type { Shape } from '../formats/imageDraw.ts';
+import type { Background, Shape } from '../formats/imageDraw.ts';
+import { ANCHORS } from '../formats/imagePixels.ts';
+import { LAYER_OPS, describeLayers, layerOp } from './pictureLayerTools.ts';
 import { FORMAT_LIST, isFormat } from '../formats/convert.ts';
 import { sniffImage } from '../formats/images.ts';
 import { MAX_SIDE } from '../formats/imagePixels.ts';
@@ -16,13 +18,29 @@ import { displayDocumentName } from '../documentName.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { Action, ImageOp } from '../ui/actions.ts';
 import { FORMATS } from '../ui/formats.ts';
+import { NEW_KINDS } from '../ui/newKinds.ts';
 import type { DocumentKind } from '../ui/actions.ts';
 import type { ToolResult } from './conversation.ts';
 import { fileTools, type FileToolsHost } from './fileTools.ts';
 import type { OtherDocuments } from './libraryDocs.ts';
 import { MAX_COPY } from './otherDocs.ts';
 
+/** The large-text editor, when a big text file is open in it. Lines are numbered from 1; each answers in words for the model ("Error:" says nothing was done). */
+export interface TextEditorTools {
+  describe(): string;
+  read(start: number, count: number): string;
+  findAll(options: SearchOptions): Promise<string>;
+  replaceFile(options: SearchOptions, replacement: string): Promise<string>;
+  editLines(first: number, last: number, text: string): string;
+  insertLines(after: number, text: string): string;
+  deleteLines(first: number, last: number): string;
+  undoStep(): string;
+  redoStep(): string;
+}
+
 export interface AppToolsHost {
+  /** The large-text editor if a big text file is open in it (the paragraph tools do not apply to it), else null. */
+  textEditor(): TextEditorTools | null;
   /** The open document: a new object each time one is opened. */
   current(): object;
   documentName(): string;
@@ -43,7 +61,7 @@ export interface AppToolsHost {
   /** Opens a document of the library, resolving once it has opened. */
   openEntry(entry: LibraryEntry): Promise<void>;
   /** File › New (in `folderId`), resolving once the new document has opened. */
-  newDocument(folderId: string | null): Promise<void>;
+  newDocument(folderId: string | null, docKind?: DocumentKind): Promise<void>;
   /** Does what a menu or toolbar does. */
   perform(action: Action): Promise<void> | void;
   view(): { statusBar: boolean; ruler: boolean; formattingMarks: boolean };
@@ -62,10 +80,8 @@ export interface AppToolsHost {
   closeTextDrawing(): Promise<string | null>;
   /** A new blank drawing in the text, open for drawing; the reason it can't be, or null. */
   insertTextDrawing(size: { width?: number; height?: number }): Promise<string | null>;
-  /** Who is editing the open document, and for a drawing only one person at a time may edit, who may. */
+  /** Who is editing the open document. */
   collaboration(): Collaboration;
-  /** Asks for, or lets go of, the right to edit such a drawing, and says how it stands once answered. */
-  lease(action: 'request' | 'release'): Promise<Collaboration>;
   /** The shapes drawn over the open picture (its layers), and a change of them (resolving once it has taken effect). */
   pictureShapes(): readonly Shape[];
   setPictureShapes(shapes: Shape[]): Promise<void>;
@@ -80,16 +96,10 @@ export interface Collaboration {
   /** Everyone's names when known (yours marked), else how many. */
   people: string[];
   count: number;
-  /** Only one person at a time may edit this document (a drawing). */
-  exclusive: boolean;
-  /** This person may edit it now. */
-  mine: boolean;
-  /** Who may, when somebody does. */
-  holder: string | null;
 }
 
-/** The app's tools that act on the open document (the others are about the library). */
-const OPEN_DOCUMENT_APP_TOOLS = new Set(['read_drawing', 'edit_drawing', 'list_text_drawings', 'insert_text_drawing', 'open_text_drawing', 'close_text_drawing', 'collaboration_status', 'take_over_editing', 'release_editing', 'view_picture', 'rename_document', 'download_document', 'print_document', 'convert_document']);
+/** Tools that don't read or change the open document (the person's other documents, the app's settings); every other one is refused once a different document is open. File tools are left alone too. */
+const ELSEWHERE_TOOLS = new Set(['search_documents', 'read_other_document', 'open_file', 'new_document', 'download_all', 'set_drawing_options']);
 /** Tools that open another document on purpose: the request goes on with that one. */
 const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document']);
 
@@ -107,6 +117,11 @@ const wholeNumber = (args: Record<string, unknown>, key: string, min: number, ma
 };
 
 /** A whole number argument that may be left out. */
+const searchOptions = (args: Record<string, unknown>): SearchOptions => {
+  if (typeof args.text !== 'string') throw new Error('`text` must be text: what to find.');
+  return { text: args.text, caseSensitive: optionalFlag(args, 'match_case') ?? false, wholeWord: optionalFlag(args, 'whole_word') ?? false, regex: optionalFlag(args, 'regex') ?? false };
+};
+
 const optionalNumber = (args: Record<string, unknown>, key: string, fallback: number, min: number, max: number): number => {
   if (args[key] === undefined) return fallback;
   return wholeNumber(args, key, min, max);
@@ -125,27 +140,25 @@ const IMAGE_OPS: Record<string, ImageOp> = {
   sharpen: 'sharpen',
   auto_levels: 'autoLevels',
 };
-const DRAWN = ['line', 'arrow', 'rectangle', 'ellipse', 'text'] as const;
 
-const SHARED_PICTURE = 'others are editing this picture now, so changes to the picture itself (crop, resize, rotate, flip, colours, effects, flatten) are not available; draw, layers, erase_shape and move_shape are.';
-
-/** Who may edit a shared drawing, in a sentence. */
-function hold(info: Collaboration): string {
-  if (info.mine) return 'This person may edit the drawing.';
-  return info.holder ? `${info.holder} is editing this drawing now.` : 'Nobody holds the right to edit this drawing now.';
+/** The colour or gradient an operation paints with: `color`, and for a gradient `gradient_to` (with `gradient_type`, and `angle` for a linear one). */
+function paintArgs(args: Record<string, unknown>): Background {
+  const hex = (key: string): string | undefined => {
+    const v = args[key];
+    if (v === undefined) return undefined;
+    if (typeof v !== 'string' || !/^#[0-9a-f]{6}$/i.test(v)) throw new Error(`\`${key}\` must be like #e53935.`);
+    return v;
+  };
+  const from = hex('color');
+  if (!from) throw new Error('`color` is the colour to paint with, like #e53935.');
+  const to = hex('gradient_to');
+  if (!to) return { color: from };
+  const type = args.gradient_type === undefined ? 'linear' : args.gradient_type;
+  if (type !== 'linear' && type !== 'radial') throw new Error('`gradient_type` must be linear or radial.');
+  return { color: from, gradient: { type, to, angle: args.angle === undefined ? 90 : wholeNumber(args, 'angle', 0, 360) } };
 }
 
-/** The shapes drawn over a picture, back to front, numbered from 0. */
-function describeShapes(shapes: readonly Shape[]): string {
-  if (!shapes.length) return 'No shapes are drawn over the picture.';
-  return shapes
-    .map((s, i) => {
-      const [a, b] = [s.points[0], s.points[s.points.length - 1]];
-      const where = s.points.length > 1 ? ` from (${Math.round(a.x)}, ${Math.round(a.y)}) to (${Math.round(b.x)}, ${Math.round(b.y)})` : ` at (${Math.round(a.x)}, ${Math.round(a.y)})`;
-      return `${i}: ${s.tool}${where}; ${s.color}; width ${s.width}${s.text ? `; "${s.text}"` : ''}${s.fill ? '; filled' : ''}`;
-    })
-    .join('\n');
-}
+const SHARED_PICTURE = 'others are editing this picture now, so changes to the picture itself (crop, resize, rotate, flip, colours, effects, flatten) are not available; draw and the layer operations (layers, erase_shape, move_shape, group, hide_layer and the rest) are.';
 
 /**
  * The assistant's tools, and what it needs to know of each request: `begin` when one starts (the
@@ -155,14 +168,22 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
   /** The document open when each of the assistant's requests started: its edits are for that one. */
   const assistantDocs = new WeakMap<AbortSignal, object>();
 
+  /** The large-text editor, which the text_file tools need. */
+  const textEditor = (): TextEditorTools => {
+    const editor = host.textEditor();
+    if (!editor) throw new Error('no text file is open. text_file is only for a plain text file in the text editor.');
+    return editor;
+  };
+
   /** Runs one of the layout worker's tools for another tool, and answers with its text (the pictures a tool fetches are only for the model). */
   const workerText = async (name: string, args: string): Promise<string> => {
     const result = await host.agent(name, args);
     return typeof result === 'string' ? result : result.text;
   };
 
+  const files = fileTools(host.files);
   const tools: Record<string, (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult> = {
-    ...fileTools(host.files),
+    ...files,
     async list_pictures() {
       // The open document's pictures are the layout worker's to find; the library's are listed here.
       return `${await workerText('list_pictures', '{}')}\n${await host.otherDocuments.describePictureFiles()}`;
@@ -205,7 +226,33 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       const count = last - first + 1;
       return `Copied ${count === 1 ? `paragraph ${first}` : `paragraphs ${first} to ${last}`} of "${name}" into this document as paragraphs ${after + 1} to ${after + count}. Pictures and tables in them are not carried over, only their text; undo steps back.`;
     },
-    get_document_info: () => `The document is "${host.documentName()}", edited as ${formatLabel(host.documentKind())}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`,
+    get_document_info: () => {
+      const large = host.textEditor();
+      if (large) return `The document is "${host.documentName()}", ${large.describe()}. Use text_file to read and change it; it cannot be converted.`;
+      return `The document is "${host.documentName()}", edited as ${formatLabel(host.documentKind())}. It can be converted to: ${FORMAT_LIST.map(formatLabel).join(', ')}.`;
+    },
+    text_file_info: () => `"${host.documentName()}" is ${textEditor().describe()}.`,
+    text_file_read: (args) => textEditor().read(optionalNumber(args, 'line', 1, 1, 2_000_000_000), optionalNumber(args, 'count', 40, 1, 200)),
+    text_file_find: (args) => textEditor().findAll(searchOptions(args)),
+    text_file_replace(args) {
+      if (typeof args.with !== 'string') throw new Error('`with` must be text (it may be empty).');
+      return textEditor().replaceFile(searchOptions(args), args.with);
+    },
+    text_file_edit_lines(args) {
+      const line = wholeNumber(args, 'line', 1, 2_000_000_000);
+      if (typeof args.text !== 'string') throw new Error('`text` must be text (it may be empty).');
+      return textEditor().editLines(line, optionalNumber(args, 'last_line', line, line, 2_000_000_000), args.text);
+    },
+    text_file_insert_lines(args) {
+      if (typeof args.text !== 'string') throw new Error('`text` must be text.');
+      return textEditor().insertLines(wholeNumber(args, 'line', 0, 2_000_000_000), args.text);
+    },
+    text_file_delete_lines(args) {
+      const line = wholeNumber(args, 'line', 1, 2_000_000_000);
+      return textEditor().deleteLines(line, optionalNumber(args, 'last_line', line, line, 2_000_000_000));
+    },
+    text_file_undo: () => textEditor().undoStep(),
+    text_file_redo: () => textEditor().redoStep(),
     rename_document(args) {
       if (typeof args.name !== 'string') return 'Error: `name` must be text.';
       if (!host.renamable()) return 'Error: this document cannot be renamed.';
@@ -233,7 +280,8 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       const folder = args.folder;
       if (folder !== undefined && folder !== null && (typeof folder !== 'string' || !(await host.files.folders()).some((f) => f.id === folder))) return `Error: there is no folder ${String(folder)}.`;
       if (args.name !== undefined && typeof args.name !== 'string') return 'Error: `name` must be text.';
-      await host.newDocument((folder as string | null | undefined) ?? null);
+      if (args.type !== undefined && !NEW_KINDS.includes(args.type as DocumentKind)) return `Error: \`type\` must be one of ${NEW_KINDS.join(', ')}.`;
+      await host.newDocument((folder as string | null | undefined) ?? null, args.type as DocumentKind | undefined);
       const named = typeof args.name === 'string' ? host.renameDocument(args.name) : null;
       return `Opened a new blank document${named ? ` named "${displayDocumentName(named, host.documentKind())}"` : ''}; it is saved once something is written in it. The tools now work on it.`;
     },
@@ -305,6 +353,11 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         setLockGuides(lock);
         done.push(`guides ${lock ? 'locked' : 'unlocked'}`);
       }
+      const pressure = optionalFlag(args, 'pen_pressure');
+      if (pressure !== undefined) {
+        setPenPressure(pressure);
+        done.push(`pen pressure ${pressure ? 'on' : 'off'}`);
+      }
       const smoothing = args.pencil_smoothing;
       if (smoothing !== undefined) {
         const level = SMOOTHING_LEVELS.find((l) => l === smoothing);
@@ -312,7 +365,7 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         setPencilSmoothing(level);
         done.push(`pencil smoothing ${level}`);
       }
-      if (!done.length) throw new Error('Say what to change: select_after_pencil, return_to_select, pencil_smoothing, show_guides or lock_guides.');
+      if (!done.length) throw new Error('Say what to change: select_after_pencil, return_to_select, pencil_smoothing, pen_pressure, show_guides or lock_guides.');
       return `Changed the drawing options: ${done.join(', ')}.`;
     },
     async read_drawing() {
@@ -323,7 +376,6 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
     async edit_drawing(args) {
       const editor = await host.drawing();
       if (!editor?.drawing) return 'Error: the open document is not a vector drawing (SVG), and no drawing in its text is open. Convert it to SVG, or open one with text_drawings.';
-      if (editor.readOnly) return `Error: ${hold(host.collaboration())} Nothing was changed; use collaboration (take_over) if the person wants to edit it.`;
       return `${await editDrawing(editor, args)}\n${describeDrawing(editor.drawing)}`;
     },
     async list_text_drawings() {
@@ -351,20 +403,7 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       const info = host.collaboration();
       if (!info.shared) return 'Nobody else is editing this document now.';
       const who = info.people.length ? `Editing now: ${info.people.join(', ')}.` : `${info.count} people are editing now.`;
-      return info.exclusive ? `${who} ${hold(info)}` : `${who} Everyone can edit at once.`;
-    },
-    async take_over_editing() {
-      const before = host.collaboration();
-      if (!before.exclusive) return 'Nothing to take over: everyone can edit this document at once.';
-      if (before.mine) return 'This person already may edit the drawing.';
-      const after = await host.lease('request');
-      return after.mine ? 'This person may edit the drawing now.' : `Refused: ${hold(after)} It is given up when they stop working for a while; do not keep asking.`;
-    },
-    async release_editing() {
-      const before = host.collaboration();
-      if (!before.exclusive || !before.mine) return 'This person is not the one editing a shared drawing, so there is nothing to let go of.';
-      const after = await host.lease('release');
-      return after.mine ? 'It could not be let go of.' : 'Let go: others may edit the drawing now.';
+      return `${who} Everyone can edit at once.`;
     },
     async edit_picture(args) {
       if (!host.isPicture()) return 'Error: the open document is not a picture. Convert it to png, jpeg or webp to edit it as one.';
@@ -373,14 +412,11 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       const size = sniffImage(await host.pictureBytes());
       if (!size) throw new Error('the picture could not be read');
       // Shapes drawn over the picture are its layers: they are listed, changed and put into the picture here.
-      if (op === 'layers') return describeShapes(host.pictureShapes());
-      if (op === 'erase_shape' || op === 'move_shape') {
-        const shapes = host.pictureShapes();
-        const at = wholeNumber(args, 'number', 0, Math.max(0, shapes.length - 1));
-        if (!shapes.length) return 'Error: there are no shapes drawn over the picture.';
-        const next = op === 'erase_shape' ? shapes.filter((_, i) => i !== at) : shapes.map((s, i) => (i === at ? shiftShape(s, wholeNumber(args, 'dx', -size.width, size.width), wholeNumber(args, 'dy', -size.height, size.height)) : s));
-        await host.setPictureShapes([...next]);
-        return `Done: ${op.replace('_', ' ')} ${at}.\n${describeShapes(host.pictureShapes())}`;
+      if (op === 'layers') return describeLayers(host.pictureShapes());
+      if ((LAYER_OPS as readonly string[]).includes(op)) {
+        const next = layerOp(op, args, host.pictureShapes(), size);
+        await host.setPictureShapes([...next.shapes]);
+        return next.message;
       }
       if (op === 'flatten') {
         if (!host.pictureShapes().length) return 'There are no shapes to put into the picture.';
@@ -403,21 +439,14 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       } else if (op === 'adjust') {
         const part = (key: string) => (args[key] === undefined ? 0 : wholeNumber(args, key, -100, 100));
         edit = { op: 'adjust', brightness: part('brightness'), contrast: part('contrast'), saturation: part('saturation') };
-      } else if (op === 'draw') {
-        const tool = args.tool;
-        if (typeof tool !== 'string' || !(DRAWN as readonly string[]).includes(tool)) throw new Error(`\`tool\` must be one of ${DRAWN.join(', ')}.`);
-        const color = typeof args.color === 'string' && /^#[0-9a-f]{6}$/i.test(args.color) ? args.color : args.color === undefined ? '#e53935' : null;
-        if (!color) throw new Error('`color` must be like #e53935.');
-        const at = (px: string, py: string) => ({ x: wholeNumber(args, px, 0, size.width), y: wholeNumber(args, py, 0, size.height) });
-        const points = tool === 'text' ? [at('x', 'y')] : [at('x', 'y'), at('to_x', 'to_y')];
-        if (tool === 'text' && (typeof args.text !== 'string' || !args.text)) throw new Error('`text` is what to write.');
-        const width = args.width === undefined ? Math.max(2, Math.round(Math.max(size.width, size.height) / 150)) : wholeNumber(args, 'width', 1, 200);
-        const shape: Shape = { id: crypto.randomUUID().slice(0, 12), tool: tool as 'line', color, width, points, ...(optionalFlag(args, 'fill') && { fill: true }), ...(tool === 'text' && { text: args.text as string }) };
-        // A shape is a layer over the picture (its pixels are not changed), and is shared with others editing it.
-        await host.setPictureShapes([...host.pictureShapes(), shape]);
-        return `Done: draw ${tool} as shape ${host.pictureShapes().length - 1} over the picture (it is ${size.width} x ${size.height}; layers lists the shapes).`;
+      } else if (op === 'set_background') {
+        edit = { op: 'background', paint: paintArgs(args) };
+      } else if (op === 'set_canvas') {
+        const anchor = args.anchor === undefined ? 'center' : args.anchor;
+        if (typeof anchor !== 'string' || !(ANCHORS as readonly string[]).includes(anchor)) throw new Error(`\`anchor\` must be one of ${ANCHORS.join(', ')}.`);
+        edit = { op: 'canvas', width: wholeNumber(args, 'width', 1, MAX_SIDE), height: wholeNumber(args, 'height', 1, MAX_SIDE), anchor: anchor as (typeof ANCHORS)[number], ...(args.color !== undefined && { paint: paintArgs(args) }) };
       } else {
-        throw new Error(`\`op\` must be one of ${[...Object.keys(IMAGE_OPS), 'crop', 'resize', 'adjust', 'draw', 'layers', 'erase_shape', 'move_shape', 'flatten'].join(', ')}.`);
+        throw new Error(`\`op\` must be one of ${[...Object.keys(IMAGE_OPS), 'crop', 'resize', 'adjust', 'set_background', 'set_canvas', ...LAYER_OPS, 'flatten'].join(', ')}.`);
       }
       await host.changePicture(edit);
       return `Done: ${op.replaceAll('_', ' ')} (the picture is ${size.width} x ${size.height} before the change; undo steps back).`;
@@ -428,9 +457,11 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
     const handler = Object.hasOwn(tools, name) ? tools[name] : undefined;
     // Another document was opened since the request started (by the person, or a file tool): these
     // tools would read and change that one instead, without anyone meaning them to.
-    if ((!handler || OPEN_DOCUMENT_APP_TOOLS.has(name)) && assistantDocs.get(request) !== host.current()) {
+    if (!ELSEWHERE_TOOLS.has(name) && !Object.hasOwn(files, name) && assistantDocs.get(request) !== host.current()) {
       return `Error: the document this request was about is no longer open (now open: "${host.documentName()}"). Nothing was done; tell the user, and ask before working on this one.`;
     }
+    // A big text file is shown in an editor of its own, and the document under it is empty: the paragraph tools would work on that.
+    if (!handler && host.textEditor()) return 'Error: the open file is a plain text file, which has lines rather than paragraphs. Only text_file works on it (info, read, find, replace, edit_lines, insert_lines, delete_lines, undo, redo).';
     if (!handler) return host.agent(name, argumentsJson);
     let args: Record<string, unknown>;
     try {

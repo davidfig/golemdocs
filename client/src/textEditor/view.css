@@ -1,0 +1,99 @@
+/* The large-text editor's chrome (see view.ts). The text itself is drawn on the app's canvas, under this layer: only the find bar (over
+   the top of the text), the status line (over the bottom) and the hidden textarea that takes the keyboard are here. */
+
+.wm-large {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  color: var(--wm-text, #000);
+  font: 13px var(--wm-font, system-ui);
+}
+
+.wm-large[hidden] {
+  display: none;
+}
+
+.wm-large-fill {
+  flex: 1 1 auto;
+}
+
+.wm-large-bar {
+  pointer-events: auto;
+}
+
+.wm-large-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--wm-border, #b9b9b9);
+  background: var(--wm-face, #f0f0f0);
+}
+
+.wm-large-bar[hidden] {
+  display: none;
+}
+
+.wm-large-bar input[type='text'] {
+  min-width: 14em;
+  flex: 1 1 14em;
+  max-width: 32em;
+}
+
+.wm-large-bar .wm-large-line {
+  width: 7em;
+  flex: 0 0 auto;
+}
+
+.wm-large-toggle[aria-pressed='true'] {
+  background: var(--wm-checked, #e1e6f0);
+  border-color: var(--wm-hot-border, #316ac5);
+}
+
+.wm-large-message {
+  color: var(--wm-muted, #666);
+  min-width: 8em;
+}
+
+.wm-large-message.wm-large-error {
+  color: var(--wm-error, #b00020);
+}
+
+/* The textarea that takes typing and input-method text (it sits at the caret, so an input method's window opens there). */
+.wm-large-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  width: 2px;
+  height: 1em;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-large-replace {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-large-replace[hidden] {
+  display: none;
+}
+
+.wm-large-replace input[type='text'] {
+  min-width: 14em;
+  flex: 1 1 14em;
+  max-width: 32em;
+}

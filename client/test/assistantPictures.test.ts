@@ -114,7 +114,7 @@ const stored = (id: string, name: string, load: () => Promise<ArrayBuffer>, extr
 async function library() {
   const loads: string[] = [];
   const track = (id: string, bytes: () => Promise<ArrayBuffer>) => () => (loads.push(id), bytes());
-  const text = toBuffer(new TextEncoder().encode('not a document at all'));
+  const text = toBuffer(new Uint8Array([0, 1, 2, 3, 4, 5]));
   const documents = [
     stored('1', 'Report.docx', track('1', pictureDocx)),
     stored('2', 'Cat.png', track('2', pictureWdoc)),

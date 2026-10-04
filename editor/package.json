@@ -5,7 +5,9 @@
   "version": "0.9.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./textUnits": "./src/textUnits.ts",
+    "./pattern": "./src/pattern.ts"
   },
   "scripts": {
     "test": "tsx --test \"test/**/*.test.ts\"",

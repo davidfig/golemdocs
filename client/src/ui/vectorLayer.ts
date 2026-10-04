@@ -141,6 +141,19 @@ export class VectorLayer {
     };
   }
 
+  /** Paints the drawing on its white page into `width` × `height` pixels (the page's thumbnail); false when no drawing is shown. */
+  paintInto(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+    const scene = this._scene;
+    if (!scene) return false;
+    ctx.save();
+    ctx.scale(width / scene.width, height / scene.height);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, scene.width, scene.height);
+    paintScene(ctx, scene, scene.width, scene.height, { images: this.images });
+    ctx.restore();
+    return true;
+  }
+
   /** Paints the drawing where the view has its page (the view moved, or the drawing changed). */
   position(): void {
     const { scene } = this;

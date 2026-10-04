@@ -78,7 +78,10 @@ test.describe('Keyboard Shortcuts dialog', () => {
     await page.keyboard.press('F1');
     const dialog = shortcutsDialog(page);
     await expect(dialog.locator('th', { hasText: 'Vector Editor' })).toBeVisible();
-    const pen = dialog.getByRole('button', { name: 'Change shortcut for Pen', exact: true });
+    // The picture tools have a Pen too (Photoshop's B), in a section of their own.
+    await expect(dialog.locator('th', { hasText: 'Picture Tools' })).toBeVisible();
+    await expect(dialog.locator('[data-command="image.pen"]')).toHaveText('B');
+    const pen = dialog.locator('[data-command="vector.pen"]');
     await expect(pen).toHaveText('P');
     await pen.click();
     await page.keyboard.press('q');

@@ -30,6 +30,11 @@ export class PictureLayers implements ObjectHost {
     return layersOf({ shapes: this.list });
   }
 
+  /** Shapes as objects (for `ObjectSync.localFrom`). */
+  static objectsOf(shapes: readonly Shape[]): ObjectLayers {
+    return layersOf({ shapes: shapes.map(withId) });
+  }
+
   /** Changes from others, or an undo: put in as they are. There is one part to a picture, so it is the one that changed. */
   applyObjects(ops: readonly ObjectOp[]): number[] {
     const { layers, changed } = applyObjectOps(this.objects, ops);

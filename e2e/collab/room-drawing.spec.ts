@@ -1,5 +1,4 @@
-// A drawing in a room: only one person at a time edits it (the lease), the others see each change as it is made, and
-// can take over once the editor has gone.
+// A drawing in a room: everyone edits it at once, node by node, and each sees the others' changes as they are made.
 
 import { test, expect, App } from '../fixtures';
 import { importFile } from '../files/helpers';
@@ -40,12 +39,9 @@ async function drawRectangle(app: App): Promise<void> {
   await app.page.mouse.up();
 }
 
-test('a drawing can be shared: the one who joins opens the same drawing as a drawing, and nobody waits to edit', async ({ browser }) => {
+test('a drawing can be shared: the one who joins opens the same drawing as a drawing', async ({ browser }) => {
   const { context, a, b } = await drawingPair(browser);
   await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/SVG/);
-  // There is no one editor: no bar telling anyone to wait.
-  await expect(a.page.locator('.wm-lease')).toBeHidden();
-  await expect(b.page.locator('.wm-lease')).toBeHidden();
   await context.close();
 });
 

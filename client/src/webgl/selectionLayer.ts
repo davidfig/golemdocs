@@ -2,23 +2,13 @@ import { packColor, RECT_INSTANCE_BYTES } from '@golemdocs/layout';
 import type { SelectionUpdate } from '../layout/protocol.ts';
 import { RectBatch } from './shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';
+import { CARET, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from './overlayColors.ts';
 
-const HIGHLIGHT = packColor(0x3390ff, 0.28);
 /** Commented text, under the selection. */
 const COMMENTED = packColor(0xffc83d, 0.35);
-const CARET = packColor(0x000000);
-/** Squiggles under misspelled words and grammar mistakes. */
-const SQUIGGLE_COLORS = [packColor(0xe0271f), packColor(0x1c9c3c)];
-/** A squiggle is a run of little steps up and down: width and height of a step, and the rise, in points. */
-const STEP = 1.6;
-const STEP_HEIGHT = 0.7;
-const RISE = 1;
 /** Caret width in points; the rect shader keeps it at least one device pixel wide. */
 const CARET_WIDTH = 0.01;
 
-/** Other people's carets are wider than one's own, and flagged, points. */
-const REMOTE_WIDTH = 1.5;
-const FLAG = 3;
 
 /** Rect instances, each with its own color. */
 function coloredRects(list: { rect: number[]; color: number }[]): RectBatch {
@@ -73,8 +63,8 @@ export class SelectionLayer {
     };
     add(selection.commentRects, COMMENTED);
     // Other people's selections, behind the text in their colors, and behind this user's own.
-    for (const person of selection.remoteRects) add(Float64Array.from(person.rects), packColor(person.color, 0.25));
-    add(selection.rects, HIGHLIGHT);
+    for (const person of selection.remoteRects) add(Float64Array.from(person.rects), packColor(person.color, REMOTE_ALPHA));
+    add(selection.rects, SELECTION);
     for (const [page, list] of byPage) this.highlights.set(page, coloredRects(list));
     this.updateSquiggles(selection.spellMarks);
     this.caret = selection.caret;
@@ -108,8 +98,7 @@ export class SelectionLayer {
       if (!list) byPage.set(marks[i], (list = []));
       const [x, y, width, height] = [marks[i + 1], marks[i + 2], marks[i + 3], marks[i + 4]];
       const color = SQUIGGLE_COLORS[marks[i + 5]] ?? SQUIGGLE_COLORS[0];
-      const base = y + height - STEP_HEIGHT - 0.3;
-      for (let k = 0, at = x; at < x + width; k++, at += STEP) list.push({ rect: [at, k % 2 ? base : base - RISE, Math.min(STEP, x + width - at), STEP_HEIGHT], color });
+      for (const rect of squiggleRects(x, y, width, height)) list.push({ rect, color });
     }
     for (const [page, list] of byPage) this.squiggles.set(page, coloredRects(list));
   }

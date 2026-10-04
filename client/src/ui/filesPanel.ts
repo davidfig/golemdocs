@@ -16,6 +16,8 @@ import { fileIcon, setFileName } from './fileIcons.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { showPopupMenu, type PopupItem } from './popupMenu.ts';
+import { newKindItems } from './newKinds.ts';
+import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
 import './filesPanel.css';
 
@@ -24,7 +26,7 @@ export interface FilesPanelHost {
   /** The pointer is on this document: a chance to start fetching what opening it needs. */
   warm(entry: LibraryEntry): void;
   /** Starts a blank document, to be filed in `folderId` (null: the top level) when it is first saved. */
-  newDocument(folderId: string | null): void;
+  newDocument(folderId: string | null, docKind?: DocumentKind): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
   importFile(folderId: string | null): void;
   /** Asks for a folder on this computer and imports its documents, filed in `folderId`. */
@@ -330,7 +332,7 @@ export class FilesPanel {
     return [
       { label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(folder.id) },
       'separator',
-      { label: t('panels.dashboard.newBlank'), run: () => this.host.newDocument(folder.id) },
+      { label: t('panels.dashboard.newBlank'), items: newKindItems((kind) => this.host.newDocument(folder.id, kind)) },
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
@@ -345,7 +347,7 @@ export class FilesPanel {
   /** What a right click on the empty part offers: the same as on the Documents screen, at the top level. */
   private rootItems(): PopupItem[] {
     return [
-      { label: t('panels.dashboard.newBlank'), run: () => this.host.newDocument(null) },
+      { label: t('panels.dashboard.newBlank'), items: newKindItems((kind) => this.host.newDocument(null, kind)) },
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(null) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(null) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(null) },

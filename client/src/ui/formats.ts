@@ -45,8 +45,8 @@ export interface FormatProfile {
   imageTools: boolean;
   /** A vector drawing: the vector editor's tools apply, and undo and redo are the editor's own. */
   vectorTools: boolean;
-  /** A file too big to be a document, shown in the large-text viewer: search, filter and copy, and nothing that edits, prints or converts. */
-  largeText: boolean;
+  /** A file too big to be a document, shown in the large-text editor: search, filter, replace and typing, and nothing that formats, prints or converts. */
+  textEditor: boolean;
 }
 
 const WORD_STYLES = [
@@ -92,7 +92,7 @@ const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   horizontalRule: true,
   imageTools: false,
   vectorTools: false,
-  largeText: false,
+  textEditor: false,
 };
 
 const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
@@ -122,7 +122,7 @@ const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   horizontalRule: false,
   imageTools: false,
   vectorTools: false,
-  largeText: false,
+  textEditor: false,
 };
 
 /** What an HTML page can express; EPUB and MHTML hold the same content in a container. */
@@ -155,8 +155,8 @@ const MARKUP: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   horizontalRule: true,
 };
 
-/** A text file too big to be a document: read in the large-text viewer (see ../largeText). */
-const LARGE_TEXT: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, largeText: true };
+/** A text file too big to be a document: edited in the large-text editor (see ../textEditor). */
+const LARGE_TEXT: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, textEditor: true };
 
 /** A vector drawing: looked at for now; the vector editor's tools come with it (see vector/). */
 const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, vectorTools: true };
@@ -279,7 +279,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   fb2: { ...MARKUP, kind: 'fb2', label: 'FictionBook', extensions: ['.fb2'], mime: 'application/x-fictionbook+xml', marks: ['bold', 'italic', 'strikethrough', 'code', 'superscript', 'subscript'], lists: false, codeBlocks: false },
   // An outline: headings and nested lists of plain text.
   opml: { ...NOTHING, kind: 'opml', label: 'OPML', extensions: ['.opml'], mime: 'text/x-opml', styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'], lists: true, indent: true },
-  largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.largetext'); }, extensions: [], mime: 'text/plain' },
+  largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.txt'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg'], mime: 'image/jpeg' },
   webp: { ...PICTURE, kind: 'webp', get label() { return t('menus.format.webp'); }, extensions: ['.webp'], mime: 'image/webp' },
@@ -345,7 +345,7 @@ export function formatGroup(kind: DocumentKind): (typeof FORMAT_GROUPS)[number][
 
 /** The kinds a document of this kind can be switched to, grouped and in order: the document's own group first (an image lists the other images first), then the popular formats and the rest (its own kind included, if it isn't one of them). */
 export function convertTargets(kind: DocumentKind): DocumentKind[] {
-  if (kind === 'largetext') return ['largetext'];
+  if (kind === 'largetext') return convertTargets('txt');
   const order = PICTURE_KINDS.includes(kind) ? PICTURE_CONVERT_ORDER : VECTOR_KINDS.includes(kind) ? VECTOR_CONVERT_ORDER : CONVERT_ORDER;
   const all = order.includes(kind) ? order : [...order, kind];
   const own = FORMAT_GROUPS.find((g) => g.kinds.includes(kind));
@@ -376,16 +376,26 @@ export function acceptList(): string {
 
 /** Whether a document of this format can express the action at all. */
 export function formatAllows(profile: FormatProfile, action: Action): boolean {
-  // The viewer for big text files only looks: no printing, converting, sharing or document properties.
-  if (profile.largeText) {
+  // The text editor edits text and nothing else: no formatting or document properties (printing and converting open the file as a document first).
+  if (profile.textEditor) {
     switch (action.kind) {
       case 'print':
       case 'printPreview':
       case 'convert':
       case 'share':
+      case 'undo':
+      case 'redo':
+      case 'cut':
+      case 'copy':
+      case 'paste':
+      case 'selectAll':
+      case 'openSelection':
+      case 'insertText':
+        return true;
+      case 'changeCase':
         return false;
       case 'dialog':
-        return action.name === 'find' || action.name === 'goTo' || action.name === 'searchAll';
+        return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll' || action.name === 'spelling';
     }
   }
   switch (action.kind) {
@@ -420,6 +430,9 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return true;
     case 'setFormMode':
       return profile.kind === 'pdf';
+    // Only the large-text editor has a selection of lines to open (answered above).
+    case 'openSelection':
+      return false;
     case 'image':
     case 'drawStyle':
       return profile.imageTools;

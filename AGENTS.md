@@ -62,6 +62,13 @@ The app should look and behave the same everywhere: the same buttons, icons, fon
 
 - **Reuse before you build.** Before writing a button, title bar, icon or dialog, look for the shared one and use it: `dialogTitleBar`, `showDialog` (`ui/popup.ts`), `iconButton` and `CLOSE_ICON` (`ui/dom.ts`), the `wm-button` class, and the color and font variables (`--wm-*`).
 - **Centralize what you would otherwise copy.** If two places need the same element and no shared one exists, make it shared (a helper in `ui/`, a class in `ui.css`) and move the existing copies onto it in the same change, rather than adding a third.
+- **One component per job, in one place.** Every kind of control has a single implementation that every editor calls; never build a second one for another editor, and never use a native `<select>`:
+  - drop-down lists of choices (stroke style, line width, fill type, opacity...): `dropdown` in `ui/dropdown.ts` (`lineSample` for width samples); a list of strokes is `strokeStyleList` in `ui/chrome.ts`, shared by drawings and pictures;
+  - segmented choices: `segmented` (`ui/dom.ts`); colour buttons with a palette and a fill header: `colorButton` (`ui/toolbar.ts`) with `fillHeader` / `drawFillHeader`; gradients, fills and strokes look and work the same for drawings and pictures, so a picture's fill type, gradient and stroke style live in its Fill and Line popups just as a drawing's do;
+  - the layers panel (rows, picking with Shift and Ctrl, eye, padlock, rename, drag to reorder, menu, buttons): `LayerTree` in `ui/layerTree.ts`; the vector editor and the picture tools each only give it an adapter (`ui/layersPanel.ts`, `ui/pictureLayersPanel.ts`) saying what their rows are and what each action does;
+  - mouse cursors: `ui/cursors.ts` (one drawing per tool, shared by the vector editor and the picture tools), set through the editor's `setCursor`;
+  - shapes and strokes: the vector editor's lists (`vector/shapes.ts`, `vector/brushPresets.ts`, `shapePreview`, `brushPreview`) are used by the picture tools too, so a new shape or brush shows up in both.
+  When a feature needs a control that exists in another editor, reuse it as it is, or move it to a shared module and move the other editor onto it in the same change, so the two can never differ. Look at how the vector editor does something before doing it for pictures (and the other way round), and match it.
 - **Draw icons, don't type them.** Use an SVG (`iconButton`) rather than a character such as `×` or `▸`: characters are placed differently by each font, so they don't line up with each other.
 
 ## Localization

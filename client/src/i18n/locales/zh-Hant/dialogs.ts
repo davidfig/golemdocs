@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': '完成鉛筆筆畫後將其選取',
   'dialogs.options.returnToSelect': '繪製形狀或鋼筆路徑後切換回選取工具',
   'dialogs.options.pencilSmoothing': '鉛筆平滑',
+  'dialogs.options.penPressure': '繪圖板的筆按得越重，畫出的線條越粗',
   'dialogs.options.off': '關',
   'dialogs.options.low': '低',
   'dialogs.options.medium': '中',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': '參考線',
   'dialogs.options.showGuides': '顯示參考線',
   'dialogs.options.lockGuides': '鎖定參考線',
+  'dialogs.find.wholeWord': '全字比對',
+  'dialogs.find.regex': '規則運算式',
 };

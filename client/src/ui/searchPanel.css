@@ -77,12 +77,12 @@
 }
 
 .wm-search-snippet mark {
-  background: var(--wm-find, #ffe38a);
-  color: inherit;
+  background: var(--wm-find);
+  color: var(--wm-find-text);
 }
 
 .wm-search-tag {
-  color: var(--wm-link, #0b57d0);
+  color: var(--wm-link);
   cursor: pointer;
 }
 
@@ -109,7 +109,7 @@
   border: 1px solid var(--wm-border, #b9b9b9);
   border-radius: 10px;
   background: linear-gradient(var(--wm-bar-top, #fbfbfb), var(--wm-bar-bottom, #e4e4e4));
-  color: var(--wm-link, #0b57d0);
+  color: var(--wm-link);
   font: inherit;
   padding: 1px 8px;
   cursor: pointer;
@@ -117,7 +117,7 @@
 
 .wm-search-chip:hover,
 .wm-search-chip:focus-visible {
-  border-color: var(--wm-hot-border, #316ac5);
+  border-color: var(--wm-hot-border);
   background: var(--wm-hot, #c1d2ee);
 }
 

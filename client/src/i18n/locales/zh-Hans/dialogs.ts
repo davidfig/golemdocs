@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': '完成铅笔笔画后将其选中',
   'dialogs.options.returnToSelect': '绘制形状或钢笔路径后切换回选择工具',
   'dialogs.options.pencilSmoothing': '铅笔平滑',
+  'dialogs.options.penPressure': '数位板的笔按得越重，画出的线条越粗',
   'dialogs.options.off': '关',
   'dialogs.options.low': '低',
   'dialogs.options.medium': '中',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': '参考线',
   'dialogs.options.showGuides': '显示参考线',
   'dialogs.options.lockGuides': '锁定参考线',
+  'dialogs.find.wholeWord': '全字匹配',
+  'dialogs.find.regex': '正则表达式',
 };

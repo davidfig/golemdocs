@@ -64,7 +64,7 @@ export const app: Partial<Messages> = {
   'app.roomConnectionLost': '接続が切断されました',
   'app.roomViewOnly': '閲覧のみ',
   'app.roomPeople': '{count} 人が参加中',
-  'app.collabNotHere': '画像はまだ共同編集できません',
+  'app.collabNotHere': 'このドキュメントは共有できません',
   'app.collabFailed': '共同編集できません：{message}',
   'app.leaveRoomToSwitch': '形式を切り替えるには、共同編集ルームから退出してください',
 
@@ -167,10 +167,6 @@ export const app: Partial<Messages> = {
   'app.storageOpenFailed': 'ブラウザーのストレージを開けませんでした。',
   'app.storageAborted': 'ストレージのトランザクションが中止されました。',
   'app.storageClearFailed': 'ブラウザーのストレージを消去できませんでした。',
-  'room.leaseHeld': '{name} さんがこの図形を編集中です。',
-  'room.leaseFree': 'この図形を編集している人はいません。',
-  'room.leaseTakeOver': '引き継ぐ',
-  'room.leaseEdit': '編集する',
   'room.pdfPageOps': '他の人がこの PDF を編集している間は、ページの移動、削除、回転はまだできません。',
   'room.pdfImageTooBig': '他の人がこの PDF を編集している間は、この画像は大きすぎて追加できません。',
 };

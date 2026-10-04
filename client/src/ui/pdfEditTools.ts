@@ -7,7 +7,7 @@
 import { t } from '../i18n/index.ts';
 import type { WireBox, WireCommand, WirePickedObject, WirePickedText } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
-import { h, isFormField } from './dom.ts';
+import { h, isFormField, modalOpen } from './dom.ts';
 import './pdfEditTools.css';
 
 export interface ToolPage {
@@ -354,7 +354,7 @@ export class PdfEditTools {
 
   private key(e: KeyboardEvent): void {
     // Keys typed in a box, or pressed in a dialog, are theirs.
-    if (isFormField(e.target) || document.querySelector('dialog:modal')) return;
+    if (isFormField(e.target) || modalOpen()) return;
     if (e.key === 'Escape' && (this.tool || this.object)) {
       if (this.tool) this.choose(null);
       else this.host.send({ kind: 'pdfPutDown' });

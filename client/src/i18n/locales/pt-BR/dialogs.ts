@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': 'Selecionar o traço do lápis ao terminá-lo',
   'dialogs.options.returnToSelect': 'Voltar à ferramenta Selecionar depois de desenhar uma forma ou um caminho de caneta',
   'dialogs.options.pencilSmoothing': 'Suavização do lápis',
+  'dialogs.options.penPressure': 'Desenhar linhas mais grossas quanto mais forte a caneta da mesa digitalizadora for pressionada',
   'dialogs.options.off': 'Desligada',
   'dialogs.options.low': 'Baixa',
   'dialogs.options.medium': 'Média',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': 'Guias',
   'dialogs.options.showGuides': 'Mostrar guias',
   'dialogs.options.lockGuides': 'Bloquear guias',
+  'dialogs.find.wholeWord': 'Palavra inteira',
+  'dialogs.find.regex': 'Expressão regular',
 };

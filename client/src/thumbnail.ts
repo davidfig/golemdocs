@@ -76,7 +76,7 @@ export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, pag
  * Renders a page to an image (WebP where the browser can encode it, else PNG). Returns null if
  * the framebuffer can't be made.
  */
-export async function capturePageThumbnail(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage): Promise<Blob | null> {
+export async function capturePageThumbnail(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage, paintOver?: (context: CanvasRenderingContext2D, width: number, height: number) => void): Promise<Blob | null> {
   const { width, height } = thumbnailSize(page.width, page.height);
   const pixels = readPage(gl, renderer, page, width, height);
   if (!pixels) return null;
@@ -86,6 +86,27 @@ export async function capturePageThumbnail(gl: WebGL2RenderingContext, renderer:
   const context = canvas.getContext('2d');
   if (!context) return null;
   context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  paintOver?.(context, width, height);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
+}
+
+/** A thumbnail of a plain text file: its first lines on a page, as small as a page's would be. */
+export async function textThumbnail(lines: readonly string[]): Promise<Blob | null> {
+  const { width, height } = thumbnailSize(612, 792);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = '#3a3a3a';
+  context.font = '7px "JetBrains Mono", ui-monospace, monospace';
+  context.textBaseline = 'top';
+  const margin = 18;
+  const step = 9;
+  const columns = Math.floor((width - 2 * margin) / 4.2);
+  for (let i = 0; i < lines.length && margin + (i + 1) * step < height - margin; i++) context.fillText(lines[i]!.replace(/\t/g, '    ').slice(0, columns), margin, margin + i * step);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
 }
 

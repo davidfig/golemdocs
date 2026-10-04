@@ -41,7 +41,6 @@ export const menus: Partial<Messages> = {
   'menus.format.txt': '일반 텍스트',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '전자 메일 메시지',
-  'menus.format.largetext': '큰 텍스트',
   'menus.format.png': 'PNG 이미지',
   'menus.format.jpeg': 'JPEG 이미지',
   'menus.format.webp': 'WebP 이미지',

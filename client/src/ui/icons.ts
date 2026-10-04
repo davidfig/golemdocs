@@ -186,6 +186,16 @@ export const ICONS: Record<string, string> = {
       `<path d="M3.5 9.5h17M3.5 14.5h17M9.2 4.5v15M14.8 4.5v15" stroke-width="1"/>` +
       `<rect x="9.2" y="9.5" width="5.6" height="5" fill="${BLUE}" stroke="none"/><rect x="3.5" y="14.5" width="5.7" height="5" fill="${LINE}" stroke="none"/><rect x="14.8" y="4.5" width="5.7" height="5" fill="${LINE}" stroke="none"/>`,
   ),
+  smudge: svg(`<path d="M5 17c2.500-1 4-3.500 5.500-6.500S14 6 18 6.500" stroke-width="3.400" stroke="${BLUE}"/><path d="M5 17c2.500-1 4-3.500 5.500-6.500S14 6 18 6.500" stroke-width="1.600" stroke="${SKY}"/><path d="M12 19.500c2-.5 4-2 6-4.500" stroke-width="1.400"/>`),
+  blurBrush: svg(`<circle cx="12" cy="12" r="7.500" fill="${SKY}" stroke-dasharray="2 2.200"/><circle cx="12" cy="12" r="3.500" fill="${BLUE}" stroke="none" opacity=".7"/>`),
+  sharpenBrush: svg(`<path d="M12 3.500l8 15.500H4z" fill="${SKY}"/><path d="M12 9v5" stroke-width="1.800"/>`),
+  mixer: svg(`<path d="M4 15c2-5 4-5 6-2s4 2 6-3" stroke="${RED}" stroke-width="3.200"/><path d="M8 19c2-3 4-3 6-1s4 1 6-2" stroke="${BLUE}" stroke-width="3.200" opacity=".85"/>`),
+  dodge: svg(`<circle cx="12" cy="12" r="4.500" fill="${YELLOW}"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.500 5.500l2 2M16.500 16.500l2 2M18.500 5.500l-2 2M7.500 16.500l-2 2" stroke-width="1.700"/>`),
+  burn: svg(`<path d="M12 3c4 4.500 6 7 6 10a6 6 0 0 1-12 0c0-3 2-5.500 6-10z" fill="${ORANGE}"/><path d="M12 12c2 2 3 3 3 4.500a3 3 0 0 1-6 0c0-1.500 1-2.500 3-4.500z" fill="${YELLOW}" stroke-width="1.200"/>`),
+  eyedropper: svg(`<path d="M4 20.5l1-4 8.500-8.500 3 3L8 19.500z" fill="${SKY}"/><path d="M12.500 7.500l-1-1 2.500-2.500a2.200 2.200 0 0 1 3.100 3.100l-2.500 2.500-1-1" fill="${LINE}"/><path d="M5.500 17l3 3" stroke-width="1"/>`),
+  bucket: svg(`<path d="M4.500 12l7-7 8 8-7 7z" fill="${SKY}"/><path d="M5 11.500l12 .5M11.500 5L9 3.500" stroke-width="1.600"/><path d="M20 15.500c1.500 2 2 3 2 4a2 2 0 0 1-4 0c0-1 .5-2 2-4z" fill="${BLUE}"/>`),
+  background: svg(`<rect x="3.500" y="4.500" width="17" height="15" rx="2" fill="${SKY}"/><path d="M3.500 15.500l5-5 4 4 3-3 5 5" fill="${GREEN}" stroke-width="1.400"/><circle cx="16" cy="9" r="1.600" fill="${YELLOW}" stroke-width="1.200"/>`),
+  layersStack: svg(`<path d="M12 3.500l9 4.500-9 4.500L3 8z" fill="${SKY}"/><path d="M3 12l9 4.500 9-4.500M3 16l9 4.500 9-4.500" stroke-width="1.700"/>`),
   eraser: svg(`<path d="M14.5 4l6 6-8.5 8.5H7.5L3.5 14.5z" fill="${PINK}"/><path d="M9 9l6 6M8 20.5h12.5" stroke-width="2"/>`),
   import: svg(
     `<path d="M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4" fill="${SKY}"/>` +

@@ -7,12 +7,16 @@ import { FORMAT_ACTIONS, TABLE_EDITS, type FormatAction } from './layout/formatt
 import type { DocumentSource } from './layout/protocol.ts';
 import { WDOC_EXTENSION } from './formats/wdoc.ts';
 import { isZipName, sourceFromFile } from './formats/source.ts';
+import type { DocumentEngine } from './documentEngine.ts';
+import { writeClipboardText } from './ui/clipboard.ts';
 import { toPng } from './formats/imageCodec.ts';
-import { LARGE_TEXT_BYTES, looksLikeText, opensAsLargeText } from './formats/textFiles.ts';
+import type { DrawStyle } from './formats/imageDraw.ts';
+import { looksLikeText, usesTextEngine } from './formats/textFiles.ts';
 import { nearestPage, type Bounds } from './document/arrange.ts';
 import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
+import { blankSource, lastNewKind } from './ui/newKinds.ts';
 import { acceptList, type ImageOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
@@ -26,6 +30,8 @@ export interface AppHooks {
   pages(): readonly GpuPage[];
   bounds(): Bounds;
   open(source: DocumentSource): void;
+  /** Resolves once a document other than the one open now has opened. */
+  documentReady(): Promise<void>;
   /** Cover the editor with the loading screen for `name` (else take it away). */
   loading(name: string | null): void;
   openSample(id: string): void;
@@ -81,19 +87,17 @@ export interface AppHooks {
   /** The open document is a vector drawing. */
   isDrawing(): boolean;
   /** The Draw tools' colour and thickness step. */
-  drawStyle(color?: string, size?: number, fill?: boolean): void;
+  drawStyle(change: Partial<DrawStyle>): void;
   /** Insert ▸ Picture: choose a picture file and put it in the document. */
   pickPicture(): void;
   /** Puts a new blank vector drawing in the text and starts editing it. */
   insertDrawing(): void;
-  /** The open file is in the large-text viewer. */
-  isLargeText(): boolean;
-  /** Copy the lines selected in the large-text viewer. */
-  largeCopy(): Promise<void>;
-  /** Change the viewer's text size by a factor, or back to normal. */
-  largeZoom(factor: number, reset?: boolean): void;
+  /** The editor of the open file when it is not a document (the text editor), else null. */
+  engine(): DocumentEngine | null;
+  /** Opens the large-text editor's selected lines as an ordinary document. */
+  openSelection(): void;
   /** Open a text file too big to be a document: in the viewer. */
-  openLarge(name: string, bytes: Uint8Array): void;
+  openLarge(name: string, bytes: Uint8Array): void | Promise<void>;
   /** The open document is a picture (its own undo history, and no text editing). */
   isPicture(): boolean;
   stepPicture(direction: 'undo' | 'redo'): Promise<void>;
@@ -157,6 +161,7 @@ const SUPPORTED = new Set<ActionKind>([
   'share',
   'download',
   'downloadAll',
+  'openSelection',
   'print',
   'printPreview',
   'signIn',
@@ -220,11 +225,11 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         if (!known) {
           // An extension we don't know: text is text whatever it is called, binary files are not opened.
           if (!looksLikeText(new Uint8Array(bytes))) return unsupported(file);
-          return bytes.byteLength >= LARGE_TEXT_BYTES ? app.openLarge(file.name, new Uint8Array(bytes)) : app.open({ kind: 'txt', name: file.name, bytes });
+          return app.open({ kind: 'txt', name: file.name, bytes });
         }
         const source = sourceFromFile(file.name, bytes)!;
-        // Text too big to be a document opens in the viewer instead.
-        if (opensAsLargeText(source.kind, bytes.byteLength)) return app.openLarge(file.name, new Uint8Array(bytes));
+        // A table too big to be a document opens in the text editor instead (plain text always does, through `open`).
+        if (source.kind !== 'txt' && usesTextEngine(source.kind, bytes.byteLength)) return app.openLarge(file.name, new Uint8Array(bytes));
         if (source.kind !== 'image') return app.open(source);
         // GIF, BMP and SVG open as PNG (a GIF as its first frame); PNG, JPEG and WebP as they are.
         const picture = await toPng(source.name, new Uint8Array(bytes));
@@ -275,6 +280,13 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       camera.zoomAt(width / 2, height / 2, to / camera.zoom);
     } else if (to === 'allPages') {
       camera.fit(app.bounds(), width, height);
+    } else if (app.engine()) {
+      // A big text file has no pages: "page width" and "whole page" both fit its text to the window's width, from the left.
+      const area = app.bounds();
+      const top = camera.toDocument(0, 0).y;
+      camera.zoom = Math.min(Math.max((width - 32) / (area.width * CSS_PX_PER_POINT), camera.minZoom), camera.maxZoom);
+      camera.x = area.x;
+      camera.y = top;
     } else {
       const page = currentPage();
       if (!page) return;
@@ -315,7 +327,16 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'new':
           await app.prepareNew(action.folderId);
           untitled++;
-          app.open({ kind: 'blank', name: `${t('app.blankDocumentName')}${untitled}` });
+          {
+            const kind = action.docKind ?? lastNewKind();
+            const { source, converted } = blankSource(kind, `${t('app.blankDocumentName')}${untitled}`);
+            const ready = converted ? app.documentReady() : null;
+            app.open(source);
+            if (ready) {
+              await ready;
+              await app.convert(kind);
+            }
+          }
           return;
         case 'open':
           return app.dashboard();
@@ -366,30 +387,38 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleClip();
         case 'downloadAll':
           return app.downloadAll();
+        case 'openSelection':
+          return app.openSelection();
         case 'clearLocalData':
           return app.clearLocalData();
         case 'viewMode':
           return app.setViewMode(action.mode);
         case 'copy':
-          if (app.isLargeText()) return app.largeCopy();
-          await navigator.clipboard.writeText(app.selectedText());
+          if (app.engine()) return app.engine()!.copy();
+          await writeClipboardText(app.selectedText());
           return;
         case 'cut': {
+          if (app.engine()) return app.engine()!.cut();
           const text = app.selectedText();
           if (!text) return;
-          await navigator.clipboard.writeText(text);
+          await writeClipboardText(text);
           app.send({ kind: 'delete', direction: 'backward' });
           return;
         }
         case 'paste':
+          if (app.engine()) return app.engine()!.paste();
           return app.paste();
         case 'undo':
         case 'redo':
+          if (app.engine()) return app.engine()![action.kind]();
           return app.isPicture() ? app.stepPicture(action.kind) : app.send({ kind: action.kind });
         case 'image':
           return app.imageAction(action.op);
         case 'drawStyle':
-          return app.drawStyle(action.color, action.size, action.fill);
+          {
+          const { kind: _kind, ...change } = action;
+          return app.drawStyle(change);
+        }
         case 'vector':
           return app.vectorAction(action.op);
         case 'vectorStyle':
@@ -401,12 +430,11 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'insertDrawing':
           return app.insertDrawing();
         case 'selectAll':
+          if (app.engine()) return app.engine()!.selectAll();
           return app.isDrawing() ? app.vectorAction('selectAll') : app.send({ kind: 'selectAll' });
         case 'zoom':
-          if (app.isLargeText()) return app.largeZoom(1, true);
           return zoomTo(action.to);
         case 'zoomBy': {
-          if (app.isLargeText()) return app.largeZoom(action.factor);
           const { canvas, camera } = app;
           camera.zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, action.factor);
           app.viewChanged();
@@ -425,7 +453,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'toggleRuler':
           return app.toggleRuler();
         case 'insertText':
-          return app.send({ kind: 'insertText', text: action.text });
+          return app.engine() ? app.engine()!.insert(action.text) : app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':
           if (action.break === 'line') app.send({ kind: 'insertLineBreak' });
           else if (action.break === 'page' || action.break === 'column') app.send({ kind: 'insertLineBreak', type: action.break });

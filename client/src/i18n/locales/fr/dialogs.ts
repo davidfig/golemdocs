@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': 'Sélectionner le trait du crayon une fois terminé',
   'dialogs.options.returnToSelect': 'Revenir à l’outil Sélection après avoir dessiné une forme ou un tracé à la plume',
   'dialogs.options.pencilSmoothing': 'Lissage du crayon',
+  'dialogs.options.penPressure': 'Tracer des traits plus épais quand le stylet de la tablette est appuyé plus fort',
   'dialogs.options.off': 'Désactivé',
   'dialogs.options.low': 'Faible',
   'dialogs.options.medium': 'Moyen',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': 'Repères',
   'dialogs.options.showGuides': 'Afficher les repères',
   'dialogs.options.lockGuides': 'Verrouiller les repères',
+  'dialogs.find.wholeWord': 'Mot entier',
+  'dialogs.find.regex': 'Expression régulière',
 };

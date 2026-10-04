@@ -4,15 +4,16 @@
 
 import type { ToolDefinition } from './model.ts';
 
-export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks, and the drawing tools' options), pictures (edit them, and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP). You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
+export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks, and the drawing tools' options), pictures (edit them: shapes, text and ready-made shapes with fills, gradients and opacity drawn as layers you can group, hide, lock, reorder and blend, a paint bucket, a background and canvas size; and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP), and edit a large text file (8 MB or more, such as a log) in its own editor: read lines, search, replace everywhere, change, insert and delete lines, undo. You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
 
 Work like this:
 - The document is a numbered list of paragraphs (starting at 0). Read before you edit: use read_document, get_selection or find_text. Never guess what the document says.
 - When the person refers to something in another document, or asks for information they may already have written down, use other_documents (search, and list when they name a document you can't find), read what you found with its read action, and bring it in with insert_from_document, which copies paragraphs exactly. Quote from the other document rather than paraphrasing when the person wants it copied. Say which document it came from.
+- A plain text file (.txt, a log, any size) opens in the text editor, where the document is lines numbered from 1, not paragraphs, and the paragraph tools do not work. get_document_info says when that is the case. Use text_file: read lines before changing them (read, find), and replace changes every match in one step. Line numbers after an insert or delete move, so read again. Do not try to convert it.
 - Change the document only through the tools. Use document (convert) when asked to turn the document into another format (Word, PDF, Markdown and so on); paragraph numbers can change afterwards, so read again. Make the smallest change that does what was asked, and leave everything else alone.
 - You can only see a picture the person attached or one you fetched with view_picture; use list_pictures to find the ones in the open document or the person's saved files. Do not guess what a picture shows. A picture you fetched is shown to you once: say what you need to remember from it.
 - Files: the person's documents and folders are separate from the open document. Call files (list) to see their ids, then change many at once: move, delete and folders take lists, so do all of a request in one call. Delete only what was asked for: deleting cannot be taken back.
-- files open and new replace the open document with another, and the document tools then work on that one: only when the person asked to open or start one. You cannot import files from the person's computer or start sharing a document with other people (a link that lets others edit is the person's to give); tell them to use File › Import, File › Import Folder or File › Share. When others are already editing the open document you can see who with collaboration (status), (a shared drawing is edited by everyone at once, node by node, so there is nothing to wait for).
+- files open and new replace the open document with another, and the document tools then work on that one: only when the person asked to open or start one. You cannot import files from the person's computer or start sharing a document with other people (a link that lets others edit is the person's to give); tell them to use File › Import, File › Import Folder or File › Share. When others are already editing the open document you can see who with collaboration (status). Everyone in a shared document edits it at once, drawings too (node by node), so there is nothing to wait for or take over.
 - Links: a link is made with link, never by typing brackets. A web link has the address as its "url". A link to another of the person's documents has "doc:" and the document's title as its "url" ("doc:Project Plan", or "doc:Project Plan#Budget" for a heading in it); the title is the document's name without its extension, and matches ignoring case. In a Markdown document such a link is saved as an Obsidian-style "[[Project Plan]]" (or "[[Project Plan|label]]" when the text differs), and "[[Note]]" in an imported Obsidian note is already such a link; the same text typed through replace_text or insert_paragraph is only plain text, not a link. Check the title exists with list_documents first, since a link to a missing document asks to create it when clicked. Tags: "#plan" written in a document is a tag (also "#work/plans"; it needs a letter, so "#1" is not one), and a link whose url is "tag:plan" on the text "#plan" is a clickable one that opens a search of every document with that tag. In a Markdown document such a link is saved as plain "#plan". To tag a document, put the tag in a paragraph with insert_paragraph, then link it. Find the documents with a tag with other_documents search "#plan".
 - After editing, say in one or two short sentences what you changed. Do not repeat the whole text back.
 - If the request is unclear, or is about something you cannot do with these tools, say so briefly instead of guessing.
@@ -231,18 +232,18 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'read_drawing',
-    description: 'When the document is a vector drawing (SVG), or a drawing in the text that you opened with text_drawings (open): its size and its shapes, back to front, numbered from 0, with where each is, its colors and any text. Read before you edit.',
+    description: 'When the document is a vector drawing (SVG), or a drawing in the text that you opened with text_drawings (open): its size and its shapes, back to front, numbered from 0 (a shape inside a group or layer is numbered after it, like "2.1"), with where each is, its colors and any text. Read before you edit.',
     parameters: { type: 'object', properties: {} },
   },
   {
     name: 'edit_drawing',
     description:
-      'When the document is a vector drawing (SVG), or a drawing in the text opened with text_drawings (open), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_shape (shape: roundRect, triangle, rightTriangle, diamond, trapezoid, parallelogram, pentagon, hexagon, octagon, star, star4, star6, heart, arrowRight, arrowLeft, arrowUp, arrowDown, chevron, plus, moon, cloud, bubble or lightning; x, y, width, height: the box it fills), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), nudge_lines (x, y: where the round brush is; dx, dy: how far it pushes the lines under it; radius, default 40; strength, 10 to 100 percent, default 100: how much of dx, dy reaches the lines; bends lines near the brush and leaves the rest, like the Nudge tool; needs no shapes), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dryInk, frayedInk, charcoal, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, new_layer (name: optional; adds a layer on top, which new shapes then go on), new_group (name: optional; an empty group), add_guide (axis: vertical or horizontal; position: where; shapes snap to it), clear_guides, set_canvas (the page\'s width and height in pixels; shapes_follow: true to scale the shapes with it; background: a color or "none") and fit_canvas (the page shrinks or grows to the shapes, with a margin). These need no shapes.',
+      'When the document is a vector drawing (SVG), or a drawing in the text opened with text_drawings (open), one change to it (undo steps back). Coordinates are the drawing\'s own, y down. op: add_rect / add_ellipse (x, y, width, height; corner_radius), add_shape (shape: roundRect, triangle, rightTriangle, diamond, trapezoid, parallelogram, pentagon, hexagon, octagon, star, star4, star6, heart, arrowRight, arrowLeft, arrowUp, arrowDown, chevron, plus, moon, cloud, bubble or lightning; x, y, width, height: the box it fills), add_line (x, y, to_x, to_y), add_path (d: SVG path data), add_text (text, x, y, font_size), each with optional fill, stroke (colors like #e53935, or "none") and stroke_width. On shapes (a list of their numbers from read_drawing: 3, or "2.1" for a shape inside group 2): delete, duplicate, group, ungroup, order (to: front, forward, backward or back), nudge_lines (x, y: where the round brush is; dx, dy: how far it pushes the lines under it; radius, default 40; strength, 10 to 100 percent, default 100: how much of dx, dy reaches the lines; bends lines near the brush and leaves the rest, like the Nudge tool; needs no shapes), move (dx, dy), scale (sx, sy), rotate (degrees), style (fill, stroke, stroke_width), stroke_style (value: dash:dashed, dash:dotted, dash:dashDot, dash:longDash, dash:solid, or a brush: brush:taperBoth, taperStart, taperEnd, swell, pressure, calligraphic, calligraphicRound, dryBrush, chalk, dryInk, frayedInk, charcoal, dots, diamonds, chevrons, zigzag, leaves, confetti, stars, bubbles, arrowEnd, arrowStart, arrowBoth, arrowOpen, dotEnds, diamondEnd), fill_type (type: solid, linear or radial), unite / intersect / subtract (the front shapes are cut from the back one) / exclude (combine shapes into one), make_clip (the topmost shape cuts the others), release_clip, make_mask (the topmost shape, by its brightness, shows or hides the others: white shows, black hides), release_mask, new_layer (name: optional; adds a layer on top, which new shapes then go on), new_group (name: optional; an empty group), add_guide (axis: vertical or horizontal; position: where; shapes snap to it), clear_guides, set_canvas (the page\'s width and height in pixels; shapes_follow: true to scale the shapes with it; background: a color or "none") and fit_canvas (the page shrinks or grows to the shapes, with a margin). These need no shapes.',
     parameters: {
       type: 'object',
       properties: {
         op: { type: 'string' },
-        shapes: { type: 'array', items: { type: 'integer' } },
+        shapes: { type: 'array', items: { type: ['integer', 'string'] } },
         x: { type: 'number' },
         y: { type: 'number' },
         to_x: { type: 'number' },
@@ -277,7 +278,7 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'edit_picture',
-    description: 'When the document is a picture (png, jpeg or webp): rotate_left, rotate_right, rotate_180, flip_horizontal, flip_vertical, grayscale, sepia, invert, blur, sharpen, auto_levels, crop (x, y, width, height in pixels), resize (width, height), adjust (brightness, contrast, saturation, each -100 to 100): these change the picture itself, put the shapes below into it, and are not available while others are editing it. draw adds a shape as a layer over the picture (tool line, arrow, rectangle, ellipse or text; x, y; to_x, to_y; color; width; fill; text), which works with others editing it too. layers lists the shapes drawn over the picture, numbered from 0, back to front; erase_shape and move_shape (dx, dy in pixels) change shape `number`; flatten puts the shapes into the picture.',
+    description: 'When the document is a picture (png, jpeg or webp): rotate_left, rotate_right, rotate_180, flip_horizontal, flip_vertical, grayscale, sepia, invert, blur, sharpen, auto_levels, crop (x, y, width, height in pixels), resize (width, height), adjust (brightness, contrast, saturation, each -100 to 100), set_background (color, optionally gradient_to: laid behind the picture, showing where it is see-through) and set_canvas (width, height: the canvas made that size around the picture, which sits where anchor says: nw, n, ne, w, center, e, sw, s or se; color, optionally gradient_to, fills the new area): these change the picture itself, put the shapes below into it, and are not available while others are editing it. The shapes drawn over the picture are its layers, which work with others editing it too. fill (the paint bucket, a layer like the others: x, y; tolerance 0 to 100, default 20; contiguous, default true: only the connected region; color, and gradient_to to fill with a gradient; the region is found in what is under the fill (the picture and the layers before it), and layer puts it in a group) adds a fill over the picture. draw adds a shape (tool line, arrow, rectangle, ellipse, shape or text, or a brush that changes the pixels it passes over, as a layer too: smudge (drags the colour along), blurBrush, sharpenBrush, mixer (paints color and mixes it with what it passes over, like wet paint), dodge (lightens) or burn (darkens): a straight stroke from x, y to to_x, to_y, width making it thicker, strength 0 to 100, default 50; x, y; to_x, to_y; color; width; text; for shape, shape: roundRect, triangle, rightTriangle, diamond, trapezoid, parallelogram, pentagon, hexagon, octagon, star, star4, star6, heart, arrowRight, arrowLeft, arrowUp, arrowDown, chevron, plus, moon, cloud, bubble or lightning; for boxes and shapes, fill: true, fill_color, gradient_to with gradient_type linear or radial and angle in degrees, no_stroke; opacity 0 to 100; stroke_style: the same values as for drawings (dash:solid, dash:dashed, dash:dotted, dash:dashDot, dash:longDash, or a brush such as brush:taperBoth, brush:calligraphic, brush:dryBrush, brush:chalk, brush:dots, brush:stars); name; layer: the number of a group to put it in). layers lists the shapes as a tree, numbered from 0, back to front, with groups (layers) the shapes in them are indented under. On shape `number`: erase_shape, move_shape (dx, dy in pixels; a group moves what is in it), rotate_shape (degrees clockwise, -360 to 360, about its middle; a group turns as one), rename_layer (name), show_layer, hide_layer, lock_layer, unlock_layer (a hidden shape is not painted, a locked one is painted but not picked), set_layer (opacity 0 to 100, blend: normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference or exclusion; on a group it applies to everything in it), order_layer (to: front, forward, backward or back, among the shapes of its group), duplicate_layer. new_layer (name; layer: a group number to put it inside) adds a group on top, which new shapes can be put in with draw layer; group (numbers: the shapes to put in one new group; name) and ungroup (number). flatten puts the shapes into the picture.',
     parameters: {
       type: 'object',
       properties: {
@@ -291,8 +292,26 @@ export const TOOLS: ToolDefinition[] = [
         brightness: { type: 'integer', minimum: -100, maximum: 100 },
         contrast: { type: 'integer', minimum: -100, maximum: 100 },
         saturation: { type: 'integer', minimum: -100, maximum: 100 },
-        tool: { type: 'string', enum: ['line', 'arrow', 'rectangle', 'ellipse', 'text'] },
-        number: { type: 'integer', minimum: 0, description: 'For erase_shape and move_shape: the shape, from layers.' },
+        tool: { type: 'string', enum: ['line', 'arrow', 'rectangle', 'ellipse', 'shape', 'text', 'smudge', 'blurBrush', 'sharpenBrush', 'mixer', 'dodge', 'burn'] },
+        strength: { type: 'integer', minimum: 0, maximum: 100, description: 'For the brushes that change pixels: how strongly they work.' },
+        number: { type: 'integer', minimum: 0, description: 'The shape a layer operation is about, from layers.' },
+        degrees: { type: 'integer', minimum: -360, maximum: 360, description: 'For rotate_shape: degrees clockwise.' },
+        numbers: { type: 'array', items: { type: 'integer', minimum: 0 }, description: 'For group: the shapes to put in the new group, from layers.' },
+        shape: { type: 'string', description: 'For draw with tool shape: which ready-made shape.' },
+        layer: { type: 'integer', minimum: 0, description: 'For draw and new_layer: the number of the group to put it in.' },
+        fill_color: { type: 'string' },
+        gradient_to: { type: 'string' },
+        gradient_type: { type: 'string', enum: ['linear', 'radial'] },
+        angle: { type: 'integer', minimum: 0, maximum: 360 },
+        no_stroke: { type: 'boolean' },
+        opacity: { type: 'integer', minimum: 0, maximum: 100 },
+        stroke_style: { type: 'string' },
+        blend: { type: 'string' },
+        name: { type: 'string' },
+        tolerance: { type: 'integer', minimum: 0, maximum: 100 },
+        contiguous: { type: 'boolean' },
+        anchor: { type: 'string', enum: ['nw', 'n', 'ne', 'w', 'center', 'e', 'sw', 's', 'se'] },
+        to: { type: 'string', enum: ['front', 'forward', 'backward', 'back'], description: 'For order_layer.' },
         dx: { type: 'integer', description: 'For move_shape: pixels to the right.' },
         dy: { type: 'integer', description: 'For move_shape: pixels down.' },
         color: { type: 'string' },
@@ -312,10 +331,10 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'set_drawing_options',
-    description: "Change how the vector drawing tools behave (the person's preferences, kept from now on; Tools > Options). select_after_pencil: a finished pencil stroke is selected (false: nothing is selected, ready for the next stroke). return_to_select: the Select tool comes back after drawing a shape or pen path (false: the drawing tool stays). pencil_smoothing: off, low, medium or high, how smooth a pencil stroke's path is made. show_guides: false hides the guides (they stay in the file, and shapes stop snapping to them). lock_guides: true stops the guides being dragged or removed with the pointer. Give at least one.",
+    description: "Change how the vector drawing tools behave (the person's preferences, kept from now on; Tools > Options). select_after_pencil: a finished pencil stroke is selected (false: nothing is selected, ready for the next stroke). return_to_select: the Select tool comes back after drawing a shape or pen path (false: the drawing tool stays). pencil_smoothing: off, low, medium or high, how smooth a pencil stroke's path is made. pen_pressure: a drawing tablet's pen draws a wider line the harder it is pressed (the Pencil in drawings, the Pen and Highlighter on pictures); false keeps lines one width. show_guides: false hides the guides (they stay in the file, and shapes stop snapping to them). lock_guides: true stops the guides being dragged or removed with the pointer. Give at least one.",
     parameters: {
       type: 'object',
-      properties: { select_after_pencil: { type: 'boolean' }, return_to_select: { type: 'boolean' }, pencil_smoothing: { type: 'string', enum: ['off', 'low', 'medium', 'high'] }, show_guides: { type: 'boolean' }, lock_guides: { type: 'boolean' } },
+      properties: { select_after_pencil: { type: 'boolean' }, return_to_select: { type: 'boolean' }, pencil_smoothing: { type: 'string', enum: ['off', 'low', 'medium', 'high'] }, pen_pressure: { type: 'boolean' }, show_guides: { type: 'boolean' }, lock_guides: { type: 'boolean' } },
     },
   },
   {
@@ -413,7 +432,7 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'files',
-    description: "The person's documents and folders, in one call for many. list: all of them with ids and the folder each is in; use the ids with the other actions. open: document `file` in place of the open one. new: a blank Word document in place of the open one, in `folder` (id; none: top level) named `name` (no extension). move: `files` and `folders` (ids) into `to` (folder id, or null for the top level). delete: `files` and `folders` (ids) permanently, a folder with everything in it; cannot be undone. download_all: every document as one ZIP in their folders. Open, new, delete and download_all only when asked; open and new make the other tools work on that document.",
+    description: "The person's documents and folders, in one call for many. list: all of them with ids and the folder each is in; use the ids with the other actions. open: document `file` in place of the open one. new: a blank document in place of the open one, in `folder` (id; none: top level) named `name` (no extension), of `type` (docx, md, txt, html, tex, typst, adoc, rst, org, mediawiki or textile; none: the type the person made last). move: `files` and `folders` (ids) into `to` (folder id, or null for the top level). delete: `files` and `folders` (ids) permanently, a folder with everything in it; cannot be undone. download_all: every document as one ZIP in their folders. Open, new, delete and download_all only when asked; open and new make the other tools work on that document.",
     parameters: {
       type: 'object',
       properties: {
@@ -421,6 +440,7 @@ export const TOOLS: ToolDefinition[] = [
         file: { type: 'string' },
         folder: { type: ['string', 'null'] },
         name: { type: 'string' },
+        type: { type: 'string', description: 'For new: the document type.' },
         files: { type: 'array', items: { type: 'string' }, description: 'Document ids.' },
         folders: { type: 'array', items: { type: 'string' }, description: 'Folder ids.' },
         to: { type: ['string', 'null'] },
@@ -446,10 +466,30 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: 'collaboration',
     description:
-      'Whether others are editing the open document with the person. status: who is here, and, for a kind of document only one person at a time may edit, who may edit now (drawings are not one: everyone edits them at once). take_over: ask for the right to edit such a document; it is given when nobody holds it, or the holder has been idle for a while, and refused otherwise (say so; do not keep asking). release: let go of it. You cannot start sharing: that is File › Share, the person\'s to do.',
+      'Whether others are editing the open document with the person. status: who is here (everyone edits at once, drawings too). You cannot start sharing: that is File › Share, the person\'s to do.',
     parameters: {
       type: 'object',
-      properties: { action: { type: 'string', enum: ['status', 'take_over', 'release'] } },
+      properties: { action: { type: 'string', enum: ['status'] } },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'text_file',
+    description:
+      'A plain text file open in the text editor, which has lines (numbered from 1, as its gutter shows them) and no paragraphs; the paragraph tools do not work on it. info: its line count and size. read: `count` lines (default 40, at most 200) starting at line `line` (default 1). find: the lines containing `text`, with their numbers (the first 50) and how many there are in all; `regex`, `match_case` and `whole_word` are options. replace: change every match of `text` to `with` in the whole file, in one undoable step (`regex`: `with` may use $1, $2); says how many were replaced. edit_lines: replace lines `line` to `last_line` (default: just `line`) with `text`, which can be several lines separated by newlines (empty `text` leaves one empty line). insert_lines: put `text` (one or more lines) after line `line` (0: at the top). delete_lines: delete lines `line` to `last_line` (default: just `line`). undo, redo: step through the changes. Read the lines before you change them: numbers move after an insert or a delete.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['info', 'read', 'find', 'replace', 'edit_lines', 'insert_lines', 'delete_lines', 'undo', 'redo'] },
+        line: { type: 'integer', minimum: 0, description: 'The line (from 1; for insert_lines, the one to insert after, 0 for the top).' },
+        last_line: { type: 'integer', minimum: 1, description: 'Last line of a range that starts at `line`.' },
+        count: { type: 'integer', minimum: 1, maximum: 200, description: 'For read: how many lines.' },
+        text: { type: 'string', description: 'For find and replace: what to look for. For edit_lines and insert_lines: the new text.' },
+        with: { type: 'string', description: 'For replace: what to put instead (may be empty).' },
+        regex: { type: 'boolean', description: 'For find and replace: `text` is a regular expression.' },
+        match_case: { type: 'boolean' },
+        whole_word: { type: 'boolean' },
+      },
       required: ['action'],
     },
   },

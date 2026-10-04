@@ -91,6 +91,23 @@ export class ObjectSync {
     this.replica?.commit(this.transaction(ops));
   }
 
+  /**
+   * A command changed the lists from `base` to `now`. When the host still has `base`, `replace` puts `now` in as it is (order and all).
+   * When others changed the host's since (the person was dragging when their changes came), only what the command changed is put over
+   * what the host has now. Either way it is sent. Returns whether others' changes were kept, so whoever made the change is to be given
+   * the lists again.
+   */
+  localFrom(base: ObjectLayers, now: ObjectLayers, replace: () => void): boolean {
+    if (diffObjects(base, this.host.objects).length === 0) {
+      replace();
+      this.local();
+      return false;
+    }
+    this.host.applyObjects(diffObjects(base, now));
+    this.local();
+    return true;
+  }
+
   /** Forgets the history (the lists were replaced as a whole). */
   reset(): void {
     this.undoSteps.length = 0;

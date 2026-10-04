@@ -24,7 +24,7 @@ import { exportDocument, importDocument, type Format } from '../formats/convert.
 import type { PdfView } from '../formats/pdfPages.ts';
 import { sniffImage } from '../formats/images.ts';
 import { networkMedia, PortMedia, type RoomMedia } from '../collab/roomMedia.ts';
-import { exclusiveRoom, isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
+import { isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
 import type { VectorLayers } from './vectorLayers.ts';
 import type { Scene } from '../vector/model.ts';
 import { PictureLayers } from './pictureLayers.ts';
@@ -73,7 +73,7 @@ async function legalText(page: LegalPage): Promise<string> {
 async function changelogText(): Promise<string> {
   return (await import('../../../CHANGELOG.md?raw')).default;
 }
-import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
+import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { runAgentTool } from './agentTools.ts';
@@ -1018,37 +1018,6 @@ class OpenDocument {
 
   // --- Collaboration ---------------------------------------------------------------------
 
-  /** Whether only one person at a time may edit this (a development room's), and who. */
-  private devLease: { exclusive: boolean; holder: string | null } = { exclusive: false, holder: null };
-
-  /** Tells the page who may edit, when only one person at a time may. */
-  private postLease(): void {
-    // In a development room nobody holds the lease when the one who did has gone, and others are here: whoever asks first gets it.
-    if (!this.net && this.room && this.devLease.exclusive && this.devLease.holder === null && this.count > 1 && !this.devLetGo) this.toRoom({ type: 'lease' });
-    const net = this.net?.state;
-    const exclusive = net ? net.exclusive : this.devLease.exclusive;
-    const holder = net ? net.holder : this.devLease.holder;
-    const people = net ? net.people : [];
-    const mine = exclusive && holder === this.clientId;
-    // A development room's people are only counted, so it can name its holder only as the connection they are.
-    const holderName = holder === null ? null : (people.find((p) => p.client === holder)?.name ?? this.people.get(holder)?.name ?? holder);
-    const shared = net ? net.mode === 'shared' : this.count > 1;
-    const key = JSON.stringify([exclusive, holder, mine, holderName, shared]);
-    if (key === this.lastLease) return;
-    this.lastLease = key;
-    post({ type: 'lease', doc: this.doc, exclusive, mine, holder: holderName, shared });
-  }
-  private lastLease = '';
-  /** This person let go of the lease on purpose: it is not asked for again until somebody comes or goes. */
-  private devLetGo = false;
-
-  /** Asks for, or lets go of, the right to edit an exclusive room. */
-  lease(action: 'request' | 'release'): void {
-    if (this.net) return action === 'request' ? this.net.requestLease() : this.net.releaseLease();
-    this.devLetGo = action === 'release';
-    if (this.room) this.toRoom({ type: action === 'request' ? 'lease' : 'release' });
-  }
-
   /** The pictures of a development room, with its SharedWorker. */
   private portMedia: PortMedia | null = null;
   /** The cloud document whose room this is in, for its pictures. */
@@ -1059,14 +1028,14 @@ class OpenDocument {
   }
 
   /** Joins the room: resolves with the room's document and its log so far. */
-  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer, exclusive: boolean, kind: 'doc' | 'objects' | 'layers' | 'nodes' = 'doc'): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
+  join(room: Extract<RoomOptions, { kind: 'dev' }>, client: string, snapshot: ArrayBuffer, kind: 'doc' | 'objects' | 'layers' | 'nodes' = 'doc'): Promise<Extract<RoomServerMessage, { type: 'joined' }>> {
     this.clientId = client;
     this.room = room;
     this.portMedia = new PortMedia((message, transfer) => this.toRoom(message, transfer));
     room.port.onmessage = (event: MessageEvent<RoomServerMessage>) => this.fromRoom(event.data);
     return new Promise((resolve) => {
       this.joined = resolve;
-      this.toRoom({ type: 'join', room: room.name, client, snapshot, ...(exclusive && { exclusive }), ...(kind !== 'doc' && { kind }) }, [snapshot]);
+      this.toRoom({ type: 'join', room: room.name, client, snapshot, ...(kind !== 'doc' && { kind }) }, [snapshot]);
     });
   }
 
@@ -1084,13 +1053,7 @@ class OpenDocument {
     if (this.closed) return;
     if (message.type === 'joined') {
       this.count = message.people;
-      this.devLease = { exclusive: message.exclusive, holder: message.holder };
       this.joined?.(message);
-      return;
-    }
-    if (message.type === 'lease') {
-      this.devLease.holder = message.holder;
-      this.postLease();
       return;
     }
     // A PDF has no text to edit: what the room sends goes to the lists of what is on its pages.
@@ -1101,7 +1064,6 @@ class OpenDocument {
       } else if (message.type === 'people') {
         this.count = message.count;
         this.status();
-        this.postLease();
       }
       return;
     }
@@ -1112,7 +1074,6 @@ class OpenDocument {
       } else if (message.type === 'people') {
         this.count = message.count;
         this.status();
-        this.postLease();
       }
       return;
     }
@@ -1139,9 +1100,7 @@ class OpenDocument {
         break;
       case 'people':
         this.count = message.count;
-        this.devLetGo = false;
         this.status();
-        this.postLease();
         break;
     }
   }
@@ -1172,7 +1131,6 @@ class OpenDocument {
     const sync = this.replica?.sync ?? (this.pdfSync ? { version: this.pdfSync.version, unconfirmed: this.pdfSync.unconfirmed } : this.layerSync?.connected ? { version: this.layerSync.version, unconfirmed: this.layerSync.unconfirmed } : undefined);
     if (this.room && sync) post({ type: 'room', doc: this.doc, people: this.count, ...sync });
     if (this.net) this.postRoomState();
-    else this.postLease();
   }
 
   leave(): void {
@@ -1227,8 +1185,7 @@ class OpenDocument {
 
   /** Viewers, and anyone whose connection to the room is gone, can look but not edit. */
   get readOnly(): boolean {
-    // In an exclusive room only the one who holds the lease may edit (alone in a development room, the lease is theirs from the start).
-    return (this.net !== null && !this.net.canEdit) || (this.room !== null && this.devLease.exclusive && this.count > 1 && this.devLease.holder !== this.clientId);
+    return this.net !== null && !this.net.canEdit;
   }
 
   private postPointers(): void {
@@ -1247,7 +1204,6 @@ class OpenDocument {
     if (!net) return;
     const { mode, role, people } = net.state;
     post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.pdfSync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0 });
-    this.postLease();
   }
 
   /**
@@ -1263,7 +1219,6 @@ class OpenDocument {
       client: clientId,
       name: room.user,
       color: room.color,
-      exclusive: exclusiveRoom(this.format),
       kind: roomKind(this.format),
       host: this.format === 'pdf' ? this.pdfRoomHost() : isLayeredFormat(this.format) ? this.layersRoomHost() : this.roomHost(),
       connect: () => new WebSocket(`${self.location.protocol === 'https:' ? 'wss' : 'ws'}://${self.location.host}/api/rooms/${docId}`) as unknown as SocketLike,
@@ -1339,14 +1294,20 @@ class OpenDocument {
     post({ type: 'vectorScene', doc: this.doc, scene: withScene ? this.vectorLayers.scene : null, canUndo: this.layerSync?.canUndo ?? false, canRedo: this.layerSync?.canRedo ?? false });
   }
 
-  /** The person changed the drawing: it is now this. */
-  setVectorScene(scene: Scene): void {
+  /** The person changed the drawing from `base` to `scene`: what others changed meanwhile is kept, and the page is given the result. */
+  setVectorScene(scene: Scene, base?: Scene): void {
     if (!this.vectorLayers || !this.layerSync || this.readOnly) return this.postVector(true);
-    this.vectorLayers.set(scene);
-    this.layerSync.local();
+    let merged = false;
+    const layers = this.vectorLayers;
+    const change = base && layers.change(base, scene);
+    if (change) merged = this.layerSync.localFrom(change.from, change.to, () => layers.set(scene));
+    else {
+      this.vectorLayers.set(scene);
+      this.layerSync.local();
+    }
     this.edited = true;
     this.keepVector();
-    this.postVector(false);
+    this.postVector(merged);
   }
 
   /** Undo or redo of the person's own changes to the drawing. */
@@ -1382,11 +1343,16 @@ class OpenDocument {
     post({ type: 'shapes', doc: this.doc, shapes: [...(this.layers?.shapes ?? [])], ...this.pictureSize, canUndo: sync?.canUndo ?? false, canRedo: sync?.canRedo ?? false });
   }
 
-  /** The person drew, erased or moved something: the shapes are now these. */
-  setShapes(shapes: Shape[]): void {
+  /** The person drew, erased or moved something, changing the shapes from `base` to these: what others changed meanwhile is kept. */
+  setShapes(shapes: Shape[], base?: Shape[]): void {
     if (!this.layers || !this.layerSync || this.readOnly) return this.postShapes();
-    this.layers.set(shapes);
-    this.layerSync.local();
+    const layers = this.layers;
+    // Shapes without ids (none from this page, but a list given whole) can't be told apart from new ones: those replace the list.
+    if (base?.every((s) => s.id)) this.layerSync.localFrom(PictureLayers.objectsOf(base), PictureLayers.objectsOf(shapes), () => layers.set(shapes));
+    else {
+      this.layers.set(shapes);
+      this.layerSync.local();
+    }
     this.edited = true;
     this.keepLayers();
     this.postShapes();
@@ -2419,10 +2385,43 @@ function issuesOf(paragraph: Parameters<typeof paragraphText>[0], documentLang: 
     needs(language);
     return [];
   }
-  // The grammar rules are English.
-  const issues = findIssues(text, { dictionary, grammar: live.grammar && language === 'en', ignoredRules: spelling.rules }).filter((i) => live.spelling || i.kind !== 'spelling');
+  const issues = checkText(text, language, dictionary, live);
   checked.set(paragraph, { text, version: spellVersion, documentLang, issues });
   return issues;
+}
+
+/** What is wrong in a text, with the dictionary of its language (the grammar rules are English). */
+function checkText(text: string, language: SpellLanguage, dictionary: Dictionary, what: { spelling: boolean; grammar: boolean }): TextIssue[] {
+  return findIssues(text, { dictionary, grammar: what.grammar && language === 'en', ignoredRules: spelling.rules }).filter((i) => what.spelling || i.kind !== 'spelling');
+}
+
+/** Answers a `spellText`: the lines are checked in their own languages (the file's, unless a line says another), once the dictionaries are in. */
+async function spellText(message: Extract<ToWorker, { type: 'spellText' }>): Promise<void> {
+  const documentLang = documentLanguage(undefined, () => message.sample, getLocale());
+  const languages = message.texts.map((text) => paragraphLanguage(undefined, text, documentLang));
+  let loading = false;
+  for (const language of new Set(languages)) {
+    if (language === 'none' || loadedDictionaries.has(language)) continue;
+    try {
+      await loadDictionary(language);
+    } catch {
+      loading = true;
+    }
+  }
+  const issuesAt = (index: number): { issues: TextIssue[]; dictionary: Dictionary | null } => {
+    const language = languages[index];
+    const dictionary = language === 'none' ? null : (loadedDictionaries.get(language) ?? null);
+    return { dictionary, issues: dictionary && language !== 'none' ? checkText(message.texts[index], language, dictionary, message) : [] };
+  };
+  if (message.at) {
+    const { issues, dictionary } = issuesAt(message.at.index);
+    const text = message.texts[message.at.index];
+    const issue = issues.find((i) => i.start <= message.at!.offset && message.at!.offset <= i.end);
+    post({ type: 'spellText', request: message.request, marks: [], issue: issue && dictionary ? describeIssue(text, issue, dictionary) : null, loading });
+    return;
+  }
+  const marks = message.texts.map((_, i) => issuesAt(i).issues.map((m): TextMark => ({ start: m.start, end: m.end, kind: m.kind === 'spelling' ? 0 : 1 })));
+  post({ type: 'spellText', request: message.request, marks, issue: null, loading });
 }
 
 /** An issue with the sentence around it, and its suggestions, for the dialog or the menu. */
@@ -2512,7 +2511,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
         if (entry.closed) return;
         if (start?.kind === 'room') source = await load({ kind: 'wdoc', name: loaded.name, bytes: start.bytes.slice().buffer }, fonts);
       } else if (pdfRoom) {
-        const joined = await entry.join(pdfRoom, pdfClient, (await entry.wdocBytes()).slice().buffer, false, 'objects');
+        const joined = await entry.join(pdfRoom, pdfClient, (await entry.wdocBytes()).slice().buffer, 'objects');
         if (entry.closed) return;
         source = await load({ kind: 'wdoc', name: loaded.name, bytes: joined.snapshot }, fonts);
         log = joined.transactions;
@@ -2548,7 +2547,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       }
     } else if (pictureRoom) {
       const mine = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: entry.format, origin: entry.origin, pagesCurrent: false }, document: await document.write(), original: null, extensions: entry.extensions });
-      const joined = await entry.join(pictureRoom, clientId, mine.slice().buffer, false, roomKind(entry.format));
+      const joined = await entry.join(pictureRoom, clientId, mine.slice().buffer, roomKind(entry.format));
       if (entry.closed) return;
       const shared = await load({ kind: 'wdoc', name, bytes: joined.snapshot }, fonts);
       document = shared.document!;
@@ -2567,7 +2566,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       // Everyone starts from the room's copy (ours, if we're first): the same bytes, read the
       // same way, then the log so far.
       const mine = await writeRoomDocument({ docx: await document.write(), lens: entry.format, origin: entry.origin, extensions: entry.extensions });
-      const joined = await entry.join(room, clientId, mine.slice().buffer, exclusiveRoom(entry.format));
+      const joined = await entry.join(room, clientId, mine.slice().buffer);
       if (entry.closed) return;
       // A PDF's room: the person who joined by a link starts from a blank Word one, and opens the PDF it is the room of instead.
       if (isWdocBytes(joined.snapshot) && (await readWdoc(new Uint8Array(joined.snapshot))).manifest.lens === 'pdf') {
@@ -2790,6 +2789,20 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
   }
 }
 
+/** The open picture's own file, without the shapes drawn over it, answered like an export. */
+async function pictureBase(doc: number, request: number): Promise<void> {
+  try {
+    const open = current;
+    if (open?.doc !== doc || !open.document) throw new Error(t('app.documentNotOpen'));
+    const picture = await (await import('../formats/imageDoc.ts')).firstPicture(open.document);
+    if (!picture) throw new Error(t('app.notImage'));
+    const buffer = picture.image.bytes.slice().buffer;
+    post({ type: 'saved', request, bytes: buffer }, [buffer]);
+  } catch (e) {
+    post({ type: 'saved', request, bytes: null, error: (e as Error).message });
+  }
+}
+
 /** Whether a command puts an equation in the document (an inserted one, or a paste that holds one). */
 function commandHasMath(wire: WireCommand): boolean {
   if (wire.kind === 'insertContent') return containsMath(wire.content);
@@ -2919,6 +2932,12 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
     case 'embedFile':
       embedAnswers.get(message.request)?.(message.file);
       break;
+    case 'spellText':
+      void spellText(message).catch((e: unknown) => {
+        console.error(e);
+        post({ type: 'spellText', request: message.request, marks: [], issue: null, loading: false });
+      });
+      break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, checkbox: false }) });
       break;
@@ -2937,17 +2956,14 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
     case 'insertImage':
       if (current?.doc === message.doc) current.insertImage(new Uint8Array(message.bytes), message.ext, message.width, message.height, message.description);
       break;
-    case 'lease':
-      if (current?.doc === message.doc) current.lease(message.action);
-      break;
     case 'shapes':
-      if (current?.doc === message.doc) current.setShapes(message.shapes);
+      if (current?.doc === message.doc) current.setShapes(message.shapes, message.base);
       break;
     case 'shapesStep':
       if (current?.doc === message.doc) current.stepShapes(message.action);
       break;
     case 'vectorScene':
-      if (current?.doc === message.doc) current.setVectorScene(message.scene);
+      if (current?.doc === message.doc) current.setVectorScene(message.scene, message.base);
       break;
     case 'vectorStep':
       if (current?.doc === message.doc) current.stepVector(message.action);
@@ -2960,6 +2976,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'convert':
       void exportAs(message.doc, message.request, message.to);
+      break;
+    case 'pictureBase':
+      void pictureBase(message.doc, message.request);
       break;
     case 'agent':
       // Always answered, even if the tool fails: the page waits for it.

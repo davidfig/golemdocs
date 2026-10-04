@@ -20,16 +20,13 @@ import { EditorTables } from './tables.ts';
 export * from './types.ts';
 export { withFormat } from './formatting.ts';
 
-/** For `replaceDrawing`: the (first) drawing that has an SVG beside its picture, whatever part that is (a document that is one drawing). */
-export const ANY_DRAWING = '*';
-
 /** The model offset of the drawing whose SVG is part `svg`, within these inlines (offsets from their start). */
 function drawingOffset(inlines: readonly Inline[], svg: string): { offset: number; drawing: Drawing } | undefined {
   let at = 0;
   for (const inline of inlines) {
     if (inline.kind === 'run') {
       for (const item of inline.content) {
-        if (item.kind === 'drawing' && item.svg !== undefined && (svg === ANY_DRAWING || item.svg === svg)) return { offset: at, drawing: item };
+        if (item.kind === 'drawing' && item.svg === svg) return { offset: at, drawing: item };
         at += itemLength(item);
       }
     } else if (inline.kind === 'raw') at += 1;
@@ -153,9 +150,9 @@ export class Editor extends EditorTables {
         return NO_CHANGE;
       }
       case 'find':
-        return { ...NO_CHANGE, found: this.find(command.text, command.matchCase ?? false, command.backward ?? false, command.wholeWord ?? false) };
+        return { ...NO_CHANGE, found: this.find(command, command.backward ?? false) };
       case 'replaceAll':
-        return this.replaceAll(command.text, command.with, command.matchCase ?? false, command.wholeWord ?? false);
+        return this.replaceAll(command, command.with);
       case 'select': {
         const list = this.paragraphs();
         const paragraph = list[command.paragraph];

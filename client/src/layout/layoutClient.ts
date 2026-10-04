@@ -4,7 +4,7 @@ import type { FaceDescriptor } from '@golemdocs/layout';
 import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
-import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, ToWorker, WireCommand } from './protocol.ts';
+import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, SpellIssue, TextMark, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
@@ -26,7 +26,6 @@ export interface DocumentListener {
   pointers(pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[]): void;
   error(message: string): void;
   notice(message: string): void;
-  lease(state: { exclusive: boolean; mine: boolean; holder: string | null; shared: boolean }): void;
   shapes(state: { shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }): void;
   vectorScene(state: { scene: Scene | null; canUndo: boolean; canRedo: boolean }): void;
 }
@@ -39,6 +38,7 @@ export class LayoutClient {
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; checkbox: boolean }) => void>();
+  private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly agentRequests = new Map<number, (result: string | { text: string; images: string[] }) => void>();
 
   /** Finds the stored document an embed (`![[Note]]`) names, as its name and bytes (set by the page, which knows what is stored). */
@@ -105,13 +105,13 @@ export class LayoutClient {
   }
 
   /** A picture's shapes are now these. */
-  setShapes(shapes: Shape[]): void {
-    this.send({ type: 'shapes', doc: this.doc, shapes });
+  setShapes(shapes: Shape[], base?: Shape[]): void {
+    this.send({ type: 'shapes', doc: this.doc, shapes, base });
   }
 
   /** A drawing edited together is now this. */
-  setVectorScene(scene: Scene): void {
-    this.send({ type: 'vectorScene', doc: this.doc, scene });
+  setVectorScene(scene: Scene, base?: Scene): void {
+    this.send({ type: 'vectorScene', doc: this.doc, scene, base });
   }
 
   /** Steps back over, or forward again over, the person's own changes to a drawing edited together. */
@@ -122,11 +122,6 @@ export class LayoutClient {
   /** Steps back over, or forward again over, the person's own changes to a picture's shapes. */
   stepShapes(action: 'undo' | 'redo'): void {
     this.send({ type: 'shapesStep', doc: this.doc, action });
-  }
-
-  /** Asks for, or lets go of, the right to edit a document that only one person at a time may. */
-  lease(action: 'request' | 'release'): void {
-    this.send({ type: 'lease', doc: this.doc, action });
   }
 
   /** Puts a vector drawing (its SVG text and a picture of it) in the open document at the caret, or in place of the one whose SVG is part `replace`. */
@@ -159,12 +154,26 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'convert', doc: this.doc, request, to })).then((bytes) => new Uint8Array(bytes));
   }
 
+  /** The open picture's own file, without the shapes drawn over it (what a fill finds its region in). */
+  pictureBase(): Promise<Uint8Array> {
+    return this.request((request) => ({ type: 'pictureBase', doc: this.doc, request })).then((bytes) => new Uint8Array(bytes));
+  }
+
   /** Runs one of the assistant's tools on the open document (see agentTools.ts). Answers with what it did or found, and any pictures it fetched for the model. */
   agent(name: string, args: string): Promise<string | { text: string; images: string[] }> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.agentRequests.set(request, resolve);
       this.send({ type: 'agent', doc: this.doc, request, name, args });
+    });
+  }
+
+  /** What is wrong in each of some lines of a plain text file, or (`at`) the problem under an offset of one of them. */
+  spellText(texts: string[], sample: string, what: { spelling: boolean; grammar: boolean }, at?: { index: number; offset: number }): Promise<{ marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.spellRequests.set(request, resolve);
+      this.send({ type: 'spellText', request, texts, sample, ...what, ...(at && { at }) });
     });
   }
 
@@ -189,6 +198,11 @@ export class LayoutClient {
     if (message.type === 'linkAt') {
       this.linkRequests.get(message.request)?.({ url: message.url, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'spellText') {
+      this.spellRequests.get(message.request)?.(message);
+      this.spellRequests.delete(message.request);
       return;
     }
     if (message.type === 'agentResult') {
@@ -243,9 +257,6 @@ export class LayoutClient {
         break;
       case 'shapes':
         this.listener.shapes({ shapes: message.shapes, width: message.width, height: message.height, canUndo: message.canUndo, canRedo: message.canRedo });
-        break;
-      case 'lease':
-        this.listener.lease({ exclusive: message.exclusive, mine: message.mine, holder: message.holder, shared: message.shared });
         break;
     }
   }

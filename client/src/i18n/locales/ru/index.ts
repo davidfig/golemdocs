@@ -6,7 +6,7 @@ import { assistant } from './assistant.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
-import { largeText } from './largeText.ts';
+import { textEditor } from './textEditor.ts';
 import { link } from './link.ts';
 import { math } from './math.ts';
 import { menus } from './menus.ts';
@@ -21,4 +21,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...app, ...assistant, ...chrome, ...columns, ...dialogs, ...largeText, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Catalog = { ...app, ...assistant, ...chrome, ...columns, ...dialogs, ...textEditor, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

@@ -103,7 +103,7 @@ export function showShareDialog(target: ShareTarget): void {
 
   const say = (text: string, error = false) => {
     message.textContent = text;
-    message.style.color = error ? '#b00020' : 'inherit';
+    message.style.color = error ? 'var(--wm-error)' : 'inherit';
   };
 
   const row = (share: Share): HTMLElement => {

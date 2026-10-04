@@ -190,6 +190,43 @@ test('people changing different nodes both win; changing the same node ends with
   assert.equal((ann.layers.scene.children[0] as { x: number }).x, (ben.layers.scene.children[0] as { x: number }).x, 'one of them, the same for both');
 });
 
+test('a change made from an older drawing (a drag while others edited) keeps what others did meanwhile', () => {
+  const { ann, ben, deliver } = pair();
+  // Ann starts dragging the first node; the drawing on her page is the one from before.
+  const base = structuredClone(ann.layers.scene);
+  ben.edit((s) => {
+    s.children.push(rect(9));
+    (s.children[1] as { transform?: unknown }).transform = [1, 0, 0, 1, 7, 7];
+  });
+  deliver();
+  const dragged = structuredClone(base);
+  (dragged.children[0] as { x: number }).x = 50;
+  const { from, to } = ann.layers.change(base, dragged);
+  assert.equal(ann.sync.localFrom(from, to, () => ann.layers.set(dragged)), true, 'her page is to be given the drawing again');
+  deliver();
+  for (const p of [ann, ben]) {
+    const children = p.layers.scene.children as unknown as { x: number; transform?: number[] }[];
+    assert.equal(children[0]!.x, 50, 'the drag is kept');
+    assert.deepEqual(children[1]!.transform, [1, 0, 0, 1, 7, 7], 'and so is ben’s change to another node');
+    assert.equal(children.length, base.children.length + 1, 'and his new node');
+  }
+  assert.equal(writeSvg(ann.layers.scene), writeSvg(ben.layers.scene));
+  // With nothing in between, the page's drawing is the result: it need not be sent back.
+  const now = structuredClone(ann.layers.scene);
+  const moved = structuredClone(now);
+  (moved.children[0] as { x: number }).x = 60;
+  const change = ann.layers.change(now, moved);
+  assert.equal(ann.sync.localFrom(change.from, change.to, () => ann.layers.set(moved)), false);
+});
+
+test('a drawing the page read from its file, with no ids yet, is not merged as a change from it (its nodes would look new)', () => {
+  const layers = new VectorLayers(readSvg(DRAWING));
+  const fromFile = readSvg(DRAWING);
+  const drawn = structuredClone(fromFile);
+  drawn.children.push(rect(1));
+  assert.equal(layers.change(fromFile, drawn), null);
+});
+
 test('a node deleted by one while another draws in its group leaves the new node at the top, and moving a node reorders it for both', () => {
   const { ann, ben, deliver } = pair();
   const groupIndex = ann.layers.scene.children.findIndex((n) => n.kind === 'group');

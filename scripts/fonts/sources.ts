@@ -113,6 +113,11 @@ export const ARCHIVES = {
     sha256: '4d9be29b5cb380c35af8ba967abcc752ad1e07be1f738a9789c33e0dd7478c92',
     format: 'zip',
   },
+  jetbrainsMono: {
+    url: 'https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip',
+    sha256: '6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf',
+    format: 'zip',
+  },
 } as const satisfies Record<string, { url: string; sha256: string; format: 'tar.gz' | 'zip' }>;
 
 const GOOGLE_FONTS = 'https://raw.githubusercontent.com/google/fonts/23e54b51ddffbc7713c583748e3bd86f62b1fa4a/ofl';
@@ -226,6 +231,22 @@ export const FAMILIES: FamilySpec[] = [
       { weight: 700, italic: false, font: lib('LiberationMono-Bold.ttf') },
       { weight: 400, italic: true, font: lib('LiberationMono-Italic.ttf') },
       { weight: 700, italic: true, font: lib('LiberationMono-BoldItalic.ttf') },
+    ],
+  }),
+  ...withExtras({
+    // The default monospace (plain text, Markdown code, code blocks, large text files): every glyph is 0.6 em wide, like Courier New.
+    id: 'jetbrains-mono',
+    wordName: 'JetBrains Mono',
+    substitute: 'JetBrains Mono',
+    license: 'OFL-1.1',
+    licenseFile: { archive: 'jetbrainsMono', path: 'OFL.txt' },
+    // JetBrains' static builds, not Google Fonts' variable font: its outlines overlap (the 8 is two contours that each
+    // cross themselves), which msdf-atlas-gen cannot turn into a distance field. The static ones have overlaps removed.
+    faces: [
+      { weight: 400, italic: false, font: { archive: 'jetbrainsMono', path: 'fonts/ttf/JetBrainsMono-Regular.ttf' } },
+      { weight: 700, italic: false, font: { archive: 'jetbrainsMono', path: 'fonts/ttf/JetBrainsMono-Bold.ttf' } },
+      { weight: 400, italic: true, font: { archive: 'jetbrainsMono', path: 'fonts/ttf/JetBrainsMono-Italic.ttf' } },
+      { weight: 700, italic: true, font: { archive: 'jetbrainsMono', path: 'fonts/ttf/JetBrainsMono-BoldItalic.ttf' } },
     ],
   }),
   ...withExtras({

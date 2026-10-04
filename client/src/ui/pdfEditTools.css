@@ -6,7 +6,7 @@
 }
 
 .wm-pdftools-section .wm-forms-add.wm-pdftools-on {
-  background: var(--wm-accent, #316ac5);
+  background: var(--wm-hot-border);
   color: #fff;
 }
 
@@ -59,12 +59,12 @@
 }
 
 .wm-pdftools-rubber {
-  border: 1px dashed #316ac5;
-  background: rgb(49 106 197 / 0.12);
+  border: 1px dashed var(--wm-hot-border);
+  background: color-mix(in srgb, var(--wm-hot-border) 12%, transparent);
 }
 
 .wm-pdftools-frame {
-  border: 1px solid #316ac5;
+  border: 1px solid var(--wm-hot-border);
   cursor: move;
   pointer-events: auto;
   touch-action: none;
@@ -72,11 +72,12 @@
 
 .wm-pdftools-handle {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  margin: -4px;
+  width: var(--wm-handle-size);
+  height: var(--wm-handle-size);
+  margin: calc(var(--wm-handle-size) / -2);
+  box-sizing: border-box;
   background: #fff;
-  border: 1px solid #316ac5;
+  border: var(--wm-handle-line) solid var(--wm-hot-border);
 }
 
 .wm-pdftools-handle-nw { left: 0; top: 0; cursor: nwse-resize; }

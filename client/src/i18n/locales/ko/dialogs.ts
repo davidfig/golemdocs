@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': '연필 획을 그린 후 선택',
   'dialogs.options.returnToSelect': '도형이나 펜 경로를 그린 후 선택 도구로 돌아가기',
   'dialogs.options.pencilSmoothing': '연필 부드럽게 하기',
+  'dialogs.options.penPressure': '태블릿 펜을 세게 누를수록 선을 굵게 그리기',
   'dialogs.options.off': '끔',
   'dialogs.options.low': '낮음',
   'dialogs.options.medium': '보통',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': '안내선',
   'dialogs.options.showGuides': '안내선 표시',
   'dialogs.options.lockGuides': '안내선 잠그기',
+  'dialogs.find.wholeWord': '단어 단위',
+  'dialogs.find.regex': '정규식',
 };

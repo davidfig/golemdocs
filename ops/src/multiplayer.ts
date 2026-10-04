@@ -11,14 +11,9 @@
 //   shared   Everyone sends transactions (`submit`); the room orders them, broadcasts them, and
 //            writes the resulting .docx to the cloud. Clients no longer upload files.
 //
-// Some documents can't be edited by two people at once (a drawing is replaced whole by each edit): the
-// room is then exclusive, and only the one who holds its lease may submit. Anyone may ask for the lease
-// (`lease`); it is granted when nobody holds it, when the holder is gone, or when the holder has done nothing for
-// a while. The holder lets go with `release`. Who holds it is told to everyone (`lease`).
-//
 // What a document's changes are depends on what it is: for most they are operations on its text (`doc`); for a PDF, which is lists
 // of annotations, fields and edits, they are changes to single objects (`objects`, see ./objects.ts). The first to join says which,
-// like whether the room is exclusive; the room validates and writes out what it is sent accordingly.
+// and the room validates and writes out what it is sent accordingly.
 //
 // Back to solo: when only one person is left the room sends `settle`; once that client has nothing
 // unsent it answers `quiet`, the room writes the final .docx, and sends `solo`.
@@ -32,8 +27,8 @@ import type { Selection } from './history.ts';
 export type RoomMode = 'solo' | 'handoff' | 'shared';
 export type RoomRole = 'owner' | 'editor' | 'viewer';
 
-/** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), a picture's shapes (`layers`), or a drawing's nodes (`nodes`). */
-export type RoomKind = 'doc' | 'objects' | 'layers' | 'nodes';
+/** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), a picture's shapes (`layers`), or a drawing's nodes (`nodes`); or, for a plain text file, changes to its bytes (`text`, see ./textOps.ts). */
+export type RoomKind = 'doc' | 'objects' | 'layers' | 'nodes' | 'text';
 
 /** Where someone's mouse pointer is: on this page (its position in display order), at this point on it (points). */
 export interface Pointer {
@@ -56,7 +51,7 @@ export interface Person {
 
 export type MultiplayerClientMessage =
   /** First message: who is joining. */
-  | { type: 'hello'; client: string; name: string; color: number; /** The document can only be edited by one person at a time; the first to join says so for the room. */ exclusive?: boolean; /** What the document's changes are (the first to join says so for the room). */ kind?: RoomKind }
+  | { type: 'hello'; client: string; name: string; color: number; /** What the document's changes are (the first to join says so for the room). */ kind?: RoomKind }
   /** In answer to `handoff`: the document is uploaded; later edits will be submitted from version 0. */
   | { type: 'flushed'; epoch: number }
   /**
@@ -69,13 +64,10 @@ export type MultiplayerClientMessage =
   /** Where the mouse is (null: it left the document). Sent often, so it is relayed and never stored. */
   | { type: 'pointer'; pointer: Pointer | null }
   /** In answer to `settle`: nothing unsent, at this version. */
-  | { type: 'quiet'; epoch: number; version: number }
-  /** Asks to be the one who edits (an exclusive room), and lets go of that. */
-  | { type: 'lease' }
-  | { type: 'release' };
+  | { type: 'quiet'; epoch: number; version: number };
 
 export type MultiplayerServerMessage =
-  | { type: 'welcome'; role: RoomRole; client: string; mode: RoomMode; epoch: number; people: Person[]; exclusive: boolean; holder: string | null; kind: RoomKind }
+  | { type: 'welcome'; role: RoomRole; client: string; mode: RoomMode; epoch: number; people: Person[]; kind: RoomKind }
   | { type: 'handoff'; epoch: number }
   | { type: 'shared'; epoch: number }
   | (ServerMessage & { epoch: number })
@@ -83,9 +75,7 @@ export type MultiplayerServerMessage =
   | { type: 'solo'; epoch: number }
   | { type: 'people'; people: Person[] }
   | { type: 'presence'; client: string; selection: Selection | null }
-  | { type: 'pointer'; client: string; pointer: Pointer | null }
-  /** Who holds an exclusive room's lease now (null: nobody). */
-  | { type: 'lease'; holder: string | null };
+  | { type: 'pointer'; client: string; pointer: Pointer | null };
 
 /** Close codes the room uses. */
 export const ROOM_CLOSE = {

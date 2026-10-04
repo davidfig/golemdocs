@@ -123,6 +123,7 @@ export const dialogs: Catalog = {
   'dialogs.options.selectAfterPencil': 'Выделять штрих карандаша после его завершения',
   'dialogs.options.returnToSelect': 'Возвращаться к инструменту «Выделение» после рисования фигуры или контура пером',
   'dialogs.options.pencilSmoothing': 'Сглаживание карандаша',
+  'dialogs.options.penPressure': 'Рисовать тем более толстые линии, чем сильнее нажато перо планшета',
   'dialogs.options.off': 'Выкл.',
   'dialogs.options.low': 'Слабое',
   'dialogs.options.medium': 'Среднее',
@@ -130,4 +131,6 @@ export const dialogs: Catalog = {
   'dialogs.options.guides': 'Направляющие',
   'dialogs.options.showGuides': 'Показать направляющие',
   'dialogs.options.lockGuides': 'Заблокировать направляющие',
+  'dialogs.find.wholeWord': 'Слово целиком',
+  'dialogs.find.regex': 'Регулярное выражение',
 };

@@ -39,7 +39,6 @@ export const menus = {
   'menus.format.txt': 'Plain Text',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Email Message',
-  'menus.format.largetext': 'Large Text',
   'menus.format.png': 'PNG Image',
   'menus.format.jpeg': 'JPEG Image',
   'menus.format.webp': 'WebP Image',

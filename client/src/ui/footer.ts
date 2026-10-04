@@ -24,6 +24,8 @@ export interface FooterInfo {
   view: ViewMode;
   /** Flow can be chosen (not for a PDF's own pages or a picture). */
   canFlow: boolean;
+  /** A plain text file in the text editor: what to say about it (already in the language), and whether long lines wrap. */
+  text: { summary: string; position: string; progress: string; wrap: boolean } | null;
 }
 
 // Drawn in the bar's text color, on a 16-unit grid.
@@ -39,6 +41,8 @@ export interface FooterActions {
   wordCount(): void;
   zoom(anchor: HTMLElement): void;
   canvasSize(): void;
+  /** Wrap long lines or not (a plain text file). */
+  wrap(): void;
   /** The tooltip of a clickable segment. */
   label(action: FooterAction): string;
 }
@@ -57,7 +61,9 @@ const DRAWING_SEGMENT_ACTIONS: Partial<Record<MessageKey, FooterAction>> = { 'pa
 const VIEW_LABELS = { print: 'chrome.view.print', flow: 'chrome.view.flow', grid: 'chrome.view.grid' } as const satisfies Record<ViewMode, MessageKey>;
 
 export interface FooterSegment {
-  key: MessageKey;
+  key: MessageKey | null;
+  /** Said as it is (the text editor's own wording). */
+  text?: string;
   /** Numbers here are shown in the language's own digits and grouping. */
   params?: Record<string, number>;
 }
@@ -65,7 +71,9 @@ export interface FooterSegment {
 /** What the status bar says about a document, left to right. */
 export function footerSegments(info: FooterInfo): FooterSegment[] {
   const out: FooterSegment[] = [];
-  if (PICTURE_KINDS.includes(info.kind) || VECTOR_KINDS.includes(info.kind)) {
+  if (info.text) {
+    for (const text of [info.text.summary, info.text.position, info.text.progress]) if (text) out.push({ key: null, text });
+  } else if (PICTURE_KINDS.includes(info.kind) || VECTOR_KINDS.includes(info.kind)) {
     if (info.picture) out.push({ key: 'panels.footer.pixels', params: info.picture });
   } else {
     const table = info.words?.table;
@@ -88,6 +96,8 @@ export class Footer {
   readonly el: HTMLElement;
   private readonly items = h('div', { class: 'wm-footer-items', attrs: { role: 'status' } });
   private readonly views = new Map<ViewMode, HTMLButtonElement>();
+  private readonly group: HTMLElement;
+  private readonly wrap: HTMLButtonElement;
   private readonly actions: FooterActions;
   private shown = '';
 
@@ -105,7 +115,13 @@ export class Footer {
       this.views.set(view, button);
       group.append(button);
     }
-    el.replaceChildren(this.items, group);
+    this.group = group;
+    const wrapLabel = `${t('textEditor.wrap')} (Alt+Z)`;
+    this.wrap = h('button', { class: 'wm-footer-view', attrs: { type: 'button', title: wrapLabel, 'aria-label': t('textEditor.wrap'), 'aria-pressed': 'false' } });
+    this.wrap.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3.5h13M1.5 7.5h10a2.5 2.5 0 0 1 0 5H8M9.7 10.5 7.7 12.5l2 2M1.5 11.5h3"/></svg>';
+    this.wrap.addEventListener('mousedown', (e) => e.preventDefault());
+    this.wrap.addEventListener('click', () => actions.wrap());
+    el.replaceChildren(this.items, group, this.wrap);
     // What floats over the bottom of the window (Clip, the assistant) is lifted by the bar's height: 0 while it is hidden.
     new ResizeObserver(() => document.documentElement.style.setProperty('--wm-footer-height', `${el.offsetHeight}px`)).observe(el);
   }
@@ -117,13 +133,17 @@ export class Footer {
   /** Shows the segments (nothing is touched when they have not changed). */
   update(info: FooterInfo): void {
     const numbers = new Intl.NumberFormat(getLocale());
-    const segments = footerSegments(info).map(({ key, params }) => {
+    const segments = footerSegments(info).map(({ key, params, text: literal }) => {
+      if (key === null) return { text: literal ?? '', action: undefined };
       const shown: Record<string, string | number> = {};
       for (const [name, value] of Object.entries(params ?? {})) shown[name] = numbers.format(value);
       // The plural category comes from the number itself, the text from its formatted copy.
       if (params && 'count' in params) shown.count = params.count;
       return { text: t(key, { ...shown, n: numbers.format(params?.count ?? 0) }), action: (VECTOR_KINDS.includes(info.kind) ? DRAWING_SEGMENT_ACTIONS[key] : undefined) ?? SEGMENT_ACTIONS[key] };
     });
+    this.group.hidden = info.text !== null;
+    this.wrap.hidden = info.text === null;
+    if (info.text) setAttr(this.wrap, 'aria-pressed', String(info.text.wrap));
     for (const [view, button] of this.views) {
       setAttr(button, 'aria-pressed', String(view === info.view));
       const disabled = view === 'flow' && !info.canFlow;

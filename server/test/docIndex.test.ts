@@ -93,7 +93,7 @@ test('a viewer can fetch it; someone with no access gets 404; other methods 405'
 });
 
 test('a file that is not a .docx answers 422', async () => {
-  const r = await w.call(OWNER, 'POST', '/api/documents?name=Doc.docx', { body: new Uint8Array([1, 2, 3]), type: DOCX });
+  const r = await w.call(OWNER, 'POST', '/api/documents?name=Doc.docx', { body: new Uint8Array([0, 1, 2, 3]), type: DOCX });
   const doc = (await r.json()) as any;
   assert.equal((await index(OWNER, doc.id)).status, 422);
   assert.equal(idxKeys().length, 0);
@@ -138,4 +138,12 @@ test('a .wdoc with no flowing document (a PDF not turned into one) has no text h
     console.error = quiet;
   }
   assert.equal(idxKeys().length, 0);
+});
+
+test('a plain text file is indexed by its lines', async () => {
+  const r = await w.call(OWNER, 'POST', '/api/documents?name=Notes.txt', { body: new TextEncoder().encode('first line\nsecond line with cabinets\n'), type: 'text/plain' });
+  const doc = (await r.json()) as any;
+  const response = await index(OWNER, doc.id);
+  assert.equal(response.status, 200);
+  assert.equal(((await decodeIndex(new Uint8Array(await response.arrayBuffer())))!).n, 3);
 });

@@ -427,3 +427,43 @@ export async function pictureToScreen(page: Page, pictureWidth: number, x: numbe
   const pt = widthPt / pictureWidth;
   return screenPoint(page, 0, x * pt, y * pt);
 }
+
+// --- A drawing tablet's pen ---------------------------------------------------------------
+
+/** One point of a pen stroke, on screen, and how hard the pen is pressed there (0 to 1). */
+export interface PenPoint {
+  x: number;
+  y: number;
+  pressure: number;
+}
+
+/**
+ * Draws a stroke with a pen, as a tablet sends it: real input through the browser's DevTools protocol,
+ * with `pointerType` pen and its pressure, so the page sees what a Wacom pen would give it.
+ */
+export async function penStroke(page: Page, points: readonly PenPoint[]): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  const send = (type: 'mousePressed' | 'mouseMoved' | 'mouseReleased', p: PenPoint, pressed: boolean) =>
+    cdp.send('Input.dispatchMouseEvent', { type, x: p.x, y: p.y, pointerType: 'pen', force: pressed ? p.pressure : 0, button: type === 'mouseMoved' ? (pressed ? 'left' : 'none') : 'left', buttons: pressed ? 1 : 0, clickCount: type === 'mouseMoved' ? 0 : 1 });
+  await send('mouseMoved', points[0], false);
+  await send('mousePressed', points[0], true);
+  for (const p of points.slice(1)) await send('mouseMoved', p, true);
+  await send('mouseReleased', points[points.length - 1], false);
+  await cdp.detach();
+}
+
+/**
+ * Rubs the pen's eraser end along the points. The DevTools protocol has no eraser button, so these are
+ * pen pointer events made in the page (button 5, `buttons` 32), sent where a real pen's would go.
+ */
+export async function penEraser(page: Page, points: readonly { x: number; y: number }[]): Promise<void> {
+  await page.evaluate((pts) => {
+    const fire = (type: string, p: { x: number; y: number }, pressed: boolean) => {
+      const target = document.elementFromPoint(p.x, p.y) ?? document.body;
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, pointerId: 1, pointerType: 'pen', isPrimary: true, clientX: p.x, clientY: p.y, button: type === 'pointermove' ? -1 : 5, buttons: pressed ? 32 : 0, pressure: pressed ? 0.6 : 0 }));
+    };
+    fire('pointerdown', pts[0], true);
+    for (const p of pts.slice(1)) fire('pointermove', p, true);
+    fire('pointerup', pts[pts.length - 1], false);
+  }, points as { x: number; y: number }[]);
+}

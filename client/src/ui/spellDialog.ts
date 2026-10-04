@@ -140,6 +140,11 @@ export class SpellDialog {
     this.host.send({ kind: 'spellCheck', spelling: this.live.spelling, grammar: this.live.grammar, words: this.host.userWords() });
   }
 
+  /** What is underlined as the user types, or null when nothing is. */
+  get liveChecks(): { spelling: boolean; grammar: boolean } | null {
+    return this.checkingLive ? { ...this.live } : null;
+  }
+
   /** Whether anything is underlined as the user types. */
   get checkingLive(): boolean {
     return this.live.spelling || this.live.grammar;

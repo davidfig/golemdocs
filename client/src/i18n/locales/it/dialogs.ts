@@ -123,6 +123,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.selectAfterPencil': 'Seleziona il tratto della matita al termine',
   'dialogs.options.returnToSelect': 'Torna allo strumento Seleziona dopo aver disegnato una forma o un tracciato con la penna',
   'dialogs.options.pencilSmoothing': 'Smussatura della matita',
+  'dialogs.options.penPressure': 'Disegna linee più spesse quanto più si preme la penna della tavoletta',
   'dialogs.options.off': 'No',
   'dialogs.options.low': 'Bassa',
   'dialogs.options.medium': 'Media',
@@ -130,4 +131,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.guides': 'Guide',
   'dialogs.options.showGuides': 'Mostra guide',
   'dialogs.options.lockGuides': 'Blocca guide',
+  'dialogs.find.wholeWord': 'Parola intera',
+  'dialogs.find.regex': 'Espressione regolare',
 };

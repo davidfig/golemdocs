@@ -4,10 +4,11 @@
 
 import { decodeImage, encodeCanvas, makeCanvas } from './imageCodec.ts';
 import type { OutputType } from './imageCodec.ts';
-import { boxOf, paintShape, pixelBlock } from './imageDraw.ts';
-import type { Shape } from './imageDraw.ts';
-import { adjustPixels, applyEffect, clampBox, tooBig } from './imagePixels.ts';
-import type { Adjustments, Effect } from './imagePixels.ts';
+import { EFFECT_TOOLS, boxOf, paintBackground, pixelBlock } from './imageDraw.ts';
+import type { Background, Shape } from './imageDraw.ts';
+import { paintLayers, paintLeaf } from './imageLayers.ts';
+import { adjustPixels, anchorOffset, applyEffect, clampBox, tooBig } from './imagePixels.ts';
+import type { Adjustments, Anchor, Effect } from './imagePixels.ts';
 import { sniffImage } from './images.ts';
 import { t } from '../i18n/index.ts';
 
@@ -21,7 +22,11 @@ export type ImageEdit =
   | ({ op: 'adjust' } & Adjustments)
   | { op: 'effect'; effect: Effect }
   /** Shapes sketched over the picture, in its pixels. */
-  | { op: 'draw'; shapes: Shape[] };
+  | { op: 'draw'; shapes: Shape[] }
+  /** A colour or gradient laid behind the picture, showing through where it is see-through. */
+  | { op: 'background'; paint: Background }
+  /** The canvas made another size around the picture, which stays where `anchor` says; the new area is the background, or see-through. */
+  | { op: 'canvas'; width: number; height: number; anchor: Anchor; paint?: Background };
 
 export interface Edited {
   bytes: Uint8Array;
@@ -69,11 +74,24 @@ export async function applyImageEdit(bytes: Uint8Array, edit: ImageEdit): Promis
       case 'draw':
         out = makeCanvas(width, height);
         out.context.drawImage(bitmap, 0, 0);
-        for (const shape of edit.shapes) {
-          if (shape.tool === 'pixelate') pixelate(out, shape);
-          else paintShape(out.context, shape);
-        }
+        // A fill finds its region in the picture as it was before anything was drawn on it.
+        const base = edit.shapes.some((s) => s.tool === 'fill' || EFFECT_TOOLS.includes(s.tool as never)) ? out.context.getImageData(0, 0, width, height) : null;
+        paintLayers(out.context, edit.shapes, false, (ctx, shape) => (shape.tool === 'pixelate' ? !shape.hidden && pixelate(out, shape) : paintLeaf(ctx, shape, edit.shapes, base)), base);
         break;
+      case 'background':
+        out = makeCanvas(width, height);
+        out.context.drawImage(bitmap, 0, 0);
+        out.context.globalCompositeOperation = 'destination-over';
+        paintBackground(out.context, edit.paint, width, height);
+        break;
+      case 'canvas': {
+        if (tooBig(edit.width, edit.height)) throw new Error(t('app.imageTooBig'));
+        out = makeCanvas(edit.width, edit.height);
+        if (edit.paint) paintBackground(out.context, edit.paint, edit.width, edit.height);
+        const at = anchorOffset({ width, height }, edit, edit.anchor);
+        out.context.drawImage(bitmap, at.x, at.y);
+        break;
+      }
       case 'effect': {
         out = makeCanvas(width, height);
         out.context.drawImage(bitmap, 0, 0);

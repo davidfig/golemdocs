@@ -69,7 +69,7 @@ const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 7
 const DEFAULT_HALF_POINTS = 20;
 /** One indent step, twips (half an inch). */
 const INDENT_STEP = 720;
-const MONO = 'Courier New';
+const MONO = 'JetBrains Mono';
 
 /** The Table menu's operations the editor can do. */
 export const TABLE_EDITS = new Set<string>(['insertRowAbove', 'insertRowBelow', 'insertColumnLeft', 'insertColumnRight', 'deleteRows', 'deleteColumns', 'deleteTable', 'selectTable', 'mergeCells', 'splitCells']);

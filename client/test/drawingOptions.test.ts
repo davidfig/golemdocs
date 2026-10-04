@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TOOLS } from '../../server/src/assistantTools.ts';
 import { SYNCED_KEYS } from '../src/settingsSync.ts';
-import { NUDGE_SIZE_DEFAULT, NUDGE_SIZE_KEY, NUDGE_SIZE_MAX, NUDGE_SIZE_MIN, NUDGE_STRENGTH_KEY, NUDGE_STRENGTH_MIN, nudgeSize, nudgeStrength, setNudgeSize, setNudgeStrength, PENCIL_SMOOTHING_KEY, RETURN_TO_SELECT_KEY, SELECT_AFTER_PENCIL_KEY, SMOOTHING_LEVELS, lockGuidesOn, onDrawingOptions, pencilSmoothing, pencilTolerance, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, LOCK_GUIDES_KEY, SHOW_GUIDES_KEY } from '../src/ui/drawingOptions.ts';
+import { NUDGE_SIZE_DEFAULT, NUDGE_SIZE_KEY, NUDGE_SIZE_MAX, NUDGE_SIZE_MIN, NUDGE_STRENGTH_KEY, NUDGE_STRENGTH_MIN, nudgeSize, nudgeStrength, setNudgeSize, setNudgeStrength, PENCIL_SMOOTHING_KEY, PEN_PRESSURE_KEY, penPressureOn, setPenPressure, RETURN_TO_SELECT_KEY, SELECT_AFTER_PENCIL_KEY, SMOOTHING_LEVELS, lockGuidesOn, onDrawingOptions, pencilSmoothing, pencilTolerance, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, LOCK_GUIDES_KEY, SHOW_GUIDES_KEY } from '../src/ui/drawingOptions.ts';
 
 test('the defaults are the editor’s old behavior: select the stroke, return to Select, medium smoothing', () => {
   assert.equal(selectAfterPencilOn(), true);
   assert.equal(returnToSelectOn(), true);
   assert.equal(pencilSmoothing(), 'medium');
   assert.equal(pencilTolerance(), 2.5);
+  assert.equal(penPressureOn(), true);
 });
 
 test('changes are remembered and announced once', () => {
@@ -20,6 +21,11 @@ test('changes are remembered and announced once', () => {
   setSelectAfterPencil(false);
   setReturnToSelect(false);
   setPencilSmoothing('high');
+  setPenPressure(false);
+  setPenPressure(false);
+  assert.equal(penPressureOn(), false);
+  setPenPressure(true);
+  calls -= 2;
   assert.equal(selectAfterPencilOn(), false);
   assert.equal(returnToSelectOn(), false);
   assert.equal(pencilSmoothing(), 'high');
@@ -40,10 +46,10 @@ test('more smoothing lets the path stray further from the hand', () => {
 });
 
 test('the options follow the account, and the assistant can set them', () => {
-  for (const key of [SELECT_AFTER_PENCIL_KEY, RETURN_TO_SELECT_KEY, PENCIL_SMOOTHING_KEY]) assert.ok(SYNCED_KEYS.includes(key), key);
+  for (const key of [SELECT_AFTER_PENCIL_KEY, RETURN_TO_SELECT_KEY, PENCIL_SMOOTHING_KEY, PEN_PRESSURE_KEY]) assert.ok(SYNCED_KEYS.includes(key), key);
   const tool = TOOLS.find((t) => t.name === 'set_drawing_options');
   assert.ok(tool);
-  assert.deepEqual(Object.keys((tool.parameters as { properties: object }).properties), ['select_after_pencil', 'return_to_select', 'pencil_smoothing', 'show_guides', 'lock_guides']);
+  assert.deepEqual(Object.keys((tool.parameters as { properties: object }).properties), ['select_after_pencil', 'return_to_select', 'pencil_smoothing', 'pen_pressure', 'show_guides', 'lock_guides']);
 });
 
 test('the nudge brush starts at full strength and a middle size, and its settings stay in range', () => {

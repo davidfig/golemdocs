@@ -23,11 +23,11 @@ export interface CommandSpec {
    */
   nativeShortcut?: boolean;
   /**
-   * 'vector': a key of the vector editor. It only works while a drawing is open (and then wins
+   * 'vector' or 'picture': a key of the vector editor, or of the picture's Draw tools (Photoshop's keys). It only works while a drawing (a picture) is open (and then wins
    * over a document command with the same keys), may be a bare letter, and is listed in its own
    * section of the keyboard shortcuts.
    */
-  scope?: 'vector';
+  scope?: 'vector' | 'picture';
   /** The action sent to the host. */
   action?: Action | ((state: ChromeState) => Action);
   /** Runs in the chrome instead of sending an action. */

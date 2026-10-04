@@ -305,4 +305,8 @@ export const chrome: Partial<Messages> = {
   'chrome.title.tip': 'Zum Umbenennen klicken',
   'chrome.rename.title': 'Dokument umbenennen',
   'chrome.rename.action': 'Umbenennen',
+  'chrome.shortcuts.picture': 'Bildwerkzeuge',
+  'chrome.shortcuts.pictureHint': 'Tasten für die Zeichenwerkzeuge, wie in Photoshop. Ein Werkzeug kann eine einzelne Buchstaben-, Ziffern- oder Symboltaste haben.',
+  'chrome.file.openSelection': 'Auswahl als &Dokument öffnen',
+  'chrome.file.openSelection.tip': 'Die ausgewählten Zeilen als normales Dokument öffnen, das sich formatieren und konvertieren lässt',
 };

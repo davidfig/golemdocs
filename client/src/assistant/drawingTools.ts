@@ -1,6 +1,7 @@
 // What the assistant can do with a vector drawing: read it as a list of shapes, and change it with
 // the same editor commands the menus and toolbar run (so each change is one undoable step). The
-// shapes are addressed by their place in the drawing, back to front, starting at 0.
+// shapes are addressed by their place in the drawing, back to front, starting at 0; a shape inside a
+// group or layer by its group's number and its own, "2.1".
 
 import { SHAPE_IDS, isShapeId, shapePath } from '../vector/shapes.ts';
 import type { Matrix, Scene, SceneNode } from '../vector/model.ts';
@@ -14,12 +15,13 @@ import { rotation, scaling, translation, multiply, fmt } from '../vector/matrix.
 import { parseColor } from '../vector/style.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
 import type { ShapeStyle } from '../ui/vectorEditor.ts';
+import { BACKGROUND_ATTR } from '../vector/canvas.ts';
 
 /** The part of the vector editor the tools use. */
 export interface DrawingEditor {
   readonly drawing: Scene | null;
-  /** Someone else may edit the drawing (in a room): it can be looked at, not changed. */
-  readonly readOnly: boolean;
+  /** What is picked (after `addShape`, the new shape). */
+  readonly selection: readonly NodePath[];
   select(paths: NodePath[]): void;
   delete(): void;
   duplicate(): void;
@@ -50,13 +52,16 @@ export interface DrawingEditor {
 const kindName = (node: SceneNode): string => (node.kind === 'ellipse' ? (node.rx === node.ry ? 'circle' : 'ellipse') : node.kind);
 const round = (n: number): number => Math.round(n * 100) / 100;
 
-/** The drawing as text for the model: its size, and each shape (back to front) with where it is and how it looks. */
+/** A shape's number as the model sees it: "3", or "2.1" for the second shape in group 2. */
+const label = (path: NodePath): string => path.join('.');
+
+/** The drawing as text for the model: its size, and each shape (back to front, those in groups under their group) with where it is and how it looks. */
 export function describeDrawing(scene: Scene): string {
-  const lines = [`Drawing ${round(scene.width)} x ${round(scene.height)}, coordinates from (${round(scene.viewBox.x)}, ${round(scene.viewBox.y)}) to (${round(scene.viewBox.x + scene.viewBox.width)}, ${round(scene.viewBox.y + scene.viewBox.height)}). Shapes from back to front:`];
-  scene.children.forEach((node, i) => {
-    const box = worldBounds(scene, [i]);
+  const lines = [`Drawing ${round(scene.width)} x ${round(scene.height)}, coordinates from (${round(scene.viewBox.x)}, ${round(scene.viewBox.y)}) to (${round(scene.viewBox.x + scene.viewBox.width)}, ${round(scene.viewBox.y + scene.viewBox.height)}). Shapes from back to front (a shape in a group is numbered after it, like 2.1):`];
+  const describe = (node: SceneNode, path: NodePath): void => {
+    const box = worldBounds(scene, path);
     const where = box ? ` at x=${round(box.x)} y=${round(box.y)} width=${round(box.width)} height=${round(box.height)}` : '';
-    const look = (property: string): string => styleOf(scene, [i], property) ?? '';
+    const look = (property: string): string => styleOf(scene, path, property) ?? '';
     const parts: string[] = [];
     if (node.kind === 'text') parts.push(`text "${node.runs.map((r) => r.text).join('')}"`);
     if (node.kind === 'group') parts.push(`${node.children.length} shapes inside`);
@@ -67,9 +72,12 @@ export function describeDrawing(scene: Scene): string {
     }
     const brush = node.kind === 'path' ? brushOf(node) : null;
     if (brush) parts.push(`brush ${brush.preset ?? brush.kind}`);
+    if (node.attrs[BACKGROUND_ATTR] === 'true') parts.push('the page background (set_canvas changes it; leave it alone otherwise)');
     const name = node.attrs[NAME_ATTR] || node.id;
-    lines.push(`${i}: ${kindName(node)}${name ? ` "${name}"` : ''}${where}${parts.length ? `; ${parts.join('; ')}` : ''}${node.style.display === 'none' ? '; hidden' : ''}`);
-  });
+    lines.push(`${'  '.repeat(path.length - 1)}${label(path)}: ${kindName(node)}${name ? ` "${name}"` : ''}${where}${parts.length ? `; ${parts.join('; ')}` : ''}${node.style.display === 'none' ? '; hidden' : ''}`);
+    if (node.kind === 'group') node.children.forEach((child, i) => describe(child, [...path, i]));
+  };
+  scene.children.forEach((node, i) => describe(node, [i]));
   if (!scene.children.length) lines.push('(nothing yet)');
   return lines.join('\n');
 }
@@ -93,15 +101,19 @@ const STYLES = [...DASHES.map((d) => `dash:${d.id}`), ...BRUSH_PRESETS.map((p) =
 const ORDERS: Record<string, Order> = { front: 'front', forward: 'forward', backward: 'backward', back: 'back' };
 const BOOLEANS: readonly string[] = ['unite', 'intersect', 'subtract', 'exclude'];
 
-/** The shapes an operation is for: `shapes`, a list of places in the drawing. */
+/** The shapes an operation is for: `shapes`, a list of their numbers in the drawing (3, or "2.1" for one in a group). */
 function pick(scene: Scene, args: Record<string, unknown>): NodePath[] {
   const list = args.shapes;
   if (!Array.isArray(list) || !list.length) throw new Error('`shapes` must list the numbers of the shapes to change (see read_drawing).');
   return list.map((v) => {
-    if (typeof v !== 'number' || !Number.isInteger(v) || !nodeAt(scene, [v])) throw new Error(`There is no shape ${String(v)}.`);
-    return [v];
+    const path = typeof v === 'number' && Number.isInteger(v) ? [v] : typeof v === 'string' && /^\d+(\.\d+)*$/.test(v) ? v.split('.').map(Number) : null;
+    if (!path || !nodeAt(scene, path)) throw new Error(`There is no shape ${String(v)}.`);
+    return path;
   });
 }
+
+/** Where the shape just added went (into a layer, maybe), as its number. */
+const added = (editor: DrawingEditor): string => label(editor.selection[0] ?? [(editor.drawing?.children.length ?? 1) - 1]);
 
 /** Runs one request to change the drawing; answers with what it did. */
 export async function editDrawing(editor: DrawingEditor, args: Record<string, unknown>): Promise<string> {
@@ -124,13 +136,13 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
       const [x, y, w, h] = [number(args, 'x'), number(args, 'y'), number(args, 'width'), number(args, 'height')];
       if (w <= 0 || h <= 0) throw new Error('`width` and `height` must be above 0.');
       editor.addShape({ kind: 'rect', x, y, width: w, height: h, rx: Math.max(0, number(args, 'corner_radius', 0)), ry: Math.max(0, number(args, 'corner_radius', 0)), style, attrs: {} });
-      return `Added a rectangle as shape ${scene.children.length}.`;
+      return `Added a rectangle as shape ${added(editor)}.`;
     }
     case 'add_ellipse': {
       const [x, y, w, h] = [number(args, 'x'), number(args, 'y'), number(args, 'width'), number(args, 'height')];
       if (w <= 0 || h <= 0) throw new Error('`width` and `height` must be above 0.');
       editor.addShape({ kind: 'ellipse', cx: x + w / 2, cy: y + h / 2, rx: w / 2, ry: h / 2, style, attrs: {} });
-      return `Added an ellipse as shape ${scene.children.length}.`;
+      return `Added an ellipse as shape ${added(editor)}.`;
     }
     case 'add_shape': {
       const id = args.shape;
@@ -138,25 +150,25 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
       const [x, y, w, h] = [number(args, 'x'), number(args, 'y'), number(args, 'width'), number(args, 'height')];
       if (w <= 0 || h <= 0) throw new Error('`width` and `height` must be above 0.');
       editor.addShape({ kind: 'path', commands: shapePath(id, x, y, w, h), style, attrs: {} });
-      return `Added a ${id} as shape ${scene.children.length}.`;
+      return `Added a ${id} as shape ${added(editor)}.`;
     }
     case 'add_line': {
       const [x, y, x2, y2] = [number(args, 'x'), number(args, 'y'), number(args, 'to_x'), number(args, 'to_y')];
       editor.addShape({ kind: 'path', commands: [['M', x, y], ['L', x2, y2]], style: { fill: 'none', stroke: stroke === undefined ? '#2e3148' : (stroke ?? '#2e3148'), 'stroke-width': fmt(width ?? 2) }, attrs: {} });
-      return `Added a line as shape ${scene.children.length}.`;
+      return `Added a line as shape ${added(editor)}.`;
     }
     case 'add_path': {
       if (typeof args.d !== 'string') throw new Error('`d` must be SVG path data, like "M0 0 L10 10".');
       const commands = parsePath(args.d);
       if (commands.length < 2) throw new Error('`d` is not a path with at least two points.');
       editor.addShape({ kind: 'path', commands, style, attrs: {} });
-      return `Added a path as shape ${scene.children.length}.`;
+      return `Added a path as shape ${added(editor)}.`;
     }
     case 'add_text': {
       if (typeof args.text !== 'string' || !args.text) throw new Error('`text` is what to write.');
       const size = number(args, 'font_size', 24);
       editor.addShape({ kind: 'text', x: number(args, 'x'), y: number(args, 'y'), runs: [{ text: args.text, style: {} }], style: { fill: fill === undefined ? '#000000' : (fill ?? 'none'), 'font-size': fmt(size), 'font-family': 'sans-serif' }, attrs: {} });
-      return `Added the text as shape ${scene.children.length}. Its position is the left end of its baseline.`;
+      return `Added the text as shape ${added(editor)}. Its position is the left end of its baseline.`;
     }
   }
 
@@ -208,7 +220,7 @@ export async function editDrawing(editor: DrawingEditor, args: Record<string, un
   const paths = pick(scene, args);
   editor.select(paths);
   const count = paths.length;
-  const these = count === 1 ? `shape ${paths[0][0]}` : `${count} shapes`;
+  const these = count === 1 ? `shape ${label(paths[0])}` : `${count} shapes`;
   switch (op) {
     case 'delete':
       editor.delete();

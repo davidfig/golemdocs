@@ -21,6 +21,7 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.spelling.asYouType',
   'word.spelling.grammar',
   'word.userDictionary.v1',
+  'golem.newKinds', // the types File › New offers, last used first
   'word.viewMode',
   'word.formattingMarks',
   'word.ruler',
@@ -29,6 +30,7 @@ export const SYNCED_KEYS: readonly string[] = [
   'vector.selectAfterPencil', // drawing options (Tools › Options)
   'vector.returnToSelect',
   'vector.pencilSmoothing',
+  'vector.penPressure',
   'vector.nudgeSize', // the Nudge brush (its options strip)
   'vector.nudgeStrength',
 ];

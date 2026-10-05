@@ -46,6 +46,7 @@ export function textRoom(o: TextRoomOptions): TextRoom {
       unconfirmed: replica?.unconfirmed ?? 0,
       holder: null,
       watching: false,
+      catchingUp: false,
     };
     const key = JSON.stringify(state);
     if (key === shown) return;

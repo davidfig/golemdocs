@@ -15,7 +15,7 @@ import { rememberNewKind } from './ui/newKinds.ts';
 import { appTools } from './assistant/appTools.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, setLinkKeeper } from './folderOps.ts';
-import { openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
+import { keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
   releaseToGuest,
@@ -345,8 +345,8 @@ function openTicket(): () => boolean {
   return () => ticket === openRequests;
 }
 
-/** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room. */
-type OpenOptions = { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; store?: boolean; asDocument?: boolean };
+/** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
+type OpenOptions = { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -559,7 +559,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       shapesEcho = null;
       echo?.();
     },
-  }, requestedRoom, keptRoom !== null);
+  }, requestedRoom, keptRoom !== null, keptRoom ? options.version : undefined);
   focusInput();
 }
 
@@ -584,6 +584,8 @@ async function releaseRoom(doc: OpenDocument): Promise<void> {
   }
 }
 
+const WATCHED_RETRY_MS = 3000;
+
 /** The newest version of a watched document asked to be shown, while one is being opened (it is opened next). */
 let watchedNext: number | null = null;
 let watchedOpening = false;
@@ -592,10 +594,10 @@ let watchedOpening = false;
  * Watching a document someone else holds, it was saved: it is opened again from the account, as it is now, keeping its room and
  * where it was scrolled to. Saves that arrive while it is being opened are taken together, once it is.
  */
-async function refreshWatched(doc: OpenDocument, updatedAt: number): Promise<void> {
-  if (current !== doc || !doc.room?.watching) return;
+async function refreshWatched(doc: OpenDocument, updatedAt?: number): Promise<void> {
+  if (current !== doc || !(doc.room?.watching || doc.room?.catchingUp)) return;
   if (watchedOpening) {
-    watchedNext = updatedAt;
+    watchedNext = Math.max(watchedNext ?? 0, updatedAt ?? 0);
     return;
   }
   watchedOpening = true;
@@ -604,27 +606,29 @@ async function refreshWatched(doc: OpenDocument, updatedAt: number): Promise<voi
     const cloudId = library.local.find((d) => d.id === doc.localId)?.cloudId;
     if (current !== doc) return;
     wantedDocKey = viewDocKey; // back where it was
-    if (shared) open({ kind: 'docx-url', name: shared.name, url: documentUrl(shared.id) }, { shared, keepRoom: true });
+    if (shared) open({ kind: 'docx-url', name: shared.name, url: documentUrl(shared.id) }, { shared, keepRoom: true, version: updatedAt });
     else if (cloudId) {
       const { info, bytes } = await openFromCloud({ id: cloudId, name: doc.name, updatedAt }, account?.id);
       if (current !== doc) return;
       const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
-      open(source, { localId: info.id, cloudId, keepRoom: true });
+      open(source, { localId: info.id, cloudId, keepRoom: true, version: updatedAt });
     }
   } catch (e) {
+    // It stays as it is (and can't be changed) until it can be opened again.
     console.warn('could not open the saved document again', e);
+    window.setTimeout(() => void refreshWatched(doc, updatedAt), WATCHED_RETRY_MS);
   } finally {
     watchedOpening = false;
     const next = watchedNext;
     watchedNext = null;
-    if (next !== null) void refreshWatched(current, next);
+    if (next !== null) void refreshWatched(current, next || undefined);
   }
 }
 
-/** Someone else holds the open document (one edited by one person at a time): says so, and is true. */
+/** Someone else holds the open document (one edited by one person at a time): says so, and is true. Also true, saying nothing, for a moment while its newest save is being opened. */
 function refuseWhileWatching(): boolean {
   const room = current.room;
-  if (!room?.watching) return false;
+  if (!room?.watching) return !!room?.catchingUp;
   reportError(room.holder?.mine ? t('room.watchingMineNoEdit') : t('room.watchingNoEdit', { name: room.holder?.name ?? '' }));
   return true;
 }
@@ -635,6 +639,26 @@ function whyWatching(): string {
   return holder?.mine
     ? 'the person is editing this document on another of their devices, so it can only be looked at here; take it over (collaboration take_over) to change it.'
     : `${holder?.name ?? 'someone else'} is editing this document now, so it can only be looked at; take it over (collaboration take_over) to change it.`;
+}
+
+/**
+ * Watching a document someone else holds, this copy has changes the account doesn't (made here before it was opened, say): they are
+ * kept as a "(conflicted copy)" in the account, never sent over the holder's, and the holder's version is opened in their place.
+ */
+let keeping: Promise<unknown> = Promise.resolve();
+
+async function keepWatchedEdits(doc: OpenDocument): Promise<void> {
+  const id = doc.localId;
+  if (!id) return;
+  // One at a time: the second finds nothing left to keep.
+  const turn = keeping.then(() => saving).then(() => keepAsConflictCopy(id));
+  keeping = turn.catch(() => {});
+  const kept = await turn;
+  if (!kept) return;
+  library.putCloud(kept);
+  putDocInCatalogue(kept);
+  if (current === doc) notify(t('room.keptAsCopy', { name: kept.name }));
+  void refreshWatched(doc);
 }
 
 /** Asks to hold the open document someone else is editing (it is theirs to save first). */
@@ -689,6 +713,11 @@ function roomStateChanged(state: RoomState): void {
   if (state.mode === 'offline') {
     notify(t('app.roomLost'));
     if (was?.mode !== 'offline') rejoinWhenBack(doc);
+  }
+  // Watching, with changes made here that the account doesn't have: kept as a copy, and the holder's version opened instead.
+  if (state.watching && !was?.watching && doc.localId) {
+    saveIfEdited();
+    void keepWatchedEdits(doc).catch((e) => console.warn('could not keep the changes made here', e));
   }
   // Holding the document now (someone left it, or it was taken over): it can be edited. Watching now: what was being drawn or cropped is let go.
   if (was?.watching && !state.watching && state.mode !== 'offline') notify(t('room.nowEditing'));
@@ -1057,6 +1086,8 @@ async function uploadShared(): Promise<void> {
   const doc = current;
   const shared = doc.shared;
   if (!shared || !shared.dirty || shared.uploading) return;
+  // Someone else holds it: never sent over theirs (it can't be changed here meanwhile).
+  if (doc.room?.watching || doc.room?.catchingUp) return;
   clearTimeout(sharedTimer);
   shared.dirty = false;
   shared.uploading = true;
@@ -1312,6 +1343,8 @@ function joinRoomOf(doc: OpenDocument, cloudId: string): void {
 
 /** One upload: the queue says when (and handles what failing means); here is what it changes on screen. */
 async function upload(id: string): Promise<void> {
+  // Someone else holds the open document: this copy is never sent over theirs (what it had is kept as a copy instead).
+  if (id === current.localId && (current.room?.watching || current.room?.catchingUp)) return keepWatchedEdits(current);
   const before = library.local.find((d) => d.id === id)?.name;
   const { doc, conflictCopy } = await uploadToCloud(id);
   // A document made in this session gets its room once it is in the account (and one without a room, as it could not be reached, tries again).

@@ -169,4 +169,5 @@ export const app: Partial<Messages> = {
   'room.nowEditing': '이제 내가 편집하고 있습니다.',
   'room.watchingNoEdit': '{name} 님이 편집 중입니다. 변경하려면 넘겨받으세요.',
   'room.watchingMineNoEdit': '다른 기기에서 편집 중입니다. 여기서 변경하려면 넘겨받으세요.',
+  'room.keptAsCopy': '다른 사람이 편집 중이므로 여기서 한 변경 내용은 “{name}”(으)로 보관되었습니다.',
 };

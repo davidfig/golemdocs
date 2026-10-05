@@ -232,6 +232,28 @@ test('a copy changed in the account since it was opened is saved as a conflicted
   assert.equal(cloudVersion, 5, 'the other computer’s version is untouched');
 });
 
+test('changes kept as a conflicted copy (someone else holds the document) go to a new document, and the copy here can then be replaced by the account’s', async () => {
+  const { keepAsConflictCopy } = await import('../src/library.ts');
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
+  await uploadToCloud(doc.id); // c1, version 1
+  assert.equal(await keepAsConflictCopy(doc.id), null, 'nothing unsent: nothing to keep');
+  await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(2) });
+  calls = [];
+  const copy = await keepAsConflictCopy(doc.id);
+  assert.equal(copy?.name, 'Doc (conflicted copy).docx');
+  assert.deepEqual(calls.map((c) => c.method), ['POST'], 'never sent over the original');
+  const info = (await local.getSaved(doc.id))!.info;
+  assert.equal(info.cloudId, 'c1', 'the copy here stays the original’s');
+  assert.equal(info.name, 'Doc.docx');
+  assert.equal(info.cloudSyncedAt, info.updatedAt, 'and counts as sent');
+  assert.equal(cloudVersion, 1, 'the original is untouched');
+  // Opened again from a newer version of the account's, it takes that one.
+  cloudVersion = 4;
+  cloudBytes = bytes(7);
+  const opened = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 4 });
+  assert.deepEqual([...new Uint8Array(opened.bytes)], [7]);
+});
+
 test('an upload marks synced only what it sent, not what was saved while it was sending', async () => {
   const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1) });
   const before = globalThis.fetch;

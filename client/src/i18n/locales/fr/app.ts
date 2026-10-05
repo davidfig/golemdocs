@@ -178,4 +178,5 @@ export const app: Partial<Messages> = {
   'room.nowEditing': 'Vous modifiez maintenant ce document.',
   'room.watchingNoEdit': '{name} modifie ce document. Prenez la main pour le modifier.',
   'room.watchingMineNoEdit': 'Vous modifiez ce document sur un autre appareil. Prenez la main pour le modifier ici.',
+  'room.keptAsCopy': 'Les modifications faites ici ont été conservées sous « {name} », car quelqu’un d’autre modifie ce document.',
 };

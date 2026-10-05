@@ -469,7 +469,7 @@ test('holding a watched room, we edit; our own account on another device holding
   assert.equal(u.client.state.holder?.mine, true, 'the same account, another device');
 });
 
-test('watching, each save is passed on to be opened again; holding, the room’s asks to save and to let go are', async () => {
+test('each save the room tells of is passed on to be opened; holding, the room’s asks to save and to let go are', async () => {
   const t = setup();
   t.client.ready(await t.join(watchedWelcome()));
   t.socket.deliver({ type: 'saved', updatedAt: 42 });
@@ -481,7 +481,7 @@ test('watching, each save is passed on to be opened again; holding, the room’s
   t.socket.deliver({ type: 'saved', updatedAt: 43 });
   t.socket.deliver({ type: 'flush' });
   t.socket.deliver({ type: 'release' });
-  assert.deepEqual(t.log, ['saved@42', 'flush', 'release'], 'its own saves are not opened again');
+  assert.deepEqual(t.log, ['saved@42', 'saved@43', 'flush', 'release'], 'a save the room tells of is opened (the room tells no one of their own)');
   t.client.released();
   assert.deepEqual(t.socket.of('released'), [{ type: 'released' }]);
 });
@@ -523,4 +523,37 @@ test('a watched room with others in it can be rejoined after a dropped connectio
   await tick();
   assert.equal(t.client.state.mode, 'solo', 'not offline: it is the same document');
   assert.equal(t.client.watching, true, 'someone else holds it now');
+});
+
+test('a save heard of but not yet opened here keeps the document unchangeable, even once this session holds it, until it is open', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome()));
+  assert.equal(t.client.catchingUp, false);
+  // The holder saved before letting go, then the room hands the document over.
+  t.socket.deliver({ type: 'saved', updatedAt: 50 });
+  assert.equal(t.client.catchingUp, true);
+  assert.equal(t.states.at(-1)?.catchingUp, true, 'the host is told before it is asked to open the save');
+  t.socket.deliver({ type: 'holder', holder: holder('me') });
+  assert.equal(t.client.watching, false);
+  assert.equal(t.client.catchingUp, true, 'held now, but what is open is older');
+  t.client.refreshed(40);
+  assert.equal(t.client.catchingUp, true, 'an older save than the newest heard of');
+  t.client.refreshed(50);
+  assert.equal(t.client.catchingUp, false);
+  assert.equal(t.states.at(-1)?.catchingUp, false);
+  // A save heard of twice is opened once.
+  t.socket.deliver({ type: 'saved', updatedAt: 50 });
+  assert.deepEqual(t.log.filter((l) => l.startsWith('saved')), ['saved@50']);
+});
+
+test('catching up, a lost room is not let go of (what is open is older than the account’s)', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome({ holder: holder('me') })));
+  t.socket.deliver({ type: 'saved', updatedAt: 9 });
+  t.socket.drop(1006);
+  for (let i = 0; i < 6; i++) {
+    await tick(20);
+    t.socket.drop(1006);
+  }
+  assert.ok(!t.log.includes('lost'));
 });

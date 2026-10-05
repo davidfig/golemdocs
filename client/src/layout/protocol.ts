@@ -218,6 +218,8 @@ export interface RoomState {
   holder: { name: string; mine: boolean } | null;
   /** Someone else holds it: this person looks, and sees it again each time it is saved. */
   watching: boolean;
+  /** It was saved since it was opened here: nothing may be changed until the newer one is open. */
+  catchingUp: boolean;
 }
 
 /**
@@ -233,7 +235,7 @@ export type ToWorker =
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
   /** `keepRoom`: the same picture or drawing, changed, opened in place of the open one: it keeps that one's room. */
-  | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions; keepRoom?: boolean }
+  | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions; keepRoom?: boolean; /** With `keepRoom`: the saved version this is. */ version?: number }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */

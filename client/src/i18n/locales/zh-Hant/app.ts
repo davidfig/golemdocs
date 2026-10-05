@@ -172,4 +172,5 @@ export const app: Partial<Messages> = {
   'room.nowEditing': '現在由你編輯。',
   'room.watchingNoEdit': '{name} 正在編輯。接手後才能變更。',
   'room.watchingMineNoEdit': '你正在另一台裝置上編輯。接手後才能在這裡變更。',
+  'room.keptAsCopy': '由於其他人正在編輯，這裡所做的變更已保存為「{name}」。',
 };

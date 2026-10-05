@@ -1157,7 +1157,7 @@ class OpenDocument {
 
   /** Viewers, anyone whose connection to the room is gone, and anyone watching while someone else holds the document can look but not edit. */
   get readOnly(): boolean {
-    return this.net !== null && (!this.net.canEdit || this.net.watching);
+    return this.net !== null && (!this.net.canEdit || this.net.watching || this.net.catchingUp);
   }
 
   private postPointers(): void {
@@ -1174,8 +1174,8 @@ class OpenDocument {
   private postRoomState(): void {
     const net = this.net;
     if (!net) return;
-    const { mode, role, people, holder, watching } = net.state;
-    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0, holder: holder && { name: holder.name, mine: holder.mine }, watching });
+    const { mode, role, people, holder, watching, catchingUp } = net.state;
+    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0, holder: holder && { name: holder.name, mine: holder.mine }, watching, catchingUp });
   }
 
   /**
@@ -2473,7 +2473,7 @@ let current: OpenDocument | null = null;
  * Opens a document. Everything up to the first `await` happens at once, as the message is handled:
  * `current` is the new document from then on, so the messages sent after this one find it.
  */
-async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions, keepRoom?: boolean): Promise<void> {
+async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions, keepRoom?: boolean, version?: number): Promise<void> {
   // The same picture or drawing, changed: it keeps its room (when alone in it) rather than leaving and joining again.
   const carried = keepRoom ? (current?.handOverRoom() ?? null) : null;
   current?.leave();
@@ -2512,7 +2512,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
         if (entry.closed) return;
         if (start?.kind === 'room') source = await load({ kind: 'wdoc', name: loaded.name, bytes: start.bytes.slice().buffer }, fonts);
       }
-      return await openPdf(entry, source, fonts, t0, { start, client: pdfClient });
+      return await openPdf(entry, source, fonts, t0, { start, client: pdfClient, ...(carried && { version: version ?? null }) });
     }
     // A PDF edited as anything else is reflowed into a flowing document the first time.
     let document = loaded.document ?? (await reflow(loaded.original!, loaded.extensions));
@@ -2563,6 +2563,8 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     else if (isVectorFormat(entry.format) && start?.kind === 'room') await entry.ensureVector();
     entry.ready();
     if (start) entry.net!.ready(start);
+    // Opened again in place of itself (watching, it was saved): the room may let it be changed now.
+    if (carried) entry.net?.refreshed(version);
     post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
     if (entry.layers) entry.postShapes();
     // The drawing's nodes have ids of their own now: the editor is given them, so that what it changes is named as the room names it.
@@ -2586,7 +2588,7 @@ async function openPdf(
   source: Loaded,
   fonts: FontSet,
   t0: number,
-  options: { start: RoomStart | null; client: string },
+  options: { start: RoomStart | null; client: string; /** Opened again in place of itself (see `open`): the version it is. */ version?: number | null },
 ): Promise<void> {
   const { openPdfView, PdfAnnotator } = await import('../formats/handlers/pdf.ts');
   const view = await openPdfView(source.original!, fonts, { annotations: source.extensions.pdf?.annotations, fields: source.extensions.pdf?.fields, edits: source.extensions.pdf?.edits, editFonts: await editFontsFor(fonts) });
@@ -2604,6 +2606,7 @@ async function openPdf(
   entry.annotator = annotator;
   entry.ready();
   if (options.start) entry.net!.ready(options.start);
+  if (options.version !== undefined) entry.net?.refreshed(options.version ?? undefined);
   post({ type: 'opened', doc: entry.doc, name: source.name, format: 'pdf', annotating: true, outdated: !!source.document && !source.pagesCurrent });
   const bodyMs = await entry.pumpPdf();
   if (entry.closed) return;
@@ -2829,7 +2832,7 @@ function handleInbox(): void {
         .catch(() => {})
         .then(() => {
           held = false;
-          void open(message.doc, message.source, message.room, message.keepRoom);
+          void open(message.doc, message.source, message.room, message.keepRoom, message.version);
           handleInbox();
         });
     } else {

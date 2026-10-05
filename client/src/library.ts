@@ -26,8 +26,8 @@ export function conflictCopyName(name: string): string {
   return t('app.conflictedCopy', { stem: base, ext });
 }
 
-/** Uploads the saved browser copy to the cloud (creating the cloud document the first time). */
-export async function uploadToCloud(localId: string, retry = true): Promise<Uploaded> {
+/** A document's copy in this browser, ready to send: whole or as chunks, what the cloud already has of it, and how to make a new cloud document of it. */
+async function sendable(localId: string) {
   // A document this browser keeps as chunks goes as chunks, and only those the cloud does not have yet are sent; one kept whole goes whole.
   const chunked = await getSavedManifest(localId);
   const saved = chunked ? null : await getSaved(localId);
@@ -47,8 +47,6 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
   };
   /** What the cloud copy has of this one's chunks: those of the version uploaded or downloaded last. */
   const known = new Set(info.cloudId ? chunked?.manifest.syncedHashes : undefined);
-  let doc: CloudDocument;
-  let conflictCopy = false;
   const make = (name: string, folderId?: string) => (manifest ? createChunked(name, manifest, source, folderId) : createDocument(name, bytes!, folderId));
   // A new cloud document goes in the folder it is in here. If the account doesn't have that folder
   // (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
@@ -60,6 +58,14 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
       throw error;
     }
   };
+  return { info, bytes, manifest, source, known, create };
+}
+
+/** Uploads the saved browser copy to the cloud (creating the cloud document the first time). */
+export async function uploadToCloud(localId: string, retry = true): Promise<Uploaded> {
+  const { info, bytes, manifest, source, known, create } = await sendable(localId);
+  let doc: CloudDocument;
+  let conflictCopy = false;
   try {
     doc = info.cloudId ? await (manifest ? saveChunked(info.cloudId, manifest, source, known, info.name, info.cloudUpdatedAt) : saveDocument(info.cloudId, bytes!, info.name, info.cloudUpdatedAt)) : await create(info.name);
   } catch (error) {
@@ -86,6 +92,19 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
     doc = await uploadThumbnail(doc.id, thumbnail.blob).catch(() => doc);
   }
   return { doc, conflictCopy };
+}
+
+/**
+ * Keeps what this browser's copy has that the account doesn't as a new "(conflicted copy)" document in the account, and counts the copy
+ * here as sent, so the account's version replaces it when it is next opened. For a document someone else is editing (this one only
+ * watches it): what was changed here before is kept, but never sent over theirs. Null if there was nothing to keep.
+ */
+export async function keepAsConflictCopy(localId: string): Promise<CloudDocument | null> {
+  const { info, create } = await sendable(localId);
+  if (!info.cloudId || info.updatedAt <= (info.cloudSyncedAt ?? 0)) return null;
+  const doc = await create(conflictCopyName(info.name));
+  await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
+  return doc;
 }
 
 /**

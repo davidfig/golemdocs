@@ -75,11 +75,11 @@ export class LayoutClient {
     this.send({ type: 'close' });
   }
 
-  open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions, keepRoom?: boolean): void {
+  open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions, keepRoom?: boolean, version?: number): void {
     this.doc++;
     this.listener = listener;
     const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
-    this.send({ type: 'open', doc: this.doc, source, room, ...(keepRoom && { keepRoom }) }, transfer);
+    this.send({ type: 'open', doc: this.doc, source, room, ...(keepRoom && { keepRoom }), ...(version !== undefined && { version }) }, transfer);
   }
 
   /** Tells the room where this user's mouse is (null: it left the document). */

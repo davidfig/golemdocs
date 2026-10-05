@@ -75,6 +75,8 @@ export type RoomState = {
   holder: { client: string; name: string; mine: boolean } | null;
   /** A watched room held by another session: this one looks but does not edit. */
   watching: boolean;
+  /** A watched room saved since what is open here was loaded: it looks but does not edit until the newer one is open (see `refreshed`). */
+  catchingUp: boolean;
 };
 
 export type RoomStart =
@@ -123,6 +125,9 @@ export class RoomClient {
   /** This session's account, as the room knows it. */
   private user: string | null = null;
   private holder: Holder | null = null;
+  /** A watched room: the newest save the room told of, and the newest one opened here (`refreshed`). */
+  private latestSaved = 0;
+  private loaded = 0;
 
   constructor(private readonly o: RoomClientOptions) {
     this.timing = o.timing ?? DEFAULT_TIMING;
@@ -136,6 +141,7 @@ export class RoomClient {
       me: this.o.client,
       holder: this.holder && { client: this.holder.client, name: this.holder.name, mine: this.holder.user === this.user },
       watching: this.watching,
+      catchingUp: this.catchingUp,
     };
   }
 
@@ -147,6 +153,22 @@ export class RoomClient {
   /** Someone else holds the document: this session looks but does not edit. */
   get watching(): boolean {
     return this.watched && this.holder !== null && this.holder.client !== this.o.client;
+  }
+
+  /**
+   * It was saved since what is open here was loaded: nothing may be changed until the newer one is open, even holding it now (the one
+   * who held it saved just before letting go), or the change would be made to an older document.
+   */
+  get catchingUp(): boolean {
+    return this.watched && this.latestSaved > this.loaded;
+  }
+
+  /** The document saved at `updatedAt` (or the newest save heard of) is open here now. */
+  refreshed(updatedAt?: number): void {
+    const loaded = Math.max(this.loaded, updatedAt ?? this.latestSaved);
+    if (loaded === this.loaded) return;
+    this.loaded = loaded;
+    this.announce();
   }
 
   /** Whether this connection may change the document now: not a viewer, and not cut off. */
@@ -329,7 +351,11 @@ export class RoomClient {
         this.announce();
         break;
       case 'saved':
-        if (this.watching) host.saved?.(message.updatedAt);
+        // Not sent to whoever held it then: this one opens it again, even if it holds it by now.
+        if (!this.watched || message.updatedAt <= this.latestSaved) break;
+        this.latestSaved = message.updatedAt;
+        this.announce();
+        host.saved?.(message.updatedAt);
         break;
       case 'release':
         if (this.holder?.client === this.o.client) host.release?.();
@@ -450,7 +476,7 @@ export class RoomClient {
 
   /** Saving the document ourselves, with nobody else's edits to keep in step with (watching, someone else saves it). */
   private alone(): boolean {
-    return this.mode === 'solo' && !this.attached && !this.handoff && !this.watching;
+    return this.mode === 'solo' && !this.attached && !this.handoff && !this.watching && !this.catchingUp;
   }
 
   /** Alone, the room only ever said who else is here: without it the document is edited and saved as if it had none. */

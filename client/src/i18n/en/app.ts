@@ -175,5 +175,6 @@ export const app = {
   'room.nowEditing': 'You’re editing this now.',
   'room.watchingNoEdit': '{name} is editing this. Take over to make changes.',
   'room.watchingMineNoEdit': 'You’re editing this on another device. Take over to make changes here.',
+  'room.keptAsCopy': 'Changes made here were kept as “{name}”, since someone else is editing this.',
 } as const;
 

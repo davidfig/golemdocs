@@ -178,4 +178,5 @@ export const app: Partial<Messages> = {
   'room.nowEditing': 'Du bearbeitest dies jetzt.',
   'room.watchingNoEdit': '{name} bearbeitet dies gerade. Übernimm, um Änderungen vorzunehmen.',
   'room.watchingMineNoEdit': 'Du bearbeitest dies auf einem anderen Gerät. Übernimm, um hier Änderungen vorzunehmen.',
+  'room.keptAsCopy': 'Hier vorgenommene Änderungen wurden als „{name}“ behalten, da jemand anderes dies gerade bearbeitet.',
 };

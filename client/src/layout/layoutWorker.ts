@@ -195,6 +195,8 @@ async function withDrawingText(document: WordDocument | null, lens: Format, exte
 
 /** The most a picture added to a shared PDF may be, as the text that carries it: one change is one message to the room. */
 const MAX_SHARED_IMAGE_CHARS = 2_500_000;
+/** How long a document being opened waits to hear from its room before it opens anyway (the room's answer is taken when it comes). */
+const OPEN_JOIN_MS = 3000;
 
 /** A document as read from its source: the universal document (see ../formats/wdoc.ts). */
 interface Loaded {
@@ -341,6 +343,37 @@ interface Person {
   color: number;
   selection: OpSelection | null;
   pointer: Pointer | null;
+}
+
+/** A room going from a document to the one that replaces it (the same picture or drawing, changed: see OpenDocument.handOverRoom). */
+interface CarriedRoom {
+  net: RoomClient;
+  target: { entry: OpenDocument };
+  clientId: string;
+  netDoc: string | null;
+}
+
+/**
+ * What a room is given as its document: whichever document has it now. A changed picture or drawing is opened again in place of the
+ * old one, and its room goes with it rather than being left and joined again. Handing the document over waits until it has loaded.
+ */
+function forwardingHost(target: { entry: OpenDocument }): RoomHost {
+  const host = (): RoomHost => target.entry.hostForRoom();
+  return {
+    // At once when it can be: what a document does to write itself out (a Markdown paragraph shown as source is read back first)
+    // takes its turn with the commands, and must go ahead of the freeze the hand-over then puts on them.
+    serialize: () => (target.entry.isSetUp ? host().serialize() : target.entry.setUp.then(() => host().serialize())),
+    freeze: (until) => host().freeze(until),
+    connect: (send, version) => host().connect(send, version),
+    disconnect: () => host().disconnect(),
+    receive: (message) => host().receive(message),
+    sync: () => host().sync(),
+    resubmit: () => host().resubmit(),
+    changed: (state) => host().changed(state),
+    people: (people) => host().people(people),
+    pointers: (people) => host().pointers(people),
+    lost: () => host().lost(),
+  };
 }
 
 class OpenDocument {
@@ -1062,17 +1095,69 @@ class OpenDocument {
       return;
     }
     const client = this.replica?.clientId ?? crypto.randomUUID().slice(0, 8);
-    // A drawing's nodes are made objects of when it is first shared.
-    if (isVectorFormat(this.format) && !this.layerSync) await this.setupVector(client);
     const start = await this.joinNetwork(room, client);
-    if (!start || this.closed) return;
-    if (start.kind === 'own') this.net!.ready(start);
-    else {
-      this.net!.leave();
-      this.net = null;
-      // Nothing typed here yet: the page reopens the document from the room's copy instead.
-      if (!this.edited) post({ type: 'roomReplace', doc: this.doc });
-    }
+    if (start) this.startLate(start);
+  }
+
+  /** The room answered once the document was already open (see joinLate and joinWithin). */
+  private startLate(start: RoomStart): void {
+    if (this.closed || !this.net) return;
+    if (start.kind === 'own') return this.net.ready(start);
+    this.net.leave();
+    this.net = null;
+    this.roomTarget = null;
+    // Nothing typed here yet: the page reopens the document from the room's copy instead.
+    if (!this.edited) post({ type: 'roomReplace', doc: this.doc });
+  }
+
+  /**
+   * Joins as a document opens, but waits only `ms` for the room to answer: a room that is slow to answer doesn't keep the document
+   * from opening. It then opens as it is, and the room's answer is taken when it comes (as for a late join). A room that has answered
+   * and is handing the document over from someone else already in it is waited for: that is the document to open.
+   */
+  async joinWithin(room: RoomOptions, clientId: string, ms: number): Promise<RoomStart | null> {
+    const joining = this.joinNetwork(room, clientId);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<'late'>((resolve) => (timer = setTimeout(() => resolve('late'), ms)));
+    const first = await Promise.race([joining, late]);
+    clearTimeout(timer);
+    if (first !== 'late') return first;
+    if (this.joining?.answered) return joining;
+    void joining.then(async (start) => {
+      await this.setUp;
+      if (start) this.startLate(start);
+    });
+    return null;
+  }
+
+  /** The room being joined (until it says where the document comes from). */
+  private joining: RoomClient | null = null;
+
+  /** The room of the document this one replaces (the same picture or drawing, changed), handed over rather than left and joined again. */
+  private roomTarget: { entry: OpenDocument } | null = null;
+
+  /** Gives up this document's room to the one that replaces it (see takeRoom). Only alone, and not while handing the document to the room. */
+  handOverRoom(): CarriedRoom | null {
+    const net = this.net;
+    const target = this.roomTarget;
+    if (!net || !target || net.state.mode !== 'solo' || net.handingOver) return null;
+    this.net = null;
+    this.roomTarget = null;
+    return { net, target, clientId: this.clientId, netDoc: this.netDoc };
+  }
+
+  /** Takes over the room of the document this one replaces: from now on the room speaks to this one. */
+  takeRoom(carried: CarriedRoom): void {
+    this.net = carried.net;
+    this.roomTarget = carried.target;
+    carried.target.entry = this;
+    this.clientId = carried.clientId;
+    this.netDoc = carried.netDoc;
+  }
+
+  /** What the room needs from this document, for what it is. */
+  hostForRoom(): RoomHost {
+    return this.format === 'pdf' ? this.pdfRoomHost() : isLayeredFormat(this.format) ? this.layersRoomHost() : this.roomHost();
   }
 
   // --- The multiplayer server ---------------------------------------------------------
@@ -1124,12 +1209,13 @@ class OpenDocument {
     this.clientId = clientId;
     const docId = room.docId;
     this.netDoc = docId;
+    const target = { entry: this as OpenDocument };
     const net = new RoomClient({
       client: clientId,
       name: room.user,
       color: room.color,
       kind: roomKind(this.format),
-      host: this.format === 'pdf' ? this.pdfRoomHost() : isLayeredFormat(this.format) ? this.layersRoomHost() : this.roomHost(),
+      host: forwardingHost(target),
       ...cloudRoomTransport(docId),
       upload: async (bytes) => {
         const response = await fetch(`/api/documents/${docId}`, {
@@ -1140,6 +1226,7 @@ class OpenDocument {
         if (!response.ok) throw new Error(`upload failed (${response.status})`);
       },
     });
+    this.joining = net;
     try {
       const start = await net.join();
       if (this.closed) {
@@ -1148,12 +1235,25 @@ class OpenDocument {
         return null;
       }
       this.net = net;
+      this.roomTarget = target;
       return start;
     } catch (error) {
       console.warn('no multiplayer room:', (error as Error).message);
       net.leave();
+      // The page asks again later (once the document is next saved to the account).
+      if (!this.closed) post({ type: 'roomGone', doc: this.doc });
       return null;
     }
+  }
+
+  /** The room can't be reached and we were alone in it: the document is edited and saved as if it had no room, until the page joins again. */
+  lostRoom(): void {
+    this.net?.leave();
+    this.net = null;
+    this.roomTarget = null;
+    this.people.clear();
+    this.postPointers();
+    if (!this.closed) post({ type: 'roomGone', doc: this.doc });
   }
 
   /** The whole document as a .wdoc, as it is now (what is saved, and what a PDF's room starts from: the file with the lists of what is on its pages). */
@@ -1170,14 +1270,24 @@ class OpenDocument {
   vectorLayers: VectorLayers | null = null;
   private svgText: ((scene: Scene) => string) | null = null;
 
-  /** A drawing is to be edited together (or may be): its nodes become objects, from what the room has, else from the drawing. */
-  async setupVector(client: string): Promise<void> {
-    const [{ VectorLayers }, { readSvg }, { writeSvg }] = await Promise.all([import('./vectorLayers.ts'), import('../vector/svgRead.ts'), import('../vector/svgWrite.ts')]);
-    this.svgText = writeSvg;
-    const vec = this.extensions.vec;
-    this.vectorLayers = vec ? new VectorLayers(vec) : new VectorLayers(readSvg(this.extensions.svg?.source ?? ''));
-    this.layerSync = new ObjectSync(this.vectorLayers, client);
-    this.keepVector();
+  private vectorSetup: Promise<void> | null = null;
+
+  /**
+   * A drawing is edited together from now on: its nodes become objects, from what the room has, else from the drawing, and the page
+   * is given them (named as the room names them). Alone, a drawing is never made objects of: only once someone else is here (it is
+   * handed to the room, or opened from the room's copy).
+   */
+  ensureVector(): Promise<void> {
+    this.vectorSetup ??= (async () => {
+      const [{ VectorLayers }, { readSvg }, { writeSvg }] = await Promise.all([import('./vectorLayers.ts'), import('../vector/svgRead.ts'), import('../vector/svgWrite.ts')]);
+      this.svgText = writeSvg;
+      const vec = this.extensions.vec;
+      this.vectorLayers = vec ? new VectorLayers(vec) : new VectorLayers(readSvg(this.extensions.svg?.source ?? ''));
+      this.layerSync = new ObjectSync(this.vectorLayers, this.clientId);
+      this.keepVector();
+      this.postVector(true);
+    })();
+    return this.vectorSetup;
   }
 
   /** The drawing's objects are saved with the document, and the SVG that exports and conversions are made from follows them. */
@@ -1284,8 +1394,9 @@ class OpenDocument {
   }
 
   /** What every room host does the same: commands wait for a hand-over, and the other people's carets and pointers are kept and shown. `selections`: the carets are in text, so they are kept and mapped too. */
-  private presenceHost(selections: boolean): Pick<RoomHost, 'freeze' | 'people' | 'pointers'> {
+  private presenceHost(selections: boolean): Pick<RoomHost, 'freeze' | 'people' | 'pointers' | 'lost'> {
     return {
+      lost: () => this.lostRoom(),
       // Commands made while the document is being handed over wait for the handover.
       freeze: (until) => this.later(() => until.then(() => {}, () => {})),
       people: (list) => {
@@ -1324,14 +1435,27 @@ class OpenDocument {
     };
   }
 
-  /** A picture's (or drawing's) room: its changes to the shapes go out through `layerSync`. */
+  /**
+   * A picture's (or drawing's) room: its changes to the shapes go out through `layerSync`. A drawing has none until it is edited
+   * together: it is made when the drawing is handed to the room, or (for someone who can't edit, so hands nothing over) when the room
+   * connects, and what the room sends meanwhile waits for it.
+   */
   private layersRoomHost(): RoomHost {
-    return this.objectsRoomHost({
+    const vector = isVectorFormat(this.format);
+    const host = this.objectsRoomHost({
       sync: () => this.layerSync,
-      connect: (send, version) => this.layerSync?.connect(send, version),
+      connect: (send, version) => {
+        if (vector) void this.ensureVector().then(() => this.layerSync?.connect(send, version));
+        else this.layerSync?.connect(send, version);
+      },
       disconnect: () => this.layerSync?.disconnect(),
-      receive: (message) => this.receiveLayers(message),
+      receive: (message) => {
+        if (vector) void this.ensureVector().then(() => this.receiveLayers(message));
+        else this.receiveLayers(message);
+      },
     });
+    if (vector) host.serialize = () => this.ensureVector().then(() => this.wdocBytes());
+    return host;
   }
 
   /** A PDF's room: its changes to objects go out through `pdfSync`, made when the room connects. */
@@ -2368,11 +2492,16 @@ let current: OpenDocument | null = null;
  * Opens a document. Everything up to the first `await` happens at once, as the message is handled:
  * `current` is the new document from then on, so the messages sent after this one find it.
  */
-async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions): Promise<void> {
+async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions, keepRoom?: boolean): Promise<void> {
+  // The same picture or drawing, changed: it keeps its room (when alone in it) rather than leaving and joining again.
+  const carried = keepRoom ? (current?.handOverRoom() ?? null) : null;
   current?.leave();
   current?.controller.abort();
   const entry = new OpenDocument(doc);
   current = entry;
+  if (carried) entry.takeRoom(carried);
+  // It could not keep it (it was being handed over): the page joins again once the document is next saved.
+  else if (keepRoom) post({ type: 'roomGone', doc });
   try {
     const fonts = await fontsReady;
     const t0 = performance.now();
@@ -2398,7 +2527,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
       let source = loaded;
       let start: RoomStart | null = null;
       if (pdfRoom) {
-        start = await entry.joinNetwork(pdfRoom, pdfClient);
+        start = await entry.joinWithin(pdfRoom, pdfClient, OPEN_JOIN_MS);
         if (entry.closed) return;
         if (start?.kind === 'room') source = await load({ kind: 'wdoc', name: loaded.name, bytes: start.bytes.slice().buffer }, fonts);
       }
@@ -2409,10 +2538,10 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Rooms share the document itself, so any format edited through it can be in one. A picture is the exception: its pixels are not
     // edited together, but the shapes drawn over it (its layers) are, in a room of their own kind.
     const layered = isLayeredFormat(entry.format);
-    const room = requestedRoom;
+    const room = carried ? undefined : requestedRoom;
     const readMs = performance.now() - t0;
     if (entry.closed) return;
-    const clientId = crypto.randomUUID().slice(0, 8);
+    const clientId = carried?.clientId ?? crypto.randomUUID().slice(0, 8);
     // The room's document says what everyone edits it as (a person who joined by a link starts from a blank Word one).
     const adopt = async (shared: { lens: Format; origin: Format; extensions: Extensions }, from: WordDocument): Promise<void> => {
       entry.format = shared.lens;
@@ -2421,7 +2550,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     };
     let start: RoomStart | null = null;
     if (room) {
-      start = await entry.joinNetwork(room, clientId);
+      start = await entry.joinWithin(room, clientId, OPEN_JOIN_MS);
       if (entry.closed) return;
       if (start?.kind === 'room') {
         if (layered) {
@@ -2448,11 +2577,9 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     entry.session = session;
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
-    // A picture's shapes (its layers), or a drawing's nodes, are set up before the room's messages are handled.
-    if (isPictureFormat(entry.format) || (isVectorFormat(entry.format) && room)) {
-      if (isVectorFormat(entry.format)) await entry.setupVector(clientId);
-      else await entry.setupLayers(clientId);
-    }
+    // A picture's shapes (its layers), or the nodes of a drawing others are editing, are set up before the room's messages are handled.
+    if (isPictureFormat(entry.format)) await entry.setupLayers(clientId);
+    else if (isVectorFormat(entry.format) && start?.kind === 'room') await entry.ensureVector();
     entry.ready();
     if (start) entry.net!.ready(start);
     post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
@@ -2721,7 +2848,7 @@ function handleInbox(): void {
         .catch(() => {})
         .then(() => {
           held = false;
-          void open(message.doc, message.source, message.room);
+          void open(message.doc, message.source, message.room, message.keepRoom);
           handleInbox();
         });
     } else {

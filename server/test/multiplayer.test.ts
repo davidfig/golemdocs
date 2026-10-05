@@ -62,6 +62,7 @@ async function person(name: string, world: Awaited<ReturnType<typeof cloud>>, ro
     changed: (s: RoomState) => void (host.state = s),
     people: () => {},
     pointers: () => {},
+    lost: () => {},
   } satisfies RoomHost & Record<string, any>;
 
   let drop = () => {};

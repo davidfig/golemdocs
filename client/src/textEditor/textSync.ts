@@ -23,6 +23,8 @@ export interface TextRoomOptions {
   remoteEdit(): void;
   /** Gives the room the file, as it is, when someone else arrives. */
   upload(bytes: Uint8Array): Promise<void>;
+  /** The room can't be reached and this person was alone in it: the file is edited and saved as if it had none. */
+  lost(): void;
 }
 
 export interface TextRoom {
@@ -88,6 +90,10 @@ export function textRoom(o: TextRoomOptions): TextRoom {
       view?.setPeople(people.map((p) => ({ client: p.client, color: p.color, selection: p.selection ? { anchor: p.selection.anchor.offset, focus: p.selection.focus.offset } : null })), o.client);
     },
     pointers: () => undefined,
+    lost: () => {
+      o.view()?.setPeople([], o.client);
+      o.lost();
+    },
   };
   // Where this person's caret is, sent a moment after it stops moving.
   let timer: ReturnType<typeof setTimeout> | undefined;

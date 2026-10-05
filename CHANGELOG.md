@@ -1,5 +1,12 @@
 # What’s New in Golem Docs
 
+## 0.11.1 - Unreleased
+
+### Fixed
+- Opening a document in your account no longer waits on the editing-together connection when it is slow: the document opens after a few seconds at most and connects in the background.
+- Losing the connection while you are alone in a document (on a plane, say) no longer stops you editing it: it is saved as usual, and connects again for editing together the next time it saves.
+- Changing a drawing or a picture in your account no longer drops it out of editing together for a moment, so someone opening it at that moment (or your other device) no longer ends up with a separate copy.
+
 ## 0.11.0 - 2026-10-04
 
 ### Changed

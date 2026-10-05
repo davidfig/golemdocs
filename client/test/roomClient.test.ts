@@ -71,6 +71,7 @@ function setup(timing = { joinMs: 100, handoffMs: 100, reconnectMs: [5, 5] }) {
     changed: (s) => states.push(s),
     people: () => log.push('people'),
     pointers: () => log.push('pointers'),
+    lost: () => log.push('lost'),
   };
   const client = new RoomClient({
     client: 'me',
@@ -161,6 +162,18 @@ test('if the room falls back to solo while we wait, we open our own copy', async
   await tick();
   t.socket.deliver({ type: 'solo', epoch: 1 });
   assert.deepEqual(await joining, { kind: 'own' });
+});
+
+test('the room has answered once it says who is here, even while it still hands the document over', async () => {
+  const t = setup();
+  const joining = t.client.join();
+  assert.equal(t.client.answered, false);
+  t.socket.onopen?.();
+  t.socket.deliver(welcome({ people: [person('me'), person('ann')] }));
+  await tick();
+  assert.equal(t.client.answered, true, 'a document opening waits for the hand-over, not only for the room');
+  t.socket.deliver({ type: 'shared', epoch: 3 });
+  await joining;
 });
 
 test('a room that never answers, or that closes first, fails the join', async () => {
@@ -361,7 +374,7 @@ test('a refused connection is final, and repeated failures give up', async () =>
   assert.equal(revoked.client.state.mode, 'offline');
 
   const flaky = setup();
-  flaky.client.ready(await flaky.join());
+  flaky.client.ready(await flaky.join(welcome({ mode: 'shared', people: [person('me'), person('ann')] })));
   flaky.socket.drop(1006);
   for (let i = 0; i < 6; i++) {
     await tick(20);
@@ -369,6 +382,37 @@ test('a refused connection is final, and repeated failures give up', async () =>
   }
   assert.equal(flaky.client.state.mode, 'offline');
   assert.equal(flaky.sockets.length, 3, 'the first connection and two retries');
+  assert.ok(!flaky.log.includes('lost'), 'shared, what others did may be missing: not edited as if alone');
+});
+
+test('alone, a room that cannot be reached again is let go of: the document goes on as if it had none', async () => {
+  const t = setup();
+  t.client.ready(await t.join());
+  t.socket.drop(1006);
+  for (let i = 0; i < 6; i++) {
+    await tick(20);
+    t.socket.drop(1006);
+  }
+  assert.deepEqual(t.log.filter((l) => l === 'lost'), ['lost'], 'the host is told once');
+  assert.notEqual(t.client.state.mode, 'offline', 'never read-only');
+  assert.equal(t.client.canEdit, true);
+  const tried = t.sockets.length;
+  await tick(40);
+  assert.equal(t.sockets.length, tried, 'no more attempts: the page joins again when it next saves');
+});
+
+test('alone while handing the document over, a lost room is not let go of (the room may have it)', async () => {
+  const t = setup({ joinMs: 100, handoffMs: 200, reconnectMs: [5] });
+  t.client.ready(await t.join());
+  (t.client as any).o.upload = () => new Promise(() => {}); // the upload never finishes
+  t.socket.deliver({ type: 'handoff', epoch: 2 });
+  assert.equal(t.client.handingOver, true);
+  t.socket.drop(1006);
+  await tick(10);
+  t.socket.drop(1006);
+  await tick(10);
+  assert.ok(!t.log.includes('lost'));
+  assert.equal(t.client.state.mode, 'offline');
 });
 
 test('leaving closes the socket and does not reconnect', async () => {

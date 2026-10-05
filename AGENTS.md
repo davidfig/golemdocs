@@ -44,6 +44,10 @@ Every feature a user can do should have an equivalent assistant tool, so the AI 
 - Mention the capability in the system prompt's list of what the AI can do, and test the tool (`client/test/agentTools.test.ts` for worker tools).
 - If a feature truly cannot be done by a tool (it is purely visual or needs the user's own device), say so in the change instead of silently skipping it.
 
+## Multiplayer
+
+Another person and another device of the same account are the same thing: a second session, handled the same way. A signed-in session joins its document's room (`client/src/collab/roomClient.ts`), but while alone it only listens for someone else to arrive. **Alone in a room must behave exactly like having no room** (a guest's document): nothing may wait for the room (beyond a few seconds to hear whether someone is there), be refused, be set up differently or become read-only because a room exists, was asked for, or could not be reached. Only a room that is actually shared (`mode === 'shared'`, `sharedLive()` on the page, `shared` in the layout worker) may change what a document does. A room lost while alone is let go of (`RoomHost.lost`) and joined again on the next save.
+
 ## Marketing clip
 
 The home page's performance section plays `client/public/home/war-and-peace.webm`, a recording of the real app. When the app's look changes in a way the clip shows (toolbars, menus, the status bar, Page Grid, the mascot), re-record it with `pnpm record:home` (`scripts/marketing/record-war-and-peace.ts`). It needs the user's dev server on :5173 and takes about a minute; see the script's header for options.

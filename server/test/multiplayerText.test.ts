@@ -56,6 +56,7 @@ async function person(name: string, world: ReturnType<typeof cloud>) {
     changed: (s: RoomState) => void (host.state = s),
     people: () => {},
     pointers: () => {},
+    lost: () => {},
   } satisfies RoomHost & Record<string, any>;
   const client = new RoomClient({
     timing: { joinMs: 1000, handoffMs: 1000, reconnectMs: [1, 1, 1] },

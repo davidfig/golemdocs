@@ -228,7 +228,8 @@ export type ToWorker =
   | { type: 'marks'; on: boolean }
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
-  | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions }
+  /** `keepRoom`: the same picture or drawing, changed, opened in place of the open one: it keeps that one's room. */
+  | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions; keepRoom?: boolean }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
@@ -382,6 +383,8 @@ export type FromWorker =
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */
   | ({ type: 'roomState'; doc: number } & RoomState)
   | { type: 'roomReplace'; doc: number }
+  /** There is no room for the document after all (it could not be joined, or was lost while this user was alone in it): it is edited and saved as if it had none. */
+  | { type: 'roomGone'; doc: number }
   /** Where other people's mouse pointers are (page positions in display order, points). */
   | { type: 'pointers'; doc: number; pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[] }
   /** Someone else's edit changed the document (it needs saving here too). */

@@ -19,6 +19,8 @@ export interface DocumentListener {
   roomState(state: RoomState): void;
   /** The room has its own copy of the document, and nothing typed here yet: reopen from the room. */
   roomReplace(): void;
+  /** The document has no room after all (it could not be joined, or was lost while alone in it). */
+  roomGone(): void;
   /** Another person's edit changed the document. */
   remoteEdit(): void;
   /** Other people's mouse pointers moved. */
@@ -67,11 +69,11 @@ export class LayoutClient {
     this.send({ type: 'close' });
   }
 
-  open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions): void {
+  open(source: DocumentSource, listener: DocumentListener, room?: RoomOptions, keepRoom?: boolean): void {
     this.doc++;
     this.listener = listener;
     const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
-    this.send({ type: 'open', doc: this.doc, source, room }, transfer);
+    this.send({ type: 'open', doc: this.doc, source, room, ...(keepRoom && { keepRoom }) }, transfer);
   }
 
   /** Tells the room where this user's mouse is (null: it left the document). */
@@ -241,6 +243,9 @@ export class LayoutClient {
         break;
       case 'roomReplace':
         this.listener.roomReplace();
+        break;
+      case 'roomGone':
+        this.listener.roomGone();
         break;
       case 'remoteEdit':
         this.listener.remoteEdit();

@@ -444,10 +444,13 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     return;
   }
   const start = performance.now();
+  // A changed picture or drawing opened in place of itself keeps its room (when alone in it) rather than leaving and joining again.
+  const keptRoom = options.pictureEdit && current.room?.mode === 'solo' ? current.room : null;
   let { name, opening } = beginOpen(source, options);
   let firstPage = 0;
-  const requestedRoom = networkRoom(options.cloudId ?? options.shared?.id);
-  current.roomRequested = requestedRoom !== undefined;
+  const requestedRoom = keptRoom ? undefined : networkRoom(options.cloudId ?? options.shared?.id);
+  current.roomRequested = keptRoom !== null || requestedRoom !== undefined;
+  current.room = keptRoom;
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;
@@ -504,9 +507,13 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     roomReplace() {
       const doc = current;
       if (doc.localId && doc.unsavedSince === 0) void openLocal(doc.localId);
+      else if (doc.shared && !doc.shared.dirty) void openShared(doc.shared.id);
     },
     roomState(state) {
       roomStateChanged(state);
+    },
+    roomGone() {
+      roomGone(opening);
     },
     pointers(list) {
       pointerLayer.update(list);
@@ -539,8 +546,22 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       shapesEcho = null;
       echo?.();
     },
-  }, requestedRoom);
+  }, requestedRoom, keptRoom !== null);
   focusInput();
+}
+
+/**
+ * The document has no room after all: it could not be joined, or the connection was lost while this person was alone in it. It is
+ * edited and saved as if it never had one, and the room is joined again once the document is next saved to the account.
+ */
+function roomGone(doc: OpenDocument): void {
+  if (current !== doc) return;
+  doc.room = null;
+  doc.roomRequested = false;
+  lastRoomText = '';
+  pointerLayer.update([]);
+  showSync();
+  requestRender();
 }
 
 /** A plain text document opened by the layout worker (one saved by an older version) is given to the text editor, as the text it says. */
@@ -607,6 +628,10 @@ async function joinTextRoom(doc: OpenDocument, cloudId: string): Promise<void> {
     },
     upload: async (bytes) => {
       await saveDocument(cloudId, bytes);
+    },
+    lost: () => {
+      if (textRoomHandle === handle) leaveTextRoom();
+      roomGone(doc);
     },
   });
   textRoomHandle = handle;
@@ -949,6 +974,8 @@ async function uploadShared(): Promise<void> {
       shared.known = undefined;
     }
     library.refreshSoon();
+    // Without a room (it could not be reached when the document opened): try it again now the account answers.
+    joinRoomOf(doc, shared.id);
   } catch (e) {
     // Refused because the room started saving: the edits are in the room's hands now.
     if (!(e instanceof CloudError && e.status === 423)) {
@@ -1170,21 +1197,22 @@ function flushUploads(): Promise<void> {
   return uploads.flush();
 }
 
+/** Joins the open document's room, unless it is in one or has asked: a text file's is its own (see joinTextRoom), a document's the layout worker's. */
+function joinRoomOf(doc: OpenDocument, cloudId: string): void {
+  if (current !== doc || doc.roomRequested) return;
+  if (textView.active) return void joinTextRoom(doc, cloudId);
+  const room = networkRoom(cloudId);
+  if (!room) return;
+  doc.roomRequested = true;
+  worker.joinRoom(room);
+}
+
 /** One upload: the queue says when (and handles what failing means); here is what it changes on screen. */
 async function upload(id: string): Promise<void> {
   const before = library.local.find((d) => d.id === id)?.name;
   const { doc, conflictCopy } = await uploadToCloud(id);
-  // A document made in this session gets its room once it is in the account.
-  if (id === current.localId && !current.roomRequested && !conflictCopy) {
-    if (textView.active) void joinTextRoom(current, doc.id);
-    else {
-      const room = networkRoom(doc.id);
-      if (room) {
-        current.roomRequested = true;
-        worker.joinRoom(room);
-      }
-    }
-  }
+  // A document made in this session gets its room once it is in the account (and one without a room, as it could not be reached, tries again).
+  if (id === current.localId && !conflictCopy) joinRoomOf(current, doc.id);
   library.putCloud(doc);
   putDocInCatalogue(doc);
   if (conflictCopy) {

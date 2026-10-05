@@ -47,6 +47,8 @@ export interface RoomHost {
   people(people: Person[]): void;
   /** Someone's mouse pointer moved. */
   pointers(people: Person[]): void;
+  /** The room can't be reached while we're alone in it: the document goes on as if it had no room (and is saved as usual). */
+  lost(): void;
 }
 
 export type RoomState = {
@@ -119,11 +121,20 @@ export class RoomClient {
     return this.role !== 'viewer' && this.mode !== 'offline';
   }
 
+  /** The room has said who is here (joining may still wait for it to hand the document over from someone else). */
+  answered = false;
+
+  /** The document is being handed to the room (someone arrived): it must stay as it is until that is done. */
+  get handingOver(): boolean {
+    return this.handoff !== null;
+  }
+
   // --- Joining -------------------------------------------------------------------------
 
   /** Connects, and works out where the document to open comes from. Rejects if there is no room to join. */
   async join(): Promise<RoomStart> {
     const welcome = await this.open();
+    this.answered = true;
     this.role = welcome.role;
     this.epoch = welcome.epoch;
     this.people = welcome.people;
@@ -340,7 +351,8 @@ export class RoomClient {
     if (this.closedByUs) return;
     // Refused for good: our view is stale, or we were let go.
     const final = code === ROOM_CLOSE.revoked || code === ROOM_CLOSE.badMessage;
-    if (final || this.attempts >= this.timing.reconnectMs.length) return this.giveUp();
+    if (final) return this.giveUp();
+    if (this.attempts >= this.timing.reconnectMs.length) return this.alone() ? this.lose() : this.giveUp();
     const delay = this.timing.reconnectMs[this.attempts++]!;
     setTimeout(() => void this.reconnect(), delay);
   }
@@ -365,6 +377,17 @@ export class RoomClient {
     } catch {
       this.onClose(0);
     }
+  }
+
+  /** Saving the document ourselves, with nobody else's edits to keep in step with. */
+  private alone(): boolean {
+    return this.mode === 'solo' && !this.attached && !this.handoff;
+  }
+
+  /** Alone, the room only ever said who else is here: without it the document is edited and saved as if it had none. */
+  private lose(): void {
+    this.closedByUs = true;
+    this.o.host.lost();
   }
 
   /** The room can't be rejoined: keep what is on screen, but stop editing it. */

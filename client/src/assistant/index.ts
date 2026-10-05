@@ -98,6 +98,8 @@ function toolNote(name: string): string {
       return t('assistant.tool.largeEdit');
     case 'collaboration_status':
       return t('assistant.tool.collaboration');
+    case 'take_over_editing':
+      return t('assistant.tool.takeOverEditing');
     default:
       return t('assistant.tool.other');
   }

@@ -168,6 +168,11 @@ export const app: Partial<Messages> = {
   'app.storageOpenFailed': 'Não foi possível abrir o armazenamento do navegador.',
   'app.storageAborted': 'A transação de armazenamento foi cancelada.',
   'app.storageClearFailed': 'Não foi possível limpar o armazenamento do navegador.',
-  'room.pdfPageOps': 'Ainda não é possível mover, excluir ou girar páginas enquanto outras pessoas editam este PDF.',
-  'room.pdfImageTooBig': 'Essa imagem é grande demais para ser adicionada enquanto outras pessoas editam este PDF.',
+  'room.watching': '{name} está editando isto. Você verá as alterações sempre que salvar.',
+  'room.watchingMine': 'Você está editando isto em outro dispositivo. As alterações aparecem aqui sempre que é salvo.',
+  'room.takeOver': 'Assumir',
+  'room.takingOver': 'Assumindo: aguardando a outra pessoa salvar…',
+  'room.nowEditing': 'Agora você está editando isto.',
+  'room.watchingNoEdit': '{name} está editando isto. Assuma para fazer alterações.',
+  'room.watchingMineNoEdit': 'Você está editando isto em outro dispositivo. Assuma para fazer alterações aqui.',
 };

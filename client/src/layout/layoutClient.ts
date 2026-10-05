@@ -21,6 +21,12 @@ export interface DocumentListener {
   roomReplace(): void;
   /** The document has no room after all (it could not be joined, or was lost while alone in it). */
   roomGone(): void;
+  /** A document edited one person at a time: the holder saved it (watching: open it again). */
+  roomSaved(updatedAt: number): void;
+  /** Holding it, someone takes over: save what there is, then `roomReleased()`. */
+  roomRelease(): void;
+  /** Holding it, someone started watching: save now. */
+  roomFlush(): void;
   /** Another person's edit changed the document. */
   remoteEdit(): void;
   /** Other people's mouse pointers moved. */
@@ -84,6 +90,16 @@ export class LayoutClient {
   /** The open document is now in the cloud: join its multiplayer room (it had none when it opened). */
   joinRoom(room: RoomOptions): void {
     this.send({ type: 'joinRoom', doc: this.doc, room });
+  }
+
+  /** Watching a document someone else holds: ask to hold it. */
+  takeOver(): void {
+    this.send({ type: 'takeOver', doc: this.doc });
+  }
+
+  /** What there was is saved (someone takes over this document): let it go. */
+  roomReleased(): void {
+    this.send({ type: 'roomReleased', doc: this.doc });
   }
 
   /** The page is going away: leave any collaboration room. */
@@ -246,6 +262,15 @@ export class LayoutClient {
         break;
       case 'roomGone':
         this.listener.roomGone();
+        break;
+      case 'roomSaved':
+        this.listener.roomSaved(message.updatedAt);
+        break;
+      case 'roomRelease':
+        this.listener.roomRelease();
+        break;
+      case 'roomFlush':
+        this.listener.roomFlush();
         break;
       case 'remoteEdit':
         this.listener.remoteEdit();

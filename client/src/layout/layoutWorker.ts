@@ -4,7 +4,7 @@
 
 import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type NumberingReference, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
-import { Replica, type ClientMessage, type HistoryMark, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
+import { Replica, ROOM_POLICY, type ClientMessage, type HistoryMark, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
 import { cloudRoomTransport } from '../collab/cloudRoom.ts';
 import { RoomClient, type RoomHost, type RoomStart } from '../collab/roomClient.ts';
 import {
@@ -194,7 +194,6 @@ async function withDrawingText(document: WordDocument | null, lens: Format, exte
 }
 
 /** The most a picture added to a shared PDF may be, as the text that carries it: one change is one message to the room. */
-const MAX_SHARED_IMAGE_CHARS = 2_500_000;
 /** How long a document being opened waits to hear from its room before it opens anyway (the room's answer is taken when it comes). */
 const OPEN_JOIN_MS = 3000;
 
@@ -359,21 +358,17 @@ interface CarriedRoom {
  */
 function forwardingHost(target: { entry: OpenDocument }): RoomHost {
   const host = (): RoomHost => target.entry.hostForRoom();
-  return {
-    // At once when it can be: what a document does to write itself out (a Markdown paragraph shown as source is read back first)
-    // takes its turn with the commands, and must go ahead of the freeze the hand-over then puts on them.
-    serialize: () => (target.entry.isSetUp ? host().serialize() : target.entry.setUp.then(() => host().serialize())),
-    freeze: (until) => host().freeze(until),
-    connect: (send, version) => host().connect(send, version),
-    disconnect: () => host().disconnect(),
-    receive: (message) => host().receive(message),
-    sync: () => host().sync(),
-    resubmit: () => host().resubmit(),
-    changed: (state) => host().changed(state),
-    people: (people) => host().people(people),
-    pointers: (people) => host().pointers(people),
-    lost: () => host().lost(),
-  };
+  // At once when it can be: what a document does to write itself out (a Markdown paragraph shown as source is read back first)
+  // takes its turn with the commands, and must go ahead of the freeze the hand-over then puts on them.
+  const serialize = (): Promise<Uint8Array> => (target.entry.isSetUp ? host().serialize() : target.entry.setUp.then(() => host().serialize()));
+  // Every other call goes to the document that has the room now, whatever the call is (so one added to RoomHost can't be missed here).
+  return new Proxy({} as RoomHost, {
+    get: (_, key) => {
+      if (key === 'serialize') return serialize;
+      if (typeof key !== 'string' || key === 'then') return undefined; // not a promise, whatever awaits it
+      return (...args: unknown[]) => (host()[key as keyof RoomHost] as ((...a: unknown[]) => unknown) | undefined)?.(...args);
+    },
+  });
 }
 
 class OpenDocument {
@@ -393,8 +388,6 @@ class OpenDocument {
   pdf: { view: PdfView; bytes: Uint8Array } | null = null;
   /** Selecting a PDF's text and marking it up, when showing its own pages. */
   annotator: PdfAnnotator | null = null;
-  /** A PDF being edited together with others: its changes to objects, and theirs (see pdfRoom.ts). */
-  pdfSync: ObjectSync | null = null;
   /** A picture's layers (the shapes drawn over it), their history, and their changes shared with a room (see pictureLayers.ts). */
   layers: PictureLayers | null = null;
   layerSync: ObjectSync | null = null;
@@ -677,8 +670,8 @@ class OpenDocument {
       reveal: this.reveal,
       text: annotator.selectedText(CLIPBOARD_LIMIT),
       format: {},
-      canUndo: this.pdfSync ? this.pdfSync.canUndo : annotator.canUndo,
-      canRedo: this.pdfSync ? this.pdfSync.canRedo : annotator.canRedo,
+      canUndo: annotator.canUndo,
+      canRedo: annotator.canRedo,
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
       remote: [],
       stats: this.stats,
@@ -773,8 +766,8 @@ class OpenDocument {
 
   /** Commands on a PDF shown as its own pages: selecting text, and marking it up. */
   private pdfCommand(annotator: PdfAnnotator, wire: WireCommand): void {
-    // Someone who may only look (a viewer, or cut off from the room) can select and copy, nothing more.
-    if (this.readOnly && wire.kind !== 'pointer' && wire.kind !== 'selectAll') return;
+    // Someone who may only look (a viewer, cut off from the room, or watching while someone else holds it) can select and copy, nothing more.
+    if (this.readOnly && wire.kind !== 'pointer' && wire.kind !== 'selectAll') return this.refusedWatching();
     this.commandAt = performance.now();
     this.reveal = false;
     let changed: number[] = [];
@@ -875,8 +868,6 @@ class OpenDocument {
         break;
       }
       case 'pdfAddImage': {
-        // A change is one message to the room, and a picture is the whole of it: past a size it can't go.
-        if (this.pdfSync && wire.data.length > MAX_SHARED_IMAGE_CHARS) return this.notice(t('room.pdfImageTooBig'));
         const index = this.pdfPages.findIndex((p) => p.id === wire.page);
         if (index >= 0) changed = annotator.addImage(index, this.userBox(index, wire.box), wire.data);
         break;
@@ -890,31 +881,19 @@ class OpenDocument {
         break;
       }
       case 'pdfPageOp':
-        // A page operation makes a new PDF file, which a room has no way to hand round yet.
-        if (this.pdfSync) return this.notice(t('room.pdfPageOps'));
         void this.pdfPageOp(annotator, wire);
         return;
       case 'undo':
-        // Shared, undo steps back over this person's own changes only.
-        if (this.pdfSync) {
-          changed = this.pdfSync.undo();
-          break;
-        }
         changed = annotator.undo();
         if (annotator.reopen) return void this.reopenPdf(annotator);
         break;
       case 'redo':
-        if (this.pdfSync) {
-          changed = this.pdfSync.redo();
-          break;
-        }
         changed = annotator.redo();
         if (annotator.reopen) return void this.reopenPdf(annotator);
         break;
       default:
         return;
     }
-    this.pdfSync?.local();
     if (changed.length) this.relayoutPdf(changed);
     else this.sendSelection();
   }
@@ -938,7 +917,6 @@ class OpenDocument {
     if (this.closed || annotator.picked !== picked) return;
     const color = wire.color ? parseHex(wire.color) : undefined;
     const changed = annotator.setTextStyle({ font: wire.font, bold: wire.bold, italic: wire.italic, size: wire.size, ...(color && { color }) });
-    this.pdfSync?.local();
     if (changed.length) this.relayoutPdf([...new Set(changed)]);
     else this.sendSelection();
   }
@@ -1048,7 +1026,6 @@ class OpenDocument {
       if (this.closed || annotator.picked !== picked) return;
       changed = [...changed, picked.page];
     }
-    this.pdfSync?.local();
     if (changed.length) this.relayoutPdf([...new Set(changed)]);
     else this.sendSelection();
   }
@@ -1157,7 +1134,8 @@ class OpenDocument {
 
   /** What the room needs from this document, for what it is. */
   hostForRoom(): RoomHost {
-    return this.format === 'pdf' ? this.pdfRoomHost() : isLayeredFormat(this.format) ? this.layersRoomHost() : this.roomHost();
+    const kind = roomKind(this.format);
+    return ROOM_POLICY[kind] === 'watch' ? this.watchRoomHost() : kind === 'nodes' ? this.drawingRoomHost() : this.roomHost();
   }
 
   // --- The multiplayer server ---------------------------------------------------------
@@ -1177,9 +1155,9 @@ class OpenDocument {
     });
   }
 
-  /** Viewers, and anyone whose connection to the room is gone, can look but not edit. */
+  /** Viewers, anyone whose connection to the room is gone, and anyone watching while someone else holds the document can look but not edit. */
   get readOnly(): boolean {
-    return this.net !== null && !this.net.canEdit;
+    return this.net !== null && (!this.net.canEdit || this.net.watching);
   }
 
   private postPointers(): void {
@@ -1196,8 +1174,8 @@ class OpenDocument {
   private postRoomState(): void {
     const net = this.net;
     if (!net) return;
-    const { mode, role, people } = net.state;
-    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.pdfSync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0 });
+    const { mode, role, people, holder, watching } = net.state;
+    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0, holder: holder && { name: holder.name, mine: holder.mine }, watching });
   }
 
   /**
@@ -1376,7 +1354,7 @@ class OpenDocument {
     this.postShapes();
   }
 
-  /** Changes to a picture's shapes from the room. */
+  /** Changes to a drawing's nodes from the room. */
   private receiveLayers(message: Parameters<ObjectSync['receive']>[0]): void {
     const sync = this.layerSync;
     if (!sync) return;
@@ -1384,13 +1362,8 @@ class OpenDocument {
     if (got.length === 0) return;
     this.edited = true;
     post({ type: 'remoteEdit', doc: this.doc });
-    if (this.vectorLayers) {
-      this.keepVector();
-      this.postVector(true);
-    } else {
-      this.keepLayers();
-      this.postShapes();
-    }
+    this.keepVector();
+    this.postVector(true);
   }
 
   /** What every room host does the same: commands wait for a hand-over, and the other people's carets and pointers are kept and shown. `selections`: the carets are in text, so they are kept and mapped too. */
@@ -1436,54 +1409,62 @@ class OpenDocument {
   }
 
   /**
-   * A picture's (or drawing's) room: its changes to the shapes go out through `layerSync`. A drawing has none until it is edited
-   * together: it is made when the drawing is handed to the room, or (for someone who can't edit, so hands nothing over) when the room
-   * connects, and what the room sends meanwhile waits for it.
+   * A drawing's room: its changes to the nodes go out through `layerSync`. A drawing has none until it is edited together: it is made
+   * when the drawing is handed to the room, or (for someone who can't edit, so hands nothing over) when the room connects, and what
+   * the room sends meanwhile waits for it.
    */
-  private layersRoomHost(): RoomHost {
-    const vector = isVectorFormat(this.format);
+  private drawingRoomHost(): RoomHost {
     const host = this.objectsRoomHost({
       sync: () => this.layerSync,
-      connect: (send, version) => {
-        if (vector) void this.ensureVector().then(() => this.layerSync?.connect(send, version));
-        else this.layerSync?.connect(send, version);
-      },
+      connect: (send, version) => void this.ensureVector().then(() => this.layerSync?.connect(send, version)),
       disconnect: () => this.layerSync?.disconnect(),
-      receive: (message) => {
-        if (vector) void this.ensureVector().then(() => this.receiveLayers(message));
-        else this.receiveLayers(message);
-      },
+      receive: (message) => void this.ensureVector().then(() => this.receiveLayers(message)),
     });
-    if (vector) host.serialize = () => this.ensureVector().then(() => this.wdocBytes());
+    host.serialize = () => this.ensureVector().then(() => this.wdocBytes());
     return host;
   }
 
-  /** A PDF's room: its changes to objects go out through `pdfSync`, made when the room connects. */
-  private pdfRoomHost(): RoomHost {
-    return this.objectsRoomHost({
-      sync: () => this.pdfSync,
-      connect: (send, version) => {
-        if (this.annotator) {
-          this.pdfSync = new ObjectSync(this.annotator, this.clientId);
-          this.pdfSync.connect(send, version);
-        }
-      },
-      disconnect: () => {
-        this.pdfSync = null;
-      },
-      receive: (message) => this.receivePdf(message),
-    });
+  /**
+   * A watched room's (a PDF's or a picture's: see ROOM_POLICY): nothing is edited through it. Holding the document, it is saved as if
+   * alone, and the page saves now when someone starts watching or takes over; watching, the page opens it again when it is saved.
+   */
+  private watchRoomHost(): RoomHost {
+    return {
+      ...this.presenceHost(false),
+      serialize: () => this.wdocBytes(),
+      connect: () => {},
+      disconnect: () => {},
+      receive: () => {},
+      sync: () => null,
+      resubmit: () => {},
+      changed: () => this.postRoomState(),
+      saved: (updatedAt) => post({ type: 'roomSaved', doc: this.doc, updatedAt }),
+      release: () => post({ type: 'roomRelease', doc: this.doc }),
+      flush: () => post({ type: 'roomFlush', doc: this.doc }),
+    };
   }
 
-  /** Changes to a PDF's objects from the room: put in, and the pages they changed shown again. */
-  private receivePdf(message: Parameters<ObjectSync['receive']>[0]): void {
-    const sync = this.pdfSync;
-    if (!sync || !this.pdf) return;
-    const pages = sync.receive(message);
-    this.edited = true;
-    post({ type: 'remoteEdit', doc: this.doc });
-    if (pages.length) this.relayoutPdf(pages);
-    else this.sendSelection();
+  /** Asks to hold the document others are editing one at a time (a watched room). */
+  takeOver(): void {
+    this.net?.takeOver();
+  }
+
+  /** The page saved what there was, as the room asked (someone takes over): someone else may hold the document now. */
+  released(): void {
+    this.net?.released();
+  }
+
+  /** An edit was asked for while someone else holds the document: the person is told who, and how to change it. */
+  private refusedWatching(): void {
+    const holder = this.net?.watching ? this.net.state.holder : null;
+    if (holder) this.notice(holder.mine ? t('room.watchingMineNoEdit') : t('room.watchingNoEdit', { name: holder.name }));
+  }
+
+  /** Why the document can't be changed, for the assistant. */
+  whyReadOnly(): string {
+    const holder = this.net?.state.holder;
+    if (this.net?.watching && holder) return holder.mine ? 'this document is being edited on another of the person’s devices; take it over (take_over_editing) to change it here.' : `${holder.name} is editing this document now; take it over (take_over_editing) to change it.`;
+    return 'this document cannot be changed (it can only be viewed, or its connection was lost).';
   }
 
   /** The document as the room holds it: what it is edited as and what only that format keeps go with it. */
@@ -1572,7 +1553,7 @@ class OpenDocument {
   }
 
   private mediaFailed(error: unknown): void {
-    post({ type: 'notice', doc: this.doc, message: t('picture.shareFailed', { message: (error as Error).message }) });
+    this.notice(t('picture.shareFailed', { message: (error as Error).message }));
   }
 
   /** A picture another person added to the document being edited together, from the room; null for any other part, or when there is no room. */
@@ -1659,7 +1640,7 @@ class OpenDocument {
   private agentPdf(annotator: PdfAnnotator, name: string, args: string): Promise<string> {
     const ids = () => this.pdfPages;
     const pageCount = () => this.pdf?.view.pageCount ?? 0;
-    const shared = () => this.pdfSync !== null;
+    const readOnly = (): string | null => (this.readOnly ? this.whyReadOnly() : null);
     return runPdfTool(
       {
         annotator,
@@ -1675,8 +1656,8 @@ class OpenDocument {
           this.command(wire);
           while (this.waiting) await this.waiting;
         },
-        get shared() {
-          return shared();
+        get readOnly() {
+          return readOnly();
         },
         pageOp: (index, op) => this.pdfPageOp(annotator, { kind: 'pdfPageOp', page: ids()[index]!.id, op }),
         pick: (index, x, y) => this.pickText(annotator, index, x, y),
@@ -2521,8 +2502,8 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Shown as PDF: the original's own pages, even when its text has since been edited as
     // something else (the page is told, to say that the edits aren't on them).
     if (loaded.lens === 'pdf' && loaded.original) {
-      const pdfClient = crypto.randomUUID().slice(0, 8);
-      const pdfRoom = requestedRoom;
+      const pdfClient = carried?.clientId ?? crypto.randomUUID().slice(0, 8);
+      const pdfRoom = carried ? undefined : requestedRoom;
       // Others in the room: the pages open from the room's file, not ours.
       let source = loaded;
       let start: RoomStart | null = null;
@@ -2872,6 +2853,12 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'joinRoom':
       if (current?.doc === message.doc) void current.joinLate(message.room);
+      break;
+    case 'takeOver':
+      if (current?.doc === message.doc) current.takeOver();
+      break;
+    case 'roomReleased':
+      if (current?.doc === message.doc) current.released();
       break;
     case 'leave':
       current?.leave();

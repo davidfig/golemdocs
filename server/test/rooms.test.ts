@@ -159,3 +159,15 @@ test('deleting a document deletes its pictures too', async () => {
   assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${id}`)).status, 204);
   assert.ok(![...w.objects.keys()].some((key) => key.includes('.media/')), 'no picture is left behind');
 });
+
+test('a save that goes in is told to the document’s room (so people watching it open it again); one refused is not', async () => {
+  const id = await create();
+  w.roomCalls.length = 0;
+  const saved = (await (await w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: DOCX })).json()) as any;
+  const told = w.roomCalls.find((c) => c.path === '/saved');
+  assert.ok(told, 'the room was told');
+  assert.equal(new URL(told!.url).searchParams.get('at'), String(saved.updatedAt));
+  w.roomCalls.length = 0;
+  assert.equal((await w.call(OWNER, 'PUT', `/api/documents/${id}?base=1`, { body: new Uint8Array([8]), type: DOCX })).status, 409);
+  assert.ok(!w.roomCalls.some((c) => c.path === '/saved'));
+});

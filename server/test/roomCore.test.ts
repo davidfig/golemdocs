@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { paragraphsIn, WordDocument } from '@golemdocs/docx';
-import { Engine, ROOM_CLOSE, type MultiplayerServerMessage, type Operation, type Transaction } from '@golemdocs/ops';
+import { Engine, ROOM_CLOSE, type MultiplayerServerMessage, type Operation, type RoomKind, type Transaction } from '@golemdocs/ops';
 import { INITIAL_META, RoomCore, type Peer, type RoomMeta, type RoomStore } from '../src/roomCore.ts';
 
 class MemoryStore implements RoomStore {
@@ -54,12 +54,12 @@ async function setup(options: { graceMs?: number } = {}) {
   );
 
   const peers: (Peer & { inbox: MultiplayerServerMessage[]; closed: number | null; name: string })[] = [];
-  const join = async (name: string, role: 'owner' | 'editor' | 'viewer' = 'editor', kind?: 'objects') => {
+  const join = async (name: string, role: 'owner' | 'editor' | 'viewer' = 'editor', kind?: RoomKind, user = name) => {
     const peer: Peer & { inbox: MultiplayerServerMessage[]; closed: number | null; name: string } = {
       name,
       inbox: [],
       closed: null,
-      state: { userId: name, role, client: null, name: '', picture: name === 'a' ? 'https://example.com/a.png' : null, color: 0, selection: null, synced: false },
+      state: { userId: user, role, client: null, name: '', picture: name === 'a' ? 'https://example.com/a.png' : null, color: 0, selection: null, synced: false },
       send(m) {
         this.inbox.push(m);
       },
@@ -365,10 +365,10 @@ test('what an older client says about a drawing being edited by one person at a 
 
 test('the first to join says what the changes are, and the room takes those and no others', async () => {
   const t = await setup();
-  const a = await t.join('a', 'editor', 'objects');
-  assert.equal((a.inbox[0] as any).kind, 'objects');
+  const a = await t.join('a', 'editor', 'nodes');
+  assert.equal((a.inbox[0] as any).kind, 'nodes');
   const b = await t.join('b');
-  assert.equal((b.inbox[0] as any).kind, 'objects', 'whatever a later one says, the room’s answer is the document’s');
+  assert.equal((b.inbox[0] as any).kind, 'nodes', 'whatever a later one says, the room’s answer is the document’s');
   await t.core.message(a, { type: 'flushed', epoch: 0 });
   await t.core.message(a, { type: 'sync', epoch: 0, version: 0 });
   await t.core.message(b, { type: 'sync', epoch: 0, version: 0 });
@@ -393,7 +393,7 @@ test('in a room of text, a change to an object is refused', async () => {
 
 test('a change that is too big, or a transaction with too many of them, is refused', async () => {
   const t = await setup();
-  const a = await t.join('a', 'editor', 'objects');
+  const a = await t.join('a', 'editor', 'nodes');
   await t.join('b');
   await t.core.message(a, { type: 'flushed', epoch: 0 });
   await t.core.message(a, { type: 'sync', epoch: 0, version: 0 });
@@ -401,4 +401,126 @@ test('a change that is too big, or a transaction with too many of them, is refus
   await t.core.message(a, { type: 'submit', epoch: 0, version: 0, transactions: [big] });
   assert.equal(a.closed, 4004);
   assert.equal(t.store.length(), 0);
+});
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+// --- Watched rooms: PDFs and pictures are held by one session, and watched by the others ----------------------------------
+
+const holderOf = (p: { inbox: MultiplayerServerMessage[] }) => {
+  const last = [...p.inbox].reverse().find((m) => m.type === 'holder' || m.type === 'welcome') as any;
+  return last?.holder?.client ?? null;
+};
+
+test('a watched room never goes shared: the first session holds the document, the next watches, and the holder saves for them', async () => {
+  for (const kind of ['objects', 'layers'] as const) {
+    const t = await setup();
+    const a = await t.join('a', 'editor', kind);
+    assert.equal(holderOf(a), 'a');
+    const b = await t.join('b');
+    assert.equal(holderOf(b), 'a', 'the newcomer is told who holds it');
+    assert.equal(t.store.meta().mode, 'solo', 'no hand-over: nothing is edited together');
+    assert.ok(!t.types(a).includes('handoff'));
+    assert.equal(t.types(a).at(-1), 'flush', 'the holder saves now, so the newcomer sees its latest');
+    assert.ok(t.core.clientsMaySave, 'the holder saves the file itself');
+  }
+});
+
+test('a drawing’s room is still edited together', async () => {
+  const t = await setup();
+  const a = await t.join('a', 'editor', 'nodes');
+  await t.join('b');
+  assert.ok(t.types(a).includes('handoff'));
+});
+
+test('a save is told to the watchers, not to the holder', async () => {
+  const t = await setup();
+  const a = await t.join('a', 'editor', 'objects');
+  const b = await t.join('b');
+  t.core.saved(5000);
+  assert.deepEqual(b.inbox.at(-1), { type: 'saved', updatedAt: 5000 });
+  assert.ok(!t.types(a).includes('saved'));
+  // A room edited together says nothing: its own saves are what people see.
+  const u = await setup();
+  const c = await u.join('c');
+  u.core.saved(5000);
+  assert.ok(!u.types(c).includes('saved'));
+});
+
+test('taking over asks the holder to save what it has, and the document is the taker’s once it has', async () => {
+  const t = await setup();
+  const a = await t.join('a', 'editor', 'objects');
+  const b = await t.join('b');
+  await t.core.message(b, { type: 'takeOver' });
+  assert.equal(t.types(a).at(-1), 'release');
+  assert.equal(holderOf(b), 'a', 'not until it has');
+  await t.core.message(a, { type: 'released' });
+  assert.equal(holderOf(a), 'b');
+  assert.equal(holderOf(b), 'b');
+  assert.equal(t.store.meta().takeOver, null);
+});
+
+test('a holder that does not save in time loses the document anyway', async () => {
+  const t = await setup();
+  const a = await t.join('a', 'editor', 'objects');
+  const b = await t.join('b');
+  await t.core.message(b, { type: 'takeOver' });
+  assert.equal(t.clock.alarm, 1000 + 15_000);
+  t.clock.now += 15_000;
+  await t.core.tick();
+  assert.equal(holderOf(a), 'b');
+  // A late `released` changes nothing.
+  await t.core.message(a, { type: 'released' });
+  assert.equal(t.store.meta().holder?.client, 'b');
+});
+
+test('a holder whose connection goes keeps the document for a while, then the next session holds it', async () => {
+  const t = await setup({ graceMs: 30_000 });
+  const a = await t.join('a', 'editor', 'objects');
+  const b = await t.join('b');
+  a.close(1006);
+  await tick();
+  assert.equal(t.store.meta().holder?.client, 'a', 'it may only be reconnecting');
+  t.clock.now += 30_000;
+  await t.core.tick();
+  assert.equal(holderOf(b), 'b');
+});
+
+test('the holder’s own account, back (the page was reloaded), holds the document at once; someone else waits', async () => {
+  const t = await setup({ graceMs: 30_000 });
+  const a = await t.join('a', 'editor', 'objects', 'ann');
+  await t.join('b', 'editor', undefined, 'bob');
+  a.close(1006);
+  await tick();
+  const c = await t.join('c', 'editor', undefined, 'carl');
+  assert.equal(holderOf(c), 'a', 'another person waits for the holder to come back');
+  const a2 = await t.join('a2', 'editor', undefined, 'ann');
+  assert.equal(holderOf(a2), 'a2');
+  assert.equal(holderOf(c), 'a2');
+  assert.equal(t.store.meta().holderGone, null);
+});
+
+test('the holder leaving an otherwise empty room frees it; and someone taking over when the holder is gone holds it at once', async () => {
+  const t = await setup({ graceMs: 30_000 });
+  const a = await t.join('a', 'editor', 'objects');
+  a.close(1000);
+  await tick();
+  assert.equal(t.store.meta().holder, null);
+  const b = await t.join('b', 'editor', 'objects');
+  assert.equal(holderOf(b), 'b');
+  const c = await t.join('c');
+  b.close(1006);
+  await tick();
+  await t.core.message(c, { type: 'takeOver' });
+  assert.equal(holderOf(c), 'c');
+});
+
+test('viewers watch, and never hold the document or take it over', async () => {
+  const t = await setup();
+  const v = await t.join('v', 'viewer', 'objects');
+  assert.equal(holderOf(v), null);
+  const a = await t.join('a');
+  assert.equal(holderOf(a), 'a');
+  await t.core.message(v, { type: 'takeOver' });
+  assert.ok(!t.types(a).includes('release'));
 });

@@ -5,10 +5,16 @@
 // Solo, the document is saved to the cloud as usual and this only reports who else is here. When a
 // second person arrives the room asks us to upload the document (`handoff`) and from then on
 // edits travel as transactions; when we're alone again the room hands saving back.
+//
+// A watched room (a PDF or a picture: see ROOM_POLICY) is never shared: one session holds the
+// document and saves it as if alone, the others watch it (read-only) and open it again each time it
+// is saved. Watching, we may take it over.
 
 import {
   ROOM_CLOSE,
+  ROOM_POLICY,
   type ClientMessage,
+  type Holder,
   type MultiplayerClientMessage,
   type MultiplayerServerMessage,
   type Person,
@@ -49,6 +55,12 @@ export interface RoomHost {
   pointers(people: Person[]): void;
   /** The room can't be reached while we're alone in it: the document goes on as if it had no room (and is saved as usual). */
   lost(): void;
+  /** A watched room: the holder saved the document (`updatedAt` is its new version); a watcher opens it again. */
+  saved?(updatedAt: number): void;
+  /** A watched room, to its holder: someone takes over; save what there is, then call `released()`. */
+  release?(): void;
+  /** A watched room, to its holder: someone started watching; save what there is now. */
+  flush?(): void;
 }
 
 export type RoomState = {
@@ -59,6 +71,10 @@ export type RoomState = {
   people: { client: string; name: string; picture: string | null; color: number }[];
   /** This connection's id (the `client` of its entry in `people`). */
   me: string;
+  /** A watched room: who holds the document (`mine`: this account, on this device or another), or null. */
+  holder: { client: string; name: string; mine: boolean } | null;
+  /** A watched room held by another session: this one looks but does not edit. */
+  watching: boolean;
 };
 
 export type RoomStart =
@@ -102,6 +118,11 @@ export class RoomClient {
   private welcome: ((m: Extract<MultiplayerServerMessage, { type: 'welcome' }>) => void) | null = null;
   private whenShared: { resolve: (v: 'shared' | 'solo') => void } | null = null;
   private handoff: Promise<void> | null = null;
+  /** What the room's changes are, and so whether it is watched (see ROOM_POLICY). */
+  private kind: RoomKind = 'doc';
+  /** This session's account, as the room knows it. */
+  private user: string | null = null;
+  private holder: Holder | null = null;
 
   constructor(private readonly o: RoomClientOptions) {
     this.timing = o.timing ?? DEFAULT_TIMING;
@@ -113,7 +134,19 @@ export class RoomClient {
       role: this.role,
       people: this.people.map(({ client, name, picture, color }) => ({ client, name, picture, color })),
       me: this.o.client,
+      holder: this.holder && { client: this.holder.client, name: this.holder.name, mine: this.holder.user === this.user },
+      watching: this.watching,
     };
+  }
+
+  /** A room whose document one session holds while the others watch. */
+  get watched(): boolean {
+    return ROOM_POLICY[this.kind] === 'watch';
+  }
+
+  /** Someone else holds the document: this session looks but does not edit. */
+  get watching(): boolean {
+    return this.watched && this.holder !== null && this.holder.client !== this.o.client;
   }
 
   /** Whether this connection may change the document now: not a viewer, and not cut off. */
@@ -138,8 +171,10 @@ export class RoomClient {
     this.role = welcome.role;
     this.epoch = welcome.epoch;
     this.people = welcome.people;
-    // Alone and saving: open our own copy. Otherwise the room has the current document.
-    if (welcome.mode === 'solo' && welcome.people.length <= 1) return { kind: 'own' };
+    this.welcomed(welcome);
+    // Alone and saving: open our own copy. Otherwise the room has the current document. A watched room's document is always the one
+    // saved to the account (its holder saves it as if alone).
+    if (this.watched || (welcome.mode === 'solo' && welcome.people.length <= 1)) return { kind: 'own' };
     if (welcome.mode !== 'shared') {
       const outcome = await this.waitForShared();
       if (outcome === 'solo') return { kind: 'own' };
@@ -289,7 +324,39 @@ export class RoomClient {
         this.mode = 'solo';
         this.announce();
         break;
+      case 'holder':
+        this.holder = message.holder;
+        this.announce();
+        break;
+      case 'saved':
+        if (this.watching) host.saved?.(message.updatedAt);
+        break;
+      case 'release':
+        if (this.holder?.client === this.o.client) host.release?.();
+        break;
+      case 'flush':
+        if (this.holder?.client === this.o.client) host.flush?.();
+        break;
     }
+  }
+
+  /** What the welcome says about a watched room: what it is, who we are, and who holds its document. */
+  private welcomed(welcome: Extract<MultiplayerServerMessage, { type: 'welcome' }>): void {
+    this.kind = welcome.kind;
+    this.user = welcome.user ?? null;
+    this.holder = welcome.holder ?? null;
+  }
+
+  // --- A watched room ------------------------------------------------------------------
+
+  /** Asks to hold the document (watching): the room asks the holder to save what it has first. */
+  takeOver(): void {
+    if (this.watching && this.role !== 'viewer') this.send({ type: 'takeOver' });
+  }
+
+  /** In answer to `release`: what we had is saved, and someone else may hold the document. */
+  released(): void {
+    if (this.holder?.client === this.o.client) this.send({ type: 'released' });
   }
 
   /** We are alone or someone new is here, and must give the room our document before anyone else can edit. */
@@ -366,8 +433,10 @@ export class RoomClient {
       this.attempts = 0;
       this.role = welcome.role;
       this.people = welcome.people;
-      // What we have is only good to continue with if the room is where we left it.
-      if (wasAttached ? welcome.mode === 'shared' && welcome.epoch === epoch : welcome.mode === 'solo' && welcome.people.length <= 1) {
+      this.welcomed(welcome);
+      // What we have is only good to continue with if the room is where we left it. (A watched room is never shared: whoever holds
+      // its document now, what we have is the document as saved, or our own edits to save.)
+      if (wasAttached ? welcome.mode === 'shared' && welcome.epoch === epoch : welcome.mode === 'solo' && (this.watched || welcome.people.length <= 1)) {
         if (wasAttached) {
           this.reconnected = true;
           this.send({ type: 'sync', epoch, version: this.o.host.sync()!.version });
@@ -379,9 +448,9 @@ export class RoomClient {
     }
   }
 
-  /** Saving the document ourselves, with nobody else's edits to keep in step with. */
+  /** Saving the document ourselves, with nobody else's edits to keep in step with (watching, someone else saves it). */
   private alone(): boolean {
-    return this.mode === 'solo' && !this.attached && !this.handoff;
+    return this.mode === 'solo' && !this.attached && !this.handoff && !this.watching;
   }
 
   /** Alone, the room only ever said who else is here: without it the document is edited and saved as if it had none. */

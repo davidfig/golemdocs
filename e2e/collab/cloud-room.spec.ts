@@ -294,7 +294,7 @@ test.describe('a cloud drawing in a room', () => {
 });
 
 test.describe('a cloud PDF in a room', () => {
-  test('markup from either device reaches the other, and the account’s copy keeps the PDF with the markup written into its lists', async ({ browser }) => {
+  test('markup from whichever device holds it reaches the other, and the account’s copy keeps the PDF with the markup written into its lists', async ({ browser }) => {
     const a = await newPerson(browser, 'pdf');
     await a.page.goto('/?doc=welcome');
     await openPdf(a.app, makePdf({ pages: [[{ text: 'Hello PDF world', x: 40, y: 240, size: 18 }, { text: 'Second line of text', x: 40, y: 200, size: 18 }]] }));
@@ -310,14 +310,18 @@ test.describe('a cloud PDF in a room', () => {
 
     const save = async (app: App) => (await app.download(() => app.menu('File', 'Download'))).bytes;
     const button = (on: import('@playwright/test').Page, name: string) => on.getByRole('button', { name, exact: true });
+    // One device edits it at a time: the first holds it, the other watches and sees each save, then takes it over.
     await selectBetween(a.page, 0, [41, 54], [120, 54]);
     await button(a.page, 'Highlight').click();
     await expect.poll(async () => annotations(await save(second), 'Highlight').length, { timeout: 30_000 }).toBe(1);
+    await button(page, 'Take over').click();
+    await expect(page.locator('.wm-watch')).toBeHidden({ timeout: 30_000 });
+    await showPage(page, 0);
     await selectBetween(page, 0, [41, 94], [120, 94]);
     await button(page, 'Underline').click();
     await expect.poll(async () => annotations(await save(a.app), 'Underline').length, { timeout: 30_000 }).toBe(1);
 
-    // The room wrote both into the account's copy: still a PDF document, the file untouched, the lists holding what was drawn.
+    // Both went into the account's copy: still a PDF document, the file untouched, the lists holding what was drawn.
     await expect
       .poll(async () => {
         const parts = await cloudParts(a.page, doc.id);
@@ -333,7 +337,7 @@ test.describe('a cloud PDF in a room', () => {
 });
 
 test.describe('a cloud picture in a room', () => {
-  test('shapes drawn on either device appear on the other, and the account’s copy keeps the picture with the shapes as its layers', async ({ browser }) => {
+  test('shapes drawn on whichever device holds it appear on the other, and the account’s copy keeps the picture with the shapes as its layers', async ({ browser }) => {
     const a = await newPerson(browser, 'picture');
     await a.page.goto('/?doc=welcome');
     await openPicture(a.app, makePng(400, 300, () => [255, 255, 255, 255]));
@@ -354,14 +358,17 @@ test.describe('a cloud picture in a room', () => {
       await app.page.mouse.move(q.x, q.y, { steps: 6 });
       await app.page.mouse.up();
     };
+    // One device edits it at a time: the first holds it, the other watches and sees each save, then takes it over.
     await a.app.toolbarButton(/^Line$/).click();
     await drag(a.app, [40, 40], [240, 40]);
     await expect.poll(() => shapes(page), { timeout: 30_000 }).toEqual(['line']);
+    await page.getByRole('button', { name: 'Take over', exact: true }).click();
+    await expect(page.locator('.wm-watch')).toBeHidden({ timeout: 30_000 });
     await second.toolbarButton(/^Rectangle$/).click();
     await drag(second, [40, 150], [240, 250]);
     await expect.poll(() => shapes(a.page), { timeout: 30_000 }).toEqual(['line', 'rectangle']);
 
-    // The room wrote both into the account's copy: still a picture document, the picture untouched, the shapes in its extension.
+    // Both went into the account's copy: still a picture document, the picture untouched, the shapes in its extension.
     await expect
       .poll(async () => {
         const parts = await cloudParts(a.page, doc.id);

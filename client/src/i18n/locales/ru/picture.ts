@@ -65,7 +65,6 @@ export const picture: Catalog = {
   'picture.editFailed': 'Не удалось изменить рисунок: {message}',
   'picture.shareFailed': 'Не удалось поделиться рисунком с другими: {message}',
   'picture.embedNotInRoom': 'Векторные рисунки пока нельзя добавлять в общий документ Markdown.',
-  'picture.editsNotShared': 'Изменения самого изображения (обрезка, размер, поворот, цвета) недоступны, пока его редактируют другие. Рисовать можно.',
   'picture.draw.shape': 'Фигуры',
   'picture.draw.eyedropper': 'Пипетка',
   'picture.draw.bucket': 'Заливка',

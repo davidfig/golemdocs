@@ -16,6 +16,8 @@ Editors and viewers both see changes live. You can remove someone at any time.
 
 Changes appear as people type. Everyone in the document sees each person's name and cursor position, so it is clear who is working where. Edits to the text, formatting, and tables of a [Word document](/home/documents) are shared as you make them.
 
+A [PDF](/home/pdf) or a [picture](/home/images) is edited by one person at a time. Whoever opened it first edits it, with every tool, and everyone else sees it again each time it is saved. Choose **Take over** to edit it yourself. This works the same for someone you share with and for your own account on another device.
+
 ## Your documents follow you
 
 With a subscription, your documents are saved to your account and open on any device. Each change is still saved in your browser first, so it is instant and safe offline, and uploaded soon after. Each account's documents are kept in a database of its own, and the files are kept in encrypted cloud storage.

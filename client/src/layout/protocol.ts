@@ -214,6 +214,10 @@ export interface RoomState {
   people: { name: string; picture: string | null; color: number; /** This user. */ me: boolean }[];
   /** Edits the server hasn't confirmed (shared only). */
   unconfirmed: number;
+  /** A document edited by one person at a time (a PDF, a picture): who holds it (`mine`: this account, on this device or another), or null. */
+  holder: { name: string; mine: boolean } | null;
+  /** Someone else holds it: this person looks, and sees it again each time it is saved. */
+  watching: boolean;
 }
 
 /**
@@ -234,6 +238,10 @@ export type ToWorker =
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
   | { type: 'joinRoom'; doc: number; room: RoomOptions }
+  /** Watching a document someone else holds: ask to hold it. */
+  | { type: 'takeOver'; doc: number }
+  /** Holding a document someone takes over: what there was is saved, so let it go. */
+  | { type: 'roomReleased'; doc: number }
   /** Leaving the page: tell the room. */
   | { type: 'leave' }
   /** The open document is closed and none replaces it (the page now shows something the worker does not hold: a plain text file). */
@@ -383,6 +391,11 @@ export type FromWorker =
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */
   | ({ type: 'roomState'; doc: number } & RoomState)
   | { type: 'roomReplace'; doc: number }
+  /** A document edited one person at a time: the person holding it saved it (open it again, watching); someone takes over (save
+   * what there is, then answer `roomReleased`); someone started watching (save now). */
+  | { type: 'roomSaved'; doc: number; updatedAt: number }
+  | { type: 'roomRelease'; doc: number }
+  | { type: 'roomFlush'; doc: number }
   /** There is no room for the document after all (it could not be joined, or was lost while this user was alone in it): it is edited and saved as if it had none. */
   | { type: 'roomGone'; doc: number }
   /** Where other people's mouse pointers are (page positions in display order, points). */

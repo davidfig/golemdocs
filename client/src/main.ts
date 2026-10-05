@@ -56,6 +56,7 @@ import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
+import { WatchBanner } from './ui/watchBanner.ts';
 import { Assistant } from './assistant/index.ts';
 import { searchServer } from './assistant/api.ts';
 import { OtherDocuments, type StoredDocument } from './assistant/libraryDocs.ts';
@@ -344,7 +345,8 @@ function openTicket(): () => boolean {
   return () => ticket === openRequests;
 }
 
-type OpenOptions = { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; store?: boolean; asDocument?: boolean };
+/** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room. */
+type OpenOptions = { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; store?: boolean; asDocument?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -444,13 +446,15 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     return;
   }
   const start = performance.now();
-  // A changed picture or drawing opened in place of itself keeps its room (when alone in it) rather than leaving and joining again.
-  const keptRoom = options.pictureEdit && current.room?.mode === 'solo' ? current.room : null;
+  // A changed picture or drawing (or one watched, saved by whoever holds it) opened in place of itself keeps its room rather than
+  // leaving and joining again (when nothing is edited together in it).
+  const keptRoom = (options.pictureEdit || options.keepRoom) && current.room?.mode === 'solo' ? current.room : null;
   let { name, opening } = beginOpen(source, options);
   let firstPage = 0;
   const requestedRoom = keptRoom ? undefined : networkRoom(options.cloudId ?? options.shared?.id);
   current.roomRequested = keptRoom !== null || requestedRoom !== undefined;
   current.room = keptRoom;
+  showWatch();
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;
@@ -515,6 +519,15 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     roomGone() {
       roomGone(opening);
     },
+    roomSaved(updatedAt) {
+      void refreshWatched(opening, updatedAt);
+    },
+    roomRelease() {
+      void releaseRoom(opening);
+    },
+    roomFlush() {
+      if (opening === current) void saveAndSend();
+    },
     pointers(list) {
       pointerLayer.update(list);
     },
@@ -550,6 +563,88 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   focusInput();
 }
 
+// --- Documents edited one person at a time (PDFs, pictures: see ROOM_POLICY in @golemdocs/ops) ---------------------------------
+
+/** Saves the open document and sends it to the account now, rather than after the usual pause. */
+async function saveAndSend(): Promise<void> {
+  const doc = current;
+  saveIfEdited();
+  await saving;
+  if (doc.shared) await uploadShared();
+  else await flushUploads();
+}
+
+/** Someone takes over the document this person holds: what they have is saved and sent first, then it is theirs. */
+async function releaseRoom(doc: OpenDocument): Promise<void> {
+  if (current !== doc) return;
+  try {
+    await saveAndSend();
+  } finally {
+    if (current === doc) worker.roomReleased();
+  }
+}
+
+/** The newest version of a watched document asked to be shown, while one is being opened (it is opened next). */
+let watchedNext: number | null = null;
+let watchedOpening = false;
+
+/**
+ * Watching a document someone else holds, it was saved: it is opened again from the account, as it is now, keeping its room and
+ * where it was scrolled to. Saves that arrive while it is being opened are taken together, once it is.
+ */
+async function refreshWatched(doc: OpenDocument, updatedAt: number): Promise<void> {
+  if (current !== doc || !doc.room?.watching) return;
+  if (watchedOpening) {
+    watchedNext = updatedAt;
+    return;
+  }
+  watchedOpening = true;
+  try {
+    const shared = doc.shared ? sharedDocs.get(doc.shared.id) : undefined;
+    const cloudId = library.local.find((d) => d.id === doc.localId)?.cloudId;
+    if (current !== doc) return;
+    wantedDocKey = viewDocKey; // back where it was
+    if (shared) open({ kind: 'docx-url', name: shared.name, url: documentUrl(shared.id) }, { shared, keepRoom: true });
+    else if (cloudId) {
+      const { info, bytes } = await openFromCloud({ id: cloudId, name: doc.name, updatedAt }, account?.id);
+      if (current !== doc) return;
+      const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
+      open(source, { localId: info.id, cloudId, keepRoom: true });
+    }
+  } catch (e) {
+    console.warn('could not open the saved document again', e);
+  } finally {
+    watchedOpening = false;
+    const next = watchedNext;
+    watchedNext = null;
+    if (next !== null) void refreshWatched(current, next);
+  }
+}
+
+/** Someone else holds the open document (one edited by one person at a time): says so, and is true. */
+function refuseWhileWatching(): boolean {
+  const room = current.room;
+  if (!room?.watching) return false;
+  reportError(room.holder?.mine ? t('room.watchingMineNoEdit') : t('room.watchingNoEdit', { name: room.holder?.name ?? '' }));
+  return true;
+}
+
+/** For the assistant: why the open document can't be changed while someone else holds it. */
+function whyWatching(): string {
+  const holder = current.room?.holder;
+  return holder?.mine
+    ? 'the person is editing this document on another of their devices, so it can only be looked at here; take it over (collaboration take_over) to change it.'
+    : `${holder?.name ?? 'someone else'} is editing this document now, so it can only be looked at; take it over (collaboration take_over) to change it.`;
+}
+
+/** Asks to hold the open document someone else is editing (it is theirs to save first). */
+function takeOverEditing(): boolean {
+  if (!current.room?.watching) return false;
+  worker.takeOver();
+  setStatus(t('room.takingOver'));
+  return true;
+}
+
 /**
  * The document has no room after all: it could not be joined, or the connection was lost while this person was alone in it. It is
  * edited and saved as if it never had one, and the room is joined again once the document is next saved to the account.
@@ -560,6 +655,7 @@ function roomGone(doc: OpenDocument): void {
   doc.roomRequested = false;
   lastRoomText = '';
   pointerLayer.update([]);
+  showWatch();
   showSync();
   requestRender();
 }
@@ -594,6 +690,13 @@ function roomStateChanged(state: RoomState): void {
     notify(t('app.roomLost'));
     if (was?.mode !== 'offline') rejoinWhenBack(doc);
   }
+  // Holding the document now (someone left it, or it was taken over): it can be edited. Watching now: what was being drawn or cropped is let go.
+  if (was?.watching && !state.watching && state.mode !== 'offline') notify(t('room.nowEditing'));
+  if (state.watching && !was?.watching) {
+    drawLayer.cancel();
+    cropLayer.cancel();
+  }
+  showWatch();
   showSync();
   requestRender();
 }
@@ -2236,8 +2339,7 @@ function showPicture(bytes: Uint8Array): void {
 }
 
 async function changePicture(edit: ImageEdit): Promise<void> {
-  // Each of these makes a new picture, which a room has no way to hand round: only the layers are shared.
-  if (sharedLive()) return reportError(t('picture.editsNotShared'));
+  if (refuseWhileWatching()) return;
   const doc = current;
   try {
     const before = await pictureBytes();
@@ -2253,6 +2355,7 @@ async function changePicture(edit: ImageEdit): Promise<void> {
 }
 
 async function stepPicture(direction: 'undo' | 'redo'): Promise<void> {
+  if (isPicture() && refuseWhileWatching()) return;
   if (isDrawing() || embeddedDrawing) return direction === 'undo' ? vector?.editor.undo() : vector?.editor.redo();
   // What was drawn over the picture is stepped back over first; then the picture's own changes.
   if (isPicture() && (direction === 'undo' ? layerSteps.canUndo : layerSteps.canRedo)) return stepShapes(direction);
@@ -2290,6 +2393,7 @@ async function pictureAction(op: ImageOp): Promise<void> {
   if (!isPicture()) return;
   if (op === 'sizeUp' || op === 'sizeDown') return setDrawStyle({ size: drawStyle.size + (op === 'sizeUp' ? 1 : -1) });
   if (op === 'layers') return toggleLayers();
+  if (refuseWhileWatching()) return;
   if (op.startsWith('shape:') || op === 'shape') {
     if (op !== 'shape') setDrawStyle({ shape: op.slice(6) as DrawStyle['shape'] });
     cropLayer.cancel();
@@ -4028,7 +4132,8 @@ function collaboration(): Collaboration {
   const net = current.room;
   const people = net ? net.people.map((p) => (p.me ? `${p.name} (you)` : p.name)) : [];
   const count = net ? net.people.length : 1;
-  return { shared: sharedLive() && count > 1, people, count };
+  const holder = net?.holder ? { ...net.holder, here: !net.watching } : null;
+  return { shared: count > 1, people, count, holder };
 }
 
 const assistantTools = appTools({
@@ -4081,7 +4186,8 @@ const assistantTools = appTools({
       };
       changeShapes(shapes);
     }),
-  sharedLive,
+  watching: () => (current.room?.watching ? whyWatching() : null),
+  takeOver: takeOverEditing,
   drawing: async () => {
     if (!isDrawing() && !embeddedDrawing) return null;
     const session = await loadVector();
@@ -4096,6 +4202,13 @@ chrome.update({ clip: assistant.visible });
 
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
+const watchBanner = new WatchBanner(document.getElementById('viewport')!, () => void takeOverEditing());
+
+/** Shows who holds the open document, if someone else does (see WatchBanner). */
+function showWatch(): void {
+  const room = current.room;
+  watchBanner.update({ watching: room?.watching ?? false, holder: room?.holder ?? null, canTakeOver: room?.role !== 'viewer' && room?.mode !== 'offline' });
+}
 // Cropping a picture (see ui/cropLayer.ts).
 const cropLayer = new CropLayer(document.getElementById('viewport')!, { camera, page: () => pages[0] });
 // Text files too big to be documents (see textEditor/view.ts).
@@ -4679,6 +4792,7 @@ Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },
   status: { get: () => status },
+  room: { get: () => current.room },
   pictureShapes: { get: () => drawLayer.shapes },
   selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others }) },
 });

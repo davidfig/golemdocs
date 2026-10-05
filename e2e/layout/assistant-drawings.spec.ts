@@ -70,17 +70,25 @@ test.describe('a picture’s layers', () => {
     expect(isReddish([...img.data.slice((120 * img.width + 150) * 4, (120 * img.width + 150) * 4 + 4)] as never)).toBe(true);
   });
 
-  test('while another person is in the picture, drawing works and the picture itself cannot be changed', async ({ browser }) => {
+  test('with another device in the picture, the one holding it changes it, and the other’s assistant is told to take it over first', async ({ browser }) => {
     const person = await newPerson(browser, 'picture');
     await person.page.goto('/?doc=welcome');
     await openPicture(person.app, CANVAS);
     const { context, a, b } = await secondDevice(browser, person);
-    await expect.poll(() => b.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(0);
-    expect(await tool(a, 'edit_picture', { op: 'rotate_left' })).toContain('Error: others are editing this picture now');
+    expect(await tool(b, 'edit_picture', { op: 'rotate_left' })).toMatch(/^Error: the person is editing this document on another of their devices.*take it over/);
+    expect(await tool(b, 'edit_picture', { op: 'draw', tool: 'line', x: 10, y: 10, to_x: 200, to_y: 10 })).toMatch(/^Error: /);
+    expect(await tool(b, 'collaboration_status')).toMatch(/one person at a time, and the person, on another of their devices holds it/);
     expect(await tool(a, 'edit_picture', { op: 'draw', tool: 'line', x: 10, y: 10, to_x: 200, to_y: 10 })).toContain('Done: draw line');
-    await expect.poll(() => b.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length), { timeout: 30_000 }).toBe(1);
+    expect(await tool(a, 'edit_picture', { op: 'rotate_left' })).toContain('Done: rotate left');
+    // The other device sees it turned once it is saved.
+    await expect.poll(async () => (await currentPicture(b)).width, { timeout: 30_000 }).toBe((await currentPicture(a)).width);
+    // Taking over: the other device's assistant can change it then.
+    expect(await tool(b, 'take_over_editing')).toMatch(/^Asked to take it over/);
+    await expect.poll(() => tool(b, 'collaboration_status'), { timeout: 30_000 }).toMatch(/the person holds it/);
+    expect(await tool(b, 'edit_picture', { op: 'rotate_right' })).toContain('Done: rotate right');
     await context.close();
   });
+
 });
 
 test.describe('who is editing', () => {
@@ -92,7 +100,7 @@ test.describe('who is editing', () => {
     await a.type('shared text');
     expect(await tool(a, 'collaboration_status')).toBe('Nobody else is editing this document now.');
     const { context } = await secondDevice(browser, person);
-    await expect.poll(() => tool(a, 'collaboration_status'), { timeout: 30_000 }).toMatch(/^Editing now: .+ \(you\), .+\. Everyone can edit at once\./);
+    await expect.poll(() => tool(a, 'collaboration_status'), { timeout: 30_000 }).toMatch(/^Here now: .+ \(you\), .+\. Everyone can edit at once\./);
     await context.close();
   });
 });

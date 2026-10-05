@@ -16,7 +16,7 @@ function png(width: number, height: number): Uint8Array {
   return bytes;
 }
 
-const ALONE: Collaboration = { shared: false, people: [], count: 1 };
+const ALONE: Collaboration = { shared: false, people: [], count: 1, holder: null };
 
 function setup(overrides: Partial<AppToolsHost> = {}) {
   const document = {};
@@ -32,7 +32,8 @@ function setup(overrides: Partial<AppToolsHost> = {}) {
     changePicture: async (edit: { op: string }) => void log.push(`change ${edit.op}`),
     pictureShapes: () => shapes,
     setPictureShapes: async (next: Shape[]) => void (shapes = next),
-    sharedLive: () => false,
+    watching: () => null as string | null,
+    takeOver: () => false,
     textDrawings: () => [{ page: 1, width: 480, height: 320 }, { page: 2, width: 100, height: 100, embed: 'Sketch.svg' }],
     openTextDrawing: async (i: number) => (log.push(`open ${i}`), i > 1 ? 'there is no drawing' : null),
     closeTextDrawing: async () => (log.push('close'), null),
@@ -78,14 +79,23 @@ test('a shape is erased or moved by its number, and flatten puts the shapes into
   assert.match(await empty.run('edit_picture', { op: 'erase_shape', number: 0 }), /no shapes/);
 });
 
-test('while others edit the picture, drawing and layers work and changes to the picture itself are refused', async () => {
-  const t = setup({ sharedLive: () => true });
-  assert.match(await t.run('edit_picture', { op: 'draw', tool: 'ellipse', x: 10, y: 10, to_x: 60, to_y: 40 }), /Done: draw/);
-  assert.match(await t.run('edit_picture', { op: 'layers' }), /ellipse/);
-  for (const args of [{ op: 'rotate_left' }, { op: 'crop', x: 0, y: 0, width: 10, height: 10 }, { op: 'grayscale' }, { op: 'resize', width: 10, height: 10 }, { op: 'flatten' }]) {
-    assert.match(await t.run('edit_picture', args), /Error: others are editing this picture now/, JSON.stringify(args));
+test('while someone else holds the picture, it is only looked at: every change is refused with the reason, and listing works', async () => {
+  const t = setup({ watching: () => 'Ann is editing this document now.' });
+  assert.equal(await t.run('edit_picture', { op: 'layers' }), 'No shapes are drawn over the picture.');
+  for (const args of [{ op: 'draw', tool: 'ellipse', x: 10, y: 10, to_x: 60, to_y: 40 }, { op: 'rotate_left' }, { op: 'crop', x: 0, y: 0, width: 10, height: 10 }, { op: 'grayscale' }, { op: 'flatten' }, { op: 'erase_shape', number: 0 }]) {
+    assert.equal(await t.run('edit_picture', args), 'Error: Ann is editing this document now.', JSON.stringify(args));
   }
   assert.deepEqual(t.log, [], 'nothing was changed');
+  assert.equal(t.shapes.length, 0);
+});
+
+test('taking over asks for the document only when someone else holds it', async () => {
+  let asked = 0;
+  const held = setup({ takeOver: () => (asked++, true) });
+  assert.match(await held.run('take_over_editing'), /^Asked to take it over/);
+  const free = setup({ takeOver: () => false });
+  assert.match(await free.run('take_over_editing'), /^Nobody else holds this document/);
+  assert.equal(asked, 1);
 });
 
 test('drawings in the text are listed, inserted, opened and closed, and the reasons they cannot be come back as errors', async () => {
@@ -106,10 +116,16 @@ test('drawings in the text are listed, inserted, opened and closed, and the reas
 test('collaboration says who is here, and that everyone edits at once', async () => {
   const t = setup();
   assert.equal(await t.run('collaboration_status'), 'Nobody else is editing this document now.');
-  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2 };
-  assert.equal(await t.run('collaboration_status'), 'Editing now: Ann, Ben (you). Everyone can edit at once.');
-  t.collab = { shared: true, people: [], count: 3 };
-  assert.equal(await t.run('collaboration_status'), '3 people are editing now. Everyone can edit at once.');
+  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2, holder: null };
+  assert.equal(await t.run('collaboration_status'), 'Here now: Ann, Ben (you). Everyone can edit at once.');
+  t.collab = { shared: true, people: [], count: 3, holder: null };
+  assert.equal(await t.run('collaboration_status'), '3 people are here now. Everyone can edit at once.');
+  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2, holder: { name: 'Ann', mine: false, here: false } };
+  assert.match(await t.run('collaboration_status'), /one person at a time, and Ann holds it: .*take_over/);
+  t.collab = { shared: true, people: ['Ben', 'Ben (you)'], count: 2, holder: { name: 'Ben', mine: true, here: false } };
+  assert.match(await t.run('collaboration_status'), /the person, on another of their devices holds it/);
+  t.collab = { shared: true, people: ['Ann', 'Ben (you)'], count: 2, holder: { name: 'Ben', mine: true, here: true } };
+  assert.match(await t.run('collaboration_status'), /the person holds it/);
 });
 
 test('once another document is open, a tool on the open document is refused, and one about other documents is not', async () => {

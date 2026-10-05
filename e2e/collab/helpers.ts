@@ -122,6 +122,10 @@ export const others = (page: Page) =>
 
 export const statusLine = (page: Page): Promise<string> => page.evaluate(() => (window as unknown as { status: string }).status);
 
+/** Where the open document stands in its room (null: it has none): who is here, and whether someone else holds it (a PDF or a picture). */
+export const roomOf = (page: Page): Promise<{ people: { name: string; me: boolean }[]; watching: boolean; holder: { name: string; mine: boolean } | null } | null> =>
+  page.evaluate(() => (window as unknown as { room: never }).room);
+
 /** The text of a document, polled until it equals `expected`. */
 export async function expectText(app: App, expected: string): Promise<void> {
   await expect.poll(() => app.text(), { message: `document text is ${JSON.stringify(expected)}` }).toBe(expected);
@@ -136,10 +140,12 @@ export const together = (...contexts: BrowserContext[]) => ({ close: async () =>
  */
 export async function secondDevice(browser: Browser, person: Person): Promise<{ context: ReturnType<typeof together>; a: App; b: App }> {
   const doc = await waitForCloudDoc(person.page);
+  // In its room first: of a document edited one person at a time (a PDF, a picture), the first to join is the one who edits it.
+  await expect.poll(async () => (await roomOf(person.page)) !== null, { message: 'the first device joined the room', timeout: 30_000 }).toBe(true);
   const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   await signInAs(other, person.email);
   const b = await openCloud(await other.newPage(), doc.id);
-  await expect.poll(() => statusLine(person.page), { message: 'the second device joined the room', timeout: 30_000 }).toContain('2 people here');
+  await expect.poll(async () => (await roomOf(person.page))?.people.length ?? 0, { message: 'the second device joined the room', timeout: 30_000 }).toBe(2);
   return { context: together(person.context, other), a: person.app, b };
 }
 

@@ -51,6 +51,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.files': '파일을 처리하는 중…',
   'assistant.tool.openDocument': '문서를 여는 중…',
   'assistant.tool.collaboration': '편집 중인 사람을 확인하는 중…',
+  'assistant.tool.takeOverEditing': '편집을 넘겨받는 중…',
   'assistant.tool.largeRead': '파일을 읽는 중…',
   'assistant.tool.largeFind': '파일에서 검색하는 중…',
   'assistant.tool.largeEdit': '파일을 편집하는 중…',

@@ -63,7 +63,6 @@ export const picture = {
   'picture.editFailed': '无法修改图片：{message}',
   'picture.shareFailed': '无法与其他人共享该图片：{message}',
   'picture.embedNotInRoom': '共享的 Markdown 文档目前还不能添加绘图。',
-  'picture.editsNotShared': '其他人正在编辑时，不能对图片本身进行更改（裁剪、调整大小、旋转、颜色）。绘图可以。',
   'picture.draw.shape': '形状',
   'picture.draw.eyedropper': '吸管',
   'picture.draw.bucket': '油漆桶',

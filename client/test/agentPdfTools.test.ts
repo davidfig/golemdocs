@@ -82,13 +82,15 @@ test('the PDF tools are for PDFs, and the text tools for documents', async () =>
   assert.match(await agent(doc, 'read_pdf_page', { page: 1 }), /^Error: there is no tool called read_pdf_page/);
 });
 
-test('pdf_page is refused while others are editing the PDF (a page operation makes a new file a room cannot hand round), and nothing is changed', async () => {
+test('a PDF that can’t be changed now (someone else holds it) refuses the tools that change it, and says why; reading still works', async () => {
   const { runPdfTool } = await import('../src/layout/agentPdfTools.ts');
   const called: unknown[] = [];
-  const env = { shared: true, pageCount: 3, pageOp: async (...args: unknown[]) => void called.push(args) } as never;
-  assert.match(await runPdfTool(env, 'pdf_page', JSON.stringify({ page: 2, op: 'delete' })), /^Error: others are editing this PDF now, so pages cannot be moved/);
+  const env = { readOnly: 'Ann is editing this PDF.', pageCount: 3, pageOp: async (...args: unknown[]) => void called.push(args), characters: () => [] } as never;
+  assert.equal(await runPdfTool(env, 'pdf_page', JSON.stringify({ page: 2, op: 'delete' })), 'Error: Ann is editing this PDF.');
+  assert.equal(await runPdfTool(env, 'pdf_markup', JSON.stringify({ page: 1, text: 'x', kind: 'highlight' })), 'Error: Ann is editing this PDF.');
   assert.deepEqual(called, []);
-  const alone = { shared: false, pageCount: 3, pageOp: async (...args: unknown[]) => void called.push(args) } as never;
-  assert.match(await runPdfTool(alone, 'pdf_page', JSON.stringify({ page: 2, op: 'rotate_left' })), /^Done: rotate left on page 2/);
+  assert.doesNotMatch(await runPdfTool(env, 'read_pdf_page', JSON.stringify({ page: 1 })), /Ann is editing/);
+  const free = { readOnly: null, pageCount: 3, pageOp: async (...args: unknown[]) => void called.push(args) } as never;
+  assert.match(await runPdfTool(free, 'pdf_page', JSON.stringify({ page: 2, op: 'rotate_left' })), /^Done: rotate left on page 2/);
   assert.equal(called.length, 1);
 });

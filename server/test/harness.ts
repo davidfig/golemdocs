@@ -51,7 +51,7 @@ export interface World {
    */
   signUp(email: string, name?: string, options?: { subscribed?: boolean }): Promise<string>;
   /** What reached the (fake) room objects: [document id, path, headers]. */
-  roomCalls: { doc: string; path: string; headers: Headers }[];
+  roomCalls: { doc: string; path: string; url: string; headers: Headers }[];
   /** Work the worker left running after a response (`waitUntil`); a test awaits it to see the end state. */
   background: Promise<unknown>[];
   /** What the fake rooms answer to /state. */
@@ -100,7 +100,7 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
     get: (doc: string) => ({
       async fetch(request: Request) {
         const path = new URL(request.url).pathname;
-        roomCalls.push({ doc, path, headers: request.headers });
+        roomCalls.push({ doc, path, url: request.url, headers: request.headers });
         return path === '/state' ? Response.json({ maySave: room.maySave }) : (path === '/document' ? new Response('room') : new Response(null, { status: 204 }));
       },
     }),

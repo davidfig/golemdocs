@@ -44,6 +44,8 @@ export function textRoom(o: TextRoomOptions): TextRoom {
       role: last.role,
       people: last.people.map((p) => ({ name: p.name, picture: p.picture, color: p.color, me: p.client === last!.me })),
       unconfirmed: replica?.unconfirmed ?? 0,
+      holder: null,
+      watching: false,
     };
     const key = JSON.stringify(state);
     if (key === shown) return;

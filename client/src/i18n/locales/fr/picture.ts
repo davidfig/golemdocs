@@ -63,7 +63,6 @@ export const picture = {
   'picture.editFailed': 'Impossible de modifier l’image : {message}',
   'picture.shareFailed': 'L’image n’a pas pu être partagée avec les autres : {message}',
   'picture.embedNotInRoom': 'Il n’est pas encore possible d’ajouter des dessins à un document Markdown partagé.',
-  'picture.editsNotShared': 'Les modifications de l’image elle-même (rogner, redimensionner, pivoter, couleurs) ne sont pas disponibles pendant que d’autres la modifient. Le dessin l’est.',
   'picture.draw.shape': 'Formes',
   'picture.draw.eyedropper': 'Pipette',
   'picture.draw.bucket': 'Pot de peinture',

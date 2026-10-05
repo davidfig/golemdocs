@@ -223,6 +223,10 @@ export class Room {
       });
     }
     if (url.pathname === '/state') return Response.json({ maySave: this.core.clientsMaySave });
+    if (url.pathname === '/saved') {
+      this.core.saved(Number(url.searchParams.get('at')) || Date.now());
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname === '/kick') {
       this.core.kick(url.searchParams.get('user') ?? '');
       return new Response(null, { status: 204 });

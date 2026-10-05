@@ -7,7 +7,7 @@
 // transactions (persisted, so it survives the object being evicted) and turns it into .docx files:
 // on a timer while people keep editing, and for good when the epoch ends.
 
-import { isObjectOp, isOperation, isTextOp, ROOM_CLOSE, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomKind, type RoomMode, type RoomRole } from '@golemdocs/ops';
+import { isObjectOp, isOperation, isTextOp, ROOM_CLOSE, ROOM_POLICY, type Holder, type MultiplayerClientMessage, type MultiplayerServerMessage, type Person, type RoomKind, type RoomMode, type RoomRole } from '@golemdocs/ops';
 import type { Transaction } from '@golemdocs/ops';
 import { applyLog } from './snapshot.ts';
 
@@ -26,9 +26,15 @@ export interface RoomMeta {
   snapshotDue: number | null;
   /** What the changes are (set by whoever joins an empty room). */
   kind: RoomKind;
+  /** A watched room (see ROOM_POLICY): the session holding its document, or null. */
+  holder: Holder | null;
+  /** A watcher taking over: who, and when the holder's time to save what it has runs out. */
+  takeOver: { by: string; deadline: number } | null;
+  /** The holder's connection went: when someone else may hold the document (it may only be reconnecting). */
+  holderGone: number | null;
 }
 
-export const INITIAL_META: RoomMeta = { epoch: 0, mode: 'solo', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null, kind: 'doc' };
+export const INITIAL_META: RoomMeta = { epoch: 0, mode: 'solo', snapshotVersion: 0, handoffDeadline: null, flusher: null, settleAt: null, snapshotDue: null, kind: 'doc', holder: null, takeOver: null, holderGone: null };
 
 export interface RoomStore {
   meta(): RoomMeta;
@@ -139,9 +145,14 @@ export class RoomCore {
 
   private canEdit = (p: Peer): boolean => p.state.role !== 'viewer';
 
+  /** Its document is held by one session at a time, and watched by the others (see ROOM_POLICY). */
+  private get watched(): boolean {
+    return ROOM_POLICY[this.meta.kind] === 'watch';
+  }
+
   private reschedule(): void {
-    const { handoffDeadline, snapshotDue, settleAt } = this.meta;
-    const times = [handoffDeadline, snapshotDue, settleAt].filter((t): t is number => t !== null);
+    const { handoffDeadline, snapshotDue, settleAt, takeOver, holderGone } = this.meta;
+    const times = [handoffDeadline, snapshotDue, settleAt, takeOver?.deadline ?? null, holderGone].filter((t): t is number => t !== null);
     this.host.alarm(times.length ? Math.min(...times) : null);
   }
 
@@ -177,6 +188,10 @@ export class RoomCore {
         return this.submit(peer, message);
       case 'quiet':
         return this.quiet(peer, message.epoch, message.version);
+      case 'takeOver':
+        return this.takeOver(peer);
+      case 'released':
+        return this.released(peer);
       default:
         return peer.close(ROOM_CLOSE.badMessage, 'unknown message');
     }
@@ -185,6 +200,7 @@ export class RoomCore {
   async disconnect(peer: Peer): Promise<void> {
     if (!this.peers.delete(peer) || peer.state.client === null) return;
     this.broadcast({ type: 'people', people: this.people() });
+    if (this.watched) return this.departedWatched(peer);
     await this.afterDeparture();
   }
 
@@ -196,15 +212,107 @@ export class RoomCore {
     peer.persist();
     // The first to join an empty room says what its changes are (it is a property of the document, the same for everyone).
     if (this.meta.mode === 'solo' && this.members.length === 1) this.store.setMeta({ kind: message.kind === 'objects' || message.kind === 'layers' || message.kind === 'nodes' || message.kind === 'text' ? message.kind : 'doc' });
+    if (this.watched) this.arrived(peer);
     const meta = this.meta;
-    peer.send({ type: 'welcome', role: peer.state.role, client: peer.state.client!, mode: meta.mode, epoch: meta.epoch, people: this.people(), kind: meta.kind });
+    peer.send({ type: 'welcome', role: peer.state.role, client: peer.state.client!, mode: meta.mode, epoch: meta.epoch, people: this.people(), kind: meta.kind, user: peer.state.userId, holder: meta.holder });
     this.broadcast({ type: 'people', people: this.people() }, peer);
+    if (this.watched) return this.watcherArrived(peer);
 
     if (meta.mode === 'solo' && this.members.length >= 2) this.beginHandoff(peer);
     if (meta.mode === 'shared' && meta.settleAt !== null && this.members.length >= 2) {
       this.store.setMeta({ settleAt: null });
       this.reschedule();
     }
+  }
+
+  // --- Watched rooms: one session holds the document -----------------------------------
+
+  private present(client: string | undefined): boolean {
+    return client !== undefined && this.members.some((p) => p.state.client === client);
+  }
+
+  /** The first session that may edit, in the order they joined. */
+  private nextHolder(): Peer | null {
+    return this.members.find((p) => this.canEdit(p)) ?? null;
+  }
+
+  private setHolder(peer: Peer | null, except?: Peer): void {
+    const holder = peer ? { client: peer.state.client!, name: peer.state.name, user: peer.state.userId } : null;
+    this.store.setMeta({ holder, takeOver: null, holderGone: null });
+    this.reschedule();
+    this.broadcast({ type: 'holder', holder }, except);
+  }
+
+  /**
+   * Someone joined a watched room (before they are welcomed): they hold its document if nobody does, or if they are the account of a
+   * holder whose connection has gone (the page was reloaded: it is theirs, not someone else's to wait for).
+   */
+  private arrived(peer: Peer): void {
+    if (!this.canEdit(peer)) return;
+    const { holder, holderGone } = this.meta;
+    if (holder?.client === peer.state.client) {
+      // The holder's own connection, back.
+      if (holderGone !== null) {
+        this.store.setMeta({ holderGone: null });
+        this.reschedule();
+      }
+      return;
+    }
+    if (holder === null || (!this.present(holder.client) && holder.user === peer.state.userId)) this.setHolder(peer, peer);
+  }
+
+  /** Someone started watching (they were welcomed): the holder saves what it has now, so they see it rather than an older copy. */
+  private watcherArrived(peer: Peer): void {
+    const holder = this.meta.holder;
+    if (holder && holder.client !== peer.state.client) this.members.find((p) => p.state.client === holder.client)?.send({ type: 'flush' });
+  }
+
+  /** A watcher asks to hold the document: at once if its holder is gone, otherwise once the holder has saved what it has. */
+  private takeOver(peer: Peer): void {
+    const meta = this.meta;
+    if (!this.watched || !this.canEdit(peer) || meta.holder?.client === peer.state.client) return;
+    const holder = this.members.find((p) => p.state.client === meta.holder?.client);
+    if (!holder) return this.setHolder(peer);
+    if (meta.takeOver) return; // someone else is taking over already
+    this.store.setMeta({ takeOver: { by: peer.state.client!, deadline: this.host.now() + this.timings.handoffMs } });
+    this.reschedule();
+    holder.send({ type: 'release' });
+  }
+
+  private released(peer: Peer): void {
+    const { holder, takeOver } = this.meta;
+    if (!this.watched || !takeOver || holder?.client !== peer.state.client) return;
+    this.handOver(takeOver.by);
+  }
+
+  /** The one taking over holds the document now (if they left meanwhile, it stays with the holder, if still here). */
+  private handOver(to: string): void {
+    const next = this.members.find((p) => p.state.client === to && this.canEdit(p)) ?? this.members.find((p) => p.state.client === this.meta.holder?.client) ?? this.nextHolder();
+    this.setHolder(next);
+  }
+
+  /** Someone left a watched room. */
+  private departedWatched(peer: Peer): void {
+    const meta = this.meta;
+    if (meta.takeOver?.by === peer.state.client) {
+      this.store.setMeta({ takeOver: null });
+      this.reschedule();
+    }
+    if (meta.holder?.client !== peer.state.client) return;
+    // Nobody left to watch: nothing to wait for. Someone taking over: theirs now (what the holder had not saved went with it).
+    if (this.members.length === 0) return this.setHolder(null);
+    if (meta.takeOver && meta.takeOver.by !== peer.state.client) return this.handOver(meta.takeOver.by);
+    // It may only be reconnecting: it keeps the document for a while.
+    this.store.setMeta({ holderGone: this.host.now() + this.timings.graceMs });
+    this.reschedule();
+    if (this.timings.graceMs === 0) this.setHolder(this.nextHolder());
+  }
+
+  /** A save of the document went in: whoever watches opens it again. */
+  saved(updatedAt: number): void {
+    if (!this.watched) return;
+    const holder = this.meta.holder?.client;
+    this.broadcast({ type: 'saved', updatedAt }, undefined, (p) => p.state.client !== holder);
   }
 
   /** A second person arrived while one was saving on their own: get that person's document first. */
@@ -361,6 +469,13 @@ export class RoomCore {
       // Closing it lands in disconnect(), which carries on without its document.
       this.store.setMeta({ handoffDeadline: null });
       this.members.find((p) => p.state.client === meta.flusher)?.close(ROOM_CLOSE.handoffFailed, 'no document upload');
+    }
+    // A watched room: the holder took too long to save what it had, or did not come back.
+    const { takeOver, holderGone, holder } = this.meta;
+    if (takeOver && now >= takeOver.deadline) this.handOver(takeOver.by);
+    else if (holderGone !== null && now >= holderGone) {
+      if (this.present(holder?.client)) this.store.setMeta({ holderGone: null });
+      else this.setHolder(this.nextHolder());
     }
     if (this.meta.mode === 'shared' && this.meta.settleAt !== null && now >= this.meta.settleAt) await this.beginSettle();
     if (this.meta.mode === 'shared' && this.meta.snapshotDue !== null && now >= this.meta.snapshotDue) {

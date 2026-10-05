@@ -168,6 +168,11 @@ export const app: Partial<Messages> = {
   'app.linksUpdateFailed': 'Impossibile aggiornare i collegamenti a ciò che hai rinominato o spostato: {message}',
   'app.createLinkedTitle': 'Documento non trovato',
   'app.createLinkedAction': 'Crea',
-  'room.pdfPageOps': 'Non è ancora possibile spostare, eliminare o ruotare le pagine mentre altri modificano questo PDF.',
-  'room.pdfImageTooBig': 'Questa immagine è troppo grande per essere aggiunta mentre altri modificano questo PDF.',
+  'room.watching': '{name} sta modificando questo documento. Vedrai le modifiche ogni volta che salva.',
+  'room.watchingMine': 'Stai modificando questo documento su un altro dispositivo. Le modifiche compaiono qui a ogni salvataggio.',
+  'room.takeOver': 'Prendi il controllo',
+  'room.takingOver': 'Presa del controllo: in attesa che l’altra persona salvi…',
+  'room.nowEditing': 'Ora stai modificando questo documento.',
+  'room.watchingNoEdit': '{name} sta modificando questo documento. Prendi il controllo per apportare modifiche.',
+  'room.watchingMineNoEdit': 'Stai modificando questo documento su un altro dispositivo. Prendi il controllo per apportare modifiche qui.',
 };

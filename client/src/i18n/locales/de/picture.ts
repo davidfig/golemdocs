@@ -63,7 +63,6 @@ export const picture = {
   'picture.editFailed': 'Das Bild konnte nicht geändert werden: {message}',
   'picture.shareFailed': 'Das Bild konnte nicht mit den anderen geteilt werden: {message}',
   'picture.embedNotInRoom': 'Zeichnungen können noch nicht in ein geteiltes Markdown-Dokument eingefügt werden.',
-  'picture.editsNotShared': 'Änderungen am Bild selbst (zuschneiden, Größe ändern, drehen, Farben) sind nicht möglich, solange andere es bearbeiten. Zeichnen schon.',
   'picture.draw.shape': 'Formen',
   'picture.draw.eyedropper': 'Pipette',
   'picture.draw.bucket': 'Farbeimer',

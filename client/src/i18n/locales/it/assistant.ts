@@ -51,6 +51,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.files': 'Elaborazione dei tuoi file…',
   'assistant.tool.openDocument': 'Apertura di un documento…',
   'assistant.tool.collaboration': 'Controllo chi sta modificando…',
+  'assistant.tool.takeOverEditing': 'Presa del controllo della modifica…',
   'assistant.tool.largeRead': 'Lettura del file…',
   'assistant.tool.largeFind': 'Ricerca nel file…',
   'assistant.tool.largeEdit': 'Modifica del file…',

@@ -171,6 +171,11 @@ export const app: Partial<Messages> = {
   'app.docTooOld': 'Ce fichier a été enregistré avec Word 6 ou 95, ce qui n’est pas pris en charge. Ouvrez-le dans Word et enregistrez-le dans un format plus récent.',
   'app.docEncrypted': 'Ce document Word est protégé par un mot de passe. Supprimez le mot de passe dans Word, puis réessayez.',
   'app.docDamaged': 'Ce document Word est endommagé ou utilise une mise en page que nous ne pouvons pas lire.',
-  'room.pdfPageOps': 'Il n’est pas encore possible de déplacer, supprimer ou pivoter des pages pendant que d’autres personnes modifient ce PDF.',
-  'room.pdfImageTooBig': 'Cette image est trop grande pour être ajoutée pendant que d’autres personnes modifient ce PDF.',
+  'room.watching': '{name} modifie ce document. Vous verrez ses modifications à chaque enregistrement.',
+  'room.watchingMine': 'Vous modifiez ce document sur un autre appareil. Les modifications apparaissent ici à chaque enregistrement.',
+  'room.takeOver': 'Prendre la main',
+  'room.takingOver': 'Prise de main : en attente de l’enregistrement de l’autre personne…',
+  'room.nowEditing': 'Vous modifiez maintenant ce document.',
+  'room.watchingNoEdit': '{name} modifie ce document. Prenez la main pour le modifier.',
+  'room.watchingMineNoEdit': 'Vous modifiez ce document sur un autre appareil. Prenez la main pour le modifier ici.',
 };

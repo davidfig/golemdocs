@@ -168,7 +168,12 @@ export const app = {
   'app.storageOpenFailed': 'Could not open browser storage.',
   'app.storageAborted': 'The storage transaction was aborted.',
   'app.storageClearFailed': 'Could not clear browser storage.',
-  'room.pdfPageOps': 'Pages can’t be moved, deleted or rotated while others are editing this PDF yet.',
-  'room.pdfImageTooBig': 'That picture is too big to add while others are editing this PDF.',
+  'room.watching': '{name} is editing this. You’ll see their changes each time they save.',
+  'room.watchingMine': 'You’re editing this on another device. Changes show here each time it saves.',
+  'room.takeOver': 'Take over',
+  'room.takingOver': 'Taking over: waiting for the other editor to save…',
+  'room.nowEditing': 'You’re editing this now.',
+  'room.watchingNoEdit': '{name} is editing this. Take over to make changes.',
+  'room.watchingMineNoEdit': 'You’re editing this on another device. Take over to make changes here.',
 } as const;
 

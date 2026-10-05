@@ -50,6 +50,7 @@ export const assistant = {
   'assistant.tool.files': 'Working on your files…',
   'assistant.tool.openDocument': 'Opening a document…',
   'assistant.tool.collaboration': 'Checking who is editing…',
+  'assistant.tool.takeOverEditing': 'Taking over editing…',
   'assistant.tool.largeRead': 'Reading the file…',
   'assistant.tool.largeFind': 'Searching the file…',
   'assistant.tool.largeEdit': 'Editing the file…',

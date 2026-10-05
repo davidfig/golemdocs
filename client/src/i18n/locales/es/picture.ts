@@ -63,7 +63,6 @@ export const picture = {
   'picture.editFailed': 'No se pudo cambiar la imagen: {message}',
   'picture.shareFailed': 'No se pudo compartir la imagen con los demás: {message}',
   'picture.embedNotInRoom': 'Aún no se pueden añadir dibujos a un documento Markdown compartido.',
-  'picture.editsNotShared': 'Los cambios en la propia imagen (recortar, redimensionar, girar, colores) no están disponibles mientras otras personas la editan. Dibujar sí.',
   'picture.draw.shape': 'Formas',
   'picture.draw.eyedropper': 'Cuentagotas',
   'picture.draw.bucket': 'Bote de pintura',

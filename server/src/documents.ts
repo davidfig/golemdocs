@@ -11,7 +11,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkFolder, type FolderRow } from './folders.ts';
 import { removeManyFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
-import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave } from './roomGate.ts';
+import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { deleteMedia } from './roomMedia.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, userDb, type UserDb } from './userDb.ts';
@@ -604,6 +604,9 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     }
     // The save is in: what it replaced is cleanup, which can wait until after the response.
     const cleanup = (delta ? deleteChunkList(env, ownerId, id, dropped) : isChunked(before) ? deleteChunks(env, ownerId, id) : Promise.resolve()).catch((error) => console.error('chunk cleanup failed', error));
+    // Anyone watching it (a document one person edits at a time) opens it again. Before answering, not deferred: whoever saved this
+    // to hand the document over says so only once the answer is back, and the room must have told the watchers first.
+    await roomSaved(env, id, updated[0].updated_at).catch((error) => console.error('telling the room failed', error));
     if (defer) defer(cleanup);
     else await cleanup;
     return json(describe({ ...row, name, size, updated_at: updated[0].updated_at }, role));

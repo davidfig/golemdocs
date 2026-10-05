@@ -72,6 +72,9 @@ function setup(timing = { joinMs: 100, handoffMs: 100, reconnectMs: [5, 5] }) {
     people: () => log.push('people'),
     pointers: () => log.push('pointers'),
     lost: () => log.push('lost'),
+    saved: (at) => log.push(`saved@${at}`),
+    release: () => log.push('release'),
+    flush: () => log.push('flush'),
   };
   const client = new RoomClient({
     client: 'me',
@@ -436,4 +439,88 @@ test('everyone in a shared room may edit, and what an older room says about who 
   t.socket.deliver({ type: 'lease', holder: 'ann' } as unknown as MultiplayerServerMessage);
   assert.equal(t.client.canEdit, true);
   assert.equal(t.client.state.mode, 'shared');
+});
+
+// --- Watched rooms (PDFs, pictures): one session holds the document, the others watch -------------------------------------
+
+const holder = (client: string, user = client) => ({ client, name: client.toUpperCase(), user });
+const watchedWelcome = (over: Partial<Extract<MultiplayerServerMessage, { type: 'welcome' }>> = {}) =>
+  welcome({ kind: 'objects', user: 'me-user', people: [person('ann'), person('me')], holder: holder('ann'), ...over });
+
+test('joining a watched room someone else holds opens the saved document, read-only, and never waits for a hand-over', async () => {
+  const t = setup();
+  const start = await t.join(watchedWelcome());
+  assert.deepEqual(start, { kind: 'own' });
+  t.client.ready(start);
+  assert.equal(t.client.watching, true);
+  assert.deepEqual(t.client.state.holder, { client: 'ann', name: 'ANN', mine: false });
+  assert.equal(t.client.state.watching, true);
+  assert.equal(t.client.state.mode, 'solo');
+});
+
+test('holding a watched room, we edit; our own account on another device holding it is told apart from someone else', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome({ holder: holder('me', 'me-user') })));
+  assert.equal(t.client.watching, false);
+  assert.equal(t.client.state.holder?.mine, true);
+  const u = setup();
+  u.client.ready(await u.join(watchedWelcome({ holder: holder('laptop', 'me-user') })));
+  assert.equal(u.client.watching, true);
+  assert.equal(u.client.state.holder?.mine, true, 'the same account, another device');
+});
+
+test('watching, each save is passed on to be opened again; holding, the room’s asks to save and to let go are', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome()));
+  t.socket.deliver({ type: 'saved', updatedAt: 42 });
+  t.socket.deliver({ type: 'release' });
+  assert.deepEqual(t.log, ['saved@42'], 'a watcher has nothing to release');
+  t.socket.deliver({ type: 'holder', holder: holder('me') });
+  assert.equal(t.client.watching, false);
+  assert.equal(t.states.at(-1)?.watching, false, 'the host is told');
+  t.socket.deliver({ type: 'saved', updatedAt: 43 });
+  t.socket.deliver({ type: 'flush' });
+  t.socket.deliver({ type: 'release' });
+  assert.deepEqual(t.log, ['saved@42', 'flush', 'release'], 'its own saves are not opened again');
+  t.client.released();
+  assert.deepEqual(t.socket.of('released'), [{ type: 'released' }]);
+});
+
+test('taking over is asked of the room only while watching, and not by a viewer', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome()));
+  t.client.takeOver();
+  assert.deepEqual(t.socket.of('takeOver'), [{ type: 'takeOver' }]);
+  const h = setup();
+  h.client.ready(await h.join(watchedWelcome({ holder: holder('me') })));
+  h.client.takeOver();
+  assert.equal(h.socket.of('takeOver').length, 0);
+  const v = setup();
+  v.client.ready(await v.join(watchedWelcome({ role: 'viewer' })));
+  v.client.takeOver();
+  assert.equal(v.socket.of('takeOver').length, 0);
+});
+
+test('watching, a room that cannot be reached again leaves the document read-only (it is someone else’s to save)', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome()));
+  t.socket.drop(1006);
+  for (let i = 0; i < 6; i++) {
+    await tick(20);
+    t.socket.drop(1006);
+  }
+  assert.ok(!t.log.includes('lost'));
+  assert.equal(t.client.state.mode, 'offline');
+});
+
+test('a watched room with others in it can be rejoined after a dropped connection', async () => {
+  const t = setup();
+  t.client.ready(await t.join(watchedWelcome({ holder: holder('me') })));
+  t.socket.drop(1006);
+  await tick(20);
+  t.socket.onopen?.();
+  t.socket.deliver(watchedWelcome({ holder: holder('ann') }));
+  await tick();
+  assert.equal(t.client.state.mode, 'solo', 'not offline: it is the same document');
+  assert.equal(t.client.watching, true, 'someone else holds it now');
 });

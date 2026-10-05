@@ -171,6 +171,11 @@ export const app: Partial<Messages> = {
   'app.storageOpenFailed': 'Der Browserspeicher konnte nicht geöffnet werden.',
   'app.storageAborted': 'Die Speichertransaktion wurde abgebrochen.',
   'app.storageClearFailed': 'Der Browserspeicher konnte nicht geleert werden.',
-  'room.pdfPageOps': 'Seiten lassen sich noch nicht verschieben, löschen oder drehen, während andere dieses PDF bearbeiten.',
-  'room.pdfImageTooBig': 'Dieses Bild ist zu groß, um es hinzuzufügen, während andere dieses PDF bearbeiten.',
+  'room.watching': '{name} bearbeitet dies gerade. Du siehst die Änderungen jedes Mal, wenn gespeichert wird.',
+  'room.watchingMine': 'Du bearbeitest dies auf einem anderen Gerät. Änderungen erscheinen hier bei jedem Speichern.',
+  'room.takeOver': 'Übernehmen',
+  'room.takingOver': 'Wird übernommen: Warten, bis die andere Person gespeichert hat…',
+  'room.nowEditing': 'Du bearbeitest dies jetzt.',
+  'room.watchingNoEdit': '{name} bearbeitet dies gerade. Übernimm, um Änderungen vorzunehmen.',
+  'room.watchingMineNoEdit': 'Du bearbeitest dies auf einem anderen Gerät. Übernimm, um hier Änderungen vorzunehmen.',
 };

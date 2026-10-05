@@ -85,8 +85,10 @@ export interface AppToolsHost {
   /** The shapes drawn over the open picture (its layers), and a change of them (resolving once it has taken effect). */
   pictureShapes(): readonly Shape[];
   setPictureShapes(shapes: Shape[]): Promise<void>;
-  /** Others are editing the open document now (changes to a picture itself are not possible then). */
-  sharedLive(): boolean;
+  /** Why the open document can't be changed: someone else holds it (a PDF or a picture is edited by one person at a time), or null. */
+  watching(): string | null;
+  /** Asks to hold the open document someone else is editing; false if nobody else holds it. */
+  takeOver(): boolean;
 }
 
 /** Who is editing the open document. */
@@ -96,6 +98,8 @@ export interface Collaboration {
   /** Everyone's names when known (yours marked), else how many. */
   people: string[];
   count: number;
+  /** A document edited by one person at a time (a PDF, a picture): who holds it (`mine`: the person, here or on another device), or null for one everyone edits at once. */
+  holder: { name: string; mine: boolean; here: boolean } | null;
 }
 
 /** Tools that don't read or change the open document (the person's other documents, the app's settings); every other one is refused once a different document is open. File tools are left alone too. */
@@ -157,8 +161,6 @@ function paintArgs(args: Record<string, unknown>): Background {
   if (type !== 'linear' && type !== 'radial') throw new Error('`gradient_type` must be linear or radial.');
   return { color: from, gradient: { type, to, angle: args.angle === undefined ? 90 : wholeNumber(args, 'angle', 0, 360) } };
 }
-
-const SHARED_PICTURE = 'others are editing this picture now, so changes to the picture itself (crop, resize, rotate, flip, colours, effects, flatten) are not available; draw and the layer operations (layers, erase_shape, move_shape, group, hide_layer and the rest) are.';
 
 /**
  * The assistant's tools, and what it needs to know of each request: `begin` when one starts (the
@@ -402,8 +404,16 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
     async collaboration_status() {
       const info = host.collaboration();
       if (!info.shared) return 'Nobody else is editing this document now.';
-      const who = info.people.length ? `Editing now: ${info.people.join(', ')}.` : `${info.count} people are editing now.`;
-      return `${who} Everyone can edit at once.`;
+      const who = info.people.length ? `Here now: ${info.people.join(', ')}.` : `${info.count} people are here now.`;
+      const holder = info.holder;
+      if (!holder) return `${who} Everyone can edit at once.`;
+      if (holder.here) return `${who} This kind of document is edited by one person at a time, and the person holds it: the others see each save.`;
+      const by = holder.mine ? 'the person, on another of their devices' : holder.name;
+      return `${who} This kind of document is edited by one person at a time, and ${by} holds it: the person sees each save, and can change it only after taking it over (collaboration take_over).`;
+    },
+    async take_over_editing() {
+      if (!host.takeOver()) return 'Nobody else holds this document: it can be edited now.';
+      return 'Asked to take it over: whoever holds it saves what they have first, then it can be edited here (in a few seconds at most). Check with collaboration status before changing it.';
     },
     async edit_picture(args) {
       if (!host.isPicture()) return 'Error: the open document is not a picture. Convert it to png, jpeg or webp to edit it as one.';
@@ -413,6 +423,8 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       if (!size) throw new Error('the picture could not be read');
       // Shapes drawn over the picture are its layers: they are listed, changed and put into the picture here.
       if (op === 'layers') return describeLayers(host.pictureShapes());
+      const held = host.watching();
+      if (held) return `Error: ${held}`;
       if ((LAYER_OPS as readonly string[]).includes(op)) {
         const next = layerOp(op, args, host.pictureShapes(), size);
         await host.setPictureShapes([...next.shapes]);
@@ -420,12 +432,9 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       }
       if (op === 'flatten') {
         if (!host.pictureShapes().length) return 'There are no shapes to put into the picture.';
-        if (host.sharedLive()) return `Error: ${SHARED_PICTURE}`;
         await host.changePicture({ op: 'draw', shapes: [] });
         return 'Done: the shapes are in the picture now (they are not layers any more).';
       }
-      // The rest change the picture itself, which others editing it at the same time cannot be given.
-      if (op !== 'draw' && host.sharedLive()) return `Error: ${SHARED_PICTURE}`;
       let edit: ImageEdit;
       if (Object.hasOwn(IMAGE_OPS, op)) {
         const name = IMAGE_OPS[op]!;

@@ -22,8 +22,8 @@ export interface PdfAgentEnv {
   fields(): WireField[];
   run(command: WireCommand): Promise<void>;
   /** Changes the pages (done once the new file is shown). */
-  /** Others are editing this PDF with the person now. */
-  readonly shared: boolean;
+  /** Why the PDF can't be changed now (someone else holds it, say), or null if it can. */
+  readonly readOnly: string | null;
   pageOp(index: number, op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert'): Promise<void>;
   /** Picks the text at a point of a page to edit it in place (done once it is picked). */
   pick(index: number, x: number, y: number): Promise<void>;
@@ -230,8 +230,6 @@ const PAGE_OPS = {
 async function pageOp(env: PdfAgentEnv, args: Args): Promise<string> {
   const index = pageIndex(env, args);
   const op = text(args, 'op');
-  // A page operation makes a new PDF file, which a room has no way to hand round yet.
-  if (env.shared) throw new ToolError('others are editing this PDF now, so pages cannot be moved, deleted, rotated, duplicated or added; markup, text edits, shapes and form fields work.');
   if (!Object.hasOwn(PAGE_OPS, op)) throw new ToolError(`\`op\` must be one of ${Object.keys(PAGE_OPS).join(', ')}.`);
   if (op === 'delete' && env.pageCount < 2) return 'The only page cannot be deleted.';
   const before = env.pageCount;
@@ -298,6 +296,9 @@ const TOOLS: Record<string, (env: PdfAgentEnv, args: Args) => string | Promise<s
   redo: (env) => undoRedo(env, 'redo'),
 };
 
+/** The tools that only read the PDF: the others change it. */
+const READING = new Set(['read_pdf_page', 'find_pdf_text', 'list_pdf_fields']);
+
 /** The text tools name a PDF would be asked for by mistake: they need paragraphs, which a PDF page doesn't have. */
 const TEXT_TOOLS = /^(read_document|get_selection|find_text|replace_paragraph|insert_paragraph|delete_paragraph|replace_text|set_style|format_text|add_comment|clear_formatting|change_case|format_paragraph|insert_link|remove_link|insert_break|insert_table|edit_table|set_columns|set_page|insert_equation|list_comments|edit_comment|reply_comment|resolve_comment|delete_comment|count_words)$/;
 
@@ -309,6 +310,7 @@ export async function runPdfTool(env: PdfAgentEnv, name: string, argumentsJson: 
       ? `Error: ${name} works on a document with paragraphs, and this is a PDF shown as pages. Use read_pdf_page, find_pdf_text, pdf_markup, pdf_edit_text, pdf_add_text, pdf_add_shape, pdf_page, list_pdf_fields and fill_pdf_field, or convert_document to edit it as Word (which reflows its text).`
       : `Error: there is no tool called ${name}.`;
   }
+  if (env.readOnly && !READING.has(name)) return `Error: ${env.readOnly}`;
   try {
     const parsed: unknown = argumentsJson.trim() ? JSON.parse(argumentsJson) : {};
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new ToolError('the arguments must be an object');

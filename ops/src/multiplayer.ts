@@ -20,6 +20,15 @@
 //
 // Each stretch in shared mode is an epoch. Its log starts at version 0 from the .docx in the cloud
 // at that moment, so messages carry the epoch and a message from an old one is ignored.
+//
+// Some kinds of document are not edited by several people at once (ROOM_POLICY 'watch'): their room
+// never goes shared. One session holds the document (`holder`): it edits and saves it as if alone.
+// Everyone else watches: their copy is read-only, and is opened again each time the holder saves
+// (`saved`, which the server sends once a save is in). A watcher may `takeOver`: the room asks the
+// holder to save what it has (`release`), and once it answers `released` (or doesn't, in time) the
+// watcher holds the document. When the holder leaves, the next session that may edit holds it. A
+// session of the same account as a holder that has gone (the page was reloaded) holds it at once.
+// Another person and another device of the same account are the same: each is a session.
 
 import type { ClientMessage, ServerMessage } from './collab.ts';
 import type { Selection } from './history.ts';
@@ -29,6 +38,21 @@ export type RoomRole = 'owner' | 'editor' | 'viewer';
 
 /** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), a picture's shapes (`layers`), or a drawing's nodes (`nodes`); or, for a plain text file, changes to its bytes (`text`, see ./textOps.ts). */
 export type RoomKind = 'doc' | 'objects' | 'layers' | 'nodes' | 'text';
+
+/**
+ * How several sessions in a room edit its document: together (`shared`: their changes are merged), or one at a time while the others
+ * watch (`watch`). A kind is edited together only once its changes can all be merged: PDFs (pages are moved and rotated as whole new
+ * files) and pictures (their pixels) are not yet, so they are held by one session. Making one shared is a change to this table.
+ */
+export const ROOM_POLICY: Record<RoomKind, 'shared' | 'watch'> = { doc: 'shared', text: 'shared', nodes: 'shared', objects: 'watch', layers: 'watch' };
+
+/** Who holds a watched room's document (see ROOM_POLICY): their session, name and account. */
+export interface Holder {
+  client: string;
+  name: string;
+  /** Their account, so a session can tell its own other devices from other people. */
+  user: string;
+}
 
 /** Where someone's mouse pointer is: on this page (its position in display order), at this point on it (points). */
 export interface Pointer {
@@ -64,10 +88,23 @@ export type MultiplayerClientMessage =
   /** Where the mouse is (null: it left the document). Sent often, so it is relayed and never stored. */
   | { type: 'pointer'; pointer: Pointer | null }
   /** In answer to `settle`: nothing unsent, at this version. */
-  | { type: 'quiet'; epoch: number; version: number };
+  | { type: 'quiet'; epoch: number; version: number }
+  /** A watcher asks to hold the document (a watched room). */
+  | { type: 'takeOver' }
+  /** In answer to `release`: what the holder had is saved; someone else may hold it now. */
+  | { type: 'released' };
 
 export type MultiplayerServerMessage =
-  | { type: 'welcome'; role: RoomRole; client: string; mode: RoomMode; epoch: number; people: Person[]; kind: RoomKind }
+  /** `user`: this session's account. `holder`: who holds a watched room's document (null: nobody, or a room edited together). */
+  | { type: 'welcome'; role: RoomRole; client: string; mode: RoomMode; epoch: number; people: Person[]; kind: RoomKind; user?: string; holder?: Holder | null }
+  /** Who holds a watched room's document now. */
+  | { type: 'holder'; holder: Holder | null }
+  /** The document was saved (a watched room): watchers open it again. */
+  | { type: 'saved'; updatedAt: number }
+  /** To the holder: someone takes over, so save what you have and answer `released`. */
+  | { type: 'release' }
+  /** To the holder: someone started watching, so save what you have now rather than in a while. */
+  | { type: 'flush' }
   | { type: 'handoff'; epoch: number }
   | { type: 'shared'; epoch: number }
   | (ServerMessage & { epoch: number })

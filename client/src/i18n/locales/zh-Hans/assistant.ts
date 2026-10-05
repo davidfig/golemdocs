@@ -51,6 +51,7 @@ export const assistant: Partial<Messages> = {
   'assistant.tool.files': '正在处理你的文件…',
   'assistant.tool.openDocument': '正在打开文档…',
   'assistant.tool.collaboration': '正在查看谁在编辑…',
+  'assistant.tool.takeOverEditing': '正在接管编辑…',
   'assistant.tool.largeRead': '正在读取文件…',
   'assistant.tool.largeFind': '正在搜索文件…',
   'assistant.tool.largeEdit': '正在编辑文件…',

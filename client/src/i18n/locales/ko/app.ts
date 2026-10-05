@@ -162,6 +162,11 @@ export const app: Partial<Messages> = {
   'app.linksUpdateFailed': '이름을 바꾸거나 옮긴 항목으로 가는 링크를 업데이트하지 못했습니다: {message}',
   'app.createLinkedTitle': '문서를 찾을 수 없음',
   'app.createLinkedAction': '만들기',
-  'room.pdfPageOps': '다른 사람이 이 PDF를 편집하는 동안에는 페이지를 이동, 삭제 또는 회전할 수 없습니다.',
-  'room.pdfImageTooBig': '다른 사람이 이 PDF를 편집하는 동안에는 이 그림이 너무 커서 추가할 수 없습니다.',
+  'room.watching': '{name} 님이 편집 중입니다. 저장할 때마다 변경 내용이 표시됩니다.',
+  'room.watchingMine': '다른 기기에서 편집 중입니다. 저장할 때마다 변경 내용이 여기에 표시됩니다.',
+  'room.takeOver': '넘겨받기',
+  'room.takingOver': '넘겨받는 중: 상대방이 저장하기를 기다리는 중…',
+  'room.nowEditing': '이제 내가 편집하고 있습니다.',
+  'room.watchingNoEdit': '{name} 님이 편집 중입니다. 변경하려면 넘겨받으세요.',
+  'room.watchingMineNoEdit': '다른 기기에서 편집 중입니다. 여기서 변경하려면 넘겨받으세요.',
 };

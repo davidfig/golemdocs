@@ -1,6 +1,9 @@
 # What’s New in Golem Docs
 
-## 0.11.1 - Unreleased
+## 0.12.0 - Unreleased
+
+### Changed
+- PDFs and pictures in your account are now edited by one person at a time, whether it is someone you shared with or you on another device. Whoever opened it first edits it with every tool, including moving, deleting and rotating PDF pages, adding large pictures to a PDF, and cropping, resizing, rotating and changing the colours of a picture, none of which worked before while others had it open. Everyone else sees it update each time it is saved, and can choose Take over to edit it themselves. Documents, text files and drawings are still edited by everyone at once. The assistant can say who is editing and take over when you ask.
 
 ### Fixed
 - Opening a document in your account no longer waits on the editing-together connection when it is slow: the document opens after a few seconds at most and connects in the background.

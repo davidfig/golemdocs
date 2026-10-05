@@ -165,6 +165,11 @@ export const app: Partial<Messages> = {
   'app.storageOpenFailed': 'ブラウザーのストレージを開けませんでした。',
   'app.storageAborted': 'ストレージのトランザクションが中止されました。',
   'app.storageClearFailed': 'ブラウザーのストレージを消去できませんでした。',
-  'room.pdfPageOps': '他の人がこの PDF を編集している間は、ページの移動、削除、回転はまだできません。',
-  'room.pdfImageTooBig': '他の人がこの PDF を編集している間は、この画像は大きすぎて追加できません。',
+  'room.watching': '{name} さんが編集中です。保存されるたびに変更が表示されます。',
+  'room.watchingMine': '別のデバイスで編集中です。保存されるたびに変更がここに表示されます。',
+  'room.takeOver': '引き継ぐ',
+  'room.takingOver': '引き継ぎ中: 相手の保存を待っています…',
+  'room.nowEditing': 'あなたが編集しています。',
+  'room.watchingNoEdit': '{name} さんが編集中です。変更するには引き継いでください。',
+  'room.watchingMineNoEdit': '別のデバイスで編集中です。ここで変更するには引き継いでください。',
 };

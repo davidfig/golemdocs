@@ -165,6 +165,11 @@ export const app: Partial<Messages> = {
   'app.docTooOld': '此檔案是由 Word 6 或 95 儲存的，不受支援。請在 Word 中開啟並另存為較新的格式。',
   'app.docEncrypted': '此 Word 文件已設定密碼保護。請在 Word 中移除密碼後再試一次。',
   'app.docDamaged': '此 Word 文件已損毀，或使用了我們無法讀取的版面配置。',
-  'room.pdfPageOps': '其他人正在編輯此 PDF 時，暫時無法移動、刪除或旋轉頁面。',
-  'room.pdfImageTooBig': '其他人正在編輯此 PDF 時，該圖片太大，無法加入。',
+  'room.watching': '{name} 正在編輯。每次儲存後，你都會看到變更。',
+  'room.watchingMine': '你正在另一台裝置上編輯。每次儲存後，變更會顯示在這裡。',
+  'room.takeOver': '接手',
+  'room.takingOver': '正在接手：等待對方儲存…',
+  'room.nowEditing': '現在由你編輯。',
+  'room.watchingNoEdit': '{name} 正在編輯。接手後才能變更。',
+  'room.watchingMineNoEdit': '你正在另一台裝置上編輯。接手後才能在這裡變更。',
 };

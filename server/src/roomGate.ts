@@ -22,6 +22,11 @@ export async function roomAllowsSave(env: Env, docId: string): Promise<boolean> 
   return state.maySave;
 }
 
+/** Tells the document's room a save went in: people watching it (a document one person edits at a time) open it again. */
+export async function roomSaved(env: Env, docId: string, updatedAt: number): Promise<void> {
+  if (env.ROOMS) await roomFor(env, docId).fetch(new Request(`https://room/saved?at=${updatedAt}`));
+}
+
 /** Ends the documents' rooms (they were deleted), a few dozen at a time rather than one after another. */
 export async function endRooms(env: Env, docIds: string[]): Promise<void> {
   if (!env.ROOMS) return;

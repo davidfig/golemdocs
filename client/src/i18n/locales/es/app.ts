@@ -171,6 +171,11 @@ export const app: Partial<Messages> = {
   'app.docTooOld': 'Este archivo se guardó con Word 6 o 95, que no es compatible. Ábrelo en Word y guárdalo en un formato más reciente.',
   'app.docEncrypted': 'Este documento de Word está protegido con contraseña. Quita la contraseña en Word e inténtalo de nuevo.',
   'app.docDamaged': 'Este documento de Word está dañado o usa un diseño que no podemos leer.',
-  'room.pdfPageOps': 'Aún no se pueden mover, eliminar ni girar páginas mientras otras personas editan este PDF.',
-  'room.pdfImageTooBig': 'Esa imagen es demasiado grande para añadirla mientras otras personas editan este PDF.',
+  'room.watching': '{name} está editando esto. Verás sus cambios cada vez que guarde.',
+  'room.watchingMine': 'Estás editando esto en otro dispositivo. Los cambios aparecen aquí cada vez que se guarda.',
+  'room.takeOver': 'Tomar el control',
+  'room.takingOver': 'Tomando el control: esperando a que la otra persona guarde…',
+  'room.nowEditing': 'Ahora estás editando esto.',
+  'room.watchingNoEdit': '{name} está editando esto. Toma el control para hacer cambios.',
+  'room.watchingMineNoEdit': 'Estás editando esto en otro dispositivo. Toma el control para hacer cambios aquí.',
 };

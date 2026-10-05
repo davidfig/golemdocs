@@ -1,6 +1,5 @@
-// Sharing, in one dialog: a link that lets anyone edit the document live together (no account
-// needed), and, for a cloud document, the people it is shared with: the owner adds them by the
-// email they signed in with, as editors (who can change the document) or viewers (who can only
+// Sharing, in one dialog: for a cloud document, the people it is shared with: the owner adds them by
+// the email they signed in with, as editors (who can change the document) or viewers (who can only
 // look, live), and removes them.
 
 import { addShare, listShares, removeShare, type Share, type ShareRole } from '../cloud.ts';
@@ -24,12 +23,6 @@ function roleSelect(value: ShareRole): HTMLSelectElement {
 
 export interface ShareTarget {
   name: string;
-  /**
-   * The live link. `link` is set when the document is already in a room; otherwise `create` puts it
-   * in one and gives the link, and `unavailable` says why it can't be. Left out where only people
-   * are shared with (the Dashboard).
-   */
-  room?: { link?: string; create?: () => Promise<string>; unavailable?: string };
   /** The cloud document to share with people by email, or why that can't be done. */
   people: { id: string } | { unavailable: string };
 }
@@ -40,49 +33,7 @@ const section = (heading: string, ...content: (HTMLElement | null)[]): HTMLEleme
   return h('section', {}, title, ...content);
 };
 
-/** The link section: a read-only field and a button that gets the link, then copies it. */
-function roomSection(room: NonNullable<ShareTarget['room']>): HTMLElement {
-  if (!room.link && !room.create) return section(t('dialogs.share.linkHeading'), h('p', { text: room.unavailable ?? '' }));
-  const note = h('p', { text: t('dialogs.roomLink.note') });
-  note.style.margin = '0 0 8px';
-  const field = h('input', { attrs: { type: 'text', readonly: '', 'aria-label': t('dialogs.roomLink.label') } });
-  field.style.cssText = 'flex:1;min-width:0;padding:6px';
-  field.addEventListener('focus', () => field.select());
-  const button = h('button', { attrs: { type: 'button' } });
-  const status = h('p', { attrs: { role: 'status' } });
-  status.style.cssText = 'margin:6px 0 0;min-height:1.2em';
-
-  let link = room.link ?? '';
-  const show = () => {
-    field.value = link;
-    button.textContent = t(link ? 'dialogs.roomLink.copy' : 'dialogs.share.getLink');
-  };
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    try {
-      if (!link) {
-        link = await room.create!();
-        show();
-        field.select();
-        return;
-      }
-      await navigator.clipboard.writeText(link).then(
-        () => (status.textContent = t('dialogs.roomLink.copied')),
-        () => field.select(), // no clipboard access: leave it selected for the user to copy
-      );
-    } catch (error) {
-      status.textContent = (error as Error).message;
-    } finally {
-      button.disabled = false;
-    }
-  });
-  show();
-  const row = h('div', {}, field, button);
-  row.style.cssText = 'display:flex;gap:6px';
-  return section(t('dialogs.share.linkHeading'), note, row, status);
-}
-
-/** A modal for sharing the open document: a link to edit it live, and the people it is shared with. */
+/** A modal for sharing the open document with people. */
 export function showShareDialog(target: ShareTarget): void {
   const doc = { name: target.name };
   const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: doc.name }) } });
@@ -176,7 +127,7 @@ export function showShareDialog(target: ShareTarget): void {
     'id' in target.people
       ? section(t('dialogs.share.peopleHeading'), note, people, form, message)
       : section(t('dialogs.share.peopleHeading'), h('p', { text: target.people.unavailable }));
-  const body = h('div', { class: 'wm-dialog-body' }, target.room ? roomSection(target.room) : null, peopleSection, done);
+  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, done);
   body.style.paddingBottom = '14px';
   dialog.append(dialogTitleBar(t('dialogs.share.title', { name: doc.name }), () => dialog.close()), body);
   // Keys stay in the dialog: the document's handlers listen on the window.

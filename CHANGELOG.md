@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.10.2 - Unreleased
+
+### Changed
+- File › Share no longer has Get Link. The link only worked between tabs of the same browser, so it could not be sent to anyone else. To edit together, share the document with people by email (they edit or view it live), or open it in your account on another device. Old `?room=` links open your last document instead.
+
 ## 0.10.1 - 2026-10-04
 
 ### Fixed

@@ -3,7 +3,8 @@
 // it others' changes, and tells it who is here. What the person changes is sent by the text document itself (textDocument.ts).
 
 import { TextReplica, type ClientMessage, type ServerMessage } from '@golemdocs/ops';
-import { RoomClient, type RoomHost, type RoomState as ClientRoomState, type SocketLike } from '../collab/roomClient.ts';
+import { cloudRoomTransport } from '../collab/cloudRoom.ts';
+import { RoomClient, type RoomHost, type RoomState as ClientRoomState } from '../collab/roomClient.ts';
 import type { RoomState } from '../layout/protocol.ts';
 import type { TextEditorView } from './view.ts';
 
@@ -106,12 +107,7 @@ export function textRoom(o: TextRoomOptions): TextRoom {
     color: o.color,
     kind: 'text',
     host,
-    connect: () => new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/rooms/${o.docId}`) as unknown as SocketLike,
-    fetchDocument: async () => {
-      const response = await fetch(`/api/rooms/${o.docId}/document`);
-      if (!response.ok) throw new Error(`could not fetch the room's document (${response.status})`);
-      return { bytes: new Uint8Array(await response.arrayBuffer()), epoch: Number(response.headers.get('x-room-epoch')), version: Number(response.headers.get('x-room-version')) };
-    },
+    ...cloudRoomTransport(o.docId),
     upload: o.upload,
   });
   return { client, refresh: emit };

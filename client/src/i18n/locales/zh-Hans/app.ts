@@ -64,8 +64,6 @@ export const app: Partial<Messages> = {
   'app.roomConnectionLost': '连接中断',
   'app.roomViewOnly': '仅供查看',
   'app.roomPeople': '当前有 {count} 人在此',
-  'app.collabNotHere': '此文档无法共享',
-  'app.collabFailed': '无法协作：{message}',
   'app.leaveRoomToSwitch': '请先离开协作房间，才能切换格式',
 
   // Account and cloud

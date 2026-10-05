@@ -11,6 +11,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkFolder, type FolderRow } from './folders.ts';
 import { removeManyFromIndex } from './search.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
+import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave } from './roomGate.ts';
 import { deleteMedia } from './roomMedia.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, userDb, type UserDb } from './userDb.ts';
@@ -80,8 +81,6 @@ async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Pr
   return { ...row, folder_id: to };
 }
 
-const ROOMS_AT_ONCE = 25;
-
 /**
  * Deletes the owner's documents: the rows, then their shares, search entries, rooms and files. The
  * rows are what make a document gone, so once they are deleted the rest is cleanup: with `defer`
@@ -106,12 +105,7 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
   const cleanup = async () => {
     if (!forgotten) await forgetDocuments(env, ids);
     await removeManyFromIndex(env, ids);
-    // Each room is told in its own request: a few dozen at a time rather than one after another.
-    if (env.ROOMS) {
-      for (let i = 0; i < rows.length; i += ROOMS_AT_ONCE) {
-        await Promise.all(rows.slice(i, i + ROOMS_AT_ONCE).map((row) => roomFor(env, row.id).fetch(new Request('https://room/end'))));
-      }
-    }
+    await endRooms(env, ids);
     // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
     const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
@@ -229,9 +223,6 @@ async function dropUnused(env: Env, ownerId: string, docId: string, key: string,
     console.error('removing unused chunks failed', error);
   }
 }
-
-/** The room object for a document. */
-export const roomFor = (env: Env, docId: string) => env.ROOMS.get(env.ROOMS.idFromName(docId));
 
 /**
  * The user's access to a document. Documents from before sharing existed have no owner record;
@@ -494,13 +485,13 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       await shareWith(env, id, target, body.role);
       // Someone already in the room keeps the role they joined with until they reconnect:
       // make them, so a viewer made an editor (or the other way round) takes effect now.
-      if (before && before.role !== body.role && env.ROOMS) await roomFor(env, id).fetch(new Request(`https://room/rejoin?user=${encodeURIComponent(target)}`));
+      if (before && before.role !== body.role) await rejoinRoom(env, id, target);
       return json({ ...(await person(env, target)), role: body.role });
     }
     if (granteeId !== undefined && request.method === 'DELETE') {
       if (role !== 'owner' && granteeId !== userId) throw new HttpError(403, 'only the owner can remove other people');
       await unshare(env, id, granteeId);
-      if (env.ROOMS) await roomFor(env, id).fetch(new Request(`https://room/kick?user=${encodeURIComponent(granteeId)}`));
+      await kickFromRoom(env, id, granteeId);
       return new Response(null, { status: 204 });
     }
     throw new HttpError(405, 'method not allowed');
@@ -565,7 +556,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     requireStorage();
     // While several people are editing, the room writes the file; an upload would be overwritten.
     // (423, not 409: 409 already means "changed elsewhere", which clients answer with a copy.)
-    if (env.ROOMS && !((await (await roomFor(env, id).fetch(new Request('https://room/state'))).json()) as { maySave: boolean }).maySave) {
+    if (!(await roomAllowsSave(env, id))) {
       throw new HttpError(423, 'this document is being edited by several people; the server is saving it');
     }
     const base = url.searchParams.get('base');

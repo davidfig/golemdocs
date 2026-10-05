@@ -3,7 +3,7 @@
 
 import { test, expect, App } from '../fixtures';
 import { currentPicture, expectPicture, isReddish, isWhite, makePng, openPicture, pictureToScreen, pixelAt } from '../layout/helpers';
-import { getRoomLink } from './helpers';
+import { newPerson, secondDevice } from './helpers';
 
 const W = 400;
 const H = 300;
@@ -27,15 +27,12 @@ async function drag(app: App, from: [number, number], to: [number, number]): Pro
   await app.page.mouse.up();
 }
 
-/** Two people on one picture: `a` opened it and shared it, `b` joined. */
+/** Two devices on one picture of the account: `a` opened it, `b` joined. */
 async function picturePair(browser: import('@playwright/test').Browser) {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-  const a = new App(await context.newPage());
-  await openPicture(a, CANVAS());
-  const url = await getRoomLink(a);
-  const b = new App(await context.newPage());
-  await b.page.goto(url);
-  await b.ready();
+  const person = await newPerson(browser, 'picture');
+  await person.page.goto('/?doc=welcome');
+  await openPicture(person.app, CANVAS());
+  const { context, a, b } = await secondDevice(browser, person);
   await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/PNG/);
   return { context, a, b };
 }
@@ -57,20 +54,6 @@ test('both can draw at once, and every shape ends up on both pictures, and in th
   await expect.poll(async () => (await shapesOf(a)).sort(), { timeout: 30_000 }).toEqual(['line', 'rectangle']);
   await expect.poll(async () => (await shapesOf(b)).sort(), { timeout: 30_000 }).toEqual(['line', 'rectangle']);
   for (const app of [a, b]) await expectPicture(app, (i) => isReddish(pixelAt(i, 140, 40)) && isReddish(pixelAt(i, 40, 200)));
-  await context.close();
-});
-
-test('undo takes back only the person’s own shape', async ({ browser }) => {
-  const { context, a, b } = await picturePair(browser);
-  await a.toolbarButton(/^Line$/).click();
-  await drag(a, [40, 40], [240, 40]);
-  await b.toolbarButton(/^Rectangle$/).click();
-  await expect.poll(() => shapesOf(b), { timeout: 30_000 }).toEqual(['line']);
-  await drag(b, [40, 150], [240, 250]);
-  await expect.poll(async () => (await shapesOf(a)).length, { timeout: 30_000 }).toBe(2);
-  await b.menu('Edit', 'Undo');
-  await expect.poll(() => shapesOf(b), { timeout: 30_000 }).toEqual(['line']);
-  await expect.poll(() => shapesOf(a), { timeout: 30_000 }).toEqual(['line']);
   await context.close();
 });
 

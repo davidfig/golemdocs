@@ -8,7 +8,7 @@ J’ai fait Golem Docs parce que je voulais un seul éditeur qui ouvre tous les 
 - **Changer de forme sans rien perdre.** Convertir en, dans le menu Fichier, change ce que le document est modifié comme, et en revenant, vous retrouvez votre mise en forme.
 - **Annoter les PDF.** Surlignez, soulignez, barrez et laissez des notes sur les pages d'un PDF.
 - **Modifier les PDF.** Passez en mode Modifier le PDF pour changer le texte d'une page à sa place, déplacer, ajouter ou supprimer des images et des formes, noircir des informations confidentielles et réorganiser les pages. Le mode Remplir saisit du texte dans les champs d'un formulaire.
-- **Travailler à plusieurs.** Partager, dans le menu Fichier, vous donne un lien. Toutes les personnes qui l'ouvrent modifient le même document, et les changements s'affichent en direct. Vous pouvez aussi partager avec des personnes précises. Le partage passe par mon serveur, il fait donc partie de l'abonnement ; modifier seul est gratuit.
+- **Travailler à plusieurs.** Partager, dans le menu Fichier, vous permet d'inviter des personnes précises par e-mail, comme éditeurs ou lecteurs. Toutes les personnes qui ont le document ouvert modifient la même copie, et les changements s'affichent en direct. Le partage passe par mon serveur, il fait donc partie de l'abonnement ; modifier seul est gratuit.
 - **Demander à l'IA.** L'assistant IA, dans le coin, peut lire votre document, réécrire ou ajouter des paragraphes, mettre le texte en forme, laisser des commentaires, remplir des formulaires et convertir dans un autre format, et Annuler reprend ses modifications. Il fait partie de l'abonnement, car chaque requête me coûte de l'argent. Affichage › Assistant IA l'affiche ou le masque.
 
 ## À essayer
@@ -16,7 +16,7 @@ J’ai fait Golem Docs parce que je voulais un seul éditeur qui ouvre tous les 
 1. **Changer de forme.** Dans le menu Fichier, choisissez Convertir en, puis Markdown. Cette page devient du texte brut avec des titres `#`, et vous pouvez la reconvertir.
 2. **Ouvrir des données.** Déposez un fichier CSV sur la fenêtre. Il s'ouvre sous forme de tableau modifiable, et se télécharge en tant que le même CSV.
 3. **Demander à l'IA.** Ouvrez l'assistant IA et demandez-lui de résumer cette page ou de faire ressortir un titre, puis appuyez sur Annuler si vous voulez revenir en arrière. Cela nécessite un abonnement.
-4. **Modifier à plusieurs.** Dans le menu Fichier, choisissez Partager, puis Obtenir le lien, et ouvrez le lien dans une deuxième fenêtre. Tapez dans l'une et regardez l'autre se mettre à jour. Cela nécessite aussi un abonnement.
+4. **Modifier à plusieurs.** Dans le menu Fichier, choisissez Partager et ajoutez l'adresse e-mail d'une personne qui s'est connectée à Golem Docs. Quand elle ouvre le document depuis Partagés avec moi, vous le modifiez tous les deux en direct. Cela nécessite aussi un abonnement.
 
 Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document vierge, ou Télécharger quand il vous faut un fichier pour quelqu'un d'autre.
 

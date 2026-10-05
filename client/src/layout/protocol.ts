@@ -197,19 +197,13 @@ export interface WirePickedText {
 export type WireField = FormField & { pageId: number; box: { x: number; y: number; width: number; height: number } };
 
 /** A collaboration room to open the document in (see ../collab). */
-export type RoomOptions =
-  /** A room shared between this browser's tabs, for development (./collab/devServer.ts). */
-  | {
-      kind: 'dev';
-      name: string;
-      /** Connected to the room server; transferred to the worker. */
-      port: MessagePort;
-      /** How this user appears to others. */
-      user: string;
-      color: number;
-    }
-  /** The multiplayer server's room for a cloud document. */
-  | { kind: 'network'; docId: string; user: string; color: number };
+export interface RoomOptions {
+  /** The cloud document whose multiplayer room this is. */
+  docId: string;
+  /** How this user appears to others. */
+  user: string;
+  color: number;
+}
 
 /** Where a document stands in the multiplayer server's room. */
 export interface RoomState {
@@ -238,7 +232,7 @@ export type ToWorker =
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
-  | { type: 'joinRoom'; doc: number; room: Extract<RoomOptions, { kind: 'network' }> }
+  | { type: 'joinRoom'; doc: number; room: RoomOptions }
   /** Leaving the page: tell the room. */
   | { type: 'leave' }
   /** The open document is closed and none replaces it (the page now shows something the worker does not hold: a plain text file). */
@@ -385,7 +379,6 @@ export type FromWorker =
   /** A drawing being edited together: as it stands now (null: it has not changed, only what can be undone) after others' changes or an undo, and whether the person's own changes can be undone or redone. */
   | { type: 'vectorScene'; doc: number; scene: Scene | null; canUndo: boolean; canRedo: boolean }
   /** Collaboration status: people in the room, and edits not yet confirmed by the server. */
-  | { type: 'room'; doc: number; people: number; version: number; unconfirmed: number }
   /** The multiplayer room changed: who is in it, what this user may do, who saves. */
   | ({ type: 'roomState'; doc: number } & RoomState)
   | { type: 'roomReplace'; doc: number }

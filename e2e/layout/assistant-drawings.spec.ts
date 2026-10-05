@@ -4,7 +4,7 @@
 import { expect, test } from '../fixtures';
 import type { App } from '../fixtures';
 import { currentPicture, expectPicture, isReddish, makePng, openPicture } from './helpers';
-import { getRoomLink } from '../collab/helpers';
+import { newPerson, secondDevice } from '../collab/helpers';
 import { importFile } from '../files/helpers';
 
 /** Runs one tool, as the assistant's call of it would, and gives its answer. */
@@ -71,14 +71,10 @@ test.describe('a picture’s layers', () => {
   });
 
   test('while another person is in the picture, drawing works and the picture itself cannot be changed', async ({ browser }) => {
-    const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-    const { App: AppClass } = await import('../fixtures');
-    const a = new AppClass(await context.newPage());
-    await openPicture(a, CANVAS);
-    const url = await getRoomLink(a);
-    const b = new AppClass(await context.newPage());
-    await b.page.goto(url);
-    await b.ready();
+    const person = await newPerson(browser, 'picture');
+    await person.page.goto('/?doc=welcome');
+    await openPicture(person.app, CANVAS);
+    const { context, a, b } = await secondDevice(browser, person);
     await expect.poll(() => b.page.evaluate(() => (window as unknown as { pictureShapes: unknown[] }).pictureShapes.length)).toBe(0);
     expect(await tool(a, 'edit_picture', { op: 'rotate_left' })).toContain('Error: others are editing this picture now');
     expect(await tool(a, 'edit_picture', { op: 'draw', tool: 'line', x: 10, y: 10, to_x: 200, to_y: 10 })).toContain('Done: draw line');
@@ -89,17 +85,14 @@ test.describe('a picture’s layers', () => {
 
 test.describe('who is editing', () => {
   test('alone, nobody else is; with another person here, the tools say so', async ({ browser }) => {
-    const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-    const { App: AppClass } = await import('../fixtures');
-    const a = new AppClass(await context.newPage());
+    const person = await newPerson(browser, 'status');
+    await person.page.goto('/?doc=welcome');
+    const a = person.app;
     await a.blank();
     await a.type('shared text');
     expect(await tool(a, 'collaboration_status')).toBe('Nobody else is editing this document now.');
-    const url = await getRoomLink(a);
-    const b = new AppClass(await context.newPage());
-    await b.page.goto(url);
-    await b.ready();
-    await expect.poll(() => tool(a, 'collaboration_status'), { timeout: 30_000 }).toMatch(/people are editing now\. Everyone can edit at once\./);
+    const { context } = await secondDevice(browser, person);
+    await expect.poll(() => tool(a, 'collaboration_status'), { timeout: 30_000 }).toMatch(/^Editing now: .+ \(you\), .+\. Everyone can edit at once\./);
     await context.close();
   });
 });
@@ -108,20 +101,15 @@ test.describe('a drawing in a room', () => {
   const DRAWING = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"><rect id="red" x="20" y="20" width="120" height="80" fill="#e53935"/></svg>';
 
   test('both may edit at once, and the status says so', async ({ browser }) => {
-    const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-    const { App: AppClass } = await import('../fixtures');
-    const a = new AppClass(await context.newPage());
-    await a.goto('?doc=welcome');
-    await importFile(a, { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(DRAWING) });
-    await a.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem').first().waitFor({ timeout: 30_000 });
-    const url = await getRoomLink(a);
-    const b = new AppClass(await context.newPage());
-    await b.page.goto(url);
-    await b.ready();
+    const person = await newPerson(browser, 'drawing');
+    await person.page.goto('/?doc=welcome');
+    await importFile(person.app, { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(DRAWING) });
+    await person.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem').first().waitFor({ timeout: 30_000 });
+    const { context, a, b } = await secondDevice(browser, person);
     await b.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem').first().waitFor({ timeout: 30_000 });
     expect(await tool(a, 'edit_drawing', { op: 'add_rect', x: 200, y: 20, width: 50, height: 50 })).not.toContain('Error');
     expect(await tool(b, 'edit_drawing', { op: 'add_rect', x: 0, y: 0, width: 5, height: 5 })).not.toContain('Error');
-    const rows = (app: InstanceType<typeof AppClass>) => app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
+    const rows = (app: App) => app.page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
     await expect(rows(a)).toHaveCount(3, { timeout: 30_000 });
     await expect(rows(b)).toHaveCount(3, { timeout: 30_000 });
     await context.close();

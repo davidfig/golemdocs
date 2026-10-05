@@ -8,7 +8,7 @@ Ho creato Golem Docs perché volevo un solo editor che aprisse ogni tipo di docu
 - **Cambia forma senza perdere nulla.** Converti in, nel menu File, cambia la forma con cui viene modificato il documento, e tornando indietro ritrovi la tua formattazione.
 - **Annota i PDF.** Evidenzia, sottolinea, barra e lascia note sulle pagine di un PDF.
 - **Modifica i PDF.** Passa a Modifica PDF per cambiare il testo di una pagina dov'è, spostare, aggiungere o eliminare immagini e forme, oscurare dati riservati e riordinare le pagine. Compila scrive nei campi di un modulo.
-- **Lavora insieme agli altri.** Condividi, nel menu File, ti dà un collegamento. Chiunque lo apra modifica lo stesso documento, e le modifiche compaiono in tempo reale. Puoi anche condividere con persone specifiche. La condivisione richiede il mio server, quindi fa parte dell’abbonamento; modificare da soli è gratuito.
+- **Lavora insieme agli altri.** Condividi, nel menu File, ti permette di invitare persone specifiche via posta elettronica come editor o lettori. Chiunque abbia il documento aperto modifica la stessa copia, e le modifiche compaiono in tempo reale. La condivisione richiede il mio server, quindi fa parte dell’abbonamento; modificare da soli è gratuito.
 - **Chiedi all’assistente IA.** L’assistente IA nell’angolo può leggere il tuo documento, riscrivere o aggiungere paragrafi, formattare il testo, lasciare commenti, compilare moduli e convertire in un altro formato, e Annulla ripristina le sue modifiche. Fa parte dell’abbonamento, perché ogni richiesta mi costa dei soldi. Visualizza › Assistente IA lo mostra o lo nasconde.
 
 ## Provalo
@@ -16,7 +16,7 @@ Ho creato Golem Docs perché volevo un solo editor che aprisse ogni tipo di docu
 1. **Cambia forma.** Nel menu File, scegli Converti in e poi Markdown. Questa pagina diventa testo normale con titoli `#`, e puoi riconvertirla.
 2. **Apri dei dati.** Trascina un file CSV sulla finestra. Si apre come una tabella che puoi modificare e si scarica come lo stesso CSV.
 3. **Chiedi all’assistente IA.** Apri l’assistente IA e chiedigli di riassumere questa pagina o di far risaltare un titolo, poi premi Annulla se vuoi tornare indietro. Per questo serve un abbonamento.
-4. **Modifica insieme.** Nel menu File, scegli Condividi e poi Ottieni collegamento, e apri il collegamento in una seconda finestra. Scrivi in una e guarda l’altra aggiornarsi. Anche per questo serve un abbonamento.
+4. **Modifica insieme.** Nel menu File, scegli Condividi e aggiungi l’indirizzo di posta elettronica di qualcuno che ha effettuato l’accesso a Golem Docs. Quando aprirà il documento da Condivisi con me, lo modificherete entrambi in tempo reale. Anche per questo serve un abbonamento.
 
 Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Scarica quando ti serve un file da dare a qualcun altro.
 

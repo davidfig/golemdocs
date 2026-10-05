@@ -54,14 +54,8 @@ export const dialogs: Catalog = {
   'dialogs.share.remove': 'Удалить',
   'dialogs.share.nobody': 'Пока ни с кем не открыт общий доступ.',
   'dialogs.share.done': 'Готово',
-  'dialogs.share.linkHeading': 'Ссылка',
   'dialogs.share.peopleHeading': 'Пользователи',
-  'dialogs.share.getLink': 'Получить ссылку',
   'dialogs.share.note': 'Пользователи должны хотя бы раз войти в Golem Docs. Редакторы и читатели видят изменения в реальном времени.',
-  'dialogs.roomLink.label': 'Ссылка на этот общий документ',
-  'dialogs.roomLink.note': 'Любой, у кого есть эта ссылка, может открыть документ и редактировать его вместе с вами. Изменения видны всем в реальном времени.',
-  'dialogs.roomLink.copy': 'Копировать ссылку',
-  'dialogs.roomLink.copied': 'Скопировано',
 
   // Sign in
   'dialogs.signIn.title': 'Вход',

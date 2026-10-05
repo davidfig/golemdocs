@@ -11,11 +11,9 @@
 // shortcut (server/src/auth.ts). `signedOutContext` sets that cookie up front (equivalent to having
 // clicked Sign out), so `/api/auth/me` answers `{ user: null }` and the app behaves as a guest.
 //
-// Real-time collaboration comes in two kinds:
-//  - `?room=<name>` (File ▸ Share ▸ Get Link) runs in a SharedWorker (client/src/collab/devServer.ts),
-//    which every tab of ONE browser profile shares. Two tabs of the same context are two people.
-//  - cloud documents join a Durable Object room on the server: two contexts signed in as different
-//    accounts, one sharing the document with the other (`cloudRoom`).
+// Real-time collaboration: cloud documents join a Durable Object room on the server. Two browser
+// contexts are two devices of one account (`cloudPair`, `secondDevice`), or two accounts, one
+// sharing the document with the other.
 
 import { inflateRawSync } from 'node:zlib';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
@@ -129,32 +127,37 @@ export async function expectText(app: App, expected: string): Promise<void> {
   await expect.poll(() => app.text(), { message: `document text is ${JSON.stringify(expected)}` }).toBe(expected);
 }
 
-/** Two people in one browser profile, joined in the same `?room=` (File ▸ Share ▸ Get Link). `a` starts with `initial` typed. */
-export async function roomPair(browser: Browser, initial = 'Hello'): Promise<{ context: BrowserContext; a: App; b: App; url: string }> {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-  const a = new App(await context.newPage());
-  await a.blank();
-  if (initial) await a.type(initial);
-  const url = await getRoomLink(a);
-  await a.press('ControlOrMeta+End'); // the document was reopened in its room: the caret is back at the start
-  const b = new App(await context.newPage());
-  await b.page.goto(url);
-  await b.ready();
-  return { context, a, b, url };
+/** A closer for several browser contexts at once, so a test written for one context can end with `context.close()`. */
+export const together = (...contexts: BrowserContext[]) => ({ close: async () => void (await Promise.all(contexts.map((c) => c.close()))) });
+
+/**
+ * A second device of the account `person` is signed in as, opened on the cloud document `person` has open (it must have reached the
+ * account) and in its room with it. `context` closes both devices.
+ */
+export async function secondDevice(browser: Browser, person: Person): Promise<{ context: ReturnType<typeof together>; a: App; b: App }> {
+  const doc = await waitForCloudDoc(person.page);
+  const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  await signInAs(other, person.email);
+  const b = await openCloud(await other.newPage(), doc.id);
+  await expect.poll(() => statusLine(person.page), { message: 'the second device joined the room', timeout: 30_000 }).toContain('2 people here');
+  return { context: together(person.context, other), a: person.app, b };
 }
 
-/** File ▸ Share ▸ Get Link, then closes the dialog. Returns the link. */
-export async function getRoomLink(app: App): Promise<string> {
-  await app.menu('File', 'Share');
-  const dialog = app.page.locator('dialog.wm-share');
-  await dialog.getByRole('button', { name: 'Get Link' }).click();
-  const link = dialog.getByLabel('Link to this shared document');
-  await expect(link).toHaveValue(/\?room=/);
-  const value = await link.inputValue();
-  await dialog.getByRole('button', { name: 'Done' }).click();
-  await app.page.waitForFunction(() => (window as unknown as { loaded: boolean }).loaded === true);
-  await app.focus();
-  return value;
+/** Two devices in one cloud text document, which starts with `initial` (the first device's caret at its end). */
+export async function roomPair(browser: Browser, initial = 'Hello'): Promise<{ context: ReturnType<typeof together> & { newPage(): Promise<Page> }; a: App; b: App; url: string }> {
+  const pair = await cloudPair(browser, [initial]);
+  const contexts = [pair.a.context, pair.b.context];
+  const context = {
+    // Another device of the account: a context of its own, as a tab of an existing one would not be a separate device.
+    newPage: async () => {
+      const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+      contexts.push(other);
+      await signInAs(other, pair.a.email);
+      return other.newPage();
+    },
+    close: async () => void (await Promise.all(contexts.map((c) => c.close()))),
+  };
+  return { context, a: pair.a.app, b: pair.b.app, url: `/?doc=cloud:${pair.doc.id}` };
 }
 
 // --- Comments ---------------------------------------------------------------------------

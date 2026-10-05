@@ -64,8 +64,6 @@ export const app: Partial<Messages> = {
   'app.roomConnectionLost': '연결 끊김',
   'app.roomViewOnly': '보기 전용',
   'app.roomPeople': '{count}명 접속 중',
-  'app.collabNotHere': '이 문서는 공유할 수 없습니다',
-  'app.collabFailed': '공동 작업을 할 수 없습니다: {message}',
   'app.leaveRoomToSwitch': '형식을 전환하려면 공동 작업 방에서 나가십시오',
 
   // Account and cloud

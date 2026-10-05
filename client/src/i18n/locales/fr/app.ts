@@ -66,8 +66,6 @@ export const app: Partial<Messages> = {
   'app.roomViewOnly': 'lecture seule',
   'app.roomPeople.one': '{count} personne ici',
   'app.roomPeople': '{count} personnes ici',
-  'app.collabNotHere': 'Ce document ne peut pas être partagé',
-  'app.collabFailed': 'Impossible de collaborer : {message}',
   'app.leaveRoomToSwitch': 'Quittez la salle de collaboration pour changer de format',
 
   // Account and cloud

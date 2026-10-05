@@ -8,7 +8,7 @@ Hice Golem Docs porque quería un solo editor que abriera todo tipo de documento
 - **Cambiar de forma sin perder nada.** Convertir a, en el menú Archivo, cambia lo que es el documento al editarlo, y al volver recuperas tu formato.
 - **Marcar PDF.** Resalta, subraya, tacha y deja notas en las páginas de un PDF.
 - **Editar PDF.** Cambia a Editar PDF para modificar el texto de una página donde está, mover, añadir o eliminar imágenes y formas, tachar datos privados y reorganizar páginas. Rellenar escribe en los campos de un formulario.
-- **Trabajar en equipo.** Compartir, en el menú Archivo, te da un enlace. Quien lo abre edita el mismo documento, y los cambios se ven en directo. También puedes compartir con personas concretas. Compartir necesita mi servidor, así que forma parte de la suscripción; editar por tu cuenta es gratis.
+- **Trabajar en equipo.** Compartir, en el menú Archivo, te permite invitar a personas concretas por correo electrónico como editoras o lectoras. Quien tenga el documento abierto edita la misma copia, y los cambios se ven en directo. Compartir necesita mi servidor, así que forma parte de la suscripción; editar por tu cuenta es gratis.
 - **Pregunta a la IA.** El asistente de IA de la esquina puede leer tu documento, reescribir o añadir párrafos, dar formato al texto, dejar comentarios, rellenar formularios y convertir a otro formato, y Deshacer revierte sus cambios. Forma parte de la suscripción, porque cada petición me cuesta dinero. Ver › Asistente de IA lo muestra u oculta.
 
 ## Pruébalo
@@ -16,7 +16,7 @@ Hice Golem Docs porque quería un solo editor que abriera todo tipo de documento
 1. **Cambia de forma.** En el menú Archivo, elige Convertir a y luego Markdown. Esta página se convierte en texto sin formato con encabezados `#`, y puedes volver a convertirla.
 2. **Abre algunos datos.** Suelta un archivo CSV sobre la ventana. Se abre como una tabla que puedes editar y se descarga como el mismo CSV.
 3. **Pregunta a la IA.** Abre el asistente de IA y pídele que resuma esta página o que destaque un encabezado, y luego pulsa Deshacer si quieres recuperar el cambio. Para esto hace falta una suscripción.
-4. **Edita en equipo.** En el menú Archivo, elige Compartir y luego Obtener enlace, y abre el enlace en una segunda ventana. Escribe en una y mira cómo se actualiza la otra. Para esto también hace falta una suscripción.
+4. **Edita en equipo.** En el menú Archivo, elige Compartir y añade el correo electrónico de alguien que haya iniciado sesión en Golem Docs. Cuando abra el documento desde Compartidos conmigo, los dos lo editáis en directo. Para esto también hace falta una suscripción.
 
 Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o Descargar cuando necesites un archivo para otra persona.
 

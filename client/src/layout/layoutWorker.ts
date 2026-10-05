@@ -24,7 +24,7 @@ import { exportDocument, importDocument, type Format } from '../formats/convert.
 import type { PdfView } from '../formats/pdfPages.ts';
 import { sniffImage } from '../formats/images.ts';
 import { networkMedia, type RoomMedia } from '../collab/roomMedia.ts';
-import { isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
+import { isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomKind, writeRoomDocument } from '../formats/roomDoc.ts';
 import type { VectorLayers } from './vectorLayers.ts';
 import type { Scene } from '../vector/model.ts';
 import { PictureLayers } from './pictureLayers.ts';
@@ -1054,7 +1054,7 @@ class OpenDocument {
    * it carries on unshared and is merged as a separate copy later.
    */
   async joinLate(room: RoomOptions): Promise<void> {
-    if (this.net || !roomable(this.format)) return;
+    if (this.net) return;
     // Still being set up (the page heard who is signed in first): joined once it is, as the page
     // asks only once.
     if (this.format === 'pdf' ? !this.annotator : isPictureFormat(this.format) ? !this.layerSync : !this.replica || !this.editor) {
@@ -2393,7 +2393,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // something else (the page is told, to say that the edits aren't on them).
     if (loaded.lens === 'pdf' && loaded.original) {
       const pdfClient = crypto.randomUUID().slice(0, 8);
-      const pdfRoom = roomable(loaded.lens) ? requestedRoom : undefined;
+      const pdfRoom = requestedRoom;
       // Others in the room: the pages open from the room's file, not ours.
       let source = loaded;
       let start: RoomStart | null = null;
@@ -2409,7 +2409,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // Rooms share the document itself, so any format edited through it can be in one. A picture is the exception: its pixels are not
     // edited together, but the shapes drawn over it (its layers) are, in a room of their own kind.
     const layered = isLayeredFormat(entry.format);
-    const room = roomable(entry.format) ? requestedRoom : undefined;
+    const room = requestedRoom;
     const readMs = performance.now() - t0;
     if (entry.closed) return;
     const clientId = crypto.randomUUID().slice(0, 8);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { WordDocument } from '@golemdocs/docx';
 import { isWdoc } from '../src/formats/wdoc.ts';
-import { isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomable, roomKind, writeRoomDocument } from '../src/formats/roomDoc.ts';
+import { isLayeredFormat, isPictureFormat, isVectorFormat, readRoomDocument, roomKind, writeRoomDocument } from '../src/formats/roomDoc.ts';
 import { sourceFromFile } from '../src/formats/source.ts';
 
 const docx = async (): Promise<Uint8Array> => (await WordDocument.create()).write();
@@ -30,10 +30,6 @@ test('Word with extensions, or made from another format, is kept as that', async
   const bytes = await docx();
   assert.equal(isWdoc(await writeRoomDocument({ docx: bytes, lens: 'docx', origin: 'rtf', extensions: {} })), true);
   assert.equal(isWdoc(await writeRoomDocument({ docx: bytes, lens: 'docx', origin: 'docx', extensions: { html: { head: '' } as never } })), true);
-});
-
-test('every kind of document can be in a room', () => {
-  for (const format of ['png', 'jpeg', 'webp', 'docx', 'md', 'txt', 'html', 'odt', 'rtf', 'csv', 'tex', 'svg', 'svgz', 'pdf'] as const) assert.equal(roomable(format), true, format);
 });
 
 test('a picture’s changes are to the shapes drawn over it', () => {

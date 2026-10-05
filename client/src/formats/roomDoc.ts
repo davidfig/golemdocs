@@ -31,9 +31,6 @@ export const isVectorFormat = (format: Format): boolean => format === 'svg' || f
 /** Whether its room shares objects with a host of its own (a picture's shapes, a drawing's nodes) rather than the document's text. */
 export const isLayeredFormat = (format: Format): boolean => PICTURES.has(format) || isVectorFormat(format);
 
-/** Whether a document edited as this format can be in a room: every one can. */
-export const roomable = (_format: Format): boolean => true;
-
 const hasExtensions = (extensions: Extensions): boolean => Object.values(extensions).some((value) => value && Object.keys(value).length);
 
 /** The bytes a room holds for a document. */

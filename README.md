@@ -65,7 +65,7 @@ Other things `server/.dev.vars` controls:
 
 ### Handy for development
 
-- `?doc=` in the URL opens a document (`welcome`, `fonts`, `war-and-peace`, `local:<id>`, `cloud:<id>`); `?room=<name>` opens a collaboration room shared between this browser's tabs.
+- `?doc=` in the URL opens a document (`welcome`, `fonts`, `war-and-peace`, `local:<id>`, `cloud:<id>`).
 - `pnpm --filter @golemdocs/docx corpus` downloads the .docx round-trip corpus; the dev server then lists it under File ▸ Open Sample.
 - `pnpm fonts` regenerates the font atlases (needs `cmake`, FreeType and libpng; see `scripts/fonts/generate.ts`).
 

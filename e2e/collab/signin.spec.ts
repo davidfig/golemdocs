@@ -75,13 +75,12 @@ test.describe('a guest (not signed in)', () => {
     await context.close();
   });
 
-  test('File > Share for a guest offers a link but says to sign in to share with people', async ({ browser }) => {
+  test('File > Share for a guest says to sign in to share', async ({ browser }) => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('text');
     await app.menu('File', 'Share');
     const dialog = page.locator('dialog.wm-share');
-    await expect(dialog.getByRole('button', { name: 'Get Link' })).toBeVisible();
     await expect(dialog.getByText('Sign in to share this document')).toBeVisible();
     await expect(dialog.getByLabel('Email address')).toHaveCount(0);
     await context.close();

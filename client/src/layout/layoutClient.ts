@@ -15,7 +15,6 @@ export interface DocumentListener {
   done(pages: number, timings: LayoutTimings): void;
   selection(update: SelectionUpdate): void;
   /** Collaboration status (documents opened in a room). */
-  room(people: number, version: number, unconfirmed: number): void;
   /** The multiplayer room changed (cloud documents). */
   roomState(state: RoomState): void;
   /** The room has its own copy of the document, and nothing typed here yet: reopen from the room. */
@@ -72,7 +71,6 @@ export class LayoutClient {
     this.doc++;
     this.listener = listener;
     const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
-    if (room?.kind === 'dev') transfer.push(room.port);
     this.send({ type: 'open', doc: this.doc, source, room }, transfer);
   }
 
@@ -82,7 +80,7 @@ export class LayoutClient {
   }
 
   /** The open document is now in the cloud: join its multiplayer room (it had none when it opened). */
-  joinRoom(room: Extract<RoomOptions, { kind: 'network' }>): void {
+  joinRoom(room: RoomOptions): void {
     this.send({ type: 'joinRoom', doc: this.doc, room });
   }
 
@@ -237,9 +235,6 @@ export class LayoutClient {
         break;
       case 'selection':
         this.listener.selection(message);
-        break;
-      case 'room':
-        this.listener.room(message.people, message.version, message.unconfirmed);
         break;
       case 'roomState':
         this.listener.roomState(message);

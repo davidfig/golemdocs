@@ -161,7 +161,7 @@ Commit the generated files; the `home` test fails if they are stale or a languag
 - English `/home` sends visitors to their language (the app's saved `wm.locale`, else the browser's); the
   language links in the footer set `wm.locale`, so the choice carries into the app.
 - Strings may hold their own `<a>`/`<em>` markup; keep the tags and `href`s as in English.
-- Use the same terms as the app for menu names (File ▸ Download All, Convert To, Share ▸ Get Link).
+- Use the same terms as the app for menu names (File ▸ Download All, Convert To, File ▸ Share).
 - **Adding a language:** after the steps above, copy `en.json` to `client/home/locales/<tag>.json` and translate it,
   run `pnpm build:home`, add `https://golemdocs.com/home/<tag>` to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in
   `client/home/build.ts`.

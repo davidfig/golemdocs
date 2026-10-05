@@ -64,8 +64,6 @@ export const app: Partial<Messages> = {
   'app.roomConnectionLost': '接続が切断されました',
   'app.roomViewOnly': '閲覧のみ',
   'app.roomPeople': '{count} 人が参加中',
-  'app.collabNotHere': 'このドキュメントは共有できません',
-  'app.collabFailed': '共同編集できません：{message}',
   'app.leaveRoomToSwitch': '形式を切り替えるには、共同編集ルームから退出してください',
 
   // Account and cloud

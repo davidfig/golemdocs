@@ -1,5 +1,5 @@
 // Opening documents that are not there, or that need an account: the error paths of
-// ?doc=cloud:…, ?doc=shared:…, ?doc=local:… and ?room=…
+// ?doc=cloud:…, ?doc=shared:… and ?doc=local:…
 
 import { test, expect, App } from '../fixtures';
 import { newPerson, signedOutContext, statusLine, uploadDoc, makeDocx } from './helpers';
@@ -82,32 +82,6 @@ test.describe('local documents', () => {
     await expect.poll(() => statusLine(page)).toContain('no longer saved in this browser');
     await app.type('fresh start');
     expect(await app.text()).toBe('fresh start');
-    await context.close();
-  });
-});
-
-test.describe('rooms', () => {
-  test('?room= with no document opens a blank one, named by ?name=', async ({ browser }) => {
-    const context = await signedOutContext(browser);
-    const page = await context.newPage();
-    const app = new App(page);
-    await page.goto('/?room=brandnew&name=Minutes.docx');
-    await app.ready();
-    await expect.poll(() => statusLine(page)).toContain('Minutes.docx');
-    await app.type('first in the room');
-    expect(await app.text()).toBe('first in the room');
-    await context.close();
-  });
-
-  test('a link to a room keeps the room in the address and does not save a local copy in the address bar', async ({ browser }) => {
-    const context = await signedOutContext(browser);
-    const page = await context.newPage();
-    const app = new App(page);
-    await page.goto('/?room=keepme');
-    await app.ready();
-    await app.type('typing');
-    await expect(page).toHaveURL(/\?room=keepme/);
-    expect(new URL(page.url()).searchParams.has('doc')).toBe(false);
     await context.close();
   });
 });

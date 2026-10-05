@@ -116,7 +116,7 @@ import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
 import { sniffImage } from './formats/images.ts';
 import { LARGE_TEXT_BYTES, hasExtension, isProseName, textFileName, usesTextEngine, toUtf8WithEncoding } from './formats/textFiles.ts';
-import { isVectorFormat, roomable } from './formats/roomDoc.ts';
+import { isVectorFormat } from './formats/roomDoc.ts';
 import { ensureUids } from './vector/nodes.ts';
 import type { Scene } from './vector/model.ts';
 import type { Collaboration } from './assistant/appTools.ts';
@@ -248,7 +248,7 @@ try {
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
 {
   const params = new URLSearchParams(location.search);
-  const wanted = wantedDoc(params) ?? (params.get('room') ? null : lastDoc());
+  const wanted = wantedDoc(params) ?? lastDoc();
   if (wanted?.startsWith('local:')) earlySaved = { id: wanted.slice(6), saved: getSaved(wanted.slice(6)).catch(() => null) };
 }
 
@@ -275,8 +275,6 @@ let annotating = false;
 /** A PDF's pages: filling in its form, or editing the form itself. */
 let formMode: FormMode = 'fill';
 let status = '';
-/** Collaboration status in a development room (the SharedWorker one, `?room=`); a cloud room is `current.room`. */
-let devRoom: { id: string; people: number; version: number; unsent: number } | null = null;
 /** Latest edit round trip (command sent to its selection update), ms. */
 let editTimes: { total: number; worker: number } | null = null;
 /** How long the current document took to open, ms. */
@@ -417,7 +415,6 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   cameraPlaced = false;
   userMoved = false;
   editTimes = null;
-  devRoom = null;
   loadTimes = null;
   pendingNotice = null;
   annotating = false;
@@ -449,7 +446,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   const start = performance.now();
   let { name, opening } = beginOpen(source, options);
   let firstPage = 0;
-  const requestedRoom = roomOptions() ?? networkRoom(options.cloudId ?? options.shared?.id);
+  const requestedRoom = networkRoom(options.cloudId ?? options.shared?.id);
   current.roomRequested = requestedRoom !== undefined;
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
@@ -517,10 +514,6 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     remoteEdit() {
       // Other people's edits are part of this document too, so they're kept in this browser.
       documentEdited();
-    },
-    room(people, version, unconfirmed) {
-      devRoom = { id: new URLSearchParams(location.search).get('room') ?? '', people, version, unsent: unconfirmed };
-      requestRender();
     },
     error(message) {
       loaded = true;
@@ -632,25 +625,17 @@ async function joinTextRoom(doc: OpenDocument, cloudId: string): Promise<void> {
 }
 
 // --- Collaboration ---------------------------------------------------------------------
-// ?room=<name> opens the document in a collaboration room. Until there's a networked server,
-// rooms live in a SharedWorker (./collab/devServer.ts) shared by this browser's tabs.
+// A cloud document is edited together with others in the multiplayer server's room (see collab/roomClient.ts).
 
 const USER_COLORS = [0xe8590c, 0x2f9e44, 0x7048e8, 0xd6336c, 0x1098ad, 0xf08c00];
 const userColor = USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
 const guestNumber = Math.floor(Math.random() * 900 + 100);
 const guestName = (): string => t('app.guestName', { number: guestNumber });
 
-function roomOptions(): RoomOptions | undefined {
-  const name = new URLSearchParams(location.search).get('room');
-  if (!name || typeof SharedWorker === 'undefined') return undefined;
-  const server = new SharedWorker(new URL('./collab/devServer.ts', import.meta.url), { type: 'module', name: 'word-collab' });
-  return { kind: 'dev', name, port: server.port, user: guestName(), color: userColor };
-}
-
 /** The multiplayer server's room for a cloud document, when signed in (else the document is edited on its own). */
-function networkRoom(cloudId: string | undefined): Extract<RoomOptions, { kind: 'network' }> | undefined {
+function networkRoom(cloudId: string | undefined): RoomOptions | undefined {
   if (!cloudId || !account) return undefined;
-  return { kind: 'network', docId: cloudId, user: account.name ?? account.email ?? guestName(), color: userColor };
+  return { docId: cloudId, user: account.name ?? account.email ?? guestName(), color: userColor };
 }
 
 let lastRoomText = '';
@@ -687,37 +672,9 @@ function describeRoom(state: RoomState): string {
 }
 
 /** Others may be editing the open document with this person now (a room). */
-const sharedLive = (): boolean => {
-  // Once the room has said how it is, that is what counts: `shared` means others are in it; alone (`solo`), or cut off for good (`offline`), nobody else is editing.
-  if (current.room) return current.room.mode === 'shared';
-  // A room is being joined (the address names one): until it answers, others may be there.
-  return !!new URLSearchParams(location.search).get('room');
-};
+const sharedLive = (): boolean => current.room?.mode === 'shared';
 
-/** Whether the open document can be edited together with others: a document in any format can (see `roomable`). */
-const sharable = (): boolean => isFormat(current.kind) && roomable(current.kind);
 
-/**
- * Puts the document, as it is now, in a room (unless it is in one), and gives the link that lets
- * others join it. Throws, with a message to show, when it can't.
- */
-async function enterRoom(): Promise<string> {
-  const params = new URLSearchParams(location.search);
-  if (!sharable()) throw new Error(t('app.collabNotHere'));
-  if (!params.get('room')) {
-    let bytes: Uint8Array;
-    try {
-      // The whole document, with what it is edited as: the room's first copy, which the others join.
-      bytes = await worker.save();
-    } catch (e) {
-      throw new Error(t('app.collabFailed', { message: (e as Error).message }));
-    }
-    const name = fileName();
-    setUrl(new URLSearchParams({ room: Math.random().toString(36).slice(2, 8), name }));
-    open({ kind: 'wdoc', name, bytes: bytes.slice().buffer });
-  }
-  return location.href;
-}
 window.addEventListener('pagehide', () => {
   rememberView();
   saveIfEdited();
@@ -857,15 +814,14 @@ function openFile(file: File): void {
 }
 
 /**
- * Opens a document by name; `keepRoom` keeps the URL's collaboration room (else it's left).
+ * Opens a document by name.
  * `step` says how the address changes: a new step in history (Back returns to the document before),
  * or `'replace'` for the one at start-up or after a delete, or `'none'` when Back/Forward already moved it.
  */
-function openSource(source: string, keepRoom = false, step: 'push' | 'replace' | 'none' = 'push'): void {
+function openSource(source: string, step: 'push' | 'replace' | 'none' = 'push'): void {
   wantedDocKey = source;
   const params = new URLSearchParams(location.search);
   params.set('doc', source);
-  if (!keepRoom) params.delete('room');
   if (step === 'none') noteAddressDoc(source);
   else setUrl(params, step === 'push');
   if (source === 'war-and-peace') {
@@ -1288,16 +1244,15 @@ function rejoinWhenBack(doc: OpenDocument): void {
     if (!navigator.onLine) return;
     stop();
     rememberView();
-    openSource(`local:${doc.localId}`, true, 'none');
+    openSource(`local:${doc.localId}`, 'none');
   };
   const timer = window.setInterval(retry, ROOM_RETRY_MS);
   window.addEventListener('online', retry);
 }
 
-/** Makes reloading the page reopen this document (not inside a collaboration room, where the room decides). */
+/** Makes reloading the page reopen this document. */
 function rememberInUrl(doc: string): void {
   const params = new URLSearchParams(location.search);
-  if (params.get('room')) return;
   params.set('doc', doc);
   setUrl(params);
   viewDocKey ??= doc; // a new document, saved for the first time
@@ -1755,7 +1710,7 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
     throw e;
   }
   if (deletingOpen) {
-    if (openId !== null && result.removed.has(openId)) openSource('welcome', true, 'replace');
+    if (openId !== null && result.removed.has(openId)) openSource('welcome', 'replace');
     else keepOpen();
   }
   if (result.refused.size) throw new Error([...result.refused.values()][0]);
@@ -1955,7 +1910,7 @@ async function updateLinksIn(entry: LibraryEntry, renames: ReadonlyMap<string, s
   const info = await saveSaved({ id: found.info.id, name: found.info.name, bytes, owner: account?.id });
   library.putLocal(info);
   if (account) scheduleUpload(info.id);
-  if (isOpen) openSource(`local:${info.id}`, false, 'replace');
+  if (isOpen) openSource(`local:${info.id}`, 'replace');
   return 'updated';
 }
 
@@ -2006,8 +1961,6 @@ async function share(): Promise<void> {
   // (otherwise the dialog would say to sign in, or to subscribe, to someone who has).
   await accountKnown;
   if (current.localId && !library.local.some((d) => d.id === current.localId)) await library.reloadLocal();
-  const inRoom = new URLSearchParams(location.search).has('room');
-  const room = !sharable() ? { unavailable: t('app.collabNotHere') } : inRoom ? { link: location.href } : { create: enterRoom };
   const info = library.local.find((d) => d.id === current.localId);
   const people = !account
     ? { unavailable: signedIn ? t('app.subscribeToShare') : t('app.signInToShare') }
@@ -2018,7 +1971,7 @@ async function share(): Promise<void> {
         : !info.cloudId
           ? { unavailable: t('app.notInAccountYet') }
           : { id: info.cloudId };
-  showShareDialog({ name: info?.name ?? current.name, room, people });
+  showShareDialog({ name: info?.name ?? current.name, people });
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -2127,7 +2080,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   if (VECTOR_KINDS.includes(to) && !VECTOR_KINDS.includes(from)) return convertToDrawing(to as 'svg' | 'svgz');
   if (!isFormat(to) || !isFormat(from)) throw new Error(t('app.unsupportedFormat', { label: FORMATS[isFormat(to) ? from : to].label }));
   // What a room's people edit the document as is the room's, so it stays while others are in it.
-  if (new URLSearchParams(location.search).get('room') || (current.room && current.room.mode !== 'solo')) {
+  if (current.room && current.room.mode !== 'solo') {
     reportError(t('app.leaveRoomToSwitch'));
     return;
   }
@@ -2678,7 +2631,7 @@ async function insertStoredDrawing(size: { width?: number; height?: number } = {
     const known = new Set<string>();
     newDrawingSince = known;
     setTimeout(() => newDrawingSince === known && (newDrawingSince = null), 15000);
-    openSource(`local:${current.localId}`, false, 'replace');
+    openSource(`local:${current.localId}`, 'replace');
   } catch (e) {
     reportError(t('picture.insertFailed', { message: (e as Error).message }));
   }
@@ -2891,16 +2844,6 @@ function updateDebug(): void {
   const panels: HTMLElement[] = [];
   if (flags.status) {
     panels.push(debugPanel('Document', [['status', status], ...(loadTimes ? ([['pages', loadTimes.pages.toLocaleString()], ['glyphs', loadTimes.glyphs.toLocaleString()]] as DebugRow[]) : [])], true));
-    if (devRoom) {
-      panels.push(
-        debugPanel('Room', [
-          ['id', devRoom.id],
-          ['people', String(devRoom.people)],
-          ['version', `v${devRoom.version}`],
-          ['unsent', String(devRoom.unsent)],
-        ]),
-      );
-    }
   }
   if (flags.load && loadTimes) {
     const times = loadTimes;
@@ -4056,7 +3999,7 @@ async function insertTextDrawing(size: { width?: number; height?: number }): Pro
 function collaboration(): Collaboration {
   const net = current.room;
   const people = net ? net.people.map((p) => (p.me ? `${p.name} (you)` : p.name)) : [];
-  const count = net ? net.people.length : devRoom ? devRoom.people : 1;
+  const count = net ? net.people.length : 1;
   return { shared: sharedLive() && count > 1, people, count };
 }
 
@@ -4313,7 +4256,7 @@ async function putBackDrawing(reopen: boolean): Promise<void> {
         if (!reopen) return;
         if (current.localId) {
           await saveNow();
-          openSource(`local:${current.localId}`, false, 'replace');
+          openSource(`local:${current.localId}`, 'replace');
           return;
         }
         worker.putDrawing({ svg: e.latest, png: picture.png, width, height }, e.svg);
@@ -4715,13 +4658,11 @@ Object.defineProperties(window, {
 // Back and Forward: the document and the Documents screen the address names.
 window.addEventListener('popstate', () => {
   const params = new URLSearchParams(location.search);
-  // A collaboration room is joined from the address, so changing to or from one starts the page over.
-  if (params.get('room') || devRoom) return location.reload();
   const doc = wantedDoc(params);
   if (doc && doc !== addressDoc()) {
     const name = library.local.find((d) => `local:${d.id}` === doc)?.name;
     if (name) showLoading(name);
-    openSource(doc, true, 'none');
+    openSource(doc, 'none');
   }
   if (history.state?.dashboard) void dashboard.show(false);
   else if (dashboard.visible) dashboard.dismiss(false);
@@ -4754,22 +4695,20 @@ window.addEventListener('popstate', () => {
     setUrl(params);
     void firstConnect.then(() => (subscribed ? afterCheckout() : signedIn ? subscribe() : undefined));
   }
-  // Joining a room without a document: the room has it.
-  if (!doc && params.get('room')) open({ kind: 'blank', name: params.get('name') ?? t('app.blankDocumentName') });
-  else if (doc) openSource(doc, true, 'replace');
+  if (doc) openSource(doc, 'replace');
   // Nothing asked for: carry on with the document last open here (else the newest saved one);
   // someone with no documents yet is welcomed with what Golem Docs is.
   else {
     const early = earlySaved;
     void (async () => {
-      if (early && (await early.saved)) return openSource(`local:${early.id}`, true, 'replace');
+      if (early && (await early.saved)) return openSource(`local:${early.id}`, 'replace');
       try {
         const saved = await listSaved();
         const last = lastDoc();
         const id = saved.some((d) => `local:${d.id}` === last) ? last : [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id;
-        openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', true, 'replace');
+        openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', 'replace');
       } catch {
-        openSource('welcome', true, 'replace');
+        openSource('welcome', 'replace');
       }
     })();
   }

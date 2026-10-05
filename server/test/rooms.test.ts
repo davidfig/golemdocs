@@ -69,6 +69,23 @@ test('uploading the file is refused while the room is the one saving', async () 
   assert.equal((await w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: DOCX })).status, 200);
 });
 
+test('while the room is the one saving, no request can replace the file (whole, delta or conditional), but renaming and moving still work', async () => {
+  const id = await create();
+  const bytes = async () => new Uint8Array(await (await w.call(OWNER, 'GET', `/api/documents/${id}`)).arrayBuffer());
+  const before = await bytes();
+  w.room.maySave = false;
+  const attempts = [
+    w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: DOCX }),
+    w.call(OWNER, 'PUT', `/api/documents/${id}?name=Other.docx&base=0`, { body: new Uint8Array([9]), type: DOCX }),
+    w.call(OWNER, 'PUT', `/api/documents/${id}`, { body: new Uint8Array([9]), type: 'application/vnd.golemdocs.delta' }),
+  ];
+  for (const response of await Promise.all(attempts)) assert.equal(response.status, 423);
+  assert.deepEqual(await bytes(), before, 'the file is as it was');
+  const renamed = await w.call(OWNER, 'PATCH', `/api/documents/${id}`, { body: JSON.stringify({ name: 'Renamed.docx' }), type: 'application/json' });
+  assert.equal(renamed.status, 200);
+  assert.deepEqual(await bytes(), before);
+});
+
 test('withdrawing access disconnects the person, and deleting the document closes the room', async () => {
   const id = await create();
   await share(id, ALICE, 'editor');

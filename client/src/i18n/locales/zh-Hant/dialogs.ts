@@ -54,14 +54,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.remove': '移除',
   'dialogs.share.nobody': '尚未與任何人分享。',
   'dialogs.share.done': '完成',
-  'dialogs.share.linkHeading': '連結',
   'dialogs.share.peopleHeading': '人員',
-  'dialogs.share.getLink': '取得連結',
   'dialogs.share.note': '對方必須先登入過 Golem Docs。編輯者與檢視者都能即時看到變更。',
-  'dialogs.roomLink.label': '此共用文件的連結',
-  'dialogs.roomLink.note': '任何取得此連結的人都能開啟文件並與您一起編輯。所有人都會即時看到變更。',
-  'dialogs.roomLink.copy': '複製連結',
-  'dialogs.roomLink.copied': '已複製',
 
   // Sign in
   'dialogs.signIn.title': '登入',

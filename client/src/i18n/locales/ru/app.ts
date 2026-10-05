@@ -70,8 +70,6 @@ export const app: Catalog = {
   'app.roomPeople.few': 'Здесь {count} человека',
   'app.roomPeople.many': 'Здесь {count} человек',
   'app.roomPeople': 'Здесь {count} человек',
-  'app.collabNotHere': 'Этим документом нельзя поделиться',
-  'app.collabFailed': 'Не удалось начать совместную работу: {message}',
   'app.leaveRoomToSwitch': 'Чтобы сменить формат, выйдите из совместной работы',
 
   // Account and cloud

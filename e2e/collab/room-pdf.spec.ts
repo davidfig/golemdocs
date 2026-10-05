@@ -3,7 +3,7 @@
 
 import { test, expect, App } from '../fixtures';
 import { annotations, editMode, makePdf, openPdf, pageCount, selectBetween, showPage } from '../pdf/helpers';
-import { getRoomLink } from './helpers';
+import { newPerson, secondDevice } from './helpers';
 
 const sample = () =>
   makePdf({
@@ -23,16 +23,13 @@ const save = async (app: App) => (await app.download(() => app.menu('File', 'Dow
 /** Waits until the PDF the person has now holds `count` annotations of a kind. */
 const expectAnnotations = (app: App, subtype: string, count: number) => expect.poll(async () => annotations(await save(app), subtype).length, { timeout: 30_000 }).toBe(count);
 
-/** Two people in one PDF: `a` opened it and shared it, `b` joined. */
+/** Two devices in one PDF of the account: `a` opened it, `b` joined. */
 async function pdfPair(browser: import('@playwright/test').Browser) {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-  const a = new App(await context.newPage());
-  await openPdf(a, sample());
-  const url = await getRoomLink(a);
+  const person = await newPerson(browser, 'pdf');
+  await person.page.goto('/?doc=welcome');
+  await openPdf(person.app, sample());
+  const { context, a, b } = await secondDevice(browser, person);
   await showPage(a.page, 0);
-  const b = new App(await context.newPage());
-  await b.page.goto(url);
-  await b.ready();
   await showPage(b.page, 0);
   return { context, a, b };
 }
@@ -79,13 +76,10 @@ test('undo takes back only what the person did themselves', async ({ browser }) 
 });
 
 test('pages cannot be moved while others are here, and the person is told', async ({ browser }) => {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-  const a = new App(await context.newPage());
-  await openPdf(a, makePdf({ pages: [[{ text: 'Alpha page', x: 40, y: 240, size: 18 }], [{ text: 'Bravo page', x: 40, y: 240, size: 18 }]] }));
-  const url = await getRoomLink(a);
-  const b = new App(await context.newPage());
-  await b.page.goto(url);
-  await b.ready();
+  const person = await newPerson(browser, 'pdf');
+  await person.page.goto('/?doc=welcome');
+  await openPdf(person.app, makePdf({ pages: [[{ text: 'Alpha page', x: 40, y: 240, size: 18 }], [{ text: 'Bravo page', x: 40, y: 240, size: 18 }]] }));
+  const { context, a, b } = await secondDevice(browser, person);
   await editMode(a.page);
   await showPage(a.page, 1);
   await a.page.locator('.wm-pdftools-pages button[data-op="delete"]').click();

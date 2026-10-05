@@ -52,14 +52,8 @@ export const dialogs = {
   'dialogs.share.remove': 'Remove',
   'dialogs.share.nobody': 'Not shared with anyone yet.',
   'dialogs.share.done': 'Done',
-  'dialogs.share.linkHeading': 'Link',
   'dialogs.share.peopleHeading': 'People',
-  'dialogs.share.getLink': 'Get Link',
   'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors and viewers see changes live.',
-  'dialogs.roomLink.label': 'Link to this shared document',
-  'dialogs.roomLink.note': 'Anyone with this link can open the document and edit it with you. Changes show up live for everyone.',
-  'dialogs.roomLink.copy': 'Copy Link',
-  'dialogs.roomLink.copied': 'Copied',
 
   // Sign in
   'dialogs.signIn.title': 'Sign in',

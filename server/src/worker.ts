@@ -5,15 +5,15 @@ import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
-import { handleDocuments, ownStorage, resolveAccess, roomFor, type DocumentRoute } from './documents.ts';
+import { handleDocuments, ownStorage, resolveAccess, type DocumentRoute } from './documents.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
 import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
 import { Room } from './room.ts';
+import { joinRoom, roomHeaders } from './roomGate.ts';
 import { handleSearch } from './search.ts';
-import type { Role } from './sharing.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError, existingUserDb } from './userDb.ts';
 
@@ -38,18 +38,6 @@ async function requireOwnerSync(env: Env, userId: string, ownerId: string): Prom
   if (ownerId === userId) throw subscriptionRequired();
   throw new HttpError(403, 'the owner’s subscription has ended', 'subscription');
 }
-
-const roomHeaders = (headers: Headers, userId: string, role: Role, ownerId: string, docId: string, picture: string | null): Headers => {
-  const out = new Headers(headers);
-  // Set here and nowhere else: whatever the client sent is replaced.
-  out.set('x-user', userId);
-  out.set('x-role', role);
-  out.set('x-owner', ownerId);
-  out.set('x-doc', docId);
-  out.delete('x-picture');
-  if (picture) out.set('x-picture', picture);
-  return out;
-};
 
 const handler: ExportedHandler = {
   async fetch(request, env, ctx) {
@@ -99,9 +87,8 @@ const handler: ExportedHandler = {
         if (!access) throw new HttpError(404, 'not found');
         // The room saves into the owner's storage, so the owner must have sync (whoever is joining).
         await requireOwnerSync(env, userId, access.ownerId);
-        const room = roomFor(env, docId);
         const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId, roomMatch[2] ? null : await pictureOf(env, userId));
-        return room.fetch(new Request(`https://room/${roomMatch[2] ? 'document' : 'ws'}`, { headers }));
+        return joinRoom(env, docId, headers, !!roomMatch[2]);
       }
 
       // GET /api/subscription: whether this user has paid for sync.

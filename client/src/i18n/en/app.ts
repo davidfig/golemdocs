@@ -66,8 +66,6 @@ export const app = {
   'app.roomViewOnly': 'view only',
   'app.roomPeople.one': '{count} person here',
   'app.roomPeople': '{count} people here',
-  'app.collabNotHere': 'This document can’t be shared',
-  'app.collabFailed': 'Can’t collaborate: {message}',
   'app.leaveRoomToSwitch': 'Leave the collaboration room to switch formats',
 
   // Account and cloud

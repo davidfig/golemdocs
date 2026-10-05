@@ -54,14 +54,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.remove': 'Entfernen',
   'dialogs.share.nobody': 'Noch für niemanden freigegeben.',
   'dialogs.share.done': 'Fertig',
-  'dialogs.share.linkHeading': 'Link',
   'dialogs.share.peopleHeading': 'Personen',
-  'dialogs.share.getLink': 'Link abrufen',
   'dialogs.share.note': 'Die Personen müssen sich einmal bei Golem Docs angemeldet haben. Bearbeiter und Leser sehen Änderungen in Echtzeit.',
-  'dialogs.roomLink.label': 'Link zu diesem geteilten Dokument',
-  'dialogs.roomLink.note': 'Jeder, der diesen Link hat, kann das Dokument öffnen und gemeinsam mit Ihnen bearbeiten. Änderungen erscheinen für alle live.',
-  'dialogs.roomLink.copy': 'Link kopieren',
-  'dialogs.roomLink.copied': 'Kopiert',
 
   // Sign in
   'dialogs.signIn.title': 'Anmelden',

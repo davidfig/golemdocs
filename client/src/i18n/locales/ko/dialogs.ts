@@ -54,14 +54,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.remove': '제거',
   'dialogs.share.nobody': '아직 공유한 사람이 없습니다.',
   'dialogs.share.done': '완료',
-  'dialogs.share.linkHeading': '링크',
   'dialogs.share.peopleHeading': '사용자',
-  'dialogs.share.getLink': '링크 가져오기',
   'dialogs.share.note': '상대방이 Golem Docs에 한 번 로그인한 적이 있어야 합니다. 편집자와 보기 권한 사용자는 변경 내용을 실시간으로 볼 수 있습니다.',
-  'dialogs.roomLink.label': '이 공유 문서의 링크',
-  'dialogs.roomLink.note': '이 링크가 있는 사람은 누구나 문서를 열고 함께 편집할 수 있습니다. 변경 내용은 모든 사용자에게 실시간으로 표시됩니다.',
-  'dialogs.roomLink.copy': '링크 복사',
-  'dialogs.roomLink.copied': '복사됨',
 
   // Sign in
   'dialogs.signIn.title': '로그인',

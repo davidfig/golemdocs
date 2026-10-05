@@ -13,7 +13,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Rename (File ▸ Rename, or click the name centred in the menu bar; also an AI tool, `rename_document`). Not for built-in pages or documents shared by someone else
 - Convert To (Word, ODT, HTML, PDF, Markdown, text)
 - Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab)
-- Share: a link to a live room (no account needed) and, for cloud documents, sharing with people by email; Sync Now
+- Share: sharing a cloud document with people by email; Sync Now
 - Sign In, Sign Out, Clear Local Data
 
 **Edit**

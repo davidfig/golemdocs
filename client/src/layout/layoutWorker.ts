@@ -1827,8 +1827,8 @@ class OpenDocument {
     return { url, checkbox };
   }
 
-  /** Right click: selects the mistake under the point and reports it for the menu (nothing, if there is none). */
-  private async spellAt(pageId: number, x: number, y: number): Promise<void> {
+  /** Selects the mistake under the point (unless `select` is false) and reports it for the menu (nothing, if there is none). */
+  private async spellAt(pageId: number, x: number, y: number, select: boolean): Promise<void> {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session || this.closed || this.annotator) return;
@@ -1842,7 +1842,7 @@ class OpenDocument {
       const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && hit.offset <= i.end);
       if (issue) {
         this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
-        editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
+        if (select) editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
       }
     }
     this.reveal = false;
@@ -1943,7 +1943,7 @@ class OpenDocument {
       live.livePreview = wire.on;
       return this.syncRaw().then(() => this.finishRaw());
     }
-    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y);
+    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
     if (isPdfCommand(wire)) return;

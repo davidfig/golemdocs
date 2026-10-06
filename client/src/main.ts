@@ -55,6 +55,7 @@ import { checkoutUrl, fetchSubscription, portalUrl, SubscriptionError, waitForSu
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
+import { NewVersionNotice } from './ui/newVersionNotice.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { WatchBanner } from './ui/watchBanner.ts';
 import { Assistant } from './assistant/index.ts';
@@ -71,7 +72,7 @@ import { arrangePages, columnsToFill, nearestPage, type Bounds } from './documen
 import { LayoutClient } from './layout/layoutClient.ts';
 import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
 import type { TextRoom } from './textEditor/view.ts';
-import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type WireCommand, type WordStats } from './layout/protocol.ts';
+import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type WireCommand, type WordStats } from './layout/protocol.ts';
 import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from './webgl/text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
@@ -2873,7 +2874,7 @@ function applySelection(update: SelectionUpdate): void {
   updateCursor();
   if (update.search) findDialog.report(update.search);
   if (update.spell?.menu) {
-    if (update.spell.issue && spellMenuAt) spellMenu.show(update.spell.issue, spellMenuAt.x, spellMenuAt.y);
+    showSpellMenu(update.spell.issue, spellMenuAt);
     spellMenuAt = null;
   } else if (update.spell) spellDialog.report(update.spell);
   if (update.stats !== undefined) {
@@ -3458,6 +3459,8 @@ canvas.addEventListener('pointerleave', () => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'touch') return touchMove(e);
+  if (e.buttons === 0) spellHoverMoved(e);
+  else spellHoverStop();
   pointerMoved(e.offsetX, e.offsetY);
   hoverInside = true;
   linkKeyChanged(e);
@@ -4024,7 +4027,66 @@ function toggleFilesPanel(): void {
   chrome.update({ filesPanel: filesOpen });
 }
 
-let spellMenuAt: { x: number; y: number } | null = null;
+/** Where the menu being asked for goes, and, when the pointer only rests on the mistake, the point to select it at if a suggestion is chosen. */
+type SpellMenuAt = { x: number; y: number; hover?: { page: number; px: number; py: number } };
+let spellMenuAt: SpellMenuAt | null = null;
+
+/** The menu for a mistake the layout worker found at a point: after a right click, or because the pointer rested there. */
+function showSpellMenu(issue: SpellIssue | null, at: SpellMenuAt | null): void {
+  if (!at) return;
+  if (!at.hover) {
+    if (issue) spellMenu.show(issue, at.x, at.y);
+    return;
+  }
+  // The pointer rested here: a right-click menu that is open is left alone; the mistake menu follows the pointer from one mistake to the next, and goes when it is on none.
+  if (spellMenu.isOpen && !spellMenu.isHover) return;
+  if (!issue) return spellMenu.close(false);
+  if (spellMenu.isHover && spellMenu.issue?.text === issue.text && spellMenu.issue.message === issue.message) return;
+  const { page, px, py } = at.hover;
+  const select = () => void (textView.active ? textView.spellIssueAt(px, py) : send({ kind: 'spellAt', page, x: px, y: py }));
+  spellMenu.show(issue, at.x, at.y + SPELL_HOVER_BELOW_PX, { select });
+}
+
+// The pointer resting on a squiggle opens the same menu after a pause (it does not move the caret or select the word, so typing is not in its way).
+const SPELL_HOVER_DELAY_MS = 600;
+/** The menu opens this far under the pointer, so it does not cover the word. */
+const SPELL_HOVER_BELOW_PX = 18;
+/** The pointer may cross this much space between the word and its menu without the menu going. */
+const SPELL_HOVER_BRIDGE_PX = 32;
+let spellHoverTimer = 0;
+
+function spellHoverStop(): void {
+  window.clearTimeout(spellHoverTimer);
+  spellHoverTimer = 0;
+}
+
+/** The pointer moved over the document with no button down: look for a mistake under it once it is still. */
+function spellHoverMoved(e: PointerEvent): void {
+  spellHoverStop();
+  if (spellMenu.isOpen && !spellMenu.isHover) return;
+  // On the menu (or the way to it): it stays.
+  if (spellMenu.isHover && spellMenu.near(e.clientX, e.clientY, SPELL_HOVER_BRIDGE_PX)) return;
+  if (!spellMenu.isHover && !spellDialog.checkingLive) return;
+  const at = { x: e.clientX, y: e.clientY, ox: e.offsetX, oy: e.offsetY };
+  spellHoverTimer = window.setTimeout(() => {
+    spellHoverTimer = 0;
+    // Only while the editor has the keyboard (not while the person types in a dialog), and nothing else is in the way.
+    const editing = textView.active ? textView.hasFocus : document.activeElement === input;
+    if (!editing || annotating || !loaded) return;
+    if (textView.active) {
+      void textView.spellIssueAt(at.ox, at.oy, false).then((issue) => showSpellMenu(issue, { x: at.x, y: at.y, hover: { page: 0, px: at.ox, py: at.oy } }));
+      return;
+    }
+    const hit = pageAt(at.ox, at.oy);
+    if (!hit) return void (spellMenu.isHover && spellMenu.close(false));
+    spellMenuAt = { x: at.x, y: at.y, hover: { page: hit.page.id, px: hit.x, py: hit.y } };
+    send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y, select: false });
+  }, SPELL_HOVER_DELAY_MS);
+}
+canvas.addEventListener('pointerleave', spellHoverStop);
+canvas.addEventListener('pointerdown', spellHoverStop, true);
+window.addEventListener('keydown', spellHoverStop, true);
+
 canvas.addEventListener('contextmenu', (e) => {
   // The menu takes the pointer: a press that was under way is over, and the editor keeps the keyboard.
   endPointer();
@@ -4096,6 +4158,9 @@ const dashboard = new Dashboard(document.body, {
 
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
+
+// A new release: offer What's New (once per version, unless turned off).
+new NewVersionNotice(document.body, () => openSource('changelog'));
 
 /**
  * The person's other documents, for the assistant: this browser's copies and the account's, and

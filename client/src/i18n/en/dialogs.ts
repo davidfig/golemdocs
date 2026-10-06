@@ -63,6 +63,13 @@ export const dialogs = {
   'dialogs.signIn.notNow': 'Not now',
   'dialogs.signIn.subscribeNote': 'Sign in to subscribe. Once you are signed in, you go straight to checkout.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'New version',
+  'dialogs.newVersion.message': 'Golem Docs {version} has been released.',
+  'dialogs.newVersion.view': 'See What’s New',
+  'dialogs.newVersion.off': 'Don’t show again',
+  'dialogs.newVersion.close': 'Close',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Shared computer',
   'dialogs.sharedDevice.clear': 'Clear Local Data…',

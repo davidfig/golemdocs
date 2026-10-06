@@ -114,7 +114,8 @@ export type WireCommand =
   /** Whether the paragraph the caret is in shows its Markdown source, in Markdown documents (see livePreview.ts). */
   | { kind: 'livePreview'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
-  | { kind: 'spellAt'; page: number; x: number; y: number }
+  /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
+  | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
   | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean; /** The status bar is asking: the answer comes back as `footerStats`, not `stats`. */ footer?: boolean }
   /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */

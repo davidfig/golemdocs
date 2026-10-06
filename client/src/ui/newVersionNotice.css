@@ -1,0 +1,62 @@
+/* The new-version note (see newVersionNotice.ts), in the bottom left of the window. */
+
+.wm-version-notice {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--wm-menu-border);
+  border-radius: var(--wm-radius);
+  background: var(--wm-face);
+  box-shadow: var(--wm-float-shadow);
+  font: 12px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: var(--wm-text, #000);
+}
+
+.wm-version-notice[hidden] {
+  display: none;
+}
+
+.wm-version-notice p {
+  margin: 0 18px 8px 0;
+}
+
+.wm-version-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wm-version-notice-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.wm-version-notice-close svg {
+  fill: none;
+  stroke: var(--wm-text, #000);
+  stroke-width: 1.5;
+}
+
+.wm-version-notice-off {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--wm-text, #000);
+  text-decoration: underline;
+  cursor: pointer;
+}

@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': '暂时不要',
   'dialogs.signIn.subscribeNote': '登录后即可订阅。登录后将直接进入结账页面。',
 
+  // New version notice
+  'dialogs.newVersion.label': '新版本',
+  'dialogs.newVersion.message': 'Golem Docs {version} 已发布。',
+  'dialogs.newVersion.view': '查看新功能',
+  'dialogs.newVersion.off': '不再显示',
+  'dialogs.newVersion.close': '关闭',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': '公用电脑',
   'dialogs.sharedDevice.clear': '清除本地数据…',

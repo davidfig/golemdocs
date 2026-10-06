@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': 'Non ora',
   'dialogs.signIn.subscribeNote': 'Accedi per abbonarti. Dopo l’accesso passi direttamente al pagamento.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Nuova versione',
+  'dialogs.newVersion.message': 'È stata rilasciata Golem Docs {version}.',
+  'dialogs.newVersion.view': 'Vedi le novità',
+  'dialogs.newVersion.off': 'Non mostrare più',
+  'dialogs.newVersion.close': 'Chiudi',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Computer condiviso',
   'dialogs.sharedDevice.clear': 'Cancella dati locali…',

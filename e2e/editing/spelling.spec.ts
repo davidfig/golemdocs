@@ -359,3 +359,69 @@ test.describe('squiggles and the right-click menu', () => {
   void MOD;
   void waitCaretSettled;
 });
+
+test.describe('resting the pointer on a squiggle', () => {
+  const menu = (app: App) => app.page.getByRole('menu', { name: 'Spelling and Grammar' });
+
+  /** Types the text, puts the caret at its end, and moves the pointer to the middle of [from, to) (no click). */
+  async function hoverWord(app: App, text: string, from: number, to: number) {
+    await app.blank();
+    await app.editor.focus();
+    await app.page.keyboard.insertText(text);
+    await expect.poll(() => app.text()).toBe(text);
+    const gaps = await lineGaps(app, text.length);
+    const at = { x: (gaps[from].x + gaps[to].x) / 2, y: gaps[0].y };
+    await app.page.mouse.move(at.x - 40, at.y + 60);
+    await app.page.mouse.move(at.x, at.y, { steps: 4 });
+    return at;
+  }
+
+  test('opens the spelling menu after a pause, without selecting the word or moving the caret', async ({ app }) => {
+    await hoverWord(app, 'I recieve mail.', 2, 9);
+    await expect(menu(app)).toBeVisible();
+    await expect(menu(app).getByRole('menuitem', { name: 'receive', exact: true })).toBeVisible();
+    expect(await app.selectedText()).toBe('');
+  });
+
+  test('choosing a suggestion fixes the word', async ({ app }) => {
+    await hoverWord(app, 'I recieve mail.', 2, 9);
+    await menu(app).getByRole('menuitem', { name: 'receive', exact: true }).click();
+    await expect(menu(app)).toBeHidden();
+    await expect.poll(() => app.text()).toBe('I receive mail.');
+  });
+
+  test('typing carries on, and closes the menu', async ({ app }) => {
+    await hoverWord(app, 'I recieve mail.', 2, 9);
+    await expect(menu(app)).toBeVisible();
+    await app.page.keyboard.type('X');
+    await expect(menu(app)).toBeHidden();
+    await expect.poll(() => app.text()).toBe('I recieve mail.X');
+  });
+
+  test('moving the pointer off the word closes it', async ({ app, page }) => {
+    const at = await hoverWord(app, 'I recieve mail.', 2, 9);
+    await expect(menu(app)).toBeVisible();
+    await page.mouse.move(at.x + 400, at.y + 300, { steps: 6 });
+    await expect(menu(app)).toBeHidden();
+  });
+
+  test('a correctly spelled word opens nothing', async ({ app }) => {
+    await hoverWord(app, 'I receive mail.', 2, 9);
+    await app.page.waitForTimeout(1200);
+    await expect(menu(app)).toHaveCount(0);
+  });
+
+  test('with spelling and grammar checks off it opens nothing', async ({ app }) => {
+    await app.blank();
+    await app.editor.focus();
+    await app.page.keyboard.insertText('I recieve mail.');
+    await openSpelling(app);
+    await spell(app).getByRole('checkbox', { name: 'Check spelling as you type' }).uncheck();
+    await spell(app).getByRole('checkbox', { name: 'Check grammar' }).uncheck();
+    await btn(app, 'Close').click();
+    const gaps = await lineGaps(app, 15);
+    await app.page.mouse.move((gaps[2].x + gaps[9].x) / 2, gaps[0].y, { steps: 4 });
+    await app.page.waitForTimeout(1200);
+    await expect(menu(app)).toHaveCount(0);
+  });
+});

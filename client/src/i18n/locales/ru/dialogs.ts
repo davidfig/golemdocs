@@ -65,6 +65,13 @@ export const dialogs: Catalog = {
   'dialogs.signIn.notNow': 'Не сейчас',
   'dialogs.signIn.subscribeNote': 'Войдите, чтобы оформить подписку. После входа вы сразу перейдёте к оплате.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Новая версия',
+  'dialogs.newVersion.message': 'Вышла новая версия Golem Docs {version}.',
+  'dialogs.newVersion.view': 'Что нового',
+  'dialogs.newVersion.off': 'Больше не показывать',
+  'dialogs.newVersion.close': 'Закрыть',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Общий компьютер',
   'dialogs.sharedDevice.clear': 'Очистить локальные данные…',

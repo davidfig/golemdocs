@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': '나중에',
   'dialogs.signIn.subscribeNote': '구독하려면 로그인하세요. 로그인하면 바로 결제 화면으로 이동합니다.',
 
+  // New version notice
+  'dialogs.newVersion.label': '새 버전',
+  'dialogs.newVersion.message': 'Golem Docs {version}이(가) 출시되었습니다.',
+  'dialogs.newVersion.view': '새로운 기능 보기',
+  'dialogs.newVersion.off': '다시 표시 안 함',
+  'dialogs.newVersion.close': '닫기',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': '공용 컴퓨터',
   'dialogs.sharedDevice.clear': '로컬 데이터 지우기…',

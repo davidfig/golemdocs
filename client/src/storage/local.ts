@@ -2,7 +2,7 @@
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
 import type { DocIndex } from '@golemdocs/docx';
-import { LOCAL_LIMITS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
+import { LOCAL_LIMITS, TRASH_MS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import { CHUNK_ALGO, CHUNK_MIN_FILE, assemble, chunkBytes } from './chunker.ts';
@@ -48,6 +48,8 @@ const CHUNK_REFS = 'chunkRefs';
 // A document's history in this browser (see "History" below): its checkpoints' details by document id, and what each one holds by `<id>/<version>`.
 const HISTORY = 'history';
 const HISTORY_DATA = 'historyData';
+// Documents deleted from this browser, kept for 30 days (see "Trash" below): their catalogue records by document id. Everything else about them (bytes, chunks, history, thumbnail) stays where it was.
+const TRASH = 'trash';
 
 /** What is stored of a document kept as chunks. */
 export interface StoredManifest {
@@ -65,7 +67,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 6);
+      const request = indexedDB.open(DB_NAME, 7);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -84,6 +86,7 @@ function openDb(): Promise<IDBDatabase> {
           request.result.createObjectStore(HISTORY);
           request.result.createObjectStore(HISTORY_DATA);
         }
+        if (from < 7) request.result.createObjectStore(TRASH);
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -433,11 +436,14 @@ export async function releaseToGuest(owner: string): Promise<void> {
 /** Deletes an account's copies from this browser (it signed out). Its cloud documents are untouched. */
 export async function deleteOwnedBy(owner: string): Promise<void> {
   for (const info of ownedBy(await listSaved(), owner)) await deleteSaved(info.id);
+  // What the account deleted from this browser goes too: it is not the next person's to restore.
+  for (const { info } of await trashedRecords()) if (info.owner === owner) await deleteSaved(info.id);
 }
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH], 'readwrite');
+  tx.objectStore(TRASH).delete(id);
   await forgetHistory(tx, id);
   await release(tx, id);
   tx.objectStore(META).delete(id);
@@ -722,4 +728,69 @@ export async function deleteVersion(id: string, version: number): Promise<void> 
     await dropData(tx, id, gone);
   }
   await finished(tx);
+}
+
+// --- Trash -----------------------------------------------------------------------------------------------------------------
+// A document deleted from this browser by the person (not one an account removes when it signs out, or one found to be deleted
+// elsewhere) is not deleted: its catalogue record moves from META to TRASH, so every list of documents stops showing it, and
+// everything else about it stays put. Restoring moves the record back; deleting for good (or 30 days, `TRASH_MS`) does what
+// `deleteSaved` always did. A document that has a copy in an account is deleted from the account's own trash instead (see the server),
+// and only this browser's copy of it is deleted here.
+
+/** A deleted document, as kept in the trash. */
+export interface TrashedSaved {
+  info: SavedInfo;
+  /** When it was deleted. */
+  deletedAt: number;
+}
+
+async function trashedRecords(): Promise<TrashedSaved[]> {
+  const db = await openDb();
+  return done(db.transaction(TRASH).objectStore(TRASH).getAll() as IDBRequest<TrashedSaved[]>);
+}
+
+/** Moves a saved document to the trash. */
+export async function trashSaved(id: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction([META, TRASH], 'readwrite');
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  if (info) {
+    tx.objectStore(TRASH).put({ info, deletedAt: Date.now() } satisfies TrashedSaved, id);
+    tx.objectStore(META).delete(id);
+  }
+  await finished(tx);
+}
+
+/** What is in the trash, newest first; what has been there for 30 days is deleted for good first. */
+export async function listTrashedSaved(now = Date.now()): Promise<TrashedSaved[]> {
+  const all = await trashedRecords();
+  const expired = all.filter((r) => now - r.deletedAt >= TRASH_MS);
+  for (const r of expired) await deleteSaved(r.info.id);
+  return all.filter((r) => !expired.includes(r)).sort((a, b) => b.deletedAt - a.deletedAt);
+}
+
+/**
+ * Puts a trashed document back. A document made while signed out comes back as `owner`'s when someone is signed in (as adopting
+ * the guest documents does at sign-in), which the caller then uploads. Null if it is not in the trash.
+ */
+export async function restoreTrashedSaved(id: string, owner?: string): Promise<SavedInfo | null> {
+  const db = await openDb();
+  const tx = db.transaction([META, TRASH], 'readwrite');
+  const record = (await done(tx.objectStore(TRASH).get(id))) as TrashedSaved | undefined;
+  if (!record) {
+    await finished(tx);
+    return null;
+  }
+  const { releasedFrom: _from, ...rest } = record.info;
+  const info: SavedInfo = record.info.owner === undefined && owner !== undefined ? { ...rest, owner } : record.info;
+  tx.objectStore(META).put(info);
+  tx.objectStore(TRASH).delete(id);
+  await finished(tx);
+  return info;
+}
+
+/** Deletes trashed documents for good: one, or (without an id) all of them. */
+export async function purgeTrashedSaved(id?: string): Promise<void> {
+  const ids = id !== undefined ? [id] : (await trashedRecords()).map((r) => r.info.id);
+  for (const one of ids) await deleteSaved(one);
 }

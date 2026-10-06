@@ -292,7 +292,7 @@ export class Chrome {
       { id: 'file.rename', label: t('chrome.file.rename'), tooltip: t('chrome.file.rename.tip'), run: () => this.renameDocument(), enabled: (s) => s.renamable },
       dialog('file.properties', t('chrome.file.properties'), 'properties', { icon: 'properties' }),
       dialog('file.versionHistory', t('history.menu'), 'versionHistory', { tooltip: t('history.menu.tip') }),
-      dialog('file.trash', t('history.trashMenu'), 'trash', { tooltip: t('history.trashMenu.tip'), visible: (s) => s.subscription === 'active' }),
+      dialog('file.trash', t('history.trashMenu'), 'trash', { tooltip: t('history.trashMenu.tip') }),
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
       // Signed out, Subscribe signs in first. Once subscribed, the same place manages it.
       a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' }),

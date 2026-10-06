@@ -5,7 +5,7 @@ import { deskColor, onThemeChange, pagesDark } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { zipDocuments } from './storage/archive.ts';
 import { pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
@@ -32,6 +32,10 @@ import {
   saveThumbnail,
   deleteSearchIndexes,
   listSearchIndexes,
+  listTrashedSaved,
+  purgeTrashedSaved,
+  restoreTrashedSaved,
+  trashSaved,
   putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
@@ -93,6 +97,8 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
+import { loadTrash, restoreById, type TrashDeps, type TrashItem } from './trash.ts';
+import { TRASH_MS } from '@golemdocs/ops';
 import { deviceVersionBytes, loadHistory, restoreFromAccount, restoredName, saveNamedVersion, type HistoryEntry, type HistoryTarget } from './history.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
 import { showOptions } from './ui/optionsDialog.ts';
@@ -1925,7 +1931,9 @@ async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readon
     for (const entry of entries) {
       if (refused.has(cloudIdOf(entry)) || (entry.cloud?.folderId && refused.has(entry.cloud.folderId))) continue;
       if (!entry.local) continue;
-      await deleteSaved(entry.local.id);
+      // The account keeps what it deleted for 30 days (its trash); a document only this browser has goes to this browser's.
+      if (account && cloudIdOf(entry)) await deleteSaved(entry.local.id);
+      else await trashSaved(entry.local.id);
       removed.add(entry.local.id);
       progress?.update(++done, total);
     }
@@ -3960,8 +3968,31 @@ const versionHistoryDialog = new VersionHistoryDialog({
   focusEditor: focusInput,
 });
 
-// File ▸ Trash: the account's deleted documents.
-const trashDialog = new TrashDialog({ available: () => account !== null, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });
+// File ▸ Trash: what was deleted from this browser and from the account.
+const trashDeps: TrashDeps = {
+  hasAccount: () => account !== null,
+  // A document made while signed out can be brought back by whoever is signed in now (it is adopted, like the guest documents at sign-in).
+  listDevice: async () =>
+    (await listTrashedSaved())
+      .filter(({ info }) => info.owner === undefined || info.owner === account?.id)
+      .map(({ info, deletedAt }): TrashItem => ({ source: 'device', id: info.id, name: info.name, size: info.size, deletedAt, purgeAt: deletedAt + TRASH_MS })),
+  listAccount: async () => (await listTrash()).map((d): TrashItem => ({ source: 'account', id: d.id, name: d.name, size: d.size, deletedAt: d.deletedAt, purgeAt: d.purgeAt })),
+  async restore(item) {
+    if (item.source === 'account') {
+      await restoreFromTrash(item.id);
+      return;
+    }
+    const info = await restoreTrashedSaved(item.id, account?.id);
+    if (!info) throw new Error(t('trash.gone'));
+    library.putLocal(info);
+    if (account) scheduleUpload(info.id);
+  },
+  async purge(item) {
+    if (!item || item.source === 'device') await purgeTrashedSaved(item?.id);
+    if (account && (!item || item.source === 'account')) await purgeTrash(item?.id);
+  },
+};
+const trashDialog = new TrashDialog({ deps: trashDeps, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });
 
 // Tools ▸ Word Count.
 const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput });
@@ -4258,20 +4289,8 @@ const assistantTools = appTools({
     entries: () => library.entries,
     folders: listFoldersHere,
     deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
-    trash: async () => (account ? listTrash() : null),
-    restoreFromTrash: async (ids) => {
-      const restored: string[] = [];
-      const failed: string[] = [];
-      for (const id of ids) {
-        try {
-          await restoreFromTrash(id);
-          restored.push(id);
-        } catch (error) {
-          failed.push(`${id}: ${(error as Error).message}`);
-        }
-      }
-      return { restored, failed };
-    },
+    trash: async () => (await loadTrash(trashDeps)).items,
+    restoreFromTrash: (ids) => restoreById(trashDeps, ids),
     changed: () => refreshLibrary(),
   },
   history: {

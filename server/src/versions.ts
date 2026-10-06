@@ -24,8 +24,7 @@ export interface VersionRow {
 /** What the client sees of one. */
 export const describeVersion = (row: VersionRow) => ({ version: row.version, size: row.size, name: row.name });
 
-/** What a deleted document stays in the trash for. */
-export const TRASH_MS = 30 * 24 * 60 * 60 * 1000;
+export { TRASH_MS } from '@golemdocs/ops';
 
 /** The catalogue row of the document a checkpoint is of (the fields this module needs). */
 export interface Live {

@@ -1,16 +1,15 @@
-// File ▸ Trash: the account's deleted documents, kept for 30 days (server/src/trash.ts). Each can be brought back or deleted for good, and the
-// whole trash can be emptied. Only an account with sync has one; documents deleted while signed out are not recoverable.
+// File ▸ Trash: what was deleted from this browser and from the account, each kept for 30 days. Each can be brought back or deleted for good,
+// and the whole trash can be emptied. The lists and the work are in ../trash.ts; this only shows them.
 
 import { getLocale, t } from '../i18n/index.ts';
-import { listTrash, purgeTrash, restoreFromTrash, type TrashedDocument } from '../cloud.ts';
+import { loadTrash, type TrashDeps, type TrashItem } from '../trash.ts';
 import { formatSize } from './dashboardFormat.ts';
 import { confirmDelete } from './deleteDialog.ts';
 import { h } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
 
 export interface TrashHost {
-  /** Whether the account has a trash to show (signed in with sync). */
-  available(): boolean;
+  deps: TrashDeps;
   /** A document came back: the lists of documents need to hear of it. */
   restored(): void;
   tell(text: string): void;
@@ -26,11 +25,13 @@ export class TrashDialog {
 
   open(): void {
     if (this.dialog) return;
+    const deps = this.host.deps;
     const list = h('ul', { class: 'wm-history-list', attrs: { 'aria-label': t('trash.title') } });
+    const notes = h('div', { class: 'wm-history-notes' });
     const empty = h('button', { class: 'wm-button wm-danger', text: t('trash.emptyTrash'), attrs: { type: 'button' } });
     empty.hidden = true;
     const close = h('button', { class: 'wm-button', text: t('trash.close'), attrs: { type: 'button' } });
-    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, h('p', { class: 'wm-history-intro', text: t('trash.note') }), list);
+    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, h('p', { class: 'wm-history-intro', text: t('trash.note') }), notes, list);
     const dialog = h('dialog', { class: 'wm-dialog wm-history', attrs: { 'aria-label': t('trash.title') } }, dialogTitleBar(t('trash.title'), () => dialog.close()), body, h('div', { class: 'wm-dialog-buttons spread' }, empty, close));
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     close.addEventListener('click', () => dialog.close());
@@ -41,28 +42,21 @@ export class TrashDialog {
     });
     this.dialog = dialog;
 
-    let items: TrashedDocument[] = [];
-    const show = (text: string) => list.replaceChildren(h('li', { class: 'wm-history-empty', text }));
+    let items: TrashItem[] = [];
     const refresh = async () => {
-      if (!this.host.available()) {
-        empty.hidden = true;
-        return show(t('trash.signedOut'));
-      }
-      show(t('trash.loading'));
-      try {
-        items = await listTrash();
-      } catch (error) {
-        empty.hidden = true;
-        return show(t('trash.loadFailed', { message: (error as Error).message }));
-      }
+      list.replaceChildren(h('li', { class: 'wm-history-empty', text: t('trash.loading') }));
+      notes.replaceChildren();
+      const loaded = await loadTrash(deps);
       if (!this.dialog) return;
+      items = loaded.items;
+      if (loaded.accountError !== null) notes.append(h('p', { class: 'wm-history-note wm-history-warning', text: t('trash.accountFailed', { message: loaded.accountError }) }));
       empty.hidden = items.length === 0;
       list.replaceChildren(...(items.length ? items.map((item) => this.row(item, refresh)) : [h('li', { class: 'wm-history-empty', text: t('trash.empty') })]));
     };
     empty.addEventListener('click', () => {
-      void confirmDelete(t('trash.emptyTitle'), items.map((item) => item.name), this.dialog ?? document.body).then(async (yes) => {
+      void confirmDelete(t('trash.emptyTitle'), items.map((item) => item.name), dialog).then(async (yes) => {
         if (!yes) return;
-        await purgeTrash().catch((error: unknown) => this.host.tell((error as Error).message));
+        await deps.purge().catch((error: unknown) => this.host.tell((error as Error).message));
         void refresh();
       });
     });
@@ -71,17 +65,19 @@ export class TrashDialog {
     void refresh();
   }
 
-  private row(item: TrashedDocument, refresh: () => Promise<void>): HTMLElement {
+  private row(item: TrashItem, refresh: () => Promise<void>): HTMLElement {
+    const deps = this.host.deps;
     const info = h(
       'div',
       { class: 'wm-history-info' },
       h('span', { class: 'wm-history-name-text', text: item.name }),
       h('span', { class: 'wm-history-meta', text: `${t('trash.deleted', { when: date(item.deletedAt) })} · ${t('trash.until', { when: date(item.purgeAt) })} · ${formatSize(item.size)}` }),
+      h('span', { class: 'wm-history-source', text: t(item.source === 'account' ? 'history.account' : 'history.device') }),
     );
     const restore = h('button', { class: 'wm-button', text: t('trash.restore'), attrs: { type: 'button' } });
     restore.addEventListener('click', () => {
       restore.disabled = true;
-      restoreFromTrash(item.id).then(
+      deps.restore(item).then(
         () => {
           this.host.tell(t('trash.restored', { name: item.name }));
           this.host.restored();
@@ -97,7 +93,7 @@ export class TrashDialog {
     forever.addEventListener('click', () => {
       void confirmDelete(t('trash.deleteTitle', { name: item.name }), [item.name], this.dialog ?? document.body).then(async (yes) => {
         if (!yes) return;
-        await purgeTrash(item.id).catch((error: unknown) => this.host.tell((error as Error).message));
+        await deps.purge(item).catch((error: unknown) => this.host.tell((error as Error).message));
         void refresh();
       });
     });

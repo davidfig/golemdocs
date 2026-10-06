@@ -20,7 +20,7 @@ const folder = (id: string, parentId: string | null): Folder => ({ id, name: id.
 const doc = (key: string, folderId: string | null): LibraryEntry =>
   ({ key, name: `${key}.docx`, size: 1, updatedAt: 1, local: null, cloud: { id: key, name: key, size: 1, createdAt: 1, updatedAt: 1, thumbAt: null, folderId }, state: 'cloud-only', folderId }) as LibraryEntry;
 
-function setup(trash: { id: string; name: string; deletedAt: number; purgeAt: number }[] | null = []) {
+function setup(trash: { id: string; name: string; source: 'device' | 'account'; deletedAt: number; purgeAt: number }[] = []) {
   calls.length = 0;
   const deleted: [string[], string[]][] = [];
   const restored: string[] = [];
@@ -33,7 +33,7 @@ function setup(trash: { id: string; name: string; deletedAt: number; purgeAt: nu
     deleteEntries: async (list, folderIds) => void deleted.push([list.map((e) => e.key), folderIds]),
     trash: async () => trash,
     restoreFromTrash: async (ids) => {
-      const known = (id: string) => trash?.some((t) => t.id === id) ?? false;
+      const known = (id: string) => trash.some((t) => t.id === id);
       restored.push(...ids.filter(known));
       return { restored: ids.filter(known), failed: ids.filter((id) => !known(id)).map((id) => `${id}: not found`) };
     },
@@ -97,15 +97,14 @@ test('rename_folders renames several at once and says which could not be', async
 });
 
 test('list_trash names what was deleted, with when it goes for good', async () => {
-  const { tools } = setup([{ id: 't1', name: 'Old.docx', deletedAt: Date.UTC(2026, 0, 1), purgeAt: Date.UTC(2026, 0, 31) }]);
+  const { tools } = setup([{ id: 't1', name: 'Old.docx', source: 'device', deletedAt: Date.UTC(2026, 0, 1), purgeAt: Date.UTC(2026, 0, 31) }]);
   const text = await tools.list_trash!({});
-  assert.match(text, /trashed document t1 "Old.docx", deleted 2026-01-01T00:00:00.000Z, kept until 2026-01-31T00:00:00.000Z/);
+  assert.match(text, /trashed document t1 "Old.docx" \(on this device\), deleted 2026-01-01T00:00:00.000Z, kept until 2026-01-31T00:00:00.000Z/);
   assert.equal(await setup([]).tools.list_trash!({}), 'The trash is empty.');
-  assert.match(await setup(null).tools.list_trash!({}), /^Error: the trash is part of the person's account/);
 });
 
 test('restore_from_trash puts back the ids it is given and says which it could not', async () => {
-  const { tools, restored } = setup([{ id: 't1', name: 'A.docx', deletedAt: 1, purgeAt: 2 }]);
+  const { tools, restored } = setup([{ id: 't1', name: 'A.docx', source: 'account', deletedAt: 1, purgeAt: 2 }]);
   const reply = await tools.restore_from_trash!({ files: ['t1', 'zzz'] });
   assert.match(reply, /restored 1 document/);
   assert.match(reply, /zzz: not found/);

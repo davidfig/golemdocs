@@ -2,10 +2,10 @@
 // documents, named, renamed and deleted; and deleted documents brought back from the trash.
 
 import type { Page } from '@playwright/test';
-import { expect, test, type App } from './fixtures';
+import { App, expect, test } from './fixtures';
 import { waitForSaved } from './helpers';
 import { dialog } from '../editing/helpers';
-import { cloudDocs, newPerson, waitForCloudDoc } from '../collab/helpers';
+import { cloudDocs, newPerson, signedOutContext, waitForCloudDoc } from '../collab/helpers';
 
 const history = (page: Page) => dialog(page, 'Version History');
 const rows = (page: Page) => history(page).locator('.wm-history-row');
@@ -124,4 +124,40 @@ test('a document in the account keeps versions there too, and one opens as a new
   await expect.poll(async () => (await cloudDocs(page)).length, { timeout: 30_000 }).toBe(2);
   await expect.poll(() => app.text(), { timeout: 30_000 }).toBe('first draft');
   await person.context.close();
+});
+
+test('a document deleted while signed out goes to this browser’s trash, and Restore brings it back', async ({ browser }) => {
+  const context = await signedOutContext(browser);
+  const page = await context.newPage();
+  const app = new App(page);
+  await app.blank();
+  await app.type('only on this device');
+  await waitForSaved(page);
+  await app.menu('File', 'Open…');
+  const card = dashboard(page).locator('article.wm-card').first();
+  await expect(card).toBeVisible();
+  await card.hover();
+  await card.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(dashboard(page).locator('article.wm-card')).toHaveCount(0);
+
+  // The Trash button is there for everyone, not only for an account.
+  await dashboard(page).getByRole('button', { name: 'Trash' }).click();
+  const trash = dialog(page, 'Trash');
+  await expect(trash.locator('.wm-history-row')).toHaveCount(1);
+  await expect(trash.locator('.wm-history-source')).toHaveText('On this device');
+  await trash.getByRole('button', { name: 'Restore' }).click();
+  await expect(trash.getByText('The trash is empty.')).toBeVisible();
+  await trash.getByRole('button', { name: 'Close' }).first().click();
+  await expect(dashboard(page).locator('article.wm-card')).toHaveCount(1);
+
+  // Deleted again, and this time for good.
+  await card.hover();
+  await card.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await dashboard(page).getByRole('button', { name: 'Trash' }).click();
+  await trash.getByRole('button', { name: 'Delete Forever' }).click();
+  await trash.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(trash.getByText('The trash is empty.')).toBeVisible();
+  await context.close();
 });

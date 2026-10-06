@@ -34,11 +34,15 @@ IndexedDB version 6 adds `history` (document id → its versions, newest first, 
 - a small document's version is a copy of its bytes, stored **after** the save went through in its own transaction (`keepWhole`), so a full disk costs the version, never the save;
 - a chunked document's version is a *hold* on its chunks: one more count in `chunkRefs` per chunk, taken in the save's own transaction before it lets go of the chunks it drops (`holdChunked`). Nothing is copied, so it costs only a few counters.
 
-Deleting a document deletes its history (`forgetHistory`). `listVersions`, `getVersion`, `keepVersion`, `nameVersion`, `deleteVersion` are the API. Local history has no trash: a document deleted from the browser (signed out) is gone, as before.
+Deleting a document for good deletes its history (`forgetHistory`). `listVersions`, `getVersion`, `keepVersion`, `nameVersion`, `deleteVersion` are the API.
+
+### The local trash
+
+A document the person deletes is not deleted when no account's trash is keeping a copy (a guest's document, or an account's that has no cloud copy): `trashSaved` moves its catalogue record from `meta` to the `trash` store (IndexedDB version 7), so every list stops showing it, and leaves its bytes, chunks, history and thumbnail where they were. A document that has a cloud copy is deleted here for good, because the account's trash keeps it (`deleteEntries` in `main.ts`). `restoreTrashedSaved` moves the record back (a document made while signed out comes back as the signed-in person's and is uploaded, as adopting at sign-in does); `purgeTrashedSaved` and `deleteSaved` delete for good. What has been there 30 days (`TRASH_MS`, in `@golemdocs/ops` for both trashes) is deleted when the trash is next listed. Signing out deletes the account's trashed copies with its other copies (`deleteOwnedBy`); Clear Local Data deletes the whole database.
 
 ## The app (`client/src/history.ts`, `ui/versionHistoryDialog.ts`, `ui/trashDialog.ts`)
 
-File › Version History lists this browser's and the account's versions of the open document together (each marked *On this device* or *In your account*, so one moment may appear twice). A source that cannot be reached (offline, no subscription) is reported and the other still shows. File › Trash and a Trash button on the Documents screen (the menu bar is behind it) open the trash. Both are modal dialogs, so a confirmation asked from inside one (`confirmDelete(…, parent)`) is put inside it: everything outside a modal dialog is inert.
+File › Version History lists this browser's and the account's versions of the open document together (each marked *On this device* or *In your account*, so one moment may appear twice). A source that cannot be reached (offline, no subscription) is reported and the other still shows. File › Trash and a Trash button on the Documents screen (the menu bar is behind it) open the trash, which lists this browser's and the account's deleted documents together (`client/src/trash.ts`: each marked *On this device* or *In your account*; the account's failing does not hide this browser's). Both are modal dialogs, so a confirmation asked from inside one (`confirmDelete(…, parent)`) is put inside it: everything outside a modal dialog is inert.
 
 The assistant has the same abilities: `versions` (list, save, restore) and the `files` actions `trash` and `restore` (`server/src/assistantTools.ts`, `client/src/assistant/appTools.ts`, `fileTools.ts`). `delete` in `files` now moves documents to the trash.
 
@@ -50,5 +54,5 @@ R2 charges for writes and storage, not for reads out. A checkpoint is one read a
 
 - A prune racing a delta upload of the *same* document by another tab could delete a chunk the upload counted on; the document then reads as damaged until saved again whole (`missing-chunks` makes the client send everything). It needs two tabs saving one big document while an old checkpoint is being thinned.
 - A refused save (a corrupt delta, a stale base) may still have taken the checkpoint it checked first; it is a real version, and a second attempt finds it already kept.
-- The trash is purged lazily, so an owner who never returns leaves their trashed files in R2 until they do.
+- The trash is purged lazily, so an owner who never returns leaves their trashed files in R2 until they do (and a browser's trash is purged when it is next opened).
 - Versions in the account and in this browser are not reconciled: they are made by different clocks, so they do not line up.

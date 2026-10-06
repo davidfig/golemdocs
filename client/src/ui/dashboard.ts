@@ -369,8 +369,6 @@ export class Dashboard {
     this.renderCrumbs(searching);
 
     this.newFolderButton.hidden = searching;
-    // Only an account has a trash.
-    this.trashButton.hidden = this.host.account() === null;
 
     const cards = shown.map((entry) => this.card(entry));
     const children: (HTMLElement | string)[] = [...shownFolders.map((f) => this.folderCard(f)), ...cards];

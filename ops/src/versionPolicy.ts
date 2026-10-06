@@ -8,6 +8,9 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+/** How long a deleted document stays in the trash, here and in the account. */
+export const TRASH_MS = 30 * DAY;
+
 /** A checkpoint as the policy sees it. */
 export interface VersionStamp {
   /** When this version was the document (its `updatedAt`); also its identity. */

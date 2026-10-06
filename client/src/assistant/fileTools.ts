@@ -13,8 +13,8 @@ export interface FileToolsHost {
   folders(): Promise<Folder[]>;
   /** Deletes documents and folders, the same as the Documents screen's Delete. */
   deleteEntries(entries: LibraryEntry[], folderIds: string[]): Promise<void>;
-  /** The account's trash (deleted documents kept for 30 days); null when there is no account to have one. */
-  trash(): Promise<{ id: string; name: string; deletedAt: number; purgeAt: number }[] | null>;
+  /** The trash: documents deleted from this browser and from the account, kept for 30 days. */
+  trash(): Promise<{ id: string; name: string; source: 'device' | 'account'; deletedAt: number; purgeAt: number }[]>;
   /** Puts trashed documents back; each id that could not be is reported with why. */
   restoreFromTrash(ids: string[]): Promise<{ restored: string[]; failed: string[] }>;
   /** Lists everything again and redraws the screens that show it. */
@@ -142,8 +142,7 @@ export function fileTools(host: FileToolsHost): Record<string, (args: Args) => P
 
     async list_trash() {
       const items = await host.trash();
-      if (items === null) return "Error: the trash is part of the person's account, and nobody with sync is signed in.";
-      return items.length ? items.map((i) => `trashed document ${i.id} "${i.name}", deleted ${new Date(i.deletedAt).toISOString()}, kept until ${new Date(i.purgeAt).toISOString()}`).join('\n') : 'The trash is empty.';
+      return items.length ? items.map((i) => `trashed document ${i.id} "${i.name}" (${i.source === 'account' ? 'in the account' : 'on this device'}), deleted ${new Date(i.deletedAt).toISOString()}, kept until ${new Date(i.purgeAt).toISOString()}`).join('\n') : 'The trash is empty.';
     },
 
     async restore_from_trash(args) {

@@ -2,6 +2,7 @@
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
 import type { DocIndex } from '@golemdocs/docx';
+import { LOCAL_LIMITS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import { CHUNK_ALGO, CHUNK_MIN_FILE, assemble, chunkBytes } from './chunker.ts';
@@ -44,6 +45,9 @@ const SEARCH = 'search';
 const MANIFESTS = 'manifests';
 const CHUNKS = 'chunks';
 const CHUNK_REFS = 'chunkRefs';
+// A document's history in this browser (see "History" below): its checkpoints' details by document id, and what each one holds by `<id>/<version>`.
+const HISTORY = 'history';
+const HISTORY_DATA = 'historyData';
 
 /** What is stored of a document kept as chunks. */
 export interface StoredManifest {
@@ -61,7 +65,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 5);
+      const request = indexedDB.open(DB_NAME, 6);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -75,6 +79,10 @@ function openDb(): Promise<IDBDatabase> {
           request.result.createObjectStore(MANIFESTS);
           request.result.createObjectStore(CHUNKS);
           request.result.createObjectStore(CHUNK_REFS);
+        }
+        if (from < 6) {
+          request.result.createObjectStore(HISTORY);
+          request.result.createObjectStore(HISTORY_DATA);
         }
       };
       request.onsuccess = () => {
@@ -173,9 +181,14 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
     const before = input.id ? await readManifest(db, input.id) : undefined;
     plan = await chunkBytes(view, new Set(before?.hashes));
   }
+  // Does this save replace a version worth keeping? Decided before, while it can still be read (see "History").
+  const previous = input.id ? await versionDue(db, input.id, view.length) : null;
   for (;;) {
-    const info = await commit(db, id, input, view, plan, cloud);
-    if (info) return info;
+    const info = await commit(db, id, input, view, plan, cloud, previous);
+    if (info) {
+      if (previous?.whole) await keepWhole(db, id, previous.info, previous.whole);
+      return info;
+    }
     // What was stored changed while this was being made ready (another tab saved it): everything is sent again, nothing assumed.
     plan = await chunkBytes(view, new Set());
   }
@@ -209,8 +222,8 @@ async function letGo(tx: IDBTransaction, hashes: Iterable<string>): Promise<void
 }
 
 /** Writes a document in one transaction: null (having written nothing) if a chunk the plan counted on is not there. */
-async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo | null> {
-  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS], 'readwrite');
+async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }, previous?: DueVersion | null): Promise<SavedInfo | null> {
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
   const meta = tx.objectStore(META);
   const manifests = tx.objectStore(MANIFESTS);
   const existing = input.id ? ((await done(meta.get(input.id))) as SavedInfo | undefined) : undefined;
@@ -229,6 +242,8 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
       await finished(tx);
       return null;
     }
+    // A checkpoint of the chunked version being replaced holds its chunks before the save lets go of the ones it drops.
+    if (previous && old && existing?.updatedAt === previous.info.updatedAt) await holdChunked(tx, id, previous.info, old);
     // What was stored of the cloud copy still is; a copy that has just come from the cloud is the cloud copy.
     const synced = cloud ? [...wanted] : old?.syncedHashes;
     write = () => {
@@ -249,7 +264,10 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
       tx.objectStore(BYTES).delete(id);
     };
     if (drops.length) await letGo(tx, drops);
-  } else if (old) await release(tx, id, old);
+  } else if (old) {
+    if (previous && existing?.updatedAt === previous.info.updatedAt) await holdChunked(tx, id, previous.info, old);
+    await release(tx, id, old);
+  }
   const info: SavedInfo = {
     ...existing,
     id,
@@ -419,7 +437,8 @@ export async function deleteOwnedBy(owner: string): Promise<void> {
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
+  await forgetHistory(tx, id);
   await release(tx, id);
   tx.objectStore(META).delete(id);
   tx.objectStore(BYTES).delete(id);
@@ -435,10 +454,11 @@ export async function deleteSaved(id: string): Promise<void> {
  */
 export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
   const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
   const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
   if (unchanged) {
+    await forgetHistory(tx, seen.id);
     await release(tx, seen.id);
     tx.objectStore(META).delete(seen.id);
     tx.objectStore(BYTES).delete(seen.id);
@@ -510,4 +530,196 @@ export async function clearAllSaved(): Promise<void> {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error ?? new Error(t('app.storageClearFailed')));
   });
+}
+
+// --- History ---------------------------------------------------------------------------------------------------------------
+// A document's earlier versions, kept in this browser whether or not it is signed in (the cloud keeps its own, for paying accounts:
+// server/src/versions.ts). A save keeps the version it replaces when the shared rules say one is due (`shouldCheckpoint` in
+// @golemdocs/ops), and the same rules thin them. A version of a document kept as chunks holds its chunks by reference (CHUNK_REFS),
+// so it costs only what changed; a small one is a copy of its bytes. History never makes a save fail: a copy that cannot be stored
+// (the browser's quota) is skipped, and a chunked version's hold is just a few counters.
+
+/** One kept version (what the dialog lists). */
+export interface LocalVersion {
+  /** The `updatedAt` of the document as it was; also its identity. */
+  version: number;
+  size: number;
+  /** Set when the person saved it on purpose; those are kept longer. */
+  name: string | null;
+  /** Kept as a hold on the document's chunks rather than a copy. */
+  chunked: boolean;
+}
+
+/** What a chunked version's data is: the manifest without the chunks. */
+interface HeldManifest {
+  hashes: string[];
+  lengths: number[];
+}
+
+/** A version a save is about to replace and should keep; `whole` is its bytes when it is not chunked. */
+interface DueVersion {
+  info: SavedInfo;
+  whole?: ArrayBuffer;
+}
+
+const dataKey = (id: string, version: number): string => `${id}/${version}`;
+const stampOf = (v: LocalVersion): VersionStamp => ({ at: v.version, size: v.chunked ? Math.ceil(v.size / 10) : v.size, ...(v.name !== null ? { named: true } : {}) });
+
+/** The saved copy as it is now, if replacing it with `nextSize` bytes should keep it as a version. */
+async function versionDue(db: IDBDatabase, id: string, nextSize: number): Promise<DueVersion | null> {
+  try {
+    const tx = db.transaction([META, HISTORY, MANIFESTS, BYTES]);
+    const [info, list, manifest] = await Promise.all([
+      done(tx.objectStore(META).get(id)) as Promise<SavedInfo | undefined>,
+      done(tx.objectStore(HISTORY).get(id)) as Promise<LocalVersion[] | undefined>,
+      done(tx.objectStore(MANIFESTS).get(id)) as Promise<StoredManifest | undefined>,
+    ]);
+    if (!info) return null;
+    const kept = list ?? [];
+    if (kept.some((v) => v.version === info.updatedAt)) return null;
+    const lastAt = kept.length ? Math.max(...kept.map((v) => v.version)) : null;
+    if (!shouldCheckpoint({ lastAt, replacedAt: info.updatedAt, replacedSize: info.size, nextSize, now: Date.now() })) return null;
+    if (manifest) return { info };
+    const whole = (await done(tx.objectStore(BYTES).get(id))) as ArrayBuffer | undefined;
+    return whole ? { info, whole } : null;
+  } catch (error) {
+    console.error('history: could not look at the saved copy', error);
+    return null;
+  }
+}
+
+/** Adds `entry` to the document's list and lets go of the versions the rules no longer keep. */
+async function recordVersion(tx: IDBTransaction, id: string, entry: LocalVersion, liveSize: number, data: ArrayBuffer | HeldManifest): Promise<void> {
+  const history = tx.objectStore(HISTORY);
+  const list = (((await done(history.get(id))) as LocalVersion[] | undefined) ?? []).filter((v) => v.version !== entry.version);
+  list.push(entry);
+  list.sort((a, b) => b.version - a.version);
+  tx.objectStore(HISTORY_DATA).put(data, dataKey(id, entry.version));
+  const doomed = new Set(versionsToDrop(list.map(stampOf), Date.now(), { ...LOCAL_LIMITS, maxBytes: byteBudget(liveSize) }));
+  const going = list.filter((v) => doomed.has(v.version));
+  history.put(
+    list.filter((v) => !doomed.has(v.version)),
+    id,
+  );
+  for (const v of going) await dropData(tx, id, v);
+}
+
+/** Deletes what a version held: its copy, or its hold on the chunks. */
+async function dropData(tx: IDBTransaction, id: string, v: LocalVersion): Promise<void> {
+  const data = tx.objectStore(HISTORY_DATA);
+  if (v.chunked) {
+    const held = (await done(data.get(dataKey(id, v.version)))) as HeldManifest | undefined;
+    if (held) await letGo(tx, new Set(held.hashes));
+  }
+  data.delete(dataKey(id, v.version));
+}
+
+/** Keeps the chunked version `old` (of the saved copy `info`) as a version: counts one more hold on each of its chunks. */
+async function holdChunked(tx: IDBTransaction, id: string, info: SavedInfo, old: StoredManifest, name: string | null = null): Promise<void> {
+  const refs = tx.objectStore(CHUNK_REFS);
+  const distinct = [...new Set(old.hashes)];
+  const counts = await Promise.all(distinct.map(async (h) => ((await done(refs.get(h))) as number | undefined) ?? 0));
+  distinct.forEach((h, i) => refs.put(counts[i]! + 1, h));
+  await recordVersion(tx, id, { version: info.updatedAt, size: info.size, name, chunked: true }, info.size, { hashes: old.hashes, lengths: old.lengths });
+}
+
+/** Keeps a small version as a copy of its bytes, after the save that replaced it went through (a failure costs the version, not the save). */
+async function keepWhole(db: IDBDatabase, id: string, info: SavedInfo, bytes: ArrayBuffer, name: string | null = null): Promise<void> {
+  try {
+    const tx = db.transaction([META, HISTORY, HISTORY_DATA, CHUNK_REFS, CHUNKS], 'readwrite');
+    const live = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+    if (!live) return; // deleted meanwhile
+    await recordVersion(tx, id, { version: info.updatedAt, size: info.size, name, chunked: false }, live.size, bytes);
+    await finished(tx);
+  } catch (error) {
+    console.error('history: could not keep a version', error);
+  }
+}
+
+/** Forgets all of a document's history (the document is deleted). */
+async function forgetHistory(tx: IDBTransaction, id: string): Promise<void> {
+  const list = ((await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined) ?? [];
+  for (const v of list) await dropData(tx, id, v);
+  tx.objectStore(HISTORY).delete(id);
+}
+
+/** A document's kept versions, newest first. */
+export async function listVersions(id: string): Promise<LocalVersion[]> {
+  const db = await openDb();
+  const list = (await done(db.transaction(HISTORY).objectStore(HISTORY).get(id))) as LocalVersion[] | undefined;
+  return list ? [...list].sort((a, b) => b.version - a.version) : [];
+}
+
+/** The bytes of a kept version (null if it is gone, or a chunk of it is). */
+export async function getVersion(id: string, version: number): Promise<ArrayBuffer | null> {
+  const db = await openDb();
+  const tx = db.transaction([HISTORY_DATA, CHUNKS, HISTORY]);
+  const data = (await done(tx.objectStore(HISTORY_DATA).get(dataKey(id, version)))) as ArrayBuffer | HeldManifest | undefined;
+  if (!data) return null;
+  if (!('hashes' in data)) return data;
+  const list = (await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined;
+  const size = list?.find((v) => v.version === version)?.size ?? data.lengths.reduce((a, b) => a + b, 0);
+  const chunks = tx.objectStore(CHUNKS);
+  const found = await Promise.all([...new Set(data.hashes)].map(async (h) => [h, await done(chunks.get(h) as IDBRequest<ArrayBuffer | undefined>)] as const));
+  const byHash = new Map(found.flatMap(([h, bytes]) => (bytes ? [[h, new Uint8Array(bytes)] as const] : [])));
+  const whole = assemble({ algo: CHUNK_ALGO, size, chunks: data.hashes.map((h, i) => ({ h, n: data.lengths[i]! })) }, (h) => byHash.get(h));
+  return whole ? (whole.buffer as ArrayBuffer) : null;
+}
+
+/** Keeps the document as it is now as a version (named if `name` is given), whatever the rules say. Null if there is no such document. */
+export async function keepVersion(id: string, name: string | null = null): Promise<LocalVersion | null> {
+  const db = await openDb();
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  if (!info) {
+    await finished(tx);
+    return null;
+  }
+  const list = ((await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined) ?? [];
+  const existing = list.find((v) => v.version === info.updatedAt);
+  let entry: LocalVersion;
+  if (existing) {
+    // Already kept: a name goes on it.
+    entry = { ...existing, name: name ?? existing.name };
+    tx.objectStore(HISTORY).put(list.map((v) => (v.version === entry.version ? entry : v)), id);
+  } else {
+    const manifest = (await done(tx.objectStore(MANIFESTS).get(id))) as StoredManifest | undefined;
+    entry = { version: info.updatedAt, size: info.size, name, chunked: manifest !== undefined };
+    if (manifest) await holdChunked(tx, id, info, manifest, name);
+    else {
+      const bytes = (await done(tx.objectStore(BYTES).get(id))) as ArrayBuffer | undefined;
+      if (!bytes) {
+        await finished(tx);
+        return null;
+      }
+      await recordVersion(tx, id, entry, info.size, bytes);
+    }
+  }
+  await finished(tx);
+  return entry;
+}
+
+/** Names a kept version, or (null) lets it be thinned like the others. */
+export async function nameVersion(id: string, version: number, name: string | null): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(HISTORY, 'readwrite');
+  const list = (await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined;
+  if (list) tx.objectStore(HISTORY).put(list.map((v) => (v.version === version ? { ...v, name } : v)), id);
+  await finished(tx);
+}
+
+/** Removes a kept version. */
+export async function deleteVersion(id: string, version: number): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction([HISTORY, HISTORY_DATA, CHUNK_REFS, CHUNKS], 'readwrite');
+  const list = (await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined;
+  const gone = list?.find((v) => v.version === version);
+  if (list && gone) {
+    tx.objectStore(HISTORY).put(
+      list.filter((v) => v !== gone),
+      id,
+    );
+    await dropData(tx, id, gone);
+  }
+  await finished(tx);
 }

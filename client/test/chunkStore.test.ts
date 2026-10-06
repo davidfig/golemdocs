@@ -59,7 +59,9 @@ test('saving an edit stores only the chunks that changed, and lets go of the one
   const dropped = before.filter((h) => !after.includes(h));
   assert.ok(added.length >= 1 && added.length <= 2, `${added.length} chunks changed`);
   assert.equal(added.length, dropped.length);
-  // The replaced chunks are gone; every chunk of the new copy is there.
+  // The replaced chunks stay for the version that kept the old copy (see localHistory.test.ts) and go with it; every chunk of the new copy is there.
+  assert.equal((await local.getChunks(dropped)).size, new Set(dropped).size);
+  for (const v of await local.listVersions(first.id)) await local.deleteVersion(first.id, v.version);
   assert.equal((await local.getChunks(dropped)).size, 0);
   assert.equal((await local.getChunks(after)).size, new Set(after).size);
   const saved = await local.getSaved(first.id);
@@ -90,6 +92,8 @@ test('a document that grows past the size is converted when saved, and one that 
   await local.saveSaved({ id: first.id, name: 'x.txt', bytes: small });
   assert.equal(await local.getSavedManifest(first.id), null);
   assert.ok(same((await local.getSaved(first.id))!.bytes, small));
+  // The big copy stays as a version of the document until that is let go.
+  for (const v of await local.listVersions(first.id)) await local.deleteVersion(first.id, v.version);
   assert.equal((await local.getChunks(hashes)).size, 0);
 });
 

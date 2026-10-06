@@ -58,6 +58,8 @@ export interface AppToolsHost {
   convertTo(kind: DocumentKind): Promise<void>;
   /** Whether the open document is being edited with other people (it then can't change format). */
   inRoom(): boolean;
+  /** The open document's version history (File › Version History): the same functions the dialog uses. Each answers in words for the model ("Error:" says nothing was done). */
+  history: HistoryTools;
   /** Opens a document of the library, resolving once it has opened. */
   openEntry(entry: LibraryEntry): Promise<void>;
   /** File › New (in `folderId`), resolving once the new document has opened. */
@@ -91,6 +93,16 @@ export interface AppToolsHost {
   takeOver(): boolean;
 }
 
+/** The open document's history, for the assistant. */
+export interface HistoryTools {
+  /** The kept versions, newest first, as lines the model can pass back to `restore`. */
+  list(): Promise<string>;
+  /** Keeps the document as it is now as a named version. */
+  save(name: string): Promise<string>;
+  /** Opens a kept version as a new document (resolving once it has opened). */
+  restore(source: 'device' | 'account', version: number): Promise<string>;
+}
+
 /** Who is editing the open document. */
 export interface Collaboration {
   /** Others are here with the person. */
@@ -105,7 +117,7 @@ export interface Collaboration {
 /** Tools that don't read or change the open document (the person's other documents, the app's settings); every other one is refused once a different document is open. File tools are left alone too. */
 const ELSEWHERE_TOOLS = new Set(['search_documents', 'read_other_document', 'open_file', 'new_document', 'download_all', 'set_drawing_options']);
 /** Tools that open another document on purpose: the request goes on with that one. */
-const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document']);
+const OPENING_TOOLS = new Set(['convert_document', 'open_file', 'new_document', 'restore_version']);
 
 const formatLabel = (kind: string): string => (isFormat(kind) ? `${FORMATS[kind].label} (${FORMATS[kind].extensions[0]})` : kind);
 const optionalFlag = (args: Record<string, unknown>, key: string): boolean | undefined => {
@@ -277,6 +289,16 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
       if (!entry) return `Error: there is no document ${String(args.file)}; list_files gives the ids.`;
       await host.openEntry(entry);
       return `Opened "${entry.name}". The tools now work on it; read it before editing.`;
+    },
+    list_versions: () => host.history.list(),
+    save_version(args) {
+      if (typeof args.name !== 'string' || !args.name.trim()) return 'Error: `name` must be text, the version\'s name.';
+      return host.history.save(args.name.trim());
+    },
+    restore_version(args) {
+      if (args.source !== 'device' && args.source !== 'account') return 'Error: `source` must be "device" or "account" (see list).';
+      if (typeof args.version !== 'number' || !Number.isInteger(args.version)) return 'Error: `version` must be the whole number from list.';
+      return host.history.restore(args.source, args.version);
     },
     async new_document(args) {
       const folder = args.folder;

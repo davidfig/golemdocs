@@ -4,7 +4,7 @@
 
 import type { ToolDefinition } from './model.ts';
 
-export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks, and the drawing tools' options), pictures (edit them: shapes, text and ready-made shapes with fills, gradients and opacity drawn as layers you can group, hide, lock, reorder and blend, a paint bucket, a background and canvas size; and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP), and edit a large text file (8 MB or more, such as a log) in its own editor: read lines, search, replace everywhere, change, insert and delete lines, undo. You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
+export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks, and the drawing tools' options), pictures (edit them: shapes, text and ready-made shapes with fills, gradients and opacity drawn as layers you can group, hide, lock, reorder and blend, a paint bucket, a background and canvas size; and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP, bring back deleted documents from the trash), look at the open document's version history (it keeps earlier versions as they edit) and keep a named version or open an earlier one as a new document, and edit a large text file (8 MB or more, such as a log) in its own editor: read lines, search, replace everywhere, change, insert and delete lines, undo. You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
 
 Work like this:
 - The document is a numbered list of paragraphs (starting at 0). Read before you edit: use read_document, get_selection or find_text. Never guess what the document says.
@@ -432,11 +432,11 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'files',
-    description: "The person's documents and folders, in one call for many. list: all of them with ids and the folder each is in; use the ids with the other actions. open: document `file` in place of the open one. new: a blank document in place of the open one, in `folder` (id; none: top level) named `name` (no extension), of `type` (docx, md, txt, html, tex, typst, adoc, rst, org, mediawiki or textile; none: the type the person made last). move: `files` and `folders` (ids) into `to` (folder id, or null for the top level). delete: `files` and `folders` (ids) permanently, a folder with everything in it; cannot be undone. download_all: every document as one ZIP in their folders. Open, new, delete and download_all only when asked; open and new make the other tools work on that document.",
+    description: "The person's documents and folders, in one call for many. list: all of them with ids and the folder each is in; use the ids with the other actions. open: document `file` in place of the open one. new: a blank document in place of the open one, in `folder` (id; none: top level) named `name` (no extension), of `type` (docx, md, txt, html, tex, typst, adoc, rst, org, mediawiki or textile; none: the type the person made last). move: `files` and `folders` (ids) into `to` (folder id, or null for the top level). delete: `files` and `folders` (ids), a folder with everything in it; they go to the trash for 30 days. trash: the deleted documents still in the trash, with ids. restore: put back the trashed documents in `files` (ids from trash). download_all: every document as one ZIP in their folders. Open, new, delete, restore and download_all only when asked; open and new make the other tools work on that document.",
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['list', 'open', 'new', 'move', 'delete', 'download_all'] },
+        action: { type: 'string', enum: ['list', 'open', 'new', 'move', 'delete', 'trash', 'restore', 'download_all'] },
         file: { type: 'string' },
         folder: { type: ['string', 'null'] },
         name: { type: 'string' },
@@ -444,6 +444,21 @@ export const TOOLS: ToolDefinition[] = [
         files: { type: 'array', items: { type: 'string' }, description: 'Document ids.' },
         folders: { type: 'array', items: { type: 'string' }, description: 'Folder ids.' },
         to: { type: ['string', 'null'] },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'versions',
+    description:
+      "The open document's version history: earlier versions of it that are kept as the person edits, on this device and (for a document in their account) in the account. list: the kept versions, newest first, each with its `source` (device or account), `version` (its identity), when it was saved, its size and name if the person named it. save: keep the document as it is now as a version called `name` (a named version is kept longer; only when asked). restore: open the version `version` from `source` as a NEW document, which becomes the open one; the document it came from is not changed (only when asked, and say which version it was).",
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'save', 'restore'] },
+        name: { type: 'string', description: 'For save: the version\'s name.' },
+        source: { type: 'string', enum: ['device', 'account'], description: 'For restore: where the version is kept, from list.' },
+        version: { type: 'integer', description: 'For restore: the version, from list.' },
       },
       required: ['action'],
     },

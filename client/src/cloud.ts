@@ -336,3 +336,72 @@ export async function addShare(id: string, email: string, role: ShareRole): Prom
 export async function removeShare(id: string, userId: string): Promise<void> {
   await check(await send(`/api/documents/${id}/shares/${userId}`, { method: 'DELETE' }));
 }
+
+// --- History and the trash (server/src/versions.ts, trash.ts) ----------------------------------------------------------------
+
+/** A version of a document the account kept (`version` is the document's `updatedAt` as it was). */
+export interface CloudVersion {
+  version: number;
+  size: number;
+  name: string | null;
+}
+
+const JSON_HEADERS = { 'content-type': 'application/json' };
+
+/** A document's kept versions, newest first. Anyone who can open the document may ask. */
+export async function listCloudVersions(id: string): Promise<CloudVersion[]> {
+  return (await check(await send(`/api/documents/${id}/versions`))).json();
+}
+
+/** Keeps the document as it is now; with a `name`, as a named version (kept longer). Anyone who can edit it may. */
+export async function saveCloudVersion(id: string, name?: string): Promise<CloudVersion> {
+  return (await check(await send(`/api/documents/${id}/versions`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(name ? { name } : {}) }))).json();
+}
+
+/** The bytes of a kept version. */
+export async function downloadCloudVersion(id: string, version: number): Promise<ArrayBuffer> {
+  return (await check(await send(`/api/documents/${id}/versions/${version}`))).arrayBuffer();
+}
+
+/** Names a version, or (null) lets it be thinned like the others. */
+export async function nameCloudVersion(id: string, version: number, name: string | null): Promise<CloudVersion> {
+  return (await check(await send(`/api/documents/${id}/versions/${version}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ name }) }))).json();
+}
+
+export async function deleteCloudVersion(id: string, version: number): Promise<void> {
+  await check(await send(`/api/documents/${id}/versions/${version}`, { method: 'DELETE' }));
+}
+
+/** Makes a new document (the caller's own) from a version, leaving the document as it is. */
+export async function restoreCloudVersion(id: string, version: number, name?: string): Promise<CloudDocument> {
+  const query = name ? `?${new URLSearchParams({ name })}` : '';
+  return (await check(await send(`/api/documents/${id}/versions/${version}/restore${query}`, { method: 'POST' }))).json();
+}
+
+/** A deleted document, kept for 30 days. */
+export interface TrashedDocument {
+  id: string;
+  name: string;
+  size: number;
+  updatedAt: number;
+  thumbAt: number | null;
+  deletedAt: number;
+  /** When it will be deleted for good. */
+  purgeAt: number;
+}
+
+export async function listTrash(): Promise<TrashedDocument[]> {
+  return (await check(await send('/api/trash'))).json();
+}
+
+/** Puts a deleted document back (unshared, and at the top level if its folder is gone). */
+export async function restoreFromTrash(id: string): Promise<CloudDocument> {
+  const document = (await (await check(await send(`/api/trash/${id}/restore`, { method: 'POST' }))).json()) as CloudDocument;
+  deleted.delete(id);
+  return document;
+}
+
+/** Deletes one trashed document for good, or (without an id) empties the trash. */
+export async function purgeTrash(id?: string): Promise<void> {
+  await check(await send(id ? `/api/trash/${id}` : '/api/trash', { method: 'DELETE' }));
+}

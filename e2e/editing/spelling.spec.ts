@@ -425,3 +425,24 @@ test.describe('resting the pointer on a squiggle', () => {
     await expect(menu(app)).toHaveCount(0);
   });
 });
+
+test.describe('squiggles while typing', () => {
+  const squiggles = (app: App) => app.page.evaluate(() => (window as unknown as { selectionState: { squiggles: number } }).selectionState.squiggles);
+
+  test('the word just typed is underlined after a pause, not as the keys go in', async ({ app }) => {
+    await app.blank();
+    await app.editor.focus();
+    await app.page.keyboard.type('I recieve ');
+    expect(await squiggles(app)).toBe(0);
+    await expect.poll(() => squiggles(app), { timeout: 5000 }).toBe(1);
+  });
+
+  test('a mistake further back is underlined at once', async ({ app }) => {
+    await app.blank();
+    await app.editor.focus();
+    await app.page.keyboard.insertText('I recieve mail');
+    await expect.poll(() => squiggles(app), { timeout: 5000 }).toBe(1);
+    await app.page.keyboard.type(' today and');
+    expect(await squiggles(app)).toBe(1);
+  });
+});

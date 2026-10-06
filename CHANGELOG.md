@@ -2,6 +2,9 @@
 
 ## 0.12.1 - Unreleased
 
+### Changed
+- Red and blue squiggles are calmer while you type: the word you have just finished is underlined after a short pause instead of the moment you press space.
+
 ### Added
 - Rest the pointer on a red or blue squiggle for a moment and its menu opens (suggestions, Ignore, Add to Dictionary), with no right click needed. It does not move the caret or select the word, so you can keep typing; typing, scrolling or moving away closes it.
 

@@ -4965,7 +4965,7 @@ Object.defineProperties(window, {
   status: { get: () => status },
   room: { get: () => current.room },
   pictureShapes: { get: () => drawLayer.shapes },
-  selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others }) },
+  selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others, squiggles: selection.squiggleCount }) },
 });
 
 // Back and Forward: the document and the Documents screen the address names.

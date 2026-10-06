@@ -1787,11 +1787,20 @@ class OpenDocument {
     this.sendSelection();
   }
 
+  /** When the last edit was made here (performance.now()): squiggles hold off for the word just finished until the typing pauses. */
+  private typedAt = -Infinity;
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
+
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
     if (!live.spelling && !live.grammar) return new Float64Array(0);
     const [start, end] = editor.ordered();
     const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
+    // Typing along: the word just finished (and the space or mark after it) is not underlined until a pause, so a squiggle doesn't flash under every word as it is typed.
+    const sinceTyped = performance.now() - this.typedAt;
+    const settling = typing !== null && sinceTyped < SPELL_SETTLE_MS;
+    clearTimeout(this.settleTimer);
+    if (settling) this.settleTimer = setTimeout(() => this.sendSelection(), SPELL_SETTLE_MS - sinceTyped + 20);
     const documentLang = documentLanguageOf(editor);
     const marks = editor.marks((paragraph) =>
       issuesOf(paragraph, documentLang, (language) => {
@@ -1804,7 +1813,7 @@ class OpenDocument {
           .finally(() => this.loadingMarks.delete(language));
       })
         // The word being typed isn't marked until the caret leaves it.
-        .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && typing.offset <= i.end))
+        .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && (typing.offset <= i.end || (settling && typing.offset - i.end <= SPELL_FINISHED_REACH))))
         .map((i) => ({ start: i.start, end: i.end, kind: i.kind === 'spelling' ? 0 : 1 })),
     );
     const out = new Float64Array(marks.length * 6);
@@ -1904,6 +1913,7 @@ class OpenDocument {
     this.commandAt = performance.now();
     if (editor.apply(command).edited) {
       this.edited = true;
+      this.typedAt = performance.now();
       void this.pump();
       this.postRoomState();
     } else this.sendSelection();
@@ -2338,6 +2348,11 @@ function unmark(mark: Mark): RunFormat {
       return { style: null, fonts: null };
   }
 }
+
+/** Squiggles wait this long after the last keystroke for the word just typed. */
+const SPELL_SETTLE_MS = 1000;
+/** A word counts as just finished when the caret is within this many characters after it (a space, or a space and a mark). */
+const SPELL_FINISHED_REACH = 2;
 
 /** Words the user added to the dictionary (for every document), and the words and grammar rules ignored in the open document. */
 const spelling = { words: new Set<string>(), ignoredWords: new Set<string>(), rules: new Set<string>() };

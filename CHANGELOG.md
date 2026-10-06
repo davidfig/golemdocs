@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.12.0 - Unreleased
+## 0.12.0 - 2026-10-06
 
 ### Added
 - View › Toolbars › Show Toolbars hides or shows all the toolbars under the menu bar at once, for more room to write. The choice is kept, and each toolbar keeps its own setting for when they come back. The assistant can do it too.

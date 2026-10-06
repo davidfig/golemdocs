@@ -120,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Sesión cerrada',
   'dialogs.sync.signedOut.body': 'Los cambios se conservan en este dispositivo. Inicie sesión de nuevo para guardarlos en su cuenta.',
   'dialogs.options.title': 'Opciones',
+  'dialogs.options.view': 'Vista',
+  'dialogs.options.fullScreenMenu': 'Mantener la barra de menús en pantalla completa',
   'dialogs.options.drawing': 'Dibujo',
   'dialogs.options.selectAfterPencil': 'Seleccionar el trazo del lápiz al terminarlo',
   'dialogs.options.returnToSelect': 'Volver a la herramienta Seleccionar tras dibujar una forma o un trazado de pluma',

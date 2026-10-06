@@ -118,6 +118,8 @@ export const dialogs = {
   'dialogs.sync.signedOut.title': 'Signed out',
   'dialogs.sync.signedOut.body': 'Your changes are kept on this device. Sign in again to save them to your account.',
   'dialogs.options.title': 'Options',
+  'dialogs.options.view': 'View',
+  'dialogs.options.fullScreenMenu': 'Keep the menu bar in full screen',
   'dialogs.options.drawing': 'Drawing',
   'dialogs.options.selectAfterPencil': 'Select a pencil stroke when it is finished',
   'dialogs.options.returnToSelect': 'Switch back to the Select tool after drawing a shape or pen path',

@@ -1,9 +1,10 @@
-/* The new-version note (see newVersionNotice.ts), in the bottom left of the window. */
+/* The new-version note (see newVersionNotice.ts), centered near the bottom of the window. */
 
 .wm-version-notice {
   position: fixed;
-  left: 16px;
-  bottom: 16px;
+  left: 50%;
+  bottom: calc(16px + var(--wm-footer-clearance, 0px));
+  transform: translateX(-50%);
   z-index: 5;
   width: 280px;
   max-width: calc(100vw - 32px);

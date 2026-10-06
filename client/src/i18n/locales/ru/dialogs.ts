@@ -120,6 +120,8 @@ export const dialogs: Catalog = {
   'dialogs.sync.signedOut.title': 'Вы вышли',
   'dialogs.sync.signedOut.body': 'Изменения хранятся на этом устройстве. Войдите снова, чтобы сохранить их в вашей учётной записи.',
   'dialogs.options.title': 'Параметры',
+  'dialogs.options.view': 'Вид',
+  'dialogs.options.fullScreenMenu': 'Оставлять строку меню в полноэкранном режиме',
   'dialogs.options.drawing': 'Рисование',
   'dialogs.options.selectAfterPencil': 'Выделять штрих карандаша после его завершения',
   'dialogs.options.returnToSelect': 'Возвращаться к инструменту «Выделение» после рисования фигуры или контура пером',

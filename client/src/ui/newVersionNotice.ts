@@ -52,5 +52,8 @@ export class NewVersionNotice {
     write(SEEN_KEY, version);
     this.el.hidden = !(ALWAYS_SHOW || (isNew && read(OFF_KEY) !== '1'));
     parent.append(this.el);
+    // Sits above the status bar when it is showing: the page's bottom edge is the bar's top edge.
+    const footer = document.getElementById('footer');
+    if (footer) new ResizeObserver(() => this.el.style.setProperty('--wm-footer-clearance', `${footer.offsetHeight}px`)).observe(footer);
   }
 }

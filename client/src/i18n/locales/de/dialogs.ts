@@ -120,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Abgemeldet',
   'dialogs.sync.signedOut.body': 'Ihre Änderungen bleiben auf diesem Gerät. Melden Sie sich erneut an, um sie in Ihrem Konto zu speichern.',
   'dialogs.options.title': 'Optionen',
+  'dialogs.options.view': 'Ansicht',
+  'dialogs.options.fullScreenMenu': 'Menüleiste im Vollbildmodus beibehalten',
   'dialogs.options.drawing': 'Zeichnen',
   'dialogs.options.selectAfterPencil': 'Strich nach dem Zeichnen mit dem Stift auswählen',
   'dialogs.options.returnToSelect': 'Nach einer Form oder einem Zeichenstiftpfad zum Auswahlwerkzeug zurückwechseln',

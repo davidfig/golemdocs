@@ -215,10 +215,11 @@ test.describe('Full Screen', () => {
     test.skip(!(await page.evaluate(() => document.fullscreenEnabled)), 'this browser cannot go full screen');
     await choose(app, 'View', 'Full Screen');
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
-    await openMenu(app, 'View');
-    expect(await isChecked(page, 'Full Screen')).toBe(true);
-    await menuRow(page, 'Full Screen').click();
+    // The menu bar is hidden while full screen (Esc leaves it): the browser's own exit stands in for the key.
+    await page.evaluate(() => document.exitFullscreen());
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+    await openMenu(app, 'View');
+    expect(await isChecked(page, 'Full Screen')).toBe(false);
   });
 });
 
@@ -234,5 +235,36 @@ test.describe('Show Toolbars', () => {
     await expect(toolbars).toBeHidden();
     await app.menu('View', 'Toolbars', 'Show Toolbars');
     await expect(toolbars).toBeVisible();
+  });
+});
+
+test.describe('Full Screen', () => {
+  const leave = (page: import('@playwright/test').Page) => page.evaluate(() => document.exitFullscreen());
+
+  test('hides the menus, toolbars and status bar, says how to leave, and brings them back on leaving', async ({ app, page }) => {
+    await app.blank();
+    await expect(page.locator('#chrome')).toBeVisible();
+    await app.menu('View', 'Full Screen');
+    await expect(page.locator('body.wm-fullscreen')).toHaveCount(1);
+    await expect(page.locator('#chrome')).toBeHidden();
+    await expect(page.locator('#footer')).toBeHidden();
+    await expect(page.getByRole('alert').filter({ hasText: 'Esc' })).toBeVisible();
+    await leave(page);
+    await expect(page.locator('body.wm-fullscreen')).toHaveCount(0);
+    await expect(page.locator('#chrome')).toBeVisible();
+  });
+
+  test('keeps the menu bar, and hides only the toolbars, when Options says so', async ({ app, page }) => {
+    await app.blank();
+    await app.menu('Tools', 'Options');
+    await page.getByRole('checkbox', { name: 'Keep the menu bar in full screen' }).check();
+    await page.keyboard.press('Escape');
+    await app.menu('View', 'Full Screen');
+    await expect(page.locator('body.wm-fullscreen')).toHaveCount(1);
+    await expect(page.locator('#chrome')).toBeVisible();
+    await expect(page.locator('.wm-toolbars')).toBeHidden();
+    await expect(page.locator('.wm-menubar').first()).toBeVisible();
+    await leave(page);
+    await expect(page.locator('.wm-toolbars')).toBeVisible();
   });
 });

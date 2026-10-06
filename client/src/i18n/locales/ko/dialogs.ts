@@ -120,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': '로그아웃됨',
   'dialogs.sync.signedOut.body': '변경 내용은 이 장치에 보관됩니다. 계정에 저장하려면 다시 로그인하십시오.',
   'dialogs.options.title': '옵션',
+  'dialogs.options.view': '보기',
+  'dialogs.options.fullScreenMenu': '전체 화면에서도 메뉴 표시줄 유지',
   'dialogs.options.drawing': '그리기',
   'dialogs.options.selectAfterPencil': '연필 획을 그린 후 선택',
   'dialogs.options.returnToSelect': '도형이나 펜 경로를 그린 후 선택 도구로 돌아가기',

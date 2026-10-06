@@ -150,6 +150,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.toolbar.formatting': '서식(&F)',
   'chrome.admin.debug': '디버그(&D)…',
   'chrome.view.fullScreen': '전체 화면(&U)',
+  'chrome.fullScreen.hint': 'Esc 키를 누르면 전체 화면이 종료됩니다',
   'chrome.view.darkMode': '어두운 모드(&D)',
   'chrome.view.darkPages': '어두운 페이지(&P)',
   'chrome.view.matchSystem': '시스템 설정에 맞춤(&M)',

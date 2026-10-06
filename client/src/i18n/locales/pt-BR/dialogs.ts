@@ -120,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Desconectado',
   'dialogs.sync.signedOut.body': 'Suas alterações ficam neste dispositivo. Entre novamente para salvá-las na sua conta.',
   'dialogs.options.title': 'Opções',
+  'dialogs.options.view': 'Exibir',
+  'dialogs.options.fullScreenMenu': 'Manter a barra de menus em tela inteira',
   'dialogs.options.drawing': 'Desenho',
   'dialogs.options.selectAfterPencil': 'Selecionar o traço do lápis ao terminá-lo',
   'dialogs.options.returnToSelect': 'Voltar à ferramenta Selecionar depois de desenhar uma forma ou um caminho de caneta',

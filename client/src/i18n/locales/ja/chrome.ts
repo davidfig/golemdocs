@@ -150,6 +150,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.toolbar.formatting': '書式設定(&F)',
   'chrome.admin.debug': 'デバッグ(&D)…',
   'chrome.view.fullScreen': '全画面表示(&U)',
+  'chrome.fullScreen.hint': 'Esc キーで全画面表示を終了します',
   'chrome.view.darkMode': 'ダーク モード(&D)',
   'chrome.view.darkPages': 'ダーク ページ(&P)',
   'chrome.view.matchSystem': 'システムに合わせる(&M)',

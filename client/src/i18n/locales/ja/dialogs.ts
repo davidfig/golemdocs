@@ -120,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'サインアウト済み',
   'dialogs.sync.signedOut.body': '変更はこのデバイスに保持されています。アカウントに保存するには、もう一度サインインしてください。',
   'dialogs.options.title': 'オプション',
+  'dialogs.options.view': '表示',
+  'dialogs.options.fullScreenMenu': '全画面表示でもメニュー バーを表示する',
   'dialogs.options.drawing': '描画',
   'dialogs.options.selectAfterPencil': '鉛筆のストロークを描き終えたら選択する',
   'dialogs.options.returnToSelect': '図形またはペンのパスを描いた後に選択ツールへ戻る',

@@ -120,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': '已退出登录',
   'dialogs.sync.signedOut.body': '你的更改保留在此设备上。请重新登录以将更改保存到你的账户。',
   'dialogs.options.title': '选项',
+  'dialogs.options.view': '视图',
+  'dialogs.options.fullScreenMenu': '全屏时保留菜单栏',
   'dialogs.options.drawing': '绘图',
   'dialogs.options.selectAfterPencil': '完成铅笔笔画后将其选中',
   'dialogs.options.returnToSelect': '绘制形状或钢笔路径后切换回选择工具',

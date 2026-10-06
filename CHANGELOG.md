@@ -6,6 +6,7 @@
 - Red and blue squiggles are calmer while you type: the word you have just finished is underlined after a short pause instead of the moment you press space.
 
 ### Added
+- View › Full Screen now also hides the menu bar, toolbars, ruler and status bar, leaving only the document, and a short message reminds you that Esc leaves full screen and brings them back. Tools › Options › View can keep the menu bar showing in full screen.
 - Rest the pointer on a red or blue squiggle for a moment and its menu opens (suggestions, Ignore, Add to Dictionary), with no right click needed. It does not move the caret or select the word, so you can keep typing; typing, scrolling or moving away closes it.
 
 ### Added

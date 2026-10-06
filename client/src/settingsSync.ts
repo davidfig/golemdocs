@@ -28,6 +28,7 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.formattingMarks',
   'word.ruler',
   'word.footer', // status bar
+  'word.fullScreenMenus', // Tools › Options: keep the menu bar in full screen
   'word.toolbarsShown', // View › Toolbars › Show Toolbars
   'wm.largeWrap',
   'vector.selectAfterPencil', // drawing options (Tools › Options)

@@ -16,6 +16,7 @@
     "test": "pnpm --no-bail --filter @golemdocs/docx --filter @golemdocs/layout --filter @golemdocs/ops --filter @golemdocs/editor --filter @golemdocs/server --filter @golemdocs/client --filter @golemdocs/pdf --filter @golemdocs/odt test",
     "test:coverage": "tsx scripts/coverage.ts",
     "e2e": "tsx scripts/e2e.ts",
+    "e2e:rest": "tsx scripts/e2e.ts rest",
     "record:home": "tsx scripts/marketing/record-war-and-peace.ts"
   },
   "devDependencies": {

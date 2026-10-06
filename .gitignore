@@ -25,3 +25,4 @@ server/wrangler.local.json
 server/wrangler.generated.jsonc
 e2e/.state-*
 e2e/.results-*
+e2e/.progress

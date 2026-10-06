@@ -2,7 +2,8 @@
 // `pnpm dev` runs on :5173 and :3001). The server is wrangler's fully simulated local mode on a
 // throwaway state folder, so no test touches real Cloudflare resources.
 //
-//   pnpm e2e            run everything (scripts/e2e.ts: the @heavy tests get a second, quieter pass)
+//   pnpm e2e            run everything (scripts/e2e.ts: shards with their own servers, then the @heavy tests in a second, quieter pass)
+//   pnpm e2e:rest       run only what the last run did not pass
 //   pnpm e2e --ui       watch mode with the Playwright UI (arguments go straight to Playwright)
 //
 // Billing and the assistant (Clip) are deliberately not covered yet.
@@ -25,8 +26,13 @@ export default defineConfig({
   // A third of the cores (Playwright's default is half): each test runs a full WebGL page, and a busier machine is what made tests that pass alone fail in a full run. E2E_WORKERS overrides it.
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : process.env.CI ? 2 : Math.max(2, Math.floor(os.cpus().length / 3)),
   timeout: 60_000,
+  // A run that has not ended by now is stopped, with the tests that did not report left to `pnpm e2e:rest`, instead of hanging for ever. The runner also stops a run that prints nothing for a while (E2E_IDLE_MS).
+  globalTimeout: Number(process.env.E2E_GLOBAL_TIMEOUT_MS ?? 40 * 60_000),
   expect: { timeout: 10_000 },
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'e2e/.report' }]] : 'list',
+  // The progress reporter writes how each test ended, for `pnpm e2e:rest` (it does nothing without E2E_PROGRESS).
+  reporter: process.env.CI
+    ? [['list'], ['./e2e/progress-reporter.ts'], ['html', { open: 'never', outputFolder: 'e2e/.report' }]]
+    : [['list'], ['./e2e/progress-reporter.ts']],
   use: {
     baseURL: `http://localhost:${CLIENT_PORT}`,
     trace: 'retain-on-failure',
@@ -54,7 +60,7 @@ export default defineConfig({
       command:
         `rm -rf ${STATE} && mkdir -p client/dist && cd server && ` +
         `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ../${STATE} && ` +
-        `pnpm exec wrangler dev --env local --port ${API_PORT} --persist-to ../${STATE} --var DEV_USER:e2e@example.com ` +
+        `pnpm exec wrangler dev --env local --port ${API_PORT} --inspector-port ${API_PORT + 6000} --persist-to ../${STATE} --var DEV_USER:e2e@example.com ` +
         // Fake Google credentials, so the sign-in tests do not depend on a developer's own .dev.vars.
         `--var GOOGLE_CLIENT_ID:e2e-google-client --var GOOGLE_CLIENT_SECRET:e2e-google-secret`,
       url: `http://localhost:${API_PORT}/api/health`,

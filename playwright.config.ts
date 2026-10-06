@@ -60,7 +60,7 @@ export default defineConfig({
       command:
         `rm -rf ${STATE} && mkdir -p client/dist && cd server && ` +
         `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ../${STATE} && ` +
-        `pnpm exec wrangler dev --env local --port ${API_PORT} --inspector-port ${API_PORT + 6000} --persist-to ../${STATE} --var DEV_USER:e2e@example.com ` +
+        `exec ./node_modules/.bin/wrangler dev --env local --port ${API_PORT} --inspector-port ${API_PORT + 6000} --persist-to ../${STATE} --var DEV_USER:e2e@example.com ` +
         // Fake Google credentials, so the sign-in tests do not depend on a developer's own .dev.vars.
         `--var GOOGLE_CLIENT_ID:e2e-google-client --var GOOGLE_CLIENT_SECRET:e2e-google-secret`,
       url: `http://localhost:${API_PORT}/api/health`,
@@ -69,7 +69,8 @@ export default defineConfig({
       stdout: 'ignore',
     },
     {
-      command: `pnpm --filter @golemdocs/client exec vite --port ${CLIENT_PORT} --strictPort`,
+      // `exec`, and not `pnpm exec`: pnpm starts the server in a process group of its own, which Playwright's shutdown does not kill, and the server then keeps Playwright from ever exiting.
+      command: `cd client && exec ./node_modules/.bin/vite --port ${CLIENT_PORT} --strictPort`,
       url: `http://localhost:${CLIENT_PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

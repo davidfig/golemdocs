@@ -61,13 +61,15 @@ process.on('SIGTERM', () => stopAll('SIGTERM'));
 function freePorts(env: Record<string, string> = {}): void {
   const client = Number(env.E2E_CLIENT_PORT ?? 5273);
   const api = Number(env.E2E_API_PORT ?? 3101);
-  const ports = [client, api, api + 6000];
-  const out = spawnSync('lsof', ['-nti', ...ports.map((port) => `-iTCP:${port}`), '-sTCP:LISTEN'], { encoding: 'utf8' });
-  for (const pid of out.stdout.split('\n').filter(Boolean)) {
-    try {
-      process.kill(Number(pid), 'SIGKILL');
-    } catch {
-      // already gone
+  // One lsof per port, and `-a`: without it lsof ORs its selections, and `-sTCP:LISTEN` alone matches every listening process of the user, dev servers included.
+  for (const port of [client, api, api + 6000]) {
+    const out = spawnSync('lsof', ['-nti', '-a', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
+    for (const pid of out.stdout.split('\n').filter(Boolean)) {
+      try {
+        process.kill(Number(pid), 'SIGKILL');
+      } catch {
+        // already gone
+      }
     }
   }
 }

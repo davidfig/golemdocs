@@ -68,7 +68,7 @@ test('a version can be saved under a name, renamed and deleted', async ({ app, p
   await expect(rows(page)).toHaveCount(before - 1);
 });
 
-test('a document with no history yet says so, and a viewer-free document offers to save a version', async ({ app, page }) => {
+test('a new document has no history yet, and the dialog closes', async ({ app, page }) => {
   await app.blank();
   await app.menu('File', 'Version History');
   await expect(history(page)).toBeVisible();

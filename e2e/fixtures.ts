@@ -5,7 +5,7 @@
 // `pages`, `status`), through the DOM of the menus, toolbars and dialogs, and through files the
 // app downloads.
 
-import { expect, test as base, type Download, type Locator, type Page } from '@playwright/test';
+import { expect, test as base, type Browser, type Download, type Locator, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 export const MOD = 'ControlOrMeta';
@@ -126,7 +126,42 @@ function escape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean; livePreviewDefault: boolean }>({
+/** Autocorrect on for the running test (its `autoCorrectDefault`): the contexts a test opens for other devices and people follow it. */
+let autoCorrectWanted = false;
+
+/** Turns autocorrect off in a context, unless the browser already holds a choice (what the page fixture does for its own page). */
+const AUTOCORRECT_OFF = () => {
+  try {
+    if (localStorage.getItem('word.autoCorrect') === null) localStorage.setItem('word.autoCorrect', JSON.stringify(['quotes', 'dashes', 'ellipsis', 'symbols', 'ordinals', 'capitalize', 'twoCapitals', 'links', 'typos', 'replacements']));
+  } catch {
+    // No storage: the app falls back to its default.
+  }
+};
+
+export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean; livePreviewDefault: boolean; autoCorrectDefault: boolean; autoCorrectFollowsOption: void }, { browser: Browser }>({
+  // Tests open further contexts of their own (a second device, another person) with `browser.newContext()`: each starts
+  // with autocorrect off too, as the page does, so the text typed in one reads the same in the other.
+  browser: [
+    async ({ browser }, use) => {
+      const newContext = browser.newContext.bind(browser);
+      browser.newContext = async (options) => {
+        const context = await newContext(options);
+        if (!autoCorrectWanted) await context.addInitScript(AUTOCORRECT_OFF);
+        return context;
+      };
+      await use(browser);
+      browser.newContext = newContext;
+    },
+    { scope: 'worker' },
+  ],
+  // Set before the test's own contexts open (automatic fixtures are set up first).
+  autoCorrectFollowsOption: [
+    async ({ autoCorrectDefault }, use) => {
+      autoCorrectWanted = autoCorrectDefault;
+      await use();
+    },
+    { auto: true },
+  ],
   // The page sidebar is open by default in a wide window, where it would cover the PDF tool palette and shift the
   // page. Tests start with it closed (unless the browser already holds a choice); the ones about the default opt in.
   sidebarDefault: [false, { option: true }],

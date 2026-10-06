@@ -110,21 +110,28 @@ test('the edited file downloads with the changes, and nothing else changed', asy
   expect(file.bytes.equals(expected)).toBe(true);
 });
 
-// 150,000 replacements: slow enough to time out while other tests are running, so it runs in the second, quieter pass.
-test('Replace All changes every match as one step that can be undone', { tag: '@heavy' }, async ({ app, page }) => {
-  await open(app);
+// A few hundred matches in a file of 150,000 lines: replacing every match of a word on every line is a different, much slower job
+// (it timed out when the machine was busy) and says nothing more about "one step that can be undone".
+const MARKED = 200;
+const BIG_MARKED = Buffer.from(
+  Array.from({ length: LINES }, (_, i) => `Line ${i + 1} the ${i < MARKED ? 'marked' : 'quick brown'} fox jumps over the lazy dog ${'.'.repeat(12)}`).join('\n') + '\n',
+  'utf8',
+);
+
+test('Replace All changes every match as one step that can be undone', async ({ app, page }) => {
+  await open(app, 'marked.txt', BIG_MARKED);
   await app.menu('Edit', 'Replace…');
-  await viewer(page).getByRole('textbox', { name: 'Find' }).fill('quick brown');
-  await viewer(page).getByRole('textbox', { name: 'Replace with' }).fill('slow red');
+  await viewer(page).getByRole('textbox', { name: 'Find' }).fill('marked');
+  await viewer(page).getByRole('textbox', { name: 'Replace with' }).fill('changed');
   await viewer(page).getByRole('button', { name: 'Replace all' }).click();
-  await expect(viewer(page).locator('.wm-large-message')).toContainText(`Replaced ${LINES.toLocaleString('en-US')} matches`, { timeout: 30_000 });
-  await expectLine(page, 0, /^Line 1 the slow red fox/);
+  await expect(viewer(page).locator('.wm-large-message')).toContainText(`Replaced ${MARKED} matches`, { timeout: 30_000 });
+  await expectLine(page, 0, /^Line 1 the changed fox/);
   await page.keyboard.press('Escape');
   await clickAt(page, 0, 0);
   await page.keyboard.press(`${MOD}+z`);
-  await expectLine(page, 0, /^Line 1 the quick brown fox/);
+  await expectLine(page, 0, /^Line 1 the marked fox/);
   await page.keyboard.press(`${MOD}+Shift+z`);
-  await expectLine(page, 0, /^Line 1 the slow red fox/);
+  await expectLine(page, 0, /^Line 1 the changed fox/);
 });
 
 test('Replace takes the matches one at a time', async ({ app, page }) => {

@@ -23,6 +23,8 @@ export interface D1Database {
 export interface R2ObjectBody {
   body: ReadableStream;
   size: number;
+  /** The same value `head` calls its etag (httpEtag is that in quotes, for the HTTP header). */
+  etag: string;
   httpEtag: string;
   httpMetadata?: { contentType?: string };
   customMetadata?: Record<string, string>;

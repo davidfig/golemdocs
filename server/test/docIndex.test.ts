@@ -99,11 +99,27 @@ test('a file that is not a .docx answers 422', async () => {
   assert.equal(idxKeys().length, 0);
 });
 
+test('a file that is not a ZIP (a PDF, a picture) answers 422 without logging a failure', async () => {
+  const r = await w.call(OWNER, 'POST', '/api/documents?name=Doc.pdf', { body: new TextEncoder().encode('%PDF-1.7\n\u0000\u0001binary'), type: 'application/pdf' });
+  const doc = (await r.json()) as any;
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void logged.push(args);
+  try {
+    assert.equal((await index(OWNER, doc.id)).status, 422);
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(logged, []);
+});
+
 test('deleting a document deletes its index too', async () => {
   const doc = await create('Zebra crossing');
   await index(OWNER, doc.id);
   assert.equal(idxKeys().length, 1);
   assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${doc.id}`)).status, 204);
+  // The trash keeps the document (and so its index is rebuilt, when asked) until it is emptied.
+  assert.equal((await w.call(OWNER, 'DELETE', '/api/trash')).status, 204);
   assert.equal(w.objects.size, 0);
 });
 

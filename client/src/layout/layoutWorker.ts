@@ -78,7 +78,8 @@ import { runAgentTool } from './agentTools.ts';
 import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { linkInSource } from '../formats/wikiLinks.ts';
-import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, urlShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
+import { AUTOCORRECT_DEFAULTS, AUTOCORRECT_KEYS, autoCorrect, ordinalAt, urlAt } from './autocorrect.ts';
+import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
 import { FORMATS, formatAllows } from '../ui/formats.ts';
 import type { Action, DocumentKind, Mark } from '../ui/actions.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
@@ -318,7 +319,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that change the editor's settings rather than the document (they work with none open). */
-const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'livePreview']);
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'livePreview']);
 
 /** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
 function applySettings(wire: WireCommand): void {
@@ -329,10 +330,11 @@ function applySettings(wire: WireCommand): void {
     live.grammar = wire.grammar;
     void acceptSpelling(wire.words ?? []);
   } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
+  else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
   else if (wire.kind === 'livePreview') live.livePreview = wire.on;
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -1949,6 +1951,10 @@ class OpenDocument {
       live.autoFormat = wire.on;
       return;
     }
+    if (wire.kind === 'autoCorrect') {
+      setAutoCorrect(wire);
+      return;
+    }
     if (wire.kind === 'livePreview') {
       live.livePreview = wire.on;
       return this.syncRaw().then(() => this.finishRaw());
@@ -2011,7 +2017,10 @@ class OpenDocument {
     }
     // Edits send the selection once the changed pages are laid out.
     const finish = () => {
-      if (edited) this.edited = true;
+      if (edited) {
+        this.edited = true;
+        this.typedAt = performance.now();
+      }
       if (edited || this.rawTouched) {
         this.rawTouched = false;
         void this.pump();
@@ -2196,8 +2205,8 @@ class OpenDocument {
   private converted: { steps: number; paragraph: number; offset: number } | null = null;
 
   /** What shortcuts may do here: the format can express headings, lists and marks, and the caret is in plain text. */
-  private shortcutContext(editor: Editor): { profile: (typeof FORMATS)[DocumentKind]; line: LineContext; code: boolean; index: number; before: string } | null {
-    if (!live.autoFormat || this.raw || !editor.collapsed || this.annotator || this.readOnly) return null;
+  private shortcutContext(editor: Editor, markdown = true): { profile: (typeof FORMATS)[DocumentKind]; line: LineContext; code: boolean; index: number; before: string } | null {
+    if ((markdown && !live.autoFormat) || this.raw || !editor.collapsed || this.annotator || this.readOnly) return null;
     const profile = FORMATS[this.format as DocumentKind];
     if (!profile?.editable) return null;
     const [at] = editor.ordered();
@@ -2227,23 +2236,81 @@ class OpenDocument {
     }
   }
 
-  /** Plain text that is just a web address was pasted: it becomes a link. */
+  /** Plain text that is just a web address was pasted: it becomes a link (when the "links" autocorrect is on). */
   private pastedUrl(editor: Editor, text: string): void {
-    if (text.length < 2 || !/^https?:\/\/\S+$/i.test(text)) return;
-    const context = this.shortcutContext(editor);
+    if (!live.autoCorrect.links || text.length < 2 || /\s/.test(text)) return;
+    const context = this.shortcutContext(editor, false);
     if (!context || context.code || !formatAllows(context.profile, { kind: 'insertLink' } as Action)) return;
     const end = context.before.length;
-    if (!context.before.endsWith(text)) return;
-    const start = end - text.length;
-    editor.apply({ kind: 'select', paragraph: context.index, from: start, to: end });
-    editor.apply({ kind: 'setLink', url: text, text });
+    const url = urlAt(`${context.before} `);
+    if (!url || url.text !== text || url.start + text.length !== end) return;
+    editor.apply({ kind: 'select', paragraph: context.index, from: url.start, to: end });
+    editor.apply({ kind: 'setLink', url: url.url, text });
     editor.apply({ kind: 'select', paragraph: context.index, from: end, to: end });
     this.converted = { steps: 1, paragraph: context.index, offset: end };
   }
 
-  /** A character was typed: if it finishes a Markdown shortcut, turns what was typed into formatting. */
+  /** A character was typed: if it finishes a Markdown shortcut, turns what was typed into formatting; else autocorrects it (see autocorrect.ts). */
   private typedShortcut(editor: Editor, typed: string): void | Promise<void> {
     if (typed.length !== 1) return;
+    const known = this.converted;
+    const markdown = this.markdownShortcut(editor, typed);
+    return this.converted !== known ? markdown : this.autoCorrected(editor, typed);
+  }
+
+  /** Smart quotes, dashes, symbols, capital letters and links as the user types (as Word and Google Docs do). */
+  private autoCorrected(editor: Editor, typed: string): void | Promise<void> {
+    const rules = live.autoCorrect;
+    if (!AUTOCORRECT_KEYS.some((key) => rules[key])) return;
+    const context = this.shortcutContext(editor, false);
+    if (!context || context.code) return;
+    const { profile, index, before } = context;
+    const [at] = editor.ordered();
+    const end = before.length;
+    const select = (from: number, to: number) => editor.apply({ kind: 'select', paragraph: index, from, to });
+    // What is typed in code is left as typed.
+    const inCode = () => !!this.formats?.read(...editor.ordered(), editor.paragraphs(), editor.pending).marks?.code;
+    const language = () => paragraphLanguageOf(at.paragraph, documentLanguageOf(editor), paragraphText(at.paragraph));
+    if (typed === ' ' && rules.links) {
+      const url = urlAt(before);
+      if (url && formatAllows(profile, { kind: 'insertLink' } as Action) && !editor.linkAt(at.paragraph, url.start + 1, false) && !inCode()) {
+        select(url.start, url.start + url.text.length);
+        editor.apply({ kind: 'setLink', url: url.url, text: url.text });
+        select(end, end);
+        this.converted = { steps: 1, paragraph: index, offset: end };
+        return;
+      }
+    }
+    if (rules.ordinals && !/[\p{L}\p{N}]/u.test(typed)) {
+      const span = ordinalAt(before, language());
+      if (span && formatAllows(profile, { kind: 'toggleMark', mark: 'superscript' }) && !inCode()) {
+        select(span.start, span.end);
+        this.converted = { steps: 1, paragraph: index, offset: end };
+        return this.formatSteps(editor, [{ kind: 'toggleMark', mark: 'superscript' }]).then(() => {
+          select(end, end);
+        });
+      }
+    }
+    const fix = autoCorrect(before, typed, rules, language, { custom: live.replacements, words: spelling.words });
+    if (!fix || inCode()) return;
+    // Typing over the characters replaces them in one undoable step, which Backspace takes back.
+    const replace = () => {
+      const depth = editor.undoDepth;
+      select(fix.from, fix.to);
+      editor.apply({ kind: 'insertText', text: fix.text });
+      const caret = end - (fix.to - fix.from) + fix.text.length;
+      select(caret, caret);
+      const steps = editor.undoDepth - depth;
+      if (steps > 0) this.converted = { steps, paragraph: index, offset: end };
+    };
+    // A replacement the user wrote may have characters whose font page is not loaded yet (an emoji, say).
+    const session = this.session;
+    if (session && !CORE_TEXT.test(fix.text)) return session.ensurePages(fix.text).then(() => (this.closed ? undefined : replace()));
+    replace();
+  }
+
+  /** The Markdown shortcuts: a character was typed that may finish one. */
+  private markdownShortcut(editor: Editor, typed: string): void | Promise<void> {
     const context = this.shortcutContext(editor);
     if (!context) return;
     const { profile, line, code, index, before } = context;
@@ -2263,7 +2330,7 @@ class OpenDocument {
     }
     if (typed === ' ') {
       // A link (or a #tag) is made by the space after it: the text typed next then goes after the link, not into it.
-      const link = code ? null : linkShortcut(before.slice(0, -1)) ?? wikiLinkShortcut(before.slice(0, -1)) ?? urlShortcut(before.slice(0, -1)) ?? tagShortcut(before.slice(0, -1));
+      const link = code ? null : linkShortcut(before.slice(0, -1)) ?? wikiLinkShortcut(before.slice(0, -1)) ?? tagShortcut(before.slice(0, -1));
       if (link && allows([{ kind: 'insertLink' } as Action])) {
         select(link.start, end - 1);
         editor.apply({ kind: 'setLink', url: link.url, text: link.text });
@@ -2314,7 +2381,8 @@ class OpenDocument {
   private tagBeforeEnter(editor: Editor): void {
     const context = this.shortcutContext(editor);
     if (!context || context.code) return;
-    const link = urlShortcut(context.before) ?? tagShortcut(context.before);
+    const url = live.autoCorrect.links ? urlAt(`${context.before} `) : null;
+    const link = url ?? tagShortcut(context.before);
     if (!link || !formatAllows(context.profile, { kind: 'insertLink' } as Action)) return;
     const [at] = editor.ordered();
     if (editor.linkAt(at.paragraph, link.start + 1, false)) return; // already a link
@@ -2346,6 +2414,9 @@ class OpenDocument {
   }
 }
 
+/** Text made only of characters the core font atlases hold (see scripts/fonts/charset.txt). */
+const CORE_TEXT = /^[\u0020-\u007e\u00a0-\u024f\u2000-\u218f\u2190-\u21ff]*$/;
+
 /** What finishes a #tag besides a space. */
 const TAG_ENDINGS = ',;:!?)]}';
 
@@ -2371,7 +2442,13 @@ const SPELL_FINISHED_REACH = 2;
 /** Words the user added to the dictionary (for every document), and the words and grammar rules ignored in the open document. */
 const spelling = { words: new Set<string>(), ignoredWords: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
-const live = { spelling: true, grammar: true, autoFormat: true, livePreview: false };
+const live = { spelling: true, grammar: true, autoFormat: true, autoCorrect: { ...AUTOCORRECT_DEFAULTS }, replacements: new Map<string, string>(), livePreview: false };
+
+/** The autocorrect rules that are on, and the user's replacement list. */
+function setAutoCorrect(wire: Extract<WireCommand, { kind: 'autoCorrect' }>): void {
+  live.autoCorrect = wire.options;
+  live.replacements = new Map(wire.replacements);
+}
 const dictionaries = new Map<SpellLanguage, Promise<Dictionary>>();
 const loadedDictionaries = new Map<SpellLanguage, Dictionary>();
 /** Changes when what counts as a mistake does, so checked paragraphs are checked again. */

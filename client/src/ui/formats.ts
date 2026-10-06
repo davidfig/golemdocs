@@ -453,6 +453,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
         case 'wordCount':
         case 'options':
         case 'properties':
+        case 'versionHistory':
+        case 'trash':
           return true;
         case 'replace':
         case 'pasteSpecial':

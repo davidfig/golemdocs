@@ -24,3 +24,9 @@ export const chunkPrefix = (ownerId: string, docId: string): string => `${ownerI
 
 /** What every one of a document's pictures' keys starts with. */
 export const mediaPrefix = (ownerId: string, docId: string): string => `${ownerId}/${docId}.media/`;
+
+/** A checkpoint of a document: its file as it was before the save that replaced it, named by that file's `updated_at` (see versions.ts). */
+export const historyKey = (ownerId: string, docId: string, version: number): string => `${ownerId}/${docId}.history/${version}`;
+
+/** What every one of a document's checkpoints' keys starts with. */
+export const historyPrefix = (ownerId: string, docId: string): string => `${ownerId}/${docId}.history/`;

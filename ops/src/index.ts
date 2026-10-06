@@ -8,3 +8,4 @@ export * from './replica.ts';
 export * from './multiplayer.ts';
 export * from './objects.ts';
 export * from './textOps.ts';
+export * from './versionPolicy.ts';

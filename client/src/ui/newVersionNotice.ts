@@ -11,9 +11,6 @@ import './newVersionNotice.css';
 const SEEN_KEY = 'golem.newVersion.seen';
 const OFF_KEY = 'golem.newVersion.off';
 
-/** TESTING: shows the note on every start, whatever was seen or turned off. Set to false before release. */
-const ALWAYS_SHOW = true;
-
 function read(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -50,7 +47,7 @@ export class NewVersionNotice {
     const first = read(SEEN_KEY) === null;
     const isNew = !first && read(SEEN_KEY) !== version;
     write(SEEN_KEY, version);
-    this.el.hidden = !(ALWAYS_SHOW || (isNew && read(OFF_KEY) !== '1'));
+    this.el.hidden = !(isNew && read(OFF_KEY) !== '1');
     parent.append(this.el);
     // Sits above the status bar when it is showing: the page's bottom edge is the bar's top edge.
     const footer = document.getElementById('footer');

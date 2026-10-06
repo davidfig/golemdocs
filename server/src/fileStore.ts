@@ -179,6 +179,11 @@ function parse(body: ArrayBuffer, maxBytes: number): { manifest: Manifest; suppl
   return { manifest, supplied: bytes };
 }
 
+/** The size a delta upload's file will have (its manifest's), without storing anything. */
+export function deltaSize(body: ArrayBuffer, maxBytes: number): number {
+  return parse(body, maxBytes).manifest.size;
+}
+
 /**
  * Stores a delta upload: checks it, writes the chunks it brought, then the manifest (only if the file is still as `etagMatches`
  * says, when given). Every chunk the manifest names must be brought or already be in `previous` (the manifest it replaces): else it is

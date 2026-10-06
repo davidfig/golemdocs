@@ -13,6 +13,10 @@ export interface FileToolsHost {
   folders(): Promise<Folder[]>;
   /** Deletes documents and folders, the same as the Documents screen's Delete. */
   deleteEntries(entries: LibraryEntry[], folderIds: string[]): Promise<void>;
+  /** The trash: documents deleted from this browser and from the account, kept for 30 days. */
+  trash(): Promise<{ id: string; name: string; source: 'device' | 'account'; deletedAt: number; purgeAt: number }[]>;
+  /** Puts trashed documents back; each id that could not be is reported with why. */
+  restoreFromTrash(ids: string[]): Promise<{ restored: string[]; failed: string[] }>;
   /** Lists everything again and redraws the screens that show it. */
   changed(): Promise<void> | void;
 }
@@ -134,6 +138,19 @@ export function fileTools(host: FileToolsHost): Record<string, (args: Args) => P
       if (alone.length || movable.length) await host.changed();
       const done = [alone.length ? `moved ${count(alone.length, 'document')}` : '', movable.length ? `moved ${count(movable.length, 'folder')}` : ''].filter(Boolean);
       return report(done, skipped);
+    },
+
+    async list_trash() {
+      const items = await host.trash();
+      return items.length ? items.map((i) => `trashed document ${i.id} "${i.name}" (${i.source === 'account' ? 'in the account' : 'on this device'}), deleted ${new Date(i.deletedAt).toISOString()}, kept until ${new Date(i.purgeAt).toISOString()}`).join('\n') : 'The trash is empty.';
+    },
+
+    async restore_from_trash(args) {
+      const ids = strings(args, 'files');
+      if (!ids.length) throw new Error('`files` must list the ids of trashed documents (see the trash action).');
+      const { restored, failed } = await host.restoreFromTrash(ids);
+      if (restored.length) await host.changed();
+      return report(restored.length ? [`restored ${count(restored.length, 'document')}`] : [], failed);
     },
 
     async delete_files(args) {

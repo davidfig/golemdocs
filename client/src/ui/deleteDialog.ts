@@ -7,9 +7,10 @@ import { h } from './dom.ts';
 
 /**
  * Asks whether to delete `lines` (what would go, one per line). `title` names the action. Resolves
- * true on Delete, false on Cancel, Escape or a click outside. Cancel has the focus to start.
+ * true on Delete, false on Cancel, Escape or a click outside. Cancel has the focus to start. Asked from inside a modal dialog, it goes
+ * in `parent` (that dialog): everything outside a modal dialog is inert, so a question put in the page could not be answered.
  */
-export function confirmDelete(title: string, lines: readonly string[]): Promise<boolean> {
+export function confirmDelete(title: string, lines: readonly string[], parent: HTMLElement = document.body): Promise<boolean> {
   return new Promise((resolve) => {
     const finish = (yes: boolean) => {
       backdrop.remove();
@@ -37,7 +38,7 @@ export function confirmDelete(title: string, lines: readonly string[]): Promise<
       e.stopPropagation();
       finish(false);
     });
-    document.body.append(backdrop);
+    parent.append(backdrop);
     cancel.focus();
   });
 }

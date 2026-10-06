@@ -14,7 +14,7 @@
 // owner's namespace); the page looks through those itself.
 
 import { readDocument } from './fileStore.ts';
-import { WordDocument, isPlainText, paragraphSegments, textSegments, type Segment } from '@golemdocs/docx';
+import { WordDocument, ZipError, isPlainText, paragraphSegments, textSegments, type Segment } from '@golemdocs/docx';
 import type { AiBinding, Env } from './cf.ts';
 import { HttpError } from './http.ts';
 import { docxKey } from './keys.ts';
@@ -98,13 +98,26 @@ export interface IndexedDocument {
 
 const vectorId = (doc: string, chunk: number) => `${doc}:${chunk}`;
 
+/**
+ * The paragraphs of a .docx; none for a file that is not a ZIP at all (a PDF, a picture, a drawing): it has no text
+ * here, and is indexed as empty, so it is neither retried on every search nor counted as waiting.
+ */
+async function docxSegments(docx: Uint8Array): Promise<Segment[]> {
+  try {
+    return paragraphSegments(await WordDocument.read(docx));
+  } catch (error) {
+    if (error instanceof ZipError && error.message.startsWith('not a ZIP file')) return [];
+    throw error;
+  }
+}
+
 /** Puts (the current version of) a document in the index, replacing whatever was there. */
 export async function indexDocument(env: Env, ownerId: string, doc: IndexedDocument, bytes: Uint8Array): Promise<void> {
   const index = env.VECTORS!;
   // The app saves its own wrapper around the .docx: one with no document in it has no text to index.
   // A plain text file is kept as it is: its lines are its paragraphs.
   const docx = isPlainText(bytes) ? null : await storedDocx(bytes);
-  const chunks = isPlainText(bytes) ? chunkSegments(textSegments(bytes)) : docx ? chunkSegments(paragraphSegments(await WordDocument.read(docx))) : [];
+  const chunks = isPlainText(bytes) ? chunkSegments(textSegments(bytes)) : docx ? chunkSegments(await docxSegments(docx)) : [];
   // The name is part of what each chunk is about, and what finds a document by its title.
   const vectors = chunks.length ? await embed(env.AI!, chunks.map((c) => `${doc.name}\n${c.text}`)) : [];
   if (vectors.length) {

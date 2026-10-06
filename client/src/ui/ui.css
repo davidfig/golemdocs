@@ -1721,6 +1721,47 @@
   margin-left: auto;
 }
 
+/* --- Tools > Options > Edit List (see replacementsDialog.ts) --------------------------------------- */
+
+.wm-replacements {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(480px, 80vw);
+}
+
+.wm-replacements p {
+  margin: 0;
+}
+
+.wm-replacements-head,
+.wm-replacements-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 22px;
+  gap: 6px;
+  align-items: center;
+}
+
+.wm-replacements-head {
+  font-weight: bold;
+}
+
+.wm-replacements-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.wm-replacements input {
+  min-width: 0;
+}
+
+.wm-replacements .wm-button {
+  align-self: flex-start;
+}
+
 /* --- Cloudflare billing (see billingPanel.ts) ------------------------------------------------- */
 
 .wm-billing table {
@@ -2779,4 +2820,113 @@ body.wm-fullscreen .wm-toolbars {
 .wm-footer-view:focus-visible {
   outline: 2px solid var(--wm-hot-border);
   outline-offset: 1px;
+}
+
+/* --- Version History and Trash (see versionHistoryDialog.ts, trashDialog.ts) ------------------------------------------------- */
+
+.wm-dialog.wm-history {
+  width: 580px;
+  max-width: min(580px, calc(100vw - 32px));
+}
+
+.wm-history-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wm-history-intro,
+.wm-history-note {
+  margin: 0;
+  color: var(--wm-muted);
+}
+
+.wm-history-warning {
+  color: var(--wm-warning);
+}
+
+.wm-history-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wm-history-name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wm-history-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-history-name-row .wm-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.wm-history-list {
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--wm-field-border);
+  background: var(--wm-field-bg);
+  list-style: none;
+}
+
+.wm-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--wm-etch-dark);
+}
+
+.wm-history-row:last-child {
+  border-bottom: 0;
+}
+
+.wm-history-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.wm-history-name-text {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-history-meta,
+.wm-history-source {
+  color: var(--wm-muted);
+  font-size: 0.9em;
+}
+
+.wm-history-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.wm-history-actions .wm-button {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.wm-history-empty {
+  padding: 12px;
+  color: var(--wm-muted);
+  text-align: center;
 }

@@ -63,6 +63,12 @@ function toolNote(name: string): string {
       return t('assistant.tool.viewPicture');
     case 'rename_document':
       return t('assistant.tool.rename');
+    case 'list_versions':
+    case 'save_version':
+    case 'restore_version':
+      return t('assistant.tool.versions');
+    case 'list_trash':
+    case 'restore_from_trash':
     case 'list_files':
     case 'create_folders':
     case 'rename_folders':

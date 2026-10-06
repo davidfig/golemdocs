@@ -4,15 +4,16 @@
 // who else may open it is kept in the directory (see sharing.ts).
 
 import { documentIndex } from './docIndex.ts';
-import { CHUNKED_FROM, DELTA, applyDelta, deleteChunkList, deleteChunks, documentResponse, isChunked, previousManifest } from './fileStore.ts';
-import { DOCX, docxKey, indexKey, thumbKey } from './keys.ts';
+import { DELTA, applyDelta, deleteChunkList, deleteChunks, deltaSize, documentResponse, isChunked, previousManifest, readDocument } from './fileStore.ts';
+import { DOCX, docxKey, historyKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkFolder, type FolderRow } from './folders.ts';
 import { removeManyFromIndex } from './search.ts';
+import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
+import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, versionsOf, type VersionRow } from './versions.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
-import { deleteMedia } from './roomMedia.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, userDb, type UserDb } from './userDb.ts';
 
@@ -82,16 +83,15 @@ async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Pr
 }
 
 /**
- * Deletes the owner's documents: the rows, then their shares, search entries, rooms and files. The
- * rows are what make a document gone, so once they are deleted the rest is cleanup: with `defer`
- * it is handed over to carry on after the response (it cannot fail the request; a failure leaves
- * unreferenced objects, never a row pointing at nothing), otherwise it is done before returning.
- * `also` goes in the same transaction as the rows (a folder delete's folders, so either both go or neither).
+ * Deletes the owner's documents: the rows move to the trash (see trash.ts), their shares, search entries and rooms go, and
+ * the files stay in R2 until the trash is emptied or 30 days pass. The rows are what make a document gone, so once they have moved
+ * the rest is cleanup: with `defer` it is handed over to carry on after the response (it cannot fail the request), otherwise it is done
+ * before returning. `also` goes in the same transaction as the rows (a folder delete's folders, so either both go or neither).
  */
 async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[], defer?: (work: Promise<unknown>) => void, also: { sql: string; params: unknown[] }[] = []): Promise<void> {
   const ids = rows.map((r) => r.id);
   // Many to a statement and all in one request to Cloudflare, which limits how many it takes.
-  await db.runAll([...perChunk(ids, (marks) => `DELETE FROM documents WHERE id IN (${marks})`), ...also]);
+  await db.runAll([...trashStatements(ids, Date.now()), ...perChunk(ids, (marks) => `DELETE FROM documents WHERE id IN (${marks})`), ...also]);
   // The owner and share rows are what let the bytes be read straight from R2 (see the fast read in
   // handleDocuments), so they go before answering: deferred work can be cut short, and the files would
   // stay readable. They are cheap (the directory is a binding, not the rate-limited API).
@@ -106,12 +106,7 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
     if (!forgotten) await forgetDocuments(env, ids);
     await removeManyFromIndex(env, ids);
     await endRooms(env, ids);
-    // R2 refuses an empty list (a folder with no documents) and more than 1000 keys at once.
-    const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
-    for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
-    for (const row of rows) await deleteMedia(env, ownerId, row.id);
-    // Only a document the client keeps as chunks has any (it does so from CHUNKED_FROM bytes; a save that makes one whole removes them), so a small one is not looked for.
-    for (const row of rows) if (row.size >= CHUNKED_FROM) await deleteChunks(env, ownerId, row.id);
+    await purgeExpired(env, ownerId, db);
   };
   if (defer) defer(cleanup().catch((error) => console.error('delete cleanup failed', error)));
   else await cleanup();
@@ -241,12 +236,14 @@ export async function resolveAccess(env: Env, userId: string, docId: string, kno
 
 /** A request under /api/documents or /api/shared, as the router split its path. */
 export interface DocumentRoute {
-  collection: 'documents' | 'shared';
+  collection: 'documents' | 'shared' | 'trash';
   /** The document, or `batch` for the batch upload; undefined for the collection itself. */
   id?: string;
-  sub?: 'thumbnail' | 'index' | 'shares';
-  /** Whose share a DELETE /api/documents/:id/shares/:userId removes. */
+  sub?: 'thumbnail' | 'index' | 'shares' | 'versions';
+  /** Whose share a DELETE /api/documents/:id/shares/:userId removes, or which version /api/documents/:id/versions/:version is. */
   granteeId?: string;
+  /** `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore. */
+  action?: 'restore';
 }
 
 /** The user's own storage: whether they sync, and their database if they have one (or get one now). */
@@ -267,7 +264,7 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  * on after the response (a delete's cleanup); without it that work is done before answering.
  */
 export async function handleDocuments(request: Request, env: Env, userId: string, url: URL, route: DocumentRoute, defer?: (work: Promise<unknown>) => void): Promise<Response> {
-  const { collection, id, sub, granteeId } = route;
+  const { collection, id, sub, granteeId, action } = route;
   const batchUpload = collection === 'documents' && id === 'batch' && sub === undefined;
   // Who may open the document doesn't depend on the user's database, so both are looked up together.
   const earlyAccess = id !== undefined && collection === 'documents' ? accessFor(env, userId, id) : undefined;
@@ -317,6 +314,44 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       }),
     );
     return json(perOwner.flat());
+  }
+
+  // /api/trash[/:id[/restore]]: what the owner deleted in the last 30 days (see trash.ts).
+  if (collection === 'trash') {
+    if (!ownDb) {
+      if (request.method === 'GET' && !id) return json([]);
+      throw new HttpError(404, 'not found');
+    }
+    if (!id) {
+      if (request.method === 'GET') {
+        await purgeExpired(env, userId, ownDb);
+        return json((await ownDb.all<TrashRow>('SELECT * FROM trash ORDER BY deleted_at DESC')).map(describeTrashed));
+      }
+      // DELETE /api/trash: empty it.
+      if (request.method === 'DELETE') {
+        await purge(env, userId, ownDb, await ownDb.all<TrashRow>('SELECT * FROM trash'));
+        return new Response(null, { status: 204 });
+      }
+      throw new HttpError(405, 'method not allowed');
+    }
+    const trashed = await ownDb.first<TrashRow>('SELECT * FROM trash WHERE id = ?', [id]);
+    if (!trashed) throw new HttpError(404, 'not found');
+    if (request.method === 'DELETE' && !action) {
+      await purge(env, userId, ownDb, [trashed]);
+      return new Response(null, { status: 204 });
+    }
+    if (request.method === 'POST' && action === 'restore') {
+      if (!syncing) throw subscriptionRequired();
+      // Its folder may have been deleted since: then it comes back at the top level.
+      const folderId = trashed.folder_id !== null && (await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [trashed.folder_id])) ? trashed.folder_id : null;
+      await ownDb.runAll([
+        { sql: 'INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', params: [trashed.id, trashed.name, trashed.size, trashed.r2_key, trashed.created_at, trashed.updated_at, trashed.thumb_at, folderId] },
+        { sql: 'DELETE FROM trash WHERE id = ?', params: [id] },
+      ]);
+      await registerOwner(env, id, userId);
+      return json(describe({ ...trashed, folder_id: folderId }));
+    }
+    throw new HttpError(405, 'method not allowed');
   }
 
   // GET /api/documents: the user's documents, newest first.
@@ -504,6 +539,70 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     return documentIndex(env, ownerId, row);
   }
 
+  // /api/documents/:id/versions[/:version[/restore]]: the document's history (versions.ts). Anyone who can open the document may look
+  // at it; anyone who can edit may save a version, rename or restore one. Restoring never touches the document: it makes a new one, in
+  // the restorer's own account, from the version's bytes.
+  if (sub === 'versions') {
+    const rest = granteeId;
+    if (rest === undefined) {
+      if (request.method === 'GET') return json((await versionsOf(db, id)).map(describeVersion));
+      // POST { name? }: keep the document as it is now (as a named version if it has a name).
+      if (request.method === 'POST') {
+        requireWrite();
+        requireStorage();
+        const body = (await request.json().catch(() => null)) as { name?: unknown } | null;
+        const name = typeof body?.name === 'string' ? cleanName(body.name) : null;
+        if (typeof body?.name === 'string' && !name) throw new HttpError(400, 'expected a name');
+        if (!(await checkpoint(env, ownerId, db, row, { force: true, ...(name ? { name } : {}) }))) throw new HttpError(503, 'could not save the version; try again');
+        const saved = await db.first<VersionRow>('SELECT * FROM versions WHERE doc_id = ? AND version = ?', [id, row.updated_at]);
+        return json(saved ? describeVersion(saved) : { version: row.updated_at }, 201);
+      }
+      throw new HttpError(405, 'method not allowed');
+    }
+    if (!/^\d{1,16}$/.test(rest)) throw new HttpError(404, 'not found');
+    const version = Number(rest);
+    const kept = await db.first<VersionRow>('SELECT * FROM versions WHERE doc_id = ? AND version = ?', [id, version]);
+    if (!kept) throw new HttpError(404, 'not found');
+    if (!action) {
+      if (request.method === 'GET') {
+        const response = await documentResponse(env, historyKey(ownerId, id, version), ownerId, id, DOCX);
+        if (!response) throw new HttpError(404, 'version file is missing');
+        return response;
+      }
+      // PATCH { name }: names a version, or (null) lets it be thinned like the others.
+      if (request.method === 'PATCH') {
+        requireWrite();
+        const body = (await request.json().catch(() => null)) as { name?: unknown } | null;
+        const name = body?.name === null ? null : typeof body?.name === 'string' ? cleanName(body.name) : undefined;
+        if (name === undefined || (typeof body?.name === 'string' && !name)) throw new HttpError(400, 'expected { name }');
+        await db.run('UPDATE versions SET name = ? WHERE doc_id = ? AND version = ?', [name, id, version]);
+        return json(describeVersion({ ...kept, name }));
+      }
+      if (request.method === 'DELETE') {
+        requireWrite();
+        await removeVersions(env, ownerId, db, id, [kept]);
+        return new Response(null, { status: 204 });
+      }
+      throw new HttpError(405, 'method not allowed');
+    }
+    if (request.method === 'POST' && action === 'restore') {
+      requireWrite();
+      // The new document is the restorer's own, so it needs their sync (not the owner's).
+      if (!ownDb || !syncing) throw subscriptionRequired();
+      const bytes = await readDocument(env, historyKey(ownerId, id, version), ownerId, id, MAX_BYTES);
+      if (bytes === null) throw new HttpError(404, 'version file is missing');
+      if (bytes === 'too-large') throw new HttpError(413, 'document too large');
+      const docId = crypto.randomUUID();
+      const name = cleanName(url.searchParams.get('name')) ?? row.name;
+      const now = Date.now();
+      await env.FILES.put(docxKey(userId, docId), bytes, { httpMetadata: { contentType: DOCX } });
+      await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [docId, name, bytes.byteLength, docxKey(userId, docId), now, now, null]);
+      await registerOwner(env, docId, userId);
+      return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null, folderId: null }, 201);
+    }
+    throw new HttpError(405, 'method not allowed');
+  }
+
   // GET/PUT /api/documents/:id/thumbnail: a small image of the first page, made by the client.
   // The client asks for it as `?v=<thumbAt>`, so a given URL never changes and can be cached hard.
   if (sub === 'thumbnail') {
@@ -573,6 +672,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     let size = body.byteLength;
     let added: string[] = [];
     let dropped: string[] = [];
+    // Keep what this save replaces, when the rules say it is due (versions.ts). Before the bytes go in, and never a reason to refuse the save.
+    await checkpoint(env, ownerId, db, row, { nextSize: delta ? deltaSize(body, MAX_DELTA_BYTES) : body.byteLength, ...(current ? { etag: current.etag } : {}) });
     if (delta) {
       const saved = await applyDelta(env, ownerId, id, row.r2_key, body, await previousManifest(env, row.r2_key), { maxBytes: MAX_BYTES, ...(current ? { etagMatches: current.etag } : {}) });
       ({ added, dropped } = saved);
@@ -597,13 +698,21 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         if (delta) await dropUnused(env, ownerId, id, row.r2_key, added);
         throw new HttpError(409, 'changed elsewhere');
       }
-      // Deleted while this save was on its way: the bytes just written belong to nothing.
-      await env.FILES.delete(row.r2_key);
-      await deleteChunks(env, ownerId, id).catch((error) => console.error('removing chunks failed', error));
+      // Deleted while this save was on its way. In the trash, the file is its (restorable) file, bytes just written and all; if the row is
+      // gone altogether (emptied meanwhile), the bytes belong to nothing.
+      if (!(await db.first('SELECT 1 FROM trash WHERE id = ?', [id]))) {
+        await env.FILES.delete(row.r2_key);
+        await deleteChunks(env, ownerId, id).catch((error) => console.error('removing chunks failed', error));
+      }
       throw new HttpError(404, 'not found');
     }
     // The save is in: what it replaced is cleanup, which can wait until after the response.
-    const cleanup = (delta ? deleteChunkList(env, ownerId, id, dropped) : isChunked(before) ? deleteChunks(env, ownerId, id) : Promise.resolve()).catch((error) => console.error('chunk cleanup failed', error));
+    // Chunks a checkpoint still names stay; then the checkpoints the rules no longer keep go.
+    const cleanup = (async () => {
+      if (delta) await deleteChunkList(env, ownerId, id, await chunksToDelete(env, ownerId, db, id, dropped));
+      else if (isChunked(before)) await deleteChunks(env, ownerId, id, await retainedChunks(env, ownerId, db, id));
+      await prune(env, ownerId, db, id, size);
+    })().catch((error) => console.error('chunk cleanup failed', error));
     // Anyone watching it (a document one person edits at a time) opens it again. Before answering, not deferred: whoever saved this
     // to hand the document over says so only once the answer is back, and the room must have told the watchers first.
     await roomSaved(env, id, updated[0].updated_at).catch((error) => console.error('telling the room failed', error));

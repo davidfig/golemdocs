@@ -5,7 +5,7 @@ import { deskColor, onThemeChange, pagesDark } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, renameCloudDocument, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { zipDocuments } from './storage/archive.ts';
 import { pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
@@ -32,6 +32,10 @@ import {
   saveThumbnail,
   deleteSearchIndexes,
   listSearchIndexes,
+  listTrashedSaved,
+  purgeTrashedSaved,
+  restoreTrashedSaved,
+  trashSaved,
   putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
@@ -81,6 +85,7 @@ import { PageRenderer, type FrameStats } from './webgl/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
+import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect } from './ui/autoCorrect.ts';
 import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
 import { livePreviewOn, onLivePreview } from './ui/livePreview.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
@@ -93,6 +98,11 @@ import { showPasteSpecialDialog } from './ui/pasteSpecialDialog.ts';
 import { attachTextInput, editKey, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
+import { TrashDialog } from './ui/trashDialog.ts';
+import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
+import { loadTrash, restoreById, type TrashDeps, type TrashItem } from './trash.ts';
+import { TRASH_MS } from '@golemdocs/ops';
+import { deviceVersionBytes, loadHistory, restoreFromAccount, restoredName, saveNamedVersion, type HistoryEntry, type HistoryTarget } from './history.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
 import { showOptions } from './ui/optionsDialog.ts';
 import { Footer } from './ui/footer.ts';
@@ -478,6 +488,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       spellDialog.sendLive();
       startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
+      worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() });
       worker.command({ kind: 'livePreview', on: livePreviewOn() });
       setStatus(t('app.layingOut', { name }));
     },
@@ -1929,7 +1940,9 @@ async function deleteEntries(entries: readonly LibraryEntry[], folderIds: readon
     for (const entry of entries) {
       if (refused.has(cloudIdOf(entry)) || (entry.cloud?.folderId && refused.has(entry.cloud.folderId))) continue;
       if (!entry.local) continue;
-      await deleteSaved(entry.local.id);
+      // The account keeps what it deleted for 30 days (its trash); a document only this browser has goes to this browser's.
+      if (account && cloudIdOf(entry)) await deleteSaved(entry.local.id);
+      else await trashSaved(entry.local.id);
       removed.add(entry.local.id);
       progress?.update(++done, total);
     }
@@ -2936,6 +2949,7 @@ const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'un
 
 /** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
+onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
 onLivePreview((on) => worker.command({ kind: 'livePreview', on }));
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
@@ -2945,7 +2959,7 @@ function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
   commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -3788,6 +3802,12 @@ const chromeHost = createChromeHost({
   },
   renameDocument,
   showProperties: () => propertiesDialog.open(),
+  showVersionHistory: () => {
+    // What was typed a moment ago is part of the history it is about to show.
+    saveIfEdited();
+    void saving.then(() => versionHistoryDialog.open());
+  },
+  showTrash: () => trashDialog.open(),
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
@@ -3923,6 +3943,75 @@ const findDialog = new FindDialog(document.body, {
 
 // File ▸ Properties.
 const propertiesDialog = new PropertiesDialog({ send, focusEditor: focusInput });
+
+// File ▸ Version History: the versions this browser and (for a document in the account) the account kept of the open document.
+/** Tells the person something short, in the status bar and a toast. */
+function say(text: string): void {
+  setStatus(text);
+  showToast(text);
+}
+
+/** The open document as history knows it, or null if it has never been saved (the welcome document, say). */
+function historyTarget(): HistoryTarget | null {
+  if (current.shared) return { localId: null, cloudId: current.shared.id };
+  if (!current.localId) return null;
+  const local = library.entries.find((e) => e.local?.id === current.localId)?.local;
+  return { localId: current.localId, cloudId: account ? (local?.cloudId ?? null) : null };
+}
+
+/** Makes a new document from a kept version and opens it; the document the version is of stays as it is. */
+async function openVersion(entry: HistoryEntry): Promise<string> {
+  const target = historyTarget();
+  if (!target) throw new Error(t('history.gone'));
+  const name = restoredName(current.name || t('app.newDocumentName'), entry.version, getLocale());
+  if (entry.source === 'account') {
+    const made = await restoreFromAccount(target, entry, name);
+    await refreshLibrary();
+    void openCloud(made.id);
+    return made.name;
+  }
+  const bytes = await deviceVersionBytes(target.localId!, entry.version);
+  if (!bytes) throw new Error(t('history.gone'));
+  const info = await saveSaved({ name, bytes, owner: account?.id });
+  library.putLocal(info);
+  if (account) scheduleUpload(info.id);
+  openSource(`local:${info.id}`);
+  return info.name;
+}
+
+const versionHistoryDialog = new VersionHistoryDialog({
+  target: historyTarget,
+  canEdit: () => current.shared?.role !== 'viewer',
+  openVersion,
+  tell: say,
+  focusEditor: focusInput,
+});
+
+// File ▸ Trash: what was deleted from this browser and from the account.
+const trashDeps: TrashDeps = {
+  hasAccount: () => account !== null,
+  // A document made while signed out can be brought back by whoever is signed in now (it is adopted, like the guest documents at sign-in).
+  listDevice: async () =>
+    (await listTrashedSaved())
+      .filter(({ info }) => info.owner === undefined || info.owner === account?.id)
+      .map(({ info, deletedAt }): TrashItem => ({ source: 'device', id: info.id, name: info.name, size: info.size, deletedAt, purgeAt: deletedAt + TRASH_MS })),
+  listAccount: async () => (await listTrash()).map((d): TrashItem => ({ source: 'account', id: d.id, name: d.name, size: d.size, deletedAt: d.deletedAt, purgeAt: d.purgeAt })),
+  async restore(item) {
+    if (item.source === 'account') {
+      await restoreFromTrash(item.id);
+      return;
+    }
+    const info = await restoreTrashedSaved(item.id, account?.id);
+    if (!info) throw new Error(t('trash.gone'));
+    library.putLocal(info);
+    if (account) scheduleUpload(info.id);
+  },
+  async purge(item) {
+    if (!item || item.source === 'device') await purgeTrashedSaved(item?.id);
+    if (account && (!item || item.source === 'account')) await purgeTrash(item?.id);
+  },
+};
+const trashDialog = new TrashDialog({ deps: trashDeps, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });
 
 // Tools ▸ Word Count.
 const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput });
@@ -4148,6 +4237,7 @@ const dashboard = new Dashboard(document.body, {
     openSource(`shared:${doc.id}`);
   },
   closed: focusInput,
+  showTrash: () => trashDialog.open(),
   contentMatches: async (query) => {
     const docs = await searchableNow();
     // Copies kept here are indexed in the background a few seconds after a change; a search doesn't wait for that.
@@ -4318,7 +4408,42 @@ const assistantTools = appTools({
     entries: () => library.entries,
     folders: listFoldersHere,
     deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
+    trash: async () => (await loadTrash(trashDeps)).items,
+    restoreFromTrash: (ids) => restoreById(trashDeps, ids),
     changed: () => refreshLibrary(),
+  },
+  history: {
+    async list() {
+      // What was typed a moment ago is part of the history it is about to list.
+      saveIfEdited();
+      await saving;
+      const target = historyTarget();
+      if (!target) return 'Error: this document has not been saved yet, so it has no history.';
+      const { entries, unreachable } = await loadHistory(target);
+      const lines = entries.map((e) => `${e.source} version ${e.version}: saved ${new Date(e.version).toISOString()}, ${e.size} bytes${e.name !== null ? `, named "${e.name}"` : ''}`);
+      const note = unreachable.length ? ` (The versions kept ${unreachable.map((s) => (s === 'account' ? 'in the account' : 'on this device')).join(' and ')} could not be loaded.)` : '';
+      return lines.length ? `${lines.join('\n')}${note}` : `There are no earlier versions yet; they are kept as the document is edited.${note}`;
+    },
+    async save(name) {
+      saveIfEdited();
+      await saving;
+      const target = historyTarget();
+      if (!target) return 'Error: this document has not been saved yet, so it has no history.';
+      if (current.shared?.role === 'viewer') return 'Error: the person can only view this document, not keep versions of it.';
+      await saveNamedVersion(target, name);
+      return `Kept the document as it is now as the version "${name}".`;
+    },
+    async restore(source, version) {
+      const target = historyTarget();
+      if (!target) return 'Error: this document has not been saved yet, so it has no history.';
+      if (current.shared?.role === 'viewer') return 'Error: the person can only view this document, not open its versions.';
+      const entry = (await loadHistory(target)).entries.find((e) => e.source === source && e.version === version);
+      if (!entry) return `Error: there is no ${source} version ${version}; use list.`;
+      const ready = nextDocumentReady();
+      const name = await openVersion(entry);
+      await ready;
+      return `Opened the version as a new document named "${name}". It is the open document now; the one it came from is unchanged.`;
+    },
   },
   otherDocuments,
   renamable,

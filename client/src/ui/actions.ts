@@ -67,7 +67,11 @@ export type DialogName =
   | 'wordCount'
   | 'options'
   | 'pageNumbers'
-  | 'dateTime';
+  | 'dateTime'
+  /** File ▸ Version History: the earlier versions of the open document. */
+  | 'versionHistory'
+  /** File ▸ Trash: the account's deleted documents. */
+  | 'trash';
 
 export type Action =
   // File

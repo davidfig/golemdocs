@@ -165,13 +165,20 @@ const handler: ExportedHandler = {
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).
-      const match = /^\/api\/(documents|shared|folders)(?:\/([^/]+)(?:\/(thumbnail|index|shares)(?:\/([^/]+))?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|restore)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
-      const [, collection, id, sub, granteeId] = match;
+      const [, collection, id, sub0, granteeId, action0] = match;
+      // `/api/trash/:id/restore` has its action where the other collections have a sub-resource.
+      const sub = sub0 === 'restore' ? undefined : sub0;
+      const action = sub0 === 'restore' ? 'restore' : action0;
       const batchUpload = collection === 'documents' && id === 'batch' && sub === undefined;
       if (id !== undefined && !batchUpload && !ID.test(id)) throw new HttpError(404, 'not found');
       if (collection === 'shared' && id !== undefined) throw new HttpError(404, 'not found');
-      if (collection === 'folders' && sub !== undefined) throw new HttpError(404, 'not found');
+      if (collection === 'folders' && (sub !== undefined || action !== undefined)) throw new HttpError(404, 'not found');
+      // Only a trashed document has `restore` right after its id; only a version has it after the version.
+      if (sub0 === 'restore' && collection !== 'trash') throw new HttpError(404, 'not found');
+      if (collection === 'trash' && sub !== undefined) throw new HttpError(404, 'not found');
+      if (action0 !== undefined && sub0 !== 'versions') throw new HttpError(404, 'not found');
 
       // Locally, catalogues live in the simulated directory database (see userDb.ts).
       if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
@@ -181,7 +188,7 @@ const handler: ExportedHandler = {
         const { syncing, ownDb } = await ownStorage(env, userId, request.method);
         return await handleFolders(request, id, ownDb, syncing);
       }
-      return await handleDocuments(request, env, userId, url, { collection, id, sub, granteeId } as DocumentRoute, ctx && ((work) => ctx.waitUntil(work)));
+      return await handleDocuments(request, env, userId, url, { collection, id, sub, granteeId, action } as DocumentRoute, ctx && ((work) => ctx.waitUntil(work)));
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
       console.error(error instanceof CloudflareError ? `${error.message} ${JSON.stringify(error.errors)}` : error);

@@ -121,14 +121,6 @@ export function tagShortcut(before: string): LinkShortcut | null {
   return tag && tag.end === before.length ? { start, text: before.slice(start), url: tagAddress(tag.name) } : null;
 }
 
-const BARE_URL = /(?:^|[\s(])(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"\]])$/i;
-
-/** The text before a space just typed (or after a paste) ends with a web address: "https://example.com/page". */
-export function urlShortcut(before: string): LinkShortcut | null {
-  const m = BARE_URL.exec(before);
-  return m ? { start: before.length - m[1].length, text: m[1], url: m[1] } : null;
-}
-
 /** The text before a space just typed ends with "[text](url)". */
 export function linkShortcut(before: string): LinkShortcut | null {
   if (!before.endsWith(')')) return null;

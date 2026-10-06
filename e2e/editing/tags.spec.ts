@@ -35,6 +35,8 @@ test('Ctrl/Cmd+click on a #tag opens Search All Documents on it, listing only th
   await expect(panel(page)).toHaveCount(0);
   // The keyboard is back in the document.
   await expect(app.editor).toBeFocused();
+  // Chrome drops text typed in the same instant focus comes back from a closed dialog (no beforeinput is sent): let it settle, as a person's typing would.
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   await page.keyboard.press('End');
   await page.keyboard.type('!');
   await expect.poll(() => app.text()).toBe('Plan #project now!');

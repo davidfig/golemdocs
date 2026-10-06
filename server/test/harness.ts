@@ -71,7 +71,7 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
   const bucket: any = {
     async get(key: string) {
       const o = objects.get(key);
-      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, httpEtag: `"${o.etag}"`, httpMetadata: { contentType: o.contentType }, customMetadata: o.customMetadata };
+      return o && { body: new Blob([o.bytes]).stream(), size: o.bytes.byteLength, etag: o.etag!, httpEtag: `"${o.etag}"`, httpMetadata: { contentType: o.contentType }, customMetadata: o.customMetadata };
     },
     async head(key: string) {
       const o = objects.get(key);

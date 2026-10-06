@@ -144,9 +144,18 @@ test.describe('presence', () => {
     const { a, b, context } = await roomPair(browser, 'one two three');
     await expectText(b, 'one two three');
     await b.press('Home');
-    const atStart = await expect.poll(async () => (await others(a.page))[0]?.x).toBeDefined();
-    void atStart;
-    const x0 = (await others(a.page))[0]!.x;
+    const remoteX = async () => (await others(a.page))[0]?.x;
+    await expect.poll(remoteX).toBeDefined();
+    // The caret may still be on its way from where it joined: its start is where it stops moving.
+    let x0 = 0;
+    await expect
+      .poll(async () => {
+        const before = await remoteX();
+        await a.page.waitForTimeout(150);
+        x0 = (await remoteX()) ?? 0;
+        return before === x0;
+      })
+      .toBe(true);
     await b.press('End');
     await expect.poll(async () => (await others(a.page))[0]?.x ?? 0).toBeGreaterThan(x0 + 20);
     await b.press('Enter');

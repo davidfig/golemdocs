@@ -73,6 +73,7 @@ Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into posit
 | `client/src/layout/agentTools.ts`, `agentPdfTools.ts` | Assistant tools run in the worker |
 | `client/src/layout/formatting.ts`, `selectionFormat.ts` | Menu/toolbar formatting actions and toolbar state |
 | `client/src/layout/autoformat.ts`, `livePreview.ts` | Markdown shortcuts, source shown at the caret |
+| `client/src/layout/autocorrect.ts` | Autocorrect as you type: pure rules (what the text typed so far should become); the worker's `autoCorrected` applies one as a single undoable replacement that Backspace takes back |
 | `editor/src/` | `Editor`: commands, hit-testing (`navigation.ts`), selection geometry |
 
 ## Key data types

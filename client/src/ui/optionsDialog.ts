@@ -3,9 +3,12 @@
 
 import { t } from '../i18n/index.ts';
 import { SMOOTHING_LEVELS, lockGuidesOn, penPressureOn, pencilSmoothing, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPenPressure, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, type Smoothing } from './drawingOptions.ts';
+import { AUTOCORRECT_KEYS } from '../layout/autocorrect.ts';
+import { autoCorrectOptions, setAutoCorrect } from './autoCorrect.ts';
 import { h } from './dom.ts';
 import { keepMenuInFullScreen, setKeepMenuInFullScreen } from './fullScreen.ts';
 import { showDialog } from './popup.ts';
+import { showReplacements } from './replacementsDialog.ts';
 
 function check(label: string, on: boolean, set: (value: boolean) => void): HTMLElement {
   const box = h('input', { attrs: { type: 'checkbox' } });
@@ -20,10 +23,13 @@ export function optionsPanel(): HTMLElement {
   for (const level of SMOOTHING_LEVELS) smoothing.append(h('option', { text: t(`dialogs.options.${level}`), attrs: { value: level } }));
   smoothing.value = pencilSmoothing();
   smoothing.addEventListener('change', () => setPencilSmoothing(smoothing.value as Smoothing));
+  const editList = h('button', { class: 'wm-button', text: t('dialogs.options.editReplacements'), attrs: { type: 'button' } });
+  editList.addEventListener('click', () => showReplacements());
   return h(
     'div',
     { class: 'wm-options' },
     h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen)),
+    h('fieldset', {}, h('legend', { text: t('dialogs.options.autocorrect') }), ...AUTOCORRECT_KEYS.map((rule) => check(t(`dialogs.options.${rule}`), autoCorrectOptions()[rule], (on) => setAutoCorrect(rule, on))), editList),
     h(
       'fieldset',
       {},

@@ -81,6 +81,7 @@ import { PageRenderer, type FrameStats } from './webgl/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
+import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect } from './ui/autoCorrect.ts';
 import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
 import { livePreviewOn, onLivePreview } from './ui/livePreview.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
@@ -478,6 +479,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       spellDialog.sendLive();
       startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
+      worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() });
       worker.command({ kind: 'livePreview', on: livePreviewOn() });
       setStatus(t('app.layingOut', { name }));
     },
@@ -2936,6 +2938,7 @@ const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'un
 
 /** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
+onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
 onLivePreview((on) => worker.command({ kind: 'livePreview', on }));
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
@@ -2945,7 +2948,7 @@ function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
   commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }

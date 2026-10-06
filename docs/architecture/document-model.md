@@ -106,6 +106,7 @@ Shared UI components (dropdowns, `LayerTree`, cursors, shape lists) are mandated
 | `client/src/layout/layoutClient.ts` | Page-side wrapper (`LayoutClient`, `DocumentListener`) |
 | `client/src/layout/protocol.ts` | `WireCommand`, `ToWorker`, `FromWorker`, `LayoutUpdate`, `SelectionUpdate` |
 | `client/src/layout/autoformat.ts`, `livePreview.ts` | Markdown shortcuts as you type; live-preview source paragraph |
+| `client/src/layout/autocorrect.ts`, `typos.ts`, `ui/autoCorrect.ts`, `ui/replacementsDialog.ts` | Autocorrect as you type (smart quotes, dashes, symbols, capitals, links, English typos, the user's replacement list) and its per-rule settings; the list is `word.replacements.v1`, synced with the account |
 | `client/src/layout/agentTools.ts` | Assistant edit tools (reuse editor functions) |
 | `client/src/ui/textInput.ts`, `ui/clipboard.ts` | Keyboard, IME and clipboard for canvas editors |
 | `client/src/documentEngine.ts` | Interface the chrome uses for non-document editors |

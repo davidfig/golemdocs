@@ -1721,6 +1721,47 @@
   margin-left: auto;
 }
 
+/* --- Tools > Options > Edit List (see replacementsDialog.ts) --------------------------------------- */
+
+.wm-replacements {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(480px, 80vw);
+}
+
+.wm-replacements p {
+  margin: 0;
+}
+
+.wm-replacements-head,
+.wm-replacements-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 22px;
+  gap: 6px;
+  align-items: center;
+}
+
+.wm-replacements-head {
+  font-weight: bold;
+}
+
+.wm-replacements-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.wm-replacements input {
+  min-width: 0;
+}
+
+.wm-replacements .wm-button {
+  align-self: flex-start;
+}
+
 /* --- Cloudflare billing (see billingPanel.ts) ------------------------------------------------- */
 
 .wm-billing table {

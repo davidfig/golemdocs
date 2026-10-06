@@ -426,6 +426,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'toggleFilesPanel':
     case 'toggleRuler':
     case 'toggleFooter':
+    case 'toggleToolbars':
     case 'toggleFormattingMarks':
       return true;
     case 'setFormMode':

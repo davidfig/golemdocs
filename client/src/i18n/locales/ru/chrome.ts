@@ -177,6 +177,7 @@ export const chrome: Catalog = {
   'chrome.none': '(нет)',
   'chrome.file.convertTo': 'Пре&образовать в',
   'chrome.view.toolbars': 'Панели &инструментов',
+  'chrome.view.showToolbars': '&Показать панели инструментов',
   'chrome.view.colorScheme': 'Цветовая &схема',
   'chrome.admin.billing': '&Счета Cloudflare…',
   'chrome.admin.feedback': 'О&тзывы…',

@@ -177,6 +177,7 @@ export const chrome: Partial<Messages> = {
   'chrome.none': '（无）',
   'chrome.file.convertTo': '转换为(&V)',
   'chrome.view.toolbars': '工具栏(&T)',
+  'chrome.view.showToolbars': '显示工具栏(&S)',
   'chrome.view.colorScheme': '配色方案(&S)',
   'chrome.admin.billing': 'Cloudflare 账单(&B)…',
   'chrome.admin.feedback': '反馈(&F)…',

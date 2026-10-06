@@ -175,6 +175,7 @@ export const chrome = {
   'chrome.none': '(none)',
   'chrome.file.convertTo': 'Con&vert To',
   'chrome.view.toolbars': '&Toolbars',
+  'chrome.view.showToolbars': '&Show Toolbars',
   'chrome.view.colorScheme': 'Color &Scheme',
   'chrome.admin.billing': 'Cloudflare &Billing…',
   'chrome.admin.feedback': '&Feedback…',

@@ -219,9 +219,14 @@ export class Chrome {
     this.menuBar.refresh();
   }
 
+  /** The toolbars' row goes when the toolbars are turned off, or when none of them has anything to show. */
+  private syncToolbarsHidden(): void {
+    this.toolbarsEl.hidden = !this.state.toolbars || this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
+  }
+
   private refresh(): void {
     for (const toolbar of this.toolbars) toolbar.refresh(this.state);
-    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
+    this.syncToolbarsHidden();
     this.menuBar.refresh();
     this.syncFormatBox();
     this.syncButton.update(this.state.sync);
@@ -323,6 +328,7 @@ export class Chrome {
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
       a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
+      a('view.toolbars', t('chrome.view.showToolbars'), { kind: 'toggleToolbars' }, { checked: (s) => s.toolbars }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
@@ -723,7 +729,7 @@ export class Chrome {
           cmd('view.flow'),
           cmd('view.grid'),
           sep,
-          sub(t('chrome.view.toolbars'), [cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
+          sub(t('chrome.view.toolbars'), [cmd('view.toolbars'), sep, cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
           sep,
           cmd('view.ruler'),
@@ -1634,7 +1640,7 @@ export class Chrome {
     this.toolbars.push(mobile);
     this.toolbarsEl.append(mobile.el);
     // The document area changes size; the canvas's ResizeObserver takes it from there.
-    this.toolbarsEl.hidden = this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
+    this.syncToolbarsHidden();
     this.refresh();
   }
 
@@ -1679,7 +1685,7 @@ export class Chrome {
     const items: CatalogItem[] = [];
     const byCategory = new Map<string, CatalogItem[]>();
     for (const command of this.registry.all()) {
-      if (command.id === 'view.customizeToolbars') continue;
+      if (command.id === 'view.customizeToolbars' || command.id === 'view.toolbars') continue;
       const { label, category } = this.commandInfo(command, command.tooltip ?? command.plainLabel);
       if (!byCategory.has(category)) byCategory.set(category, []);
       byCategory.get(category)!.push({ id: command.id, label, category });

@@ -215,6 +215,15 @@ try {
   // Storage unavailable: the bar starts on.
 }
 
+// The toolbars (View > Toolbars > Show Toolbars): on until turned off, then remembered in this browser.
+const TOOLBARS_KEY = 'word.toolbarsShown';
+let toolbarsOn = true;
+try {
+  toolbarsOn = localStorage.getItem(TOOLBARS_KEY) !== 'off';
+} catch {
+  // Storage unavailable: the toolbars start on.
+}
+
 // The ruler (View > Ruler): off until turned on, then remembered in this browser.
 const RULER_KEY = 'word.ruler';
 let rulerOn = false;
@@ -3087,6 +3096,7 @@ function render(): void {
     pagesPanel: pagesOpen() && !textView.active && !reflowing(),
     filesPanel: filesOpen,
     footer: footerOn,
+    toolbars: toolbarsOn,
     rulerVisible: rulerOn,
     format: selectionFormat,
     canUndo: textView.active ? textEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
@@ -3564,6 +3574,17 @@ function toggleFooter(): void {
   requestRender();
 }
 
+function toggleToolbars(): void {
+  toolbarsOn = !toolbarsOn;
+  try {
+    localStorage.setItem(TOOLBARS_KEY, toolbarsOn ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  // The toolbars take room from the document: the canvas is resized by its observer, and the view is placed again.
+  requestRender();
+}
+
 function toggleRuler(): void {
   rulerOn = !rulerOn;
   try {
@@ -3833,6 +3854,7 @@ const chromeHost = createChromeHost({
   togglePagesPanel,
   toggleFilesPanel,
   toggleFooter,
+  toggleToolbars,
   toggleRuler,
   setViewMode,
   toggleFormattingMarks: () => {
@@ -4200,7 +4222,7 @@ const assistantTools = appTools({
     await ready;
   },
   perform: (action) => chromeHost.perform(action),
-  view: () => ({ statusBar: footerOn, ruler: rulerOn, formattingMarks }),
+  view: () => ({ toolbars: toolbarsOn, statusBar: footerOn, ruler: rulerOn, formattingMarks }),
   isPicture,
   pictureBytes,
   changePicture,

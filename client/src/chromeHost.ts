@@ -138,6 +138,7 @@ export interface AppHooks {
   toggleFilesPanel(): void;
   /** Show or hide the status bar under the document. */
   toggleFooter(): void;
+  toggleToolbars(): void;
   toggleRuler(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
@@ -189,6 +190,7 @@ const SUPPORTED = new Set<ActionKind>([
   'togglePagesPanel',
   'toggleFilesPanel',
   'toggleFooter',
+  'toggleToolbars',
   'toggleRuler',
   'toggleFormattingMarks',
   'insertText',
@@ -450,6 +452,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleFilesPanel();
         case 'toggleFooter':
           return app.toggleFooter();
+        case 'toggleToolbars':
+          return app.toggleToolbars();
         case 'toggleRuler':
           return app.toggleRuler();
         case 'insertText':

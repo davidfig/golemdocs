@@ -64,7 +64,7 @@ export interface AppToolsHost {
   newDocument(folderId: string | null, docKind?: DocumentKind): Promise<void>;
   /** Does what a menu or toolbar does. */
   perform(action: Action): Promise<void> | void;
-  view(): { statusBar: boolean; ruler: boolean; formattingMarks: boolean };
+  view(): { toolbars: boolean; statusBar: boolean; ruler: boolean; formattingMarks: boolean };
   isPicture(): boolean;
   /** The open picture as a file of its type. */
   pictureBytes(): Promise<Uint8Array>;
@@ -315,6 +315,11 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         else throw new Error('`zoom` must be a percentage from 10 to 500, or page_width, whole_page or all_pages.');
         done.push(`zoom ${String(zoom)}`);
       }
+      const toolbars = optionalFlag(args, 'toolbars');
+      if (toolbars !== undefined && toolbars !== host.view().toolbars) {
+        void host.perform({ kind: 'toggleToolbars' });
+        done.push(`toolbars ${toolbars ? 'on' : 'off'}`);
+      }
       const bar = optionalFlag(args, 'status_bar');
       if (bar !== undefined && bar !== host.view().statusBar) {
         void host.perform({ kind: 'toggleFooter' });
@@ -330,7 +335,7 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
         void host.perform({ kind: 'toggleFormattingMarks' });
         done.push(`formatting marks ${marks ? 'on' : 'off'}`);
       }
-      if (!done.length) throw new Error('Say what to change: view_mode, zoom, status_bar, ruler or formatting_marks.');
+      if (!done.length) throw new Error('Say what to change: view_mode, zoom, toolbars, status_bar, ruler or formatting_marks.');
       return `Changed the view: ${done.join(', ')}.`;
     },
     set_drawing_options(args) {

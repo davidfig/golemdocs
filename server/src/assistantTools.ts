@@ -323,10 +323,10 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'set_view',
-    description: 'Change how the document is shown: view_mode (print: pages as they print; flow: the text reflowed to the window; grid: every page side by side), zoom (a percentage, or page_width, whole_page, all_pages), status_bar (the bar under the document with its page, word count and size), ruler (the measures above and beside the page, with its margins), formatting_marks.',
+    description: 'Change how the document is shown: view_mode (print: pages as they print; flow: the text reflowed to the window; grid: every page side by side), zoom (a percentage, or page_width, whole_page, all_pages), toolbars (the rows of buttons under the menu bar), status_bar (the bar under the document with its page, word count and size), ruler (the measures above and beside the page, with its margins), formatting_marks.',
     parameters: {
       type: 'object',
-      properties: { view_mode: { type: 'string', enum: ['print', 'flow', 'grid'] }, zoom: { type: ['number', 'string'] }, status_bar: { type: 'boolean' }, ruler: { type: 'boolean' }, formatting_marks: { type: 'boolean' } },
+      properties: { view_mode: { type: 'string', enum: ['print', 'flow', 'grid'] }, zoom: { type: ['number', 'string'] }, toolbars: { type: 'boolean' }, status_bar: { type: 'boolean' }, ruler: { type: 'boolean' }, formatting_marks: { type: 'boolean' } },
     },
   },
   {

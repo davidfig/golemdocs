@@ -26,6 +26,7 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.formattingMarks',
   'word.ruler',
   'word.footer', // status bar
+  'word.toolbarsShown', // View › Toolbars › Show Toolbars
   'wm.largeWrap',
   'vector.selectAfterPencil', // drawing options (Tools › Options)
   'vector.returnToSelect',

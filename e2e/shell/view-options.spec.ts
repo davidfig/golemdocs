@@ -221,3 +221,18 @@ test.describe('Full Screen', () => {
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
   });
 });
+
+test.describe('Show Toolbars', () => {
+  test('View › Toolbars › Show Toolbars hides and shows every toolbar, and the choice is remembered', async ({ app, page }) => {
+    await app.blank();
+    const toolbars = page.locator('.wm-toolbars');
+    await expect(toolbars).toBeVisible();
+    await app.menu('View', 'Toolbars', 'Show Toolbars');
+    await expect(toolbars).toBeHidden();
+    await page.reload();
+    await app.ready();
+    await expect(toolbars).toBeHidden();
+    await app.menu('View', 'Toolbars', 'Show Toolbars');
+    await expect(toolbars).toBeVisible();
+  });
+});

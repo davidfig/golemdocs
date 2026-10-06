@@ -177,6 +177,7 @@ export const chrome: Partial<Messages> = {
   'chrome.none': '(なし)',
   'chrome.file.convertTo': '変換先(&V)',
   'chrome.view.toolbars': 'ツール バー(&T)',
+  'chrome.view.showToolbars': 'ツール バーを表示(&S)',
   'chrome.view.colorScheme': '配色(&S)',
   'chrome.admin.billing': 'Cloudflare の請求(&B)…',
   'chrome.admin.feedback': 'フィードバック(&F)…',

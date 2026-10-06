@@ -177,6 +177,7 @@ export const chrome: Partial<Messages> = {
   'chrome.none': '(ninguno)',
   'chrome.file.convertTo': 'Con&vertir a',
   'chrome.view.toolbars': 'Barras de &herramientas',
+  'chrome.view.showToolbars': 'Mo&strar barras de herramientas',
   'chrome.view.colorScheme': 'Combinación de &colores',
   'chrome.admin.billing': 'Facturación de C&loudflare…',
   'chrome.admin.feedback': '&Comentarios…',

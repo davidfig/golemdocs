@@ -2,6 +2,9 @@
 
 ## 0.12.0 - Unreleased
 
+### Added
+- View › Toolbars › Show Toolbars hides or shows all the toolbars under the menu bar at once, for more room to write. The choice is kept, and each toolbar keeps its own setting for when they come back. The assistant can do it too.
+
 ### Changed
 - PDFs and pictures in your account are now edited by one person at a time, whether it is someone you shared with or you on another device. Whoever opened it first edits it with every tool, including moving, deleting and rotating PDF pages, adding large pictures to a PDF, and cropping, resizing, rotating and changing the colours of a picture, none of which worked before while others had it open. Everyone else sees it update each time it is saved, and can choose Take over to edit it themselves. If you come back to one with changes that never reached your account while someone else is editing it, your changes are kept as a separate “(conflicted copy)” rather than lost or saved over theirs. Documents, text files and drawings are still edited by everyone at once. The assistant can say who is editing and take over when you ask.
 

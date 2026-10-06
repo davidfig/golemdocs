@@ -177,6 +177,7 @@ export const chrome: Partial<Messages> = {
   'chrome.none': '(없음)',
   'chrome.file.convertTo': '다음으로 변환(&V)',
   'chrome.view.toolbars': '도구 모음(&T)',
+  'chrome.view.showToolbars': '도구 모음 표시(&S)',
   'chrome.view.colorScheme': '색 구성표(&S)',
   'chrome.admin.billing': 'Cloudflare 청구(&B)…',
   'chrome.admin.feedback': '피드백(&F)…',

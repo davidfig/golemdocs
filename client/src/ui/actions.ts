@@ -125,6 +125,7 @@ export type Action =
   | { kind: 'toggleFilesPanel' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleFooter' }
+  | { kind: 'toggleToolbars' }
   | { kind: 'toggleFormattingMarks' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
   | { kind: 'setFormMode'; mode: FormMode }
@@ -248,6 +249,8 @@ export interface ChromeState {
   rulerVisible: boolean;
   /** The status bar is showing under the document. */
   footer: boolean;
+  /** The toolbars under the menu bar are showing (each can still be turned off on its own). */
+  toolbars: boolean;
   formattingMarks: boolean;
   trackChanges: boolean;
   format: FormatState;
@@ -306,6 +309,7 @@ export const DEFAULT_STATE: ChromeState = {
   filesPanel: false,
   rulerVisible: false,
   footer: false,
+  toolbars: true,
   formattingMarks: false,
   trackChanges: false,
   format: {},

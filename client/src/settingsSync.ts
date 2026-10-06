@@ -21,6 +21,7 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.spelling.asYouType',
   'word.spelling.grammar',
   'word.userDictionary.v1',
+  'word.spelling.ignored.v1', // what is ignored in each document, by the document's account id
   'golem.newKinds', // the types File › New offers, last used first
   'word.viewMode',
   'word.formattingMarks',

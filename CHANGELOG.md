@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.12.1 - Unreleased
+
+### Fixed
+- Ignore All and Ignore Rule in the spelling and grammar menu and dialog now stay ignored in that document after you reload or reopen it (and on your other devices when you are signed in), instead of the squiggle coming back. They no longer carry over to other documents.
+- Typing no longer stops working after you right-click (or Control-click on a Mac) a word with a squiggle and close the menu.
+
 ## 0.12.0 - 2026-10-06
 
 ### Added

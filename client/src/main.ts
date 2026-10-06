@@ -83,6 +83,7 @@ import { SpellDialog } from './ui/spellDialog.ts';
 import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
 import { livePreviewOn, onLivePreview } from './ui/livePreview.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
+import { loadIgnored, saveIgnored, withIgnored, type Ignored } from './spelling/ignored.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
@@ -386,6 +387,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
     builtIn: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
     room: null,
     roomRequested: false,
+    ignored: { words: [], rules: [] },
     shared: options.shared?.role === 'editor' || options.shared?.role === 'viewer' ? { id: options.shared.id, role: options.shared.role, dirty: false, uploading: false, error: null } : null,
     newFolder: options.localId ? null : newDocumentFolder,
     name,
@@ -473,6 +475,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       if (format === 'txt' && !options.asDocument && !options.pictureEdit) void migrateText(current, docName, options);
       if (outdated) pendingNotice = outdatedPages();
       spellDialog.sendLive();
+      startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
       worker.command({ kind: 'livePreview', on: livePreviewOn() });
       setStatus(t('app.layingOut', { name }));
@@ -1034,6 +1037,8 @@ interface OpenDocument {
   room: RoomState | null;
   /** A multiplayer room has been asked for (at open, or once the document was first uploaded). */
   roomRequested: boolean;
+  /** What the person chose to ignore in it (Ignore All, Ignore Rule): kept with it, see `ignoredKeys`. */
+  ignored: Ignored;
   /**
    * A document someone else owns, opened straight from the cloud: it has no copy in this browser
    * and edits go to the cloud directly (or through the room), never to a copy of it here.
@@ -1048,7 +1053,7 @@ interface OpenDocument {
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, shared: null, newFolder: null, name: '', kind: 'docx' };
+let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, ignored: { words: [], rules: [] }, shared: null, newFolder: null, name: '', kind: 'docx' };
 /**
  * The folder the next document to open goes in once first saved (null: the top level): set just
  * before it opens (New, Import or a file dropped on a folder), and taken over by open().
@@ -1692,6 +1697,7 @@ function saveInBrowser(): Promise<string | null> {
       const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
       linksAfter?.();
       doc.localId = info.id;
+      rememberIgnored(doc);
       if (doc === current) {
         await makeThumbnail(info);
         rememberInUrl(`local:${info.id}`);
@@ -2556,6 +2562,7 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
   const { opening } = beginOpen({ kind: 'txt', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared });
   worker.close();
   spellDialog.sendLive(); // what is underlined, and the person's words: the worker holds them for text files too
+  startIgnored(opening);
   const text = toUtf8WithEncoding(bytes);
   textView.open(name, text.bytes, { encoding: text.encoding, bom: text.bom, original: bytes });
   textView.editor!.readOnly = options.shared?.role === 'viewer';
@@ -2937,7 +2944,7 @@ function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
   commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -3347,6 +3354,12 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   if (e.button !== 0) return;
+  // Control-click on a Mac is a right click: the contextmenu event follows, and the button's release may never arrive, so it is not the start of a selection.
+  if (MAC && e.ctrlKey) {
+    canvas.releasePointerCapture(e.pointerId);
+    e.preventDefault();
+    return;
+  }
   e.preventDefault();
   press(e);
 });
@@ -3928,7 +3941,42 @@ const addUserWord = (word: string): void => {
     // Storage unavailable: the word is accepted for this session only.
   }
 };
+/**
+ * The keys a document's ignored words are kept under, best first: its account's id for it when it has one (the same on every device),
+ * then its id in this browser. None while it is unsaved (the welcome document, or a new one before its first save): it is ignored for as long as it is open.
+ */
+function ignoredKeys(doc: OpenDocument): string[] {
+  if (doc.builtIn) return [];
+  const cloudId = doc.shared?.id ?? library.local.find((d) => d.id === doc.localId)?.cloudId;
+  return [...(cloudId ? [`cloud:${cloudId}`] : []), ...(doc.localId ? [`local:${doc.localId}`] : [])];
+}
+
+/** A document has opened: what was ignored in it before is ignored again (the layout worker forgot the last document's). */
+function startIgnored(doc: OpenDocument): void {
+  doc.ignored = ignoredKeys(doc).reduce((all, key) => {
+    const saved = loadIgnored(key);
+    return withIgnored(all, saved.words, saved.rules);
+  }, doc.ignored);
+  send({ kind: 'spellIgnored', ...doc.ignored });
+}
+
+/** Writes what is ignored in the document where it is kept (once it has an id to be kept under). */
+function rememberIgnored(doc: OpenDocument): void {
+  const [key] = ignoredKeys(doc);
+  if (key) saveIgnored(key, doc.ignored);
+}
+
+/** Ignore All and Ignore Rule: in the open document from now on, and the next time it is opened. */
+function ignoreInDocument(words: string[], rules: string[]): void {
+  current.ignored = withIgnored(current.ignored, words, rules);
+  rememberIgnored(current);
+  send({ kind: 'spellIgnored', ...current.ignored });
+  // What counts as a mistake changed: a plain text file in the text editor is checked again.
+  textView.spellReset();
+}
+
 const spellDialog: SpellDialog = new SpellDialog(document.body, {
+  ignore: ignoreInDocument,
   send: (command) => {
     // A plain text file is checked by the text editor (the layout worker still holds the dictionaries and the words that were added or ignored).
     if (textView.active) {
@@ -3954,6 +4002,7 @@ const spellDialog: SpellDialog = new SpellDialog(document.body, {
 
 // Right click on an underlined word: change it, or ignore it.
 const spellMenu = new SpellMenu({
+  ignore: ignoreInDocument,
   send: (command) => {
     // In a plain text file the problem is selected: the suggestion types over it.
     if (textView.active && command.kind === 'insertText') textEngine.insert(command.text);
@@ -3977,6 +4026,8 @@ function toggleFilesPanel(): void {
 
 let spellMenuAt: { x: number; y: number } | null = null;
 canvas.addEventListener('contextmenu', (e) => {
+  // The menu takes the pointer: a press that was under way is over, and the editor keeps the keyboard.
+  endPointer();
   if (textView.active) {
     // A plain text file: the same menu, from the text editor's own marks.
     if (!spellDialog.checkingLive) return;

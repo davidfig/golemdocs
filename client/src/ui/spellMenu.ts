@@ -8,6 +8,8 @@ import { h } from './dom.ts';
 export interface SpellMenuHost {
   send(command: WireCommand): void;
   addUserWord(word: string): void;
+  /** Ignores the words and grammar rules in the open document, from now on. */
+  ignore(words: string[], rules: string[]): void;
   focusEditor(): void;
 }
 
@@ -43,9 +45,9 @@ export class SpellMenu {
     else menu.append(h('div', { class: 'wm-item disabled', attrs: { 'aria-disabled': 'true' } }, h('span', { class: 'wm-gutter' }), h('span', { class: 'label', text: t('spelling.noSuggestions') })));
     menu.append(separator());
     if (grammar) {
-      if (issue.rule) menu.append(item(t('spelling.ignoreRule'), () => this.host.send({ kind: 'spellWords', rules: [issue.rule!] })));
+      if (issue.rule) menu.append(item(t('spelling.ignoreRule'), () => this.host.ignore([], [issue.rule!])));
     } else {
-      menu.append(item(t('spelling.ignoreAll'), () => this.host.send({ kind: 'spellWords', words: [issue.text] })));
+      menu.append(item(t('spelling.ignoreAll'), () => this.host.ignore([issue.text], [])));
       menu.append(
         item(t('spelling.addToDictionary'), () => {
           this.host.addUserWord(issue.text);
@@ -86,10 +88,13 @@ export class SpellMenu {
 
   private cleanup: (() => void) | null = null;
 
+  /** Closes the menu, and (however it was dismissed: Escape, a click elsewhere, the window losing focus) gives the keyboard back to the editor. */
   close(): void {
+    const wasOpen = this.el !== null;
     this.el?.remove();
     this.el = null;
     this.cleanup?.();
     this.cleanup = null;
+    if (wasOpen) this.host.focusEditor();
   }
 }

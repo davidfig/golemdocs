@@ -103,8 +103,10 @@ export type WireCommand =
    * or the end of the selection, and reports it (see `SelectionUpdate.spell`).
    */
   | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
-  /** Words to accept as spelled correctly (the user's dictionary, or ones ignored), and grammar rules to ignore. */
-  | { kind: 'spellWords'; words?: string[]; rules?: string[] }
+  /** Words to accept as spelled correctly in every document (the user's dictionary). */
+  | { kind: 'spellWords'; words?: string[] }
+  /** What is ignored in the open document: the words and grammar rules, replacing what was ignored before. */
+  | { kind: 'spellIgnored'; words: string[]; rules: string[] }
   /** Check-as-you-type: what to underline in the document, and the user's dictionary words to accept. */
   | { kind: 'spellCheck'; spelling: boolean; grammar: boolean; words?: string[] }
   /** Whether typed Markdown shortcuts ("# ", "- ", "**bold**") turn into formatting (see autoformat.ts). */

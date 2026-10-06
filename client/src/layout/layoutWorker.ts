@@ -318,20 +318,21 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that change the editor's settings rather than the document (they work with none open). */
-const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellCheck', 'autoFormat', 'livePreview']);
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'livePreview']);
 
 /** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
 function applySettings(wire: WireCommand): void {
-  if (wire.kind === 'spellWords') void acceptSpelling(wire.words ?? [], wire.rules ?? []);
+  if (wire.kind === 'spellWords') void acceptSpelling(wire.words ?? []);
+  else if (wire.kind === 'spellIgnored') ignoreSpelling(wire.words, wire.rules);
   else if (wire.kind === 'spellCheck') {
     live.spelling = wire.spelling;
     live.grammar = wire.grammar;
-    void acceptSpelling(wire.words ?? [], []);
+    void acceptSpelling(wire.words ?? []);
   } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
   else if (wire.kind === 'livePreview') live.livePreview = wire.on;
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -1924,11 +1925,15 @@ class OpenDocument {
       this.props = { ...this.document?.properties };
       return this.sendSelection();
     }
-    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? [], wire.rules ?? []).then(() => this.sendSelection());
+    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? []).then(() => this.sendSelection());
+    if (wire.kind === 'spellIgnored') {
+      ignoreSpelling(wire.words, wire.rules);
+      return this.sendSelection();
+    }
     if (wire.kind === 'spellCheck') {
       live.spelling = wire.spelling;
       live.grammar = wire.grammar;
-      return acceptSpelling(wire.words ?? [], []).then(() => this.sendSelection());
+      return acceptSpelling(wire.words ?? []).then(() => this.sendSelection());
     }
     if (wire.kind === 'autoFormat') {
       live.autoFormat = wire.on;
@@ -2334,8 +2339,8 @@ function unmark(mark: Mark): RunFormat {
   }
 }
 
-/** Words the user added to the dictionary or chose to ignore, and grammar rules to ignore: for every document. */
-const spelling = { words: new Set<string>(), rules: new Set<string>() };
+/** Words the user added to the dictionary (for every document), and the words and grammar rules ignored in the open document. */
+const spelling = { words: new Set<string>(), ignoredWords: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
 const live = { spelling: true, grammar: true, autoFormat: true, livePreview: false };
 const dictionaries = new Map<SpellLanguage, Promise<Dictionary>>();
@@ -2454,17 +2459,26 @@ async function readDictionary(language: SpellLanguage): Promise<Dictionary> {
   const decoder = new TextDecoder(affixEncoding(affix));
   const dictionary = Dictionary.parse(decoder.decode(affix), decoder.decode(await dic.arrayBuffer()), { smallWords: language === 'en' ? ENGLISH_SMALL_WORDS : undefined });
   dictionary.accept(...APP_WORDS[language], ...spelling.words);
+  dictionary.setIgnored([...spelling.ignoredWords]);
   loadedDictionaries.set(language, dictionary);
   return dictionary;
 }
 
-/** Words to treat as spelled correctly and grammar rules to leave out, from now on. */
-async function acceptSpelling(words: string[], rules: string[]): Promise<void> {
+/** Words to treat as spelled correctly in every document, from now on. */
+async function acceptSpelling(words: string[]): Promise<void> {
   for (const word of words) spelling.words.add(word);
-  for (const rule of rules) spelling.rules.add(rule);
   spellVersion++;
   for (const dictionary of loadedDictionaries.values()) dictionary.accept(...words);
   // A dictionary still being read takes them when it is done (it reads `spelling.words`).
+}
+
+/** What is ignored in the open document, instead of what was ignored in the one before. */
+function ignoreSpelling(words: string[], rules: string[]): void {
+  spelling.ignoredWords = new Set(words);
+  spelling.rules = new Set(rules);
+  spellVersion++;
+  for (const dictionary of loadedDictionaries.values()) dictionary.setIgnored(words);
+  // A dictionary still being read takes them when it is done (it reads `spelling.ignoredWords`).
 }
 
 let current: OpenDocument | null = null;
@@ -2480,6 +2494,8 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
   current?.controller.abort();
   const entry = new OpenDocument(doc);
   current = entry;
+  // What was ignored in the document before is not ignored in this one (the page sends its own once it is open).
+  ignoreSpelling([], []);
   if (carried) entry.takeRoom(carried);
   // It could not keep it (it was being handed over): the page joins again once the document is next saved.
   else if (keepRoom) post({ type: 'roomGone', doc });

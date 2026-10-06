@@ -243,10 +243,89 @@ test.describe('squiggles and the right-click menu', () => {
     await expect(spell(app).getByText('The spelling and grammar check is complete.')).toBeVisible();
   });
 
+  test('Ignore All from the menu is remembered for that document after a reload, and is not ignored in another', async ({ app, page }) => {
+    await rightClickWord(app, 'I recieve mail.', 2, 9);
+    await menu(app).getByRole('menuitem', { name: 'Ignore All' }).click();
+    // The document is saved in this browser a moment after the change.
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('word.spelling.ignored.v1') ?? '')).toContain('recieve');
+    await page.waitForTimeout(2500);
+    await page.reload();
+    await app.ready();
+    await expect.poll(() => app.text()).toBe('I recieve mail.');
+    await app.editor.focus();
+    await app.press(`${DOC}+Home`);
+    await app.press('F7');
+    await expect(spell(app).getByText('The spelling and grammar check is complete.')).toBeVisible();
+    await app.press('Escape');
+    // Another document does not have it.
+    await app.blank();
+    await app.editor.focus();
+    await page.keyboard.insertText('I recieve mail.');
+    await app.press(`${DOC}+Home`);
+    await app.press('F7');
+    await expect.poll(() => app.selectedText()).toBe('recieve');
+  });
+
   test('Add to Dictionary from the menu is remembered', async ({ app }) => {
     await rightClickWord(app, 'a zorbulant day', 2, 10);
     await menu(app).getByRole('menuitem', { name: 'Add to Dictionary' }).click();
     await expect.poll(() => app.page.evaluate(() => Object.values(localStorage).join('|'))).toContain('zorbulant');
+  });
+
+  test('typing still works after the menu is dismissed by Escape', async ({ app }) => {
+    await rightClickWord(app, 'I recieve mail.', 2, 9);
+    await expect(menu(app)).toBeVisible();
+    await app.press('Escape');
+    await app.page.keyboard.type('X');
+    await expect.poll(() => app.text()).toContain('X');
+  });
+
+  test('typing still works after clicking away from the menu', async ({ app }) => {
+    await rightClickWord(app, 'I recieve mail.', 2, 9);
+    await expect(menu(app)).toBeVisible();
+    const gaps = await lineGaps(app, 15);
+    await clickAt(app, { x: gaps[15].x + 300, y: gaps[0].y });
+    await expect(menu(app)).toBeHidden();
+    await app.page.keyboard.type('X');
+    await expect.poll(() => app.text()).toContain('X');
+  });
+
+  test('typing still works after clicking the page background away from the menu', async ({ app }) => {
+    await rightClickWord(app, 'I recieve mail.', 2, 9);
+    await expect(menu(app)).toBeVisible();
+    await app.page.mouse.click(5, 300);
+    await expect(menu(app)).toBeHidden();
+    await app.page.keyboard.type('X');
+    await expect.poll(() => app.text()).toContain('X');
+  });
+
+  test('typing still works after a suggestion is chosen', async ({ app }) => {
+    await rightClickWord(app, 'I recieve mail.', 2, 9);
+    await menu(app).getByRole('menuitem', { name: 'receive', exact: true }).click();
+    await app.page.keyboard.type('X');
+    await expect.poll(() => app.text()).toContain('X');
+  });
+
+  test('typing still works after a Control-click (macOS: the button press never gets its release)', async ({ app }) => {
+    const text = 'I recieve mail.';
+    await app.blank();
+    await app.editor.focus();
+    await app.page.keyboard.insertText(text);
+    await expect.poll(() => app.text()).toBe(text);
+    await app.press('ArrowLeft', 0);
+    const gaps = await lineGaps(app, text.length);
+    const x = (gaps[2].x + gaps[9].x) / 2;
+    const y = gaps[0].y;
+    await app.page.keyboard.down('Control');
+    await app.page.mouse.move(x, y);
+    await app.page.mouse.down();
+    await app.page.evaluate(([cx, cy]) => document.getElementById('canvas')!.dispatchEvent(new MouseEvent('contextmenu', { clientX: cx, clientY: cy, button: 0, ctrlKey: true, bubbles: true, cancelable: true })), [x, y]);
+    await expect(menu(app)).toBeVisible();
+    await app.page.keyboard.up('Control');
+    await app.press('Escape');
+    await app.page.mouse.up();
+    await app.page.keyboard.type('X');
+    await expect.poll(() => app.text()).toContain('X');
   });
 
   test('right-clicking a correctly spelled word opens no spelling menu', async ({ app }) => {

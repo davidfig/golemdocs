@@ -433,7 +433,10 @@ test.describe('squiggles while typing', () => {
     await app.blank();
     await app.editor.focus();
     await app.page.keyboard.type('I recieve ');
-    expect(await squiggles(app)).toBe(0);
+    const typedAt = Date.now();
+    const straightAway = await squiggles(app);
+    // On a busy machine the read can come after the pause (1 s): only a read inside it says anything.
+    if (Date.now() - typedAt < 500) expect(straightAway).toBe(0);
     await expect.poll(() => squiggles(app), { timeout: 5000 }).toBe(1);
   });
 
@@ -443,6 +446,7 @@ test.describe('squiggles while typing', () => {
     await app.page.keyboard.insertText('I recieve mail');
     await expect.poll(() => squiggles(app), { timeout: 5000 }).toBe(1);
     await app.page.keyboard.type(' today and');
+    // Held back only for the word just typed: the earlier one stays underlined.
     expect(await squiggles(app)).toBe(1);
   });
 });

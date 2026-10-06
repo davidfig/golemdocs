@@ -134,7 +134,9 @@ export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDe
   statusBarDefault: [false, { option: true }],
   // Show Markdown at the Caret is on by default too, which shows `# ` in the heading the caret is in; tests start with it off.
   livePreviewDefault: [false, { option: true }],
-  page: async ({ page, sidebarDefault, statusBarDefault, livePreviewDefault }, use) => {
+  // Autocorrect (smart quotes, capitals, dashes...) is on by default too, and would change the text other tests type; they start with it off.
+  autoCorrectDefault: [false, { option: true }],
+  page: async ({ page, sidebarDefault, statusBarDefault, livePreviewDefault, autoCorrectDefault }, use) => {
     // Every test shares one signed-in account, so settings kept in it (shortcuts, view choices) would carry from
     // one test to the next. Each test gets an account with no settings that forgets what it is sent; the specs
     // about settings following the account use their own people and contexts, which this does not touch.
@@ -154,6 +156,15 @@ export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDe
       await page.addInitScript(() => {
         try {
           if (localStorage.getItem('word.livePreview') === null) localStorage.setItem('word.livePreview', 'off');
+        } catch {
+          // No storage: the app falls back to its default.
+        }
+      });
+    }
+    if (!autoCorrectDefault) {
+      await page.addInitScript(() => {
+        try {
+          if (localStorage.getItem('word.autoCorrect') === null) localStorage.setItem('word.autoCorrect', JSON.stringify(['quotes', 'dashes', 'ellipsis', 'symbols', 'ordinals', 'capitalize', 'twoCapitals', 'links', 'typos', 'replacements']));
         } catch {
           // No storage: the app falls back to its default.
         }

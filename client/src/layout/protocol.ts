@@ -13,6 +13,7 @@ import type { Shape } from '../formats/imageDraw.ts';
 import type { Scene } from '../vector/model.ts';
 import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
+import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
 
 export type DocumentSource =
@@ -111,6 +112,8 @@ export type WireCommand =
   | { kind: 'spellCheck'; spelling: boolean; grammar: boolean; words?: string[] }
   /** Whether typed Markdown shortcuts ("# ", "- ", "**bold**") turn into formatting (see autoformat.ts). */
   | { kind: 'autoFormat'; on: boolean }
+  /** Which autocorrect rules are on: smart quotes, dashes, symbols and so on (see autocorrect.ts). */
+  | { kind: 'autoCorrect'; options: AutoCorrectOptions; /** The user's replacement list: text, and what replaces it. */ replacements: [string, string][] }
   /** Whether the paragraph the caret is in shows its Markdown source, in Markdown documents (see livePreview.ts). */
   | { kind: 'livePreview'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */

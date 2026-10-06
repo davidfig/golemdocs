@@ -110,7 +110,8 @@ test('the edited file downloads with the changes, and nothing else changed', asy
   expect(file.bytes.equals(expected)).toBe(true);
 });
 
-test('Replace All changes every match as one step that can be undone', async ({ app, page }) => {
+// 150,000 replacements: slow enough to time out while other tests are running, so it runs in the second, quieter pass.
+test('Replace All changes every match as one step that can be undone', { tag: '@heavy' }, async ({ app, page }) => {
   await open(app);
   await app.menu('Edit', 'Replace…');
   await viewer(page).getByRole('textbox', { name: 'Find' }).fill('quick brown');

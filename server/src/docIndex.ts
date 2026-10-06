@@ -9,6 +9,7 @@
 import {
   INDEX_VERSION,
   WordDocument,
+  ZipError,
   buildIndex,
   encodeIndex,
   isPlainText,
@@ -70,7 +71,9 @@ export async function documentIndex(
       );
     }
   } catch (error) {
-    console.error("indexing failed", error);
+    // A PDF, a picture or a drawing is not a .docx and has no text for the server to read: the page reads those itself, so this is no failure to log.
+    if (!(error instanceof ZipError && error.message.startsWith("not a ZIP file")))
+      console.error("indexing failed", error);
     throw new HttpError(422, "the document could not be read");
   }
   await env.FILES.put(

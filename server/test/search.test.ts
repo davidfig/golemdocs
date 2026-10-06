@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { WordDocument } from '@golemdocs/docx';
+import { WordDocument, ZipArchive, writeZip } from '@golemdocs/docx';
 import { DIMENSIONS, MAX_CHUNKS, MAX_CHUNK_CHARS, MAX_INDEXED_PER_SEARCH, chunkSegments } from '../src/search.ts';
 import { DOCX, world, type World } from './harness.ts';
 
@@ -195,12 +195,39 @@ test('deleting documents together removes each from the index and from results t
   assert.deepEqual(((await (await search(me, 'remember')).json()) as { hits: unknown[] }).hits, []);
 });
 
-test('a document that cannot be read is skipped, not fatal', async () => {
+test('a file that is not a document (a PDF, a picture) is indexed as empty: not fatal, not waiting, not retried', async () => {
   const me = 'sub@example.com';
   await w.signUp(me, 'Sub', { subscribed: true });
-  await w.call(me, 'POST', '/api/documents?name=Bad.docx', { body: new Uint8Array([0, 1, 2, 3]), type: DOCX });
+  await w.call(me, 'POST', '/api/documents?name=Scan.pdf', { body: new Uint8Array([0, 1, 2, 3]), type: 'application/pdf' });
   await upload(me, 'Good.docx', await docx('# Fine', 'readable words'));
-  const found = (await (await search(me, 'readable')).json()) as { hits: { name: string }[]; pending: number };
-  assert.equal(found.hits[0]!.name, 'Good.docx');
-  assert.equal(found.pending, 1);
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void logged.push(args);
+  try {
+    const found = (await (await search(me, 'readable')).json()) as { hits: { name: string }[]; pending: number };
+    assert.equal(found.hits[0]!.name, 'Good.docx');
+    assert.equal(found.pending, 0);
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(logged, []);
+});
+
+test('a document that cannot be read is skipped, not fatal, and counts as waiting', async () => {
+  const me = 'sub@example.com';
+  await w.signUp(me, 'Sub', { subscribed: true });
+  // A .docx whose document is not XML: it is a ZIP, so it fails for another reason than not being one.
+  const zip = ZipArchive.read(await (await WordDocument.create()).write());
+  const entries = await Promise.all([...zip.entries.values()].map(async (e) => ({ name: e.name, data: e.name === 'word/document.xml' ? new TextEncoder().encode('<<<not xml') : await e.read() })));
+  await w.call(me, 'POST', '/api/documents?name=Bad.docx', { body: await writeZip(entries), type: DOCX });
+  await upload(me, 'Good.docx', await docx('# Fine', 'readable words'));
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const found = (await (await search(me, 'readable')).json()) as { hits: { name: string }[]; pending: number };
+    assert.equal(found.hits[0]!.name, 'Good.docx');
+    assert.equal(found.pending, 1);
+  } finally {
+    console.error = original;
+  }
 });

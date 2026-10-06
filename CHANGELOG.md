@@ -9,13 +9,15 @@
 ### Added
 - File › Version History keeps the earlier versions of every document as you edit it, so you can look back at how it was. They are kept in this browser, and in your account too if you have a subscription. Opening a version makes a new document and leaves the one you are in as it is, so nothing is ever overwritten. You can also save the document as it is now under a name (a named version is kept longer), rename a version and delete it. Anyone who can edit a shared document can open its versions. The assistant can look at the history, keep a version and open one.
 - File › Trash (and a Trash button on the Documents screen): documents you delete are kept for 30 days, whether they were in your account or only in this browser (a document you made while signed out, say), and you can bring one back (one from your account returns unshared) or delete it for good. The assistant can list the trash and restore from it.
+- Autocorrect as you type, as in Word and Google Docs: straight quotes become smart quotes (in the language of the paragraph), `--` an em dash, ` - ` an en dash, `...` an ellipsis, `(c)`, `(r)`, `(tm)`, `1/2` and `->` become ©, ®, ™, ½ and →, `1st` gets a raised suffix, the first letter of a sentence is capitalized, `TWo` becomes `Two`, and a web address followed by a space becomes a link. Backspace right after a correction gives back what you typed. Common English typing mistakes (`teh`, `recieve`, `dont`) are corrected when you finish the word, and Tools › Options › Autocorrect as You Type › Edit List… holds your own replacements (`omw` becomes `on my way`), kept on this device and in your account when you are signed in. Each rule can be turned off in Tools › Options › Autocorrect as You Type.
 - View › Full Screen now also hides the menu bar, toolbars, ruler and status bar, leaving only the document, and a short message reminds you that Esc leaves full screen and brings them back. Tools › Options › View can keep the menu bar showing in full screen.
 - Rest the pointer on a red or blue squiggle for a moment and its menu opens (suggestions, Ignore, Add to Dictionary), with no right click needed. It does not move the caret or select the word, so you can keep typing; typing, scrolling or moving away closes it.
 
 ### Added
-- After a new version is released, a note in the bottom left offers a button to What’s New. Close it to hide it until the next release, or choose Don’t show again to turn it off.
+- After a new version is released, a note centered at the bottom of the window offers a button to What’s New. Close it to hide it until the next release, or choose Don’t show again to turn it off.
 
 ### Fixed
+- The assistant no longer says some documents are “still being prepared for searching” when they are PDFs or pictures, which can never be searched by meaning.
 - Ignore All and Ignore Rule in the spelling and grammar menu and dialog now stay ignored in that document after you reload or reopen it (and on your other devices when you are signed in), instead of the squiggle coming back. They no longer carry over to other documents.
 - Typing no longer stops working after you right-click (or Control-click on a Mac) a word with a squiggle and close the menu.
 

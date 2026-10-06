@@ -59,7 +59,14 @@ if (cloud) {
   );
 }
 
-const migrate = spawnSync(pnpm, ['--filter', '@golemdocs/server', cloud ? 'cf:migrate:dev' : 'cf:migrate:local'], { cwd: root, encoding: 'utf8' });
+const runMigrate = () => spawnSync(pnpm, ['--filter', '@golemdocs/server', cloud ? 'cf:migrate:dev' : 'cf:migrate:local'], { cwd: root, encoding: 'utf8' });
+let migrate = runMigrate();
+if (migrate.status !== 0 && cloud) {
+  // The first call after a while can fail with Cloudflare's "account is not valid or is not authorized" (code 7403)
+  // while wrangler refreshes its expired login; the same call works right after. Migrations are safe to repeat.
+  console.log('[dev] the first migration attempt failed (often an expired Cloudflare login being refreshed); retrying once');
+  migrate = runMigrate();
+}
 if (migrate.status !== 0) {
   process.stderr.write(`${migrate.stdout}${migrate.stderr}`);
   console.error(`[dev] applying ${cloud ? 'dev' : 'local'} database migrations failed${cloud ? ' (not logged in to Cloudflare or offline? try `wrangler login`, or `pnpm dev --local`)' : ''}`);

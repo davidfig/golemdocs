@@ -71,6 +71,7 @@ Details: [Document model](architecture/document-model.md), [Layout](architecture
 | Add an editing command or change undo | [Document model](architecture/document-model.md) |
 | Add or change a file format | [Formats](architecture/formats.md) |
 | Change saving, sync or conflicts | [Storage and sync](architecture/storage-and-sync.md) |
+| Change what is kept of earlier versions, or the trash | [Version history and the trash](history.md) |
 | Change an API route, sharing or billing | [Server](architecture/server.md) |
 | Change live editing | [Collaboration](architecture/collaboration.md) |
 | Add an assistant tool | [Assistant](architecture/assistant.md) |

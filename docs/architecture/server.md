@@ -18,8 +18,8 @@
  Storage
    D1  DIRECTORY (migrations/directory)  users->database_id, identities, sessions, document_owners, shares,
                                           subscriptions, feedback, assistant_usage, doc_index, catalogue_cache
-   D1  one database per user (schema.ts)  documents, folders, preferences   (created via Cloudflare REST API)
-   R2  FILES   <owner>/<doc>.docx | .thumb | .idx | .chunks/<sha256> | .media/<hash>
+   D1  one database per user (schema.ts)  documents, folders, preferences, versions, trash   (created via Cloudflare REST API)
+   R2  FILES   <owner>/<doc>.docx | .thumb | .idx | .chunks/<sha256> | .media/<hash> | .history/<version>
    DO  ROOMS   one per document: transaction log in its own SQLite
    Vectorize VECTORS (embeddings), AI (Workers AI)
 ```
@@ -47,10 +47,12 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 
 - `documents.ts` (`handleDocuments`): `GET/POST /api/documents`, `/:id` (GET bytes, PUT replace, DELETE), `/:id/thumbnail`, `/:id/index`, `/:id/shares[/:userId]`, `POST /api/documents/batch`, `GET /api/shared`. A document is a catalogue row in its owner's database plus R2 objects named in `keys.ts` (`docxKey`, `thumbKey`, `indexKey`, `mediaKey`, `chunkKey`). The key ends in `.docx` for historical reasons but holds the client's `.wdoc` (`stored.ts` extracts or replaces the inner `document.docx` for the server-side readers). Reads need only owner id + doc id, so the common GET skips the user's database.
 - **Concurrency**: `PUT ?base=<updatedAt>` is optimistic. A stale base gives 409 `changed elsewhere`; R2 `onlyIf etagMatches` and `UPDATE ... WHERE updated_at = ? RETURNING` close races between two saves from the same base; `updated_at` is `MAX(now, old + 1)` so versions strictly increase. 423 means a room is the writer (`roomAllowsSave`). 413 over 50 MiB; 402 without sync.
+- **History** (`versions.ts`): a save keeps the file it replaces when the shared rules (`ops/src/versionPolicy.ts`) say a checkpoint is due: an R2 object at `<owner>/<doc>.history/<version>` plus a `versions` row, taken *before* the bytes are overwritten (in `PUT` here and in a room's `CloudFiles.write`) and never able to fail the save. Pruning runs after the save (`defer`). Chunked documents are checkpointed as manifests, and `chunksToDelete` / `retainedChunks` keep every chunk a checkpoint names. `GET/POST /api/documents/:id/versions`, `GET/PATCH/DELETE …/:version`, `POST …/:version/restore` (a new document in the *caller's* account; needs edit access and the caller's sync). See [Version history](../history.md).
+- **Trash** (`trash.ts`): deleting moves the catalogue row to the owner's `trash` table in the transaction that deletes it, forgets its owner and share rows, and leaves the files. `GET /api/trash`, `POST /api/trash/:id/restore` (back unshared), `DELETE /api/trash[/:id]`. What is 30 days old is purged when the owner lists their trash or deletes something (no scheduler).
 - **Chunked files** (`fileStore.ts`): documents of 2 MiB or more are stored as a JSON manifest at the usual key (R2 custom metadata `chunked=1`) plus chunks under `<owner>/<doc>.chunks/`. `Content-Type: application/vnd.golemdocs.delta` uploads send only changed chunks; reads reassemble through `documentResponse`. Chunks are per document, never shared, so no refcounting; deleting removes by prefix. See [Chunked storage](../chunked-storage.md).
 - `folders.ts`: `/api/folders[/:id]`; PUT is create-or-update because clients make the ids (offline-made folders upload as they are); depth limited and moving a folder inside itself refused (`MAX_FOLDER_DEPTH`); `checkFolder` validates that a document's target folder exists.
 - `preferences.ts`: `/api/preferences`, rows per (profile, key) with limits; the client decides what the keys mean.
-- Deletes clean up in the background through `ctx.waitUntil` (`defer`): chunks, thumbnails, media, search index, owner/share rows, rooms (`endRooms`).
+- Deletes move the document to the trash; in the background (`ctx.waitUntil`, `defer`) its search entries and rooms go (`endRooms`) and expired trash is purged. Files, chunks, pictures and history are removed only when the trash is purged (`trash.ts: purge`).
 
 ## Sharing
 
@@ -82,6 +84,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 | --- | --- |
 | `server/src/worker.ts` | router, auth gate, origin check, error mapping, exports `Room` |
 | `server/src/documents.ts`, `fileStore.ts`, `keys.ts`, `stored.ts` | document API, R2 file/chunk store, key names, `.wdoc` inner-docx access |
+| `server/src/versions.ts`, `trash.ts` | checkpoints and their pruning, the 30-day trash |
 | `server/src/userDb.ts`, `schema.ts`, `folders.ts`, `preferences.ts` | per-user D1, migrations, folders, settings |
 | `server/src/authRoutes.ts`, `providers.ts`, `accounts.ts`, `session.ts`, `auth.ts`, `crypto.ts` | sign-in |
 | `server/src/sharing.ts`, `roomGate.ts`, `room.ts`, `roomCore.ts`, `roomMedia.ts`, `snapshot.ts` | access rules and rooms |
@@ -93,7 +96,8 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 ## Invariants and gotchas
 
 - Access checks go through `resolveAccess`/`accessFor`; never read another user's R2 key without them.
-- Anything that writes a document's file must first ask `roomAllowsSave`.
+- Anything that writes a document's file must first ask `roomAllowsSave`, and should give `checkpoint` (`versions.ts`) the file it is about to replace.
+- Never delete a chunk by listing a document's prefix and keeping a set unless the set includes `retainedChunks`: a checkpoint's chunks are not in the live manifest.
 - Append-only: `USER_MIGRATIONS` entries and directory migrations. A migration that fails midway must be safe to rerun (`migrate` records the version in the same batch).
 - Local mode differs: no Vectorize/AI (search runs in the browser), no subscription checks, table-prefix user DB.
 - The comment above the `local` env in `wrangler.jsonc` ("cloud documents are switched off") is out of date; the README and `LocalUserDb` say they work locally.
@@ -101,4 +105,4 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 
 ## Related docs
 
-[Storage and sync](storage-and-sync.md) · [Formats](formats.md) · [Collaboration](collaboration.md) · [Assistant](assistant.md) · [Chunked storage](../chunked-storage.md) · [server/AUTH.md](../../server/AUTH.md) · [README](../../README.md)
+[Version history and the trash](../history.md) · [Storage and sync](storage-and-sync.md) · [Formats](formats.md) · [Collaboration](collaboration.md) · [Assistant](assistant.md) · [Chunked storage](../chunked-storage.md) · [server/AUTH.md](../../server/AUTH.md) · [README](../../README.md)

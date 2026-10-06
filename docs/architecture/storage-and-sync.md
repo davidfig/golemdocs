@@ -26,13 +26,15 @@ Nothing is ever merged and nothing is overwritten: a copy that started from an o
 
 ## IndexedDB layout (`client/src/storage/local.ts`)
 
-Database `word`, version 5. Object stores:
+Database `word`, version 7. Object stores:
 
 | Store | Key -> value |
 | --- | --- |
 | `meta` | document id -> `SavedInfo` (name, size, `updatedAt`, `owner`, `cloudId`, `cloudSyncedAt`, `cloudUpdatedAt`, `folderId`, `releasedFrom`) |
 | `bytes` | id -> the whole file (documents under 2 MiB: `CHUNK_MIN_FILE` in `chunker.ts`) |
 | `manifests`, `chunks`, `chunkRefs` | for documents of 2 MiB or more: id -> `StoredManifest` (chunk hashes, lengths, `syncedHashes`), hash -> bytes, hash -> reference count (a chunk is deleted when the last document lets go). Details in [Chunked storage](../chunked-storage.md) |
+| `history`, `historyData` | a document's earlier versions: id -> its versions' details (small), `<id>/<version>` -> a small version's bytes or a chunked one's manifest (a hold on its chunks through `chunkRefs`). See [Version history](../history.md) |
+| `trash` | document id -> `{ info, deletedAt }`: the catalogue record of a document the person deleted, moved out of `meta` so every list stops showing it; its bytes, chunks, history and thumbnail stay. Restored or deleted for good by the trash dialog, or after 30 days. See [Version history](../history.md) |
 | `thumbs` | id -> `{ blob, forUpdatedAt }`, the first-page thumbnail rendered by `thumbnail.ts` on every save |
 | `folders` | the guest (signed-out) folder hierarchy |
 | `search` | per-document full-text index cache (`search/searchLibrary.ts`) |
@@ -45,6 +47,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 - **Sign in with sync**: `adoptGuestFolders()` (`folderOps.ts`) sends guest folders first, then `adoptGuestDocuments(userId)` stamps every guest copy with the account and the upload queue sends them. A guest copy that was `releasedFrom` a *different* account loses its cloud link and folder and becomes a new document for this one (else it would look "deleted elsewhere").
 - **Signed in without sync** (subscription ended): `releaseToGuest(userId)` makes the account's copies guest copies again, remembering `releasedFrom`; cloud copies are untouched, subscribing again re-adopts them.
 - **Sign out**: `deleteOwnedBy(userId)` removes that account's copies, `forgetCatalogue()` clears `wm.catalogue`, and `wm.signedOut` in localStorage tells other tabs (`main.ts`, near the sign-out function). Guest copies stay. The cloud keeps everything.
+- **Deleting**: a document with a copy in the account is deleted from the account (which moves it to the account's trash for 30 days) and for good here; one with none (a guest's, or an account's without sync) is moved to this browser's trash (`trashSaved`). Sign out and Clear Local Data delete for good, trash included (`deleteOwnedBy`, `clearAllSaved`).
 - **Deleted elsewhere**: `loadLibrary` deletes a linked local copy no longer in the account's list *only if* it has no unsent changes (`deletedElsewhere`, `deleteSavedIfUnchanged`); an edited copy is uploaded again instead, so no work is lost.
 
 ## Key files
@@ -52,6 +55,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | Path | Role |
 | --- | --- |
 | `client/src/storage/local.ts` | IndexedDB access: save/get/list/delete, chunk assembly, thumbnails, folders, ownership transitions, `markSynced`, `saveFromCloud` |
+| `client/src/history.ts`, `client/src/trash.ts` | the one list of kept versions (this browser's and the account's) and the one list of deleted documents, with restore; `ui/versionHistoryDialog.ts` and `ui/trashDialog.ts` show them |
 | `client/src/storage/chunker.ts` | content-defined chunking (`cdc1`), `CHUNK_MIN_FILE`, `assemble` |
 | `client/src/storage/archive.ts`, `zipImport.ts`, `droppedFiles.ts`, `uniqueName.ts` | Download All as ZIP, ZIP/folder import into folders, name de-duplication |
 | `client/src/library.ts` | `uploadToCloud`, `uploadNewToCloud` (batches), `openFromCloud`, `prefetchFromCloud`, `conflictCopyName` |
@@ -83,7 +87,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 
 ## Invariants and gotchas
 
-- Save locally first, always. No code path may make a local save wait for the network.
+- Save locally first, always. No code path may make a local save wait for the network. A version kept by a save is stored after the save (a small one) or inside its transaction as counters only (a chunked one), so history can cost a version but never a save.
 - `getSaved` returns `null` for a chunked copy with a missing chunk: a damaged copy reads as no copy.
 - `uploadToCloud` re-reads `cloudUpdatedAt` on a 409 and retries once before making a conflicted copy, because another tab may have just uploaded.
 - A conflicted copy keeps the browser's id linked to the *new* cloud document (`markSynced` with the new name).
@@ -93,4 +97,4 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 
 ## Related docs
 
-[Formats](formats.md) (what is inside a stored `.wdoc`) · [Server](server.md) · [Collaboration](collaboration.md) · [Chunked storage](../chunked-storage.md) · [Text files](../text-files.md) · [Rendering](rendering.md) · [UI](ui.md)
+[Version history and the trash](../history.md) · [Formats](formats.md) (what is inside a stored `.wdoc`) · [Server](server.md) · [Collaboration](collaboration.md) · [Chunked storage](../chunked-storage.md) · [Text files](../text-files.md) · [Rendering](rendering.md) · [UI](ui.md)

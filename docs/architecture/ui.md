@@ -50,6 +50,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 
 Reuse before you build, and centralize what you would copy. One implementation per job:
 
+- A confirmation asked from inside a modal `<dialog>` (`confirmDelete(…, parent)`) must be put inside it: everything outside a modal dialog is inert. The Documents screen covers the menu bar, so what a menu command does that you need there (File › Trash) also has a button on the screen.
 - Dialogs and titles: `dialogTitleBar`, `showDialog`, `showConfirm` (`ui/popup.ts`); buttons: `iconButton`, `CLOSE_ICON` (`ui/dom.ts`), class `wm-button`; colors and fonts: `--wm-*` variables.
 - Lists of choices: `dropdown` (`ui/dropdown.ts`, `lineSample` for widths), never a native `<select>`; stroke lists via `strokeStyleList` (`ui/chrome.ts`). Segmented choices: `segmented`. Colors: `colorButton` (`ui/toolbar.ts`) with the `fillHeader`/`drawFillHeader` methods on `Chrome`; drawings and pictures share fill, gradient and stroke UI.
 - Layers: `LayerTree` (`ui/layerTree.ts`); an editor supplies only a `LayerAdapter`.

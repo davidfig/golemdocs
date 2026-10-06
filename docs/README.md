@@ -22,6 +22,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 
 | Doc | Covers |
 | --- | --- |
+| [history.md](history.md) | Version history (this browser's and the account's), the shared retention rules, and the trash |
 | [chunked-storage.md](chunked-storage.md) | Content-defined chunking and delta uploads for files of 2 MiB or more |
 | [text-files.md](text-files.md) | The large text and log editor (50 MB files): design, status and measurements |
 | [pdf-editing.md](pdf-editing.md) | Fill In and Edit PDF modes |

@@ -32,8 +32,8 @@ Clip is a paperclip in the corner of the app that reads and edits the open docum
 | `client/src/assistant/conversation.ts` | `converse()` loop, `Message`/`Reply`/`AssistantError` types, step and size limits |
 | `client/src/assistant/api.ts` | `fetchStatus`, `askServer`, `searchServer` (the three endpoints) |
 | `client/src/assistant/toolGroups.ts` | `TOOL_GROUPS`, `expandTool` |
-| `client/src/assistant/appTools.ts` | `appTools(host)`: tools that act on the app (files, rename, convert, view, text file, pictures, collaboration); falls through to the worker |
-| `client/src/assistant/fileTools.ts` | library tools: list/open/move/delete files and folders |
+| `client/src/assistant/appTools.ts` | `appTools(host)`: tools that act on the app (files, rename, convert, view, text file, pictures, collaboration, the document's version history: `list_versions`, `save_version`, `restore_version`); falls through to the worker |
+| `client/src/assistant/fileTools.ts` | library tools: list/open/move/delete files and folders, and the trash (`list_trash`, `restore_from_trash`) |
 | `client/src/assistant/libraryDocs.ts`, `otherDocs.ts` | "other documents": list, search, read, copy parts into the open one (`otherDocs.ts` is the pure part) |
 | `client/src/assistant/drawingTools.ts`, `pictureLayerTools.ts` | vector drawing and picture-layer tools |
 | `client/src/assistant/clipArt.ts`, `assistant.css` | the mascot SVG and styling |

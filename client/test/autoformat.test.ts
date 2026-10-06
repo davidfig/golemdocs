@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut } from '../src/layout/autoformat.ts';
+import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, urlShortcut, wikiLinkShortcut } from '../src/layout/autoformat.ts';
 
 const plain = { styled: false, listed: false };
 
@@ -55,6 +55,15 @@ test('markers that are not around marked text are left alone', () => {
   assert.equal(inlineShortcut('**bold*'), null);
   assert.equal(inlineShortcut('a \\*not\\*'), null);
   assert.equal(inlineShortcut('plain text'), null);
+});
+
+test('a bare web address is converted when a space is typed', () => {
+  const url = 'https://youtu.be/ll4TB7ddLzM?si=lJmVXFUuDbNgCAt-';
+  assert.deepEqual(urlShortcut(url), { start: 0, text: url, url });
+  assert.deepEqual(urlShortcut(`watch ${url}`), { start: 6, text: url, url });
+  assert.equal(urlShortcut('see https://example.com.'), null);
+  assert.equal(urlShortcut('https://'), null);
+  assert.equal(urlShortcut('nothttps://example.com'), null);
 });
 
 test('[text](url) is converted when ")" is typed', () => {

@@ -78,7 +78,7 @@ import { runAgentTool } from './agentTools.ts';
 import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { linkInSource } from '../formats/wikiLinks.ts';
-import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
+import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, urlShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
 import { FORMATS, formatAllows } from '../ui/formats.ts';
 import type { Action, DocumentKind, Mark } from '../ui/actions.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
@@ -2006,7 +2006,7 @@ class OpenDocument {
         const result = editor.apply(command);
         edited = result.edited;
         if (command.kind === 'find' || command.kind === 'replaceAll') this.search = { found: result.found, replaced: result.replaced };
-        if (edited && command.kind === 'insertText') after = this.typedShortcut(editor, command.text);
+        if (edited && command.kind === 'insertText') after = this.typedShortcut(editor, command.text) ?? this.pastedUrl(editor, command.text);
       }
     }
     // Edits send the selection once the changed pages are laid out.
@@ -2227,6 +2227,20 @@ class OpenDocument {
     }
   }
 
+  /** Plain text that is just a web address was pasted: it becomes a link. */
+  private pastedUrl(editor: Editor, text: string): void {
+    if (text.length < 2 || !/^https?:\/\/\S+$/i.test(text)) return;
+    const context = this.shortcutContext(editor);
+    if (!context || context.code || !formatAllows(context.profile, { kind: 'insertLink' } as Action)) return;
+    const end = context.before.length;
+    if (!context.before.endsWith(text)) return;
+    const start = end - text.length;
+    editor.apply({ kind: 'select', paragraph: context.index, from: start, to: end });
+    editor.apply({ kind: 'setLink', url: text, text });
+    editor.apply({ kind: 'select', paragraph: context.index, from: end, to: end });
+    this.converted = { steps: 1, paragraph: context.index, offset: end };
+  }
+
   /** A character was typed: if it finishes a Markdown shortcut, turns what was typed into formatting. */
   private typedShortcut(editor: Editor, typed: string): void | Promise<void> {
     if (typed.length !== 1) return;
@@ -2249,7 +2263,7 @@ class OpenDocument {
     }
     if (typed === ' ') {
       // A link (or a #tag) is made by the space after it: the text typed next then goes after the link, not into it.
-      const link = code ? null : linkShortcut(before.slice(0, -1)) ?? wikiLinkShortcut(before.slice(0, -1)) ?? tagShortcut(before.slice(0, -1));
+      const link = code ? null : linkShortcut(before.slice(0, -1)) ?? wikiLinkShortcut(before.slice(0, -1)) ?? urlShortcut(before.slice(0, -1)) ?? tagShortcut(before.slice(0, -1));
       if (link && allows([{ kind: 'insertLink' } as Action])) {
         select(link.start, end - 1);
         editor.apply({ kind: 'setLink', url: link.url, text: link.text });
@@ -2296,11 +2310,11 @@ class OpenDocument {
     return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]);
   }
 
-  /** Enter right after a #tag (not yet a link) makes it one, then the paragraph is split as usual. */
+  /** Enter right after a #tag or a web address (not yet a link) makes it one, then the paragraph is split as usual. */
   private tagBeforeEnter(editor: Editor): void {
     const context = this.shortcutContext(editor);
     if (!context || context.code) return;
-    const link = tagShortcut(context.before);
+    const link = urlShortcut(context.before) ?? tagShortcut(context.before);
     if (!link || !formatAllows(context.profile, { kind: 'insertLink' } as Action)) return;
     const [at] = editor.ordered();
     if (editor.linkAt(at.paragraph, link.start + 1, false)) return; // already a link

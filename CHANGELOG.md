@@ -10,9 +10,10 @@
 - Rest the pointer on a red or blue squiggle for a moment and its menu opens (suggestions, Ignore, Add to Dictionary), with no right click needed. It does not move the caret or select the word, so you can keep typing; typing, scrolling or moving away closes it.
 
 ### Added
-- After a new version is released, a note in the bottom left offers a button to What’s New. Close it to hide it until the next release, or choose Don’t show again to turn it off.
+- After a new version is released, a note centered at the bottom of the window offers a button to What’s New. Close it to hide it until the next release, or choose Don’t show again to turn it off.
 
 ### Fixed
+- The assistant no longer says some documents are “still being prepared for searching” when they are PDFs or pictures, which can never be searched by meaning.
 - Ignore All and Ignore Rule in the spelling and grammar menu and dialog now stay ignored in that document after you reload or reopen it (and on your other devices when you are signed in), instead of the squiggle coming back. They no longer carry over to other documents.
 - Typing no longer stops working after you right-click (or Control-click on a Mac) a word with a squiggle and close the menu.
 

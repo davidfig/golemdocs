@@ -113,6 +113,7 @@ test('the room’s file write updates the bytes and the catalogue row, and never
 
   await w.call(OWNER, 'DELETE', `/api/documents/${id}`);
   assert.equal(await files.write(new Uint8Array([8])), false);
+  await w.call(OWNER, 'DELETE', '/api/trash');
   assert.equal(await files.read(), null);
 });
 
@@ -157,6 +158,8 @@ test('deleting a document deletes its pictures too', async () => {
   await putMedia(OWNER, id, hash, picture);
   assert.equal((await w.call(OWNER, 'GET', `/api/rooms/${id}/media/${hash}`)).status, 200);
   assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${id}`)).status, 204);
+  assert.ok([...w.objects.keys()].some((key) => key.includes('.media/')), 'kept in the trash');
+  assert.equal((await w.call(OWNER, 'DELETE', '/api/trash')).status, 204);
   assert.ok(![...w.objects.keys()].some((key) => key.includes('.media/')), 'no picture is left behind');
 });
 

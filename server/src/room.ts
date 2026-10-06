@@ -12,6 +12,7 @@ import type { DurableObjectState, Env, SqlStorage, WebSocketHandle } from './cf.
 import { DEFAULT_TIMINGS, INITIAL_META, RoomCore, type Peer, type PeerState, type RoomFiles, type RoomMeta, type RoomStore } from './roomCore.ts';
 import { deleteMedia, readMedia } from './roomMedia.ts';
 import { userDb } from './userDb.ts';
+import { checkpoint, prune, retainedChunks } from './versions.ts';
 
 const MAX_MESSAGE_CHARS = 4 * 1024 * 1024;
 
@@ -118,15 +119,18 @@ export class CloudFiles implements RoomFiles {
 
   async write(bytes: Uint8Array): Promise<boolean> {
     const db = await userDb(this.env, this.owner());
-    const row = await db.first<{ updated_at: number }>('SELECT updated_at FROM documents WHERE id = ?', [this.doc()]);
+    const row = await db.first<{ id: string; size: number; updated_at: number }>('SELECT id, size, updated_at FROM documents WHERE id = ?', [this.doc()]);
     if (!row) return false;
-    // A room saves the file whole, and chunks it was kept as before are of no use any more.
+    // A room saves the file whole, and chunks it was kept as before are of no use any more (those a checkpoint names stay).
     const before = await this.env.FILES.head(this.key());
+    // What this save replaces, if the rules say a checkpoint is due (versions.ts).
+    await checkpoint(this.env, this.owner(), db, { ...row, r2_key: this.key() }, { nextSize: bytes.byteLength });
     // Bytes first: a failure leaves an old file with a row that is merely out of date.
     await this.env.FILES.put(this.key(), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, { httpMetadata: { contentType: DOCX } });
-    if (isChunked(before)) await deleteChunks(this.env, this.owner(), this.doc()).catch((error) => console.error('removing chunks failed', error));
+    if (isChunked(before)) await deleteChunks(this.env, this.owner(), this.doc(), await retainedChunks(this.env, this.owner(), db, this.doc())).catch((error) => console.error('removing chunks failed', error));
     // Strictly increasing, like an upload's: clients tell versions apart by it.
     await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, Math.max(Date.now(), row.updated_at + 1), this.doc()]);
+    await prune(this.env, this.owner(), db, this.doc(), bytes.byteLength);
     return true;
   }
 

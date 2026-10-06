@@ -80,6 +80,8 @@ test('deleting a document deletes its thumbnail too', async () => {
   await call('PUT', `/api/documents/${doc.id}/thumbnail`, { body: new Uint8Array([1]), type: 'image/png' });
   assert.equal([...w.objects.keys()].filter((k) => k.endsWith('.thumb')).length, 1);
   assert.equal((await call('DELETE', `/api/documents/${doc.id}`)).status, 204);
+  assert.equal([...w.objects.keys()].filter((k) => k.endsWith('.thumb')).length, 1, 'kept in the trash');
+  assert.equal((await call('DELETE', '/api/trash')).status, 204);
   assert.equal(w.objects.size, 0);
 });
 
@@ -218,7 +220,10 @@ test('a delete answers once the rows are gone and cleans up after the response',
   assert.deepEqual(await (await call('GET', '/api/documents')).json(), [], 'gone from the list at once');
   assert.equal((await call('GET', `/api/documents/${made.id}`)).status, 404);
   await Promise.all(w.background);
-  assert.equal(w.objects.size, 0, 'the files go with the cleanup');
+  assert.equal(w.objects.size, 1, 'the files stay in the trash');
+  assert.equal(((await (await call('GET', '/api/trash')).json()) as any[]).length, 1);
+  assert.equal((await call('DELETE', '/api/trash')).status, 204);
+  assert.equal(w.objects.size, 0, 'and go when it is emptied');
 });
 
 const save = (doc: { id: string; updatedAt: number }, bytes: number[]) => call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: new Uint8Array(bytes), type: DOCX });
@@ -255,6 +260,7 @@ test('a save that lands after the document was deleted answers 404 and leaves no
   const doc = await create();
   beforeNextPut(async () => assert.equal((await call('DELETE', `/api/documents/${doc.id}`)).status, 204));
   assert.equal((await call('PUT', `/api/documents/${doc.id}`, { body: new Uint8Array([9]), type: DOCX })).status, 404);
+  assert.equal((await call('DELETE', '/api/trash')).status, 204);
   assert.equal(w.objects.size, 0);
 });
 
@@ -262,6 +268,7 @@ test('a thumbnail that lands after the document was deleted answers 404 and leav
   const doc = await create();
   beforeNextPut(async () => assert.equal((await call('DELETE', `/api/documents/${doc.id}`)).status, 204));
   assert.equal((await call('PUT', `/api/documents/${doc.id}/thumbnail`, { body: new Uint8Array([1]), type: 'image/webp' })).status, 404);
+  assert.equal((await call('DELETE', '/api/trash')).status, 204);
   assert.equal(w.objects.size, 0);
 });
 

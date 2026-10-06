@@ -41,4 +41,29 @@ export const USER_MIGRATIONS: string[][] = [
        PRIMARY KEY (profile, key)
      )`,
   ],
+  // 5: history. A version is a document's file as it was before a save replaced it (`version` is that file's `updated_at`, which
+  // is also its identity), kept in R2 at `<owner>/<doc>.history/<version>`; `name` is set when the person saved it on purpose.
+  // `chunked` marks a version kept as a manifest of the document's chunks. The trash holds a deleted document's catalogue row
+  // (its files stay in R2 until `deleted_at` is 30 days old or it is deleted for good).
+  [
+    `CREATE TABLE versions (
+       doc_id     TEXT NOT NULL,
+       version    INTEGER NOT NULL,
+       size       INTEGER NOT NULL,
+       name       TEXT,
+       chunked    INTEGER NOT NULL DEFAULT 0,
+       PRIMARY KEY (doc_id, version)
+     )`,
+    `CREATE TABLE trash (
+       id         TEXT PRIMARY KEY,
+       name       TEXT NOT NULL,
+       size       INTEGER NOT NULL,
+       r2_key     TEXT NOT NULL,
+       created_at INTEGER NOT NULL,
+       updated_at INTEGER NOT NULL,
+       thumb_at   INTEGER,
+       folder_id  TEXT,
+       deleted_at INTEGER NOT NULL
+     )`,
+  ],
 ];

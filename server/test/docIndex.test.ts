@@ -104,6 +104,8 @@ test('deleting a document deletes its index too', async () => {
   await index(OWNER, doc.id);
   assert.equal(idxKeys().length, 1);
   assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${doc.id}`)).status, 204);
+  // The trash keeps the document (and so its index is rebuilt, when asked) until it is emptied.
+  assert.equal((await w.call(OWNER, 'DELETE', '/api/trash')).status, 204);
   assert.equal(w.objects.size, 0);
 });
 

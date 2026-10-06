@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.13.0 - Unreleased
+## 0.13.0 - 2026-10-06
 
 ### Added
 - Autocorrect as you type, as in Word and Google Docs: straight quotes become smart quotes (in the language of the paragraph), `--` an em dash, ` - ` an en dash, `...` an ellipsis, `(c)`, `(r)`, `(tm)`, `1/2` and `->` become ©, ®, ™, ½ and →, `1st` gets a raised suffix, the first letter of a sentence is capitalized, `TWo` becomes `Two`, and a web address followed by a space becomes a link. Backspace right after a correction gives back what you typed. Common English typing mistakes (`teh`, `recieve`, `dont`) are corrected when you finish the word, and Tools › Options › Autocorrect as You Type › Edit List… holds your own replacements (`omw` becomes `on my way`), kept on this device and in your account when you are signed in. Each rule can be turned off in Tools › Options › Autocorrect as You Type.

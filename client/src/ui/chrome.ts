@@ -32,6 +32,7 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
+import { installFullScreen, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
@@ -157,6 +158,7 @@ export class Chrome {
     this.buildToolbars();
 
     window.addEventListener('keydown', (e) => this.shortcut(e), true);
+    installFullScreen();
     document.addEventListener('fullscreenchange', () => this.refresh());
 
     const fonts = host.fonts?.();
@@ -342,7 +344,7 @@ export class Chrome {
       {
         id: 'view.fullScreen',
         label: t('chrome.view.fullScreen'),
-        run: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}),
+        run: toggleFullScreen,
         checked: () => !!document.fullscreenElement,
         enabled: () => document.fullscreenEnabled,
       },

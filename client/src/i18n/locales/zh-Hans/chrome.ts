@@ -150,6 +150,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.toolbar.formatting': '格式(&F)',
   'chrome.admin.debug': '调试(&D)…',
   'chrome.view.fullScreen': '全屏(&U)',
+  'chrome.fullScreen.hint': '按 Esc 键退出全屏',
   'chrome.view.darkMode': '深色模式(&D)',
   'chrome.view.darkPages': '深色页面(&P)',
   'chrome.view.matchSystem': '跟随系统(&M)',

@@ -2673,6 +2673,17 @@
 }
 
 /* The status bar (View > Status Bar, see ui/footer.ts): a strip under the document. */
+/* View ▸ Full Screen: only the document stays (Esc brings the rest back). The menu bar stays if Options says so. */
+body.wm-fullscreen #ruler,
+body.wm-fullscreen #vruler,
+body.wm-fullscreen #footer {
+  display: none !important;
+}
+body.wm-fullscreen:not(.wm-fullscreen-menu) #chrome,
+body.wm-fullscreen .wm-toolbars {
+  display: none;
+}
+
 #footer {
   display: flex;
   flex: none;

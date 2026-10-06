@@ -103,8 +103,10 @@ export type WireCommand =
    * or the end of the selection, and reports it (see `SelectionUpdate.spell`).
    */
   | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
-  /** Words to accept as spelled correctly (the user's dictionary, or ones ignored), and grammar rules to ignore. */
-  | { kind: 'spellWords'; words?: string[]; rules?: string[] }
+  /** Words to accept as spelled correctly in every document (the user's dictionary). */
+  | { kind: 'spellWords'; words?: string[] }
+  /** What is ignored in the open document: the words and grammar rules, replacing what was ignored before. */
+  | { kind: 'spellIgnored'; words: string[]; rules: string[] }
   /** Check-as-you-type: what to underline in the document, and the user's dictionary words to accept. */
   | { kind: 'spellCheck'; spelling: boolean; grammar: boolean; words?: string[] }
   /** Whether typed Markdown shortcuts ("# ", "- ", "**bold**") turn into formatting (see autoformat.ts). */
@@ -112,7 +114,8 @@ export type WireCommand =
   /** Whether the paragraph the caret is in shows its Markdown source, in Markdown documents (see livePreview.ts). */
   | { kind: 'livePreview'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
-  | { kind: 'spellAt'; page: number; x: number; y: number }
+  /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
+  | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
   | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean; /** The status bar is asking: the answer comes back as `footerStats`, not `stats`. */ footer?: boolean }
   /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */

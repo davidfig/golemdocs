@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': 'Non ora',
   'dialogs.signIn.subscribeNote': 'Accedi per abbonarti. Dopo l’accesso passi direttamente al pagamento.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Nuova versione',
+  'dialogs.newVersion.message': 'È stata rilasciata Golem Docs {version}.',
+  'dialogs.newVersion.view': 'Vedi le novità',
+  'dialogs.newVersion.off': 'Non mostrare più',
+  'dialogs.newVersion.close': 'Chiudi',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Computer condiviso',
   'dialogs.sharedDevice.clear': 'Cancella dati locali…',
@@ -113,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Disconnesso',
   'dialogs.sync.signedOut.body': 'Le modifiche sono conservate su questo dispositivo. Accedi di nuovo per salvarle nel tuo account.',
   'dialogs.options.title': 'Opzioni',
+  'dialogs.options.view': 'Visualizza',
+  'dialogs.options.fullScreenMenu': 'Mantieni la barra dei menu a schermo intero',
   'dialogs.options.drawing': 'Disegno',
   'dialogs.options.selectAfterPencil': 'Seleziona il tratto della matita al termine',
   'dialogs.options.returnToSelect': 'Torna allo strumento Seleziona dopo aver disegnato una forma o un tracciato con la penna',

@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': '나중에',
   'dialogs.signIn.subscribeNote': '구독하려면 로그인하세요. 로그인하면 바로 결제 화면으로 이동합니다.',
 
+  // New version notice
+  'dialogs.newVersion.label': '새 버전',
+  'dialogs.newVersion.message': 'Golem Docs {version}이(가) 출시되었습니다.',
+  'dialogs.newVersion.view': '새로운 기능 보기',
+  'dialogs.newVersion.off': '다시 표시 안 함',
+  'dialogs.newVersion.close': '닫기',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': '공용 컴퓨터',
   'dialogs.sharedDevice.clear': '로컬 데이터 지우기…',
@@ -113,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': '로그아웃됨',
   'dialogs.sync.signedOut.body': '변경 내용은 이 장치에 보관됩니다. 계정에 저장하려면 다시 로그인하십시오.',
   'dialogs.options.title': '옵션',
+  'dialogs.options.view': '보기',
+  'dialogs.options.fullScreenMenu': '전체 화면에서도 메뉴 표시줄 유지',
   'dialogs.options.drawing': '그리기',
   'dialogs.options.selectAfterPencil': '연필 획을 그린 후 선택',
   'dialogs.options.returnToSelect': '도형이나 펜 경로를 그린 후 선택 도구로 돌아가기',

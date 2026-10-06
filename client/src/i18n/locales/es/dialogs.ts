@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': 'Ahora no',
   'dialogs.signIn.subscribeNote': 'Inicia sesión para suscribirte. Al iniciar sesión, pasas directamente al pago.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Nueva versión',
+  'dialogs.newVersion.message': 'Se ha publicado Golem Docs {version}.',
+  'dialogs.newVersion.view': 'Ver novedades',
+  'dialogs.newVersion.off': 'No volver a mostrar',
+  'dialogs.newVersion.close': 'Cerrar',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Equipo compartido',
   'dialogs.sharedDevice.clear': 'Borrar datos locales…',
@@ -113,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Sesión cerrada',
   'dialogs.sync.signedOut.body': 'Los cambios se conservan en este dispositivo. Inicie sesión de nuevo para guardarlos en su cuenta.',
   'dialogs.options.title': 'Opciones',
+  'dialogs.options.view': 'Vista',
+  'dialogs.options.fullScreenMenu': 'Mantener la barra de menús en pantalla completa',
   'dialogs.options.drawing': 'Dibujo',
   'dialogs.options.selectAfterPencil': 'Seleccionar el trazo del lápiz al terminarlo',
   'dialogs.options.returnToSelect': 'Volver a la herramienta Seleccionar tras dibujar una forma o un trazado de pluma',

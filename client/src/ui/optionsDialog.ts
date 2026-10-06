@@ -4,6 +4,7 @@
 import { t } from '../i18n/index.ts';
 import { SMOOTHING_LEVELS, lockGuidesOn, penPressureOn, pencilSmoothing, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPenPressure, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, type Smoothing } from './drawingOptions.ts';
 import { h } from './dom.ts';
+import { keepMenuInFullScreen, setKeepMenuInFullScreen } from './fullScreen.ts';
 import { showDialog } from './popup.ts';
 
 function check(label: string, on: boolean, set: (value: boolean) => void): HTMLElement {
@@ -22,6 +23,7 @@ export function optionsPanel(): HTMLElement {
   return h(
     'div',
     { class: 'wm-options' },
+    h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen)),
     h(
       'fieldset',
       {},

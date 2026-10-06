@@ -150,6 +150,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.toolbar.formatting': '&Formatierung',
   'chrome.admin.debug': '&Debug…',
   'chrome.view.fullScreen': '&Vollbild',
+  'chrome.fullScreen.hint': 'Mit Esc beenden Sie den Vollbildmodus',
   'chrome.view.darkMode': '&Dunkelmodus',
   'chrome.view.darkPages': 'Dunkle Seite&n',
   'chrome.view.matchSystem': 'Systemeinstellung &folgen',

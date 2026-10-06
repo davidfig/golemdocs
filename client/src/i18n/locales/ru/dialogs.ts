@@ -65,6 +65,13 @@ export const dialogs: Catalog = {
   'dialogs.signIn.notNow': 'Не сейчас',
   'dialogs.signIn.subscribeNote': 'Войдите, чтобы оформить подписку. После входа вы сразу перейдёте к оплате.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Новая версия',
+  'dialogs.newVersion.message': 'Вышла новая версия Golem Docs {version}.',
+  'dialogs.newVersion.view': 'Что нового',
+  'dialogs.newVersion.off': 'Больше не показывать',
+  'dialogs.newVersion.close': 'Закрыть',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Общий компьютер',
   'dialogs.sharedDevice.clear': 'Очистить локальные данные…',
@@ -113,6 +120,8 @@ export const dialogs: Catalog = {
   'dialogs.sync.signedOut.title': 'Вы вышли',
   'dialogs.sync.signedOut.body': 'Изменения хранятся на этом устройстве. Войдите снова, чтобы сохранить их в вашей учётной записи.',
   'dialogs.options.title': 'Параметры',
+  'dialogs.options.view': 'Вид',
+  'dialogs.options.fullScreenMenu': 'Оставлять строку меню в полноэкранном режиме',
   'dialogs.options.drawing': 'Рисование',
   'dialogs.options.selectAfterPencil': 'Выделять штрих карандаша после его завершения',
   'dialogs.options.returnToSelect': 'Возвращаться к инструменту «Выделение» после рисования фигуры или контура пером',

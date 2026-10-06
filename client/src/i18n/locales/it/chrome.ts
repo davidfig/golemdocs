@@ -150,6 +150,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.toolbar.formatting': '&Formattazione',
   'chrome.admin.debug': '&Debug…',
   'chrome.view.fullScreen': 'Sc&hermo intero',
+  'chrome.fullScreen.hint': 'Premi Esc per uscire dalla modalità schermo intero',
   'chrome.view.darkMode': '&Modalità scura',
   'chrome.view.darkPages': '&Pagine scure',
   'chrome.view.matchSystem': 'Come &sistema',

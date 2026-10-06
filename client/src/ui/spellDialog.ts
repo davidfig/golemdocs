@@ -14,6 +14,8 @@ export interface SpellHost {
   /** The words the user has added to the dictionary. */
   userWords(): string[];
   addUserWord(word: string): void;
+  /** Ignores the words and grammar rules in the open document, from now on. */
+  ignore(words: string[], rules: string[]): void;
   focusEditor(): void;
 }
 
@@ -239,8 +241,8 @@ export class SpellDialog {
   private ignoreEvery(): void {
     const { issue } = this;
     if (!issue) return;
-    if (issue.kind === 'grammar' && issue.rule) this.host.send({ kind: 'spellWords', rules: [issue.rule] });
-    else this.host.send({ kind: 'spellWords', words: [issue.text] });
+    if (issue.kind === 'grammar' && issue.rule) this.host.ignore([], [issue.rule]);
+    else this.host.ignore([issue.text], []);
     this.next('selectionEnd');
   }
 

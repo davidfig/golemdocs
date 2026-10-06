@@ -185,8 +185,8 @@ export class TextEditor {
     return (await this.view?.spellNext(from, grammar)) ?? null;
   }
 
-  async spellIssueAt(x: number, y: number): Promise<SpellIssue | null> {
-    return (await this.view?.spellIssueAt(x, y)) ?? null;
+  async spellIssueAt(x: number, y: number, select = true): Promise<SpellIssue | null> {
+    return (await this.view?.spellIssueAt(x, y, select)) ?? null;
   }
 
   pointOf(pos: Pos): { x: number; y: number } | null {

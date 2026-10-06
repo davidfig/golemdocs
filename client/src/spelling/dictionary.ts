@@ -59,6 +59,8 @@ export class Dictionary {
   private readonly stems = new Map<string, string[][]>();
   /** Words the user added, and words to ignore, lower-cased. */
   private readonly extra = new Set<string>();
+  /** Words ignored in the open document (replaced as a whole when another opens), lower-cased. */
+  private ignored = new Set<string>();
   private readonly replacements: [string, string][] = [];
   private readonly letters: string;
   private readonly suffixes: RuleIndex = { byAdd: new Map(), longest: 0 };
@@ -193,6 +195,11 @@ export class Dictionary {
     for (const word of words) this.extra.add(word.toLowerCase());
   }
 
+  /** Words to accept in the open document only; the ones before are forgotten. */
+  setIgnored(words: readonly string[]): void {
+    this.ignored = new Set(words.map((word) => word.toLowerCase()));
+  }
+
   /** The flags of a stem that spells `word` and has all of `flags`, if there is one. */
   private stemWith(word: string, flags: readonly string[], want: Want): string[] | null {
     const entries = this.stems.get(word);
@@ -293,7 +300,7 @@ export class Dictionary {
    */
   check(word: string): boolean {
     const w = word.replace(/’/g, "'");
-    if (this.find(w) || this.extra.has(w.toLowerCase())) return true;
+    if (this.find(w) || this.extra.has(w.toLowerCase()) || this.ignored.has(w.toLowerCase())) return true;
     if (isAllCaps(w)) {
       const lower = w.toLowerCase();
       return !!(this.find(lower) || this.find(capitalize(lower)) || this.compound(lower));

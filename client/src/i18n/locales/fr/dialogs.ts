@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': 'Plus tard',
   'dialogs.signIn.subscribeNote': 'Connectez-vous pour vous abonner. Une fois connecté, vous passez directement au paiement.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Nouvelle version',
+  'dialogs.newVersion.message': 'Golem Docs {version} est disponible.',
+  'dialogs.newVersion.view': 'Voir les nouveautés',
+  'dialogs.newVersion.off': 'Ne plus afficher',
+  'dialogs.newVersion.close': 'Fermer',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Ordinateur partagé',
   'dialogs.sharedDevice.clear': 'Effacer les données locales…',
@@ -113,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Déconnecté',
   'dialogs.sync.signedOut.body': 'Vos modifications sont conservées sur cet appareil. Reconnectez-vous pour les enregistrer dans votre compte.',
   'dialogs.options.title': 'Options',
+  'dialogs.options.view': 'Affichage',
+  'dialogs.options.fullScreenMenu': 'Garder la barre de menus en plein écran',
   'dialogs.options.drawing': 'Dessin',
   'dialogs.options.selectAfterPencil': 'Sélectionner le trait du crayon une fois terminé',
   'dialogs.options.returnToSelect': 'Revenir à l’outil Sélection après avoir dessiné une forme ou un tracé à la plume',

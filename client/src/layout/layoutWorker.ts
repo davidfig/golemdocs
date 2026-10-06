@@ -318,20 +318,21 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that change the editor's settings rather than the document (they work with none open). */
-const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellCheck', 'autoFormat', 'livePreview']);
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'livePreview']);
 
 /** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
 function applySettings(wire: WireCommand): void {
-  if (wire.kind === 'spellWords') void acceptSpelling(wire.words ?? [], wire.rules ?? []);
+  if (wire.kind === 'spellWords') void acceptSpelling(wire.words ?? []);
+  else if (wire.kind === 'spellIgnored') ignoreSpelling(wire.words, wire.rules);
   else if (wire.kind === 'spellCheck') {
     live.spelling = wire.spelling;
     live.grammar = wire.grammar;
-    void acceptSpelling(wire.words ?? [], []);
+    void acceptSpelling(wire.words ?? []);
   } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
   else if (wire.kind === 'livePreview') live.livePreview = wire.on;
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'spellAt', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -1786,11 +1787,20 @@ class OpenDocument {
     this.sendSelection();
   }
 
+  /** When the last edit was made here (performance.now()): squiggles hold off for the word just finished until the typing pauses. */
+  private typedAt = -Infinity;
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
+
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
     if (!live.spelling && !live.grammar) return new Float64Array(0);
     const [start, end] = editor.ordered();
     const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
+    // Typing along: the word just finished (and the space or mark after it) is not underlined until a pause, so a squiggle doesn't flash under every word as it is typed.
+    const sinceTyped = performance.now() - this.typedAt;
+    const settling = typing !== null && sinceTyped < SPELL_SETTLE_MS;
+    clearTimeout(this.settleTimer);
+    if (settling) this.settleTimer = setTimeout(() => this.sendSelection(), SPELL_SETTLE_MS - sinceTyped + 20);
     const documentLang = documentLanguageOf(editor);
     const marks = editor.marks((paragraph) =>
       issuesOf(paragraph, documentLang, (language) => {
@@ -1803,7 +1813,7 @@ class OpenDocument {
           .finally(() => this.loadingMarks.delete(language));
       })
         // The word being typed isn't marked until the caret leaves it.
-        .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && typing.offset <= i.end))
+        .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && (typing.offset <= i.end || (settling && typing.offset - i.end <= SPELL_FINISHED_REACH))))
         .map((i) => ({ start: i.start, end: i.end, kind: i.kind === 'spelling' ? 0 : 1 })),
     );
     const out = new Float64Array(marks.length * 6);
@@ -1826,8 +1836,8 @@ class OpenDocument {
     return { url, checkbox };
   }
 
-  /** Right click: selects the mistake under the point and reports it for the menu (nothing, if there is none). */
-  private async spellAt(pageId: number, x: number, y: number): Promise<void> {
+  /** Selects the mistake under the point (unless `select` is false) and reports it for the menu (nothing, if there is none). */
+  private async spellAt(pageId: number, x: number, y: number, select: boolean): Promise<void> {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session || this.closed || this.annotator) return;
@@ -1841,7 +1851,7 @@ class OpenDocument {
       const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && hit.offset <= i.end);
       if (issue) {
         this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
-        editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
+        if (select) editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
       }
     }
     this.reveal = false;
@@ -1903,6 +1913,7 @@ class OpenDocument {
     this.commandAt = performance.now();
     if (editor.apply(command).edited) {
       this.edited = true;
+      this.typedAt = performance.now();
       void this.pump();
       this.postRoomState();
     } else this.sendSelection();
@@ -1924,11 +1935,15 @@ class OpenDocument {
       this.props = { ...this.document?.properties };
       return this.sendSelection();
     }
-    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? [], wire.rules ?? []).then(() => this.sendSelection());
+    if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? []).then(() => this.sendSelection());
+    if (wire.kind === 'spellIgnored') {
+      ignoreSpelling(wire.words, wire.rules);
+      return this.sendSelection();
+    }
     if (wire.kind === 'spellCheck') {
       live.spelling = wire.spelling;
       live.grammar = wire.grammar;
-      return acceptSpelling(wire.words ?? [], []).then(() => this.sendSelection());
+      return acceptSpelling(wire.words ?? []).then(() => this.sendSelection());
     }
     if (wire.kind === 'autoFormat') {
       live.autoFormat = wire.on;
@@ -1938,7 +1953,7 @@ class OpenDocument {
       live.livePreview = wire.on;
       return this.syncRaw().then(() => this.finishRaw());
     }
-    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y);
+    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
     if (isPdfCommand(wire)) return;
@@ -2334,8 +2349,13 @@ function unmark(mark: Mark): RunFormat {
   }
 }
 
-/** Words the user added to the dictionary or chose to ignore, and grammar rules to ignore: for every document. */
-const spelling = { words: new Set<string>(), rules: new Set<string>() };
+/** Squiggles wait this long after the last keystroke for the word just typed. */
+const SPELL_SETTLE_MS = 1000;
+/** A word counts as just finished when the caret is within this many characters after it (a space, or a space and a mark). */
+const SPELL_FINISHED_REACH = 2;
+
+/** Words the user added to the dictionary (for every document), and the words and grammar rules ignored in the open document. */
+const spelling = { words: new Set<string>(), ignoredWords: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
 const live = { spelling: true, grammar: true, autoFormat: true, livePreview: false };
 const dictionaries = new Map<SpellLanguage, Promise<Dictionary>>();
@@ -2454,17 +2474,26 @@ async function readDictionary(language: SpellLanguage): Promise<Dictionary> {
   const decoder = new TextDecoder(affixEncoding(affix));
   const dictionary = Dictionary.parse(decoder.decode(affix), decoder.decode(await dic.arrayBuffer()), { smallWords: language === 'en' ? ENGLISH_SMALL_WORDS : undefined });
   dictionary.accept(...APP_WORDS[language], ...spelling.words);
+  dictionary.setIgnored([...spelling.ignoredWords]);
   loadedDictionaries.set(language, dictionary);
   return dictionary;
 }
 
-/** Words to treat as spelled correctly and grammar rules to leave out, from now on. */
-async function acceptSpelling(words: string[], rules: string[]): Promise<void> {
+/** Words to treat as spelled correctly in every document, from now on. */
+async function acceptSpelling(words: string[]): Promise<void> {
   for (const word of words) spelling.words.add(word);
-  for (const rule of rules) spelling.rules.add(rule);
   spellVersion++;
   for (const dictionary of loadedDictionaries.values()) dictionary.accept(...words);
   // A dictionary still being read takes them when it is done (it reads `spelling.words`).
+}
+
+/** What is ignored in the open document, instead of what was ignored in the one before. */
+function ignoreSpelling(words: string[], rules: string[]): void {
+  spelling.ignoredWords = new Set(words);
+  spelling.rules = new Set(rules);
+  spellVersion++;
+  for (const dictionary of loadedDictionaries.values()) dictionary.setIgnored(words);
+  // A dictionary still being read takes them when it is done (it reads `spelling.ignoredWords`).
 }
 
 let current: OpenDocument | null = null;
@@ -2480,6 +2509,8 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
   current?.controller.abort();
   const entry = new OpenDocument(doc);
   current = entry;
+  // What was ignored in the document before is not ignored in this one (the page sends its own once it is open).
+  ignoreSpelling([], []);
   if (carried) entry.takeRoom(carried);
   // It could not keep it (it was being handed over): the page joins again once the document is next saved.
   else if (keepRoom) post({ type: 'roomGone', doc });

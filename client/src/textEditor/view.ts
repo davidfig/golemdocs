@@ -450,8 +450,8 @@ export class TextEditorView {
     return null;
   }
 
-  /** The problem under a window point, with the word selected, for the right-click menu; null when there is none. */
-  async spellIssueAt(x: number, y: number): Promise<SpellIssue | null> {
+  /** The problem under a window point, with the word selected (unless `select` is false), for the spelling menu; null when there is none. */
+  async spellIssueAt(x: number, y: number, select = true): Promise<SpellIssue | null> {
     const index = this.index;
     if (!index || !this.spell?.active) return null;
     const point = this.deps.camera.toDocument(x, y);
@@ -463,7 +463,7 @@ export class TextEditorView {
     // The problem is a word (or phrase) that touches the click: the nearest place its text is.
     let from = -1;
     for (let at = text.indexOf(issue.text); at >= 0; at = text.indexOf(issue.text, at + 1)) if (at <= hit.col && hit.col <= at + issue.text.length) from = at;
-    if (from >= 0) this.setSelection({ anchor: { line: hit.line, col: from }, focus: { line: hit.line, col: from + issue.text.length } });
+    if (select && from >= 0) this.setSelection({ anchor: { line: hit.line, col: from }, focus: { line: hit.line, col: from + issue.text.length } });
     return issue;
   }
 

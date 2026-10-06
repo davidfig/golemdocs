@@ -88,7 +88,11 @@ export class SelectionLayer {
     }
   }
 
+  /** How many squiggles are drawn (for the end-to-end tests: the canvas can't be read). */
+  squiggleCount = 0;
+
   private updateSquiggles(marks: Float64Array | undefined): void {
+    this.squiggleCount = marks ? marks.length / 6 : 0;
     for (const batch of this.squiggles.values()) batch.dispose(this.gl);
     this.squiggles.clear();
     if (!marks) return;

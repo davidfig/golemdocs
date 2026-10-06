@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': '後で',
   'dialogs.signIn.subscribeNote': '購読するにはサインインしてください。サインイン後、そのままお支払いに進みます。',
 
+  // New version notice
+  'dialogs.newVersion.label': '新バージョン',
+  'dialogs.newVersion.message': 'Golem Docs {version} がリリースされました。',
+  'dialogs.newVersion.view': '新機能を見る',
+  'dialogs.newVersion.off': '今後表示しない',
+  'dialogs.newVersion.close': '閉じる',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': '共有コンピューター',
   'dialogs.sharedDevice.clear': 'ローカル データを消去…',
@@ -113,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'サインアウト済み',
   'dialogs.sync.signedOut.body': '変更はこのデバイスに保持されています。アカウントに保存するには、もう一度サインインしてください。',
   'dialogs.options.title': 'オプション',
+  'dialogs.options.view': '表示',
+  'dialogs.options.fullScreenMenu': '全画面表示でもメニュー バーを表示する',
   'dialogs.options.drawing': '描画',
   'dialogs.options.selectAfterPencil': '鉛筆のストロークを描き終えたら選択する',
   'dialogs.options.returnToSelect': '図形またはペンのパスを描いた後に選択ツールへ戻る',

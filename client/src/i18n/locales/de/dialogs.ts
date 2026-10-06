@@ -65,6 +65,13 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.notNow': 'Nicht jetzt',
   'dialogs.signIn.subscribeNote': 'Melden Sie sich an, um zu abonnieren. Nach der Anmeldung gelangen Sie direkt zur Kasse.',
 
+  // New version notice
+  'dialogs.newVersion.label': 'Neue Version',
+  'dialogs.newVersion.message': 'Golem Docs {version} ist erschienen.',
+  'dialogs.newVersion.view': 'Neuigkeiten ansehen',
+  'dialogs.newVersion.off': 'Nicht mehr anzeigen',
+  'dialogs.newVersion.close': 'Schließen',
+
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Gemeinsam genutzter Computer',
   'dialogs.sharedDevice.clear': 'Lokale Daten löschen…',
@@ -113,6 +120,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.signedOut.title': 'Abgemeldet',
   'dialogs.sync.signedOut.body': 'Ihre Änderungen bleiben auf diesem Gerät. Melden Sie sich erneut an, um sie in Ihrem Konto zu speichern.',
   'dialogs.options.title': 'Optionen',
+  'dialogs.options.view': 'Ansicht',
+  'dialogs.options.fullScreenMenu': 'Menüleiste im Vollbildmodus beibehalten',
   'dialogs.options.drawing': 'Zeichnen',
   'dialogs.options.selectAfterPencil': 'Strich nach dem Zeichnen mit dem Stift auswählen',
   'dialogs.options.returnToSelect': 'Nach einer Form oder einem Zeichenstiftpfad zum Auswahlwerkzeug zurückwechseln',

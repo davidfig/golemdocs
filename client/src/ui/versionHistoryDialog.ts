@@ -124,7 +124,7 @@ export class VersionHistoryDialog {
       rename.addEventListener('click', () => this.editName(target, entry, info, refresh));
       const remove = h('button', { class: 'wm-button', text: t('history.delete'), attrs: { type: 'button' } });
       remove.addEventListener('click', () => {
-        void confirmDelete(t('history.deleteTitle'), [entry.name !== null ? `${entry.name} (${label})` : label]).then(async (yes) => {
+        void confirmDelete(t('history.deleteTitle'), [entry.name !== null ? `${entry.name} (${label})` : label], this.dialog ?? document.body).then(async (yes) => {
           if (!yes) return;
           await deleteEntry(target, entry).catch((error: unknown) => this.host.tell((error as Error).message));
           refresh();

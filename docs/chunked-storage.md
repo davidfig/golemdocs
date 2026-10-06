@@ -42,6 +42,10 @@ download). If the server says it lacks some, everything goes once. A document un
 before; a chunked document is left out of a batch and goes the single way. `uploadShared` (documents others own) does the same with the chunks
 of its last upload this session.
 
+## History
+
+A document's checkpoints (see [Version history](history.md)) name chunks too. A save no longer deletes a chunk a checkpoint still names, in the server (`chunksToDelete`, `retainedChunks` in `versions.ts`) and in this browser (a checkpoint holds a count on each of its chunks in `chunkRefs`).
+
 ## Not done
 
 Downloads are still whole (the server reassembles; a second computer fetches the full file). The 50 MiB limit on a document stands, since the first

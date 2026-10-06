@@ -1,5 +1,14 @@
 # What’s New in Golem Docs
 
+## 0.13.0 - Unreleased
+
+### Added
+- File › Version History keeps the earlier versions of every document as you edit it, so you can look back at how it was. They are kept in this browser, and in your account too if you have a subscription. Opening a version makes a new document and leaves the one you are in as it is, so nothing is ever overwritten. You can also save the document as it is now under a name (a named version is kept longer), rename a version and delete it. Anyone who can edit a shared document can open its versions. The assistant can look at the history, keep a version and open one.
+- File › Trash (and a Trash button on the Documents screen): documents you delete from your account are kept for 30 days, and you can bring one back (it returns unshared) or delete it for good. The assistant can list the trash and restore from it.
+
+### Changed
+- Deleting a document from your account now moves it to the trash instead of deleting it for good. A document deleted from this browser while signed out is still gone for good.
+
 ## 0.12.0 - 2026-10-06
 
 ### Added

@@ -58,6 +58,8 @@ export interface DashboardHost {
   share(cloudId: string, name: string): void;
   /** Opens a document someone else shared with the user. */
   openShared(doc: CloudDocument): void;
+  /** Opens the trash (the account's deleted documents), which has its own dialog. */
+  showTrash(): void;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
   closed(): void;
   /** The keys of the documents (library entries, and shared documents by id) with the search's words or #tags in them. */
@@ -83,6 +85,7 @@ export class Dashboard {
   private readonly scroller: HTMLElement;
   private thumbnails!: Thumbnails;
   private readonly newFolderButton: HTMLButtonElement;
+  private readonly trashButton: HTMLButtonElement;
   /** Documents (`doc:<key>`) and folders (`folder:<id>`) ticked for a bulk Move or Delete. */
   private readonly selected = new Set<string>();
   /** Where a Shift-click range starts: the card ticked last. */
@@ -167,6 +170,7 @@ export class Dashboard {
         this.renaming = folder.id;
       }, false);
     });
+    this.trashButton = action('trash', t('trash.title'), t('trash.title'), () => this.host.showTrash());
     const moveSelected = action('moveToFolder', t('panels.dashboard.move'), t('panels.dashboard.moveSelected'), () => this.moveSelection());
     const deleteSelected = this.deleteButton(() => this.selectedItems(), (before, items) => this.deleteSelection(before, items), 'trash');
     const clearSelection = action('close', t('panels.dashboard.clearSelection'), t('panels.dashboard.clearSelection'), () => this.setSelection([]));
@@ -191,7 +195,7 @@ export class Dashboard {
       );
     });
     const newSplit = h('span', { class: 'wm-dash-split' }, blank, typeButton);
-    const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.selectionBar);
+    const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.trashButton, this.selectionBar);
     const size = this.sizeSlider();
     this.root = h(
       'section',
@@ -365,6 +369,8 @@ export class Dashboard {
     this.renderCrumbs(searching);
 
     this.newFolderButton.hidden = searching;
+    // Only an account has a trash.
+    this.trashButton.hidden = this.host.account() === null;
 
     const cards = shown.map((entry) => this.card(entry));
     const children: (HTMLElement | string)[] = [...shownFolders.map((f) => this.folderCard(f)), ...cards];

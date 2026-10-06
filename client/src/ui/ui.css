@@ -2774,7 +2774,7 @@
 
 .wm-dialog.wm-history {
   width: 580px;
-  max-width: calc(100vw - 24px);
+  max-width: min(580px, calc(100vw - 32px));
 }
 
 .wm-history-body {

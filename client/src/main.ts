@@ -4090,6 +4090,7 @@ const dashboard = new Dashboard(document.body, {
     openSource(`shared:${doc.id}`);
   },
   closed: focusInput,
+  showTrash: () => trashDialog.open(),
   contentMatches: async (query) => {
     const docs = await searchableNow();
     // Copies kept here are indexed in the background a few seconds after a change; a search doesn't wait for that.

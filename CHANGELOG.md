@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.14.0 - Unreleased
+## 0.14.0 - 2026-10-06
 
 ### Added
 - File › Version History keeps the earlier versions of every document as you edit it, so you can look back at how it was. They are kept in this browser, and in your account too if you have a subscription. Opening a version makes a new document and leaves the one you are in as it is, so nothing is ever overwritten. You can also save the document as it is now under a name (a named version is kept longer), rename a version and delete it. Anyone who can edit a shared document can open its versions. The assistant can look at the history, keep a version and open one.

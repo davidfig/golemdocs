@@ -668,7 +668,8 @@
   filter: grayscale(1);
 }
 
-.icon svg {
+.icon svg,
+.icon.letter {
   filter: var(--wm-icon-halo);
 }
 

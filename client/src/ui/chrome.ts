@@ -1623,19 +1623,23 @@ export class Chrome {
     this.formatCombo.refresh(this.state);
   }
 
-  /** Marks the body while the document has the keyboard, which shows the phone's typing bar. */
+  /**
+   * Marks the body while the caret is down in the document (a click or tap put it there, and the document
+   * still has focus), which shows the phone's typing bar. A command handing focus back doesn't count.
+   */
   private trackTyping(): void {
     const input = document.getElementById('input');
     let timer = 0;
-    document.addEventListener('focusin', (e) => {
-      if (e.target !== input) return;
+    const typing = (on: boolean) => document.body.classList.toggle('wm-typing', on);
+    document.addEventListener('wm-caret', () => {
       clearTimeout(timer);
-      document.body.classList.add('wm-typing');
+      typing(true);
     });
+    document.addEventListener('wm-caret-off', () => typing(false));
     document.addEventListener('focusout', (e) => {
       if (e.target !== input) return;
       // Focus moves out and back in when a command hands it back to the document: not a flicker.
-      timer = window.setTimeout(() => document.body.classList.toggle('wm-typing', document.activeElement === input), 150);
+      timer = window.setTimeout(() => typing(document.activeElement === input && document.body.classList.contains('wm-typing')), 150);
     });
   }
 

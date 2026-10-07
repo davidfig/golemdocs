@@ -985,6 +985,7 @@ const loadingScreen = new LoadingScreen(document.getElementById('viewport')!);
 
 /** Covers the editor (and the dashboard) with the loading screen until the document is open. */
 function showLoading(name: string): void {
+  document.dispatchEvent(new Event('wm-caret-off'));
   loadingScreen.show(name);
   dashboard.hide();
 }
@@ -3245,6 +3246,8 @@ type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 
 
 function press(e: Press): void {
   focusInput();
+  // Putting the caret down is what shows the phone's typing bar (see Chrome.trackTyping).
+  document.dispatchEvent(new Event('wm-caret'));
   if (textView.active) {
     textView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e));
     return;

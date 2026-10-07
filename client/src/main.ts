@@ -3171,6 +3171,8 @@ if (visual) {
   const fitVisual = () => {
     const covered = window.innerHeight - visual.height > 1;
     document.documentElement.style.setProperty('--app-height', covered ? `${visual.height}px` : '100%');
+    // Where the keyboard starts, for the sheets and bars fixed to the bottom of the page (iOS leaves them under it).
+    document.documentElement.style.setProperty('--keyboard-inset', covered ? `${Math.max(0, window.innerHeight - visual.height - visual.offsetTop)}px` : '0px');
     if (covered && (window.scrollY || visual.offsetTop)) window.scrollTo(0, 0);
   };
   visual.addEventListener('resize', fitVisual);
@@ -3276,6 +3278,8 @@ function press(e: Press): void {
 const TOUCH_SLOP_PX = 8;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
+/** Two or more fingers were down in this gesture: until every finger is up, nothing in it is a tap. */
+let touchMulti = false;
 let lastMoveAt = 0;
 let pinch: { distance: number; x: number; y: number } | null = null;
 
@@ -3313,8 +3317,14 @@ function startFling(): void {
 function touchDown(e: PointerEvent): void {
   stopFling();
   flingVelocity = { x: 0, y: 0 };
+  // A first finger starts a new gesture; a finger whose release was never seen must not count as a second one.
+  if (e.isPrimary) {
+    touches.clear();
+    touchMulti = false;
+  }
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (touches.size === 1) {
+  if (touches.size > 1) touchMulti = true;
+  if (touches.size === 1 && !touchMulti) {
     touchTap = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false };
   } else {
     touchTap = null;
@@ -3351,8 +3361,9 @@ function touchUp(e: PointerEvent): void {
   touches.delete(e.pointerId);
   pinch = touches.size === 2 ? pinchState() : null;
   if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
-  if (touchTap && e.type === 'pointerup') press(touchTap);
+  if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') press(touchTap);
   touchTap = null;
+  if (touches.size === 0) touchMulti = false;
 }
 
 canvas.addEventListener('pointerdown', (e) => {

@@ -7,7 +7,7 @@ import type { CommandRegistry } from './commands.ts';
 import { t } from '../i18n/index.ts';
 import { h, keepFocus, setAttr, toggleClass } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
-import { closePopup, openPopup, popupOpenFor } from './popup.ts';
+import { closePopup, narrow, openPopup, popupOpenFor } from './popup.ts';
 import { toolbarTitle } from './toolbarLayout.ts';
 import { newKindLabel, newKindOrder } from './newKinds.ts';
 
@@ -22,11 +22,6 @@ export interface Control {
 }
 
 export type ToolbarItem = { type: 'button'; id: string } | { type: 'separator' } | { type: 'control'; create: () => Control };
-
-/** Phones and small windows, where the toolbars are one row and the rest goes behind "…". Matches the CSS. */
-let narrowQuery: MediaQueryList | undefined;
-// Made on first use, so importing this module needs no window (the tests run without one).
-const narrow = (): MediaQueryList => (narrowQuery ??= window.matchMedia('(max-width: 720px)'));
 
 export const tsep: ToolbarItem = { type: 'separator' };
 export const btn = (id: string): ToolbarItem => ({ type: 'button', id });
@@ -171,8 +166,7 @@ export function newButton(registry: CommandRegistry): Control {
   keepFocus(main);
   keepFocus(arrow);
   const el = h('div', { class: 'wm-split' }, main, arrow);
-  main.addEventListener('click', () => registry.execute(command));
-  arrow.addEventListener('click', () => {
+  const listKinds = () => {
     if (popupOpenFor(el)) return closePopup();
     const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': command.plainLabel } });
     for (const kind of newKindOrder()) {
@@ -189,7 +183,10 @@ export function newButton(registry: CommandRegistry): Control {
       list.append(row);
     }
     openPopup(el, list);
-  });
+  };
+  // On a phone there is no arrow to hit: the button itself lists the types, in a sheet.
+  main.addEventListener('click', () => (narrow().matches ? listKinds() : registry.execute(command)));
+  arrow.addEventListener('click', listKinds);
   return {
     el,
     available: () => registry.isAvailable(command),

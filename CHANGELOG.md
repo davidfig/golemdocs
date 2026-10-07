@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.15.0 - Unreleased
+
+### Changed
+- On a phone, drop-downs (New, font, size, colors, the “…” buttons and more) open as sheets from the bottom of the screen, above the keyboard, instead of small pop-ups, and New is one button that lists the document types.
+- On a phone, the top toolbar is for files (New, Open, Undo, Redo, Find, Share, and “…” for the rest), and while you type, a formatting bar (Bold, Italic, Underline, lists, Link, Image, Comment, and “…” for the rest) sits right above the keyboard.
+
 ## 0.14.0 - 2026-10-06
 
 ### Added

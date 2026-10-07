@@ -1427,6 +1427,11 @@
   }
 }
 
+/* The phone's typing bar: between the document and the footer, so it rides on top of the keyboard. */
+.wm-keys {
+  display: none;
+}
+
 /* The one-row phone toolbar exists only on narrow screens; the desktop toolbars are hidden there. */
 .wm-toolbar.wm-mobile-only {
   display: none;
@@ -2500,6 +2505,10 @@
   .wm-tbutton .icon {
     transform: scale(1.25);
   }
+  /* New has no arrow here: the button itself lists the types, in a sheet. */
+  .wm-split-arrow {
+    display: none;
+  }
   .wm-combo {
     height: 36px;
   }
@@ -2514,6 +2523,46 @@
   }
   .wm-button {
     height: 36px;
+  }
+}
+
+/* On a phone, drop-downs are sheets at the bottom of the screen (see openPopup), above the keyboard if it is up. */
+.wm-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.wm-popup.wm-sheet {
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: var(--keyboard-inset, 0px);
+  min-width: 0;
+  max-width: none;
+  max-height: 60%;
+  overflow-y: auto;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-radius: 12px 12px 0 0;
+}
+
+.wm-sheet .wm-list {
+  max-height: none;
+}
+
+.wm-sheet .wm-option {
+  padding: 10px 16px;
+}
+
+@media (max-width: 720px) {
+  body.wm-typing .wm-keys {
+    display: block;
+    flex: none;
+    background: var(--wm-bar-top);
+    border-top: 1px solid var(--wm-menu-border);
+  }
+  .wm-keys .wm-toolbar.wm-mobile-only:not([hidden]) {
+    display: flex;
   }
 }
 

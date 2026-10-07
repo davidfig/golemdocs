@@ -46,7 +46,7 @@ import { AccountButton } from './accountButton.ts';
 import { SyncButton } from './syncButton.ts';
 import { DocumentTitle } from './documentTitle.ts';
 import { displayDocumentName } from '../documentName.ts';
-import { DEFAULT_LAYOUT, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
+import { DEFAULT_LAYOUT, MOBILE_KEYS, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import './ui.css';
 
 export interface ChromeOptions {
@@ -121,6 +121,8 @@ export class Chrome {
   /** Controls that can be placed on toolbars besides command buttons (the font box…). */
   private readonly controls = new Map<string, { label: string; category: string; icon: string; create: () => Control }>();
   private layout: ToolbarLayout[];
+  /** The phone's typing bar, in the page between the document and the footer; shown while the document has the keyboard (CSS, `wm-typing` on the body). */
+  private readonly keysEl = h('div', { class: 'wm-keys' });
   /** The "Format" selector at the right of the menu bar. */
   private readonly formatBox: HTMLElement;
   private formatCombo!: Control;
@@ -155,6 +157,8 @@ export class Chrome {
     this.formatBox = this.buildFormatBox();
     this.docTitle = new DocumentTitle(this.menuBar.el, this.formatBox, (name) => host.renameDocument(name), () => host.focusEditor());
     this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.docTitle.el, this.formatBox, this.toolbarsEl);
+    document.getElementById('footer')?.before(this.keysEl);
+    this.trackTyping();
     this.buildToolbars();
 
     window.addEventListener('keydown', (e) => this.shortcut(e), true);
@@ -1619,6 +1623,22 @@ export class Chrome {
     this.formatCombo.refresh(this.state);
   }
 
+  /** Marks the body while the document has the keyboard, which shows the phone's typing bar. */
+  private trackTyping(): void {
+    const input = document.getElementById('input');
+    let timer = 0;
+    document.addEventListener('focusin', (e) => {
+      if (e.target !== input) return;
+      clearTimeout(timer);
+      document.body.classList.add('wm-typing');
+    });
+    document.addEventListener('focusout', (e) => {
+      if (e.target !== input) return;
+      // Focus moves out and back in when a command hands it back to the document: not a flicker.
+      timer = window.setTimeout(() => document.body.classList.toggle('wm-typing', document.activeElement === input), 150);
+    });
+  }
+
   /** (Re)creates the toolbars from the layout. */
   private buildToolbars(): void {
     const r = this.registry;
@@ -1639,14 +1659,21 @@ export class Chrome {
       this.toolbars.push(toolbar);
       this.toolbarsEl.append(toolbar.el);
     }
-    // On a phone there is one row instead: the main buttons, then every other button from the visible toolbars.
-    const primary = new Set(MOBILE_PRIMARY);
-    const rest = this.layout.filter((t) => t.visible).flatMap((t) => [SEPARATOR, ...t.items.filter((id) => !primary.has(id))]);
-    const mobile = new Toolbar('Standard', r, [...MOBILE_PRIMARY, ...rest].map(item));
+    // On a phone there are two rows instead. The top one is for the file; the Formatting toolbar's buttons
+    // go to the typing bar above the keyboard, and every other button is behind the top row's "…".
+    const used = new Set([...MOBILE_PRIMARY, ...MOBILE_KEYS]);
+    const visible = this.layout.filter((t) => t.visible);
+    const rest = (formatting: boolean) => visible.filter((t) => (t.name === 'Formatting') === formatting).flatMap((t) => [SEPARATOR, ...t.items.filter((id) => !used.has(id))]);
+    const mobile = new Toolbar('Standard', r, [...MOBILE_PRIMARY, ...rest(false)].map(item));
     mobile.el.classList.add('wm-mobile-only');
     mobile.setShown(this.layout.some((t) => t.visible && t.items.length > 0));
     this.toolbars.push(mobile);
     this.toolbarsEl.append(mobile.el);
+    const keys = new Toolbar('Formatting', r, [...MOBILE_KEYS, ...rest(true)].map(item));
+    keys.el.classList.add('wm-mobile-only');
+    keys.setShown(visible.some((t) => t.name === 'Formatting'));
+    this.toolbars.push(keys);
+    this.keysEl.replaceChildren(keys.el);
     // The document area changes size; the canvas's ResizeObserver takes it from there.
     this.syncToolbarsHidden();
     this.refresh();

@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.15.0 - Unreleased
+## 0.15.0 - 2026-10-08
 
 ### Fixed
 - Converting a PDF to Word keeps vector drawings (logos, charts, line art, QR codes and barcodes) as pictures, drawn as SVG so they stay sharp, with their gradients, patterns, clipping, dashes and line joins. They used to be left out. A PDF with no text on it also keeps its pictures now.

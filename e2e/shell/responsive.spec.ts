@@ -49,16 +49,21 @@ test.describe('tablet layout', () => {
 });
 
 test.describe('phone layout', () => {
-  test('one hamburger replaces the menu titles and a single compact toolbar replaces the two', async ({ app, page }) => {
+  test('one hamburger replaces the menu titles, a file row replaces the toolbars, and a typing bar shows once the caret is down', async ({ app, page }) => {
     await page.setViewportSize(PHONE);
     await app.goto('?doc=welcome');
     await expect(hamburger(page)).toBeVisible();
     await expect(menuTitle(app, 'File')).toBeHidden();
+    // The top row is for the file; the formatting buttons wait for the caret.
     const toolbars = page.getByRole('toolbar');
     await expect(toolbars).toHaveCount(1);
-    for (const name of ['Undo', 'Redo', 'Bold', 'Italic', 'Underline', 'Bullets', 'Numbering', 'Hyperlink', 'Picture', 'Insert Table']) {
-      await expect(toolbars.getByRole('button', { name, exact: true })).toBeVisible();
-    }
+    for (const name of ['Undo', 'Redo']) await expect(toolbars.getByRole('button', { name, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Bold', exact: true })).toBeHidden();
+    expect(await noHorizontalScroll(page)).toBe(true);
+    // Putting the caret in the document brings up the typing bar above the keyboard.
+    await app.canvas.click({ position: { x: 100, y: 200 } });
+    await expect(toolbars).toHaveCount(2);
+    for (const name of ['Bold', 'Italic', 'Underline', 'Bullets', 'Numbering']) await expect(page.locator('.wm-keys').getByRole('button', { name, exact: true })).toBeVisible();
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 

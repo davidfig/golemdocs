@@ -2,7 +2,7 @@
 import { type Position, type MoveTarget, type Rect, type Caret, type SelectionGeometry } from './types.ts';
 import type { Selection as OpSelection } from '@golemdocs/ops';
 
-import { paragraphLength, paragraphText, plainText, type Paragraph } from '@golemdocs/docx';
+import { paragraphLength, paragraphText, plainText, splitInlines, type Paragraph } from '@golemdocs/docx';
 import { type Pos } from '@golemdocs/ops';
 import { graphemeAt } from './segment.ts';
 import { charAfter, charBefore, wordLeft, wordRange, wordRight } from './textUnits.ts';
@@ -280,6 +280,23 @@ export abstract class EditorNavigation extends EditorBase {
     parts.push(plainText(end.paragraph, 0, end.offset));
     const text = parts.join('\n');
     return text.length > limit ? text.slice(0, limit) : text;
+  }
+
+  /** The selected paragraphs with their formatting, the first and last cut to the selection (for the clipboard's HTML). Empty when nothing is selected. */
+  selectedFragments(): Paragraph[] {
+    if (this.collapsed) return [];
+    const [start, end] = this.ordered();
+    const cut = (p: Paragraph, from: number, to: number): Paragraph => {
+      const [, tail] = splitInlines(p.children, from);
+      const [children] = splitInlines(tail, to - from);
+      return structuredClone({ ...p, children });
+    };
+    if (start.paragraph === end.paragraph) return [cut(start.paragraph, start.offset, end.offset)];
+    const list = this.paragraphs();
+    const out = [cut(start.paragraph, start.offset, paragraphLength(start.paragraph))];
+    for (let k = this.indexOf(start.paragraph) + 1; k < this.indexOf(end.paragraph); k++) out.push(structuredClone(list[k]));
+    out.push(cut(end.paragraph, 0, end.offset));
+    return out;
   }
 
   /** Caret or highlight for the current selection, on the session's display pages. */

@@ -544,6 +544,9 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     selection(update) {
       applySelection(update);
     },
+    selectionHtml(text, html) {
+      selectionHtml = { text, html };
+    },
     roomReplace() {
       const doc = current;
       if (doc.localId && doc.unsavedSince === 0) void openLocal(doc.localId);
@@ -3146,6 +3149,12 @@ let blinkTimer = 0;
 /** When the last edit command was sent, for the latency readout. */
 let editSent = 0;
 
+/** The selection as HTML, once the layout worker has written it (it follows a moment after the selection settles). */
+let selectionHtml: { text: string; html: string } | null = null;
+function selectedHtml(): string | undefined {
+  return selectionHtml && selectionHtml.text === selection.text ? selectionHtml.html : undefined;
+}
+
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
   commentsPanel.update(update.comments, update.activeComment);
@@ -4103,6 +4112,7 @@ attachTextInput(input, {
     for (const command of editingCommand(key) ?? []) send(command);
   },
   copy: () => selection.text,
+  copyHtml: selectedHtml,
   copyOther: (cut) => copySelectedPicture(cut),
   cut: () => {
     if (selection.text) send({ kind: 'delete', direction: 'backward' });
@@ -4263,6 +4273,7 @@ const chromeHost = createChromeHost({
   author: commentAuthor,
   startComment: () => commentsPanel.startDraft(),
   selectedText: () => selection.text,
+  selectedHtml,
   copyPicture: (cut) => !textView.active && copySelectedPicture(cut),
   focusEditor: focusInput,
   notify: reportError,

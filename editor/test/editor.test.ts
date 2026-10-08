@@ -122,6 +122,18 @@ test('selected text for the clipboard', skip, async () => {
   assert.equal(editor.selectedText(), 'one two\nthree\nfour five');
 });
 
+test('selected paragraphs keep their formatting and are cut to the selection', skip, async () => {
+  const { editor, apply } = await setup(['one two', 'three', 'four five'], (doc) => {
+    for (const p of paragraphsIn(doc.body)) for (const c of p.children) if (c.kind === 'run') c.properties.bold = true;
+  });
+  await apply({ kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'documentEnd', extend: true }, { kind: 'move', to: 'wordLeft', extend: true });
+  const out = editor.selectedFragments();
+  assert.deepEqual(out.map(paragraphText), ['two', 'three', 'four ']);
+  for (const p of out) for (const c of p.children) if (c.kind === 'run') assert.equal(c.properties.bold, true);
+  await apply({ kind: 'move', to: 'documentStart' });
+  assert.deepEqual(editor.selectedFragments(), []);
+});
+
 test('undo and redo restore text and the caret', skip, async () => {
   const { editor, apply, texts, session } = await setup(['Hello world', 'Second']);
   const undo = async () => {

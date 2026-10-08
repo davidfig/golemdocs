@@ -33,6 +33,7 @@ export interface DocumentListener {
   pointers(pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[]): void;
   error(message: string): void;
   notice(message: string): void;
+  selectionHtml(text: string, html: string): void;
   shapes(state: { shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }): void;
   vectorScene(state: { scene: Scene | null; canUndo: boolean; canRedo: boolean }): void;
 }
@@ -286,6 +287,9 @@ export class LayoutClient {
         break;
       case 'error':
         this.listener.error(message.message);
+        break;
+      case 'selectionHtml':
+        this.listener.selectionHtml(message.text, message.html);
         break;
       case 'notice':
         this.listener.notice(message.message);

@@ -8,7 +8,7 @@ import type { DocumentSource } from './layout/protocol.ts';
 import { WDOC_EXTENSION } from './formats/wdoc.ts';
 import { isZipName, sourceFromFile } from './formats/source.ts';
 import type { DocumentEngine } from './documentEngine.ts';
-import { writeClipboardText } from './ui/clipboard.ts';
+import { writeClipboardRich } from './ui/clipboard.ts';
 import { toPng } from './formats/imageCodec.ts';
 import type { DrawStyle } from './formats/imageDraw.ts';
 import { looksLikeText, usesTextEngine } from './formats/textFiles.ts';
@@ -133,6 +133,8 @@ export interface AppHooks {
   startComment(): void;
   /** The selected text (for copy and cut). */
   selectedText(): string;
+  /** The selection as HTML, if it has been written yet. */
+  selectedHtml(): string | undefined;
   /** A picture is selected: puts it on the clipboard (and, for a cut, takes it out of the document); whether one was. */
   copyPicture(cut: boolean): boolean;
   focusEditor(): void;
@@ -406,14 +408,14 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'copy':
           if (app.engine()) return app.engine()!.copy();
           if (app.copyPicture(false)) return;
-          await writeClipboardText(app.selectedText());
+          await writeClipboardRich(app.selectedText(), app.selectedHtml());
           return;
         case 'cut': {
           if (app.engine()) return app.engine()!.cut();
           if (app.copyPicture(true)) return;
           const text = app.selectedText();
           if (!text) return;
-          await writeClipboardText(text);
+          await writeClipboardRich(text, app.selectedHtml());
           app.send({ kind: 'delete', direction: 'backward' });
           return;
         }

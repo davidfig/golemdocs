@@ -8,6 +8,10 @@
 ### Changed
 - Links to Golem Docs shared in chat apps and social networks now show a large preview card.
 
+### Fixed
+- Copying or cutting text now keeps its formatting (bold, italics, links, headings, lists) when pasted into other apps.
+- Clicking a task-list check box in a Markdown document checks or unchecks it again, even when its Markdown is shown, and no longer moves the cursor.
+
 ## 0.16.0 - 2026-10-08
 
 ### Added

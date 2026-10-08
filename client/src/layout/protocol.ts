@@ -393,6 +393,8 @@ export type FromWorker =
   /** The first full layout finished. */
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }
   | ({ type: 'selection'; doc: number } & SelectionUpdate)
+  /** The selected text as HTML (`text` is the plain text it was made from, to match it with the selection), for copy. */
+  | { type: 'selectionHtml'; doc: number; text: string; html: string }
   | { type: 'error'; doc: number; message: string }
   /** Something to tell the person that isn't a failure to open (a picture that could not be shared, say). */
   | { type: 'notice'; doc: number; message: string }

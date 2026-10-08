@@ -95,6 +95,8 @@ import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLangua
 const SLICE_MS = 12;
 /** Longest selection text kept for the clipboard. */
 const CLIPBOARD_LIMIT = 4_000_000;
+/** A selection longer than this is copied as plain text only (writing its HTML after every change would be slow). */
+const SELECTION_HTML_LIMIT = 200_000;
 
 const fontsReady = FontSet.load(
   async (path) => {
@@ -657,7 +659,29 @@ class OpenDocument {
     this.reveal = false;
     this.commandAt = 0;
     this.sendPresence();
+    this.scheduleSelectionHtml(editor, update.text);
     return update;
+  }
+
+  private selectionHtmlTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Once the selection has settled, sends it as HTML so a copy carries bold, italics and the rest (the writer loads only now). */
+  private scheduleSelectionHtml(editor: Editor, text: string): void {
+    clearTimeout(this.selectionHtmlTimer);
+    if (!text || text.length > SELECTION_HTML_LIMIT) return;
+    this.selectionHtmlTimer = setTimeout(async () => {
+      const { document } = this;
+      if (!document || this.closed || this.editor !== editor) return;
+      const body = editor.selectedFragments();
+      if (body.length === 0 || editor.selectedText(CLIPBOARD_LIMIT) !== text) return;
+      try {
+        const { documentToHtml } = await import('../formats/html.ts');
+        const scratch = Object.assign(Object.create(Object.getPrototypeOf(document)), document, { body }) as WordDocument;
+        if (!this.closed && this.editor === editor) post({ type: 'selectionHtml', doc: this.doc, text, html: documentToHtml(scratch) });
+      } catch {
+        // The copy carries plain text only.
+      }
+    }, 120);
   }
 
   /** The picture the selection is exactly, for the frame the page draws around it. */
@@ -1854,7 +1878,7 @@ class OpenDocument {
     const page = this.session?.displayPages.find((p) => p.id === pageId);
     if (!this.editor || !page || this.closed || this.annotator) return { url: null, checkbox: false };
     const profile = FORMATS[this.format as DocumentKind];
-    const checkbox = !this.readOnly && !!profile?.editable && profile.lists && !!this.editor.checkboxUnder(page, x, y);
+    const checkbox = !this.readOnly && !!profile?.editable && profile.lists && !!this.checkboxHit(this.editor, page, x, y);
     let url = this.editor.linkUnder(page, x, y);
     // The paragraph showing its Markdown holds the links it shows as characters.
     if (url === null && this.raw) {
@@ -2392,15 +2416,36 @@ class OpenDocument {
     });
   }
 
-  /** A click on the check box of a task list item checks or unchecks it (and puts the caret in the item). */
+  /** The check box under a page point: a task item's box, or the `[ ]` of one whose Markdown is shown (then `at` is where its middle character is). */
+  private checkboxHit(editor: Editor, page: Parameters<Editor['checkboxUnder']>[0], x: number, y: number): { paragraph: Paragraph; checked: boolean; at?: number } | null {
+    const hit = editor.checkboxUnder(page, x, y);
+    if (hit) return hit;
+    if (!this.raw) return null;
+    const under = editor.charUnder(page, x, y);
+    if (!under || editor.paragraphId(under.paragraph) !== this.raw.id) return null;
+    const m = /^(\s*[-*+][ \t]+)\[([ xX])\]/.exec(paragraphText(under.paragraph));
+    if (!m || under.offset < m[1].length || under.offset >= m[0].length) return null;
+    return { paragraph: under.paragraph, checked: m[2] !== ' ', at: m[1].length + 1 };
+  }
+
+  /** A click on the check box of a task list item checks or unchecks it. The caret and selection stay where they were. */
   private checkboxClick(editor: Editor, click: Extract<Command, { kind: 'pointer' }>): Promise<void> | null {
     if (click.extend || (click.unit && click.unit !== 'character') || this.annotator || this.readOnly) return null;
     const profile = FORMATS[this.format as DocumentKind];
     if (!profile?.editable || !profile.lists) return null;
-    const hit = editor.checkboxUnder(click.page, click.x, click.y);
+    const hit = this.checkboxHit(editor, click.page, click.x, click.y);
     if (!hit) return null;
-    editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: 0, to: 0 });
-    return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]);
+    const selection = editor.selectionIds;
+    const index = editor.paragraphs().indexOf(hit.paragraph);
+    if (hit.at !== undefined) {
+      // The Markdown is shown: the character between the brackets is changed.
+      editor.apply({ kind: 'select', paragraph: index, from: hit.at, to: hit.at + 1 });
+      editor.apply({ kind: 'insertText', text: hit.checked ? ' ' : 'x' });
+      editor.setSelectionIds(selection);
+      return Promise.resolve();
+    }
+    editor.apply({ kind: 'select', paragraph: index, from: 0, to: 0 });
+    return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]).then(() => editor.setSelectionIds(selection));
   }
 
   /** Enter right after a #tag or a web address (not yet a link) makes it one, then the paragraph is split as usual. */

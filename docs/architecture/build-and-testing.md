@@ -94,7 +94,7 @@ One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` 
 
 - `CHANGELOG.md` is shown in the app (Help › What's New), so write for users. Any user-visible change (including home page copy) adds one line under `## <next version> - Unreleased` in `### Added`, `### Changed` or `### Fixed`. Never edit released versions; use `›` in menu paths.
 - Release: replace `Unreleased` with the date, set `version` in the root and every package's `package.json` to match, and do not leave an empty `Unreleased` heading. Bump: major for breaking changes (files or saved data that no longer open), minor for features or notable behavior changes, patch for fixes only; while `0.x`, breaking changes bump minor.
-- On deploy, run the full `pnpm e2e` first (background, output to a file, reproduce failures in an isolated second run), then release. Details are in AGENTS.md.
+- On deploy, run the full `pnpm e2e` first (background, output to a file, watched by a monitor that matches only `✘` result lines and ends on the script's last line, reproduce failures in an isolated second run), then release. Details are in AGENTS.md.
 
 ## Invariants and gotchas
 

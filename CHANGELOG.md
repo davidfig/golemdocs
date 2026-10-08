@@ -1,5 +1,13 @@
 # What’s New in Golem Docs
 
+## 0.16.1 - Unreleased
+
+### Added
+- New guides on the website for converting a PDF to Word, converting Markdown to Word and back, redacting a PDF, and opening Word files without Word.
+
+### Changed
+- Links to Golem Docs shared in chat apps and social networks now show a large preview card.
+
 ## 0.16.0 - 2026-10-08
 
 ### Added

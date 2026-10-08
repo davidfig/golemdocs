@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures';
+import { look, pictureBox } from '../layout/helpers';
 import { clickOnPage, decodePdf, dragOnPage, editMode, makeEncryptedPdf, makePdf, makeScanPdf, modeButton, openPdf, pageCount, readBack, selectBetween, showPage, tool } from './helpers';
 
 const sample = () =>
@@ -106,5 +107,21 @@ test.describe('scanned and encrypted PDFs', () => {
     const bytes = (await app.download(() => app.menu('File', 'Download'))).bytes;
     expect(bytes.toString('latin1')).not.toMatch(/\/Encrypt\b/);
     expect(await readBack(app, bytes)).toBe('Secret words');
+  });
+});
+
+test.describe('vector art in a PDF', () => {
+  test('becomes a drawing in the Word document: an SVG the editor paints, with a PNG beside it', async ({ app }) => {
+    // A blue triangle, made of paths (no picture in the PDF).
+    await openPdf(app, makePdf({ pages: [[{ text: 'Under the triangle', x: 40, y: 30, size: 14 }]], extraContent: '0 0.4 0.8 rg 100 60 m 300 60 l 200 240 l f' }));
+    await app.menu('File', 'Convert To', 'Word Document');
+    await expect(formatBox(app)).toHaveValue('Word Document');
+    await app.page.waitForFunction(() => (window as unknown as { pages: { images: { svg?: string }[] }[] }).pages[0]?.images.some((i) => i.svg));
+    const image = await app.page.evaluate(() => (window as unknown as { pages: { images: { part: string; svg?: string }[] }[] }).pages[0].images.find((i) => i.svg));
+    expect(image?.part).toMatch(/\.png$/);
+    expect(image?.svg).toMatch(/\.svg$/);
+    // What is on screen is the triangle, drawn from the SVG: its lower middle is blue.
+    const box = await pictureBox(app.page);
+    await expect.poll(async () => (await look<number[][]>(app.page, box, 'points', [[box.x + 0.5 * box.width, box.y + 0.8 * box.height]]))[0]).toEqual([0, 102, 204]);
   });
 });

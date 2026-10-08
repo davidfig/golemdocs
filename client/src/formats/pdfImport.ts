@@ -3,6 +3,7 @@
 
 import {
   WordDocument,
+  fieldContents,
   pointsToHalfPoints,
   pointsToTwips,
   type AbstractNumbering,
@@ -200,18 +201,8 @@ function setupPage(doc: WordDocument, sizes: { width: number; height: number; ma
 
 // --- Headers and footers -----------------------------------------------------------------------------
 
-const FIELD_CHAR = (type: 'begin' | 'separate' | 'end'): Run => ({ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'fieldChar', type, xml: { name: 'w:fldChar', attrs: {}, children: [] } }] });
-
 /** A PAGE or NUMPAGES field showing `shown` (what the PDF's first page had there). */
-function fieldRuns(instruction: 'PAGE' | 'NUMPAGES', shown: string, properties: RunProperties): Run[] {
-  return [
-    FIELD_CHAR('begin'),
-    { kind: 'run', properties, attrs: {}, content: [{ kind: 'instrText', text: ` ${instruction} ` }] },
-    FIELD_CHAR('separate'),
-    { kind: 'run', properties, attrs: {}, content: [{ kind: 'text', text: shown }] },
-    FIELD_CHAR('end'),
-  ];
-}
+const fieldRun = (instruction: 'PAGE' | 'NUMPAGES', shown: string, properties: RunProperties): Run => ({ kind: 'run', properties, attrs: {}, content: fieldContents(instruction, [{ kind: 'text', text: shown }]) });
 
 /** The text of a page number, with its numbers as fields: the first is the page, the next the page count ("3 of 10", "3/10"). */
 function pageNumberRuns(r: ReflowRun): Run[] {
@@ -219,7 +210,7 @@ function pageNumberRuns(r: ReflowRun): Run[] {
   const out: Run[] = [];
   let seen = 0;
   for (const part of r.text.split(/(\d+)/)) {
-    if (/^\d+$/.test(part)) out.push(...fieldRuns(seen++ === 0 ? 'PAGE' : 'NUMPAGES', part, base.properties));
+    if (/^\d+$/.test(part)) out.push(fieldRun(seen++ === 0 ? 'PAGE' : 'NUMPAGES', part, base.properties));
     else if (part) out.push({ ...base, content: [{ kind: 'text', text: part }] });
   }
   return out;

@@ -5,7 +5,7 @@
 import { PdfDict, PdfStream, type PdfObject } from '../core/objects.ts';
 import type { PdfDocument } from '../document.ts';
 import type { Matrix } from '../text/extract.ts';
-import { DEVICE_GRAY, parseColorSpace, parseFunction, type PdfFunction } from './color.ts';
+import { DEVICE_GRAY, packRgb, parseColorSpace, parseFunction, type PdfFunction } from './color.ts';
 import type { DisplayPath } from './interpret.ts';
 
 /** A color at a place along a gradient: 0xRRGGBB at an offset from 0 to 1. */
@@ -22,8 +22,6 @@ export type DisplayPaint =
 
 /** Intervals the color function is sampled in. */
 const SAMPLES = 48;
-
-const pack = (rgb: [number, number, number]): number => (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
 
 /** The shading as a gradient placed by `matrix`, or null for the kinds not read (or a damaged one). */
 export function shadingPaint(doc: PdfDocument, shading: PdfObject | undefined, resources: PdfDict | undefined, matrix: Matrix): DisplayPaint | null {
@@ -45,7 +43,7 @@ export function shadingPaint(doc: PdfDocument, shading: PdfObject | undefined, r
     const functions = list as PdfFunction[];
     const colorAt = (t: number): number => {
       const comps = functions.length === 1 ? functions[0]([t]) : functions.map((f) => f([t])[0] ?? 0);
-      return pack((cs ?? DEVICE_GRAY).toRgb(comps));
+      return packRgb((cs ?? DEVICE_GRAY).toRgb(comps));
     };
     const stops = simplify(Array.from({ length: SAMPLES + 1 }, (_, i) => ({ offset: i / SAMPLES, color: colorAt(t0 + (i / SAMPLES) * (t1 - t0)) })));
     const ext = doc.array(dict.get('Extend')) ?? [];

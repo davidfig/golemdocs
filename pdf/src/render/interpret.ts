@@ -24,7 +24,7 @@ import type { PdfDocument } from '../document.ts';
 import type { PdfPage } from '../page.ts';
 import { IDENTITY, MAX_OPERATIONS, appearanceMatrix, multiply, transformPoint, type Matrix } from '../text/extract.ts';
 import { TextFont } from '../text/font.ts';
-import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, parseColorSpace, type ColorSpace } from './color.ts';
+import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, packRgb, parseColorSpace, type ColorSpace } from './color.ts';
 import { describeFont, type FontStyle } from './fontinfo.ts';
 import { imageSupported } from './image.ts';
 import { shadingPaint, type DisplayPaint } from './shading.ts';
@@ -214,7 +214,6 @@ export function forgetDisplayFonts(doc: PdfDocument): void {
   fontCaches.delete(doc);
 }
 
-const pack = (rgb: [number, number, number]): number => (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
 
 /** Interprets one page. Never throws: problems are collected in `warnings`. */
 /** `hideFields`: leave out fillable form fields' widgets (the app draws those itself, as inputs). `paths`: also keep the shapes drawn (`PageDisplay.paths`). */
@@ -409,7 +408,7 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   };
 
   const setColor = (stroke: boolean, cs: ColorSpace, comps: number[]) => {
-    const rgb = pack(cs.toRgb(comps));
+    const rgb = packRgb(cs.toRgb(comps));
     if (stroke) {
       gs.stroke = rgb;
       gs.strokePattern = false;
@@ -425,12 +424,12 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       gs.strokeCS = cs;
       gs.strokePattern = cs.pattern === true;
       gs.strokePaint = undefined;
-      if (!cs.pattern) gs.stroke = pack(cs.toRgb(cs.initial));
+      if (!cs.pattern) gs.stroke = packRgb(cs.toRgb(cs.initial));
     } else {
       gs.fillCS = cs;
       gs.fillPattern = cs.pattern === true;
       gs.fillPaint = undefined;
-      if (!cs.pattern) gs.fill = pack(cs.toRgb(cs.initial));
+      if (!cs.pattern) gs.fill = packRgb(cs.toRgb(cs.initial));
     }
   };
 
@@ -649,7 +648,7 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     if (doc.number(dict.get('PatternType')) === 2) return shadingPaint(doc, dict.get('Shading'), resources, matrix) ?? undefined;
     if (!(obj instanceof PdfStream) || depth >= MAX_FORM_DEPTH || ctx.active.has(obj)) return undefined;
     const uncolored = doc.number(dict.get('PaintType')) === 2;
-    const rgb = uncolored && cs.base ? pack(cs.base.toRgb(comps)) : 0;
+    const rgb = uncolored && cs.base ? packRgb(cs.base.toRgb(comps)) : 0;
     const key = `${matrix.map((v) => Math.round(v * 1000)).join(',')}|${uncolored ? rgb : ''}`;
     let cached = ctx.tilings.get(obj);
     if (!cached) ctx.tilings.set(obj, (cached = new Map()));

@@ -5,11 +5,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { inflateSync } from 'node:zlib';
 import { WordDocument, type Paragraph, type Run } from '@golemdocs/docx';
 import { PageDrawing, PdfDocument, PasswordError, type PdfFont } from '../../pdf/src/index.ts';
 import { pdfToDocument, wordFontFor } from '../src/formats/pdfImport.ts';
-import { drawingGroups, drawingPng, drawingSvg } from '../src/formats/pdfDrawings.ts';
 
 const text = (p: Paragraph): string =>
   p.children
@@ -290,30 +288,6 @@ test('year-led entries stay separate, and an address set in from the edge keeps 
 
 const drawingsOf = (doc: WordDocument) => paragraphs(doc).flatMap((p) => runs(p).flatMap((r) => r.content.filter((c) => c.kind === 'drawing')));
 
-/** Pixels (RGBA) of a PNG the pdf package writes: 8-bit, unfiltered rows. */
-function pixelsOf(png: Uint8Array): { width: number; height: number; at(x: number, y: number): number[] } {
-  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
-  const width = view.getUint32(16);
-  const height = view.getUint32(20);
-  const channels = ({ 0: 1, 2: 3, 6: 4 } as Record<number, number>)[png[25]];
-  const data: number[] = [];
-  for (let p = 8; p < png.length; ) {
-    const length = view.getUint32(p);
-    if (String.fromCharCode(...png.subarray(p + 4, p + 8)) === 'IDAT') data.push(...png.subarray(p + 8, p + 8 + length));
-    p += 12 + length;
-  }
-  const raw = inflateSync(Uint8Array.from(data));
-  return {
-    width,
-    height,
-    at: (x, y) => {
-      const o = y * (width * channels + 1) + 1 + x * channels;
-      const px = Array.from(raw.subarray(o, o + channels));
-      return channels === 4 ? px : channels === 3 ? [...px, 255] : [px[0], px[0], px[0], 255];
-    },
-  };
-}
-
 test('a drawing made of many small squares (a QR code) becomes one picture', async () => {
   const pdf = PdfDocument.create();
   const font = pdf.standardFont('Helvetica');
@@ -343,23 +317,6 @@ test('curved vector art becomes a picture with an SVG; rules, boxes and bullets 
   assert.ok(picture.kind === 'drawing' && picture.image && picture.svg);
   // The ellipse and its 3pt outline: 120 + 3 wide, 80 + 3 tall.
   assert.ok(Math.abs(picture.width / 12700 - 123) < 1 && Math.abs(picture.height / 12700 - 83) < 1);
-});
-
-test('a drawing is written as SVG paths and drawn into a PNG from the same shapes', async () => {
-  const pdf = PdfDocument.create();
-  const page = pdf.addPage([200, 200]).draw({ origin: 'top-left' });
-  page.ellipse(100, 100, 50, 50, { fill: [1, 0, 0] });
-  page.finish();
-  const doc = await PdfDocument.load(await pdf.save());
-  const { interpretPage } = await import('../../pdf/src/index.ts');
-  const display = interpretPage(doc.pages[0], { paths: true });
-  const [group] = drawingGroups(display.paths, display);
-  assert.ok(group);
-  assert.deepEqual(group.frame, { x: 50, y: 50, width: 100, height: 100 });
-  assert.match(drawingSvg(group), /^<svg [^>]*viewBox="0 0 100 100"><path d="M[^"]+Z" fill="#ff0000"\/><\/svg>$/);
-  const png = pixelsOf(await drawingPng(group));
-  assert.deepEqual(png.at(Math.floor(png.width / 2), Math.floor(png.height / 2)), [255, 0, 0, 255]);
-  assert.equal(png.at(1, 1)[3], 0);
 });
 
 test('a page whose text starts far down keeps it there, titles keep their weight, and the running head and foot become the header and footer', async () => {

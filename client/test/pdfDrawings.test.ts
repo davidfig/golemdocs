@@ -1,46 +1,24 @@
-// Vector art from PDF pages as SVG and PNG: gradients, clips, tiling patterns, dashes and joins.
+// Vector art from PDF pages as drawings (scenes of the drawing editor, written as SVG): gradients, clips, tiling patterns,
+// dashes and joins. What they look like when painted is checked in the browser (e2e/layout/svg-painter.spec.ts).
 // Run: node --experimental-transform-types --test test/pdfDrawings.test.ts
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { inflateSync } from 'node:zlib';
 import { N, PdfDict, PdfDocument, PdfStream, interpretPage } from '../../pdf/src/index.ts';
-import { drawingGroups, drawingPng, drawingSvg, type DrawingGroup } from '../src/formats/pdfDrawings.ts';
+import { drawingGroups, drawingPng, drawingScene, drawingSvg, type DrawingGroup } from '../src/formats/pdfDrawings.ts';
 import { pdfToDocument } from '../src/formats/pdfImport.ts';
 import type { Drawing, Paragraph, Run } from '@golemdocs/docx';
-
-/** Pixels (RGBA) of a PNG the pdf package writes: 8-bit, unfiltered rows. */
-function pixelsOf(png: Uint8Array): { width: number; height: number; at(x: number, y: number): number[] } {
-  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
-  const width = view.getUint32(16);
-  const height = view.getUint32(20);
-  const channels = ({ 0: 1, 2: 3, 6: 4 } as Record<number, number>)[png[25]];
-  const data: number[] = [];
-  for (let p = 8; p < png.length; ) {
-    const length = view.getUint32(p);
-    if (String.fromCharCode(...png.subarray(p + 4, p + 8)) === 'IDAT') data.push(...png.subarray(p + 8, p + 8 + length));
-    p += 12 + length;
-  }
-  const raw = inflateSync(Uint8Array.from(data));
-  return {
-    width,
-    height,
-    at: (x, y) => {
-      const o = y * (width * channels + 1) + 1 + x * channels;
-      const px = Array.from(raw.subarray(o, o + channels));
-      return channels === 4 ? px : channels === 3 ? [...px, 255] : [px[0], px[0], px[0], 255];
-    },
-  };
-}
 
 async function groupsOf(pdf: PdfDocument): Promise<DrawingGroup[]> {
   const display = interpretPage(PdfDocument.load(await pdf.save()).pages[0], { paths: true });
   return drawingGroups(display.paths, display);
 }
 
-test('a gradient inside a clip is an SVG gradient, and the PNG shades from one color to the other', async () => {
+const compact = (svg: string) => svg.replace(/>\s+</g, '><');
+
+test('a gradient inside a clip is an SVG gradient in a clipped group', async () => {
   const pdf = PdfDocument.create();
   const page = pdf.addPage([300, 300]).draw({ origin: 'top-left' });
   page.save().ellipsePath(150, 150, 100, 60);
@@ -48,36 +26,28 @@ test('a gradient inside a clip is an SVG gradient, and the PNG shades from one c
   page.restore().finish();
   const [group] = await groupsOf(pdf);
   assert.ok(group);
-  const svg = drawingSvg(group);
-  assert.match(svg, /<linearGradient id="g\d+" gradientUnits="userSpaceOnUse"[^>]*>.*<stop offset="0" stop-color="#ff0000"\/>.*<stop offset="1" stop-color="#0000ff"\/>/);
+  const svg = compact(drawingSvg(group));
+  assert.match(svg, /<linearGradient id="g\d+" gradientUnits="userSpaceOnUse"[^>]*><stop offset="0" stop-color="#ff0000"\/><stop offset="1" stop-color="#0000ff"\/><\/linearGradient>/);
   assert.match(svg, /<clipPath id="c\d+"><path d="M[^"]+Z"\/><\/clipPath>/);
   assert.match(svg, /<g clip-path="url\(#c\d+\)"><path d="[^"]+" fill="url\(#g\d+\)"\/><\/g>/);
-  const png = pixelsOf(await drawingPng(group));
-  const row = Math.floor(png.height / 2);
-  const left = png.at(25, row);
-  const right = png.at(png.width - 25, row);
-  assert.ok(left[0] > 200 && left[2] < 60 && left[3] === 255, `left ${left}`);
-  assert.ok(right[2] > 200 && right[0] < 60 && right[3] === 255, `right ${right}`);
-  // The corners are outside the ellipse the gradient is clipped to.
-  assert.equal(png.at(2, 2)[3], 0);
+  // The scene is the editor's: a group under the clip holding the filled path.
+  const scene = drawingScene(group);
+  assert.equal(scene.children.length, 1);
+  assert.equal(scene.children[0].kind, 'group');
+  assert.deepEqual([scene.width, scene.height], [200, 120]);
 });
 
-test('a radial gradient starts with its first stop at the center', async () => {
+test('a radial gradient keeps its circles', async () => {
   const pdf = PdfDocument.create();
   const page = pdf.addPage([200, 200]).draw({ origin: 'top-left' });
   page.save().rectPath(50, 50, 100, 100);
-  page.gradient({ type: 'radial', coords: [100, 100, 0, 100, 100, 50], stops: [{ offset: 0, color: [1, 1, 0] }, { offset: 1, color: [0, 0, 0] }] });
+  page.gradient({ type: 'radial', coords: [90, 90, 0, 100, 100, 50], stops: [{ offset: 0, color: [1, 1, 0] }, { offset: 1, color: [0, 0.2, 0.6] }] });
   page.restore().finish();
   const [group] = await groupsOf(pdf);
-  assert.match(drawingSvg(group), /<radialGradient id="g\d+" gradientUnits="userSpaceOnUse" cx="[\d.]+" cy="[\d.]+" r="50"/);
-  const png = pixelsOf(await drawingPng(group));
-  const middle = png.at(Math.floor(png.width / 2), Math.floor(png.height / 2));
-  const edge = png.at(5, Math.floor(png.height / 2));
-  assert.ok(middle[0] > 230 && middle[1] > 230 && middle[2] < 30, `middle ${middle}`);
-  assert.ok(edge[0] < 80, `edge ${edge}`);
+  assert.match(drawingSvg(group), /<radialGradient id="g\d+" gradientUnits="userSpaceOnUse" cx="[\d.]+" cy="[\d.]+" r="50" fx="[\d.]+" fy="[\d.]+"/);
 });
 
-test('a tiling pattern is an SVG pattern, and the PNG repeats its cell', async () => {
+test('a tiling pattern is an SVG pattern holding its cell', async () => {
   const pdf = PdfDocument.create();
   const cell = new PdfStream(new PdfDict({ PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, 10, 10], XStep: 10, YStep: 10, Resources: new PdfDict() }), new TextEncoder().encode('1 0 0 rg 0 0 5 5 re f'));
   const page = pdf.addPage([200, 200]);
@@ -87,21 +57,7 @@ test('a tiling pattern is an SVG pattern, and the PNG repeats its cell', async (
   draw.finish();
   const [group] = await groupsOf(pdf);
   assert.ok(group);
-  assert.match(drawingSvg(group), /<pattern id="p\d+" patternUnits="userSpaceOnUse" x="0" y="0" width="10" height="10" viewBox="0 0 10 10" patternTransform="matrix\([^)]+\)"><path d="M0 0L5 0L5 5L0 5Z" fill="#ff0000"\/><\/pattern>/);
-  const png = pixelsOf(await drawingPng(group));
-  let red = 0;
-  let inside = 0;
-  for (let y = 0; y < png.height; y++)
-    for (let x = 0; x < png.width; x++) {
-      const px = png.at(x, y);
-      if (px[3] === 255) inside++;
-      if (px[0] > 200 && px[1] < 60 && px[3] === 255) red++;
-    }
-  // A quarter of the ellipse's area is cell; the rest of the picture shows through.
-  const k = png.width / 160;
-  const filled = Math.PI * 80 * 60 * k * k;
-  assert.ok(Math.abs(red - filled / 4) < filled * 0.04, `red ${red} of ${filled}`);
-  assert.equal(inside, red);
+  assert.match(compact(drawingSvg(group)), /<pattern id="p\d+" patternUnits="userSpaceOnUse" x="0" y="0" width="10" height="10" viewBox="0 0 10 10" patternTransform="[^"]+"><path d="M0 0L5 0L5 5L0 5Z" fill="#ff0000"\/><\/pattern>/);
 });
 
 test('dashes, caps and joins carry over to the SVG', async () => {
@@ -113,12 +69,7 @@ test('dashes, caps and joins carry over to the SVG', async () => {
   const [group] = await groupsOf(pdf);
   assert.ok(group);
   const svg = drawingSvg(group);
-  assert.match(svg, /stroke="#008000" stroke-width="6" stroke-linecap="round" stroke-linejoin="bevel" stroke-dasharray="10 5" stroke-dashoffset="2"/);
-  const png = pixelsOf(await drawingPng(group));
-  // Along the first dash the line is painted; the picture has gaps.
-  let painted = 0;
-  for (let y = 0; y < png.height; y++) for (let x = 0; x < png.width; x++) if (png.at(x, y)[3] > 128) painted++;
-  assert.ok(painted > 200 && painted < (png.width * png.height) / 3, `painted ${painted}`);
+  for (const part of ['stroke="#008000"', 'stroke-width="6"', 'stroke-linecap="round"', 'stroke-linejoin="bevel"', 'stroke-dasharray="10 5"', 'stroke-dashoffset="2"', 'fill="none"']) assert.ok(svg.includes(part), part);
 });
 
 test('shapes cut by a rectangle clip are cut in the SVG and the picture is only as large as what shows', async () => {
@@ -131,8 +82,18 @@ test('shapes cut by a rectangle clip are cut in the SVG and the picture is only 
   assert.ok(group);
   assert.deepEqual(group.frame, { x: 100, y: 100, width: 50, height: 50 });
   assert.match(drawingSvg(group), /<g clip-path="url\(#c\d+\)">/);
-  const png = pixelsOf(await drawingPng(group));
-  assert.deepEqual(png.at(Math.floor(png.width / 2), Math.floor(png.height / 2)), [0, 0, 255, 255]);
+});
+
+test('the PNG beside the SVG is a PNG (a transparent pixel where there is no canvas to paint on, as in these tests)', async () => {
+  const pdf = PdfDocument.create();
+  const page = pdf.addPage([200, 200]).draw({ origin: 'top-left' });
+  page.ellipse(100, 100, 50, 50, { fill: [1, 0, 0] });
+  page.finish();
+  const [group] = await groupsOf(pdf);
+  assert.deepEqual(group.frame, { x: 50, y: 50, width: 100, height: 100 });
+  assert.match(compact(drawingSvg(group)), /^<\?xml[^>]*\?><svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="100" height="100" viewBox="0 0 100 100"><path d="M[^"]+Z" fill="#ff0000"\/><\/svg>/);
+  const png = await drawingPng(group);
+  assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 });
 
 test('a picture drawn turned and mirrored is placed turned and mirrored', async () => {

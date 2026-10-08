@@ -4,6 +4,7 @@ export { StyleResolver, mergeProperties, type FormattingLayer } from './model/re
 export { CHECKBOX, ListCounter, formatNumber, type ListLabel, type ListState } from './model/lists.ts';
 export * from './edit/text.ts';
 export * from './edit/comments.ts';
+export * from './edit/fields.ts';
 export { isPlainText, paragraphSegments, textSegments, type Segment } from './edit/segments.ts';
 export { WordDocument } from './docx/document.ts';
 export { OpcPackage, PackageError, REL, CONTENT_TYPE } from './opc/package.ts';

@@ -5,7 +5,7 @@ import { PdfDict, PdfName, PdfStream, PdfString, type PdfObject } from '../core/
 import { parseContent, type Operation } from '../content/content.ts';
 import type { PdfDocument } from '../document.ts';
 import type { PdfPage } from '../page.ts';
-import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, parseColorSpace, type ColorSpace } from '../render/color.ts';
+import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, packRgb, parseColorSpace, type ColorSpace } from '../render/color.ts';
 import { TextFont } from './font.ts';
 
 /** [a b c d e f], as in the cm and Tm operators. */
@@ -68,8 +68,6 @@ interface GraphicsState {
   /** 0xRRGGBB, or undefined while a pattern is the fill color. */
   fill: number | undefined;
 }
-
-const packRgb = (c: [number, number, number]): number => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
 
 const MAX_FORM_DEPTH = 12;
 /**

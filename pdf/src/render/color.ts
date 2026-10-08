@@ -24,6 +24,9 @@ export interface ColorSpace {
   readonly base?: ColorSpace;
 }
 
+/** Red, green and blue in 0..1 as 0xRRGGBB. */
+export const packRgb = (c: Rgb): number => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
+
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 const unit = (n: number): number[] => Array.from({ length: n * 2 }, (_, i) => i % 2);

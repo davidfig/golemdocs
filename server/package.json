@@ -5,8 +5,8 @@
   "version": "0.15.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p ../client/dist && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",
-    "dev:local": "tsx ../scripts/wrangler-config.ts && mkdir -p ../client/dist && wrangler dev --config wrangler.generated.jsonc --env local --port 3001",
+    "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p .no-assets && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",
+    "dev:local": "tsx ../scripts/wrangler-config.ts && mkdir -p .no-assets && wrangler dev --config wrangler.generated.jsonc --env local --port 3001",
     "build": "tsc",
     "typecheck": "tsc",
     "test": "tsx --test \"test/**/*.test.ts\"",

@@ -88,6 +88,14 @@
 			// Not inherited from the top level: deploying this environment would otherwise move the
 			// golemdocs.com custom domain away from production.
 			"routes": [],
+			// The page comes from Vite (:5173), which proxies /api here. An empty assets folder makes
+			// every other path reach the Worker, which redirects it to Vite (:5173) instead of a stale ../client/dist build.
+			"assets": {
+				"directory": "./.no-assets",
+				"run_worker_first": [
+					"/*"
+				]
+			},
 			"ai": {
 				"binding": "AI"
 			},
@@ -139,6 +147,12 @@
 		// `pnpm dev --local`: everything simulated on your machine, works offline. Sign-in works;
 		// cloud documents are switched off (the per-user databases need the real Cloudflare API).
 		"local": {
+			"assets": {
+				"directory": "./.no-assets",
+				"run_worker_first": [
+					"/*"
+				]
+			},
 			"r2_buckets": [
 				{
 					"binding": "FILES",

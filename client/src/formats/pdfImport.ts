@@ -297,7 +297,11 @@ export async function blocksToDocument(
       }
     }
   }
-  if (positioned) goTo(Math.max(currentPage, ...placedOn.keys()) + 1);
+  if (positioned) {
+    // A page left with things no paragraph picked up (a PDF with no text on it) gets a paragraph of its own.
+    if (waiting.length) push({}, [], false);
+    goTo(Math.max(currentPage, ...placedOn.keys()) + 1);
+  }
   doc.body = body.length ? body : [{ kind: 'paragraph', properties: {}, children: [], attrs: {} }];
   return doc;
 }

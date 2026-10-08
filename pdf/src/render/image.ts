@@ -3,7 +3,8 @@
 
 import { PdfDict, PdfRef, PdfStream, type PdfObject } from '../core/objects.ts';
 import type { PdfDocument } from '../document.ts';
-import { decodeStream, filterChain } from '../filters/filters.ts';
+import { ccittDecode } from '../filters/ccitt.ts';
+import { decodeStream, filterChain, type DecodeResult } from '../filters/filters.ts';
 import { DEVICE_GRAY, cmykToRgb, parseColorSpace } from './color.ts';
 import { encodePng } from './png.ts';
 
@@ -25,7 +26,7 @@ export interface ImageOptions {
 /** What `imageBytes` accepts: the image's reference or stream, optionally with the drawing's options. */
 export type ImageSource = PdfRef | PdfStream | ({ stream: PdfStream } & ImageOptions);
 
-/** The image as JPEG or PNG bytes; null when unsupported (JPEG 2000, CCITT, JBIG2) or damaged. */
+/** The image as JPEG or PNG bytes; null when unsupported (JPEG 2000, JBIG2) or damaged. */
 export function imageBytes(doc: PdfDocument, image: ImageSource, options: ImageOptions = {}): ImageBytes | null {
   try {
     let stream: PdfObject | undefined;
@@ -46,7 +47,7 @@ export function imageBytes(doc: PdfDocument, image: ImageSource, options: ImageO
 export function imageSupported(doc: PdfDocument, stream: PdfStream): boolean {
   const chain = filterChain(stream.dict, (o) => doc.resolve(o));
   const last = chain[chain.length - 1]?.name;
-  return last !== 'JPXDecode' && last !== 'CCITTFaxDecode' && last !== 'JBIG2Decode';
+  return last !== 'JPXDecode' && last !== 'JBIG2Decode';
 }
 
 const num = (doc: PdfDocument, o: PdfObject | undefined, d: number): number => doc.number(o) ?? d;
@@ -56,9 +57,26 @@ function decodeArray(doc: PdfDocument, dict: PdfDict): number[] | undefined {
   return a && a.every((x) => typeof doc.resolve(x) === 'number') ? a.map((x) => doc.number(x)!) : undefined;
 }
 
+/** The stream's samples, with a CCITT fax image (the one image codec read here) decoded to rows of bits too. */
+function decodeSamples(doc: PdfDocument, stream: PdfStream): DecodeResult {
+  const resolve = (o: PdfObject | undefined) => doc.resolve(o);
+  const r = decodeStream(stream, resolve);
+  const step = r.remaining[0];
+  if (r.remaining.length !== 1 || step.name !== 'CCITTFaxDecode') return r;
+  const num = (key: string, fallback: number) => doc.number(step.parms?.get(key)) ?? fallback;
+  const flag = (key: string, fallback: boolean) => {
+    const v = resolve(step.parms?.get(key));
+    return typeof v === 'boolean' ? v : fallback;
+  };
+  const height = num('Rows', 0) || (doc.number(stream.dict.get('Height') ?? stream.dict.get('H')) ?? 0);
+  const columns = num('Columns', 1728);
+  const data = ccittDecode(r.data, { k: num('K', 0), columns, rows: height, byteAlign: flag('EncodedByteAlign', false), blackIs1: flag('BlackIs1', false) });
+  return { data, remaining: [], error: r.error };
+}
+
 function convert(doc: PdfDocument, stream: PdfStream, opts: ImageOptions): ImageBytes | null {
   const dict = stream.dict;
-  const r = decodeStream(stream, (o) => doc.resolve(o));
+  const r = decodeSamples(doc, stream);
   if (r.remaining.length) {
     const first = r.remaining[0].name;
     if (first === 'DCTDecode' && r.remaining.length === 1) return { bytes: r.data, mime: 'image/jpeg' };
@@ -206,7 +224,7 @@ function readBits(data: Uint8Array, w: number, n: number, bpc: number): SampleRe
 
 /** A soft mask as alpha (0..255) at normalized image coordinates. */
 function softMask(doc: PdfDocument, mask: PdfStream): ((u: number, v: number) => number) | undefined {
-  const r = decodeStream(mask, (o) => doc.resolve(o));
+  const r = decodeSamples(doc, mask);
   if (r.remaining.length) {
     // A JPEG soft mask can't be decoded here; treat as opaque.
     return undefined;
@@ -227,7 +245,7 @@ function softMask(doc: PdfDocument, mask: PdfStream): ((u: number, v: number) =>
 
 /** An explicit /Mask stream (a stencil): painted where the (decoded) sample is 0. */
 function stencilMask(doc: PdfDocument, mask: PdfStream): ((u: number, v: number) => number) | undefined {
-  const r = decodeStream(mask, (o) => doc.resolve(o));
+  const r = decodeSamples(doc, mask);
   if (r.remaining.length) return undefined;
   const w = num(doc, mask.dict.get('Width'), 0);
   const h = num(doc, mask.dict.get('Height'), 0);

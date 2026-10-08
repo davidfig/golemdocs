@@ -2,6 +2,11 @@
 
 ## 0.15.0 - Unreleased
 
+### Fixed
+- Converting a PDF to Word keeps vector drawings (logos, charts, line art, QR codes and barcodes) as pictures, drawn as SVG so they stay sharp, with their gradients, patterns, clipping, dashes and line joins. They used to be left out. A PDF with no text on it also keeps its pictures now.
+- Converting a PDF to Word keeps pictures that are turned or mirrored (including mirrored JPEGs), and small ones. They used to be dropped or shown the wrong way round.
+- PDFs with black-and-white fax (CCITT) scans now show and convert those images.
+
 ### Changed
 - On a phone, drop-downs (New, font, size, colors, the “…” buttons and more) open as sheets from the bottom of the screen, above the keyboard, instead of small pop-ups, and New is one button that lists the document types.
 - On a phone, the top toolbar is for files (New, Open, Undo, Redo, Find, Share, and “…” for the rest), and while you type, a formatting bar (Bold, Italic, Underline, lists, Link, Image, Comment, and “…” for the rest) sits right above the keyboard.

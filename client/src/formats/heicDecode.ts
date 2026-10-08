@@ -5,7 +5,7 @@
 // only then does `import()` this. Never import this module statically.
 
 // @ts-expect-error libheif-js has no type declarations (see libheifTypes.ts for the part used here).
-import * as loaded from 'libheif-js/wasm-bundle';
+import * as loaded from 'libheif-js/wasm-bundle.js';
 import type { Libheif } from './libheifTypes.ts';
 
 export interface Pixels {

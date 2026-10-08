@@ -2687,7 +2687,7 @@ async function openDocumentLink(title: string): Promise<void> {
 // A picture file can be opened (as a picture, to change with the picture tools) or put in the open
 // document. Insert ▸ Picture inserts; dropping one on a document asks which was meant.
 
-const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
+const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|heic|heif|svg)$/i;
 const isPictureFile = (file: File): boolean => PICTURE_FILE.test(file.name) || (file.type.startsWith('image/') && file.type !== 'image/tiff');
 
 /** Whether a picture can go into the open document now. */
@@ -2753,7 +2753,9 @@ async function insertPicture(file: File, at?: { x: number; y: number }): Promise
         // Not a drawing the editor reads: it goes in as a picture.
       }
     }
-    if (!sniffImage(bytes)) ({ bytes, name } = await toPng(name, bytes));
+    // What the document can't hold as it is (SVG, a HEIC photo) is turned into a PNG or JPEG.
+    const sniffed = sniffImage(bytes);
+    if (!sniffed || sniffed.type === 'heic') ({ bytes, name } = await toPng(name, bytes));
     const image = sniffImage(bytes);
     if (!image) throw new Error(t('app.notImage'));
     if (at) {
@@ -2835,7 +2837,7 @@ async function insertStoredDrawing(size: { width?: number; height?: number } = {
 
 /** Insert ▸ Picture: choose a file, then put it in the document. */
 function pickPicture(): void {
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml' });
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif,image/svg+xml' });
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (file) void insertPicture(file);

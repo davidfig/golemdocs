@@ -157,7 +157,9 @@ async function embedded(title: string, fonts: FontSet): Promise<Embedded | null>
   const file = await askEmbed(title);
   if (!file) return null;
   const bytes = new Uint8Array(file.bytes);
-  if (sniffImage(bytes)) return { kind: 'image', bytes };
+  const picture = sniffImage(bytes);
+  // A HEIC photo goes in as a JPEG (the converter is only fetched for one).
+  if (picture) return { kind: 'image', bytes: picture.type === 'heic' ? (await (await import('../formats/imageCodec.ts')).toPng(file.name, bytes)).bytes : bytes };
   // A drawing (a stored one, or an SVG file): shown as its picture, with the drawing beside it to be edited there.
   if (isWdoc(bytes) || /\.svgz?$/i.test(file.name)) {
     const drawing = await (await import('../formats/vectorDoc.ts')).storedDrawing(bytes);
@@ -253,7 +255,8 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     }
     case 'image': {
       const type = sniffImage(new Uint8Array(source.bytes))?.type;
-      const lens: Format = type === 'jpeg' || type === 'webp' ? type : 'png';
+      // A HEIC photo is read as a JPEG (the picture format's reader converts it).
+      const lens: Format = type === 'jpeg' || type === 'webp' ? type : type === 'heic' ? 'jpeg' : 'png';
       const { document, extensions } = await importDocument(lens, new Uint8Array(source.bytes));
       return flowing(source.name, document, lens, extensions);
     }

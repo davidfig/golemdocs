@@ -151,7 +151,7 @@ export class Assistant {
   private readonly credits = h('p', { class: 'wm-clip-credits' });
   private readonly tray = h('div', { class: 'wm-clip-tray' });
   private readonly attach = h('button', { class: 'wm-clip-button wm-clip-attach', text: '＋', attrs: { type: 'button' } });
-  private readonly files = h('input', { attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: '', hidden: '' } });
+  private readonly files = h('input', { attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.heic,.heif', multiple: '', hidden: '' } });
   /** Pictures waiting to go with the next message, as the data URIs the model is sent (they preview as they are). */
   private attached: string[] = [];
 

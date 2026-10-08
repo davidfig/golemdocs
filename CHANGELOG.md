@@ -2,6 +2,9 @@
 
 ## 0.15.1 - Unreleased
 
+### Added
+- HEIC and HEIF photos (the iPhone's picture format) open, can be inserted into documents (Insert › Picture, drag and drop, the assistant's picture button) and are shown to the assistant. They are kept as high-quality JPEGs. Safari reads them itself; other browsers load a decoder the first time you use one, so nothing extra is downloaded otherwise.
+
 ### Fixed
 - Converting a PDF to Word keeps the text where the PDF had it: a page whose text starts far down the page no longer starts at the top (over the pictures), headings keep their bold and the text its color, and a page's last line is not pushed onto a new page.
 - Converting a PDF to Word keeps the running header and footer text (dates, titles, web addresses, page numbers, which are now page fields) as the document's header and footer instead of dropping it.

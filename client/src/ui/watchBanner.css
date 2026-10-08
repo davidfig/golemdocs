@@ -1,6 +1,7 @@
 /* The bar saying who is editing a document one person at a time edits (see watchBanner.ts). */
 
-.wm-watch {
+.wm-watch,
+.wm-detour {
   position: absolute;
   top: 8px;
   left: 50%;
@@ -21,6 +22,8 @@
 }
 
 .wm-watch[hidden],
-.wm-watch .wm-button[hidden] {
+.wm-detour[hidden],
+.wm-watch .wm-button[hidden],
+.wm-detour .wm-button[hidden] {
   display: none;
 }

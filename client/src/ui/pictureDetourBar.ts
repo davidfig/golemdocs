@@ -6,8 +6,8 @@ import { h } from './dom.ts';
 import './watchBanner.css';
 
 export class PictureDetourBar {
-  readonly el = h('div', { class: 'wm-watch', attrs: { role: 'status', hidden: '' } });
-  private readonly message = h('span', { class: 'wm-watch-message' });
+  readonly el = h('div', { class: 'wm-detour', attrs: { role: 'status', hidden: '' } });
+  private readonly message = h('span', { class: 'wm-detour-message' });
 
   constructor(parent: HTMLElement, done: () => void, cancel: () => void) {
     const doneButton = h('button', { class: 'wm-button', text: t('picture.detour.done'), attrs: { type: 'button' } });

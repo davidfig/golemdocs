@@ -103,10 +103,10 @@ test.describe('a picture in the text', () => {
     const pic = await picture(app);
     await app.page.mouse.dblclick(pic.middle.x, pic.middle.y);
     await app.menubar.getByRole('menuitem', { name: 'Picture' }).waitFor();
-    await expect(app.page.locator('.wm-watch').getByRole('button', { name: 'Done' })).toBeVisible();
+    await expect(app.page.locator('.wm-detour').getByRole('button', { name: 'Done' })).toBeVisible();
     await app.menu('Picture', 'Rotate Right');
     await expect.poll(async () => (await app.page.evaluate(() => (window as unknown as { pages: { width: number; height: number }[] }).pages[0])).height).toBeGreaterThan(0);
-    await app.page.locator('.wm-watch').getByRole('button', { name: 'Done' }).click();
+    await app.page.locator('.wm-detour').getByRole('button', { name: 'Done' }).click();
     // The document is back, with the turned picture in place of the old one.
     await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('Last line');
     await expect(app.menubar.getByRole('menuitem', { name: 'Picture' })).toBeHidden();
@@ -130,7 +130,7 @@ test.describe('a picture in the text', () => {
     await app.page.mouse.dblclick(pic.middle.x, pic.middle.y);
     await app.menubar.getByRole('menuitem', { name: 'Picture' }).waitFor();
     await app.menu('Picture', 'Grayscale');
-    await app.page.locator('.wm-watch').getByRole('button', { name: 'Cancel' }).click();
+    await app.page.locator('.wm-detour').getByRole('button', { name: 'Cancel' }).click();
     await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('Last line');
     const { files } = await docx(app);
     const media = [...files.keys()].filter((k) => k.startsWith('word/media/'));
@@ -156,7 +156,7 @@ test.describe('a picture in the text', () => {
     const pic = await picture(app);
     await app.page.mouse.click(pic.middle.x, pic.middle.y, { button: 'right' });
     await app.page.getByRole('menu', { name: 'Picture' }).getByRole('menuitem', { name: 'Edit Picture…' }).click();
-    await expect(app.page.locator('.wm-watch').getByRole('button', { name: 'Done' })).toBeVisible();
+    await expect(app.page.locator('.wm-detour').getByRole('button', { name: 'Done' })).toBeVisible();
   });
 
   test('Cut puts the picture on the clipboard and takes it out of the document', async ({ app, context }) => {

@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.15.1 - Unreleased
+## 0.16.0 - 2026-10-08
 
 ### Added
 - Pictures in a document can be picked with a click: a frame with handles appears, Delete removes the picture, a drag moves it (in line with the text, or to a new place on the page for a floating one), the corner handles resize it, and a double click opens it in the image editor (Done puts the changed picture back in the document, Cancel leaves it as it was). Right-clicking a picture offers Cut, Copy (the picture itself goes on the clipboard), Delete and Edit Picture. The assistant can do the same with its new text_pictures tool.

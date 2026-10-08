@@ -113,6 +113,19 @@ test('drawings in the text are listed, inserted, opened and closed, and the reas
   assert.match(await setup().run('insert_text_drawing', { width: 5 }), /^Error: `width` must be/);
 });
 
+test('a picture in the text is opened in the image editor and put back, or the reason it cannot be comes back as an error', async () => {
+  const t = setup({ agent: async () => 'Picture 0 is selected.', editTextPicture: async () => (t.log.push('edit'), null), finishTextPicture: async (apply: boolean) => (t.log.push(apply ? 'done' : 'cancel'), null) });
+  assert.match(await t.run('edit_text_picture', { number: 0 }), /^The picture is open in the image editor/);
+  assert.match(await t.run('edit_text_picture', { finish: 'done' }), /^The edited picture is back/);
+  assert.match(await t.run('edit_text_picture', { finish: 'cancel' }), /^The document is back as it was/);
+  assert.match(await t.run('edit_text_picture', { finish: 'maybe' }), /^Error: `finish` must be done or cancel/);
+  assert.deepEqual(t.log, ['edit', 'done', 'cancel']);
+  const missing = setup({ agent: async () => 'Error: there is no picture 4; the document has 1 (0 to 0)' });
+  assert.match(await missing.run('edit_text_picture', { number: 4 }), /^Error: there is no picture 4/);
+  const refused = setup({ agent: async () => 'Picture 0 is selected.', editTextPicture: async () => 'a picture is already open in the image editor.' });
+  assert.match(await refused.run('edit_text_picture', { number: 0 }), /^Error: a picture is already open/);
+});
+
 test('collaboration says who is here, and that everyone edits at once', async () => {
   const t = setup();
   assert.equal(await t.run('collaboration_status'), 'Nobody else is editing this document now.');

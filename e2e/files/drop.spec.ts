@@ -70,6 +70,18 @@ test('choosing Insert puts the picture in the document', async ({ app, page }) =
   expect([...media[0]!.bytes.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
 });
 
+test('dropping a picture on a Markdown note embeds it as a stored file', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, text('note.md', '# Note\n\nSome words.'));
+  await waitForOpen(app, 'note.md');
+  await dropFile(page, { name: 'photo.png', buffer: buildPng(40, 30), mimeType: 'image/png' });
+  await choice(page, 'photo.png').getByRole('button', { name: 'Insert in the document' }).click();
+  // The note is opened again to show the picture, and still is the note.
+  await waitForOpen(app, 'note.md');
+  const file = await app.download(() => app.menu('File', 'Download'));
+  expect(Buffer.from(file.bytes).toString('utf8')).toContain('![[photo.png]]');
+});
+
 test('choosing Open opens the picture as a document of its own', async ({ app, page }) => {
   await blankWith(app, 'A document');
   await dropFile(page, { name: 'photo.png', buffer: buildPng(40, 30), mimeType: 'image/png' });
@@ -100,9 +112,9 @@ test('Cancel, Escape and a click elsewhere all dismiss the picture question and 
   expect(await app.text()).toBe('Untouched');
 });
 
-test('a picture dropped on a Markdown document opens as a picture, since Markdown holds no pictures', async ({ app, page }) => {
+test('a picture dropped on a plain text document opens as a picture, since text holds no pictures', async ({ app, page }) => {
   await app.goto('?doc=welcome');
-  await importFile(app, text('notes.md', '# Notes'));
+  await importFile(app, text('notes.txt', 'Notes'));
   await dropFile(page, { name: 'photo.png', buffer: buildPng(20, 20), mimeType: 'image/png' });
   await waitForOpen(app, 'photo.png');
   expect(await formatLabel(page)).toBe('PNG Image');

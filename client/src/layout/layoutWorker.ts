@@ -640,6 +640,7 @@ class OpenDocument {
       painting: this.painter !== null,
       link: editor.selectedLink(),
       math: editor.selectedMath(),
+      picture: this.selectedPicture(editor),
       inTable: editor.inTable(),
       columns: editor.sectionColumns(),
       page: editor.sectionPage(),
@@ -657,6 +658,15 @@ class OpenDocument {
     this.commandAt = 0;
     this.sendPresence();
     return update;
+  }
+
+  /** The picture the selection is exactly, for the frame the page draws around it. */
+  private selectedPicture(editor: Editor): SelectionUpdate['picture'] {
+    const picture = editor.selectedPicture();
+    if (!picture || !picture.drawing.image) return null;
+    const { item } = picture;
+    const [start] = editor.ordered();
+    return { page: picture.page.id, at: { paragraph: editor.paragraphs().indexOf(start.paragraph), offset: start.offset }, x: item.x, y: item.y, width: item.width, height: item.height, floating: !picture.drawing.inline, part: picture.drawing.image, ...(picture.drawing.svg && { svg: picture.drawing.svg }) };
   }
 
   private pdfSelection(annotator: PdfAnnotator): SelectionUpdate {
@@ -1534,6 +1544,19 @@ class OpenDocument {
     );
   }
 
+  /** The selected picture shown as other bytes (it was edited): its width stays, its height follows the new picture (`aspect`: height over width, 0 when not known). */
+  replacePicture(bytes: Uint8Array, ext: string, aspect: number): void {
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.replacePicture(bytes, ext, aspect)));
+    const document = this.document;
+    if (!document || this.readOnly || this.pdf) return;
+    const place = (image: string) => this.apply({ kind: 'replacePicture', image, aspect });
+    if (!this.shared) return place(document.addImage(bytes, ext));
+    this.mediaChain = this.mediaChain.then(() => this.addMedia(bytes, ext)).then(
+      (image) => this.later(() => place(image)),
+      (error) => this.mediaFailed(error),
+    );
+  }
+
   /** Pictures put in the room one after another, so what is added last is applied last. */
   private mediaChain: Promise<unknown> = Promise.resolve();
 
@@ -2000,11 +2023,11 @@ class OpenDocument {
       edited = true;
     } else {
       let command: Command;
-      if (wire.kind === 'pointer') {
+      if (wire.kind === 'pointer' || wire.kind === 'moveDrawing' || (wire.kind === 'resizeDrawing' && wire.page !== undefined)) {
         const page = session.displayPages.find((p) => p.id === wire.page) ?? session.pages.find((p) => p.id === wire.page);
         if (!page) return;
         command = { ...wire, page };
-      } else command = wire;
+      } else command = wire as Command;
       const rule = command.kind === 'insertParagraph' ? this.lineShortcut(editor) : command.kind === 'pointer' ? this.checkboxClick(editor, command) : null;
       // A #tag at the end of the line is finished by Enter too.
       if (!rule && command.kind === 'insertParagraph') this.tagBeforeEnter(editor);
@@ -3047,6 +3070,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'vectorStep':
       if (current?.doc === message.doc) current.stepVector(message.action);
+      break;
+    case 'replacePicture':
+      if (current?.doc === message.doc) current.replacePicture(new Uint8Array(message.bytes), message.ext, message.aspect);
       break;
     case 'putDrawing':
       if (current?.doc === message.doc) current.putDrawing(message.svg, new Uint8Array(message.png), message.width, message.height, message.description, message.replace);

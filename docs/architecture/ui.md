@@ -38,6 +38,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/cursors.ts` | Cursor drawings for vector and picture tools |
 | `client/src/ui/theme.ts`, `ui.css` | Color schemes via `--wm-*` variables and `data-theme` |
 | `client/src/ui/dashboard.ts` | Documents screen (thumbnails, folders, selection) |
+| `client/src/ui/pictureFrame.ts`, `pictureDetourBar.ts` | The frame and resize handles around the picture selected in the text; the Done / Cancel bar while a picture of the text is open in the image editor |
 | `client/src/ui/*Layer.ts`, `vectorEditor.ts`, `vectorSession.ts` | DOM layers over the canvas (forms, PDF text, pointers, vector editing) |
 | `client/src/view/camera.ts` | `Camera`: document points to canvas; zoom and scroll only change uniforms |
 | `client/src/viewMemory.ts` | Per-document scroll and zoom (device-local) |

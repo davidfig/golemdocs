@@ -990,3 +990,135 @@ test('replacing a vector drawing swaps it in one undoable step', skip, async () 
   await apply({ kind: 'replaceDrawing', svg: 'word/media/missing.svg', drawing: drawing('word/media/three.svg') });
   assert.deepEqual(found(), ['word/media/one.svg'], 'no such drawing: nothing happens');
 });
+
+// --- Pictures: a click selects one, and it can be deleted, moved, resized and swapped ---------------------------
+
+const pictureRun = (extra: object = {}): Inline => ({ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'drawing', inline: true, width: 914400, height: 457200, image: 'word/media/one.png', ...extra }] });
+
+async function withPicture(texts = ['Hello world', 'Second paragraph']) {
+  const t = await setup(texts);
+  await t.apply({ kind: 'move', to: 'right' }, { kind: 'insertContent', content: [pictureRun()] }, { kind: 'move', to: 'documentStart' });
+  const page = t.session.displayPages[0];
+  const item = () => t.session.displayPages[0].images.find((i) => i.drawing?.image)!;
+  const click = (x: number, y: number, extra: Partial<Extract<Command, { kind: 'pointer' }>> = {}) => t.apply({ kind: 'pointer', page: t.session.displayPages[0], x, y, ...extra });
+  const clickPicture = () => click(item().x + item().width / 2, item().y + item().height / 2);
+  const pictures = () => paragraphsIn(t.doc.body).map((p) => (p.children as Inline[]).flatMap((c) => (c.kind === 'run' ? c.content.filter((i) => i.kind === 'drawing') : [])).length);
+  return { ...t, page, item, click, clickPicture, pictures };
+}
+
+test('a click on a picture selects it, and a click on text does not', skip, async () => {
+  const { editor, item, click, clickPicture } = await withPicture();
+  assert.equal(editor.selectedPicture(), null);
+  await clickPicture();
+  const picture = editor.selectedPicture();
+  assert.ok(picture, 'the picture is selected');
+  assert.equal(picture.item, item());
+  assert.equal(picture.drawing.image, 'word/media/one.png');
+  // A click on the line's text puts the caret down again.
+  await click(5, item().y + item().height - 4);
+  assert.equal(editor.selectedPicture(), null);
+  assert.equal(editor.collapsed, true);
+  // Shift-click extends the selection through the picture as text, rather than selecting it.
+  await click(2, item().y + 2);
+  await click(item().x + item().width / 2, item().y + item().height / 2, { extend: true });
+  assert.equal(editor.selectedPicture(), null);
+});
+
+test('a selected picture is deleted with one key press and brought back by undo', skip, async () => {
+  const { editor, apply, clickPicture, pictures } = await withPicture();
+  assert.deepEqual(pictures(), [1, 0]);
+  await clickPicture();
+  await apply({ kind: 'delete', direction: 'backward' });
+  assert.deepEqual(pictures(), [0, 0]);
+  editor.undo();
+  assert.deepEqual(pictures(), [1, 0]);
+});
+
+test('a picture in line with the text moves to where it is dropped, in one step', skip, async () => {
+  const { editor, session, apply, clickPicture, pictures, texts } = await withPicture();
+  await clickPicture();
+  const page = session.displayPages[0];
+  const second = page.lines.find((l) => l.paragraph === paragraphsIn(editor.doc.body)[1])!;
+  await apply({ kind: 'moveDrawing', page, x: second.x + 3, y: second.y + second.height / 2 });
+  assert.deepEqual(pictures(), [0, 1]);
+  assert.deepEqual(texts().map((t) => t.replace('￼', '')), ['Hello world', 'Second paragraph']);
+  assert.ok(editor.selectedPicture(), 'it stays selected');
+  editor.undo();
+  assert.deepEqual(pictures(), [1, 0], 'undo puts it back with one step');
+});
+
+test('a picture dropped where it already is does not change anything', skip, async () => {
+  const { editor, apply, clickPicture, item, session, pictures } = await withPicture();
+  await clickPicture();
+  const before = editor.undoDepth;
+  await apply({ kind: 'moveDrawing', page: session.displayPages[0], x: item().x + 2, y: item().y + 2 });
+  assert.equal(editor.undoDepth, before);
+  assert.deepEqual(pictures(), [1, 0]);
+});
+
+test('resizing the selected picture changes its size and keeps it selected', skip, async () => {
+  const { editor, apply, clickPicture, item } = await withPicture();
+  await clickPicture();
+  await apply({ kind: 'resizeDrawing', width: 144, height: 72 });
+  assert.equal(item().width, 144);
+  assert.equal(item().height, 72);
+  assert.ok(editor.selectedPicture());
+  assert.equal(editor.selectedPicture()!.drawing.width, 144 * 12700);
+});
+
+test('swapping the picture keeps its width and follows the new shape', skip, async () => {
+  const { editor, apply, clickPicture, item } = await withPicture();
+  await clickPicture();
+  await apply({ kind: 'replacePicture', image: 'word/media/two.png', aspect: 1 });
+  assert.equal(editor.selectedPicture()!.drawing.image, 'word/media/two.png');
+  assert.equal(item().width, 72);
+  assert.equal(item().height, 72);
+});
+
+test('a floating picture is selected by a click on it, and moved to a place on the page', skip, async () => {
+  const anchor = (offsetX: number, offsetY: number) => {
+    return {
+      kind: 'drawing' as const,
+      inline: false,
+      width: 914400,
+      height: 914400,
+      image: 'word/media/float.png',
+      xml: {
+        name: 'w:drawing',
+        attrs: {},
+        children: [
+          {
+            name: 'wp:anchor',
+            attrs: { behindDoc: '0' },
+            children: [
+              { name: 'wp:positionH', attrs: { relativeFrom: 'page' }, children: [{ name: 'wp:posOffset', attrs: {}, children: [String(offsetX * 12700)] }] },
+              { name: 'wp:positionV', attrs: { relativeFrom: 'page' }, children: [{ name: 'wp:posOffset', attrs: {}, children: [String(offsetY * 12700)] }] },
+            ],
+          },
+        ],
+      },
+    };
+  };
+  const { editor, session, apply, click } = await withPicture(['Hello world', 'Second paragraph']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'insertContent', content: [{ kind: 'run', properties: {}, attrs: {}, content: [anchor(300, 400)] }] });
+  const floating = () => session.displayPages[0].images.find((i) => i.drawing?.image === 'word/media/float.png')!;
+  assert.equal(floating().x, 300);
+  assert.equal(floating().y, 400);
+  await click(floating().x + 20, floating().y + 20);
+  assert.equal(editor.selectedPicture()?.drawing.image, 'word/media/float.png');
+  assert.equal(editor.selectedPicture()!.drawing.inline, false);
+  await apply({ kind: 'moveDrawing', page: session.displayPages[0], x: 120, y: 500 });
+  assert.equal(floating().x, 120);
+  assert.equal(floating().y, 500);
+  assert.equal(editor.selectedPicture()?.drawing.image, 'word/media/float.png', 'still selected');
+});
+
+test('a picture inside a table cell is picked by a click', skip, async () => {
+  const { editor, apply, session } = await setup(['x']);
+  await apply({ kind: 'insertTable', rows: 1, columns: 2 });
+  await apply({ kind: 'insertContent', content: [pictureRun()] });
+  const item = session.displayPages[0].images.find((i) => i.drawing?.image)!;
+  assert.ok(item, 'laid out');
+  await apply({ kind: 'pointer', page: session.displayPages[0], x: item.x + item.width / 2, y: item.y + item.height / 2 });
+  assert.ok(editor.selectedPicture(), 'selected in a cell');
+});

@@ -44,6 +44,7 @@ export const assistant: Partial<Messages> = {
   'assistant.pictureFailed': '無法處理該圖片，請換一張試試。',
   'assistant.describePicture': '你能告訴我這張圖片的內容嗎？',
   'assistant.tool.viewPicture': '正在查看圖片…',
+  'assistant.tool.textPicture': '正在處理圖片…',
   'assistant.tool.drawing': '正在處理向量圖…',
   'assistant.tool.searchDocuments': '正在搜尋你的文件…',
   'assistant.tool.readOtherDocument': '正在閱讀另一個文件…',

@@ -133,6 +133,8 @@ export interface AppHooks {
   startComment(): void;
   /** The selected text (for copy and cut). */
   selectedText(): string;
+  /** A picture is selected: puts it on the clipboard (and, for a cut, takes it out of the document); whether one was. */
+  copyPicture(cut: boolean): boolean;
   focusEditor(): void;
   notify(message: string): void;
   toggleGrid(): void;
@@ -403,10 +405,12 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.setViewMode(action.mode);
         case 'copy':
           if (app.engine()) return app.engine()!.copy();
+          if (app.copyPicture(false)) return;
           await writeClipboardText(app.selectedText());
           return;
         case 'cut': {
           if (app.engine()) return app.engine()!.cut();
+          if (app.copyPicture(true)) return;
           const text = app.selectedText();
           if (!text) return;
           await writeClipboardText(text);

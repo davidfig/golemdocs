@@ -70,7 +70,7 @@ export interface EncodedPage {
   text: EncodedText[];
   background: EncodedRects;
   foreground: EncodedRects;
-  images: ImageItem[];
+  images: Omit<ImageItem, 'drawing'>[];
   glyphCount: number;
 }
 
@@ -112,7 +112,7 @@ export function encodePage(page: PageLayout): { page: EncodedPage; faces: FaceMe
       text,
       background: rects(page.background),
       foreground: rects(page.foreground),
-      images: page.images.map((image) => ({ ...image })),
+      images: page.images.map(({ drawing: _drawing, ...image }) => image),
       glyphCount,
     },
     faces,

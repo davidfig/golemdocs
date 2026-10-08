@@ -55,6 +55,17 @@ export type Command =
   | { kind: 'pointer'; page: PageLayout; x: number; y: number; extend?: boolean; unit?: 'character' | 'word' | 'paragraph' }
   /** Replaces the vector drawing whose SVG is package part `svg` (or, for '*', the one drawing a document is) with another version of it (it was edited in place), as one undoable step. Its size is kept when the new one has none (0). */
   | { kind: 'replaceDrawing'; svg: string; drawing: Drawing }
+  /**
+   * Moves the selected picture. One floating on its page goes to put its top left corner at (x, y) of `page`; one in line
+   * with the text goes to the text at that point.
+   */
+  | { kind: 'moveDrawing'; page: PageLayout; x: number; y: number }
+  /** Gives the selected picture a size in points (and, for a floating one, a place on its page: the top left corner). */
+  | { kind: 'resizeDrawing'; width: number; height: number; page?: PageLayout; x?: number; y?: number }
+  /** Moves the selected picture to the end of a paragraph (its number among the document's paragraphs). */
+  | { kind: 'moveDrawingToParagraph'; paragraph: number }
+  /** Shows the selected picture as another image part (it was edited); its width stays, its height follows `aspect` (height over width) unless that is 0. */
+  | { kind: 'replacePicture'; image: string; aspect: number }
   | { kind: 'selectAll' }
   /** Comments the selection (or, with none, the word at the caret). */
   | { kind: 'addComment'; text: string; author: string; date?: string }

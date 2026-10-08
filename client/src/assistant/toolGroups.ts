@@ -17,6 +17,7 @@ export const TOOL_GROUPS: Record<string, Record<string, string>> = {
   files: { list: 'list_files', open: 'open_file', new: 'new_document', move: 'move_files', delete: 'delete_files', trash: 'list_trash', restore: 'restore_from_trash', download_all: 'download_all' },
   versions: { list: 'list_versions', save: 'save_version', restore: 'restore_version' },
   folders: { create: 'create_folders', rename: 'rename_folders' },
+  text_pictures: { select: 'select_text_picture', delete: 'delete_text_picture', resize: 'resize_text_picture', move: 'move_text_picture', edit: 'edit_text_picture' },
   text_drawings: { list: 'list_text_drawings', insert: 'insert_text_drawing', open: 'open_text_drawing', close: 'close_text_drawing' },
   collaboration: { status: 'collaboration_status', take_over: 'take_over_editing' },
   text_file: { info: 'text_file_info', read: 'text_file_read', find: 'text_file_find', replace: 'text_file_replace', edit_lines: 'text_file_edit_lines', insert_lines: 'text_file_insert_lines', delete_lines: 'text_file_delete_lines', undo: 'text_file_undo', redo: 'text_file_redo' },

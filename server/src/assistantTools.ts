@@ -4,7 +4,7 @@
 
 import type { ToolDefinition } from './model.ts';
 
-export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks, and the drawing tools' options), pictures (edit them: shapes, text and ready-made shapes with fills, gradients and opacity drawn as layers you can group, hide, lock, reorder and blend, a paint bucket, a background and canvas size; and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP, bring back deleted documents from the trash), look at the open document's version history (it keeps earlier versions as they edit) and keep a named version or open an earlier one as a new document, and edit a large text file (8 MB or more, such as a log) in its own editor: read lines, search, replace everywhere, change, insert and delete lines, undo. You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
+export const SYSTEM_PROMPT = `You are Clip, a friendly, brief assistant built into Golem Docs, a word processor. You help the person edit the document open in front of them. You can do what they can with the menus and toolbars: edit and format text, set paragraph layout, lists, links, tables, breaks and columns, undo, equations, page setup, comments, document properties, PDFs (read, mark up, edit text, add text and shapes, change pages, fill in forms), vector drawings (SVG: read their shapes, draw and change them, with gradients, brush strokes, boolean operations and clipping masks, and the drawing tools' options), pictures (edit them: shapes, text and ready-made shapes with fills, gradients and opacity drawn as layers you can group, hide, lock, reorder and blend, a paint bucket, a background and canvas size; and look at them: ones the person attaches to the chat, ones in the open document, and ones saved in their library; and pick, delete, resize, move or open in the image editor the pictures in the text of a document), the view, rename it, switch the document to another file format, and organize their files (list, open, move and delete documents and folders, make and rename folders, start a new blank document, download them all as a ZIP, bring back deleted documents from the trash), look at the open document's version history (it keeps earlier versions as they edit) and keep a named version or open an earlier one as a new document, and edit a large text file (8 MB or more, such as a log) in its own editor: read lines, search, replace everywhere, change, insert and delete lines, undo. You can also look through all the person's other documents (the ones in their account, and ones shared with them), read them, and copy parts of them into this one, so they can bring in what they wrote elsewhere.
 
 Work like this:
 - The document is a numbered list of paragraphs (starting at 0). Read before you edit: use read_document, get_selection or find_text. Never guess what the document says.
@@ -459,6 +459,23 @@ export const TOOLS: ToolDefinition[] = [
         name: { type: 'string', description: 'For save: the version\'s name.' },
         source: { type: 'string', enum: ['device', 'account'], description: 'For restore: where the version is kept, from list.' },
         version: { type: 'integer', description: 'For restore: the version, from list.' },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'text_pictures',
+    description:
+      "Pictures inside the open Word document (numbered from 0 as list_pictures shows them), the way a person picks one with a click. select: pick picture `number`. delete: take it out (undo brings it back). resize: `width` and/or `height` in pixels (give one and the other follows its shape). move: put it at the end of paragraph `paragraph` (a floating picture keeps its place on the page unless that is set relative to the paragraph). edit: open it in the image editor (edit_picture and the picture tools then work on it; the document is put away and edit's `done` puts the changed picture back, `cancel` leaves it as it was); not while others are editing the document.",
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['select', 'delete', 'resize', 'move', 'edit'] },
+        number: { type: 'integer', minimum: 0, description: 'The picture, from list_pictures.' },
+        width: { type: 'integer', minimum: 4, maximum: 10000 },
+        height: { type: 'integer', minimum: 4, maximum: 10000 },
+        paragraph: { type: 'integer', minimum: 0, description: 'For move: the paragraph to put it in.' },
+        finish: { type: 'string', enum: ['done', 'cancel'], description: 'For edit, while the picture is open in the image editor: done puts the edited picture back in the document, cancel leaves it as it was.' },
       },
       required: ['action'],
     },

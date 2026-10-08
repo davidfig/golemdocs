@@ -1,12 +1,13 @@
-// Hyperlinks and equations under the selection or a point.
-import { type Position } from './types.ts';
+// Hyperlinks, equations and pictures under the selection or a point.
+import { NO_CHANGE, type CommandResult, type Position } from './types.ts';
 import type { Command } from './types.ts';
-import { paragraphLength } from '@golemdocs/docx';
+import { paragraphLength, type Drawing } from '@golemdocs/docx';
 
 import { inlineLength, inlinesLength, mathAt, plainText, readMathInline, runPropertiesAt, splitInlines, type MathEquation, type Hyperlink, type Inline, type Paragraph } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
-import { toModel, type PageLayout } from '@golemdocs/layout';
+import { toModel, type ImageItem, type PageLayout } from '@golemdocs/layout';
 import { EditorEditing } from './editing.ts';
+import { drawingAt, findDrawing, placedOnPage } from './drawings.ts';
 
 export abstract class EditorLinks extends EditorEditing {
   /** The hyperlink at a position (a caret counts at either end of it), with its range. */
@@ -81,6 +82,114 @@ export abstract class EditorLinks extends EditorEditing {
       return mathAt(line.paragraph, offset) ? { paragraph: line.paragraph, offset } : null;
     }
     return null;
+  }
+
+  /** Where a drawing is in the text, found by being that very drawing. */
+  protected drawingPosition(drawing: Drawing): Position | null {
+    for (const paragraph of this.paragraphs()) {
+      const found = findDrawing(paragraph.children, (d) => d === drawing);
+      if (found) return { paragraph, offset: found.offset };
+    }
+    return null;
+  }
+
+  /**
+   * The position of the picture under a point on a page, if the point is over one. Pictures in front of the text come first
+   * (the last drawn is on top), then those in line with it; a picture behind the text is only picked where there is no text.
+   */
+  pictureUnder(page: PageLayout, x: number, y: number): Position | null {
+    const over = (i: ImageItem) => !!i.drawing?.image && x >= i.x && x <= i.x + i.width && y >= i.y && y <= i.y + i.height;
+    const hits = page.images.filter(over);
+    const inText = () => page.lines.some((l) => y >= l.y && y <= l.y + l.height && x >= l.x && x <= l.x + l.width);
+    const picked = [...hits].reverse().find((i) => !i.behind) ?? (hits.length && !inText() ? hits[hits.length - 1] : undefined);
+    return picked?.drawing ? this.drawingPosition(picked.drawing) : null;
+  }
+
+  /** The picture the selection is exactly (one selected position holding a picture), with where it is shown. */
+  selectedPicture(): { drawing: Drawing; page: PageLayout; item: ImageItem } | null {
+    if (this.collapsed) return null;
+    const [start, end] = this.ordered();
+    if (start.paragraph !== end.paragraph || end.offset - start.offset !== 1) return null;
+    const drawing = drawingAt(start.paragraph.children, start.offset);
+    if (!drawing?.image) return null;
+    const shown = this.session.displayPages;
+    const first = this.session.linesOf(start.paragraph, this.hint)[0];
+    const from = Math.max(first ? shown.indexOf(first.page) : 0, 0);
+    // A floating picture may sit on the page after its paragraph.
+    for (let i = from; i < Math.min(from + 3, shown.length); i++) {
+      const item = shown[i].images.find((image) => image.drawing === drawing);
+      if (item) return { drawing, page: shown[i], item };
+    }
+    return null;
+  }
+
+  /** Selects the picture at a position, as the one thing selected. */
+  protected selectPictureAt(at: Position): void {
+    this.selection = { anchor: { ...at }, focus: { paragraph: at.paragraph, offset: at.offset + 1 } };
+  }
+
+  /** The selected picture put somewhere else: at a place on a page (a floating one), or in the text at a point. */
+  moveDrawing(command: Extract<Command, { kind: 'moveDrawing' }>): CommandResult {
+    const picture = this.selectedPicture();
+    if (!picture) return NO_CHANGE;
+    const target = this.hitTest(command.page, command.x, command.y);
+    if (!target) return NO_CHANGE;
+    const floating = !picture.drawing.inline;
+    return this.relocatePicture(picture.drawing, target, floating ? placedOnPage(picture.drawing, command.x, command.y) : picture.drawing);
+  }
+
+  /** The selected picture moved to the end of a paragraph (by its number among the document's). */
+  moveDrawingToParagraph(command: Extract<Command, { kind: 'moveDrawingToParagraph' }>): CommandResult {
+    const picture = this.selectedPicture();
+    const paragraph = this.paragraphs()[command.paragraph];
+    if (!picture || !paragraph) return NO_CHANGE;
+    return this.relocatePicture(picture.drawing, { paragraph, offset: paragraphLength(paragraph) }, picture.drawing);
+  }
+
+  /** Takes the selected picture out of where it is and puts `moved` (the picture, perhaps given a place) at `target`, as one step, keeping it selected. */
+  private relocatePicture(drawing: Drawing, target: Position, moved: Drawing): CommandResult {
+    const [from] = this.ordered();
+    const source = this.replica.id(from.paragraph);
+    const sameParagraph = target.paragraph === from.paragraph;
+    // Dropped where it was: nothing to do.
+    if (drawing.inline && sameParagraph && target.offset >= from.offset && target.offset <= from.offset + 1) return NO_CHANGE;
+    // A floating picture dropped in its own paragraph stays where it is in the text.
+    const offset = !drawing.inline && sameParagraph ? from.offset : sameParagraph && target.offset > from.offset ? target.offset - 1 : target.offset;
+    const id = this.replica.id(target.paragraph);
+    const ops: Operation[] = [{ type: 'delete', paragraph: source, from: from.offset, to: from.offset + 1 }, { type: 'insertItem', paragraph: id, offset, item: structuredClone(moved) }];
+    const result = this.edit([ops, { paragraph: id, offset: offset + 1 }]);
+    this.selectPictureAt({ paragraph: target.paragraph, offset });
+    return result;
+  }
+
+  /** The selected picture shown as another image (it was edited). */
+  replacePicture(command: Extract<Command, { kind: 'replacePicture' }>): CommandResult {
+    const picture = this.selectedPicture();
+    if (!picture) return NO_CHANGE;
+    const [from] = this.ordered();
+    const id = this.replica.id(from.paragraph);
+    const { drawing } = picture;
+    const replaced: Drawing = { ...drawing, image: command.image, ...(command.aspect > 0 && { height: Math.round(drawing.width * command.aspect) }) };
+    // A vector drawing it was once is a picture now.
+    delete replaced.svg;
+    const ops: Operation[] = [{ type: 'delete', paragraph: id, from: from.offset, to: from.offset + 1 }, { type: 'insertItem', paragraph: id, offset: from.offset, item: structuredClone(replaced) }];
+    const result = this.edit([ops, { paragraph: id, offset: from.offset + 1 }]);
+    this.selectPictureAt(from);
+    return result;
+  }
+
+  /** The selected picture given another size (points). */
+  resizeDrawing(command: Extract<Command, { kind: 'resizeDrawing' }>): CommandResult {
+    const picture = this.selectedPicture();
+    if (!picture || !(command.width > 0) || !(command.height > 0)) return NO_CHANGE;
+    const [from] = this.ordered();
+    const id = this.replica.id(from.paragraph);
+    const sized: Drawing = { ...picture.drawing, width: Math.round(command.width * 12700), height: Math.round(command.height * 12700) };
+    const resized = !picture.drawing.inline && command.x !== undefined && command.y !== undefined ? placedOnPage(sized, command.x, command.y) : sized;
+    const ops: Operation[] = [{ type: 'delete', paragraph: id, from: from.offset, to: from.offset + 1 }, { type: 'insertItem', paragraph: id, offset: from.offset, item: structuredClone(resized) }];
+    const result = this.edit([ops, { paragraph: id, offset: from.offset + 1 }]);
+    this.selectPictureAt(from);
+    return result;
   }
 
   /** The link at the selection (its start, if it's a range), for the toolbar and the Insert Hyperlink dialog. */
@@ -165,7 +274,10 @@ export abstract class EditorLinks extends EditorEditing {
   protected pointer(command: Extract<Command, { kind: 'pointer' }>): void {
     const hit = this.hitTest(command.page, command.x, command.y);
     if (!hit) return;
-    if (command.unit === 'word') {
+    // A click on a picture selects it, whole (a drag across it, or a click that goes on to a paragraph, is for the text).
+    const picture = !command.extend && command.unit !== 'paragraph' ? this.pictureUnder(command.page, command.x, command.y) : null;
+    if (picture) this.selectPictureAt(picture);
+    else if (command.unit === 'word') {
       // A double click on an equation selects it, whole.
       const math = this.mathUnder(command.page, command.x, command.y);
       const [a, b] = math ? [math, { paragraph: math.paragraph, offset: math.offset + 1 }] : this.wordAt(hit);

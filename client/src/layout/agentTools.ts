@@ -6,7 +6,7 @@
 // Each tool answers with text for the model: what it found or did, or why it couldn't. Paragraphs
 // are numbered from 0 in document order, as `Editor.paragraphs()` has them.
 
-import { mathInline, OBJECT_CHAR, paragraphLength, paragraphText, parseLatex, type DocumentProperties, type Inline, type Paragraph } from '@golemdocs/docx';
+import { inlinesLength, itemLength, mathInline, OBJECT_CHAR, paragraphLength, paragraphText, parseLatex, type DocumentProperties, type Drawing, type Inline, type Paragraph } from '@golemdocs/docx';
 import { pictureForModel } from '../formats/imageForModel.ts';
 import { sniffImage } from '../formats/images.ts';
 import type { FormatState, Mark, TableOp } from '../ui/actions.ts';
@@ -693,6 +693,10 @@ const TOOLS: Record<string, (env: AgentEnv, args: Record<string, unknown>) => st
   read_document: readDocument,
   list_pictures: listPictures,
   view_picture: viewPicture,
+  select_text_picture: selectTextPicture,
+  delete_text_picture: deleteTextPicture,
+  resize_text_picture: resizeTextPicture,
+  move_text_picture: moveTextPicture,
   get_selection: getSelection,
   find_text: findText,
   replace_paragraph: replaceParagraph,
@@ -729,17 +733,25 @@ const TOOLS: Record<string, (env: AgentEnv, args: Record<string, unknown>) => st
 
 // --- pictures ---------------------------------------------------------------------------------
 
-/** The pictures in the document, in order, each with the paragraph it is in. */
-function documentPictures(paragraphs: Paragraph[]): { part: string; paragraph: number; name: string }[] {
-  const found: { part: string; paragraph: number; name: string }[] = [];
-  const inlines = (list: readonly Inline[], paragraph: number): void => {
+/** The pictures in the document, in order, each with the paragraph it is in and where in it (a model offset). */
+function documentPictures(paragraphs: Paragraph[]): { part: string; paragraph: number; offset: number; name: string; drawing: Drawing }[] {
+  const found: { part: string; paragraph: number; offset: number; name: string; drawing: Drawing }[] = [];
+  const inlines = (list: readonly Inline[], paragraph: number, start: number): void => {
+    let at = start;
     for (const inline of list) {
       if (inline.kind === 'run') {
-        for (const item of inline.content) if (item.kind === 'drawing' && item.image) found.push({ part: item.image, paragraph, name: item.description || item.name || '' });
-      } else if (inline.kind === 'hyperlink' || inline.kind === 'wrapper') inlines(inline.children, paragraph);
+        for (const item of inline.content) {
+          if (item.kind === 'drawing' && item.image) found.push({ part: item.image, paragraph, offset: at, name: item.description || item.name || '', drawing: item });
+          at += itemLength(item);
+        }
+      } else if (inline.kind === 'raw') at += 1;
+      else {
+        inlines(inline.children, paragraph, at);
+        at += inlinesLength(inline.children);
+      }
     }
   };
-  paragraphs.forEach((p, i) => inlines(p.children, i));
+  paragraphs.forEach((p, i) => inlines(p.children, i, 0));
   return found;
 }
 
@@ -750,6 +762,51 @@ function listPictures(env: AgentEnv): string {
   if (!pictures.length) return 'The open document has no pictures.';
   const lines = pictures.slice(0, MAX_LISTED_PICTURES).map((p, i) => `[${i}] in paragraph ${p.paragraph}${p.name ? `: ${p.name.slice(0, 120)}` : ''}`);
   return `The open document has ${pictures.length} picture${pictures.length === 1 ? '' : 's'}:\n${lines.join('\n')}${pictures.length > MAX_LISTED_PICTURES ? `\n(${pictures.length - MAX_LISTED_PICTURES} more not listed)` : ''}`;
+}
+
+/** The picture the tool's `number` names (as list_pictures numbers them), and it picked as the selection. */
+async function pickPicture(env: AgentEnv, args: Record<string, unknown>): Promise<{ number: number; picture: ReturnType<typeof documentPictures>[number] }> {
+  editable(env);
+  const pictures = documentPictures(env.editor.paragraphs());
+  const number = int(args, 'number');
+  const picture = pictures[number];
+  if (!picture) throw new ToolError(pictures.length ? `there is no picture ${number}; the document has ${pictures.length} (0 to ${pictures.length - 1})` : 'the document has no pictures');
+  await select(env, picture.paragraph, picture.offset, picture.offset + 1);
+  return { number, picture };
+}
+
+async function selectTextPicture(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  const { number } = await pickPicture(env, args);
+  return `Picture ${number} is selected.`;
+}
+
+async function deleteTextPicture(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  const { number } = await pickPicture(env, args);
+  await env.run({ kind: 'delete', direction: 'backward' });
+  return `Deleted picture ${number}; the pictures after it are numbered one lower now.`;
+}
+
+const POINTS_PER_PIXEL = 0.75;
+
+async function resizeTextPicture(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  const { number, picture } = await pickPicture(env, args);
+  const widthPx = args.width === undefined ? undefined : int(args, 'width');
+  const heightPx = args.height === undefined ? undefined : int(args, 'height');
+  if (widthPx === undefined && heightPx === undefined) throw new ToolError('give `width`, `height` or both (pixels)');
+  if ((widthPx !== undefined && widthPx < 4) || (heightPx !== undefined && heightPx < 4)) throw new ToolError('a picture must be at least 4 pixels across');
+  const { width, height } = picture.drawing;
+  // One side given: the other follows the picture's shape.
+  const widthPt = widthPx !== undefined ? widthPx * POINTS_PER_PIXEL : (heightPx! * POINTS_PER_PIXEL * width) / Math.max(height, 1);
+  const heightPt = heightPx !== undefined ? heightPx * POINTS_PER_PIXEL : (widthPx! * POINTS_PER_PIXEL * height) / Math.max(width, 1);
+  await env.run({ kind: 'resizeDrawing', width: widthPt, height: heightPt });
+  return `Picture ${number} is now ${Math.round(widthPt / POINTS_PER_PIXEL)} by ${Math.round(heightPt / POINTS_PER_PIXEL)} pixels.`;
+}
+
+async function moveTextPicture(env: AgentEnv, args: Record<string, unknown>): Promise<string> {
+  const { number } = await pickPicture(env, args);
+  const { index } = paragraphAt(env, args);
+  await env.run({ kind: 'moveDrawingToParagraph', paragraph: index });
+  return `Moved picture ${number} to the end of paragraph ${index}.`;
 }
 
 async function viewPicture(env: AgentEnv, args: Record<string, unknown>): Promise<string> {

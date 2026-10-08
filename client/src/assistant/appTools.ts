@@ -82,6 +82,10 @@ export interface AppToolsHost {
   closeTextDrawing(): Promise<string | null>;
   /** A new blank drawing in the text, open for drawing; the reason it can't be, or null. */
   insertTextDrawing(size: { width?: number; height?: number }): Promise<string | null>;
+  /** Opens the selected picture of the text in the image editor (the document is put away); the reason it can't, or null. */
+  editTextPicture(): Promise<string | null>;
+  /** Back from the image editor to the document: with the picture as edited (`apply`), or as it was; the reason it can't, or null. */
+  finishTextPicture(apply: boolean): Promise<string | null>;
   /** Who is editing the open document. */
   collaboration(): Collaboration;
   /** The shapes drawn over the open picture (its layers), and a change of them (resolving once it has taken effect). */
@@ -427,6 +431,17 @@ export function appTools(host: AppToolsHost): { begin(request: AbortSignal): voi
     async close_text_drawing() {
       const problem = await host.closeTextDrawing();
       return problem ? `Error: ${problem}` : 'The drawing is back in the text.';
+    },
+    async edit_text_picture(args) {
+      if (args.finish !== undefined) {
+        if (args.finish !== 'done' && args.finish !== 'cancel') return 'Error: `finish` must be done or cancel.';
+        const problem = await host.finishTextPicture(args.finish === 'done');
+        return problem ? `Error: ${problem}` : args.finish === 'done' ? 'The edited picture is back in the document.' : 'The document is back as it was.';
+      }
+      const answer = await workerText('select_text_picture', JSON.stringify({ number: args.number }));
+      if (answer.startsWith('Error')) return answer;
+      const problem = await host.editTextPicture();
+      return problem ? `Error: ${problem}` : 'The picture is open in the image editor: edit_picture and the picture tools work on it. text_pictures edit with finish "done" puts the changed picture back in the document, "cancel" leaves it as it was.';
     },
     async collaboration_status() {
       const info = host.collaboration();

@@ -153,6 +153,12 @@ export class LayoutClient {
     this.send({ type: 'putDrawing', doc: this.doc, svg: drawing.svg, png, width: drawing.width, height: drawing.height, description: drawing.description, replace }, [png]);
   }
 
+  /** Shows the selected picture of the open document as other bytes (it was edited in the image editor). */
+  replacePicture(bytes: Uint8Array, ext: string, aspect: number): void {
+    const copy = bytes.slice().buffer;
+    this.send({ type: 'replacePicture', doc: this.doc, bytes: copy, ext, aspect }, [copy]);
+  }
+
   /** An image part of the open document. */
   media(part: string): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'media', doc: this.doc, request, part })).then((bytes) => new Uint8Array(bytes));

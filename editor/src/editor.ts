@@ -12,32 +12,14 @@
 // links > search > formatting > comments > sections > tables. This file adds `apply`, which
 // dispatches a command to them.
 
-import { commentRanges, inlinesLength, itemLength, paragraphLength, type Drawing, type Inline, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
+import { commentRanges, inlinesLength, paragraphLength, type Drawing, type Inline, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
 import { END, type Operation, type Pos } from '@golemdocs/ops';
 import { type Command, type CommandResult, NO_CHANGE, combine } from './types.ts';
 import { EditorTables } from './tables.ts';
+import { findDrawing } from './drawings.ts';
 
 export * from './types.ts';
 export { withFormat } from './formatting.ts';
-
-/** The model offset of the drawing whose SVG is part `svg`, within these inlines (offsets from their start). */
-function drawingOffset(inlines: readonly Inline[], svg: string): { offset: number; drawing: Drawing } | undefined {
-  let at = 0;
-  for (const inline of inlines) {
-    if (inline.kind === 'run') {
-      for (const item of inline.content) {
-        if (item.kind === 'drawing' && item.svg === svg) return { offset: at, drawing: item };
-        at += itemLength(item);
-      }
-    } else if (inline.kind === 'raw') at += 1;
-    else {
-      const found = drawingOffset(inline.children, svg);
-      if (found) return { offset: at + found.offset, drawing: found.drawing };
-      at += inlinesLength(inline.children);
-    }
-  }
-  return undefined;
-}
 
 export class Editor extends EditorTables {
   /** The paragraph's id, which stays the same as it is edited. */
@@ -107,6 +89,14 @@ export class Editor extends EditorTables {
       case 'pointer':
         this.pointer(command);
         return NO_CHANGE;
+      case 'replacePicture':
+        return this.replacePicture(command);
+      case 'moveDrawingToParagraph':
+        return this.moveDrawingToParagraph(command);
+      case 'moveDrawing':
+        return this.moveDrawing(command);
+      case 'resizeDrawing':
+        return this.resizeDrawing(command);
       case 'selectAll': {
         const list = this.paragraphs();
         const last = list[list.length - 1];
@@ -176,7 +166,7 @@ export class Editor extends EditorTables {
       }
       case 'replaceDrawing': {
         for (const paragraph of this.paragraphs()) {
-          const found = drawingOffset(paragraph.children, command.svg);
+          const found = findDrawing(paragraph.children, (d) => d.svg === command.svg);
           if (!found) continue;
           const { offset, drawing: old } = found;
           // The new version is the same drawing in the text: it keeps how it is placed, its name (which marks an embed) and its description, and its size unless the new one has one.

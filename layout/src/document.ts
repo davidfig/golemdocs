@@ -927,7 +927,7 @@ export class LayoutSession {
           : frame[0];
         const x = place(frameX, w, f.h);
         const y = place(frameY, h, f.v);
-        if (f.drawing.image) page.images.push({ part: f.drawing.image, ...(f.drawing.svg && { svg: f.drawing.svg }), ...(f.drawing.svg && f.drawing.name?.startsWith(EMBED_PREFIX) && { embed: f.drawing.name.slice(EMBED_PREFIX.length) }), x, y, width: w, height: h, behind: f.behind });
+        if (f.drawing.image) page.images.push({ part: f.drawing.image, ...(f.drawing.svg && { svg: f.drawing.svg }), ...(f.drawing.svg && f.drawing.name?.startsWith(EMBED_PREFIX) && { embed: f.drawing.name.slice(EMBED_PREFIX.length) }), drawing: f.drawing, x, y, width: w, height: h, behind: f.behind });
         else {
           // A text box: its paragraphs laid out like a cell's, at the box's place. Its lines aren't
           // recorded (a click or a caret doesn't get into it: it can't be edited in place yet).

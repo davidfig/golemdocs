@@ -4,7 +4,7 @@
 // of a copy that started from an older version than the cloud's becomes a separate
 // "(conflicted copy)" document instead.
 
-import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, saveChunked, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
+import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, saveChunked, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
 import { getChunks, getSaved, getSavedManifest, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
@@ -24,6 +24,27 @@ export function conflictCopyName(name: string): string {
   let base = stem;
   while (mark && base.endsWith(mark)) base = base.slice(0, -mark.length);
   return t('app.conflictedCopy', { stem: base, ext });
+}
+
+/** Whether the account's copy of a document is byte for byte what this browser has: then there is nothing to keep apart. False if it cannot be told. */
+async function sameAsCloud(cloudId: string, bytes: Uint8Array | null, manifest: Manifest | null, source: ChunkSource): Promise<boolean> {
+  try {
+    let mine = bytes;
+    if (!mine && manifest) {
+      const chunks = await source(manifest.chunks.map((c) => c.h));
+      mine = new Uint8Array(manifest.size);
+      let at = 0;
+      for (const chunk of chunks) {
+        mine.set(chunk.bytes, at);
+        at += chunk.bytes.byteLength;
+      }
+    }
+    if (!mine) return false;
+    const theirs = new Uint8Array(await downloadDocument(cloudId));
+    return theirs.byteLength === mine.byteLength && theirs.every((b, i) => b === mine![i]);
+  } catch {
+    return false;
+  }
 }
 
 /** A document's copy in this browser, ready to send: whole or as chunks, what the cloud already has of it, and how to make a new cloud document of it. */
@@ -77,9 +98,14 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
       // Another tab uploaded this copy meanwhile, so the cloud moved on from here: go again from there.
       return uploadToCloud(localId, false);
     } else if (error.status === 409) {
-      // Changed elsewhere too: keep both. This copy carries on as the conflicted one.
-      doc = await create(conflictCopyName(info.name));
-      conflictCopy = true;
+      // Changed elsewhere too: keep both, unless they turn out to be the same. This copy carries on as the conflicted one.
+      const current = (await sameAsCloud(info.cloudId, bytes, manifest, source)) ? (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId) : undefined;
+      if (current) {
+        doc = current;
+      } else {
+        doc = await create(conflictCopyName(info.name));
+        conflictCopy = true;
+      }
     } else {
       throw error;
     }
@@ -100,8 +126,13 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
  * watches it): what was changed here before is kept, but never sent over theirs. Null if there was nothing to keep.
  */
 export async function keepAsConflictCopy(localId: string): Promise<CloudDocument | null> {
-  const { info, create } = await sendable(localId);
+  const { info, bytes, manifest, source, create } = await sendable(localId);
   if (!info.cloudId || info.updatedAt <= (info.cloudSyncedAt ?? 0)) return null;
+  // The same as the account's: nothing to keep, only to count as sent.
+  if (await sameAsCloud(info.cloudId, bytes, manifest, source)) {
+    await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
+    return null;
+  }
   const doc = await create(conflictCopyName(info.name));
   await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
   return doc;

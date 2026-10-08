@@ -41,7 +41,7 @@ function stubServer() {
       return json({ ...meta, updatedAt: cloudVersion });
     }
     if (method === 'GET' && url === '/api/shared') return json([{ id: 's1', name: 'Theirs.docx', role: 'viewer', size: 1, createdAt: 1, updatedAt: 1, thumbAt: null, owner: { name: 'O', email: 'o@example.com' } }]);
-    if (method === 'GET' && url === '/api/documents') return json([]);
+    if (method === 'GET' && url === '/api/documents') return json(cloudHas ? [meta] : []);
     if (method === 'GET' && url === '/api/documents/c1') return new Response(cloudBytes.slice());
     if (method === 'PUT' && url === '/api/documents/c1/thumbnail') return json({ ...meta, thumbAt: 7 });
     return json({ error: 'not found' }, 404);
@@ -224,12 +224,29 @@ test('a copy changed in the account since it was opened is saved as a conflicted
   calls = [];
   const { doc: copy, conflictCopy } = await uploadToCloud(doc.id);
   assert.equal(conflictCopy, true);
-  assert.deepEqual(calls.map((c) => c.method).slice(0, 2), ['PUT', 'POST'], 'refused, then saved alongside');
+  assert.deepEqual(calls.map((c) => c.method).slice(0, 3), ['PUT', 'GET', 'POST'], 'refused, compared with the account’s, then saved alongside');
   assert.equal(copy.name, 'Doc (conflicted copy).docx');
   const info = (await local.getSaved(doc.id))!.info;
   assert.equal(info.cloudId, copy.id, 'this copy carries on as the conflicted one');
   assert.equal(info.name, 'Doc (conflicted copy).docx');
   assert.equal(cloudVersion, 5, 'the other computer’s version is untouched');
+});
+
+test('no conflicted copy is made when the account’s copy is the same as this one', async () => {
+  const { keepAsConflictCopy } = await import('../src/library.ts');
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(9, 9, 9) });
+  await uploadToCloud(doc.id); // c1, version 1
+  await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(9, 9, 9) });
+  cloudVersion = 5; // "changed" elsewhere, but to the same bytes
+  calls = [];
+  const { conflictCopy } = await uploadToCloud(doc.id);
+  assert.equal(conflictCopy, false);
+  assert.ok(!calls.some((c) => c.method === 'POST'), 'nothing new created');
+  assert.equal((await local.getSaved(doc.id))!.info.cloudId, 'c1');
+  await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(9, 9, 9) });
+  calls = [];
+  assert.equal(await keepAsConflictCopy(doc.id), null);
+  assert.ok(!calls.some((c) => c.method === 'POST'), 'nothing kept apart when nothing differs');
 });
 
 test('changes kept as a conflicted copy (someone else holds the document) go to a new document, and the copy here can then be replaced by the account’s', async () => {
@@ -241,7 +258,7 @@ test('changes kept as a conflicted copy (someone else holds the document) go to 
   calls = [];
   const copy = await keepAsConflictCopy(doc.id);
   assert.equal(copy?.name, 'Doc (conflicted copy).docx');
-  assert.deepEqual(calls.map((c) => c.method), ['POST'], 'never sent over the original');
+  assert.deepEqual(calls.map((c) => c.method), ['GET', 'POST'], 'compared with the original, never sent over it');
   const info = (await local.getSaved(doc.id))!.info;
   assert.equal(info.cloudId, 'c1', 'the copy here stays the original’s');
   assert.equal(info.name, 'Doc.docx');

@@ -3,9 +3,16 @@
 ## 0.15.1 - Unreleased
 
 ### Added
+- Pictures in a document can be picked with a click: a frame with handles appears, Delete removes the picture, a drag moves it (in line with the text, or to a new place on the page for a floating one), the corner handles resize it, and a double click opens it in the image editor (Done puts the changed picture back in the document, Cancel leaves it as it was). Right-clicking a picture offers Cut, Copy (the picture itself goes on the clipboard), Delete and Edit Picture. The assistant can do the same with its new text_pictures tool.
 - HEIC and HEIF photos (the iPhone's picture format) open, can be inserted into documents (Insert › Picture, drag and drop, the assistant's picture button) and are shown to the assistant. They are kept as high-quality JPEGs. Safari reads them itself; other browsers load a decoder the first time you use one, so nothing extra is downloaded otherwise.
 
+### Changed
+- Error and warning messages that pop up at the bottom of the window are now bold white text on a red background in every theme, so they are easier to notice.
+
 ### Fixed
+- A "(conflicted copy)" is only made when the two versions really differ; if both are the same (a blank document, say), nothing extra is created.
+- Dragging a picture from your computer onto a Markdown note (it is embedded as a file of its own) or a PDF page (it is placed where you drop it) now offers to insert it, as it does in Word documents.
+- Dragging a picture from the Files panel onto a document asks whether to insert the picture or a link to it (a PDF takes the picture), instead of always making a link.
 - Converting a PDF to Word keeps the text where the PDF had it: a page whose text starts far down the page no longer starts at the top (over the pictures), headings keep their bold and the text its color, and a page's last line is not pushed onto a new page.
 - Converting a PDF to Word keeps the running header and footer text (dates, titles, web addresses, page numbers, which are now page fields) as the document's header and footer instead of dropping it.
 - Pictures made of vector shapes (QR codes, logos) are drawn sharply in the converted document, not blurred.

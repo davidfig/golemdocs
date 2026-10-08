@@ -17,6 +17,8 @@ const EMU = 12700;
 export interface Placed {
   /** Zero-based PDF page. */
   page: number;
+  /** Work that has to wait for the platform (compressing a picture), done before `build`. */
+  prepare?(): Promise<void>;
   build(doc: WordDocument): RunContent | null;
 }
 
@@ -51,7 +53,14 @@ export function placedFrom(pdf: PdfDocument, edits: readonly PdfEdit[]): Placed[
     for (const group of drawingGroups(paths, { width, height })) {
       const order = ++z;
       const frame: Frame = group.frame;
-      out.push({ page: index, build: (doc) => pictureDrawing(doc, drawingPng(group), 'png', frame, order, group.behind, new TextEncoder().encode(drawingSvg(group))) });
+      let png: Uint8Array | undefined;
+      out.push({
+        page: index,
+        prepare: async () => {
+          png = await drawingPng(group);
+        },
+        build: (doc) => (png ? pictureDrawing(doc, png, 'png', frame, order, group.behind, new TextEncoder().encode(drawingSvg(group))) : null),
+      });
     }
   });
   for (const e of edits) {

@@ -1,5 +1,7 @@
 // A minimal PNG writer: 8-bit gray, RGB or RGBA, zlib "stored" (uncompressed) blocks. Big but
-// trivial, synchronous, and it needs no platform APIs.
+// trivial, synchronous, and it needs no platform APIs. `encodePngCompressed` deflates it, where the platform can.
+
+import { flateEncode } from '../filters/filters.ts';
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -32,12 +34,17 @@ function adler32(bytes: Uint8Array): number {
   return ((b << 16) | a) >>> 0;
 }
 
-/** Encodes width x height pixels of 1 (gray), 3 (RGB) or 4 (RGBA) 8-bit channels. */
-export function encodePng(width: number, height: number, channels: 1 | 3 | 4, pixels: Uint8Array): Uint8Array {
+/** The rows of pixels with a filter byte (none) in front of each, as a PNG's image data wants them. */
+function scanlines(width: number, height: number, channels: 1 | 3 | 4, pixels: Uint8Array): Uint8Array {
   const rowBytes = width * channels;
   const raw = new Uint8Array((rowBytes + 1) * height);
   for (let y = 0; y < height; y++) raw.set(pixels.subarray(y * rowBytes, (y + 1) * rowBytes), y * (rowBytes + 1) + 1);
+  return raw;
+}
 
+/** Encodes width x height pixels of 1 (gray), 3 (RGB) or 4 (RGBA) 8-bit channels. */
+export function encodePng(width: number, height: number, channels: 1 | 3 | 4, pixels: Uint8Array): Uint8Array {
+  const raw = scanlines(width, height, channels, pixels);
   const blocks = Math.max(1, Math.ceil(raw.length / 65535));
   const z = new Uint8Array(2 + raw.length + blocks * 5 + 4);
   z[0] = 0x78;
@@ -55,7 +62,16 @@ export function encodePng(width: number, height: number, channels: 1 | 3 | 4, pi
     o += len;
   }
   new DataView(z.buffer).setUint32(o, adler32(raw));
+  return pngOf(width, height, channels, z);
+}
 
+/** Like `encodePng`, but deflated (with the platform's compression), which is far smaller for flat colors and sharp edges. */
+export async function encodePngCompressed(width: number, height: number, channels: 1 | 3 | 4, pixels: Uint8Array): Promise<Uint8Array> {
+  return pngOf(width, height, channels, await flateEncode(scanlines(width, height, channels, pixels)));
+}
+
+/** The PNG file around zlib-wrapped image data. */
+function pngOf(width: number, height: number, channels: 1 | 3 | 4, z: Uint8Array): Uint8Array {
   const out = new Uint8Array(8 + 25 + 12 + z.length + 12);
   const v = new DataView(out.buffer);
   out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);

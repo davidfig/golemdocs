@@ -357,7 +357,37 @@ test('a drawing is written as SVG paths and drawn into a PNG from the same shape
   assert.ok(group);
   assert.deepEqual(group.frame, { x: 50, y: 50, width: 100, height: 100 });
   assert.match(drawingSvg(group), /^<svg [^>]*viewBox="0 0 100 100"><path d="M[^"]+Z" fill="#ff0000"\/><\/svg>$/);
-  const png = pixelsOf(drawingPng(group));
+  const png = pixelsOf(await drawingPng(group));
   assert.deepEqual(png.at(Math.floor(png.width / 2), Math.floor(png.height / 2)), [255, 0, 0, 255]);
   assert.equal(png.at(1, 1)[3], 0);
+});
+
+test('a page whose text starts far down keeps it there, titles keep their weight, and the running head and foot become the header and footer', async () => {
+  const pdf = PdfDocument.create();
+  const regular = pdf.standardFont('Helvetica');
+  const bold = pdf.standardFont('Helvetica-Bold');
+  for (let i = 0; i < 2; i++) {
+    const page = pdf.addPage([612, 792]).draw({ origin: 'top-left' });
+    page.text('Running title', 250, 30, { font: regular, size: 8 });
+    page.text('Big Title', 150, 450, { font: bold, size: 20 });
+    page.text('Some body text under the title.', 150, 480, { font: regular, size: 11 });
+    page.text(`Page ${i + 1} of 2`, 150, 770, { font: regular, size: 8 });
+    page.finish();
+  }
+  const doc = await pdfToDocument(await pdf.save());
+  const first = paragraphs(doc)[0];
+  assert.equal(text(first), 'Big Title');
+  // The margin is kept to a third of the page; what is left of the 430 points before the title is space before it.
+  assert.ok((first.properties.spacing?.before ?? 0) > 150 * 20, JSON.stringify(first.properties.spacing));
+  assert.equal(runs(first)[0].properties.bold, true);
+  const [header] = doc.section.headers;
+  const [footer] = doc.section.footers;
+  const partText = (name: string) => JSON.stringify(doc.headersFooters.get(name)?.children);
+  assert.match(partText(header.part), /Running title/);
+  const foot = partText(footer.part);
+  assert.match(foot, /PAGE/);
+  assert.match(foot, /NUMPAGES/);
+  assert.match(foot, /Page /);
+  // Neither is in the body.
+  assert.ok(!paragraphs(doc).some((p) => /Running title|Page \d/.test(text(p))));
 });

@@ -335,3 +335,33 @@ test('a few hundred pages reflow quickly', async () => {
   assert.equal(blocks.length, 300);
   assert.ok(took < 15000, `${took}ms`);
 });
+
+test('two of the same narrow letter in a row are not faux bold, text colors are kept, and running heads and feet are kept apart from the body', async () => {
+  const doc = PdfDocument.create();
+  const f = fontsOf(doc);
+  for (let i = 0; i < 3; i++) {
+    const page = doc.addPage([612, 792]).draw({ origin: 'top-left' });
+    page.text('Running title', 200, 30, { font: f.regular, size: 8 });
+    // "All" drawn a letter at a time, as a PDF made by a browser does.
+    page.fillColor([1, 0, 0]);
+    let x = 100;
+    for (const ch of ['A', 'l', 'l']) {
+      page.text(ch, x, 300, { font: f.italic, size: 11 });
+      x += PageDrawing.measure(ch, { font: f.italic, size: 11 });
+    }
+    page.fillColor([0, 0, 0]).text(`Page ${i + 1} of 3`, 280, 770, { font: f.regular, size: 8 });
+  }
+  const result = analyzeDocument(await reload(doc), { pageBreaks: true });
+  const text = result.blocks.flatMap((b) => (b.kind === 'pageBreak' ? [] : b.runs));
+  assert.equal(text.length, 3);
+  for (const run of text) {
+    assert.equal(run.text, 'All');
+    assert.equal(run.bold, false);
+    assert.equal(run.color, 'FF0000');
+  }
+  // The head and foot are not body text, but they are not lost either.
+  assert.deepEqual(result.running?.header.map((l) => l.segments.map((s) => s.runs.map((r) => r.text).join(''))), [['Running title']]);
+  const [foot] = result.running!.footer;
+  assert.equal(foot.segments[0].pageNumber, true);
+  assert.equal(foot.segments[0].runs.map((r) => r.text).join(''), 'Page 1 of 3');
+});

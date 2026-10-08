@@ -18,7 +18,7 @@ export interface Run {
   italic: boolean;
   size: number;
   fontName: string;
-  /** RRGGBB; text extraction does not report colors yet, so it is never set today. */
+  /** RRGGBB; absent for black. */
   color?: string;
 }
 
@@ -83,7 +83,23 @@ export interface ReflowOptions {
   pageBreaks?: boolean;
 }
 
+/** A line of a running head or foot: its baseline and size, and the pieces of it that stand apart across the page. */
+export interface RunningLine {
+  /** Baseline, points from the top of the page. */
+  y: number;
+  size: number;
+  segments: {
+    x: number;
+    x1: number;
+    runs: Run[];
+    /** Its text is a page number ("3", "3 of 10", "3/10"). */
+    pageNumber?: boolean;
+  }[];
+}
+
 export interface ReflowResult {
+  /** The running heads and feet the pages repeat (taken off the first page that has them; they are not in `blocks`). */
+  running?: { header: RunningLine[]; footer: RunningLine[] };
   blocks: Block[];
   /** The PDF page the first block is on (page breaks name the pages after it). */
   firstPage: number;
@@ -94,6 +110,8 @@ export interface ReflowResult {
 // --- Pieces and rows -----------------------------------------------------------------------
 
 interface Piece {
+  /** RRGGBB, unless black. */
+  color?: string;
   text: string;
   x: number;
   x1: number;
@@ -172,6 +190,7 @@ function readPieces(page: PdfPage): { pieces: Piece[]; width: number; height: nu
       bold,
       italic,
       fontName: it.fontName,
+      ...(it.color !== undefined && it.color !== 0 && { color: it.color.toString(16).padStart(6, '0').toUpperCase() }),
     });
   }
   return { pieces, width, height };
@@ -207,7 +226,8 @@ function finishRow(row: Row): void {
   const kept: Piece[] = [];
   for (const p of row.pieces) {
     const q = kept[kept.length - 1];
-    if (q && q.text === p.text && Math.abs(p.x - q.x) < 0.25 * p.size && Math.abs(p.y - q.y) < 0.25 * p.size) {
+    // (Two of the same narrow letter in a row, the "ll" of "All", sit a letter's width apart: that is not it.)
+    if (q && q.text === p.text && Math.abs(p.x - q.x) < Math.min(0.12 * p.size, 0.5 * (q.x1 - q.x)) && Math.abs(p.y - q.y) < 0.25 * p.size) {
       q.bold = true;
       continue;
     }
@@ -257,10 +277,10 @@ function makeRuns(pieces: Piece[]): Run[] {
       if (gap > 0.16 * Math.max(prev.size, p.size) && !/\s$/.test(last.text) && !/^\s/.test(p.text)) last.text += ' ';
     }
     const last = runs[runs.length - 1];
-    if (last && last.bold === p.bold && last.italic === p.italic && last.size === p.size && last.fontName === p.fontName) {
+    if (last && last.bold === p.bold && last.italic === p.italic && last.size === p.size && last.fontName === p.fontName && last.color === p.color) {
       last.text += p.text;
     } else {
-      runs.push({ text: p.text, bold: p.bold, italic: p.italic, size: p.size, fontName: p.fontName });
+      runs.push({ text: p.text, bold: p.bold, italic: p.italic, size: p.size, fontName: p.fontName, ...(p.color && { color: p.color }) });
     }
     prev = p;
   }
@@ -291,7 +311,7 @@ function inBand(row: Row, height: number): boolean {
  * Removes rows that recur at the same height on several pages (running heads, footers, page
  * numbers: digits are ignored when comparing) and lone page numbers in the top/bottom tenth.
  */
-function dropRunningText(pages: PageRows[]): void {
+function dropRunningText(pages: PageRows[]): { header: RunningLine[]; footer: RunningLine[] } {
   const groups = new Map<string, { page: number; row: Row }[]>();
   for (const page of pages) {
     for (const row of page.rows) {
@@ -317,9 +337,45 @@ function dropRunningText(pages: PageRows[]): void {
       }
     }
   }
+  const running: { header: RunningLine[]; footer: RunningLine[] } = { header: [], footer: [] };
   for (const page of pages) {
-    page.rows = page.rows.filter((row) => !doomed.has(row) && !(inBand(row, page.height) && PAGE_NUMBER.test(row.text.trim())));
+    const gone = page.rows.filter((row) => doomed.has(row) || (inBand(row, page.height) && PAGE_NUMBER.test(row.text.trim())));
+    page.rows = page.rows.filter((row) => !gone.includes(row));
+    // The lines are taken from the first page that has some.
+    if (gone.length && !running.header.length && !running.footer.length) for (const row of gone) (row.y < page.height / 2 ? running.header : running.footer).push(runningLine(row));
   }
+  // A mark a hair off its line's baseline (a bullet after a title) is a part of that line.
+  for (const lines of [running.header, running.footer]) {
+    lines.sort((a, b) => a.y - b.y);
+    for (let i = lines.length - 1; i > 0; i--) {
+      if (lines[i].y - lines[i - 1].y < 0.6 * Math.max(lines[i].size, lines[i - 1].size)) {
+        lines[i - 1].segments.push(...lines[i].segments);
+        lines[i - 1].segments.sort((a, b) => a.x - b.x);
+        lines.splice(i, 1);
+      }
+    }
+  }
+  return running;
+}
+
+/** A row as a running line: pieces more than a letter or two apart are separate segments (a date at the left, a title in the middle). */
+function runningLine(row: Row): RunningLine {
+  const segments: RunningLine['segments'] = [];
+  let group: Piece[] = [];
+  const close = () => {
+    if (!group.length) return;
+    const runs = makeRuns(group);
+    const text = runs.map((r) => r.text).join('').trim();
+    segments.push({ x: group[0].x, x1: Math.max(...group.map((p) => p.x1)), runs, ...(/\d/.test(text) && PAGE_NUMBER.test(text) ? { pageNumber: true } : {}) });
+    group = [];
+  };
+  for (const p of [...row.pieces].sort((a, b) => a.x - b.x)) {
+    const last = group[group.length - 1];
+    if (last && p.x - last.x1 > 2.5 * Math.max(last.size, p.size)) close();
+    group.push(p);
+  }
+  close();
+  return { y: row.y, size: row.size, segments };
 }
 
 // --- Columns ---------------------------------------------------------------------------------
@@ -655,7 +711,7 @@ function mergeRuns(runs: Run[]): Run[] {
   const out: Run[] = [];
   for (const r of runs) {
     const p = out[out.length - 1];
-    if (p && p.bold === r.bold && p.italic === r.italic && p.size === r.size && p.fontName === r.fontName) p.text += r.text;
+    if (p && p.bold === r.bold && p.italic === r.italic && p.size === r.size && p.fontName === r.fontName && p.color === r.color) p.text += r.text;
     else out.push({ ...r });
   }
   return trimRuns(out.filter((r) => r.text.length > 0));
@@ -962,7 +1018,8 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
     const lineCount = p.d.lines.length;
     if (isHeading(p)) {
       const box = align ? undefined : offCenter(p.d.lines);
-      if (box) runs = mergeRuns(runsByLine(p.d.lines));
+      // A title keeps the line breaks the PDF set it with: another font's widths would break it somewhere else.
+      if (box || lineCount > 1) runs = mergeRuns(runsByLine(p.d.lines));
       blocks.push({ kind: 'heading', level: levelOf(p.size), runs, ...(align || box ? { align: align ?? 'center' } : {}), ...(box ? { indent: box } : {}) });
     } else if (
       !bodyBold &&
@@ -973,7 +1030,7 @@ function assemble(pages: PageRows[], options: ReflowOptions): ReflowResult {
       /\p{L}/u.test(text)
     ) {
       const box = align ? undefined : offCenter(p.d.lines);
-      if (box) runs = mergeRuns(runsByLine(p.d.lines));
+      if (box || lineCount > 1) runs = mergeRuns(runsByLine(p.d.lines));
       blocks.push({ kind: 'heading', level: boldHeadingLevel, runs, ...(align || box ? { align: align ?? 'center' } : {}), ...(box ? { indent: box } : {}) });
     } else {
       const box = align ? undefined : offCenter(p.d.lines);
@@ -1029,8 +1086,9 @@ export function reflowPage(page: PdfPage, options: ReflowOptions = {}): PageBloc
 /** Reflows a whole document, dropping running heads, footers and page numbers, and joining paragraphs across columns and pages. */
 export function analyzeDocument(doc: PdfDocument, options: ReflowOptions = {}): ReflowResult {
   const pages = doc.pages.map((page, i) => readPage(page, i));
-  dropRunningText(pages);
-  return assemble(pages, options);
+  const running = dropRunningText(pages);
+  const result = assemble(pages, options);
+  return running.header.length || running.footer.length ? { ...result, running } : result;
 }
 
 export function reflowDocument(doc: PdfDocument, options: ReflowOptions = {}): Block[] {

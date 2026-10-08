@@ -6,7 +6,7 @@ import type { XmlElement } from '@golemdocs/docx';
 import { parseTransform } from './matrix.ts';
 import type { Matrix, Scene } from './model.ts';
 import { IDENTITY } from './model.ts';
-import { parseColor, parseDeclarations, parseLength } from './style.ts';
+import { parseColor, parseDeclarations, parseLength, parseNumbers } from './style.ts';
 import type { Rgba } from './style.ts';
 
 export interface Stop {
@@ -111,6 +111,40 @@ export function readGradient(scene: Scene, id: string): Gradient | null {
     transform: parseTransform(attr('gradientTransform') ?? '') ?? IDENTITY,
     spread: spread === 'reflect' || spread === 'repeat' ? spread : 'pad',
     stops,
+  };
+}
+
+export interface Pattern {
+  /** The tile: its corner and size, in `units`. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** `box`: the numbers are fractions of the painted shape's bounding box; `user`: they are user units. */
+  units: 'box' | 'user';
+  transform: Matrix;
+  /** What the tile's own coordinates are mapped from, when it has a view box. */
+  viewBox?: { x: number; y: number; width: number; height: number };
+  /** The `pattern` element: its children are what the tile shows. */
+  element: XmlElement;
+}
+
+/** A `pattern` paint server, or null when there is none by that id. */
+export function readPattern(scene: Scene, id: string): Pattern | null {
+  const element = findDefinition(scene, id);
+  if (!element || element.name !== 'pattern') return null;
+  const units = element.attrs.patternUnits === 'userSpaceOnUse' ? 'user' : 'box';
+  const length = (name: string) => parseLength(element.attrs[name], 1) ?? 0;
+  const box = parseNumbers(element.attrs.viewBox);
+  return {
+    x: length('x'),
+    y: length('y'),
+    width: length('width'),
+    height: length('height'),
+    units,
+    transform: parseTransform(element.attrs.patternTransform ?? '') ?? IDENTITY,
+    ...(box.length === 4 && box[2] > 0 && box[3] > 0 ? { viewBox: { x: box[0], y: box[1], width: box[2], height: box[3] } } : {}),
+    element,
   };
 }
 

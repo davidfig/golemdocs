@@ -5,7 +5,7 @@
 // frame text are left out: only groups with a curve, a slant or a gradient in them, or with a great
 // many small squares (a code), count as art.
 
-import { encodePng, multiply, transformPoint, type DisplayClip, type DisplayPaint, type DisplayPath, type Matrix } from '@golemdocs/pdf';
+import { encodePngCompressed, multiply, transformPoint, type DisplayClip, type DisplayPaint, type DisplayPath, type Matrix } from '@golemdocs/pdf';
 
 /** A box on a page, in points from its top-left corner. */
 export interface Frame {
@@ -34,9 +34,12 @@ const SMALLEST = 10;
 const ADOPT = 6;
 /** Paths looked at per page. */
 const MAX_PATHS = 60_000;
-/** Pixels per point of the PNG, and the most pixels along its longer side. */
-const RASTER_SCALE = 1;
-const RASTER_MAX = 600;
+/** Pixels per point of the PNG (fewer for a drawing of very many shapes), the most pixels along its longer side, and the most in all. */
+const RASTER_SCALE = 4;
+const RASTER_SCALE_BUSY = 2;
+const BUSY_PATHS = 1500;
+const RASTER_MAX = 2400;
+const RASTER_PIXELS = 2_000_000;
 /** Tiles (times shapes in a tile) the PNG paints for one patterned fill. */
 const MAX_TILE_WORK = 20_000;
 
@@ -612,23 +615,46 @@ function gradientSampler(paint: Gradient): ((x: number, y: number) => [number, n
   };
 }
 
-/** Floats of clip masks kept per canvas (a mask is one float per pixel); the least recently used go first. */
-const CLIP_CACHE_FLOATS = 16_000_000;
-const clipCaches = new WeakMap<Canvas, Map<DisplayClip, Float32Array>>();
+/** Bytes of clip masks kept per canvas (a mask is one byte per pixel of the clip's own box); the least recently used go first. */
+const CLIP_CACHE_BYTES = 64_000_000;
+/** A clip's coverage (0..255) over the pixels of its box; outside the box it lets nothing through. */
+interface ClipMask {
+  rx: number;
+  ry: number;
+  rw: number;
+  rh: number;
+  data: Uint8Array;
+}
+const clipCaches = new WeakMap<Canvas, { masks: Map<DisplayClip, ClipMask>; bytes: number }>();
 
-/** How much of each pixel of the whole canvas a clip lets through. A drawing is under many clips (nested ones, many paths under each), so they are kept. */
-function clipCoverage(canvas: Canvas, clip: DisplayClip): Float32Array {
+/** How much each pixel under the clip's box shows. A drawing is under many clips (nested ones, many paths under each), so they are kept. */
+function clipCoverage(canvas: Canvas, clip: DisplayClip): ClipMask {
   let cache = clipCaches.get(canvas);
-  if (!cache) clipCaches.set(canvas, (cache = new Map()));
-  let mask = cache.get(clip);
+  if (!cache) clipCaches.set(canvas, (cache = { masks: new Map(), bytes: 0 }));
+  let mask = cache.masks.get(clip);
   if (mask) {
-    cache.delete(clip);
-    cache.set(clip, mask);
+    cache.masks.delete(clip);
+    cache.masks.set(clip, mask);
     return mask;
   }
-  mask = coverage(canvas, clip.subpaths.filter((sp) => sp.pts.length >= 6).map((sp) => sp.pts), clip.evenOdd, 0, 0, canvas.w, canvas.h).data;
-  cache.set(clip, mask);
-  while (cache.size > 1 && cache.size * mask.length > CLIP_CACHE_FLOATS) cache.delete(cache.keys().next().value!);
+  const { frame, scale, w, h } = canvas;
+  const rx = Math.max(0, Math.floor((clip.x0 - frame.x) * scale) - 1);
+  const ry = Math.max(0, Math.floor((clip.y0 - frame.y) * scale) - 1);
+  const rw = Math.max(0, Math.min(w, Math.ceil((clip.x1 - frame.x) * scale) + 1) - rx);
+  const rh = Math.max(0, Math.min(h, Math.ceil((clip.y1 - frame.y) * scale) + 1) - ry);
+  const data = new Uint8Array(rw * rh);
+  if (rw > 0 && rh > 0) {
+    const covered = coverage(canvas, clip.subpaths.filter((sp) => sp.pts.length >= 6).map((sp) => sp.pts), clip.evenOdd, rx, ry, rw, rh);
+    for (let i = 0; i < data.length; i++) data[i] = Math.round(covered.data[i] * 255);
+  }
+  mask = { rx, ry, rw, rh, data };
+  cache.masks.set(clip, mask);
+  cache.bytes += data.length;
+  while (cache.masks.size > 1 && cache.bytes > CLIP_CACHE_BYTES) {
+    const [oldest, old] = cache.masks.entries().next().value!;
+    cache.masks.delete(oldest);
+    cache.bytes -= old.data.length;
+  }
   return mask;
 }
 
@@ -644,7 +670,14 @@ function drawPath(canvas: Canvas, path: DisplayPath, outside?: Mask): void {
   const shape = coverage(canvas, polygons, path.fill?.evenOdd ?? false, rx, ry, rw, rh);
   for (const clip of path.clips ?? []) {
     const cut = clipCoverage(canvas, clip);
-    for (let y = 0; y < rh; y++) for (let x = shape.lo[y]; x < shape.hi[y]; x++) shape.data[y * rw + x] *= cut[(ry + y) * w + rx + x];
+    for (let y = 0; y < rh; y++) {
+      const cy = ry + y - cut.ry;
+      const inside = cy >= 0 && cy < cut.rh;
+      for (let x = shape.lo[y]; x < shape.hi[y]; x++) {
+        const cx = rx + x - cut.rx;
+        shape.data[y * rw + x] *= inside && cx >= 0 && cx < cut.rw ? cut.data[cy * cut.rw + cx] / 255 : 0;
+      }
+    }
   }
   if (outside) for (let y = 0; y < rh; y++) for (let x = shape.lo[y]; x < shape.hi[y]; x++) shape.data[y * rw + x] *= maskAt(outside, rx + x, ry + y);
   const style = path.fill ?? path.stroke!;
@@ -698,10 +731,14 @@ function drawTiles(canvas: Canvas, paint: Extract<DisplayPaint, { kind: 'tiling'
     }
 }
 
-/** The group as PNG bytes, for Word versions that don't show the SVG. Shapes are painted in order onto a transparent picture. */
-export function drawingPng(group: DrawingGroup): Uint8Array {
+/**
+ * The group as PNG bytes, for what doesn't show the SVG (older Word, and this editor, which draws the picture).
+ * Shapes are painted in order onto a transparent picture, at enough pixels per point to stay sharp.
+ */
+export async function drawingPng(group: DrawingGroup): Promise<Uint8Array> {
   const { frame } = group;
-  const scale = Math.min(RASTER_SCALE, RASTER_MAX / Math.max(frame.width, frame.height));
+  const top = group.paths.length > BUSY_PATHS ? RASTER_SCALE_BUSY : RASTER_SCALE;
+  const scale = Math.min(top, RASTER_MAX / Math.max(frame.width, frame.height), Math.sqrt(RASTER_PIXELS / (frame.width * frame.height)));
   const w = Math.max(1, Math.ceil(frame.width * scale));
   const h = Math.max(1, Math.ceil(frame.height * scale));
   const canvas: Canvas = { frame, scale, w, h, pixels: new Uint8Array(w * h * 4) };
@@ -709,17 +746,17 @@ export function drawingPng(group: DrawingGroup): Uint8Array {
   return pngOf(w, h, canvas.pixels);
 }
 
-/** RGBA pixels as a PNG, without the alpha channel (or the colors) where they carry nothing: the writer doesn't compress. */
-function pngOf(w: number, h: number, pixels: Uint8Array): Uint8Array {
+/** RGBA pixels as a (deflated) PNG, without the alpha channel (or the colors) where they carry nothing. */
+async function pngOf(w: number, h: number, pixels: Uint8Array): Promise<Uint8Array> {
   let opaque = true;
   let gray = true;
   for (let p = 0; p < pixels.length && (opaque || gray); p += 4) {
     if (pixels[p + 3] !== 255) opaque = false;
     if (pixels[p] !== pixels[p + 1] || pixels[p] !== pixels[p + 2]) gray = false;
   }
-  if (!opaque) return encodePng(w, h, 4, pixels);
+  if (!opaque) return encodePngCompressed(w, h, 4, pixels);
   const channels = gray ? 1 : 3;
   const packed = new Uint8Array(w * h * channels);
   for (let i = 0; i < w * h; i++) for (let k = 0; k < channels; k++) packed[i * channels + k] = pixels[i * 4 + k];
-  return encodePng(w, h, channels, packed);
+  return encodePngCompressed(w, h, channels, packed);
 }

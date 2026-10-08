@@ -433,7 +433,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   window.clearTimeout(footerTimer);
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
-  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded);
+  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded, requestRender);
   grid = options.grid ?? false;
   loaded = false;
   cameraPlaced = false;

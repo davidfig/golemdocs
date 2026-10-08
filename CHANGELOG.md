@@ -1,5 +1,14 @@
 # What’s New in Golem Docs
 
+## 0.15.1 - Unreleased
+
+### Fixed
+- Converting a PDF to Word keeps the text where the PDF had it: a page whose text starts far down the page no longer starts at the top (over the pictures), headings keep their bold and the text its color, and a page's last line is not pushed onto a new page.
+- Converting a PDF to Word keeps the running header and footer text (dates, titles, web addresses, page numbers, which are now page fields) as the document's header and footer instead of dropping it.
+- Pictures made of vector shapes (QR codes, logos) are drawn sharply in the converted document, not blurred.
+- Drawings in a document (such as the vector art from a converted PDF) are drawn from their SVG, so they stay sharp however far you zoom in, and zooming stays smooth. Tiling patterns in an SVG are drawn too.
+- A double letter such as the “ll” in “All” is no longer taken for bold text when converting a PDF.
+
 ## 0.15.0 - 2026-10-08
 
 ### Fixed

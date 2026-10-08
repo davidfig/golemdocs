@@ -52,7 +52,7 @@ test('a gradient inside a clip is an SVG gradient, and the PNG shades from one c
   assert.match(svg, /<linearGradient id="g\d+" gradientUnits="userSpaceOnUse"[^>]*>.*<stop offset="0" stop-color="#ff0000"\/>.*<stop offset="1" stop-color="#0000ff"\/>/);
   assert.match(svg, /<clipPath id="c\d+"><path d="M[^"]+Z"\/><\/clipPath>/);
   assert.match(svg, /<g clip-path="url\(#c\d+\)"><path d="[^"]+" fill="url\(#g\d+\)"\/><\/g>/);
-  const png = pixelsOf(drawingPng(group));
+  const png = pixelsOf(await drawingPng(group));
   const row = Math.floor(png.height / 2);
   const left = png.at(25, row);
   const right = png.at(png.width - 25, row);
@@ -70,7 +70,7 @@ test('a radial gradient starts with its first stop at the center', async () => {
   page.restore().finish();
   const [group] = await groupsOf(pdf);
   assert.match(drawingSvg(group), /<radialGradient id="g\d+" gradientUnits="userSpaceOnUse" cx="[\d.]+" cy="[\d.]+" r="50"/);
-  const png = pixelsOf(drawingPng(group));
+  const png = pixelsOf(await drawingPng(group));
   const middle = png.at(Math.floor(png.width / 2), Math.floor(png.height / 2));
   const edge = png.at(5, Math.floor(png.height / 2));
   assert.ok(middle[0] > 230 && middle[1] > 230 && middle[2] < 30, `middle ${middle}`);
@@ -88,7 +88,7 @@ test('a tiling pattern is an SVG pattern, and the PNG repeats its cell', async (
   const [group] = await groupsOf(pdf);
   assert.ok(group);
   assert.match(drawingSvg(group), /<pattern id="p\d+" patternUnits="userSpaceOnUse" x="0" y="0" width="10" height="10" viewBox="0 0 10 10" patternTransform="matrix\([^)]+\)"><path d="M0 0L5 0L5 5L0 5Z" fill="#ff0000"\/><\/pattern>/);
-  const png = pixelsOf(drawingPng(group));
+  const png = pixelsOf(await drawingPng(group));
   let red = 0;
   let inside = 0;
   for (let y = 0; y < png.height; y++)
@@ -98,7 +98,8 @@ test('a tiling pattern is an SVG pattern, and the PNG repeats its cell', async (
       if (px[0] > 200 && px[1] < 60 && px[3] === 255) red++;
     }
   // A quarter of the ellipse's area is cell; the rest of the picture shows through.
-  const filled = Math.PI * 80 * 60;
+  const k = png.width / 160;
+  const filled = Math.PI * 80 * 60 * k * k;
   assert.ok(Math.abs(red - filled / 4) < filled * 0.04, `red ${red} of ${filled}`);
   assert.equal(inside, red);
 });
@@ -113,7 +114,7 @@ test('dashes, caps and joins carry over to the SVG', async () => {
   assert.ok(group);
   const svg = drawingSvg(group);
   assert.match(svg, /stroke="#008000" stroke-width="6" stroke-linecap="round" stroke-linejoin="bevel" stroke-dasharray="10 5" stroke-dashoffset="2"/);
-  const png = pixelsOf(drawingPng(group));
+  const png = pixelsOf(await drawingPng(group));
   // Along the first dash the line is painted; the picture has gaps.
   let painted = 0;
   for (let y = 0; y < png.height; y++) for (let x = 0; x < png.width; x++) if (png.at(x, y)[3] > 128) painted++;
@@ -130,7 +131,7 @@ test('shapes cut by a rectangle clip are cut in the SVG and the picture is only 
   assert.ok(group);
   assert.deepEqual(group.frame, { x: 100, y: 100, width: 50, height: 50 });
   assert.match(drawingSvg(group), /<g clip-path="url\(#c\d+\)">/);
-  const png = pixelsOf(drawingPng(group));
+  const png = pixelsOf(await drawingPng(group));
   assert.deepEqual(png.at(Math.floor(png.width / 2), Math.floor(png.height / 2)), [0, 0, 255, 255]);
 });
 

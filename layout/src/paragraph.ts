@@ -12,7 +12,6 @@ import type { SourceSpan } from './offsets.ts';
 import { layerKey } from './context.ts';
 import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
 import { emitMarks, formattingMarksOn } from './marks.ts';
-import { showingSource } from './source.ts';
 import type { MathLayout } from './math/layout.ts';
 import type { MathEquation } from '@golemdocs/docx';
 
@@ -219,14 +218,12 @@ export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width:
   const props = resolver.paragraph(paragraph.properties, ctx.layer);
   // The label advances list counters whether or not the layout below is reused.
   const counted = props.numbering?.id ? ctx.lists?.next(props.numbering) : undefined;
-  // A paragraph showing its source counts in its list but has no label of its own.
-  const source = showingSource(paragraph);
-  const label = source ? undefined : counted;
+  const label = counted;
 
   // Reuse the last layout if nothing it depends on changed. Edits drop a paragraph's entry;
   // page-dependent layouts (headers and footers with page fields) aren't cached.
   const cache = ctx.fields ? undefined : ctx.paragraphCache;
-  const key = cache ? `${ctx.fonts.pageVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}${source ? '|source' : ''}` : '';
+  const key = cache ? `${ctx.fonts.pageVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
   const cached = cache?.get(paragraph);
   if (cached && cached.key === key) return cached.layout;
   const layout = layoutParagraphUncached(paragraph, ctx, width, props, label);

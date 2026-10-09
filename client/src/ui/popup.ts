@@ -128,7 +128,7 @@ export function dialogTitleBar(title: string, onClose: () => void): HTMLElement 
 export function showDialog(title: string, body: Node, onClose?: () => void): void {
   const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
   const done = () => dialog.close();
-  const ok = h('button', { class: 'wm-button', text: t('menus.dialog.ok') });
+  const ok = h('button', { class: 'wm-button wm-primary', text: t('menus.dialog.ok') });
   dialog.append(dialogTitleBar(title, done), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
@@ -147,7 +147,7 @@ export function showConfirm(title: string, body: Node, action: string): Promise<
   return new Promise((resolve) => {
     const dialog = h('dialog', { class: 'wm-dialog' });
     const cancel = h('button', { class: 'wm-button', text: t('menus.dialog.cancel') });
-    const confirm = h('button', { class: 'wm-button', text: action });
+    const confirm = h('button', { class: 'wm-button wm-primary', text: action });
     dialog.append(
       dialogTitleBar(title, () => dialog.close()),
       h('div', { class: 'wm-dialog-body' }, body),

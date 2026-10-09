@@ -1,14 +1,11 @@
-// Clicking the check box of a Markdown task item checks or unchecks it and leaves the caret where it was,
-// also while the item shows its Markdown (Show Markdown at the Caret).
+// Clicking the check box of a Markdown task item checks or unchecks it and leaves the caret where it was.
 
 import { expect, test } from '../fixtures';
 import { importFile, text } from '../files/helpers';
-import { caret, caretClient, clickAt, lineGaps, waitCaretSettled } from './helpers';
+import { caret, caretClient, clickAt, waitCaretSettled } from './helpers';
 import type { App } from '../fixtures';
 
-test.use({ livePreviewDefault: true });
-
-/** Two task items with the caret at the end of the second (its Markdown shown). */
+/** Two task items with the caret at the end of the second. */
 async function twoItems(app: App): Promise<void> {
   await app.blank();
   await importFile(app, text('tasks.md', '- [ ] one\n- [ ] two\n'));
@@ -45,24 +42,5 @@ test.describe('Task list check boxes', () => {
     await app.type('!');
     const file = await app.download(() => app.menu('File', 'Download'));
     expect(file.text.trim()).toBe('- [x] one\n- [ ] two!');
-  });
-
-  test('the [ ] of the item the caret is in toggles too, and the caret stays', async ({ app }) => {
-    await twoItems(app);
-    const gaps = await lineGaps(app, '- [ ] two'.length);
-    const middle = { x: (gaps[2].x + gaps[3].x) / 2, y: gaps[2].y };
-    await clickAt(app, middle);
-    await waitCaretSettled(app);
-    await app.page.waitForTimeout(700); // not a double click
-    await clickAt(app, middle);
-    await waitCaretSettled(app);
-    let file = await app.download(() => app.menu('File', 'Download'));
-    expect(file.text.trim()).toBe('- [ ] one\n- [ ] two');
-    await app.page.waitForTimeout(700);
-    await clickAt(app, middle);
-    await waitCaretSettled(app);
-    await app.type('!');
-    file = await app.download(() => app.menu('File', 'Download'));
-    expect(file.text.trim()).toBe('- [ ] one\n- [x] two!');
   });
 });

@@ -75,7 +75,7 @@ Run `pnpm test` (all packages, `--no-bail`) or one package: `pnpm --filter @gole
 
 Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `editing`, `files`, `layout`, `pdf`, `shell`, plus `smoke.spec.ts`). It starts its own servers: a simulated-local `wrangler dev` on :3101 with a throwaway `--persist-to` state folder (`e2e/ports.ts`, `E2E_STATE`), signed in as `DEV_USER=e2e@example.com`, and Vite on :5273. Never the `pnpm dev` ports.
 
-- `e2e/fixtures.ts` exports `test` (extends Playwright's with an `app: App` fixture and defaults for sidebar, status bar and live preview) and `App`: `goto`, `blank()` (File › New with the caret in it), `ready()` (waits for `window.loaded`), `menu()`, `editor` (`#input`), `canvas` (`#canvas`), `focus()`. Each test gets a fresh browser profile.
+- `e2e/fixtures.ts` exports `test` (extends Playwright's with an `app: App` fixture and defaults for sidebar, status bar and autocorrect) and `App`: `goto`, `blank()` (File › New with the caret in it), `ready()` (waits for `window.loaded`), `menu()`, `editor` (`#input`), `canvas` (`#canvas`), `focus()`. Each test gets a fresh browser profile.
 - The editor is a canvas, so assert through `app.text()` and `window` hooks (`selectionState`, `loaded`, `pages`, `status`), the DOM of menus and dialogs, or downloaded files.
 - GPU: on a non-CI Mac the browser uses Metal; elsewhere SwiftShader software GL (`E2E_SOFTWARE_GL=1` forces it).
 - `scripts/e2e.ts`: pass one runs everything in parallel (workers = a third of the cores, `E2E_WORKERS` overrides; one retry, and a pass on retry is reported flaky); pass two re-runs `{ tag: '@heavy' }` tests with fewer workers. `E2E_SKIP_HEAVY=1` skips pass two. Arguments go straight to `playwright test` (single pass).

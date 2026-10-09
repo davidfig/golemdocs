@@ -2,7 +2,7 @@
   "name": "@golemdocs/editor",
   "private": true,
   "description": "Document editor core (private workspace package, not on npm)",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

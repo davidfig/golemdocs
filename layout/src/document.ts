@@ -262,6 +262,8 @@ function hasMath(doc: WordDocument): boolean {
   return false;
 }
 
+/** Any character above U+009F: below it nothing is CJK, and every core atlas has it. */
+const BEYOND_LATIN1 = /[^\u0000-\u009f]/;
 const CJK_TEXT = /[\u1100-\u11ff\u3000-\u30ff\u3100-\u312f\u31a0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\ua960-\ua97f\uac00-\ud7ff]/;
 
 /** Adds the CJK characters of a string to a set. */
@@ -321,6 +323,8 @@ function pagedTextOf(doc: WordDocument, resolver: StyleResolver, fonts: FontSet)
         let missing: Set<number> | undefined;
         for (const item of node.content as { kind: string; text?: string }[]) {
           if (item.kind !== 'text' || !item.text) continue;
+          // Plain Latin text (nearly all of a big document) needs neither the CJK nor the extra pages: one test settles it.
+          if (!BEYOND_LATIN1.test(item.text)) continue;
           if (CJK_TEXT.test(item.text)) addCjk(item.text, (cjk ??= new Set()));
           // Only what neither the run's font nor the fallback font has goes to the extra pages.
           if (core && fallbackCore) addMissing(item.text, core, (missing ??= new Set()));

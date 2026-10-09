@@ -54,6 +54,7 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
 const { openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
+const { downloadDocument } = await import('../src/cloud.ts');
 const sync = await import('../src/sync.ts');
 const { loadLibrary } = sync;
 
@@ -139,6 +140,40 @@ test('opening from the cloud creates one linked browser copy and refreshes it wh
   assert.equal(second.info.id, first.info.id, 'same browser copy, not a duplicate');
   assert.equal((await local.listSaved()).length, 1);
   assert.deepEqual([...new Uint8Array((await local.getSaved(first.info.id))!.bytes)], [5, 5]);
+});
+
+test('a download reports how much has arrived, and gives the same bytes', async () => {
+  const body = new Uint8Array(100_000).map((_, i) => i % 251);
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const parts = [body.slice(0, 30_000), body.slice(30_000, 70_000), body.slice(70_000)];
+    const stream = new ReadableStream<Uint8Array>({ pull(c) { const next = parts.shift(); if (next) c.enqueue(next); else c.close(); } });
+    return new Response(stream, { headers: { 'content-length': String(body.length) } });
+  }) as typeof fetch;
+  try {
+    const shares: number[] = [];
+    const got = new Uint8Array(await downloadDocument('c1', (share) => shares.push(share)));
+    assert.deepEqual([...got.slice(0, 5)], [...body.slice(0, 5)]);
+    assert.equal(got.length, body.length);
+    assert.deepEqual(shares, [0.3, 0.7, 1]);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('an early open hands back the bytes at once and writes the same linked browser copy behind them', async () => {
+  const early = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 }, undefined, { early: true });
+  assert.deepEqual([...new Uint8Array(early.bytes)], [9, 9, 9]);
+  assert.ok(early.stored, 'the copy is being written');
+  new Uint8Array(early.bytes).fill(0); // what the worker does with the bytes it is given must not reach the copy
+  const real = await early.stored;
+  assert.equal(real.id, early.info.id);
+  assert.equal(real.cloudId, 'c1');
+  assert.deepEqual([...new Uint8Array((await local.getSaved(real.id))!.bytes)], [9, 9, 9]);
+  const again = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 }, undefined, { early: true });
+  assert.equal(again.stored, undefined, 'a copy already in step with the cloud opens from the browser');
+  assert.equal(again.info.id, early.info.id);
+  assert.equal((await local.listSaved()).length, 1);
 });
 
 test('opening from the cloud never overwrites browser edits the cloud doesn’t have', async () => {

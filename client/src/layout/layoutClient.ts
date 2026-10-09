@@ -45,7 +45,7 @@ export class LayoutClient {
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
-  private readonly linkRequests = new Map<number, (found: { url: string | null; checkbox: boolean }) => void>();
+  private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly agentRequests = new Map<number, (result: string | { text: string; images: string[] }) => void>();
 
@@ -66,6 +66,11 @@ export class LayoutClient {
    */
   setLocale(locale: string): void {
     this.send({ type: 'locale', locale });
+  }
+
+  /** A document is being downloaded: lets the worker fetch the default fonts meanwhile. */
+  warm(): void {
+    this.send({ type: 'warm' });
   }
 
   /** Opens a document, cancelling any layout in progress; in a collaboration room if given. */
@@ -166,7 +171,7 @@ export class LayoutClient {
   }
 
   /** What is under a point on a page: the address of a link (null when there is none), and whether it is a check box that a click changes. */
-  linkAt(page: number, x: number, y: number): Promise<{ url: string | null; checkbox: boolean }> {
+  linkAt(page: number, x: number, y: number): Promise<{ url: string | null; text: string; checkbox: boolean }> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.linkRequests.set(request, resolve);
@@ -226,7 +231,7 @@ export class LayoutClient {
       return;
     }
     if (message.type === 'linkAt') {
-      this.linkRequests.get(message.request)?.({ url: message.url, checkbox: message.checkbox });
+      this.linkRequests.get(message.request)?.({ url: message.url, text: message.text, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
       return;
     }

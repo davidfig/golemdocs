@@ -1,16 +1,26 @@
 # What’s New in Golem Docs
 
-## 0.16.1 - Unreleased
+## 0.17.0 - 2026-10-09
 
 ### Added
+- Resting the pointer on a link in a document opens a small form over it with the link's text and address, to change them (OK), take the link off (Remove Link) or open it. Insert › Hyperlink (Ctrl/Cmd+K) opens the same form at the caret, instead of a separate dialog.
 - New guides on the website for converting a PDF to Word, converting Markdown to Word and back, redacting a PDF, and opening Word files without Word.
 
 ### Changed
+- A fresher look for dialogs, buttons and text fields: flat surfaces with a slim accent line along the top of each dialog, a plain title and close button, and the main action (OK, Save, Apply) filled with the theme's color. The menu bar and toolbars are flatter too.
+- Pinching or Ctrl/Cmd+scrolling over the toolbars and panels no longer zooms the whole page, which broke the layout; it still zooms the document over the page itself.
+- The buttons and search box on the Documents screen now look like the ones in dialogs.
+- Markdown documents are edited as formatted text again: Tools › Show Markdown at the Caret is gone. Autoformat as You Type stays, and now works on every line, so `* ` starts a bullet list and `*word*` and `**word**` make italic and bold as you type.
+- Large documents opened from your account appear as soon as they have downloaded, instead of waiting for the copy kept in this browser to be written first, and the status bar shows how much of the download has arrived.
+- Large documents get to their first page a little sooner: the default fonts load while the document downloads, and the check for which characters a document needs is faster.
 - Links to Golem Docs shared in chat apps and social networks now show a large preview card.
 
 ### Fixed
+- On a phone or tablet, a document or folder on the Documents screen opens with one tap instead of two.
+- Very long documents no longer sit behind the loading screen until every page is laid out: the first pages appear as soon as they are ready, and the rest fill in behind them. Opening a long document is also about twice as fast, because the page sidebar and spelling underlines no longer redo all their work after every batch of pages.
 - Copying or cutting text now keeps its formatting (bold, italics, links, headings, lists) when pasted into other apps.
 - Clicking a task-list check box in a Markdown document checks or unchecks it again, even when its Markdown is shown, and no longer moves the cursor.
+- In a large text file, the “Replaced n matches” message after Replace All stays on screen instead of being replaced by “No matches” a moment later.
 
 ## 0.16.0 - 2026-10-08
 

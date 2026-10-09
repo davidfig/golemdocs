@@ -52,7 +52,7 @@ export class SelectionLayer {
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
   update(selection: SelectionUpdate): void {
-    this.clear();
+    this.clearSelection();
     const byPage = new Map<number, { rect: number[]; color: number }[]>();
     const add = (r: Float64Array, color: number) => {
       for (let i = 0; i < r.length; i += 5) {
@@ -91,7 +91,13 @@ export class SelectionLayer {
   /** How many squiggles are drawn (for the end-to-end tests: the canvas can't be read). */
   squiggleCount = 0;
 
+  /** The marks the squiggles were last built from: an update that brings the same ones leaves them as they are. */
+  private builtFrom: Float64Array | undefined;
+
   private updateSquiggles(marks: Float64Array | undefined): void {
+    const same = this.builtFrom && marks && this.builtFrom.length === marks.length && this.builtFrom.every((v, i) => v === marks[i]);
+    if (same || (!this.builtFrom?.length && !marks?.length && this.squiggles.size === 0)) return;
+    this.builtFrom = marks;
     this.squiggleCount = marks ? marks.length / 6 : 0;
     for (const batch of this.squiggles.values()) batch.dispose(this.gl);
     this.squiggles.clear();
@@ -156,12 +162,19 @@ export class SelectionLayer {
   }
 
   clear(): void {
+    this.clearSelection();
+    for (const batch of this.squiggles.values()) batch.dispose(this.gl);
+    this.squiggles.clear();
+    this.builtFrom = undefined;
+    this.squiggleCount = 0;
+  }
+
+  /** Everything but the squiggles, which an update rebuilds only when the marks differ. */
+  private clearSelection(): void {
     for (const batch of this.highlights.values()) batch.dispose(this.gl);
     this.highlights.clear();
     for (const batch of this.remote.values()) batch.dispose(this.gl);
     this.remote.clear();
-    for (const batch of this.squiggles.values()) batch.dispose(this.gl);
-    this.squiggles.clear();
     this.caretBatch?.dispose(this.gl);
     this.caretBatch = null;
     this.caretPage = null;

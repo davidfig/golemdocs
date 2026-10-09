@@ -112,7 +112,8 @@ test('Open Sample opens each sample: Welcome, Fonts and War and Peace', async ({
   await app.menu('Admin', 'Open Sample', 'War and Peace');
   await waitForOpen(app, 'War and Peace');
   await expect(page).toHaveTitle('War and Peace - Golem Docs');
-  expect(await app.text()).toContain('The Project Gutenberg eBook of War and Peace');
+  // A long document is laid out in batches, and Select All can land before the first one.
+  await expect.poll(() => app.text(), { timeout: 30_000 }).toContain('The Project Gutenberg eBook of War and Peace');
 });
 
 test('an unknown ?doc= opens the fonts sample and leaves a usable editor', async ({ app, page }) => {

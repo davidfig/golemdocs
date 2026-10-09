@@ -138,7 +138,7 @@ const AUTOCORRECT_OFF = () => {
   }
 };
 
-export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean; livePreviewDefault: boolean; autoCorrectDefault: boolean; autoCorrectFollowsOption: void }, { browser: Browser }>({
+export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDefault: boolean; autoCorrectDefault: boolean; autoCorrectFollowsOption: void }, { browser: Browser }>({
   // Tests open further contexts of their own (a second device, another person) with `browser.newContext()`: each starts
   // with autocorrect off too, as the page does, so the text typed in one reads the same in the other.
   browser: [
@@ -167,11 +167,9 @@ export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDe
   sidebarDefault: [false, { option: true }],
   // The status bar too is on by default; tests start with it off, so the document has the window's whole height.
   statusBarDefault: [false, { option: true }],
-  // Show Markdown at the Caret is on by default too, which shows `# ` in the heading the caret is in; tests start with it off.
-  livePreviewDefault: [false, { option: true }],
   // Autocorrect (smart quotes, capitals, dashes...) is on by default too, and would change the text other tests type; they start with it off.
   autoCorrectDefault: [false, { option: true }],
-  page: async ({ page, sidebarDefault, statusBarDefault, livePreviewDefault, autoCorrectDefault }, use) => {
+  page: async ({ page, sidebarDefault, statusBarDefault, autoCorrectDefault }, use) => {
     // Every test shares one signed-in account, so settings kept in it (shortcuts, view choices) would carry from
     // one test to the next. Each test gets an account with no settings that forgets what it is sent; the specs
     // about settings following the account use their own people and contexts, which this does not touch.
@@ -182,15 +180,6 @@ export const test = base.extend<{ app: App; sidebarDefault: boolean; statusBarDe
       await page.addInitScript(() => {
         try {
           if (localStorage.getItem('word.pagesPanel') === null) localStorage.setItem('word.pagesPanel', 'off');
-        } catch {
-          // No storage: the app falls back to its default.
-        }
-      });
-    }
-    if (!livePreviewDefault) {
-      await page.addInitScript(() => {
-        try {
-          if (localStorage.getItem('word.livePreview') === null) localStorage.setItem('word.livePreview', 'off');
         } catch {
           // No storage: the app falls back to its default.
         }

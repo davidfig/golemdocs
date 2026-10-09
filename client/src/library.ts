@@ -214,14 +214,17 @@ export interface OpenedFromCloud {
   bytes: ArrayBuffer;
   /** The browser copy has changes the cloud doesn't (not uploaded yet), so it was opened instead. */
   usedBrowserCopy: boolean;
+  /** With `early`: the browser copy still being written (`info` is what it will be; this settles with the real record). */
+  stored?: Promise<SavedInfo>;
 }
 
 /**
  * Makes the cloud document available as a browser copy, unless that would discard unsynced edits.
  * When the caller knows the cloud copy's `updatedAt` and it's the one the browser copy already
- * has, nothing is downloaded.
+ * has, nothing is downloaded. With `progress`, the share of a download received is reported as it comes. With `early` a download is returned as soon as it arrives, while its browser copy is written (chunked,
+ * hashed, stored: seconds for a big file) in the background as `stored`: the caller opens the bytes without waiting for it.
  */
-export async function openFromCloud(cloud: { id: string; name: string; updatedAt?: number }, owner?: string): Promise<OpenedFromCloud> {
+export async function openFromCloud(cloud: { id: string; name: string; updatedAt?: number }, owner?: string, options: { early?: boolean; progress?: (share: number) => void } = {}): Promise<OpenedFromCloud> {
   // Copies made before documents were marked with their account count as this one's.
   const linked = (await listSaved()).find((d) => d.cloudId === cloud.id && (d.owner === undefined || d.owner === owner));
   if (linked && linked.updatedAt > (linked.cloudSyncedAt ?? 0)) {
@@ -234,12 +237,21 @@ export async function openFromCloud(cloud: { id: string; name: string; updatedAt
   }
   let bytes: ArrayBuffer;
   try {
-    bytes = await (takePrefetched(cloud) ?? downloadDocument(cloud.id));
+    bytes = await (takePrefetched(cloud) ?? downloadDocument(cloud.id, options.progress));
   } catch (error) {
     // Offline: the copy this browser has is better than nothing.
     const saved = linked && !(error instanceof CloudError) ? await getSaved(linked.id) : null;
     if (saved) return { ...saved, usedBrowserCopy: false };
     throw error;
+  }
+  if (options.early) {
+    const id = linked?.id ?? crypto.randomUUID();
+    // The save gets its own bytes: opening hands the others to the worker, which empties them.
+    const stored = saveFromCloud({ id, name: cloud.name, bytes: bytes.slice(0), owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
+    stored.catch(() => {});
+    const updatedAt = Date.now();
+    const info: SavedInfo = { id, name: cloud.name, size: bytes.byteLength, updatedAt, ...(owner !== undefined && { owner }), cloudId: cloud.id, cloudSyncedAt: updatedAt, ...(cloud.updatedAt !== undefined && { cloudUpdatedAt: cloud.updatedAt }) };
+    return { info, bytes, usedBrowserCopy: false, stored };
   }
   const info = await saveFromCloud({ id: linked?.id, name: cloud.name, bytes, owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
   return { info, bytes, usedBrowserCopy: false };

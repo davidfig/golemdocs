@@ -121,7 +121,6 @@ Shared UI components (dropdowns, `LayerTree`, cursors, shape lists) are mandated
 - **Addresses are ids + model offsets**, never `Paragraph` references across a boundary; selections that leave the worker or enter `History` must use `Pos`.
 - **A command that adds characters outside the core atlases must wait for font pages** (`runCommand` re-enters after `ensurePages`); equations wait for `ensureMath`.
 - **Viewers and offline rooms are read-only**: `readOnly` in the worker blocks everything except selection/view commands.
-- **Live preview** temporarily shows a paragraph as Markdown source; `runCommand` calls `leaveRaw()` before formatting, paste, undo/redo and Enter, and restores history afterwards.
 - **The document is in the worker.** The page cannot read it synchronously; use a `ToWorker` request (`save`, `agent`, ...).
 - **Format-dependent behavior** goes through `ui/formats.ts` (`FORMATS[kind]`), e.g. which marks a format can hold.
 - Large pieces of UI and editors are lazy chunks; keep new code behind the existing entry modules (see `AGENTS.md`, "Bundle size").

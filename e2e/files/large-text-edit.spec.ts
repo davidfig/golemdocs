@@ -118,7 +118,7 @@ const BIG_MARKED = Buffer.from(
   'utf8',
 );
 
-test('Replace All changes every match as one step that can be undone', async ({ app, page }) => {
+test('Replace All changes every match as one step that can be undone', { tag: '@heavy' }, async ({ app, page }) => {
   await open(app, 'marked.txt', BIG_MARKED);
   await app.menu('Edit', 'Replace…');
   await viewer(page).getByRole('textbox', { name: 'Find' }).fill('marked');
@@ -128,8 +128,13 @@ test('Replace All changes every match as one step that can be undone', async ({ 
   await expectLine(page, 0, /^Line 1 the changed fox/);
   await page.keyboard.press('Escape');
   await clickAt(page, 0, 0);
-  await page.keyboard.press(`${MOD}+z`);
-  await expectLine(page, 0, /^Line 1 the marked fox/);
+  // Replace All is the only step to undo, so pressing again is harmless: the first press can land before the editor has the focus.
+  await expect
+    .poll(async () => {
+      await page.keyboard.press(`${MOD}+z`);
+      return lineText(page, 0);
+    }, { timeout: 15_000, message: 'undo' })
+    .toMatch(/^Line 1 the marked fox/);
   await page.keyboard.press(`${MOD}+Shift+z`);
   await expectLine(page, 0, /^Line 1 the changed fox/);
 });

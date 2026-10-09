@@ -78,8 +78,6 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '변경 내용 추적(&T)',
   'chrome.tools.autoFormat': '입력하면서 자동 서식(&A)',
   'chrome.tools.autoFormat.tip': '"# ", "- ", "**굵게**" 같은 Markdown 단축 표기를 입력하는 즉시 서식으로 바꿉니다',
-  'chrome.tools.livePreview': '커서 위치의 &Markdown 표시',
-  'chrome.tools.livePreview.tip': 'Markdown 문서에서 커서가 있는 단락의 Markdown 원본을 표시합니다(실험적)',
   'chrome.tools.options': '옵션(&O)…',
   'chrome.tools.language': '언어(&L)',
   'chrome.format.bold': '굵게(&B)',

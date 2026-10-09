@@ -59,7 +59,7 @@ sources.ts (FAMILIES, ATLAS)  -->  generate.ts + msdf-atlas-gen  -->  public/fon
 Hit-testing splits across the thread boundary. The main thread owns only geometry:
 - `pageAt(cssX, cssY)` in `main.ts` converts through `camera.toDocument`, picks the nearest page (so clicks in the gutter still land) and returns page-relative points.
 - It sends `{kind: 'pointer', page: id, x, y, extend?, unit?}` to the worker. The worker's `Editor.hitTest(page, x, y)` (`editor/src/navigation.ts`) scores every `LineRecord` on the page by distance (columns restrict candidates), then picks the nearest caret stop (`LineLayout.stops`) and maps the visible offset to a model offset with `toModel` (`layout/src/offsets.ts`).
-- Links and task-list check boxes are asked asynchronously (`linkAt`). The caret and selection come back as `SelectionUpdate` (page-relative points) and are drawn by `SelectionLayer` (`webgl/selectionLayer.ts`) as rects over the same pages, so text and caret update in the same frame.
+- Links and task-list check boxes are asked asynchronously (`linkAt`, which also returns a link's shown text). Resting the pointer on a link opens `ui/linkPopover.ts`: a form over the document with the link's text and address, whose OK / Remove Link put the caret in the link and run `setLink` / `removeLink`. It goes when the pointer leaves unless it has been used. The same form is Insert Hyperlink (`LinkPopover.edit`); there is no modal link dialog. The caret and selection come back as `SelectionUpdate` (page-relative points) and are drawn by `SelectionLayer` (`webgl/selectionLayer.ts`) as rects over the same pages, so text and caret update in the same frame.
 
 ## Canvas consequences
 

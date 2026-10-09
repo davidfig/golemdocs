@@ -37,7 +37,6 @@ import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, ty
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
 import { lockGuidesOn, selectAfterPencilOn, setLockGuides, setSelectAfterPencil, setShowGuides, showGuidesOn } from './drawingOptions.ts';
-import { livePreviewOn, setLivePreview } from './livePreview.ts';
 import { SCHEMES, currentAppearance, currentScheme, isDark, pagesDark, setAppearance, setScheme, toggleDark, toggleDarkPages } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { ICONS, iconElement } from './icons.ts';
@@ -461,7 +460,6 @@ export class Chrome {
       a('tools.trackChanges', t('chrome.tools.trackChanges'), { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
       dialog('tools.options', t('chrome.tools.options'), 'options'),
       { id: 'tools.autoFormat', label: t('chrome.tools.autoFormat'), tooltip: t('chrome.tools.autoFormat.tip'), run: () => setAutoFormat(!autoFormatOn()), checked: autoFormatOn },
-      { id: 'tools.livePreview', label: t('chrome.tools.livePreview'), tooltip: t('chrome.tools.livePreview.tip'), run: () => setLivePreview(!livePreviewOn()), checked: livePreviewOn },
     );
 
     // Table
@@ -653,7 +651,6 @@ export class Chrome {
       cmd('tools.wordCount'),
       cmd('tools.trackChanges'),
       cmd('tools.autoFormat'),
-      cmd('tools.livePreview'),
       cmd('file.pageSetup'),
       cmd('file.properties'),
       cmd('file.versionHistory'),
@@ -850,7 +847,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), cmd('tools.livePreview'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),

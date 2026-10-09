@@ -20,12 +20,7 @@
   --wm-field-bg: #fff;
   --wm-toolbar-border: #d0d0d0;
   --wm-menu-border: #8a8a8a;
-  --wm-dialog-border: #5a7eb8;
-  --wm-title-top: #3d77d6;
   --wm-title-bottom: #2156b4;
-  --wm-button-top: #fff;
-  --wm-button-bottom: #e3e3db;
-  --wm-button-border: #003c74;
   --wm-muted: #666;
   --wm-error: #b00020;
   --wm-warning: #9a5b00;
@@ -48,6 +43,9 @@
   --wm-ease: 120ms ease-out;
   /* Anything that floats over the window (menus, pop-ups, option bars, toasts, notices): one corner and one shadow. */
   --wm-radius: 4px;
+  /* The accent of dialogs, the main button and focus rings: each theme's title color. */
+  --wm-accent: var(--wm-title-bottom);
+  --wm-accent-ring: color-mix(in srgb, var(--wm-accent) 28%, transparent);
   --wm-float-shadow: 0 4px 14px var(--wm-shadow), 0 1px 3px var(--wm-shadow);
   /* The handles of what is picked on a page (see handles.ts, which draws the same on a canvas). */
   --wm-handle-size: 8px;
@@ -76,11 +74,7 @@
   --wm-field-border: #a8a09a;
   --wm-toolbar-border: #d3d2d0;
   --wm-menu-border: #8b8a88;
-  --wm-dialog-border: #b8683a;
-  --wm-title-top: #e8783a;
   --wm-title-bottom: #c24e12;
-  --wm-button-bottom: #e4e3e0;
-  --wm-button-border: #8a3a0c;
   --wm-row-hover: #f9efe8;
   --wm-letter: #4a3428;
   --wm-desk: #e6e5e3;
@@ -91,7 +85,6 @@
   --wm-hot-border: #f08040;
   --wm-checked: #57381f;
   --wm-checked-hot: #8a5230;
-  --wm-title-top: #c4581a;
   --wm-title-bottom: #8f3c0d;
   --wm-letter: #f0e0d4;
 }
@@ -114,11 +107,7 @@
   --wm-field-border: #8f8f8f;
   --wm-toolbar-border: #d0d0d0;
   --wm-menu-border: #8a8a8a;
-  --wm-dialog-border: #707070;
-  --wm-title-top: #7a7a7a;
   --wm-title-bottom: #4a4a4a;
-  --wm-button-bottom: #e0e0e0;
-  --wm-button-border: #444;
   --wm-error: #333;
   --wm-row-hover: #efefef;
   --wm-letter: #333;
@@ -143,12 +132,7 @@
   --wm-field-bg: #212121;
   --wm-toolbar-border: #474747;
   --wm-menu-border: #585858;
-  --wm-dialog-border: #585858;
-  --wm-title-top: #5a5a5a;
   --wm-title-bottom: #3c3c3c;
-  --wm-button-top: #3c3c3c;
-  --wm-button-bottom: #303030;
-  --wm-button-border: #5e5e5e;
   --wm-muted: #a3a3a3;
   --wm-error: #ddd;
   --wm-row-hover: #383838;
@@ -177,11 +161,7 @@
   --wm-field-border: #6d8fc7;
   --wm-toolbar-border: #7a9bd0;
   --wm-menu-border: #5f81b8;
-  --wm-dialog-border: #0a3f9e;
-  --wm-title-top: #2f6fe0;
   --wm-title-bottom: #0b3ea8;
-  --wm-button-bottom: #d5e3f8;
-  --wm-button-border: #0a3f9e;
   --wm-muted: #4a5f85;
   --wm-row-hover: #e6effc;
   --wm-desk: #b8cbe6;
@@ -204,11 +184,7 @@
   --wm-field-border: #8a9463;
   --wm-toolbar-border: #a8b07c;
   --wm-menu-border: #7c8557;
-  --wm-dialog-border: #5f6f2f;
-  --wm-title-top: #a3b25c;
   --wm-title-bottom: #6d7f30;
-  --wm-button-bottom: #e6e3cb;
-  --wm-button-border: #5f6f2f;
   --wm-muted: #6b6f4a;
   --wm-row-hover: #f1efd9;
   --wm-desk: #d4d1b3;
@@ -234,12 +210,7 @@
   --wm-field-bg: #202226;
   --wm-toolbar-border: #45484e;
   --wm-menu-border: #55595f;
-  --wm-dialog-border: #55595f;
-  --wm-title-top: #3a5fa8;
   --wm-title-bottom: #284785;
-  --wm-button-top: #3b3e44;
-  --wm-button-bottom: #2f3136;
-  --wm-button-border: #5b5f66;
   --wm-muted: #a0a3a8;
   --wm-error: #ff8a80;
   --wm-warning: #f0b95c;
@@ -293,7 +264,7 @@
   align-items: stretch;
   height: 22px;
   padding: 1px 2px 0;
-  background: linear-gradient(var(--wm-bar-top), var(--wm-face));
+  background: var(--wm-face);
 }
 
 .wm-title {
@@ -310,7 +281,6 @@
 .wm-title:hover,
 .wm-title.active {
   background: var(--wm-hot);
-  border-color: var(--wm-hot-border);
 }
 
 .wm-title.open {
@@ -620,7 +590,6 @@
   width: 1px;
   margin: 3px 3px;
   background: var(--wm-etch-dark);
-  box-shadow: 1px 0 0 var(--wm-etch-light);
 }
 
 .wm-tbutton {
@@ -641,13 +610,11 @@
 
 .wm-tbutton:not(:disabled):hover {
   background: var(--wm-hot);
-  border-color: var(--wm-hot-border);
 }
 
 .wm-tbutton:not(:disabled):active,
 .wm-tbutton.open {
   background: var(--wm-checked-hot);
-  border-color: var(--wm-hot-border);
 }
 
 .wm-tbutton[aria-pressed='true'] {
@@ -1106,41 +1073,46 @@
   padding: 0;
   min-width: 320px;
   max-width: min(520px, calc(100vw - 32px));
-  border: 1px solid var(--wm-dialog-border);
-  border-radius: 8px 8px 4px 4px;
-  background: var(--wm-face);
-  box-shadow: 0 10px 32px var(--wm-shadow-strong), 0 2px 6px var(--wm-shadow);
+  border: 1px solid var(--wm-border);
+  border-top: 3px solid var(--wm-accent);
+  border-radius: 6px;
+  background: var(--wm-menu-bg);
+  box-shadow: 0 14px 40px var(--wm-shadow-strong), 0 1px 3px var(--wm-shadow);
   font: 13px/1.4 var(--wm-font);
   color: var(--wm-text);
 }
 
 .wm-dialog::backdrop {
-  background: rgb(0 0 0 / 0.08);
+  background: rgb(0 0 0 / 0.14);
 }
 
 .wm-dialog-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 26px;
-  padding: 0 4px 0 10px;
-  background: linear-gradient(var(--wm-title-top), var(--wm-title-bottom));
-  border-radius: 7px 7px 0 0;
-  color: #fff;
-  font-weight: 700;
+  height: 34px;
+  padding: 0 8px 0 16px;
+  color: var(--wm-text);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .wm-dialog-close {
-  width: 20px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: 1px solid #fff;
-  border-radius: 3px;
-  background: linear-gradient(#e57a5d, #c4441f);
-  color: #fff !important;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--wm-muted) !important;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.wm-dialog-close:hover {
+  background: var(--wm-row-hover);
+  color: var(--wm-text) !important;
 }
 
 .wm-dialog-close svg {
@@ -1152,7 +1124,7 @@
 }
 
 .wm-dialog-body {
-  padding: 12px 14px 4px;
+  padding: 4px 16px 6px;
 }
 
 .wm-dialog-body p {
@@ -1164,20 +1136,30 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 8px 12px 12px;
+  padding: 12px 16px 16px;
 }
 
+/* Flat, with a hairline border. The main action (a form's submit button, or one marked wm-primary) is filled with the accent. */
 .wm-button {
-  min-width: 75px;
-  height: 23px;
-  border: 1px solid var(--wm-button-border);
-  border-radius: 3px;
-  background: linear-gradient(var(--wm-button-top), var(--wm-button-bottom));
+  min-width: 72px;
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid var(--wm-border);
+  border-radius: 5px;
+  background: var(--wm-field-bg);
+}
+
+.wm-button[type='submit'],
+.wm-button.wm-primary {
+  border-color: var(--wm-accent);
+  background: var(--wm-accent);
+  color: #fff;
+  font-weight: 600;
 }
 
 .wm-button:focus-visible {
-  outline: 1px dotted currentColor;
-  outline-offset: -4px;
+  outline: 2px solid var(--wm-accent);
+  outline-offset: 2px;
 }
 
 .wm-scroll {
@@ -1400,8 +1382,9 @@
 }
 
 .wm-button:disabled {
+  background: transparent;
   color: var(--wm-disabled);
-  border-color: var(--wm-etch-dark);
+  border-color: var(--wm-toolbar-border);
 }
 
 .wm-hint {
@@ -1822,7 +1805,19 @@
 }
 
 .wm-button:not(:disabled):hover {
-  filter: brightness(0.96);
+  background: var(--wm-row-hover);
+  border-color: var(--wm-field-border);
+}
+
+.wm-button:not(:disabled):active {
+  background: var(--wm-checked);
+}
+
+.wm-button[type='submit']:not(:disabled):hover,
+.wm-button.wm-primary:not(:disabled):hover {
+  background: var(--wm-accent);
+  border-color: var(--wm-accent);
+  filter: brightness(1.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1847,15 +1842,15 @@
   display: flex;
   gap: 2px;
   padding: 6px 12px 0;
-  border-bottom: 1px solid var(--wm-button-border);
+  border-bottom: 1px solid var(--wm-border);
 }
 
 .wm-find-tab {
   margin-bottom: -1px;
   padding: 2px 14px;
-  border: 1px solid var(--wm-button-border);
-  border-radius: 3px 3px 0 0;
-  background: linear-gradient(var(--wm-button-top), var(--wm-button-bottom));
+  border: 1px solid var(--wm-border);
+  border-radius: 5px 5px 0 0;
+  background: var(--wm-field-bg);
   cursor: default;
 }
 
@@ -1892,14 +1887,20 @@
 .wm-input {
   box-sizing: border-box;
   width: 100%;
-  height: 22px;
+  height: 28px;
   margin-bottom: 5px;
-  padding: 0 4px;
-  border: 1px solid var(--wm-field-border);
-  border-radius: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--wm-border);
+  border-radius: 5px;
   background: var(--wm-field-bg);
   color: var(--wm-text);
   font: 13px var(--wm-font);
+}
+
+.wm-input:focus {
+  outline: none;
+  border-color: var(--wm-accent);
+  box-shadow: 0 0 0 3px var(--wm-accent-ring);
 }
 
 .wm-find-case {
@@ -1942,6 +1943,19 @@
 
 .wm-dialog.wm-link {
   width: 420px;
+}
+
+/* Drawn over the document, not modal (see linkPopover.ts). */
+.wm-dialog.wm-link-over {
+  position: fixed;
+  z-index: 50;
+  margin: 0;
+  min-width: 0;
+  width: min(420px, calc(100vw - 8px));
+}
+
+.wm-dialog.wm-link-over[hidden] {
+  display: none;
 }
 
 .wm-link-body {

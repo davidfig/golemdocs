@@ -35,6 +35,8 @@ interface Item {
   label: HTMLElement;
   remove: HTMLButtonElement;
   page: PanelPage;
+  /** Its place in the list, as last numbered (-1: not yet). */
+  index: number;
   /** What is on the canvas is out of date. */
   stale: boolean;
   onScreen: boolean;
@@ -52,6 +54,9 @@ export class PagesPanel {
   private readonly list = h('ol', { class: 'wm-pages-list', attrs: { role: 'listbox', 'aria-label': t('panels.pages.label') } });
   private items: Item[] = [];
   private readonly byPage = new Map<PanelPage, Item>();
+  private readonly byEl = new Map<Element, Item>();
+  /** The pages last given while the panel was hidden: nothing is built for them until it is shown. */
+  private unshown: readonly PanelPage[] | null = null;
   private current = -1;
   private editable = false;
   private timer = 0;
@@ -60,7 +65,7 @@ export class PagesPanel {
   private readonly observer = new IntersectionObserver(
     (records) => {
       for (const record of records) {
-        const item = this.items.find((i) => i.el === record.target);
+        const item = this.byEl.get(record.target);
         if (item) item.onScreen = record.isIntersecting;
       }
       this.schedule(0);
@@ -92,7 +97,12 @@ export class PagesPanel {
   setVisible(visible: boolean): void {
     if (this.el.hidden === !visible) return;
     this.el.hidden = !visible;
-    if (visible) this.schedule(0);
+    if (visible) {
+      const waiting = this.unshown;
+      this.unshown = null;
+      if (waiting) this.update(waiting);
+      this.schedule(0);
+    }
   }
 
   /** Whether the pages can be dragged and deleted. */
@@ -103,20 +113,30 @@ export class PagesPanel {
     for (const item of this.items) item.el.draggable = editable;
   }
 
-  /** The pages, in order. Thumbnails of pages that are the same objects as before are kept. */
+  /**
+   * The pages, in order. Thumbnails of pages that are the same objects as before are kept. A hidden panel only remembers them: a
+   * document being laid out sends this after every slice of pages, which for thousands of pages is too much to build for nobody to see.
+   */
   setPages(pages: readonly PanelPage[]): void {
+    if (this.el.hidden) {
+      this.unshown = pages;
+      return;
+    }
+    this.update(pages);
+  }
+
+  private update(pages: readonly PanelPage[]): void {
     const keep = new Set(pages);
     // A page that changed (typing, a page moved) takes over the item of one that went away at the
     // same place, so its old thumbnail stays up until the new one is drawn.
     const spare = this.items.filter((i) => !keep.has(i.page));
+    let spareAt = 0;
     const next: Item[] = [];
-    const taken = new Set<Item>();
     for (const page of pages) {
       let item = this.byPage.get(page);
       if (!item) {
-        item = spare.find((s) => !taken.has(s));
+        item = spare[spareAt++];
         if (item) {
-          taken.add(item);
           this.byPage.delete(item.page);
           item.page = page;
           item.stale = true;
@@ -128,17 +148,25 @@ export class PagesPanel {
       }
       next.push(item);
     }
+    const inNext = new Set(next);
     for (const item of this.items) {
-      if (next.includes(item)) continue;
+      if (inNext.has(item)) continue;
       this.observer.unobserve(item.el);
+      this.byEl.delete(item.el);
       this.byPage.delete(item.page);
     }
+    // Pages only added at the end (a document being laid out): the rest of the list is left as it is.
+    const before = this.items;
+    const appended = next.length >= before.length && before.every((item, i) => next[i] === item);
     this.items = next;
-    next.forEach((item, i) => this.number(item, i));
-    this.list.replaceChildren(...next.map((i) => i.el));
+    next.forEach((item, i) => {
+      if (item.index !== i) this.number(item, i);
+    });
+    if (appended) this.list.append(...next.slice(before.length).map((i) => i.el));
+    else this.list.replaceChildren(...next.map((i) => i.el));
     this.list.classList.toggle('wm-pages-single', next.length < 2);
     if (this.current >= next.length) this.current = -1;
-    this.mark();
+    if (!appended || !before.length) this.mark();
     this.schedule(REDRAW_DELAY);
   }
 
@@ -175,7 +203,9 @@ export class PagesPanel {
     const label = h('span', { class: 'wm-pages-number' });
     const remove = h('button', { class: 'wm-pages-delete', text: '×', attrs: { type: 'button', tabindex: '-1' } });
     const el = h('li', { class: 'wm-pages-item', attrs: { role: 'option', tabindex: '-1' } }, h('div', { class: 'wm-pages-frame' }, canvas, remove), label);
-    const item: Item = { el, canvas, label, remove, page, stale: true, onScreen: false };
+    const item: Item = { el, canvas, label, remove, page, index: -1, stale: true, onScreen: false };
+    el.setAttribute('aria-selected', 'false');
+    this.byEl.set(el, item);
     el.draggable = this.editable;
     el.addEventListener('click', () => this.host.go(this.items.indexOf(item)));
     el.addEventListener('dragstart', (e) => {
@@ -206,6 +236,7 @@ export class PagesPanel {
   }
 
   private number(item: Item, index: number): void {
+    item.index = index;
     item.label.textContent = String(index + 1);
     item.el.setAttribute('aria-label', t('panels.pages.page', { number: index + 1 }));
     item.remove.setAttribute('aria-label', t('panels.pages.delete', { number: index + 1 }));

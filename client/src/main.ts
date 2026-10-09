@@ -90,7 +90,6 @@ import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
 import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect } from './ui/autoCorrect.ts';
 import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
-import { livePreviewOn, onLivePreview } from './ui/livePreview.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
 import { loadIgnored, saveIgnored, withIgnored, type Ignored } from './spelling/ignored.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
@@ -125,7 +124,8 @@ import { DEFAULT_DRAW_STYLE, paintOf } from './formats/imageDraw.ts';
 import type { DrawStyle, Shape } from './formats/imageDraw.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, ImageOp } from './ui/actions.ts';
-import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
+import { opensLink } from './ui/linkDialog.ts';
+import { LinkPopover, type LinkDraft } from './ui/linkPopover.ts';
 import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
@@ -141,7 +141,7 @@ import { rewriteDocumentLinks } from './formats/docLinks.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
 import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
-import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 import { modalOpen } from './ui/dom.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
@@ -499,12 +499,13 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
       worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() });
-      worker.command({ kind: 'livePreview', on: livePreviewOn() });
       setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
       if (!firstPage && update.pages.length) firstPage = performance.now() - start;
       applyLayout(update);
+      // The first pages are the document: the rest is laid out behind them while they are looked at (the status bar counts them).
+      if (loadingScreen.visible && update.pages.length && pages.length) loadingScreen.hide();
       if (update.selection) applySelection(update.selection);
       if (!loaded) setStatus(t('app.layingOutPages', { name, count: pages.length, pages: pages.length.toLocaleString(getLocale()) }));
     },
@@ -2163,6 +2164,7 @@ async function openShared(id: string): Promise<void> {
       return;
     }
     setStatus(t('app.openingShared'));
+    worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
@@ -2199,12 +2201,22 @@ async function openCloud(id: string): Promise<void> {
     const cloud = library.cloud.find((d) => d.id === id) ?? (await listDocuments().catch(() => [])).find((d) => d.id === id);
     const name = cloud?.name ?? t('app.cloudDocumentName');
     setStatus(t('app.opening', { name }));
+    worker.warm(); // the fonts load while the document downloads
     // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest. So
     // whatever is still being saved to it lands first.
     await saving;
-    const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
-    // Listed at once: what asks about the open document's copy (File › Share, say) finds it.
-    if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
+    const { info, bytes, stored } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id, {
+      early: true,
+      progress: (share) => setStatus(t('app.openingProgress', { name, percent: Math.round(share * 100) })),
+    });
+    // The browser copy is written while the document opens; whatever saves next waits for it, so an edit can't be overwritten by it.
+    if (stored) {
+      const writing = stored.then((real) => {
+        // Listed once it is there: what asks about the open document's copy (File › Share, say) finds it.
+        if ((real.owner ?? null) === (account?.id ?? null)) library.putLocal(real);
+      });
+      saving = Promise.all([saving, writing]).catch(() => null);
+    } else if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
     if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
     const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
     if (usesTextEngine(source.kind, bytes.byteLength)) openLarge(info.name, new Uint8Array(bytes), { localId: info.id });
@@ -2907,9 +2919,7 @@ function linkDroppedDocument(key: string, x: number, y: number): void {
   if (!target || !hit) return;
   const title = shortestTitle(target, documents, linkPlaces().from ?? []);
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
-  // Where Markdown shows at the caret, the paragraph is its source text: the link goes in written out, and is a link once the caret leaves.
-  if (current.kind === 'md' && livePreviewOn()) send({ kind: 'insertText', text: `[[${title}]]` });
-  else send({ kind: 'setLink', url: docAddress(title), text: title });
+  send({ kind: 'setLink', url: docAddress(title), text: title });
   focusInput();
 }
 
@@ -3237,7 +3247,6 @@ const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'un
 /** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
-onLivePreview((on) => worker.command({ kind: 'livePreview', on }));
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
 let commandsAtOpen = 0;
@@ -3246,7 +3255,7 @@ function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
   commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -3810,6 +3819,25 @@ function linkKeyChanged(e: { metaKey: boolean; ctrlKey: boolean }): void {
 window.addEventListener('keydown', linkKeyChanged, true);
 window.addEventListener('keyup', linkKeyChanged, true);
 window.addEventListener('blur', () => linkKeyChanged({ metaKey: false, ctrlKey: false }));
+/** The form that opens over a link: its text and address to change, or to take the link off. */
+const linkPopover = new LinkPopover({
+  editable: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && !annotating,
+  open: followLink,
+  apply: (target, choice) => {
+    // The caret goes into the link (the commands run in order), so the change is to that link.
+    send({ kind: 'pointer', page: target.page, x: target.x, y: target.y });
+    send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
+    focusInput();
+  },
+});
+for (const type of ['keydown', 'wheel']) window.addEventListener(type, () => linkPopover.hideHover(), true);
+/** Opens the link form over the document at a window point, and applies what it comes back with to the selection. */
+function editLink(draft: LinkDraft, at: { clientX: number; clientY: number }): void {
+  void linkPopover.edit(draft, at).then((choice) => {
+    if (choice !== undefined) send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
+    focusInput();
+  });
+}
 function hoverLink(at: Hover): void {
   hoverAt = at;
   if (hoverBusy) return;
@@ -3824,7 +3852,8 @@ function hoverLink(at: Hover): void {
     overLink = url !== null && hoverInside;
     overCheckbox = !!found?.checkbox && hoverInside;
     updateCursor();
-    if (asked && hoverInside) pointerTip(url ? t(MAC ? 'app.linkTip.cmd' : 'app.linkTip.ctrl', { url }) : null, asked.clientX, asked.clientY);
+    if (asked && hit && hoverInside && url) linkPopover.show({ url, text: found!.text, page: hit.page.id, x: hit.x, y: hit.y, clientX: asked.clientX, clientY: asked.clientY });
+    else linkPopover.leave();
     const moved = hoverAt as Hover | null; // the pointer may have moved while asking
     if (moved && hoverInside) hoverLink(moved);
   });
@@ -3837,7 +3866,7 @@ canvas.addEventListener('pointerleave', () => {
   overCheckbox = false;
   overPicture = false;
   updateCursor();
-  pointerTip(null, 0, 0);
+  linkPopover.leave();
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -3935,6 +3964,18 @@ canvas.addEventListener(
   },
   { passive: false },
 );
+
+// A pinch or ctrl/cmd+wheel anywhere else (toolbars, panels, dialogs) would zoom the whole page and break the
+// layout; the document's own zoom is the canvas's (above). Safari's pinch is a separate gesture event.
+// Keyboard browser zoom (Cmd/Ctrl +/-) is left alone, so it still works as an accessibility tool.
+window.addEventListener(
+  'wheel',
+  (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  },
+  { passive: false },
+);
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(type, (e) => e.preventDefault());
 
 // --- Keyboard and text input -----------------------------------------------------------
 
@@ -4230,11 +4271,13 @@ const chromeHost = createChromeHost({
   showLinkDialog: () => {
     const selected = selection.text;
     if (selected.includes('\n')) return reportError(t('app.linkOneParagraph'));
-    void showLinkDialog(link ?? null, selected).then((choice) => {
-      if (choice === undefined) return;
-      send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
-      focusInput();
-    });
+    // The form opens at the caret, over the document.
+    const caret = selection.caret;
+    const page = caret && pagesById.get(caret.page);
+    const rect = canvas.getBoundingClientRect();
+    const scale = camera.zoom * CSS_PX_PER_POINT;
+    const at = caret && page ? { clientX: rect.left + (page.x + caret.x - camera.x) * scale, clientY: rect.top + (page.y + caret.y + caret.height - camera.y) * scale - 14 } : { clientX: rect.left + 40, clientY: rect.top + 40 };
+    editLink(link ? { url: link.url, text: link.text, existing: true } : { url: '', text: selected, existing: false }, at);
   },
   showMathDialog: () => {
     // The LaTeX parser is only fetched when an equation is asked for.

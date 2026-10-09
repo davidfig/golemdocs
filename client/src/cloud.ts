@@ -75,9 +75,31 @@ export function documentUrl(id: string): string {
   return `/api/documents/${id}`;
 }
 
-/** The document's .docx bytes. */
-export async function downloadDocument(id: string): Promise<ArrayBuffer> {
-  return (await check(await send(documentUrl(id)))).arrayBuffer();
+/**
+ * The document's .docx bytes. With `onProgress` the body is read as it arrives and the share received is reported (only when the
+ * size is known: a compressed response's length is not the length of what it holds).
+ */
+export async function downloadDocument(id: string, onProgress?: (share: number) => void): Promise<ArrayBuffer> {
+  const response = await check(await send(documentUrl(id)));
+  const total = response.headers.has('content-encoding') ? 0 : Number(response.headers.get('content-length'));
+  if (!onProgress || !response.body || !(total > 0)) return response.arrayBuffer();
+  const parts: Uint8Array[] = [];
+  let received = 0;
+  const reader = response.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    received += value.length;
+    onProgress(Math.min(1, received / total));
+  }
+  const bytes = new Uint8Array(received);
+  let at = 0;
+  for (const part of parts) {
+    bytes.set(part, at);
+    at += part.length;
+  }
+  return bytes.buffer;
 }
 
 /**

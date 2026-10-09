@@ -3,7 +3,7 @@ import { type Position, type ParagraphFormat, type CommandResult, NO_CHANGE } fr
 import type { Selection as OpSelection } from '@golemdocs/ops';
 
 import { newParagraphProperties, paragraphLength, runPropertiesAt, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
-import { END, Replica, type Applied, type HistoryMark, type Operation, type Pos, type RemoteChange, type ServerMessage } from '@golemdocs/ops';
+import { END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type ServerMessage } from '@golemdocs/ops';
 import { EditorNavigation } from './navigation.ts';
 
 export abstract class EditorEditing extends EditorNavigation {
@@ -23,21 +23,6 @@ export abstract class EditorEditing extends EditorNavigation {
     if (selection) this.setSelectionIds(selection);
     else this.setSelectionIds(this.selectionIds);
     return { edited: true, changed: applied.changed, structural: applied.structural, styles: applied.styles };
-  }
-
-  /** The undo history as it is now (see `foldHistory`, `restoreHistory`). */
-  historyMark(): HistoryMark {
-    return this.replica.history.mark();
-  }
-
-  /** Makes the edits since `mark` one undo step. */
-  foldHistory(mark: HistoryMark): void {
-    this.replica.history.fold(mark);
-  }
-
-  /** Forgets the edits since `mark` in the undo history (the document keeps them). */
-  restoreHistory(mark: HistoryMark): void {
-    this.replica.history.restore(mark);
   }
 
   /** How many undo steps there are. */

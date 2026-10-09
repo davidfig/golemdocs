@@ -293,9 +293,9 @@
 
 .wm-clip-button {
   padding: 6px 12px;
-  border: 1px solid var(--wm-button-border, #003c74);
-  border-radius: 6px;
-  background: linear-gradient(var(--wm-button-top, #fff), var(--wm-button-bottom, #e3e3db));
+  border: 1px solid var(--wm-border, #b9b9b9);
+  border-radius: 5px;
+  background: var(--wm-field-bg, #fff);
   color: var(--wm-text, #000);
   font: inherit;
   cursor: pointer;

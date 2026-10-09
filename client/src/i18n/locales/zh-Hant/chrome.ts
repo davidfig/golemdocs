@@ -78,8 +78,6 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': '追蹤修訂(&T)',
   'chrome.tools.autoFormat': '輸入時自動套用格式(&A)',
   'chrome.tools.autoFormat.tip': '輸入時將「# 」「- 」「**粗體**」等 Markdown 快捷寫法轉換為格式',
-  'chrome.tools.livePreview': '在游標處顯示 &Markdown',
-  'chrome.tools.livePreview.tip': '在 Markdown 文件中,顯示游標所在段落的 Markdown 原始碼(實驗性)',
   'chrome.tools.options': '選項(&O)…',
   'chrome.tools.language': '語言(&L)',
   'chrome.format.bold': '粗體(&B)',

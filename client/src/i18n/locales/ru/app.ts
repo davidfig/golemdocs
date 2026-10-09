@@ -6,8 +6,6 @@ export const app: Catalog = {
   // Sample and default document names
   'app.welcomeName': 'Добро пожаловать в Golem Docs',
   'app.fontsName': 'Шрифты',
-  'app.linkTip.ctrl': '{url}\nCtrl+щелчок, чтобы перейти по ссылке',
-  'app.linkTip.cmd': '{url}\nCmd+щелчок, чтобы перейти по ссылке',
   'app.privacyName': 'Политика конфиденциальности',
   'app.termsName': 'Условия использования',
   'app.changelogName': 'Что нового',
@@ -84,6 +82,7 @@ export const app: Catalog = {
   'app.notInAccountYet': 'Этого документа ещё нет в вашей учётной записи: подождите немного, пока он загрузится, и повторите попытку',
   'app.notSavedYet': 'Сначала внесите изменение: документ сохраняется в вашей учётной записи после редактирования',
   'app.opening': 'Открывается «{name}»…',
+  'app.openingProgress': 'Открывается «{name}»… {percent}%',
   'app.openFailed': 'Не удалось открыть документ: {message}',
   'app.openingShared': 'Открывается общий документ…',
   'app.openSharedFailed': 'Не удалось открыть общий документ: {message}',

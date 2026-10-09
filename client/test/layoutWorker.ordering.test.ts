@@ -45,7 +45,7 @@ test('an assistant tool, a link lookup and a picture sent with the open all reac
   assert.deepEqual(new Uint8Array((await picture)!), new Uint8Array(png), 'the picture was in by the time its bytes were asked for');
   assert.equal(decode(await convert(doc, 'md')), '![A picture](image1.png)Beta\n');
   // Asked before there were pages: answered all the same, with nothing there.
-  assert.deepEqual(await waitFor('linkAt', (m) => m.request === link), { type: 'linkAt', request: link, url: null, checkbox: false });
+  assert.deepEqual(await waitFor('linkAt', (m) => m.request === link), { type: 'linkAt', request: link, url: null, text: '', checkbox: false });
 });
 
 test('messages for the previous document, sent after a new one is asked for, are ignored', async () => {

@@ -116,8 +116,6 @@ export type WireCommand =
   | { kind: 'autoFormat'; on: boolean }
   /** Which autocorrect rules are on: smart quotes, dashes, symbols and so on (see autocorrect.ts). */
   | { kind: 'autoCorrect'; options: AutoCorrectOptions; /** The user's replacement list: text, and what replaces it. */ replacements: [string, string][] }
-  /** Whether the paragraph the caret is in shows its Markdown source, in Markdown documents (see livePreview.ts). */
-  | { kind: 'livePreview'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
   | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean }
@@ -242,6 +240,8 @@ export type ToWorker =
   | { type: 'marks'; on: boolean }
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
+  /** A document is on its way (still downloading): load the faces nearly every document uses now, so they are there when its bytes are. */
+  | { type: 'warm' }
   /** `keepRoom`: the same picture or drawing, changed, opened in place of the open one: it keeps that one's room. */
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions; keepRoom?: boolean; /** With `keepRoom`: the saved version this is. */ version?: number }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
@@ -420,7 +420,7 @@ export type FromWorker =
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
   /** A Markdown document being opened embeds a picture or note (`![[title]]`): the stored document of that title, as `embedFile`. */
   | { type: 'embed'; request: number; title: string }
-  | { type: 'linkAt'; request: number; url: string | null; checkbox: boolean }
+  | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
   /** What an assistant tool did or found. */
   /** `images` are pictures the tool fetched for the model to look at (data: URIs). */

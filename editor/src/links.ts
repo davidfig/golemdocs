@@ -45,9 +45,14 @@ export abstract class EditorLinks extends EditorEditing {
 
   /** The address of the link whose text is under the page point (x, y), or null when the point is not over one. */
   linkUnder(page: PageLayout, x: number, y: number): string | null {
+    return this.linkDetailsUnder(page, x, y)?.url ?? null;
+  }
+
+  /** The address and the shown text of the link under a page point (null when the point is not over one). */
+  linkDetailsUnder(page: PageLayout, x: number, y: number): { url: string; text: string } | null {
     const under = this.charUnder(page, x, y);
     const at = under && this.linkAt(under.paragraph, under.offset, false);
-    return at ? (at.link.url ?? (at.link.anchor ? `#${at.link.anchor}` : '')) : null;
+    return at && under ? { url: at.link.url ?? (at.link.anchor ? `#${at.link.anchor}` : ''), text: plainText(under.paragraph, at.from, at.to) } : null;
   }
 
   /** The paragraph of the task list item whose check box is under the page point (x, y), and whether it is checked. */

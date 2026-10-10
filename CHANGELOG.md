@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.17.1 - Unreleased
+
+### Fixed
+- The Down and Up arrow keys no longer skip short or empty lines when the caret is near the right end of a long line.
+
 ## 0.17.0 - 2026-10-09
 
 ### Added

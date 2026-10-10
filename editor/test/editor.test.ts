@@ -1134,3 +1134,15 @@ test('a picture inside a table cell is picked by a click', skip, async () => {
   await apply({ kind: 'pointer', page: session.displayPages[0], x: item.x + item.width / 2, y: item.y + item.height / 2 });
   assert.ok(editor.selectedPicture(), 'selected in a cell');
 });
+
+test('Down from the end of a long line visits every short and empty line below it', skip, async () => {
+  const texts = [LOREM, 'Hi', LOREM, '', 'x', LOREM];
+  const { editor, apply } = await setup(texts);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'lineEnd' });
+  const visited = new Set<number>();
+  for (let i = 0; i < 30; i++) {
+    visited.add(editor.paragraphs().indexOf(editor.selection.focus.paragraph));
+    await apply({ kind: 'move', to: 'down' });
+  }
+  assert.deepEqual([...visited], [0, 1, 2, 3, 4, 5], 'no paragraph is skipped');
+});

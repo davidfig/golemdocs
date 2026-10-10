@@ -220,8 +220,10 @@ export abstract class EditorNavigation extends EditorBase {
         if (next && next.columnWidth !== undefined && next.column !== current.column) return this.positionInLine(next, goal);
       }
       if (candidates.length === 0) continue;
-      // Stay in the same column (table cells) when a line there qualifies.
-      const inColumn = candidates.filter((l) => goal >= l.column - 1 && goal <= l.column + Math.max(l.width + (l.x - l.column), 0) + 1);
+      // Stay in the same column (table cells) when a line there qualifies. A column is as wide as its widest line, so a short or empty line is still in the column its text is in.
+      const extent = new Map<number, number>();
+      for (const l of page.lines) extent.set(l.column, Math.max(extent.get(l.column) ?? 0, l.width + (l.x - l.column)));
+      const inColumn = candidates.filter((l) => goal >= l.column - 1 && goal <= l.column + (extent.get(l.column) ?? 0) + 1);
       const pool = inColumn.length ? inColumn : candidates;
       const best = pool.reduce((a, b) => (dir < 0 ? (b.y + b.height > a.y + a.height ? b : a) : b.y < a.y ? b : a));
       return this.positionInLine(best, goal);

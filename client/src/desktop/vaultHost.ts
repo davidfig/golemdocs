@@ -5,7 +5,8 @@ import { createDocument, deleteDocuments, downloadDocument, listDocuments, listF
 import type { Folder } from '../folders.ts';
 import type { DesktopBridge } from './bridge.ts';
 import { safeName } from './vaultPlan.ts';
-import type { VaultCloud, VaultCodec, VaultHost } from './vaultSync.ts';
+import { guestCloud } from './vaultGuest.ts';
+import { GUEST_ACCOUNT, type VaultCloud, type VaultCodec, type VaultHost } from './vaultSync.ts';
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
@@ -56,6 +57,7 @@ export function accountCloud(): VaultCloud {
   };
 }
 
-export function realHost(disk: DesktopBridge, codec: VaultCodec, account: string): VaultHost {
-  return { disk, cloud: accountCloud(), codec, hash: sha256Hex, account };
+/** The vault's host for the signed-in account, or (null) for the documents saved in this browser. */
+export function realHost(disk: DesktopBridge, codec: VaultCodec, account: string | null): VaultHost {
+  return { disk, cloud: account ? accountCloud() : guestCloud(), codec, hash: sha256Hex, account: account ?? GUEST_ACCOUNT };
 }

@@ -21,6 +21,7 @@ export class VaultDialog {
     const service = this.host.service;
     if (this.dialog || !service) return;
 
+    const intro = h('p', { class: 'wm-history-intro' });
     const folder = h('p', { class: 'wm-history-intro' });
     const status = h('p', { class: 'wm-history-note' });
     const skipped = h('p', { class: 'wm-history-note' });
@@ -29,7 +30,7 @@ export class VaultDialog {
     const syncNow = h('button', { class: 'wm-button', text: t('vault.syncNow'), attrs: { type: 'button' } });
     const confirm = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
     const close = h('button', { class: 'wm-button', text: t('vault.close'), attrs: { type: 'button' } });
-    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, h('p', { class: 'wm-history-intro', text: t('vault.intro') }), folder, status, skipped);
+    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, intro, folder, status, skipped);
     const dialog = h(
       'dialog',
       { class: 'wm-dialog wm-history', attrs: { 'aria-label': t('vault.title') } },
@@ -58,15 +59,16 @@ export class VaultDialog {
         case 'wrongAccount':
           return t('vault.status.wrongAccount');
         case 'blocked':
-          return t('vault.status.blocked', { count: s.report?.blocked?.count ?? 0 });
+          return t(service.signedIn ? 'vault.status.blocked' : 'vault.status.blockedLocal', { count: s.report?.blocked?.count ?? 0 });
       }
     };
 
     const render = (s: VaultStatus) => {
+      intro.textContent = t(service.signedIn ? 'vault.intro' : 'vault.introLocal');
       folder.textContent = s.root ? t('vault.folder', { path: s.root }) : t('vault.noFolder');
       status.textContent = describe(s);
       const skippedCount = s.report?.skipped ?? 0;
-      skipped.textContent = skippedCount ? t('vault.skipped', { count: skippedCount }) : '';
+      skipped.textContent = skippedCount ? t(service.signedIn ? 'vault.skipped' : 'vault.skippedLocal', { count: skippedCount }) : '';
       choose.textContent = s.root ? t('vault.change') : t('vault.choose');
       stop.hidden = !s.root;
       syncNow.hidden = !s.root;

@@ -2,7 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const vault: Catalog = {
   'vault.menu': 'Dossier coffre…',
-  'vault.menu.tip': 'Conserver une copie de vos documents sous forme de fichiers dans un dossier de cet ordinateur et renvoyer à votre compte les modifications faites à ces fichiers',
+  'vault.menu.tip': 'Conserver une copie de vos documents sous forme de fichiers dans un dossier de cet ordinateur et garder les deux synchronisés',
   'vault.title': 'Dossier coffre',
   'vault.intro': 'Vos documents sont conservés sous forme de fichiers dans un dossier de cet ordinateur. Modifiez un fichier et la modification est envoyée à votre compte ; modifiez un document dans votre compte et le fichier est mis à jour. Si les deux ont changé, le fichier du dossier l’emporte et votre compte garde la version précédente dans son historique.',
   'vault.noFolder': 'Aucun dossier choisi.',
@@ -12,7 +12,7 @@ export const vault: Catalog = {
   'vault.stop': 'Arrêter la synchronisation',
   'vault.syncNow': 'Synchroniser maintenant',
   'vault.close': 'Fermer',
-  'vault.signedOut': 'Connectez-vous avec la synchronisation pour utiliser un dossier coffre.',
+  'vault.signedOut': 'Ce dossier est lié à un compte. Connectez-vous à ce compte pour continuer à le synchroniser.',
   'vault.status.syncing': 'Synchronisation…',
   'vault.status.idle': 'À jour. Dernière synchronisation : {when}.',
   'vault.status.waiting': 'En attente de synchronisation.',
@@ -25,4 +25,9 @@ export const vault: Catalog = {
   'vault.deleteMissing': 'Supprimer {count} documents',
   'vault.skipped.one': 'Un document (PDF, image ou dessin) reste dans votre compte et n’est pas copié dans le dossier.',
   'vault.skipped': '{count} documents (PDF, images ou dessins) restent dans votre compte et ne sont pas copiés dans le dossier.',
+  'vault.introLocal': 'Vos documents sont conservés sous forme de fichiers dans un dossier de cet ordinateur. Modifiez un fichier là-bas et le document ici est mis à jour ; modifiez un document ici et le fichier est mis à jour. Si les deux ont changé, le fichier du dossier l’emporte et la version précédente est gardée dans l’historique du document.',
+  'vault.status.blockedLocal.one': 'Un fichier manque dans le dossier. Si vous vouliez le supprimer, il ira dans la corbeille pendant 30 jours.',
+  'vault.status.blockedLocal': '{count} fichiers manquent dans le dossier. Si vous vouliez les supprimer, ils iront dans la corbeille pendant 30 jours.',
+  'vault.skippedLocal.one': 'Un document (PDF, image ou dessin) n’est pas copié dans le dossier.',
+  'vault.skippedLocal': '{count} documents (PDF, images ou dessins) ne sont pas copiés dans le dossier.',
 };

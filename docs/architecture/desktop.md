@@ -20,6 +20,12 @@ The desktop app is a [Tauri](https://tauri.app) shell around the website, plus a
 
 ## The sync rule: the local file wins
 
+**First launch.** `connectVault` (`main.ts`) opens the Vault Folder dialog once, on a device where no folder is remembered (signed in or not). `word.vaultAsked` in localStorage records that it was shown (per device, not synced), so closing the dialog without choosing is final; File › Vault Folder stays available.
+
+**Without an account.** The folder does not need one. `syncVault` talks to a `VaultCloud` and cannot tell what is behind it: signed in it is `accountCloud()` (`vaultHost.ts`), signed out it is `guestCloud()` (`vaultGuest.ts`), the documents with no owner saved in this browser (`storage/local.ts`) and the folders kept here. Replacing one keeps a version in the browser's history and a deleted file goes to the browser's trash, so the same rule holds. The vault's `state.json` records whose folder it is (`GUEST_ACCOUNT` or an account id): a signed-out folder is taken over by the account that signs in (no memory, so files are matched to documents by path and the file wins), but a folder linked to an account is never given to another account or used signed out (`wrongAccount`, shown as "sign in to that account"), because documents copied out of it would be uploaded again by the sign-in's adoption of guest documents. `VaultService` waits for the page's uploads (`hooks.settled`) before the first sync as an account, so adopted documents are already there to match; it calls `hooks.changed` after a sync that changed anything, so the page's library list refreshes. The dialog words signed-out text with the `*Local` strings.
+
+**The open document.** `SyncReport.touched` lists the documents a sync replaced, renamed or deleted on the other side (ids as that side knows them). `vaultChanged` (`main.ts`) refreshes the library and, if the open document is one of them and has no unsaved edits and is not in a shared room, stores the account's new copy (`openFromCloud`) and opens it again from storage (`openLocal`), which keeps its caret and scroll. The file wins, so this replaces what the editor showed; edits not yet saved are left alone and the next sync decides.
+
 Whatever is done to the folder is what the account becomes. That is safe because the account keeps history: replacing a document keeps its old bytes as a version first (`keepCloudVersion`), and deleting one moves it to the account's trash for 30 days ([Version history](../history.md)).
 
 `planVault` (`client/src/desktop/vaultPlan.ts`) is a pure function of the files on disk, the manifest from the last sync and the account's catalogue. A sync is two steps: `needsHash` names the few files that must be hashed (those whose size or time moved, and possible renames), then `planVault` returns the actions.
@@ -88,5 +94,6 @@ pnpm desktop:dev
 | `client/src/desktop/vaultCodec.ts` | stored document bytes to and from the vault's file formats (runs in the worker) |
 | `client/src/desktop/convertWorker.ts`, `convertWorkerEntry.ts`, `convertClient.ts` | the worker that runs the codec, and the page's client for it |
 | `client/src/desktop/vaultFormats.ts` | which file names the vault keeps (no converters) |
+| `client/src/desktop/vaultGuest.ts` | the signed-out side: this browser's documents as a `VaultCloud` |
 | `client/src/desktop/vaultService.ts` | the running sync: looks every few seconds, syncs on change |
 | `client/src/ui/vaultDialog.ts` | File › Vault Folder |

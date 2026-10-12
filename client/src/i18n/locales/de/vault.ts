@@ -2,7 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const vault: Catalog = {
   'vault.menu': 'Tresorordner…',
-  'vault.menu.tip': 'Eine Kopie Ihrer Dokumente als Dateien in einem Ordner auf diesem Computer aufbewahren und Änderungen an diesen Dateien an Ihr Konto zurücksenden',
+  'vault.menu.tip': 'Eine Kopie Ihrer Dokumente als Dateien in einem Ordner auf diesem Computer aufbewahren und beides abgleichen',
   'vault.title': 'Tresorordner',
   'vault.intro': 'Ihre Dokumente werden als Dateien in einem Ordner auf diesem Computer aufbewahrt. Ändern Sie dort eine Datei, wird die Änderung an Ihr Konto gesendet; ändern Sie ein Dokument in Ihrem Konto, wird die Datei aktualisiert. Wurden beide geändert, gewinnt die Datei im Ordner, und Ihr Konto behält die frühere Version in seinem Verlauf.',
   'vault.noFolder': 'Kein Ordner gewählt.',
@@ -12,7 +12,7 @@ export const vault: Catalog = {
   'vault.stop': 'Synchronisierung beenden',
   'vault.syncNow': 'Jetzt synchronisieren',
   'vault.close': 'Schließen',
-  'vault.signedOut': 'Melden Sie sich mit Synchronisierung an, um einen Tresorordner zu verwenden.',
+  'vault.signedOut': 'Dieser Ordner gehört zu einem Konto. Melden Sie sich bei diesem Konto an, um die Synchronisierung fortzusetzen.',
   'vault.status.syncing': 'Synchronisiere…',
   'vault.status.idle': 'Auf dem neuesten Stand. Zuletzt synchronisiert um {when}.',
   'vault.status.waiting': 'Wartet auf die Synchronisierung.',
@@ -25,4 +25,9 @@ export const vault: Catalog = {
   'vault.deleteMissing': '{count} Dokumente löschen',
   'vault.skipped.one': 'Ein Dokument (PDF, Bild oder Zeichnung) bleibt in Ihrem Konto und wird nicht in den Ordner kopiert.',
   'vault.skipped': '{count} Dokumente (PDFs, Bilder oder Zeichnungen) bleiben in Ihrem Konto und werden nicht in den Ordner kopiert.',
+  'vault.introLocal': 'Ihre Dokumente werden als Dateien in einem Ordner auf diesem Computer aufbewahrt. Ändern Sie dort eine Datei, wird das Dokument hier aktualisiert; ändern Sie hier ein Dokument, wird die Datei aktualisiert. Wurden beide geändert, gewinnt die Datei im Ordner, und die frühere Version bleibt im Verlauf des Dokuments erhalten.',
+  'vault.status.blockedLocal.one': 'Eine Datei fehlt im Ordner. Wenn Sie sie löschen wollten, kommt sie für 30 Tage in den Papierkorb.',
+  'vault.status.blockedLocal': '{count} Dateien fehlen im Ordner. Wenn Sie sie löschen wollten, kommen sie für 30 Tage in den Papierkorb.',
+  'vault.skippedLocal.one': 'Ein Dokument (PDF, Bild oder Zeichnung) wird nicht in den Ordner kopiert.',
+  'vault.skippedLocal': '{count} Dokumente (PDFs, Bilder oder Zeichnungen) werden nicht in den Ordner kopiert.',
 };

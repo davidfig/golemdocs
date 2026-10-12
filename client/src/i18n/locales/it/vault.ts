@@ -2,7 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const vault: Catalog = {
   'vault.menu': 'Cartella del caveau…',
-  'vault.menu.tip': 'Conserva una copia dei tuoi documenti come file in una cartella di questo computer e invia al tuo account le modifiche fatte a quei file',
+  'vault.menu.tip': 'Conserva una copia dei tuoi documenti come file in una cartella di questo computer e tieni i due sincronizzati',
   'vault.title': 'Cartella del caveau',
   'vault.intro': 'I tuoi documenti sono conservati come file in una cartella di questo computer. Se modifichi un file lì, la modifica viene inviata al tuo account; se modifichi un documento nel tuo account, il file viene aggiornato. Se sono cambiati entrambi, vince il file nella cartella e il tuo account conserva la versione precedente nella cronologia.',
   'vault.noFolder': 'Nessuna cartella scelta.',
@@ -12,7 +12,7 @@ export const vault: Catalog = {
   'vault.stop': 'Interrompi la sincronizzazione',
   'vault.syncNow': 'Sincronizza ora',
   'vault.close': 'Chiudi',
-  'vault.signedOut': 'Accedi con la sincronizzazione per usare una cartella del caveau.',
+  'vault.signedOut': 'Questa cartella è collegata a un account. Accedi a quell’account per continuare a sincronizzarla.',
   'vault.status.syncing': 'Sincronizzazione…',
   'vault.status.idle': 'Tutto aggiornato. Ultima sincronizzazione: {when}.',
   'vault.status.waiting': 'In attesa di sincronizzare.',
@@ -25,4 +25,9 @@ export const vault: Catalog = {
   'vault.deleteMissing': 'Elimina {count} documenti',
   'vault.skipped.one': 'Un documento (un PDF, un’immagine o un disegno) resta nel tuo account e non viene copiato nella cartella.',
   'vault.skipped': '{count} documenti (PDF, immagini o disegni) restano nel tuo account e non vengono copiati nella cartella.',
+  'vault.introLocal': 'I tuoi documenti sono conservati come file in una cartella di questo computer. Se modifichi un file lì, il documento qui viene aggiornato; se modifichi un documento qui, il file viene aggiornato. Se sono cambiati entrambi, vince il file nella cartella e la versione precedente resta nella cronologia del documento.',
+  'vault.status.blockedLocal.one': 'Manca un file nella cartella. Se volevi eliminarlo, finirà nel cestino per 30 giorni.',
+  'vault.status.blockedLocal': 'Mancano {count} file nella cartella. Se volevi eliminarli, finiranno nel cestino per 30 giorni.',
+  'vault.skippedLocal.one': 'Un documento (un PDF, un’immagine o un disegno) non viene copiato nella cartella.',
+  'vault.skippedLocal': '{count} documenti (PDF, immagini o disegni) non vengono copiati nella cartella.',
 };

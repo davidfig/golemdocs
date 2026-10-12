@@ -1,6 +1,6 @@
 export const vault = {
   'vault.menu': 'Vault Folder…',
-  'vault.menu.tip': 'Keep a copy of your documents as files in a folder on this computer, and send changes made to those files back to your account',
+  'vault.menu.tip': 'Keep a copy of your documents as files in a folder on this computer, and keep the two in step',
   'vault.title': 'Vault Folder',
   'vault.intro': 'Your documents are kept as files in a folder on this computer. Change a file there and the change is sent to your account; change a document in your account and the file is updated. If both changed, the file in the folder wins, and your account keeps the earlier version in its history.',
   'vault.noFolder': 'No folder chosen.',
@@ -10,7 +10,7 @@ export const vault = {
   'vault.stop': 'Stop Syncing',
   'vault.syncNow': 'Sync Now',
   'vault.close': 'Close',
-  'vault.signedOut': 'Sign in with sync to keep a vault folder.',
+  'vault.signedOut': 'This folder is kept with an account. Sign in to that account to keep syncing it.',
   'vault.status.syncing': 'Syncing…',
   'vault.status.idle': 'Up to date. Last synced {when}.',
   'vault.status.waiting': 'Waiting to sync.',
@@ -23,4 +23,9 @@ export const vault = {
   'vault.deleteMissing': 'Delete {count} Documents',
   'vault.skipped.one': 'One document (a PDF, picture or drawing) stays in your account and is not copied to the folder.',
   'vault.skipped': '{count} documents (PDFs, pictures or drawings) stay in your account and are not copied to the folder.',
+  'vault.introLocal': 'Your documents are kept as files in a folder on this computer. Change a file there and the document here is updated; change a document here and the file is updated. If both changed, the file in the folder wins, and the earlier version is kept in the document’s history.',
+  'vault.status.blockedLocal.one': 'One file is missing from the folder. If you meant to delete it, it goes to the trash for 30 days.',
+  'vault.status.blockedLocal': '{count} files are missing from the folder. If you meant to delete them, they go to the trash for 30 days.',
+  'vault.skippedLocal.one': 'One document (a PDF, picture or drawing) is not copied to the folder.',
+  'vault.skippedLocal': '{count} documents (PDFs, pictures or drawings) are not copied to the folder.',
 };

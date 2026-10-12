@@ -4473,11 +4473,41 @@ const vaultDialog = new VaultDialog({
   focusEditor: focusInput,
 });
 
+const VAULT_ASKED_KEY = 'word.vaultAsked';
+
+/**
+ * A sync changed documents: the list is read again, and the open document, if a file in the folder just replaced it (or it
+ * was renamed or deleted there), is opened again from what is stored. The file wins, as in the sync. One with edits not yet saved
+ * (or one other people are editing at once) is left as it is: it is saved or merged the ordinary way, and the next sync decides.
+ */
+async function vaultChanged(touched: string[]): Promise<void> {
+  await refreshLibrary();
+  const doc = current;
+  if (!doc.localId || doc.shared || doc.unsavedSince !== 0 || doc.room?.mode === 'shared') return;
+  const entry = library.entries.find((e) => e.local?.id === doc.localId);
+  const cloudId = entry?.cloud?.id ?? entry?.local?.cloudId;
+  if (!touched.includes(doc.localId) && !(cloudId && touched.includes(cloudId))) return;
+  // The account's copy has the file's text now: make this browser's copy that, unless it has edits the account hasn't got.
+  if (account && entry?.cloud) await openFromCloud(entry.cloud, account.id).catch(() => {});
+  if (current === doc && doc.unsavedSince === 0) await openLocal(doc.localId);
+}
+
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
 async function connectVault(): Promise<void> {
   if (!isDesktopApp()) return;
-  vaultService ??= VaultService.create(() => account?.id ?? null);
+  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched) });
   await vaultService?.start();
+  // First launch with no folder: show the Vault Folder dialog once (it explains the folder and has Choose), signed in or not.
+  // Closing it without choosing is an answer; File ▸ Vault Folder is
+  // still there. Per device, so not in SYNCED_KEYS.
+  if (!vaultService || vaultService.current.root) return;
+  try {
+    if (localStorage.getItem(VAULT_ASKED_KEY)) return;
+    localStorage.setItem(VAULT_ASKED_KEY, 'yes');
+  } catch {
+    return; // no storage: better never asked than asked on every launch
+  }
+  vaultDialog.open();
 }
 
 const trashDialog = new TrashDialog({ deps: trashDeps, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });

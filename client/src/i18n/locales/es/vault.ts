@@ -2,7 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const vault: Catalog = {
   'vault.menu': 'Carpeta de la bóveda…',
-  'vault.menu.tip': 'Guarda una copia de tus documentos como archivos en una carpeta de este ordenador y envía a tu cuenta los cambios hechos en ellos',
+  'vault.menu.tip': 'Guarda una copia de tus documentos como archivos en una carpeta de este ordenador y mantén ambos sincronizados',
   'vault.title': 'Carpeta de la bóveda',
   'vault.intro': 'Tus documentos se guardan como archivos en una carpeta de este ordenador. Si cambias un archivo allí, el cambio se envía a tu cuenta; si cambias un documento en tu cuenta, el archivo se actualiza. Si ambos cambiaron, gana el archivo de la carpeta y tu cuenta conserva la versión anterior en su historial.',
   'vault.noFolder': 'No se ha elegido ninguna carpeta.',
@@ -12,7 +12,7 @@ export const vault: Catalog = {
   'vault.stop': 'Dejar de sincronizar',
   'vault.syncNow': 'Sincronizar ahora',
   'vault.close': 'Cerrar',
-  'vault.signedOut': 'Inicia sesión con sincronización para usar una carpeta de la bóveda.',
+  'vault.signedOut': 'Esta carpeta está vinculada a una cuenta. Inicia sesión en esa cuenta para seguir sincronizándola.',
   'vault.status.syncing': 'Sincronizando…',
   'vault.status.idle': 'Todo al día. Última sincronización: {when}.',
   'vault.status.waiting': 'Esperando para sincronizar.',
@@ -25,4 +25,9 @@ export const vault: Catalog = {
   'vault.deleteMissing': 'Eliminar {count} documentos',
   'vault.skipped.one': 'Un documento (un PDF, una imagen o un dibujo) se queda en tu cuenta y no se copia a la carpeta.',
   'vault.skipped': '{count} documentos (PDF, imágenes o dibujos) se quedan en tu cuenta y no se copian a la carpeta.',
+  'vault.introLocal': 'Tus documentos se guardan como archivos en una carpeta de este ordenador. Si cambias un archivo allí, el documento de aquí se actualiza; si cambias un documento aquí, el archivo se actualiza. Si ambos cambiaron, gana el archivo de la carpeta y la versión anterior se conserva en el historial del documento.',
+  'vault.status.blockedLocal.one': 'Falta un archivo en la carpeta. Si querías eliminarlo, irá a la papelera durante 30 días.',
+  'vault.status.blockedLocal': 'Faltan {count} archivos en la carpeta. Si querías eliminarlos, irán a la papelera durante 30 días.',
+  'vault.skippedLocal.one': 'Un documento (un PDF, una imagen o un dibujo) no se copia a la carpeta.',
+  'vault.skippedLocal': '{count} documentos (PDF, imágenes o dibujos) no se copian a la carpeta.',
 };

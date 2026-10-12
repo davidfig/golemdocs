@@ -2,7 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const vault: Catalog = {
   'vault.menu': '保管库文件夹…',
-  'vault.menu.tip': '在这台电脑的文件夹中以文件形式保留文档副本，并把对这些文件的更改发回你的账户',
+  'vault.menu.tip': '在这台电脑的文件夹中以文件形式保留文档副本，并让两者保持同步',
   'vault.title': '保管库文件夹',
   'vault.intro': '你的文档以文件形式保存在这台电脑的文件夹中。在那里更改文件，更改会发送到你的账户；在账户中更改文档，文件会随之更新。如果两边都更改了，以文件夹中的文件为准，账户会在历史记录中保留之前的版本。',
   'vault.noFolder': '尚未选择文件夹。',
@@ -12,7 +12,7 @@ export const vault: Catalog = {
   'vault.stop': '停止同步',
   'vault.syncNow': '立即同步',
   'vault.close': '关闭',
-  'vault.signedOut': '请登录并启用同步后再使用保管库文件夹。',
+  'vault.signedOut': '此文件夹与某个账户关联。请登录该账户以继续同步。',
   'vault.status.syncing': '正在同步…',
   'vault.status.idle': '已是最新。上次同步：{when}。',
   'vault.status.waiting': '等待同步。',
@@ -22,4 +22,7 @@ export const vault: Catalog = {
   'vault.status.blocked': '文件夹中缺少 {count} 个文件。如果你是有意删除，它们会在账户的回收站中保留 30 天。',
   'vault.deleteMissing': '删除 {count} 个文档',
   'vault.skipped': '{count} 个文档（PDF、图片或绘图）保留在你的账户中，不会复制到文件夹。',
+  'vault.introLocal': '你的文档以文件形式保存在这台电脑的文件夹中。在那里更改文件，这里的文档会随之更新；在这里更改文档，文件也会更新。如果两边都更改了，以文件夹中的文件为准，之前的版本会保留在文档的历史记录中。',
+  'vault.status.blockedLocal': '文件夹中缺少 {count} 个文件。如果你是有意删除，它们会在回收站中保留 30 天。',
+  'vault.skippedLocal': '{count} 个文档（PDF、图片或绘图）不会复制到文件夹。',
 };

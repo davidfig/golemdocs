@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost } from '../src/desktop/vaultSync.ts';
+import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost } from '../src/desktop/vaultSync.ts';
 
 const text = (s: string) => new TextEncoder().encode(s);
 const read = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -149,6 +149,7 @@ test('a file edited in the vault replaces the document, and settles', async () =
   s.folder.put('one.md', 'new words');
   const report = await s.sync();
   assert.equal(counts(report), '0,1,0,0,0,0,0');
+  assert.deepEqual(report.touched, [id], 'an editor showing it is told it is out of date');
   assert.equal(read(s.docs.get(id)!.bytes), 'wdoc:new words');
   assert.equal(s.calls.includes(`keep ${id}`), false, 'the account had not changed, so there is nothing to keep');
   assert.equal(counts(await s.sync()), quiet);
@@ -271,6 +272,34 @@ test('a vault never takes another account in', async () => {
   await s.sync();
   const other = { ...s.host, account: 'u2' };
   const report = await syncVault(other);
+  assert.equal(report.wrongAccount, true);
+  assert.equal(s.calls.filter((c) => c.startsWith('trash')).length, 0);
+});
+
+test('a vault kept while signed out joins the account that signs in, matching files to documents by path', async () => {
+  const s = setup(GUEST_ACCOUNT);
+  s.add('one.md', 'kept here');
+  await s.sync();
+  s.folder.put('one.md', 'edited while signed out');
+  s.folder.put('two.md', 'only a file');
+  s.calls.length = 0;
+  // Signing in adopts the browser's documents into a fresh account: same names, new ids.
+  s.docs.clear();
+  s.add('one.md', 'kept here', 'acct1');
+  const report = await syncVault({ ...s.host, account: 'u1' });
+  assert.equal(report.wrongAccount, undefined);
+  assert.deepEqual(report.errors, []);
+  assert.equal(counts(report), '0,1,1,0,0,0,0', 'one.md replaces the document, two.md becomes one');
+  assert.equal(read(s.docs.get('acct1')!.bytes), 'wdoc:edited while signed out');
+  assert.equal(s.docs.size, 2, 'no duplicate of one.md');
+  assert.equal(s.calls.filter((c) => c.startsWith('trash')).length, 0);
+});
+
+test('a vault linked to an account is not used while signed out', async () => {
+  const s = setup('u1');
+  s.add('one.md', 'x');
+  await s.sync();
+  const report = await syncVault({ ...s.host, account: GUEST_ACCOUNT });
   assert.equal(report.wrongAccount, true);
   assert.equal(s.calls.filter((c) => c.startsWith('trash')).length, 0);
 });

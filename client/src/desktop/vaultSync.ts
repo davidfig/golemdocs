@@ -9,6 +9,9 @@ import { cloudPaths, needsHash, planVault, type CloudDoc, type CloudFile, type C
 
 export const STATE_PATH = '.golemdocs/state.json';
 
+/** The `account` of a vault kept while nobody is signed in (its documents are the ones saved in this browser). */
+export const GUEST_ACCOUNT = '@guest';
+
 export interface VaultDisk {
   scan(): Promise<LocalFile[]>;
   read(path: string): Promise<Uint8Array>;
@@ -46,7 +49,7 @@ export interface VaultHost {
   codec: VaultCodec;
   /** Hex SHA-256. */
   hash(bytes: Uint8Array): Promise<string>;
-  /** The signed-in account. A vault belongs to one account; another's files are never mixed in. */
+  /** The signed-in account, or `GUEST_ACCOUNT`. A vault belongs to one account; another's files are never mixed in. */
   account: string;
 }
 
@@ -67,9 +70,11 @@ export interface SyncReport {
   /** Documents the vault does not keep (a PDF, a picture) and so left alone, plus any that had no text form. */
   skipped: number;
   errors: { action: VaultAction; message: string }[];
+  /** The documents (by the other side's id) whose content, name or place the sync changed there or deleted: one open in an editor is out of date. */
+  touched: string[];
   /** The plan was not run because it would delete most of the vault; confirm and sync again with `allowMassDelete`. */
   blocked?: { reason: 'mass-delete'; count: number };
-  /** The vault belongs to another account; nothing was done. */
+  /** The vault belongs to another account (or, signed out, to an account at all); nothing was done. */
   wrongAccount?: boolean;
 }
 
@@ -88,12 +93,15 @@ async function loadState(host: VaultHost): Promise<State | null> {
 const saveState = (host: VaultHost, state: State) => host.disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify(state)));
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean } = {}): Promise<SyncReport> {
-  const report: SyncReport = { downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [] };
+  const report: SyncReport = { downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [] };
   const { disk, cloud, codec } = host;
 
   const saved = await loadState(host);
-  if (saved && saved.account !== host.account) return { ...report, wrongAccount: true };
-  const state: State = saved ?? { version: 1, account: host.account, entries: [] };
+  // A vault kept while signed out is taken over by the account that signs in: with no memory, the plan matches files to
+  // documents by path and the file wins, so nothing is lost. A vault linked to an account is never given to another
+  // account, nor to a signed-out browser (that would copy its files into documents the account would then duplicate).
+  if (saved && saved.account !== host.account && (saved.account !== GUEST_ACCOUNT || host.account === GUEST_ACCOUNT)) return { ...report, wrongAccount: true };
+  const state: State = saved && saved.account === host.account ? saved : { version: 1, account: host.account, entries: [] };
 
   const listing = await cloud.list();
   const all = cloudPaths(listing.docs, listing.folders);
@@ -141,6 +149,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         const { updatedAt } = await cloud.replace(action.id, stored);
         record(action.id, action.path, file, localByPath.get(action.path)?.mtimeMs ?? 0, updatedAt, await host.hash(file));
         report.uploaded++;
+        report.touched.push(action.id);
         return;
       }
       case 'create': {
@@ -157,6 +166,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         entries.set(action.id, { ...entry, path: action.to, mtimeMs: localByPath.get(action.to)?.mtimeMs ?? entry.mtimeMs });
         touched.add(action.id);
         report.renamed++;
+        report.touched.push(action.id);
         // A new extension is a new format: the account's copy has to be written in it, or it would keep the old one's extras.
         const to = codec.kept(baseName(action.to)) ? baseName(action.to) : null;
         if (to && to.slice(to.lastIndexOf('.')) !== baseName(action.from).slice(baseName(action.from).lastIndexOf('.'))) {
@@ -185,6 +195,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         await cloud.trash(action.id);
         entries.delete(action.id);
         report.trashed++;
+        report.touched.push(action.id);
         return;
       case 'forget':
         entries.delete(action.id);

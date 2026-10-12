@@ -1,0 +1,25 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': '保管フォルダ…',
+  'vault.menu.tip': 'このコンピュータのフォルダにドキュメントのコピーをファイルとして保存し、ファイルへの変更をアカウントに送ります',
+  'vault.title': '保管フォルダ',
+  'vault.intro': 'ドキュメントは、このコンピュータのフォルダにファイルとして保存されます。そこでファイルを変更すると変更がアカウントに送られ、アカウントでドキュメントを変更するとファイルが更新されます。両方が変更されていた場合はフォルダのファイルが優先され、アカウントには以前のバージョンが履歴として残ります。',
+  'vault.noFolder': 'フォルダが選択されていません。',
+  'vault.folder': 'フォルダ: {path}',
+  'vault.choose': 'フォルダを選択…',
+  'vault.change': 'フォルダを変更…',
+  'vault.stop': '同期を停止',
+  'vault.syncNow': '今すぐ同期',
+  'vault.close': '閉じる',
+  'vault.signedOut': '保管フォルダを使うには、同期を有効にしてサインインしてください。',
+  'vault.status.syncing': '同期中…',
+  'vault.status.idle': '最新の状態です。最終同期: {when}',
+  'vault.status.waiting': '同期を待っています。',
+  'vault.status.offline': 'オフラインです。接続が戻ると同期を再開します。',
+  'vault.status.error': '同期できなかったファイルがあります: {message}',
+  'vault.status.wrongAccount': 'このフォルダは別のアカウントのものです。別のフォルダを選択してください。',
+  'vault.status.blocked': '{count} 件のファイルがフォルダにありません。削除するつもりだった場合、アカウントのごみ箱に 30 日間保管されます。',
+  'vault.deleteMissing': '{count} 件のドキュメントを削除',
+  'vault.skipped': '{count} 件のドキュメント (PDF、画像、図面) はアカウントに残り、フォルダにはコピーされません。',
+};

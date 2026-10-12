@@ -1,0 +1,95 @@
+// File ▸ Vault Folder (desktop app only): which folder on this computer keeps a copy of the documents, and how the last
+// sync went. The work is in ../desktop/vaultService.ts; this only shows it.
+
+import type { VaultService, VaultStatus } from '../desktop/vaultService.ts';
+import { getLocale, t } from '../i18n/index.ts';
+import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
+
+export interface VaultHost {
+  service: VaultService | null;
+  tell(text: string): void;
+  focusEditor(): void;
+}
+
+export class VaultDialog {
+  private dialog: HTMLDialogElement | null = null;
+
+  constructor(private readonly host: VaultHost) {}
+
+  open(): void {
+    const service = this.host.service;
+    if (this.dialog || !service) return;
+
+    const folder = h('p', { class: 'wm-history-intro' });
+    const status = h('p', { class: 'wm-history-note' });
+    const skipped = h('p', { class: 'wm-history-note' });
+    const choose = h('button', { class: 'wm-button', attrs: { type: 'button' } });
+    const stop = h('button', { class: 'wm-button wm-danger', text: t('vault.stop'), attrs: { type: 'button' } });
+    const syncNow = h('button', { class: 'wm-button', text: t('vault.syncNow'), attrs: { type: 'button' } });
+    const confirm = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
+    const close = h('button', { class: 'wm-button', text: t('vault.close'), attrs: { type: 'button' } });
+    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, h('p', { class: 'wm-history-intro', text: t('vault.intro') }), folder, status, skipped);
+    const dialog = h(
+      'dialog',
+      { class: 'wm-dialog wm-history', attrs: { 'aria-label': t('vault.title') } },
+      dialogTitleBar(t('vault.title'), () => dialog.close()),
+      body,
+      h('div', { class: 'wm-dialog-buttons spread' }, h('span', {}, choose, stop, syncNow, confirm), close),
+    );
+    dialog.addEventListener('keydown', (e) => e.stopPropagation());
+
+    const describe = (s: VaultStatus): string => {
+      switch (s.state) {
+        case 'off':
+          return '';
+        case 'signedOut':
+          return t('vault.signedOut');
+        case 'waiting':
+          return t('vault.status.waiting');
+        case 'syncing':
+          return t('vault.status.syncing');
+        case 'idle':
+          return t('vault.status.idle', { when: new Date(s.lastSync ?? Date.now()).toLocaleTimeString(getLocale(), { timeStyle: 'short' }) });
+        case 'offline':
+          return t('vault.status.offline');
+        case 'error':
+          return t('vault.status.error', { message: s.message ?? '' });
+        case 'wrongAccount':
+          return t('vault.status.wrongAccount');
+        case 'blocked':
+          return t('vault.status.blocked', { count: s.report?.blocked?.count ?? 0 });
+      }
+    };
+
+    const render = (s: VaultStatus) => {
+      folder.textContent = s.root ? t('vault.folder', { path: s.root }) : t('vault.noFolder');
+      status.textContent = describe(s);
+      const skippedCount = s.report?.skipped ?? 0;
+      skipped.textContent = skippedCount ? t('vault.skipped', { count: skippedCount }) : '';
+      choose.textContent = s.root ? t('vault.change') : t('vault.choose');
+      stop.hidden = !s.root;
+      syncNow.hidden = !s.root;
+      syncNow.disabled = s.state === 'syncing' || s.state === 'signedOut';
+      confirm.hidden = s.state !== 'blocked';
+      confirm.textContent = t('vault.deleteMissing', { count: s.report?.blocked?.count ?? 0 });
+    };
+
+    const unsubscribe = service.subscribe(render);
+    render(service.current);
+    choose.addEventListener('click', () => void service.choose().catch((error: unknown) => this.host.tell((error as Error).message)));
+    stop.addEventListener('click', () => void service.forget());
+    syncNow.addEventListener('click', () => void service.syncNow());
+    confirm.addEventListener('click', () => void service.syncNow({ allowMassDelete: true }));
+    close.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => {
+      unsubscribe();
+      dialog.remove();
+      this.dialog = null;
+      this.host.focusEditor();
+    });
+    this.dialog = dialog;
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+}

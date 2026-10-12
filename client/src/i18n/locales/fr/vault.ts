@@ -1,0 +1,28 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': 'Dossier coffre…',
+  'vault.menu.tip': 'Conserver une copie de vos documents sous forme de fichiers dans un dossier de cet ordinateur et renvoyer à votre compte les modifications faites à ces fichiers',
+  'vault.title': 'Dossier coffre',
+  'vault.intro': 'Vos documents sont conservés sous forme de fichiers dans un dossier de cet ordinateur. Modifiez un fichier et la modification est envoyée à votre compte ; modifiez un document dans votre compte et le fichier est mis à jour. Si les deux ont changé, le fichier du dossier l’emporte et votre compte garde la version précédente dans son historique.',
+  'vault.noFolder': 'Aucun dossier choisi.',
+  'vault.folder': 'Dossier : {path}',
+  'vault.choose': 'Choisir un dossier…',
+  'vault.change': 'Changer de dossier…',
+  'vault.stop': 'Arrêter la synchronisation',
+  'vault.syncNow': 'Synchroniser maintenant',
+  'vault.close': 'Fermer',
+  'vault.signedOut': 'Connectez-vous avec la synchronisation pour utiliser un dossier coffre.',
+  'vault.status.syncing': 'Synchronisation…',
+  'vault.status.idle': 'À jour. Dernière synchronisation : {when}.',
+  'vault.status.waiting': 'En attente de synchronisation.',
+  'vault.status.offline': 'Vous êtes hors ligne. La synchronisation reprendra au retour de la connexion.',
+  'vault.status.error': 'Certains fichiers n’ont pas pu être synchronisés : {message}',
+  'vault.status.wrongAccount': 'Ce dossier appartient à un autre compte. Choisissez un autre dossier.',
+  'vault.status.blocked.one': 'Un fichier manque dans le dossier. Si vous vouliez le supprimer, il ira dans la corbeille de votre compte pendant 30 jours.',
+  'vault.status.blocked': '{count} fichiers manquent dans le dossier. Si vous vouliez les supprimer, ils iront dans la corbeille de votre compte pendant 30 jours.',
+  'vault.deleteMissing.one': 'Supprimer 1 document',
+  'vault.deleteMissing': 'Supprimer {count} documents',
+  'vault.skipped.one': 'Un document (PDF, image ou dessin) reste dans votre compte et n’est pas copié dans le dossier.',
+  'vault.skipped': '{count} documents (PDF, images ou dessins) restent dans votre compte et ne sont pas copiés dans le dossier.',
+};

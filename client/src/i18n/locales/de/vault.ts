@@ -1,0 +1,28 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': 'Tresorordner…',
+  'vault.menu.tip': 'Eine Kopie Ihrer Dokumente als Dateien in einem Ordner auf diesem Computer aufbewahren und Änderungen an diesen Dateien an Ihr Konto zurücksenden',
+  'vault.title': 'Tresorordner',
+  'vault.intro': 'Ihre Dokumente werden als Dateien in einem Ordner auf diesem Computer aufbewahrt. Ändern Sie dort eine Datei, wird die Änderung an Ihr Konto gesendet; ändern Sie ein Dokument in Ihrem Konto, wird die Datei aktualisiert. Wurden beide geändert, gewinnt die Datei im Ordner, und Ihr Konto behält die frühere Version in seinem Verlauf.',
+  'vault.noFolder': 'Kein Ordner gewählt.',
+  'vault.folder': 'Ordner: {path}',
+  'vault.choose': 'Ordner wählen…',
+  'vault.change': 'Ordner ändern…',
+  'vault.stop': 'Synchronisierung beenden',
+  'vault.syncNow': 'Jetzt synchronisieren',
+  'vault.close': 'Schließen',
+  'vault.signedOut': 'Melden Sie sich mit Synchronisierung an, um einen Tresorordner zu verwenden.',
+  'vault.status.syncing': 'Synchronisiere…',
+  'vault.status.idle': 'Auf dem neuesten Stand. Zuletzt synchronisiert um {when}.',
+  'vault.status.waiting': 'Wartet auf die Synchronisierung.',
+  'vault.status.offline': 'Sie sind offline. Die Synchronisierung wird fortgesetzt, sobald die Verbindung wieder besteht.',
+  'vault.status.error': 'Einige Dateien konnten nicht synchronisiert werden: {message}',
+  'vault.status.wrongAccount': 'Dieser Ordner gehört zu einem anderen Konto. Wählen Sie einen anderen Ordner.',
+  'vault.status.blocked.one': 'Eine Datei fehlt im Ordner. Wenn Sie sie löschen wollten, kommt sie für 30 Tage in den Papierkorb Ihres Kontos.',
+  'vault.status.blocked': '{count} Dateien fehlen im Ordner. Wenn Sie sie löschen wollten, kommen sie für 30 Tage in den Papierkorb Ihres Kontos.',
+  'vault.deleteMissing.one': '1 Dokument löschen',
+  'vault.deleteMissing': '{count} Dokumente löschen',
+  'vault.skipped.one': 'Ein Dokument (PDF, Bild oder Zeichnung) bleibt in Ihrem Konto und wird nicht in den Ordner kopiert.',
+  'vault.skipped': '{count} Dokumente (PDFs, Bilder oder Zeichnungen) bleiben in Ihrem Konto und werden nicht in den Ordner kopiert.',
+};

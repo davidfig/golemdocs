@@ -1,0 +1,28 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': 'Cartella del caveau…',
+  'vault.menu.tip': 'Conserva una copia dei tuoi documenti come file in una cartella di questo computer e invia al tuo account le modifiche fatte a quei file',
+  'vault.title': 'Cartella del caveau',
+  'vault.intro': 'I tuoi documenti sono conservati come file in una cartella di questo computer. Se modifichi un file lì, la modifica viene inviata al tuo account; se modifichi un documento nel tuo account, il file viene aggiornato. Se sono cambiati entrambi, vince il file nella cartella e il tuo account conserva la versione precedente nella cronologia.',
+  'vault.noFolder': 'Nessuna cartella scelta.',
+  'vault.folder': 'Cartella: {path}',
+  'vault.choose': 'Scegli cartella…',
+  'vault.change': 'Cambia cartella…',
+  'vault.stop': 'Interrompi la sincronizzazione',
+  'vault.syncNow': 'Sincronizza ora',
+  'vault.close': 'Chiudi',
+  'vault.signedOut': 'Accedi con la sincronizzazione per usare una cartella del caveau.',
+  'vault.status.syncing': 'Sincronizzazione…',
+  'vault.status.idle': 'Tutto aggiornato. Ultima sincronizzazione: {when}.',
+  'vault.status.waiting': 'In attesa di sincronizzare.',
+  'vault.status.offline': 'Sei offline. La sincronizzazione riprenderà quando torna la connessione.',
+  'vault.status.error': 'Alcuni file non sono stati sincronizzati: {message}',
+  'vault.status.wrongAccount': 'Questa cartella appartiene a un altro account. Scegli un’altra cartella.',
+  'vault.status.blocked.one': 'Manca un file nella cartella. Se volevi eliminarlo, finirà nel cestino del tuo account per 30 giorni.',
+  'vault.status.blocked': 'Mancano {count} file nella cartella. Se volevi eliminarli, finiranno nel cestino del tuo account per 30 giorni.',
+  'vault.deleteMissing.one': 'Elimina 1 documento',
+  'vault.deleteMissing': 'Elimina {count} documenti',
+  'vault.skipped.one': 'Un documento (un PDF, un’immagine o un disegno) resta nel tuo account e non viene copiato nella cartella.',
+  'vault.skipped': '{count} documenti (PDF, immagini o disegni) restano nel tuo account e non vengono copiati nella cartella.',
+};

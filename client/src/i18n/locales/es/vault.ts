@@ -1,0 +1,28 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': 'Carpeta de la bóveda…',
+  'vault.menu.tip': 'Guarda una copia de tus documentos como archivos en una carpeta de este ordenador y envía a tu cuenta los cambios hechos en ellos',
+  'vault.title': 'Carpeta de la bóveda',
+  'vault.intro': 'Tus documentos se guardan como archivos en una carpeta de este ordenador. Si cambias un archivo allí, el cambio se envía a tu cuenta; si cambias un documento en tu cuenta, el archivo se actualiza. Si ambos cambiaron, gana el archivo de la carpeta y tu cuenta conserva la versión anterior en su historial.',
+  'vault.noFolder': 'No se ha elegido ninguna carpeta.',
+  'vault.folder': 'Carpeta: {path}',
+  'vault.choose': 'Elegir carpeta…',
+  'vault.change': 'Cambiar carpeta…',
+  'vault.stop': 'Dejar de sincronizar',
+  'vault.syncNow': 'Sincronizar ahora',
+  'vault.close': 'Cerrar',
+  'vault.signedOut': 'Inicia sesión con sincronización para usar una carpeta de la bóveda.',
+  'vault.status.syncing': 'Sincronizando…',
+  'vault.status.idle': 'Todo al día. Última sincronización: {when}.',
+  'vault.status.waiting': 'Esperando para sincronizar.',
+  'vault.status.offline': 'Estás sin conexión. La sincronización continuará cuando vuelva la conexión.',
+  'vault.status.error': 'Algunos archivos no se pudieron sincronizar: {message}',
+  'vault.status.wrongAccount': 'Esta carpeta pertenece a otra cuenta. Elige una carpeta distinta.',
+  'vault.status.blocked.one': 'Falta un archivo en la carpeta. Si querías eliminarlo, irá a la papelera de tu cuenta durante 30 días.',
+  'vault.status.blocked': 'Faltan {count} archivos en la carpeta. Si querías eliminarlos, irán a la papelera de tu cuenta durante 30 días.',
+  'vault.deleteMissing.one': 'Eliminar 1 documento',
+  'vault.deleteMissing': 'Eliminar {count} documentos',
+  'vault.skipped.one': 'Un documento (un PDF, una imagen o un dibujo) se queda en tu cuenta y no se copia a la carpeta.',
+  'vault.skipped': '{count} documentos (PDF, imágenes o dibujos) se quedan en tu cuenta y no se copian a la carpeta.',
+};

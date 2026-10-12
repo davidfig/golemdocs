@@ -1,0 +1,28 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': 'Pasta do cofre…',
+  'vault.menu.tip': 'Guarda uma cópia dos seus documentos como arquivos em uma pasta deste computador e envia à sua conta as alterações feitas neles',
+  'vault.title': 'Pasta do cofre',
+  'vault.intro': 'Seus documentos ficam guardados como arquivos em uma pasta deste computador. Se você alterar um arquivo lá, a alteração é enviada à sua conta; se alterar um documento na conta, o arquivo é atualizado. Se os dois mudaram, vale o arquivo da pasta, e sua conta guarda a versão anterior no histórico.',
+  'vault.noFolder': 'Nenhuma pasta escolhida.',
+  'vault.folder': 'Pasta: {path}',
+  'vault.choose': 'Escolher pasta…',
+  'vault.change': 'Trocar pasta…',
+  'vault.stop': 'Parar de sincronizar',
+  'vault.syncNow': 'Sincronizar agora',
+  'vault.close': 'Fechar',
+  'vault.signedOut': 'Entre com a sincronização para usar uma pasta do cofre.',
+  'vault.status.syncing': 'Sincronizando…',
+  'vault.status.idle': 'Tudo em dia. Última sincronização: {when}.',
+  'vault.status.waiting': 'Aguardando para sincronizar.',
+  'vault.status.offline': 'Você está offline. A sincronização continua quando a conexão voltar.',
+  'vault.status.error': 'Alguns arquivos não puderam ser sincronizados: {message}',
+  'vault.status.wrongAccount': 'Esta pasta pertence a outra conta. Escolha outra pasta.',
+  'vault.status.blocked.one': 'Falta um arquivo na pasta. Se você queria excluí-lo, ele vai para a lixeira da sua conta por 30 dias.',
+  'vault.status.blocked': 'Faltam {count} arquivos na pasta. Se você queria excluí-los, eles vão para a lixeira da sua conta por 30 dias.',
+  'vault.deleteMissing.one': 'Excluir 1 documento',
+  'vault.deleteMissing': 'Excluir {count} documentos',
+  'vault.skipped.one': 'Um documento (um PDF, uma imagem ou um desenho) fica na sua conta e não é copiado para a pasta.',
+  'vault.skipped': '{count} documentos (PDFs, imagens ou desenhos) ficam na sua conta e não são copiados para a pasta.',
+};

@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GolemDocs</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; text-align: center; }
+  button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid currentColor; background: none; color: inherit; cursor: pointer; }
+</style>
+<div id="box"><p id="msg">Opening GolemDocs…</p><button id="retry" hidden>Try again</button></div>
+<script>
+  // The app is the website: the same code, the same sign-in and the same account.
+  const APP = 'https://golemdocs.com/';
+  const msg = document.getElementById('msg');
+  const retry = document.getElementById('retry');
+  async function open() {
+    retry.hidden = true;
+    msg.textContent = 'Opening GolemDocs…';
+    try {
+      await fetch(APP, { mode: 'no-cors', cache: 'no-store' });
+      location.replace(APP);
+    } catch {
+      msg.textContent = 'GolemDocs could not be reached. Check your connection.';
+      retry.hidden = false;
+    }
+  }
+  retry.onclick = open;
+  addEventListener('online', open);
+  open();
+</script>

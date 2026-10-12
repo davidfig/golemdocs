@@ -101,6 +101,9 @@ import { attachTextInput, editKey, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
+import { VaultDialog } from './ui/vaultDialog.ts';
+import { isDesktopApp } from './desktop/bridge.ts';
+import { VaultService } from './desktop/vaultService.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
 import { loadTrash, restoreById, type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
@@ -1271,6 +1274,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   if ((account?.id ?? null) !== drawnFor) library.reset();
   drawnFor = account?.id ?? null;
   await refreshLibrary();
+  void connectVault();
   if (account) {
     uploads.add(...library.local.filter(hasUnsentChanges).map((info) => info.id));
     void flushUploads();
@@ -4250,6 +4254,7 @@ const chromeHost = createChromeHost({
     void saving.then(() => versionHistoryDialog.open());
   },
   showTrash: () => trashDialog.open(),
+  showVault: () => vaultDialog.open(),
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
@@ -4457,6 +4462,24 @@ const trashDeps: TrashDeps = {
     if (account && (!item || item.source === 'account')) await purgeTrash(item?.id);
   },
 };
+// File ▸ Vault Folder (the desktop app only): a folder on this computer that keeps a copy of the account's documents. The sync
+// code is about 11 kB, too small to be worth a chunk of its own (see AGENTS.md); it only runs in the desktop app.
+let vaultService: VaultService | null = null;
+const vaultDialog = new VaultDialog({
+  get service() {
+    return vaultService;
+  },
+  tell: say,
+  focusEditor: focusInput,
+});
+
+/** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
+async function connectVault(): Promise<void> {
+  if (!isDesktopApp()) return;
+  vaultService ??= VaultService.create(() => account?.id ?? null);
+  await vaultService?.start();
+}
+
 const trashDialog = new TrashDialog({ deps: trashDeps, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });
 
 // Tools ▸ Word Count.

@@ -2,6 +2,9 @@
 
 ## 0.17.2 - Unreleased
 
+### Added
+- A desktop app for Mac, Windows and Linux. File › Vault Folder keeps a copy of your documents as ordinary files in a folder on your computer (Markdown, text, Word and the other text formats stay in their own format) and sends changes you make to those files back to your account. If a document changed in both places, the file in your folder wins, and your account keeps the earlier version in its history. Files you delete from the folder go to your account's trash for 30 days. PDFs, pictures and drawings stay in your account.
+
 ### Fixed
 - Reopening a document now puts the caret and any selected text back exactly where they were, even in a window of another size or another view, and remembers where you left it however you opened it (from the Documents screen, the Files Sidebar or its address). The scroll position is kept too when you moved it by typing or with the keyboard, not only by scrolling.
 - The status bar no longer shows the Wrap Long Lines button for documents, or the Print Layout, Flow and Page Grid buttons for plain text files, where they did nothing.

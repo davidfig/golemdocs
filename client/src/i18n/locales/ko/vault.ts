@@ -1,0 +1,25 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': '보관 폴더…',
+  'vault.menu.tip': '이 컴퓨터의 폴더에 문서 사본을 파일로 보관하고, 그 파일에서 바꾼 내용을 계정으로 보냅니다',
+  'vault.title': '보관 폴더',
+  'vault.intro': '문서는 이 컴퓨터의 폴더에 파일로 보관됩니다. 그곳에서 파일을 바꾸면 변경 내용이 계정으로 전송되고, 계정에서 문서를 바꾸면 파일이 업데이트됩니다. 둘 다 바뀐 경우에는 폴더의 파일이 우선하며, 계정에는 이전 버전이 기록으로 남습니다.',
+  'vault.noFolder': '선택한 폴더가 없습니다.',
+  'vault.folder': '폴더: {path}',
+  'vault.choose': '폴더 선택…',
+  'vault.change': '폴더 변경…',
+  'vault.stop': '동기화 중지',
+  'vault.syncNow': '지금 동기화',
+  'vault.close': '닫기',
+  'vault.signedOut': '보관 폴더를 사용하려면 동기화가 포함된 계정으로 로그인하세요.',
+  'vault.status.syncing': '동기화하는 중…',
+  'vault.status.idle': '최신 상태입니다. 마지막 동기화: {when}',
+  'vault.status.waiting': '동기화를 기다리는 중입니다.',
+  'vault.status.offline': '오프라인입니다. 연결이 돌아오면 동기화를 계속합니다.',
+  'vault.status.error': '동기화하지 못한 파일이 있습니다: {message}',
+  'vault.status.wrongAccount': '이 폴더는 다른 계정의 것입니다. 다른 폴더를 선택하세요.',
+  'vault.status.blocked': '폴더에서 파일 {count}개가 없어졌습니다. 삭제하려던 것이라면 계정의 휴지통에 30일 동안 보관됩니다.',
+  'vault.deleteMissing': '문서 {count}개 삭제',
+  'vault.skipped': '문서 {count}개(PDF, 그림, 도면)는 계정에 남고 폴더로 복사되지 않습니다.',
+};

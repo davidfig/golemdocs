@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.19.1 - Unreleased
+
+### Changed
+- On a phone, the Open view starts with smaller cards (three across), and the buttons under each document or folder are one even row that no longer wraps or changes size with the icons.
+
 ## 0.19.0 - 2026-10-12
 
 ### Added

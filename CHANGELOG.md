@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.17.2 - Unreleased
+## 0.17.2 - 2026-10-12
 
 ### Fixed
 - Reopening a document now puts the caret and any selected text back exactly where they were, even in a window of another size or another view, and remembers where you left it however you opened it (from the Documents screen, the Files Sidebar or its address). The scroll position is kept too when you moved it by typing or with the keyboard, not only by scrolling.

@@ -58,7 +58,7 @@ export default defineConfig({
     {
       // Fresh database and storage every run, then the Worker (API and collaboration rooms).
       command:
-        `rm -rf ${STATE} && mkdir -p client/dist && cd server && ` +
+        `rm -rf ${STATE} && mkdir -p client/dist server/.no-assets && cd server && ` +
         `pnpm exec wrangler d1 migrations apply DIRECTORY --env local --local --persist-to ../${STATE} && ` +
         `exec ./node_modules/.bin/wrangler dev --env local --port ${API_PORT} --inspector-port ${API_PORT + 6000} --persist-to ../${STATE} --var DEV_USER:e2e@example.com ` +
         // Fake Google credentials, so the sign-in tests do not depend on a developer's own .dev.vars.

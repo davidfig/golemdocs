@@ -5,15 +5,15 @@ import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import './pictureTools.css';
 
-export type DropChoice = 'insert' | 'open';
+export type DropChoice = 'insert' | 'open' | 'link';
 
 /** Asks what to do with a dropped picture; resolves with the choice, or `undefined` if dismissed (Escape, or a click elsewhere). */
-export function askDropChoice(name: string, x: number, y: number): Promise<DropChoice | undefined> {
+export function askDropChoice(name: string, x: number, y: number, choices: readonly DropChoice[] = ['insert', 'open']): Promise<DropChoice | undefined> {
   return new Promise((resolve) => {
-    const insert = h('button', { class: 'wm-button', text: t('picture.drop.insert'), attrs: { type: 'button' } });
-    const open = h('button', { class: 'wm-button', text: t('picture.drop.open'), attrs: { type: 'button' } });
+    const button = (choice: DropChoice) => h('button', { class: 'wm-button', text: choice === 'insert' ? t('picture.drop.insert') : choice === 'open' ? t('picture.drop.open') : t('picture.drop.link'), attrs: { type: 'button' } });
+    const buttons = choices.map((choice) => ({ choice, el: button(choice) }));
     const cancel = h('button', { class: 'wm-button', text: t('picture.cancel'), attrs: { type: 'button' } });
-    const popup = h('div', { class: 'wm-drop-choice', attrs: { role: 'dialog', 'aria-label': t('picture.drop.title', { name }) } }, h('div', { class: 'wm-drop-choice-title', text: t('picture.drop.title', { name }) }), insert, open, cancel);
+    const popup = h('div', { class: 'wm-drop-choice', attrs: { role: 'dialog', 'aria-label': t('picture.drop.title', { name }) } }, h('div', { class: 'wm-drop-choice-title', text: t('picture.drop.title', { name }) }), ...buttons.map((b) => b.el), cancel);
     const finish = (choice: DropChoice | undefined) => {
       document.removeEventListener('pointerdown', outside, true);
       document.removeEventListener('keydown', keys, true);
@@ -29,8 +29,7 @@ export function askDropChoice(name: string, x: number, y: number): Promise<DropC
       e.stopPropagation();
       finish(undefined);
     };
-    insert.addEventListener('click', () => finish('insert'));
-    open.addEventListener('click', () => finish('open'));
+    for (const b of buttons) b.el.addEventListener('click', () => finish(b.choice));
     cancel.addEventListener('click', () => finish(undefined));
     document.body.append(popup);
     // Where it was dropped, kept on screen.
@@ -39,6 +38,6 @@ export function askDropChoice(name: string, x: number, y: number): Promise<DropC
     popup.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
     document.addEventListener('pointerdown', outside, true);
     document.addEventListener('keydown', keys, true);
-    insert.focus();
+    buttons[0]?.el.focus();
   });
 }

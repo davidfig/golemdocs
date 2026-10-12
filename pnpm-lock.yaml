@@ -44,6 +44,9 @@ importers:
       '@golemdocs/pdf':
         specifier: workspace:*
         version: link:../pdf
+      libheif-js:
+        specifier: ^1.23.5
+        version: 1.23.5
       polygon-clipping:
         specifier: ^0.15.7
         version: 0.15.7
@@ -1069,6 +1072,10 @@ packages:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
     engines: {node: '>=6'}
 
+  libheif-js@1.23.5:
+    resolution: {integrity: sha512-umXZPthnWZtF3iG/5mQG+AZ2V6i0UeYpo3z2CkggTEgL8dKmIIwJT6TDuAMuabXa1yTW8uJ1ZAgR+CxNTklYYw==}
+    engines: {node: '>=8.0.0'}
+
   miniflare@5.20260926.0-alpha:
     resolution: {integrity: sha512-m/M3rpLnaouw6QSoKzylfw6Z1dnOwRM48idnZ7kc5ivRqBXANFQ8XqKCyQ/V+xqQ9Rg1L99j4WkZGVU9uT4L2w==}
     engines: {node: '>=22.0.0'}
@@ -1838,6 +1845,8 @@ snapshots:
     optional: true
 
   kleur@4.1.5: {}
+
+  libheif-js@1.23.5: {}
 
   miniflare@5.20260926.0-alpha(@types/node@22.20.4):
     dependencies:

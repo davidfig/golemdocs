@@ -9,7 +9,7 @@ import { makeCanvas } from '../formats/imageCodec.ts';
 import { readClip } from './clip.ts';
 import { findDefinition } from './gradients.ts';
 import { readFragment } from './svgRead.ts';
-import { readGradient } from './gradients.ts';
+import { readGradient, readPattern } from './gradients.ts';
 import { fontSizeOf, findNode, localBounds, outline, viewBoxMatrix } from './geometry.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style, TextNode } from './model.ts';
 import type { Bounds } from './pathData.ts';
@@ -51,12 +51,58 @@ export function tracePath(ctx: Context2D, commands: readonly PathCommand[]): voi
 
 const applyMatrix = (ctx: Context2D, m: Matrix): void => ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
 
-/** What a paint value (`fill` or `stroke`) turns into on a canvas: a colour or gradient, or nothing. */
-function paintFor(ctx: Context2D, scene: Scene, value: string | undefined, chain: readonly Style[], box: Bounds | null, opacity: number): string | CanvasGradient | null {
+/** Tiles of patterns already drawn, by scene (a scene is not changed once it is made), at the size and opacity they were drawn for. */
+const tiles = new WeakMap<Scene, Map<string, Canvas>>();
+type Canvas = ReturnType<typeof makeCanvas>['canvas'];
+
+/**
+ * A `pattern` paint: its tile drawn once at the size it is shown at (the context's scale and the pattern's own),
+ * and repeated by the canvas. Null when the pattern has no area, or is too deep in patterns.
+ */
+function patternFor(walk: Walk, id: string, box: Bounds | null, opacity: number): CanvasPattern | null {
+  const { ctx, scene } = walk;
+  const pattern = readPattern(scene, id);
+  if (!pattern || walk.depth > 6 || (pattern.units === 'box' && !box)) return null;
+  const [x, y, w, h] = pattern.units === 'box' ? [box!.x + pattern.x * box!.width, box!.y + pattern.y * box!.height, pattern.width * box!.width, pattern.height * box!.height] : [pattern.x, pattern.y, pattern.width, pattern.height];
+  if (!(w > 0) || !(h > 0)) return null;
+  const device = ctx.getTransform();
+  const scale = Math.sqrt(Math.abs(device.a * device.d - device.b * device.c)) * Math.sqrt(Math.abs(pattern.transform[0] * pattern.transform[3] - pattern.transform[1] * pattern.transform[2]));
+  const width = Math.min(2048, Math.max(1, Math.ceil(w * scale)));
+  const height = Math.min(2048, Math.max(1, Math.ceil(h * scale)));
+  const key = `${id}|${width}x${height}|${w}x${h}|${opacity}`;
+  let cache = tiles.get(scene);
+  if (!cache) tiles.set(scene, (cache = new Map()));
+  let tile = cache.get(key);
+  if (!tile) {
+    const layer = makeCanvas(width, height);
+    const tc = layer.context;
+    tc.scale(width / w, height / h);
+    if (pattern.viewBox) {
+      tc.scale(w / pattern.viewBox.width, h / pattern.viewBox.height);
+      tc.translate(-pattern.viewBox.x, -pattern.viewBox.y);
+    }
+    tc.globalAlpha = opacity;
+    const nodes = readFragment([...elements(pattern.element)], w, h);
+    for (const node of nodes) paintNode({ ...walk, ctx: tc, depth: walk.depth + 1 }, node, [scene.style]);
+    cache.set(key, (tile = layer.canvas));
+  }
+  const made = ctx.createPattern(tile as CanvasImageSource, 'repeat');
+  if (!made) return null;
+  // Tile pixels back to the pattern's units, to its corner, and by the pattern's own transform.
+  const t = pattern.transform;
+  made.setTransform(new DOMMatrix([t[0], t[1], t[2], t[3], t[4], t[5]]).translate(x, y).scale(w / width, h / height));
+  return made;
+}
+
+/** What a paint value (`fill` or `stroke`) turns into on a canvas: a colour, gradient or pattern, or nothing. */
+function paintFor(walk: Walk, value: string | undefined, chain: readonly Style[], box: Bounds | null, opacity: number): string | CanvasGradient | CanvasPattern | null {
+  const { ctx, scene } = walk;
   if (value === undefined || value === 'none') return null;
   const current = (): Rgba | null => parseColor(inherited(chain, 'color') ?? 'black');
   const reference = urlReference(value);
   if (reference) {
+    const pattern = patternFor(walk, reference, box, opacity);
+    if (pattern) return pattern;
     const gradient = readGradient(scene, reference);
     if (!gradient || !gradient.stops.length) {
       // `url(#x) red`: the colour after the reference stands in when the paint server is missing.
@@ -104,8 +150,8 @@ function paintShape(walk: Walk, node: SceneNode, chain: readonly Style[], comman
   const box = localBounds(node, scene, chain);
   const fillOpacity = parseFloat(inherited(chain, 'fill-opacity') ?? '1');
   const strokeOpacity = parseFloat(inherited(chain, 'stroke-opacity') ?? '1');
-  const fill = paintFor(ctx, scene, inherited(chain, 'fill') ?? 'black', chain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);
-  const stroke = paintFor(ctx, scene, inherited(chain, 'stroke'), chain, box, Number.isFinite(strokeOpacity) ? strokeOpacity : 1);
+  const fill = paintFor(walk, inherited(chain, 'fill') ?? 'black', chain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);
+  const stroke = paintFor(walk, inherited(chain, 'stroke'), chain, box, Number.isFinite(strokeOpacity) ? strokeOpacity : 1);
   if (!fill && !stroke) return;
   ctx.beginPath();
   tracePath(ctx, commands);
@@ -142,7 +188,7 @@ function fontFor(chain: readonly Style[]): string {
 }
 
 function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
-  const { ctx, scene } = walk;
+  const { ctx } = walk;
   const anchor = inherited(chain, 'text-anchor');
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
@@ -164,12 +210,12 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
     ctx.font = fontFor(runChain);
     const box = { x, y: y - fontSizeOf(runChain) * 0.8, width: widths[i], height: fontSizeOf(runChain) };
     const fillOpacity = parseFloat(inherited(runChain, 'fill-opacity') ?? '1');
-    const fill = paintFor(ctx, scene, inherited(runChain, 'fill') ?? 'black', runChain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);
+    const fill = paintFor(walk, inherited(runChain, 'fill') ?? 'black', runChain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);
     if (fill) {
       ctx.fillStyle = fill;
       ctx.fillText(run.text, x, y);
     }
-    const stroke = paintFor(ctx, scene, inherited(runChain, 'stroke'), runChain, box, 1);
+    const stroke = paintFor(walk, inherited(runChain, 'stroke'), runChain, box, 1);
     if (stroke) {
       ctx.strokeStyle = stroke;
       ctx.lineWidth = parseLength(inherited(runChain, 'stroke-width')) ?? 1;

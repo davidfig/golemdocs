@@ -12,7 +12,6 @@ import type { SourceSpan } from './offsets.ts';
 import { layerKey } from './context.ts';
 import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
 import { emitMarks, formattingMarksOn } from './marks.ts';
-import { showingSource } from './source.ts';
 import type { MathLayout } from './math/layout.ts';
 import type { MathEquation } from '@golemdocs/docx';
 
@@ -44,7 +43,7 @@ export interface LineLayout {
   rects: Float32Array;
   rectColors: Uint32Array;
   rectLayers: Uint8Array;
-  images: { part: string; svg?: string; embed?: string; x: number; y: number; width: number; height: number }[];
+  images: { part: string; svg?: string; embed?: string; drawing?: Drawing; x: number; y: number; width: number; height: number }[];
   /** Range of the paragraph's visible text on this line (list label excluded). */
   start: number;
   end: number;
@@ -219,14 +218,12 @@ export function layoutParagraph(paragraph: Paragraph, ctx: LayoutContext, width:
   const props = resolver.paragraph(paragraph.properties, ctx.layer);
   // The label advances list counters whether or not the layout below is reused.
   const counted = props.numbering?.id ? ctx.lists?.next(props.numbering) : undefined;
-  // A paragraph showing its source counts in its list but has no label of its own.
-  const source = showingSource(paragraph);
-  const label = source ? undefined : counted;
+  const label = counted;
 
   // Reuse the last layout if nothing it depends on changed. Edits drop a paragraph's entry;
   // page-dependent layouts (headers and footers with page fields) aren't cached.
   const cache = ctx.fields ? undefined : ctx.paragraphCache;
-  const key = cache ? `${ctx.fonts.pageVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}${source ? '|source' : ''}` : '';
+  const key = cache ? `${ctx.fonts.pageVersion}.${ctx.fonts.mathVersion}|${width}|${layerKey(ctx)}|${ctx.background ?? ''}|${label ? `${label.level}:${label.text}:${label.suffix}` : ''}` : '';
   const cached = cache?.get(paragraph);
   if (cached && cached.key === key) return cached.layout;
   const layout = layoutParagraphUncached(paragraph, ctx, width, props, label);
@@ -560,7 +557,7 @@ function layoutParagraphUncached(
       } else if (code === 0xfffc) {
         const d = objects.get(j);
         const h = (d?.height ?? 0) / 12700;
-        if (d?.image) builder.images.push({ part: d.image, ...(d.svg && { svg: d.svg }), ...embedOf(d), x: pen, y: baseline - h - styles[s].rise, width: w, height: h });
+        if (d?.image) builder.images.push({ part: d.image, ...(d.svg && { svg: d.svg }), ...embedOf(d), drawing: d, x: pen, y: baseline - h - styles[s].rise, width: w, height: h });
       } else if (code === 0x09 && leaders.has(j)) {
         const leader = leaders.get(j)!;
         const style = styles[s];
@@ -673,7 +670,7 @@ export function emitLine(
     target.push(x + line.rects[r * 4], y + line.rects[r * 4 + 1], line.rects[r * 4 + 2], line.rects[r * 4 + 3], line.rectColors[r]);
   }
   for (const image of line.images) {
-    page.images.push({ part: image.part, ...(image.svg && { svg: image.svg }), ...(image.embed && { embed: image.embed }), x: x + image.x, y: y + image.y, width: image.width, height: image.height, behind: false });
+    page.images.push({ part: image.part, ...(image.svg && { svg: image.svg }), ...(image.embed && { embed: image.embed }), ...(image.drawing && { drawing: image.drawing }), x: x + image.x, y: y + image.y, width: image.width, height: image.height, behind: false });
   }
   page.lines.push({
     paragraph: paragraph.paragraph,

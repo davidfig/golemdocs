@@ -28,7 +28,7 @@ const OPML_FILE = /\.opml$/i;
 const XML_FILE = /\.xml$/i;
 const EML_FILE = /\.eml$/i;
 const IPYNB_FILE = /\.ipynb$/i;
-const IMAGE_FILE = /\.(png|jpe?g|webp|gif|bmp)$/i;
+const IMAGE_FILE = /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i;
 const SVG_FILE = /\.(svg|svgz)$/i;
 const PDF_FILE = /\.pdf$/i;
 const MARKDOWN_FILE = /\.(md|markdown)$/i;
@@ -95,7 +95,7 @@ export const isZipName = (name: string): boolean => /\.zip$/i.test(name);
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc)$/i, '');
 }
 
 /**

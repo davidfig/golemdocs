@@ -173,7 +173,10 @@ export class TextEditorView {
     parent.append(this.el);
 
     this.listenToInput();
-    this.findInput.addEventListener('input', () => this.searchSoon());
+    this.findInput.addEventListener('input', () => {
+      this.keepMessage = false;
+      this.searchSoon();
+    });
     this.findInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.step(e.shiftKey);
       else if (e.key === 'Escape') this.closeBar();
@@ -535,6 +538,9 @@ export class TextEditorView {
     this.focus();
   }
 
+  /** Set after Replace all, so the search that follows it does not overwrite the count of what was replaced. */
+  private keepMessage = false;
+
   private searchSoon(delay = 150): void {
     clearTimeout(this.searchTimer);
     this.searchTimer = window.setTimeout(() => void this.search(), delay);
@@ -554,6 +560,9 @@ export class TextEditorView {
     if (!index) return;
     this.searchAbort?.abort();
     const abort = (this.searchAbort = new AbortController());
+    // The search that follows Replace all looks again for what was replaced: it leaves "Replaced n matches" showing.
+    const keepMessage = this.keepMessage;
+    this.keepMessage = false;
     this.options = this.readOptions();
     this.message.classList.remove('wm-large-error');
     if (!this.options.text) {
@@ -574,13 +583,13 @@ export class TextEditorView {
     const result = await searchLines(index, this.options, {
       signal: abort.signal,
       onProgress: (fraction, count) => {
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted || keepMessage) return;
         this.message.textContent = t('textEditor.searching', { percent: Math.floor(fraction * 100) }) + ` · ${count.toLocaleString()}`;
       },
     });
     if (abort.signal.aborted || this.index !== index) return;
     this.matches = result.lines;
-    this.message.textContent = result.lines.length ? t(result.truncated ? 'textEditor.matchesMore' : 'textEditor.matches', { count: result.lines.length.toLocaleString() }) : t('textEditor.noMatches');
+    if (!keepMessage) this.message.textContent = result.lines.length ? t(result.truncated ? 'textEditor.matchesMore' : 'textEditor.matches', { count: result.lines.length.toLocaleString() }) : t('textEditor.noMatches');
     this.entriesChanged(true);
     // The first match from where the view was.
     const first = nextMatch(result.lines, from);
@@ -951,6 +960,7 @@ export class TextEditorView {
     }
     const count = await this.replaceAllWith(options, this.replacement(options));
     this.message.textContent = count ? t('textEditor.replaced', { count: count.toLocaleString() }) : t('textEditor.replaceNone');
+    this.keepMessage = !!count;
   }
 
   // --- For the assistant ---

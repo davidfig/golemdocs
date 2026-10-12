@@ -22,7 +22,7 @@ const COS_TILT = Math.cos(TILT);
 const SIN_TILT = Math.sin(TILT);
 
 /** Tools that change the document (the reply reminds the person that Undo takes their changes back). */
-const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'edit_drawing', 'insert_text_drawing', 'close_text_drawing', 'convert_document', 'text_file_replace', 'text_file_edit_lines', 'text_file_insert_lines', 'text_file_delete_lines', 'text_file_undo', 'text_file_redo']);
+const EDITS = new Set(['replace_paragraph', 'insert_paragraph', 'insert_from_document', 'delete_paragraph', 'replace_text', 'set_style', 'format_text', 'add_comment', 'clear_formatting', 'change_case', 'format_paragraph', 'insert_link', 'insert_horizontal_rule', 'format_code_block', 'remove_link', 'insert_break', 'insert_table', 'edit_table', 'set_columns', 'undo', 'redo', 'insert_equation', 'set_page', 'edit_comment', 'reply_comment', 'resolve_comment', 'delete_comment', 'set_properties', 'pdf_markup', 'pdf_edit_text', 'pdf_add_text', 'pdf_add_shape', 'pdf_page', 'fill_pdf_field', 'edit_picture', 'delete_text_picture', 'resize_text_picture', 'move_text_picture', 'edit_drawing', 'insert_text_drawing', 'close_text_drawing', 'convert_document', 'text_file_replace', 'text_file_edit_lines', 'text_file_insert_lines', 'text_file_delete_lines', 'text_file_undo', 'text_file_redo']);
 
 /** What Clip says it is doing while a tool runs. */
 function toolNote(name: string): string {
@@ -61,6 +61,12 @@ function toolNote(name: string): string {
     case 'list_pictures':
     case 'view_picture':
       return t('assistant.tool.viewPicture');
+    case 'select_text_picture':
+    case 'delete_text_picture':
+    case 'resize_text_picture':
+    case 'move_text_picture':
+    case 'edit_text_picture':
+      return t('assistant.tool.textPicture');
     case 'rename_document':
       return t('assistant.tool.rename');
     case 'list_versions':
@@ -151,7 +157,7 @@ export class Assistant {
   private readonly credits = h('p', { class: 'wm-clip-credits' });
   private readonly tray = h('div', { class: 'wm-clip-tray' });
   private readonly attach = h('button', { class: 'wm-clip-button wm-clip-attach', text: '＋', attrs: { type: 'button' } });
-  private readonly files = h('input', { attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: '', hidden: '' } });
+  private readonly files = h('input', { attrs: { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.heic,.heif', multiple: '', hidden: '' } });
   /** Pictures waiting to go with the next message, as the data URIs the model is sent (they preview as they are). */
   private attached: string[] = [];
 

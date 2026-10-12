@@ -1,4 +1,4 @@
-/* The message toast (see toast.ts), centered near the bottom of the window. */
+/* The message toast (see toast.ts), centered near the bottom of the window. It is always red with white text, whatever the theme: some themes' error color is gray. */
 
 .wm-toast {
   position: fixed;
@@ -9,12 +9,12 @@
   max-width: min(480px, calc(100vw - 32px));
   box-sizing: border-box;
   padding: 10px 14px;
-  border: 1px solid var(--wm-error, #b00020);
+  border: 0;
   border-radius: var(--wm-radius);
-  background: var(--wm-face);
+  background: #c62828;
   box-shadow: var(--wm-float-shadow);
-  font: 13px/1.4 var(--wm-font, system-ui, sans-serif);
-  color: var(--wm-text, #000);
+  font: 600 13px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: #fff;
   cursor: pointer;
 }
 

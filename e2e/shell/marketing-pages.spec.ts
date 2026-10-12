@@ -40,8 +40,8 @@ test.describe('home page', () => {
     await expect(page.locator('meta[name=description]')).toHaveAttribute('content', /document editor that lives in your browser/);
     await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', 'https://golemdocs.com/home');
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', 'https://golemdocs.com/home');
-    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://golemdocs.com/icon-512.png');
-    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary');
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://golemdocs.com/og.png');
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
   });
 
   test('is plain static content: no editor canvas is loaded', async ({ page }) => {
@@ -133,7 +133,9 @@ test.describe('feature pages', () => {
     const more = page.locator('.more');
     await expect(more.getByRole('heading', { name: 'More you can do' })).toBeVisible();
     const hrefs = await more.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')));
-    expect(hrefs.sort()).toEqual(FEATURES.filter((f) => f.name !== 'convert').map((f) => `/home/${f.name}`).sort());
+    // The other features, then the search guides.
+    const guides = ['markdown-to-word', 'open-docx-online', 'pdf-to-word', 'redact-pdf'];
+    expect(hrefs.sort()).toEqual([...FEATURES.filter((f) => f.name !== 'convert').map((f) => f.name), ...guides].map((name) => `/home/${name}`).sort());
   });
 
   test('the header anchors go back to the home page sections', async ({ page }) => {

@@ -6,8 +6,6 @@ export const app: Partial<Messages> = {
   // Sample and default document names
   'app.welcomeName': 'Golem Docs へようこそ',
   'app.fontsName': 'フォント',
-  'app.linkTip.ctrl': '{url}\nCtrl キーを押しながらクリックしてリンク先を表示',
-  'app.linkTip.cmd': '{url}\nCmd キーを押しながらクリックしてリンク先を表示',
   'app.privacyName': 'プライバシー ポリシー',
   'app.termsName': '利用規約',
   'app.changelogName': '新機能',
@@ -75,6 +73,7 @@ export const app: Partial<Messages> = {
   'app.notInAccountYet': 'このドキュメントはまだアカウントにありません。アップロードが完了するまでしばらくお待ちいただき、もう一度お試しください',
   'app.notSavedYet': '先に何か変更を加えてください。編集されると、ドキュメントがアカウントに保存されます',
   'app.opening': '「{name}」を開いています…',
+  'app.openingProgress': '「{name}」を開いています… {percent}%',
   'app.openFailed': 'ドキュメントを開けませんでした：{message}',
   'app.openingShared': '共有ドキュメントを開いています…',
   'app.openSharedFailed': '共有ドキュメントを開けませんでした：{message}',

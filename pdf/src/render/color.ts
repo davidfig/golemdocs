@@ -20,7 +20,12 @@ export interface ColorSpace {
   decode(bpc: number): number[];
   /** Pattern spaces have no color of their own. */
   readonly pattern?: boolean;
+  /** An uncolored tiling pattern's colors are in this space. */
+  readonly base?: ColorSpace;
 }
+
+/** Red, green and blue in 0..1 as 0xRRGGBB. */
+export const packRgb = (c: Rgb): number => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
 
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 
@@ -110,7 +115,7 @@ function parse(doc: PdfDocument, obj: PdfObject | undefined, resources: PdfDict 
       return byComponents(n);
     }
     case 'Pattern':
-      return PATTERN;
+      return o.length > 1 ? { ...PATTERN, base: parse(doc, o[1], resources, depth + 1) } : PATTERN;
     case 'Lab':
       return lab(doc, doc.dict(o[1]));
     case 'Indexed':

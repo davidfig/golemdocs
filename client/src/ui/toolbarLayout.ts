@@ -94,24 +94,16 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
 ];
 
 /**
- * The phone toolbar is one row: these first, then every other button from the visible toolbars
- * (they end up behind the row's "…" button, see Toolbar.fit).
+ * The phone's top row is for the file: these first, then every other button from the visible toolbars
+ * except the Formatting one (they end up behind the row's "…" button, see Toolbar.fit).
  */
-export const MOBILE_PRIMARY: readonly string[] = [
-  'edit.undo',
-  'edit.redo',
-  SEPARATOR,
-  'format.bold',
-  'format.italic',
-  'format.underline',
-  SEPARATOR,
-  'format.bullets',
-  'format.numbering',
-  SEPARATOR,
-  'insert.link',
-  'insert.image',
-  'insert.table',
-];
+export const MOBILE_PRIMARY: readonly string[] = ['file.new', 'file.open', SEPARATOR, 'edit.undo', 'edit.redo', SEPARATOR, 'edit.find', 'file.share'];
+
+/**
+ * The phone's typing bar, above the keyboard while the document has it: these first, then the rest of the
+ * Formatting toolbar behind its "…" button.
+ */
+export const MOBILE_KEYS: readonly string[] = ['format.bold', 'format.italic', 'format.underline', SEPARATOR, 'format.bullets', 'format.numbering', SEPARATOR, 'insert.link', 'insert.image', 'insert.comment'];
 
 /** A toolbar's name as shown (its `name` is an id, kept as saved). */
 export function toolbarTitle(name: string): string {

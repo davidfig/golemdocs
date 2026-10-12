@@ -2,7 +2,7 @@
   "name": "@golemdocs/client",
   "private": true,
   "description": "GolemDocs web app: canvas editor, UI and layout worker (private workspace package, not on npm)",
-  "version": "0.14.1",
+  "version": "0.17.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,7 @@
     "@golemdocs/odt": "workspace:*",
     "@golemdocs/ops": "workspace:*",
     "@golemdocs/pdf": "workspace:*",
+    "libheif-js": "^1.23.5",
     "polygon-clipping": "^0.15.7"
   },
   "devDependencies": {

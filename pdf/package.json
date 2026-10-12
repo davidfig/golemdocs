@@ -2,7 +2,7 @@
   "name": "@golemdocs/pdf",
   "private": true,
   "description": "PDF reader, editor and writer (private workspace package, not on npm)",
-  "version": "0.14.1",
+  "version": "0.17.1",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

@@ -32,7 +32,7 @@ Root scripts (`package.json`): `dev`, `dev:client`, `dev:server`, `kill`, `build
 
 ## Client build and lazy chunks
 
-`pnpm --filter @golemdocs/client build` runs `tsc && vite build` (`client/vite.config.ts`). Output goes to `client/dist`, which `server/wrangler.jsonc` serves as an SPA (`assets.directory`, `not_found_handling: single-page-application`, with `/api/*` first through the Worker).
+`pnpm --filter @golemdocs/client build` runs `tsc && vite build` (`client/vite.config.ts`). Output goes to `client/dist`, which `server/wrangler.jsonc` serves as an SPA (`assets.directory`, `not_found_handling: single-page-application`, with `/api/*` first through the Worker). That is production only: in the `dev` and `local` environments `assets.directory` is an empty, git-ignored `server/.no-assets`, and `run_worker_first` is `/*`, so `:3001` serves just `/api` and the Worker redirects everything else to Vite on :5173, where the page comes from.
 
 Rules (AGENTS.md "Bundle size and lazy loading"): split into its own chunk only code that is about 20 kB or more minified and not needed by most sessions; one feature, one chunk behind a single entry module that is only ever `import()`ed (never also imported statically).
 
@@ -75,7 +75,7 @@ Run `pnpm test` (all packages, `--no-bail`) or one package: `pnpm --filter @gole
 
 Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `editing`, `files`, `layout`, `pdf`, `shell`, plus `smoke.spec.ts`). It starts its own servers: a simulated-local `wrangler dev` on :3101 with a throwaway `--persist-to` state folder (`e2e/ports.ts`, `E2E_STATE`), signed in as `DEV_USER=e2e@example.com`, and Vite on :5273. Never the `pnpm dev` ports.
 
-- `e2e/fixtures.ts` exports `test` (extends Playwright's with an `app: App` fixture and defaults for sidebar, status bar and live preview) and `App`: `goto`, `blank()` (File › New with the caret in it), `ready()` (waits for `window.loaded`), `menu()`, `editor` (`#input`), `canvas` (`#canvas`), `focus()`. Each test gets a fresh browser profile.
+- `e2e/fixtures.ts` exports `test` (extends Playwright's with an `app: App` fixture and defaults for sidebar, status bar and autocorrect) and `App`: `goto`, `blank()` (File › New with the caret in it), `ready()` (waits for `window.loaded`), `menu()`, `editor` (`#input`), `canvas` (`#canvas`), `focus()`. Each test gets a fresh browser profile.
 - The editor is a canvas, so assert through `app.text()` and `window` hooks (`selectionState`, `loaded`, `pages`, `status`), the DOM of menus and dialogs, or downloaded files.
 - GPU: on a non-CI Mac the browser uses Metal; elsewhere SwiftShader software GL (`E2E_SOFTWARE_GL=1` forces it).
 - `scripts/e2e.ts`: pass one runs everything in parallel (workers = a third of the cores, `E2E_WORKERS` overrides; one retry, and a pass on retry is reported flaky); pass two re-runs `{ tag: '@heavy' }` tests with fewer workers. `E2E_SKIP_HEAVY=1` skips pass two. Arguments go straight to `playwright test` (single pass).
@@ -94,7 +94,7 @@ One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` 
 
 - `CHANGELOG.md` is shown in the app (Help › What's New), so write for users. Any user-visible change (including home page copy) adds one line under `## <next version> - Unreleased` in `### Added`, `### Changed` or `### Fixed`. Never edit released versions; use `›` in menu paths.
 - Release: replace `Unreleased` with the date, set `version` in the root and every package's `package.json` to match, and do not leave an empty `Unreleased` heading. Bump: major for breaking changes (files or saved data that no longer open), minor for features or notable behavior changes, patch for fixes only; while `0.x`, breaking changes bump minor.
-- On deploy, run the full `pnpm e2e` first (background, output to a file, reproduce failures in an isolated second run), then release. Details are in AGENTS.md.
+- On deploy, run the full `pnpm e2e` first (background, output to a file, watched by a monitor that matches only `✘` result lines and ends on the script's last line, reproduce failures in an isolated second run), then release. Details are in AGENTS.md.
 
 ## Invariants and gotchas
 

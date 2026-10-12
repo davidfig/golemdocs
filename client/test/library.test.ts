@@ -41,7 +41,7 @@ function stubServer() {
       return json({ ...meta, updatedAt: cloudVersion });
     }
     if (method === 'GET' && url === '/api/shared') return json([{ id: 's1', name: 'Theirs.docx', role: 'viewer', size: 1, createdAt: 1, updatedAt: 1, thumbAt: null, owner: { name: 'O', email: 'o@example.com' } }]);
-    if (method === 'GET' && url === '/api/documents') return json([]);
+    if (method === 'GET' && url === '/api/documents') return json(cloudHas ? [meta] : []);
     if (method === 'GET' && url === '/api/documents/c1') return new Response(cloudBytes.slice());
     if (method === 'PUT' && url === '/api/documents/c1/thumbnail') return json({ ...meta, thumbAt: 7 });
     return json({ error: 'not found' }, 404);
@@ -54,6 +54,7 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
 const { openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
+const { downloadDocument } = await import('../src/cloud.ts');
 const sync = await import('../src/sync.ts');
 const { loadLibrary } = sync;
 
@@ -141,6 +142,40 @@ test('opening from the cloud creates one linked browser copy and refreshes it wh
   assert.deepEqual([...new Uint8Array((await local.getSaved(first.info.id))!.bytes)], [5, 5]);
 });
 
+test('a download reports how much has arrived, and gives the same bytes', async () => {
+  const body = new Uint8Array(100_000).map((_, i) => i % 251);
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const parts = [body.slice(0, 30_000), body.slice(30_000, 70_000), body.slice(70_000)];
+    const stream = new ReadableStream<Uint8Array>({ pull(c) { const next = parts.shift(); if (next) c.enqueue(next); else c.close(); } });
+    return new Response(stream, { headers: { 'content-length': String(body.length) } });
+  }) as typeof fetch;
+  try {
+    const shares: number[] = [];
+    const got = new Uint8Array(await downloadDocument('c1', (share) => shares.push(share)));
+    assert.deepEqual([...got.slice(0, 5)], [...body.slice(0, 5)]);
+    assert.equal(got.length, body.length);
+    assert.deepEqual(shares, [0.3, 0.7, 1]);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('an early open hands back the bytes at once and writes the same linked browser copy behind them', async () => {
+  const early = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 }, undefined, { early: true });
+  assert.deepEqual([...new Uint8Array(early.bytes)], [9, 9, 9]);
+  assert.ok(early.stored, 'the copy is being written');
+  new Uint8Array(early.bytes).fill(0); // what the worker does with the bytes it is given must not reach the copy
+  const real = await early.stored;
+  assert.equal(real.id, early.info.id);
+  assert.equal(real.cloudId, 'c1');
+  assert.deepEqual([...new Uint8Array((await local.getSaved(real.id))!.bytes)], [9, 9, 9]);
+  const again = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 }, undefined, { early: true });
+  assert.equal(again.stored, undefined, 'a copy already in step with the cloud opens from the browser');
+  assert.equal(again.info.id, early.info.id);
+  assert.equal((await local.listSaved()).length, 1);
+});
+
 test('opening from the cloud never overwrites browser edits the cloud doesn’t have', async () => {
   const first = await openFromCloud({ id: 'c1', name: 'Doc.docx' });
   await local.saveSaved({ id: first.info.id, name: 'Doc.docx', bytes: bytes(1, 1, 1) }); // edited locally
@@ -224,12 +259,29 @@ test('a copy changed in the account since it was opened is saved as a conflicted
   calls = [];
   const { doc: copy, conflictCopy } = await uploadToCloud(doc.id);
   assert.equal(conflictCopy, true);
-  assert.deepEqual(calls.map((c) => c.method).slice(0, 2), ['PUT', 'POST'], 'refused, then saved alongside');
+  assert.deepEqual(calls.map((c) => c.method).slice(0, 3), ['PUT', 'GET', 'POST'], 'refused, compared with the account’s, then saved alongside');
   assert.equal(copy.name, 'Doc (conflicted copy).docx');
   const info = (await local.getSaved(doc.id))!.info;
   assert.equal(info.cloudId, copy.id, 'this copy carries on as the conflicted one');
   assert.equal(info.name, 'Doc (conflicted copy).docx');
   assert.equal(cloudVersion, 5, 'the other computer’s version is untouched');
+});
+
+test('no conflicted copy is made when the account’s copy is the same as this one', async () => {
+  const { keepAsConflictCopy } = await import('../src/library.ts');
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(9, 9, 9) });
+  await uploadToCloud(doc.id); // c1, version 1
+  await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(9, 9, 9) });
+  cloudVersion = 5; // "changed" elsewhere, but to the same bytes
+  calls = [];
+  const { conflictCopy } = await uploadToCloud(doc.id);
+  assert.equal(conflictCopy, false);
+  assert.ok(!calls.some((c) => c.method === 'POST'), 'nothing new created');
+  assert.equal((await local.getSaved(doc.id))!.info.cloudId, 'c1');
+  await local.saveSaved({ id: doc.id, name: 'Doc.docx', bytes: bytes(9, 9, 9) });
+  calls = [];
+  assert.equal(await keepAsConflictCopy(doc.id), null);
+  assert.ok(!calls.some((c) => c.method === 'POST'), 'nothing kept apart when nothing differs');
 });
 
 test('changes kept as a conflicted copy (someone else holds the document) go to a new document, and the copy here can then be replaced by the account’s', async () => {
@@ -241,7 +293,7 @@ test('changes kept as a conflicted copy (someone else holds the document) go to 
   calls = [];
   const copy = await keepAsConflictCopy(doc.id);
   assert.equal(copy?.name, 'Doc (conflicted copy).docx');
-  assert.deepEqual(calls.map((c) => c.method), ['POST'], 'never sent over the original');
+  assert.deepEqual(calls.map((c) => c.method), ['GET', 'POST'], 'compared with the original, never sent over it');
   const info = (await local.getSaved(doc.id))!.info;
   assert.equal(info.cloudId, 'c1', 'the copy here stays the original’s');
   assert.equal(info.name, 'Doc.docx');

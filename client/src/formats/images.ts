@@ -4,7 +4,8 @@
 
 import type { Block, Inline, WordDocument } from '@golemdocs/docx';
 
-export type ImageType = 'png' | 'jpeg' | 'gif' | 'webp' | 'bmp';
+/** `heic` (Apple's HEIC/HEIF) is only ever read: it is turned into a JPEG when a picture is opened or inserted (see `toPng`). */
+export type ImageType = 'png' | 'jpeg' | 'gif' | 'webp' | 'bmp' | 'heic';
 
 export interface ImageData {
   bytes: Uint8Array;
@@ -14,11 +15,102 @@ export interface ImageData {
   height: number;
 }
 
-export const MIME: Record<ImageType, string> = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
+export const MIME: Record<ImageType, string> = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', heic: 'image/heic' };
 
-/** The name a picture called `name` is kept under (see `toPng`): GIF, BMP and SVG open, and are saved, as PNG. */
+/** The name a picture called `name` is kept under (see `toPng`): GIF, BMP and SVG open, and are saved, as PNG; HEIC as JPEG. */
 export function keptPictureName(name: string): string {
+  if (/\.hei[cf]$/i.test(name)) return name.replace(/\.[^.]*$/, '.jpg');
   return /\.(gif|bmp|svg)$/i.test(name) ? name.replace(/\.[^.]*$/, '.png') : name;
+}
+
+// --- HEIC ---------------------------------------------------------------------------------------
+// HEIC is an ISO box file (ISO 14496-12): a `ftyp` box naming the brand, and a `meta` box that lists
+// the pictures in it, their properties (size, turn) and which is the main one. Only that much is read here;
+// the picture itself is decoded by `heicDecode.ts`.
+
+const HEIC_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs']);
+
+interface Box {
+  type: string;
+  /** Where the box's content starts (after its header) and ends. */
+  body: number;
+  end: number;
+}
+
+/** The boxes between `from` and `to`. A box that claims to run past `to` ends the list. */
+function boxes(bytes: Uint8Array, from: number, to: number): Box[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const found: Box[] = [];
+  let i = from;
+  while (i + 8 <= to) {
+    let size = view.getUint32(i);
+    let body = i + 8;
+    if (size === 1) {
+      if (i + 16 > to) break;
+      size = Number(view.getBigUint64(i + 8));
+      body = i + 16;
+    } else if (size === 0) size = to - i;
+    if (size < body - i || i + size > to) break;
+    found.push({ type: String.fromCharCode(...bytes.subarray(i + 4, i + 8)), body, end: i + size });
+    i += size;
+  }
+  return found;
+}
+
+/** The main picture's size (a quarter turn applied) of a HEIC file; null if the bytes aren't HEIC, and 0 x 0 if the size can't be found. */
+function heicSize(bytes: Uint8Array): { width: number; height: number } | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const top = boxes(bytes, 0, bytes.length);
+  const ftyp = top.find((b) => b.type === 'ftyp');
+  if (!ftyp || ftyp.end - ftyp.body < 8) return null;
+  const brand = (at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
+  const brands = [brand(ftyp.body)];
+  for (let at = ftyp.body + 8; at + 4 <= ftyp.end; at += 4) brands.push(brand(at));
+  // AVIF is the same box file with another codec: `mif1` alone, or with `avif`, is not HEIC.
+  if (brands.includes('avif') || brands.includes('avis') || !brands.some((b) => HEIC_BRANDS.has(b))) return null;
+  const none = { width: 0, height: 0 };
+  // `meta` starts with a version and flags word; `pitm` and `ipma` do too.
+  const meta = top.find((b) => b.type === 'meta');
+  if (!meta) return none;
+  const inMeta = boxes(bytes, meta.body + 4, meta.end);
+  const pitm = inMeta.find((b) => b.type === 'pitm');
+  const primary = pitm && pitm.end - pitm.body >= 6 ? (view.getUint8(pitm.body) === 0 ? view.getUint16(pitm.body + 4) : pitm.end - pitm.body >= 8 ? view.getUint32(pitm.body + 4) : -1) : -1;
+  const iprp = inMeta.find((b) => b.type === 'iprp');
+  if (!iprp) return none;
+  const inIprp = boxes(bytes, iprp.body, iprp.end);
+  const ipco = inIprp.find((b) => b.type === 'ipco');
+  if (!ipco) return none;
+  const properties = boxes(bytes, ipco.body, ipco.end);
+  // The properties the main picture has (1-based positions in `ipco`); with no `pitm` or association, the first of each kind.
+  let mine: Box[] = properties;
+  const ipma = inIprp.find((b) => b.type === 'ipma');
+  if (ipma && primary >= 0 && ipma.end - ipma.body >= 8) {
+    const version = view.getUint8(ipma.body);
+    const wide = (view.getUint8(ipma.body + 3) & 1) === 1;
+    const entries = view.getUint32(ipma.body + 4);
+    let at = ipma.body + 8;
+    for (let n = 0; n < entries && at + (version < 1 ? 3 : 5) <= ipma.end; n++) {
+      const id = version < 1 ? view.getUint16(at) : view.getUint32(at);
+      at += version < 1 ? 2 : 4;
+      const count = view.getUint8(at++);
+      const indexes: number[] = [];
+      for (let k = 0; k < count && at + (wide ? 2 : 1) <= ipma.end; k++) {
+        indexes.push(wide ? view.getUint16(at) & 0x7fff : view.getUint8(at) & 0x7f);
+        at += wide ? 2 : 1;
+      }
+      if (id === primary) {
+        mine = indexes.flatMap((index) => properties[index - 1] ?? []);
+        break;
+      }
+    }
+  }
+  const ispe = mine.find((b) => b.type === 'ispe');
+  if (!ispe || ispe.end - ispe.body < 12) return none;
+  const width = view.getUint32(ispe.body + 4);
+  const height = view.getUint32(ispe.body + 8);
+  // `irot` turns the picture by a quarter turn, anticlockwise, once or three times: its size is swapped.
+  const irot = mine.find((b) => b.type === 'irot');
+  return irot && irot.end > irot.body && view.getUint8(irot.body) & 1 ? { width: height, height: width } : { width, height };
 }
 
 /** The picture a byte string holds: its type by signature, and its pixel size. Null for anything else. */
@@ -67,6 +159,10 @@ export function sniffImage(bytes: Uint8Array): ImageData | null {
       height = 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16));
     }
     return { bytes, type: 'webp', width, height };
+  }
+  if (ascii(4, 'ftyp')) {
+    const size = heicSize(bytes);
+    if (size) return { bytes, type: 'heic', ...size };
   }
   // "BM", then (after the file header) the size of a known info header: text that starts "BM" is not a bitmap.
   if (bytes[0] === 0x42 && bytes[1] === 0x4d && bytes.length >= 26) {

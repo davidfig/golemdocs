@@ -281,7 +281,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   opml: { ...NOTHING, kind: 'opml', label: 'OPML', extensions: ['.opml'], mime: 'text/x-opml', styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'], lists: true, indent: true },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.txt'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
-  jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg'], mime: 'image/jpeg' },
+  jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg', '.heic', '.heif'], mime: 'image/jpeg' },
   webp: { ...PICTURE, kind: 'webp', get label() { return t('menus.format.webp'); }, extensions: ['.webp'], mime: 'image/webp' },
   svg: { ...VECTOR, kind: 'svg', get label() { return t('menus.format.svg'); }, extensions: ['.svg'], mime: 'image/svg+xml' },
   svgz: { ...VECTOR, kind: 'svgz', get label() { return t('menus.format.svgz'); }, extensions: ['.svgz'], mime: 'image/svg+xml' },

@@ -33,6 +33,7 @@ export interface DocumentListener {
   pointers(pointers: { page: number; x: number; y: number; color: number; name: string; picture: string | null }[]): void;
   error(message: string): void;
   notice(message: string): void;
+  selectionHtml(text: string, html: string): void;
   shapes(state: { shapes: Shape[]; width: number; height: number; canUndo: boolean; canRedo: boolean }): void;
   vectorScene(state: { scene: Scene | null; canUndo: boolean; canRedo: boolean }): void;
 }
@@ -44,7 +45,7 @@ export class LayoutClient {
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
-  private readonly linkRequests = new Map<number, (found: { url: string | null; checkbox: boolean }) => void>();
+  private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly agentRequests = new Map<number, (result: string | { text: string; images: string[] }) => void>();
 
@@ -65,6 +66,11 @@ export class LayoutClient {
    */
   setLocale(locale: string): void {
     this.send({ type: 'locale', locale });
+  }
+
+  /** A document is being downloaded: lets the worker fetch the default fonts meanwhile. */
+  warm(): void {
+    this.send({ type: 'warm' });
   }
 
   /** Opens a document, cancelling any layout in progress; in a collaboration room if given. */
@@ -153,13 +159,19 @@ export class LayoutClient {
     this.send({ type: 'putDrawing', doc: this.doc, svg: drawing.svg, png, width: drawing.width, height: drawing.height, description: drawing.description, replace }, [png]);
   }
 
+  /** Shows the selected picture of the open document as other bytes (it was edited in the image editor). */
+  replacePicture(bytes: Uint8Array, ext: string, aspect: number): void {
+    const copy = bytes.slice().buffer;
+    this.send({ type: 'replacePicture', doc: this.doc, bytes: copy, ext, aspect }, [copy]);
+  }
+
   /** An image part of the open document. */
   media(part: string): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'media', doc: this.doc, request, part })).then((bytes) => new Uint8Array(bytes));
   }
 
   /** What is under a point on a page: the address of a link (null when there is none), and whether it is a check box that a click changes. */
-  linkAt(page: number, x: number, y: number): Promise<{ url: string | null; checkbox: boolean }> {
+  linkAt(page: number, x: number, y: number): Promise<{ url: string | null; text: string; checkbox: boolean }> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.linkRequests.set(request, resolve);
@@ -219,7 +231,7 @@ export class LayoutClient {
       return;
     }
     if (message.type === 'linkAt') {
-      this.linkRequests.get(message.request)?.({ url: message.url, checkbox: message.checkbox });
+      this.linkRequests.get(message.request)?.({ url: message.url, text: message.text, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
       return;
     }
@@ -280,6 +292,9 @@ export class LayoutClient {
         break;
       case 'error':
         this.listener.error(message.message);
+        break;
+      case 'selectionHtml':
+        this.listener.selectionHtml(message.text, message.html);
         break;
       case 'notice':
         this.listener.notice(message.message);

@@ -90,8 +90,12 @@ export interface TextInputHandlers {
   compose?(preview: string | null): void;
   /** The text a copy puts on the clipboard (null: nothing is selected, or it cannot be copied). */
   copy(): string | null;
+  /** The formatted form of what `copy()` returns, if it has one (put on the clipboard beside the text). */
+  copyHtml?(): string | undefined;
   /** After a cut put `copy()`'s text on the clipboard: the selection is deleted. */
   cut(): void;
+  /** Something other than text is selected (a picture): it is put on the clipboard (and, for a cut, taken out) by the editor itself; whether it was. */
+  copyOther?(cut: boolean): boolean;
   paste(clip: Clipboard): void;
 }
 
@@ -118,16 +122,22 @@ export function attachTextInput(input: HTMLTextAreaElement, h: TextInputHandlers
     input.value = '';
   });
   input.addEventListener('copy', (e) => {
+    if (h.copyOther?.(false)) return e.preventDefault();
     const text = h.copy();
     if (text === null) return;
     e.preventDefault();
     e.clipboardData?.setData('text/plain', text);
+    const html = h.copyHtml?.();
+    if (html) e.clipboardData?.setData('text/html', html);
   });
   input.addEventListener('cut', (e) => {
+    if (h.copyOther?.(true)) return e.preventDefault();
     const text = h.copy();
     if (text === null) return;
     e.preventDefault();
     e.clipboardData?.setData('text/plain', text);
+    const html = h.copyHtml?.();
+    if (html) e.clipboardData?.setData('text/html', html);
     h.cut();
   });
   input.addEventListener('paste', (e) => {

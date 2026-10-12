@@ -4,7 +4,7 @@
 // of a copy that started from an older version than the cloud's becomes a separate
 // "(conflicted copy)" document instead.
 
-import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, saveChunked, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
+import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, saveChunked, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
 import { getChunks, getSaved, getSavedManifest, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
@@ -24,6 +24,27 @@ export function conflictCopyName(name: string): string {
   let base = stem;
   while (mark && base.endsWith(mark)) base = base.slice(0, -mark.length);
   return t('app.conflictedCopy', { stem: base, ext });
+}
+
+/** Whether the account's copy of a document is byte for byte what this browser has: then there is nothing to keep apart. False if it cannot be told. */
+async function sameAsCloud(cloudId: string, bytes: Uint8Array | null, manifest: Manifest | null, source: ChunkSource): Promise<boolean> {
+  try {
+    let mine = bytes;
+    if (!mine && manifest) {
+      const chunks = await source(manifest.chunks.map((c) => c.h));
+      mine = new Uint8Array(manifest.size);
+      let at = 0;
+      for (const chunk of chunks) {
+        mine.set(chunk.bytes, at);
+        at += chunk.bytes.byteLength;
+      }
+    }
+    if (!mine) return false;
+    const theirs = new Uint8Array(await downloadDocument(cloudId));
+    return theirs.byteLength === mine.byteLength && theirs.every((b, i) => b === mine![i]);
+  } catch {
+    return false;
+  }
 }
 
 /** A document's copy in this browser, ready to send: whole or as chunks, what the cloud already has of it, and how to make a new cloud document of it. */
@@ -77,9 +98,14 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
       // Another tab uploaded this copy meanwhile, so the cloud moved on from here: go again from there.
       return uploadToCloud(localId, false);
     } else if (error.status === 409) {
-      // Changed elsewhere too: keep both. This copy carries on as the conflicted one.
-      doc = await create(conflictCopyName(info.name));
-      conflictCopy = true;
+      // Changed elsewhere too: keep both, unless they turn out to be the same. This copy carries on as the conflicted one.
+      const current = (await sameAsCloud(info.cloudId, bytes, manifest, source)) ? (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId) : undefined;
+      if (current) {
+        doc = current;
+      } else {
+        doc = await create(conflictCopyName(info.name));
+        conflictCopy = true;
+      }
     } else {
       throw error;
     }
@@ -100,8 +126,13 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
  * watches it): what was changed here before is kept, but never sent over theirs. Null if there was nothing to keep.
  */
 export async function keepAsConflictCopy(localId: string): Promise<CloudDocument | null> {
-  const { info, create } = await sendable(localId);
+  const { info, bytes, manifest, source, create } = await sendable(localId);
   if (!info.cloudId || info.updatedAt <= (info.cloudSyncedAt ?? 0)) return null;
+  // The same as the account's: nothing to keep, only to count as sent.
+  if (await sameAsCloud(info.cloudId, bytes, manifest, source)) {
+    await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
+    return null;
+  }
   const doc = await create(conflictCopyName(info.name));
   await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
   return doc;
@@ -183,14 +214,17 @@ export interface OpenedFromCloud {
   bytes: ArrayBuffer;
   /** The browser copy has changes the cloud doesn't (not uploaded yet), so it was opened instead. */
   usedBrowserCopy: boolean;
+  /** With `early`: the browser copy still being written (`info` is what it will be; this settles with the real record). */
+  stored?: Promise<SavedInfo>;
 }
 
 /**
  * Makes the cloud document available as a browser copy, unless that would discard unsynced edits.
  * When the caller knows the cloud copy's `updatedAt` and it's the one the browser copy already
- * has, nothing is downloaded.
+ * has, nothing is downloaded. With `progress`, the share of a download received is reported as it comes. With `early` a download is returned as soon as it arrives, while its browser copy is written (chunked,
+ * hashed, stored: seconds for a big file) in the background as `stored`: the caller opens the bytes without waiting for it.
  */
-export async function openFromCloud(cloud: { id: string; name: string; updatedAt?: number }, owner?: string): Promise<OpenedFromCloud> {
+export async function openFromCloud(cloud: { id: string; name: string; updatedAt?: number }, owner?: string, options: { early?: boolean; progress?: (share: number) => void } = {}): Promise<OpenedFromCloud> {
   // Copies made before documents were marked with their account count as this one's.
   const linked = (await listSaved()).find((d) => d.cloudId === cloud.id && (d.owner === undefined || d.owner === owner));
   if (linked && linked.updatedAt > (linked.cloudSyncedAt ?? 0)) {
@@ -203,12 +237,21 @@ export async function openFromCloud(cloud: { id: string; name: string; updatedAt
   }
   let bytes: ArrayBuffer;
   try {
-    bytes = await (takePrefetched(cloud) ?? downloadDocument(cloud.id));
+    bytes = await (takePrefetched(cloud) ?? downloadDocument(cloud.id, options.progress));
   } catch (error) {
     // Offline: the copy this browser has is better than nothing.
     const saved = linked && !(error instanceof CloudError) ? await getSaved(linked.id) : null;
     if (saved) return { ...saved, usedBrowserCopy: false };
     throw error;
+  }
+  if (options.early) {
+    const id = linked?.id ?? crypto.randomUUID();
+    // The save gets its own bytes: opening hands the others to the worker, which empties them.
+    const stored = saveFromCloud({ id, name: cloud.name, bytes: bytes.slice(0), owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
+    stored.catch(() => {});
+    const updatedAt = Date.now();
+    const info: SavedInfo = { id, name: cloud.name, size: bytes.byteLength, updatedAt, ...(owner !== undefined && { owner }), cloudId: cloud.id, cloudSyncedAt: updatedAt, ...(cloud.updatedAt !== undefined && { cloudUpdatedAt: cloud.updatedAt }) };
+    return { info, bytes, usedBrowserCopy: false, stored };
   }
   const info = await saveFromCloud({ id: linked?.id, name: cloud.name, bytes, owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
   return { info, bytes, usedBrowserCopy: false };

@@ -2,7 +2,7 @@
 import { type Position, type MoveTarget, type Rect, type Caret, type SelectionGeometry } from './types.ts';
 import type { Selection as OpSelection } from '@golemdocs/ops';
 
-import { paragraphLength, paragraphText, plainText, type Paragraph } from '@golemdocs/docx';
+import { paragraphLength, paragraphText, plainText, splitInlines, type Paragraph } from '@golemdocs/docx';
 import { type Pos } from '@golemdocs/ops';
 import { graphemeAt } from './segment.ts';
 import { charAfter, charBefore, wordLeft, wordRange, wordRight } from './textUnits.ts';
@@ -220,8 +220,10 @@ export abstract class EditorNavigation extends EditorBase {
         if (next && next.columnWidth !== undefined && next.column !== current.column) return this.positionInLine(next, goal);
       }
       if (candidates.length === 0) continue;
-      // Stay in the same column (table cells) when a line there qualifies.
-      const inColumn = candidates.filter((l) => goal >= l.column - 1 && goal <= l.column + Math.max(l.width + (l.x - l.column), 0) + 1);
+      // Stay in the same column (table cells) when a line there qualifies. A column is as wide as its widest line, so a short or empty line is still in the column its text is in.
+      const extent = new Map<number, number>();
+      for (const l of page.lines) extent.set(l.column, Math.max(extent.get(l.column) ?? 0, l.width + (l.x - l.column)));
+      const inColumn = candidates.filter((l) => goal >= l.column - 1 && goal <= l.column + (extent.get(l.column) ?? 0) + 1);
       const pool = inColumn.length ? inColumn : candidates;
       const best = pool.reduce((a, b) => (dir < 0 ? (b.y + b.height > a.y + a.height ? b : a) : b.y < a.y ? b : a));
       return this.positionInLine(best, goal);
@@ -280,6 +282,23 @@ export abstract class EditorNavigation extends EditorBase {
     parts.push(plainText(end.paragraph, 0, end.offset));
     const text = parts.join('\n');
     return text.length > limit ? text.slice(0, limit) : text;
+  }
+
+  /** The selected paragraphs with their formatting, the first and last cut to the selection (for the clipboard's HTML). Empty when nothing is selected. */
+  selectedFragments(): Paragraph[] {
+    if (this.collapsed) return [];
+    const [start, end] = this.ordered();
+    const cut = (p: Paragraph, from: number, to: number): Paragraph => {
+      const [, tail] = splitInlines(p.children, from);
+      const [children] = splitInlines(tail, to - from);
+      return structuredClone({ ...p, children });
+    };
+    if (start.paragraph === end.paragraph) return [cut(start.paragraph, start.offset, end.offset)];
+    const list = this.paragraphs();
+    const out = [cut(start.paragraph, start.offset, paragraphLength(start.paragraph))];
+    for (let k = this.indexOf(start.paragraph) + 1; k < this.indexOf(end.paragraph); k++) out.push(structuredClone(list[k]));
+    out.push(cut(end.paragraph, 0, end.offset));
+    return out;
   }
 
   /** Caret or highlight for the current selection, on the session's display pages. */

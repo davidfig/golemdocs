@@ -2,19 +2,19 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type NumberingReference, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
-import { Replica, ROOM_POLICY, type ClientMessage, type HistoryMark, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
+import { Replica, ROOM_POLICY, type ClientMessage, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
 import { cloudRoomTransport } from '../collab/cloudRoom.ts';
 import { RoomClient, type RoomHost, type RoomStart } from '../collab/roomClient.ts';
 import {
   describeFace,
   encodePage,
+  FALLBACK_FAMILY,
   FontSet,
   LayoutSession,
   setFormattingMarks,
   setReflowWidth,
-  setShowingSource,
   toModel,
   type EncodedPage,
   PageLayout,
@@ -77,7 +77,6 @@ import { FormatReader } from './selectionFormat.ts';
 import { runAgentTool } from './agentTools.ts';
 import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
-import { linkInSource } from '../formats/wikiLinks.ts';
 import { AUTOCORRECT_DEFAULTS, AUTOCORRECT_KEYS, autoCorrect, ordinalAt, urlAt } from './autocorrect.ts';
 import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
 import { FORMATS, formatAllows } from '../ui/formats.ts';
@@ -95,6 +94,8 @@ import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLangua
 const SLICE_MS = 12;
 /** Longest selection text kept for the clipboard. */
 const CLIPBOARD_LIMIT = 4_000_000;
+/** A selection longer than this is copied as plain text only (writing its HTML after every change would be slow). */
+const SELECTION_HTML_LIMIT = 200_000;
 
 const fontsReady = FontSet.load(
   async (path) => {
@@ -108,6 +109,16 @@ const fontsReady = FontSet.load(
     return new Uint8Array(await response.arrayBuffer());
   },
 );
+
+/** Loads the faces of the default font, which nearly every document uses, ahead of one that is still arriving. Never fails the document. */
+async function warmFonts(): Promise<void> {
+  try {
+    const fonts = await fontsReady;
+    await fonts.ensure(new Set([false, true].flatMap((bold) => [false, true].map((italic) => fonts.resolve({ font: FALLBACK_FAMILY, bold, italic }).face))));
+  } catch (e) {
+    console.warn('could not warm the fonts', e);
+  }
+}
 
 function post(message: FromWorker, transfer: Transferable[] = []): void {
   self.postMessage(message, { transfer });
@@ -157,7 +168,9 @@ async function embedded(title: string, fonts: FontSet): Promise<Embedded | null>
   const file = await askEmbed(title);
   if (!file) return null;
   const bytes = new Uint8Array(file.bytes);
-  if (sniffImage(bytes)) return { kind: 'image', bytes };
+  const picture = sniffImage(bytes);
+  // A HEIC photo goes in as a JPEG (the converter is only fetched for one).
+  if (picture) return { kind: 'image', bytes: picture.type === 'heic' ? (await (await import('../formats/imageCodec.ts')).toPng(file.name, bytes)).bytes : bytes };
   // A drawing (a stored one, or an SVG file): shown as its picture, with the drawing beside it to be edited there.
   if (isWdoc(bytes) || /\.svgz?$/i.test(file.name)) {
     const drawing = await (await import('../formats/vectorDoc.ts')).storedDrawing(bytes);
@@ -253,7 +266,8 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     }
     case 'image': {
       const type = sniffImage(new Uint8Array(source.bytes))?.type;
-      const lens: Format = type === 'jpeg' || type === 'webp' ? type : 'png';
+      // A HEIC photo is read as a JPEG (the picture format's reader converts it).
+      const lens: Format = type === 'jpeg' || type === 'webp' ? type : type === 'heic' ? 'jpeg' : 'png';
       const { document, extensions } = await importDocument(lens, new Uint8Array(source.bytes));
       return flowing(source.name, document, lens, extensions);
     }
@@ -319,7 +333,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that change the editor's settings rather than the document (they work with none open). */
-const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'livePreview']);
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect']);
 
 /** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
 function applySettings(wire: WireCommand): void {
@@ -331,7 +345,6 @@ function applySettings(wire: WireCommand): void {
     void acceptSpelling(wire.words ?? []);
   } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
   else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
-  else if (wire.kind === 'livePreview') live.livePreview = wire.on;
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
 const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties']);
@@ -472,6 +485,12 @@ class OpenDocument {
     void this.pump();
   }
 
+  /**
+   * The first layout of the document has reached its end. Until then the squiggles are left out of the updates: they are found by
+   * walking every page laid out so far, which after each slice of a long document is more work than laying the slice out.
+   */
+  private firstLayoutDone = false;
+
   /** Lays out until the pages are current, sending updates as it goes. */
   async pump(): Promise<void> {
     const session = this.session!;
@@ -490,7 +509,10 @@ class OpenDocument {
           signal: this.controller.signal,
           mergeOverlays: false,
         });
-        if (result.completed) this.flush();
+        if (result.completed) {
+          this.firstLayoutDone = true;
+          this.flush();
+        }
       }
     } catch (e) {
       if (!this.closed) throw e;
@@ -638,6 +660,7 @@ class OpenDocument {
       painting: this.painter !== null,
       link: editor.selectedLink(),
       math: editor.selectedMath(),
+      picture: this.selectedPicture(editor),
       inTable: editor.inTable(),
       columns: editor.sectionColumns(),
       page: editor.sectionPage(),
@@ -654,7 +677,38 @@ class OpenDocument {
     this.reveal = false;
     this.commandAt = 0;
     this.sendPresence();
+    this.scheduleSelectionHtml(editor, update.text);
     return update;
+  }
+
+  private selectionHtmlTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Once the selection has settled, sends it as HTML so a copy carries bold, italics and the rest (the writer loads only now). */
+  private scheduleSelectionHtml(editor: Editor, text: string): void {
+    clearTimeout(this.selectionHtmlTimer);
+    if (!text || text.length > SELECTION_HTML_LIMIT) return;
+    this.selectionHtmlTimer = setTimeout(async () => {
+      const { document } = this;
+      if (!document || this.closed || this.editor !== editor) return;
+      const body = editor.selectedFragments();
+      if (body.length === 0 || editor.selectedText(CLIPBOARD_LIMIT) !== text) return;
+      try {
+        const { documentToHtml } = await import('../formats/html.ts');
+        const scratch = Object.assign(Object.create(Object.getPrototypeOf(document)), document, { body }) as WordDocument;
+        if (!this.closed && this.editor === editor) post({ type: 'selectionHtml', doc: this.doc, text, html: documentToHtml(scratch) });
+      } catch {
+        // The copy carries plain text only.
+      }
+    }, 120);
+  }
+
+  /** The picture the selection is exactly, for the frame the page draws around it. */
+  private selectedPicture(editor: Editor): SelectionUpdate['picture'] {
+    const picture = editor.selectedPicture();
+    if (!picture || !picture.drawing.image) return null;
+    const { item } = picture;
+    const [start] = editor.ordered();
+    return { page: picture.page.id, at: { paragraph: editor.paragraphs().indexOf(start.paragraph), offset: start.offset }, x: item.x, y: item.y, width: item.width, height: item.height, floating: !picture.drawing.inline, part: picture.drawing.image, ...(picture.drawing.svg && { svg: picture.drawing.svg }) };
   }
 
   private pdfSelection(annotator: PdfAnnotator): SelectionUpdate {
@@ -1473,14 +1527,8 @@ class OpenDocument {
 
   /** The document as the room holds it: what it is edited as and what only that format keeps go with it. */
   private async roomDocument(): Promise<Uint8Array> {
-    // A paragraph being edited as Markdown source is read back first, so the room starts from the formatted text.
-    const resume = await this.flushRaw();
-    try {
-      await this.document!.fetchMissingMedia();
-      return await writeRoomDocument({ docx: await this.document!.write(), lens: this.format, origin: this.origin, extensions: currentExtensions(this) });
-    } finally {
-      resume();
-    }
+    await this.document!.fetchMissingMedia();
+    return writeRoomDocument({ docx: await this.document!.write(), lens: this.format, origin: this.origin, extensions: currentExtensions(this) });
   }
 
   /** What the room needs from this document. */
@@ -1525,6 +1573,19 @@ class OpenDocument {
     }
     const place = (image: string) => this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image, ...(description && { description }) }], attrs: {} }] });
     // Alone, at once. With others, once the picture is in the room for them to fetch.
+    if (!this.shared) return place(document.addImage(bytes, ext));
+    this.mediaChain = this.mediaChain.then(() => this.addMedia(bytes, ext)).then(
+      (image) => this.later(() => place(image)),
+      (error) => this.mediaFailed(error),
+    );
+  }
+
+  /** The selected picture shown as other bytes (it was edited): its width stays, its height follows the new picture (`aspect`: height over width, 0 when not known). */
+  replacePicture(bytes: Uint8Array, ext: string, aspect: number): void {
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.replacePicture(bytes, ext, aspect)));
+    const document = this.document;
+    if (!document || this.readOnly || this.pdf) return;
+    const place = (image: string) => this.apply({ kind: 'replacePicture', image, aspect });
     if (!this.shared) return place(document.addImage(bytes, ext));
     this.mediaChain = this.mediaChain.then(() => this.addMedia(bytes, ext)).then(
       (image) => this.later(() => place(image)),
@@ -1614,30 +1675,22 @@ class OpenDocument {
     if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
     const editor = this.editor;
     if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
-    // The assistant works on the formatted text: a source being edited is put away until it is done.
-    this.rawPaused++;
-    try {
-      await new Promise<void>((resolve) => this.later(() => this.syncRaw().then(() => this.finishRaw()).finally(resolve)));
-      return await runAgentTool(
-        {
-          editor,
-          readOnly: this.readOnly || this.format === 'pdf',
-          run: async (wire) => {
-            // Another document was opened meanwhile: this one's editor is no longer the page's.
-            if (this.closed) throw new Error('the document was closed');
-            this.command(wire);
-            while (this.waiting) await this.waiting;
-          },
-          format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
-          show,
+    return runAgentTool(
+      {
+        editor,
+        readOnly: this.readOnly || this.format === 'pdf',
+        run: async (wire) => {
+          // Another document was opened meanwhile: this one's editor is no longer the page's.
+          if (this.closed) throw new Error('the document was closed');
+          this.command(wire);
+          while (this.waiting) await this.waiting;
         },
-        name,
-        args,
-      );
-    } finally {
-      this.rawPaused--;
-      this.later(() => this.syncRaw().then(() => this.finishRaw()));
-    }
+        format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
+        show,
+      },
+      name,
+      args,
+    );
   }
 
   /** One of the assistant's tools on a PDF shown as its own pages (see agentPdfTools.ts). */
@@ -1796,7 +1849,7 @@ class OpenDocument {
 
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
-    if (!live.spelling && !live.grammar) return new Float64Array(0);
+    if ((!live.spelling && !live.grammar) || !this.firstLayoutDone) return new Float64Array(0);
     const [start, end] = editor.ordered();
     const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
     // Typing along: the word just finished (and the space or mark after it) is not underlined until a pause, so a squiggle doesn't flash under every word as it is typed.
@@ -1825,18 +1878,13 @@ class OpenDocument {
   }
 
   /** The address of the link under a point on a page (null when there is none, or the document isn't text). */
-  linkAt(pageId: number, x: number, y: number): { url: string | null; checkbox: boolean } {
+  linkAt(pageId: number, x: number, y: number): { url: string | null; text: string; checkbox: boolean } {
     const page = this.session?.displayPages.find((p) => p.id === pageId);
-    if (!this.editor || !page || this.closed || this.annotator) return { url: null, checkbox: false };
+    if (!this.editor || !page || this.closed || this.annotator) return { url: null, text: '', checkbox: false };
     const profile = FORMATS[this.format as DocumentKind];
-    const checkbox = !this.readOnly && !!profile?.editable && profile.lists && !!this.editor.checkboxUnder(page, x, y);
-    let url = this.editor.linkUnder(page, x, y);
-    // The paragraph showing its Markdown holds the links it shows as characters.
-    if (url === null && this.raw) {
-      const under = this.editor.charUnder(page, x, y);
-      if (under && this.editor.paragraphId(under.paragraph) === this.raw.id) url = linkInSource(paragraphText(under.paragraph), under.offset);
-    }
-    return { url, checkbox };
+    const checkbox = !this.readOnly && !!profile?.editable && profile.lists && !!this.checkboxHit(this.editor, page, x, y);
+    const link = this.editor.linkDetailsUnder(page, x, y);
+    return { url: link?.url ?? null, text: link?.text ?? '', checkbox };
   }
 
   /** Selects the mistake under the point (unless `select` is false) and reports it for the menu (nothing, if there is none). */
@@ -1926,10 +1974,6 @@ class OpenDocument {
     // Sent while the document is still loading: run once it has (later commands queue behind it).
     // Settings that aren't the document's take effect at once, as the first layout uses them.
     if (!this.isSetUp && !SETTINGS_COMMANDS.has(wire.kind)) return this.setUp.then(() => this.runCommand(wire, cjkReady, mathReady));
-    // Formatting and pasting work on the formatted paragraph: its source is put away first, and shown again after.
-    if (this.raw && (wire.kind === 'format' || wire.kind === 'pasteHtml' || wire.kind === 'applyPainter')) {
-      return this.leaveRaw().then(() => Promise.resolve(this.runCommand(wire)).then(() => this.syncRaw()).then(() => this.finishRaw()));
-    }
     if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (wire.kind === 'applyPainter') return this.applyPainter();
     if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false, wire.footer ?? false);
@@ -1956,10 +2000,6 @@ class OpenDocument {
       setAutoCorrect(wire);
       return;
     }
-    if (wire.kind === 'livePreview') {
-      live.livePreview = wire.on;
-      return this.syncRaw().then(() => this.finishRaw());
-    }
     if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
@@ -1976,10 +2016,6 @@ class OpenDocument {
     }
     // Shown as PDF: selecting and moving only.
     if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
-    // Undo, redo and Enter work on the formatted paragraph, not on its source.
-    if (this.raw && (wire.kind === 'undo' || wire.kind === 'redo' || wire.kind === 'insertParagraph')) {
-      return this.leaveRaw().then(() => this.runCommand(wire, cjkReady, mathReady));
-    }
     if (wire.kind === 'insertParagraph' && this.endEmptyListItem(editor)) return;
     this.reveal = wire.kind !== 'pointer' && !(wire.kind === 'select' && wire.quiet);
     this.commandAt = performance.now();
@@ -1994,15 +2030,13 @@ class OpenDocument {
       for (let k = 0; k < converted.steps; k++) editor.undo();
       editor.apply({ kind: 'select', paragraph: converted.paragraph, from: converted.offset, to: converted.offset });
       edited = true;
-    } else if (this.raw && wire.kind === 'tab' && this.indentSource(editor, wire.backward)) {
-      edited = true;
     } else {
       let command: Command;
-      if (wire.kind === 'pointer') {
+      if (wire.kind === 'pointer' || wire.kind === 'moveDrawing' || (wire.kind === 'resizeDrawing' && wire.page !== undefined)) {
         const page = session.displayPages.find((p) => p.id === wire.page) ?? session.pages.find((p) => p.id === wire.page);
         if (!page) return;
         command = { ...wire, page };
-      } else command = wire;
+      } else command = wire as Command;
       const rule = command.kind === 'insertParagraph' ? this.lineShortcut(editor) : command.kind === 'pointer' ? this.checkboxClick(editor, command) : null;
       // A #tag at the end of the line is finished by Enter too.
       if (!rule && command.kind === 'insertParagraph') this.tagBeforeEnter(editor);
@@ -2022,182 +2056,21 @@ class OpenDocument {
         this.edited = true;
         this.typedAt = performance.now();
       }
-      if (edited || this.rawTouched) {
-        this.rawTouched = false;
+      if (edited) {
         void this.pump();
         this.postRoomState();
       } else this.sendSelection();
     };
-    // The caret may have come into a paragraph or left one: its source is shown or put away.
-    const synced = () => (live.livePreview || this.raw ? this.syncRaw().then(finish) : finish());
-    if (after) return after.then(synced);
-    return synced();
+    if (after) return after.then(finish);
+    finish();
   }
 
-  // --- Live preview: the paragraph the caret is in shows its Markdown source (see livePreview.ts) -----
-
-  /** The paragraph showing its source: what it was (to put back if nothing was changed) and the undo history before it. */
-  private raw: { id: string; source: string; text: string; numbering?: NumberingReference; mark: HistoryMark } | null = null;
-  /** Showing or putting away a source changed the pages. */
-  private rawTouched = false;
-  /** Above 0 while something works on the formatted text (the assistant): no source is shown. */
-  private rawPaused = 0;
-
-  private livePreviewCode?: Promise<typeof import('./livePreview.ts')>;
-  private livePreview() {
-    return (this.livePreviewCode ??= import('./livePreview.ts'));
-  }
-
-  /** Whether the paragraph at the caret may show its source: Markdown documents, edited alone. */
-  private rawAllowed(): boolean {
-    return live.livePreview && !this.rawPaused && this.format === 'md' && !this.annotator && !this.readOnly && !!this.editor && !this.editor.replica.connected;
-  }
-
-  /** Puts away the source of the paragraph that shows it, and shows the one the caret is in. */
-  private async syncRaw(): Promise<void> {
-    const editor = this.editor;
-    if (!editor || this.closed) return;
-    const [start, end] = editor.ordered();
-    // A selection across paragraphs, or part of one the source isn't shown in, shows no source.
-    const target = start.paragraph === end.paragraph ? start.paragraph : null;
-    const wanted = this.rawAllowed() && target ? editor.paragraphId(target) : null;
-    if (this.raw && this.raw.id === wanted) {
-      // The caret moved out of the Markdown it showed (to other text of the paragraph): that is put away, and the Markdown of where the caret is shows.
-      if (!editor.collapsed || !target) return;
-      const code = await this.livePreview();
-      if (this.closed || !this.raw || code.caretInSource(target, editor.ordered()[0].offset)) return;
-    }
-    if (this.raw) await this.leaveRaw();
-    if (this.closed || !wanted || !target || !editor.collapsed || !this.rawAllowed()) return;
-    const [at] = editor.ordered();
-    if (editor.paragraphId(at.paragraph) !== wanted) return;
-    await this.enterRaw(at.paragraph, at.offset);
-  }
-
-  /** Shows a paragraph as its source. */
-  private async enterRaw(paragraph: Paragraph, caret: number): Promise<void> {
-    const editor = this.editor;
-    if (!editor || editor.inTable()) return;
-    const code = await this.livePreview();
-    if (this.closed) return;
-    const view = code.rawView(editor.doc, paragraph, caret);
-    if (!view) return;
-    const mark = editor.historyMark();
-    const numbering = paragraph.properties.numbering && structuredClone(paragraph.properties.numbering);
-    setShowingSource(paragraph, true);
-    editor.replaceParagraph(paragraph, view.properties, view.content, view.caret);
-    this.raw = { id: editor.paragraphId(paragraph), source: view.source, text: view.text, ...(numbering && { numbering }), mark };
-    this.rawTouched = true;
-  }
-
-  /** Puts a paragraph's source away: back to how it was if nothing changed, else read as Markdown. */
-  private async leaveRaw(): Promise<void> {
-    const editor = this.editor;
-    const raw = this.raw;
-    if (!editor || !raw) return;
-    this.raw = null;
-    const paragraph = editor.paragraphWithId(raw.id);
-    // The paragraph is gone (joined to the one before): its text stays as it is.
-    if (!paragraph) return;
-    setShowingSource(paragraph, false);
-    const code = await this.livePreview();
-    if (this.closed) return;
-    const text = paragraphText(paragraph);
-    const selection = editor.selectionIds;
-    // Where a position of the text shown goes in the paragraph as it is after.
-    let place: (offset: number, after: string) => number;
-    if (text === raw.text) {
-      // Nothing was changed: as it was, and as if it had not been touched in the undo history either.
-      while (editor.undoDepth > raw.mark.undo.length && editor.undo().edited);
-      editor.restoreHistory(raw.mark);
-      place = (offset, after) => code.visibleOffset(after, text, offset);
-    } else {
-      const source = code.writtenSource(editor.doc, paragraph);
-      place = (offset, after) => code.visibleOffset(after, source, code.sourceOffset(text, source, offset, false));
-      const parsed = await code.parseRaw(source, editor.doc, { source: raw.source, numbering: raw.numbering, properties: paragraph.properties });
-      if (this.closed) return;
-      editor.replaceParagraph(paragraph, parsed.properties, parsed.content, 0, parsed.define);
-      // Showing the source, editing it and reading it back are one undo step.
-      editor.foldHistory(raw.mark);
-      this.edited = true;
-    }
-    // A caret or selection end in the paragraph goes to the same place in the text, not in the source.
-    const shown = editor.paragraphWithId(raw.id);
-    const remap = (pos: { paragraph: string; offset: number }) => (pos.paragraph === raw.id && shown ? { paragraph: pos.paragraph, offset: place(pos.offset, paragraphText(shown)) } : pos);
-    editor.setSelectionIds({ anchor: remap(selection.anchor), focus: remap(selection.focus) });
-    this.rawTouched = true;
-  }
-
-  /** After the source was shown or put away outside a command: lays out again. */
-  private finishRaw(): void {
-    if (this.rawTouched) {
-      this.rawTouched = false;
-      void this.pump();
-      this.postRoomState();
-    } else this.sendSelection();
-  }
-
-  /** Before the document is saved or exported: the source being edited is read back, so the file has the formatting (the source shows again after). */
-  /** Tab and Shift+Tab in the source of a list item move the item a level (two spaces), as in Markdown. False if the caret is not in one. */
-  private indentSource(editor: Editor, backward: boolean): boolean {
-    const raw = this.raw;
-    const paragraph = raw && editor.paragraphWithId(raw.id);
-    if (!paragraph || !editor.collapsed) return false;
-    const text = paragraphText(paragraph);
-    if (!/^[ \t]*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text)) return false;
-    const index = editor.paragraphs().indexOf(paragraph);
-    const [at] = editor.ordered();
-    const move = (from: number, to: number) => editor.apply({ kind: 'select', paragraph: index, from, to });
-    let caret = at.offset;
-    if (backward) {
-      const spaces = Math.min(/^ */.exec(text)![0].length, 2);
-      if (spaces === 0) return true;
-      move(0, spaces);
-      editor.apply({ kind: 'delete', direction: 'backward' });
-      caret = Math.max(caret - spaces, 0);
-    } else {
-      move(0, 0);
-      editor.apply({ kind: 'insertText', text: '  ' });
-      caret += 2;
-    }
-    move(caret, caret);
-    return true;
-  }
-
-  /** What undo and redo can do: not counting the showing of a source, which is no edit. */
   private canUndo(): boolean {
-    const history = this.replica!.history;
-    const raw = this.raw;
-    if (!raw) return history.canUndo;
-    const paragraph = this.editor?.paragraphWithId(raw.id);
-    return raw.mark.undo.length > 0 || (!!paragraph && paragraphText(paragraph) !== raw.text);
+    return this.replica!.history.canUndo;
   }
 
   private canRedo(): boolean {
-    return this.raw ? this.raw.mark.redo.length > 0 : this.replica!.history.canRedo;
-  }
-
-  /**
-   * Before the document is saved or exported: the source being edited is read back, so the file has the formatting.
-   * Returns what puts the source back on screen, to call once the file is made.
-   */
-  async flushRaw(): Promise<() => void> {
-    if (!this.raw) return () => {};
-    this.rawPaused++;
-    await new Promise<void>((resolve) =>
-      this.later(async () => {
-        try {
-          await this.leaveRaw();
-          this.finishRaw();
-        } finally {
-          resolve();
-        }
-      }),
-    );
-    return () => {
-      this.rawPaused--;
-      this.later(() => this.syncRaw().then(() => this.finishRaw()));
-    };
+    return this.replica!.history.canRedo;
   }
 
   // --- Markdown shortcuts as you type (see autoformat.ts) ---------------------------------------
@@ -2207,7 +2080,7 @@ class OpenDocument {
 
   /** What shortcuts may do here: the format can express headings, lists and marks, and the caret is in plain text. */
   private shortcutContext(editor: Editor, markdown = true): { profile: (typeof FORMATS)[DocumentKind]; line: LineContext; code: boolean; index: number; before: string } | null {
-    if ((markdown && !live.autoFormat) || this.raw || !editor.collapsed || this.annotator || this.readOnly) return null;
+    if ((markdown && !live.autoFormat) || !editor.collapsed || this.annotator || this.readOnly) return null;
     const profile = FORMATS[this.format as DocumentKind];
     if (!profile?.editable) return null;
     const [at] = editor.ordered();
@@ -2367,15 +2240,22 @@ class OpenDocument {
     });
   }
 
-  /** A click on the check box of a task list item checks or unchecks it (and puts the caret in the item). */
+  /** The check box under a page point: a task item's box. */
+  private checkboxHit(editor: Editor, page: Parameters<Editor['checkboxUnder']>[0], x: number, y: number): { paragraph: Paragraph; checked: boolean } | null {
+    return editor.checkboxUnder(page, x, y);
+  }
+
+  /** A click on the check box of a task list item checks or unchecks it. The caret and selection stay where they were. */
   private checkboxClick(editor: Editor, click: Extract<Command, { kind: 'pointer' }>): Promise<void> | null {
     if (click.extend || (click.unit && click.unit !== 'character') || this.annotator || this.readOnly) return null;
     const profile = FORMATS[this.format as DocumentKind];
     if (!profile?.editable || !profile.lists) return null;
-    const hit = editor.checkboxUnder(click.page, click.x, click.y);
+    const hit = this.checkboxHit(editor, click.page, click.x, click.y);
     if (!hit) return null;
-    editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: 0, to: 0 });
-    return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]);
+    const selection = editor.selectionIds;
+    const index = editor.paragraphs().indexOf(hit.paragraph);
+    editor.apply({ kind: 'select', paragraph: index, from: 0, to: 0 });
+    return this.formatSteps(editor, [{ kind: 'toggleList', list: hit.checked ? 'task' : 'taskDone', force: true }]).then(() => editor.setSelectionIds(selection));
   }
 
   /** Enter right after a #tag or a web address (not yet a link) makes it one, then the paragraph is split as usual. */
@@ -2443,7 +2323,7 @@ const SPELL_FINISHED_REACH = 2;
 /** Words the user added to the dictionary (for every document), and the words and grammar rules ignored in the open document. */
 const spelling = { words: new Set<string>(), ignoredWords: new Set<string>(), rules: new Set<string>() };
 /** What is underlined as the user types. */
-const live = { spelling: true, grammar: true, autoFormat: true, autoCorrect: { ...AUTOCORRECT_DEFAULTS }, replacements: new Map<string, string>(), livePreview: false };
+const live = { spelling: true, grammar: true, autoFormat: true, autoCorrect: { ...AUTOCORRECT_DEFAULTS }, replacements: new Map<string, string>() };
 
 /** The autocorrect rules that are on, and the user's replacement list. */
 function setAutoCorrect(wire: Extract<WireCommand, { kind: 'autoCorrect' }>): void {
@@ -2806,22 +2686,16 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     const turn = open?.doc === doc ? open.turn() : null;
     if (turn) await turn;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
-    const resume = await open.flushRaw();
     // Pictures others added that haven't been needed yet are brought in, so the file holds them all.
     await open.document?.fetchMissingMedia();
     // A document changed since it was opened records when.
     if (open.document && open.edited) open.document.properties.modified = now();
-    let bytes: Uint8Array;
-    try {
-      bytes = await writeWdoc({
-        manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
-        document: open.document ? await open.document.write() : null,
-        original: open.original,
-        extensions: currentExtensions(open),
-      });
-    } finally {
-      resume();
-    }
+    const bytes = await writeWdoc({
+      manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
+      document: open.document ? await open.document.write() : null,
+      original: open.original,
+      extensions: currentExtensions(open),
+    });
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {
@@ -2837,16 +2711,11 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
     const turn = open?.doc === doc ? open.turn() : null;
     if (turn) await turn;
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
-    const resume = await open.flushRaw();
     let bytes: Uint8Array;
-    try {
-      // A PDF whose text wasn't edited exports as the original, pages and all.
-      await open.document?.fetchMissingMedia();
-      if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
-      else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
-    } finally {
-      resume();
-    }
+    // A PDF whose text wasn't edited exports as the original, pages and all.
+    await open.document?.fetchMissingMedia();
+    if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
+    else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {
@@ -2971,6 +2840,9 @@ function handleInbox(): void {
 
 function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
   switch (message.type) {
+    case 'warm':
+      void warmFonts();
+      break;
     case 'locale':
       localeReady = loadLocale(message.locale).then(setCjkLang);
       break;
@@ -3015,7 +2887,7 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       });
       break;
     case 'linkAt':
-      post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, checkbox: false }) });
+      post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });
       break;
     case 'command':
       // The settings are the worker's own (the dictionary, what is underlined), so they hold with no document open.
@@ -3045,6 +2917,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'vectorStep':
       if (current?.doc === message.doc) current.stepVector(message.action);
+      break;
+    case 'replacePicture':
+      if (current?.doc === message.doc) current.replacePicture(new Uint8Array(message.bytes), message.ext, message.aspect);
       break;
     case 'putDrawing':
       if (current?.doc === message.doc) current.putDrawing(message.svg, new Uint8Array(message.png), message.width, message.height, message.description, message.replace);

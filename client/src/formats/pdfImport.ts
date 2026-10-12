@@ -3,6 +3,7 @@
 
 import {
   WordDocument,
+  fieldContents,
   pointsToHalfPoints,
   pointsToTwips,
   type AbstractNumbering,
@@ -15,7 +16,7 @@ import {
   type Style,
 } from '@golemdocs/docx';
 import { placedFrom, type Placed } from './pdfPlaced.ts';
-import { PdfDocument, analyzeDocument, type PdfEdit, type ReflowBlock, type ReflowIndent, type ReflowSpacing, type ReflowListFormat, type ReflowMargins, type ReflowRun } from '@golemdocs/pdf';
+import { PdfDocument, analyzeDocument, type ReflowRunningLine, type PdfEdit, type ReflowBlock, type ReflowIndent, type ReflowSpacing, type ReflowListFormat, type ReflowMargins, type ReflowRun } from '@golemdocs/pdf';
 
 export interface PdfImportOptions {
   /** User or owner password for encrypted PDFs. */
@@ -48,17 +49,20 @@ export function wordFontFor(fontName: string): string | undefined {
   return undefined;
 }
 
-/** `heading`: the run keeps its size and color (the heading style's are only a default), but not its weight. */
+/** `heading`: the run keeps its size, color, weight and slant (the heading style's are only a default). */
 function runOf(r: ReflowRun, styled: boolean, heading = false): Run {
   const properties: RunProperties = {};
   if (styled || heading) {
     const family = wordFontFor(r.fontName);
     if (family) properties.fonts = { ascii: family, hAnsi: family, cs: family };
-    if (r.bold && !heading) properties.bold = true;
+    // The heading styles (Calibri Light, one of them italic) carry no weight of their own: the PDF's text keeps its own.
+    if (r.bold) properties.bold = true;
+    else if (heading) properties.bold = false;
     properties.size = pointsToHalfPoints(r.size);
     properties.sizeCs = properties.size;
   }
   if (r.italic) properties.italic = true;
+  else if (heading) properties.italic = false;
   if (r.color && r.color !== '000000') properties.color = { val: r.color };
   else if (heading) properties.color = { val: '000000' };
   // A newline is a line break the PDF had and the layout keeps (a title of several lines).
@@ -164,17 +168,21 @@ function ensureHeading4(doc: WordDocument): void {
 
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[values.length >> 1];
 
-function setupPage(doc: WordDocument, sizes: { width: number; height: number; margins: ReflowMargins }[]): void {
+/** `fixedPages`: each PDF page is a Word page of its own, so its text must not spill onto another. */
+function setupPage(doc: WordDocument, sizes: { width: number; height: number; margins: ReflowMargins }[], fixedPages: boolean): void {
   if (!sizes.length) return;
   const first = sizes[0];
   // Where the PDF's text runs (however near the edge, as a footer can be), but never more than 30% of the page.
   const clamp = (n: number, max: number) => Math.min(n, max);
   const margins = {
     left: clamp(median(sizes.map((s) => s.margins.left)), first.width * 0.3),
+    // Another font's letters run a few percent wider than the PDF's: with a page to itself the text gets that much more room, so a line the PDF broke by hand is not broken twice.
     right: clamp(median(sizes.map((s) => s.margins.right)), first.width * 0.3),
     top: clamp(median(sizes.map((s) => s.margins.top)), first.height * 0.3),
-    bottom: clamp(median(sizes.map((s) => s.margins.bottom)), first.height * 0.3),
+    // Lines a point or two taller than the PDF's would push the last one onto a new page: leave room.
+    bottom: clamp(median(sizes.map((s) => s.margins.bottom)), fixedPages ? 36 : first.height * 0.3),
   };
+  if (fixedPages) margins.right = Math.max(0, margins.right - 0.06 * Math.max(0, first.width - margins.left - margins.right));
   doc.section.pageSize = {
     w: pointsToTwips(first.width),
     h: pointsToTwips(first.height),
@@ -191,24 +199,93 @@ function setupPage(doc: WordDocument, sizes: { width: number; height: number; ma
   };
 }
 
+// --- Headers and footers -----------------------------------------------------------------------------
+
+/** A PAGE or NUMPAGES field showing `shown` (what the PDF's first page had there). */
+const fieldRun = (instruction: 'PAGE' | 'NUMPAGES', shown: string, properties: RunProperties): Run => ({ kind: 'run', properties, attrs: {}, content: fieldContents(instruction, [{ kind: 'text', text: shown }]) });
+
+/** The text of a page number, with its numbers as fields: the first is the page, the next the page count ("3 of 10", "3/10"). */
+function pageNumberRuns(r: ReflowRun): Run[] {
+  const base = runOf(r, true);
+  const out: Run[] = [];
+  let seen = 0;
+  for (const part of r.text.split(/(\d+)/)) {
+    if (/^\d+$/.test(part)) out.push(fieldRun(seen++ === 0 ? 'PAGE' : 'NUMPAGES', part, base.properties));
+    else if (part) out.push({ ...base, content: [{ kind: 'text', text: part }] });
+  }
+  return out;
+}
+
+/**
+ * The running head and foot of the PDF as the document's own header and footer: a line is a paragraph,
+ * its pieces at the same distances across the page (tab stops), and a page number is a field.
+ */
+function addRunning(doc: WordDocument, running: { header: ReflowRunningLine[]; footer: ReflowRunningLine[] }, pageWidth: number, pageHeight: number): void {
+  const margins = doc.section.margins;
+  if (!margins) return;
+  const left = (margins.left ?? 0) / 20;
+  const textRight = pageWidth - (margins.right ?? 0) / 20;
+  for (const kind of ['header', 'footer'] as const) {
+    const lines = running[kind];
+    if (!lines.length) continue;
+    lines.sort((a, b) => a.y - b.y);
+    const part = doc.addHeaderFooter(kind);
+    let previousY = 0;
+    part.children = lines.map((line, i): Paragraph => {
+      const segments = line.segments;
+      const children: Inline[] = [];
+      segments.forEach((segment, k) => {
+        if (k > 0) children.push({ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'tab' }] });
+        for (const r of segment.runs) children.push(...(segment.pageNumber ? pageNumberRuns(r) : [runOf(r, true)]));
+      });
+      const height = line.size * 1.2;
+      const before = i === 0 ? 0 : Math.max(0, line.y - previousY - height);
+      previousY = line.y;
+      return {
+        kind: 'paragraph',
+        properties: {
+          contextualSpacing: false,
+          // A field's result is drawn in the paragraph's own character formatting.
+          runProperties: runOf(segments[0].runs[0], true).properties,
+          spacing: { before: pointsToTwips(before), after: 0, line: pointsToTwips(height), lineRule: 'exact' },
+          // The line may run past the body's edges (a page number at the page's right): the paragraph does too, with a little room so the last word is not pushed down by rounding.
+          indent: { left: pointsToTwips(segments[0].x - left), ...(segments[segments.length - 1].x1 > textRight ? { right: -pointsToTwips(segments[segments.length - 1].x1 - textRight + 8) } : {}) },
+          tabs: segments.slice(1).map((segment) => ({ val: 'left' as const, pos: pointsToTwips(segment.x - left) })),
+        },
+        children,
+        attrs: {},
+      };
+    });
+    // The first line's box starts about where its text does; the last one ends just below its baseline.
+    const first = lines[0];
+    const last = lines[lines.length - 1];
+    if (kind === 'header') margins.header = pointsToTwips(Math.max(0, first.y - 0.95 * first.size));
+    else margins.footer = pointsToTwips(Math.max(0, pageHeight - last.y - 0.3 * last.size));
+    (kind === 'header' ? doc.section.headers : doc.section.footers).push({ type: 'default', part: part.part });
+  }
+}
+
 // --- Import ----------------------------------------------------------------------------------------
 
 /** Reflows a PDF into an editable document. Throws PdfError / PasswordError for unreadable or locked files. */
 export async function pdfToDocument(bytes: Uint8Array, options: PdfImportOptions = {}): Promise<WordDocument> {
   const pdf = PdfDocument.load(bytes, { password: options.password });
   const placed = placedFrom(pdf, options.edits ?? []);
+  await Promise.all(placed.map((p) => p.prepare?.()));
   // Things placed on a page need the text to stay on its page too: each PDF page starts a Word page.
-  const { blocks, pages, firstPage } = analyzeDocument(pdf, { pageBreaks: options.pageBreaks || placed.length > 0 });
-  return blocksToDocument(blocks, pages, placed.length ? { placed, firstPage } : undefined);
+  const { blocks, pages, firstPage, running } = analyzeDocument(pdf, { pageBreaks: options.pageBreaks || placed.length > 0 });
+  return blocksToDocument(blocks, pages, placed.length ? { placed, firstPage } : undefined, running);
 }
 
 export async function blocksToDocument(
   blocks: ReflowBlock[],
   pages: { width: number; height: number; margins: ReflowMargins }[],
   positioned?: { placed: Placed[]; firstPage: number },
+  running?: { header: ReflowRunningLine[]; footer: ReflowRunningLine[] },
 ): Promise<WordDocument> {
   const doc = await WordDocument.create();
-  setupPage(doc, pages);
+  setupPage(doc, pages, blocks.some((b) => b.kind === 'pageBreak'));
+  if (running) addRunning(doc, running, pages[0]?.width ?? 612, pages[0]?.height ?? 792);
   ensureHeading4(doc);
   const lists = new Lists(doc);
 
@@ -229,10 +306,17 @@ export async function blocksToDocument(
       return content ? [{ kind: 'run' as const, properties: {}, content: [content], attrs: {} }] : [];
     });
 
+  /** Points the page's text starts below the section's top margin (the margin is kept to a third of the page, the text may start lower), for the first paragraph of the page. */
+  let extraTop = 0;
+  const extraTopOf = (page: number) => (pages[page] ? Math.max(0, pages[page].margins.top - (doc.section.margins?.top ?? 0) / 20) : 0);
   const push = (properties: ParagraphProperties, runs: ReflowRun[], styled: boolean, heading = false) => {
     if (breakBefore) {
       properties.pageBreakBefore = true;
       breakBefore = false;
+    }
+    if (extraTop > 0) {
+      properties.spacing = { ...properties.spacing, before: (properties.spacing?.before ?? 0) + pointsToTwips(extraTop) };
+      extraTop = 0;
     }
     const children: Inline[] = runs.map((r) => runOf(r, styled, heading));
     if (waiting.length) children.push(...drawingRuns(waiting));
@@ -251,15 +335,20 @@ export async function blocksToDocument(
     currentPage = page;
     waiting = placedOn.get(page) ?? [];
     breakBefore = body.length > 0;
+    extraTop = extraTopOf(page);
   };
   if (positioned) goTo(positioned.firstPage);
+  else extraTop = extraTopOf(0);
 
   for (const b of blocks) {
     if (b.kind !== 'listItem') numbered = undefined;
     switch (b.kind) {
       case 'pageBreak':
         if (positioned && b.page !== undefined) goTo(b.page);
-        else breakBefore = body.length > 0;
+        else {
+          breakBefore = body.length > 0;
+          if (b.page !== undefined) extraTop = extraTopOf(b.page);
+        }
         break;
       case 'heading': {
         // The style carries the weight; the runs keep the size, font and color the PDF had.
@@ -297,7 +386,11 @@ export async function blocksToDocument(
       }
     }
   }
-  if (positioned) goTo(Math.max(currentPage, ...placedOn.keys()) + 1);
+  if (positioned) {
+    // A page left with things no paragraph picked up (a PDF with no text on it) gets a paragraph of its own.
+    if (waiting.length) push({}, [], false);
+    goTo(Math.max(currentPage, ...placedOn.keys()) + 1);
+  }
   doc.body = body.length ? body : [{ kind: 'paragraph', properties: {}, children: [], attrs: {} }];
   return doc;
 }

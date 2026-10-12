@@ -6,8 +6,6 @@ export const app: Partial<Messages> = {
   // Sample and default document names
   'app.welcomeName': '歡迎使用 Golem Docs',
   'app.fontsName': '字型',
-  'app.linkTip.ctrl': '{url}\n按住 Ctrl 並按一下可開啟連結',
-  'app.linkTip.cmd': '{url}\n按住 Cmd 並按一下可開啟連結',
   'app.privacyName': '隱私權政策',
   'app.termsName': '服務條款',
   'app.changelogName': '新增功能',
@@ -75,6 +73,7 @@ export const app: Partial<Messages> = {
   'app.notInAccountYet': '此文件尚未加入你的帳號：請稍候片刻等待上傳完成，然後再試一次',
   'app.notSavedYet': '請先進行一項變更：文件經過編輯後才會儲存到你的帳號',
   'app.opening': '正在開啟「{name}」…',
+  'app.openingProgress': '正在開啟「{name}」… {percent}%',
   'app.openFailed': '無法開啟文件：{message}',
   'app.openingShared': '正在開啟共用文件…',
   'app.openSharedFailed': '無法開啟共用文件：{message}',

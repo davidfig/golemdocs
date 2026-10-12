@@ -7,8 +7,14 @@ import { h } from './dom.ts';
 interface Open {
   panel: HTMLElement;
   owner: HTMLElement;
+  /** A dimmed cover behind a bottom sheet (phones only). */
+  backdrop?: HTMLElement;
   onClose?: () => void;
 }
+
+/** Phones and small windows. Matches the CSS. Made on first use, so importing this module needs no window (the tests run without one). */
+let narrowQuery: MediaQueryList | undefined;
+export const narrow = (): MediaQueryList => (narrowQuery ??= window.matchMedia('(max-width: 720px)'));
 
 /** Open popups, outermost first: one opened from inside another (a palette in the toolbar's overflow panel) stacks on it. */
 const stack: Open[] = [];
@@ -27,6 +33,11 @@ function closeTop(): void {
   const open = stack.pop();
   if (!open) return;
   open.panel.remove();
+  // The cover stays a moment, so the tap that dismissed the sheet doesn't also land on the button under it.
+  if (open.backdrop) {
+    const backdrop = open.backdrop;
+    setTimeout(() => backdrop.remove(), 350);
+  }
   open.owner.classList.remove('open');
   open.owner.setAttribute('aria-expanded', 'false');
   open.onClose?.();
@@ -37,17 +48,22 @@ export function closePopup(): void {
   while (stack.length) closeTop();
 }
 
-/** Shows `panel` under `owner` (flipping above or left to stay in the window). */
+/** Shows `panel` under `owner` (flipping above or left to stay in the window); on a phone, as a sheet at the bottom of the screen. */
 export function openPopup(owner: HTMLElement, panel: HTMLElement, onClose?: () => void): void {
   // Popups the owner isn't inside of are closed; the ones it is inside of stay.
   while (stack.length && !stack[stack.length - 1].panel.contains(owner)) closeTop();
   listen();
   panel.classList.add('wm-popup');
   panel.addEventListener('mousedown', (e) => e.preventDefault());
+  const sheet = narrow().matches;
+  const backdrop = sheet ? h('div', { class: 'wm-sheet-backdrop' }) : undefined;
+  if (sheet) panel.classList.add('wm-sheet');
+  if (backdrop) (layer ?? document.body).append(backdrop);
   (layer ?? document.body).append(panel);
-  stack.push({ panel, owner, onClose });
+  stack.push({ panel, owner, backdrop, onClose });
   owner.classList.add('open');
   owner.setAttribute('aria-expanded', 'true');
+  if (sheet) return;
   const anchor = owner.getBoundingClientRect();
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
@@ -112,7 +128,7 @@ export function dialogTitleBar(title: string, onClose: () => void): HTMLElement 
 export function showDialog(title: string, body: Node, onClose?: () => void): void {
   const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
   const done = () => dialog.close();
-  const ok = h('button', { class: 'wm-button', text: t('menus.dialog.ok') });
+  const ok = h('button', { class: 'wm-button wm-primary', text: t('menus.dialog.ok') });
   dialog.append(dialogTitleBar(title, done), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
@@ -131,7 +147,7 @@ export function showConfirm(title: string, body: Node, action: string): Promise<
   return new Promise((resolve) => {
     const dialog = h('dialog', { class: 'wm-dialog' });
     const cancel = h('button', { class: 'wm-button', text: t('menus.dialog.cancel') });
-    const confirm = h('button', { class: 'wm-button', text: action });
+    const confirm = h('button', { class: 'wm-button wm-primary', text: action });
     dialog.append(
       dialogTitleBar(title, () => dialog.close()),
       h('div', { class: 'wm-dialog-body' }, body),

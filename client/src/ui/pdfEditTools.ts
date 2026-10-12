@@ -259,8 +259,8 @@ export class PdfEditTools {
     catcher.addEventListener('pointercancel', done);
   }
 
-  /** Adds a picture from a file, centered on the page in the middle of the view. */
-  private async addPicture(file: File): Promise<void> {
+  /** Adds a picture from a file, centered on the page in the middle of the view, or at `drop` (a point on the screen). */
+  async addPicture(file: File, drop?: { x: number; y: number }): Promise<void> {
     let bitmap: ImageBitmap | null = null;
     try {
       bitmap = await createImageBitmap(file);
@@ -275,7 +275,7 @@ export class PdfEditTools {
         data = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
       }
       const rect = this.layer.getBoundingClientRect();
-      const at = this.host.pageAt(rect.width / 2, rect.height / 2) ?? this.host.pageAt(rect.width / 2, rect.height / 3);
+      const at = (drop && this.host.pageAt(drop.x - rect.left, drop.y - rect.top)) || this.host.pageAt(rect.width / 2, rect.height / 2) || this.host.pageAt(rect.width / 2, rect.height / 3);
       if (!at) return;
       const natural = bitmap.width * 0.75;
       const width = Math.min(natural, PICTURE_WIDTH, at.page.width * 0.8);

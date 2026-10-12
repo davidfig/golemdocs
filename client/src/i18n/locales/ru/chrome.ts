@@ -78,8 +78,6 @@ export const chrome: Catalog = {
   'chrome.tools.trackChanges': '&Исправления',
   'chrome.tools.autoFormat': '&Автоформатирование при вводе',
   'chrome.tools.autoFormat.tip': 'Превращает сочетания Markdown, например «# », «- » и «**жирный**», в форматирование по мере ввода',
-  'chrome.tools.livePreview': 'Показывать &Markdown у курсора',
-  'chrome.tools.livePreview.tip': 'В документах Markdown показывает исходный код Markdown абзаца, в котором находится курсор (экспериментально)',
   'chrome.tools.options': 'Пара&метры…',
   'chrome.tools.language': '&Язык',
   'chrome.format.bold': 'Полужи&рный',

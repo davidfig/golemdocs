@@ -32,7 +32,7 @@ export function zipDocuments(docs: readonly ArchiveDoc[]): Promise<Uint8Array> {
     docs.map((d, i) => ({
       name: names[i],
       data: d.bytes instanceof Uint8Array ? d.bytes : new Uint8Array(d.bytes),
-      compress: !/\.(docx|wdoc|epub|pdf|png|jpe?g|gif|webp|zip|xlsx|pptx|odt)$/i.test(names[i]),
+      compress: !/\.(docx|wdoc|epub|pdf|png|jpe?g|gif|webp|heic|heif|zip|xlsx|pptx|odt)$/i.test(names[i]),
     })),
   );
 }

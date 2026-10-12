@@ -2,7 +2,7 @@
 // A WebGL renderer draws these; a PDF exporter could write them; a PDF importer could
 // produce them. Coordinates are in points, page-relative, y down.
 
-import type { Paragraph } from '@golemdocs/docx';
+import type { Drawing, Paragraph } from '@golemdocs/docx';
 import type { PageStart } from './document.ts';
 import type { SourceSpan } from './offsets.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
@@ -154,6 +154,8 @@ export interface ImageItem {
   height: number;
   /** Drawn behind text (floating images marked "behind text"). */
   behind: boolean;
+  /** The drawing in the document this shows (so a click can select it); left off what is sent to the page. */
+  drawing?: Drawing;
 }
 
 /** A laid-out line, for hit testing and caret placement when editing. */

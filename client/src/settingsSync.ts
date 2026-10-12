@@ -19,7 +19,6 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.autoFormat',
   'word.replacements.v1', // the user's own replacement list for autocorrect
   'word.autoCorrect', // smart quotes, dashes and the other autocorrect rules turned off
-  'word.livePreview', // Show Markdown at the Caret
   'word.spelling.asYouType',
   'word.spelling.grammar',
   'word.userDictionary.v1',

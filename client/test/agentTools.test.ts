@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { agent, convert, decode, openMarkdown, run, selection, startWorker, stopWorker } from './workerHarness.ts';
+import { agent, convert, decode, openBlank, openMarkdown, run, selection, send, startWorker, stopWorker } from './workerHarness.ts';
 
 before(startWorker);
 after(stopWorker);
@@ -348,4 +348,44 @@ test('edit_table merge_cells merges a block of cells, keeping their text, and sa
   assert.match(await agent(doc, 'edit_table', { paragraph: at('F'), op: 'merge_cells', to_paragraph: at('F') }), /could not be merged/);
   assert.match(await agent(doc, 'edit_table', { paragraph: at('F'), op: 'merge_cells' }), /^Error: `to_paragraph` must be a whole number/);
   assert.match(await agent(doc, 'edit_table', { paragraph: 0, op: 'merge_cells', to_paragraph: 1 }), /is not in a table/);
+});
+
+// --- pictures in the text ---------------------------------------------------------------------
+
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+/** A blank document of "One", a picture, "Two", a picture, "Three". */
+async function withPictures(): Promise<number> {
+  const doc = await openBlank();
+  const png = Uint8Array.from(Buffer.from(PNG, 'base64')).buffer;
+  const picture = async () => {
+    send({ type: 'insertImage', doc, bytes: png.slice(0), ext: 'png', width: 96 * 9525, height: 48 * 9525 });
+    await run(doc, { kind: 'insertParagraph' });
+  };
+  for (const line of ['One']) await run(doc, { kind: 'insertText', text: line });
+  await run(doc, { kind: 'insertParagraph' });
+  await picture();
+  await run(doc, { kind: 'insertText', text: 'Two' });
+  await run(doc, { kind: 'insertParagraph' });
+  await picture();
+  await run(doc, { kind: 'insertText', text: 'Three' });
+  return doc;
+}
+
+test('a picture in the text can be picked, resized, moved and deleted', async () => {
+  const doc = await withPictures();
+  const listed = await agent(doc, 'list_pictures');
+  assert.match(listed, /has 2 pictures/);
+  assert.equal(await agent(doc, 'select_text_picture', { number: 1 }), 'Picture 1 is selected.');
+  assert.match(await agent(doc, 'select_text_picture', { number: 5 }), /^Error: there is no picture 5/);
+  assert.match(await agent(doc, 'resize_text_picture', { number: 0, width: 80, height: 40 }), /Picture 0 is now 80 by 40 pixels/);
+  assert.match(await agent(doc, 'resize_text_picture', { number: 0 }), /^Error: give `width`, `height` or both/);
+  assert.match(await agent(doc, 'resize_text_picture', { number: 0, width: 2 }), /at least 4 pixels/);
+  const before = await agent(doc, 'list_pictures');
+  assert.match(await agent(doc, 'move_text_picture', { number: 0, paragraph: 4 }), /Moved picture 0 to the end of paragraph 4/);
+  assert.notEqual(await agent(doc, 'list_pictures'), before);
+  assert.match(await agent(doc, 'delete_text_picture', { number: 1 }), /^Deleted picture 1/);
+  assert.match(await agent(doc, 'list_pictures'), /has 1 picture:/);
+  assert.match(await agent(doc, 'delete_text_picture', { number: 1 }), /^Error: there is no picture 1/);
+  await run(doc, { kind: 'undo' });
+  assert.match(await agent(doc, 'list_pictures'), /has 2 pictures/);
 });

@@ -5,6 +5,7 @@ import { PdfDict, PdfName, PdfStream, PdfString, type PdfObject } from '../core/
 import { parseContent, type Operation } from '../content/content.ts';
 import type { PdfDocument } from '../document.ts';
 import type { PdfPage } from '../page.ts';
+import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, packRgb, parseColorSpace, type ColorSpace } from '../render/color.ts';
 import { TextFont } from './font.ts';
 
 /** [a b c d e f], as in the cm and Tm operators. */
@@ -43,6 +44,8 @@ export interface TextItem {
   dir: [number, number];
   /** Text rendering mode 3 (invisible, e.g. OCR layers). */
   invisible: boolean;
+  /** The fill color (0xRRGGBB) when it is a plain one; absent for a pattern fill. */
+  color?: number;
 }
 
 export interface PageText {
@@ -61,6 +64,9 @@ interface GraphicsState {
   font?: TextFont;
   fontSize: number;
   render: number;
+  fillCS: ColorSpace;
+  /** 0xRRGGBB, or undefined while a pattern is the fill color. */
+  fill: number | undefined;
 }
 
 const MAX_FORM_DEPTH = 12;
@@ -155,7 +161,7 @@ function run(
   const { items, fonts } = state;
   state.opsLeft -= ops.length;
   if (state.opsLeft < 0) return;
-  let gs: GraphicsState = { ctm: base, charSpace: 0, wordSpace: 0, scale: 1, leading: 0, rise: 0, fontSize: 0, render: 0 };
+  let gs: GraphicsState = { ctm: base, charSpace: 0, wordSpace: 0, scale: 1, leading: 0, rise: 0, fontSize: 0, render: 0, fillCS: DEVICE_GRAY, fill: 0 };
   const stack: GraphicsState[] = [];
   let tm: Matrix = IDENTITY;
   let tlm: Matrix = IDENTITY;
@@ -232,6 +238,7 @@ function run(
       fontName: font.name.replace(/^[A-Z]{6}\+/, ''),
       dir: [startTrm[0] / len, startTrm[1] / len],
       invisible: gs.render === 3,
+      ...(gs.fill !== undefined && { color: gs.fill }),
     });
   };
 
@@ -249,6 +256,26 @@ function run(
         break;
       case 'BT':
         tm = tlm = IDENTITY;
+        break;
+      case 'g':
+        gs.fillCS = DEVICE_GRAY;
+        gs.fill = packRgb(DEVICE_GRAY.toRgb([num(a[0])]));
+        break;
+      case 'rg':
+        gs.fillCS = DEVICE_RGB;
+        gs.fill = packRgb(DEVICE_RGB.toRgb(a.map(num)));
+        break;
+      case 'k':
+        gs.fillCS = DEVICE_CMYK;
+        gs.fill = packRgb(DEVICE_CMYK.toRgb(a.map(num)));
+        break;
+      case 'cs':
+        gs.fillCS = parseColorSpace(doc, a[0], resources);
+        gs.fill = gs.fillCS.pattern ? undefined : packRgb(gs.fillCS.toRgb(gs.fillCS.initial));
+        break;
+      case 'sc':
+      case 'scn':
+        gs.fill = a.length && a[a.length - 1] instanceof PdfName ? undefined : gs.fillCS.pattern ? undefined : packRgb(gs.fillCS.toRgb(a.map(num)));
         break;
       case 'Tf':
         gs.font = fontFor(a[0]);

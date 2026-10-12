@@ -18,6 +18,7 @@ import {
   commentEnd,
   commentReference,
   commentStart,
+  fieldChar,
   mergeProperties,
   WordDocument,
   type AbstractNumbering,
@@ -732,14 +733,8 @@ class Reader {
       case 'text:page-number':
       case 'text:page-count': {
         // Real fields in the core: PAGE / NUMPAGES with the displayed number as the result.
-        const instr = name === 'text:page-number' ? ' PAGE ' : ' NUMPAGES ';
-        const fieldChar = (type: 'begin' | 'separate' | 'end'): RunContent => ({
-          kind: 'fieldChar',
-          type,
-          xml: { name: 'w:fldChar', attrs: { 'w:fldCharType': type }, children: [] },
-        });
         this.add(container, props, fieldChar('begin'), ctx);
-        this.add(container, props, { kind: 'instrText', text: instr }, ctx);
+        this.add(container, props, { kind: 'instrText', text: name === 'text:page-number' ? ' PAGE ' : ' NUMPAGES ' }, ctx);
         this.add(container, props, fieldChar('separate'), ctx);
         this.addText(container, props, textOf(e), ctx);
         this.add(container, props, fieldChar('end'), ctx);

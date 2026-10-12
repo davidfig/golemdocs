@@ -44,6 +44,7 @@ export const assistant: Partial<Messages> = {
   'assistant.pictureFailed': 'Cette image n’a pas pu être préparée. Essayez-en une autre.',
   'assistant.describePicture': 'Que pouvez-vous me dire sur cette image ?',
   'assistant.tool.viewPicture': 'Examen d’une image…',
+  'assistant.tool.textPicture': 'Travail sur une image…',
   'assistant.tool.drawing': 'Travail sur le dessin…',
   'assistant.tool.searchDocuments': 'Recherche dans vos documents…',
   'assistant.tool.readOtherDocument': 'Lecture d’un autre document…',

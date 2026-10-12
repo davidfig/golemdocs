@@ -25,7 +25,14 @@ export function makeCanvas(width: number, height: number): Canvas2D {
 /** A picture's pixels as the browser shows it (rotation tags applied). */
 export async function decodeImage(bytes: Uint8Array, type?: ImageType): Promise<ImageBitmap> {
   const kind = type ?? sniffImage(bytes)?.type ?? 'png';
-  return createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: MIME[kind] }));
+  const blob = new Blob([bytes as Uint8Array<ArrayBuffer>], { type: MIME[kind] });
+  if (kind !== 'heic') return createImageBitmap(blob);
+  // HEIC: the browser's own decoder where it has one (Safari), else libheif, a lazily loaded chunk that is not fetched until a browser needs it.
+  try {
+    return await createImageBitmap(blob);
+  } catch {
+    return (await import('./heicDecode.ts')).decodeHeicBitmap(bytes);
+  }
 }
 
 /** JPEG has no transparency: what shows through is white. */
@@ -55,13 +62,17 @@ export async function transcode(bytes: Uint8Array, to: OutputType, quality = 0.9
   return encodeCanvas(canvas, to, quality);
 }
 
+/** The quality a HEIC photo is kept at when it is turned into a JPEG: a little higher than usual, as it is a second lossy pass. */
+export const HEIC_JPEG_QUALITY = 0.95;
+
 /** The longest side an SVG is drawn at: a canvas much bigger fails, or takes all the memory there is. */
 const SVG_LARGEST_SIDE = 8192;
 
-/** A picture as a PNG the document can hold: GIF and BMP (first frame) and SVG (drawn at its own size, small ones enlarged up to four times, huge ones reduced to fit a canvas). */
+/** A picture as a file the document can hold: HEIC as a JPEG (a photo, so no PNG that would be many times the size), GIF and BMP (first frame) and SVG (drawn at its own size, small ones enlarged up to four times, huge ones reduced to fit a canvas). */
 export async function toPng(name: string, bytes: Uint8Array): Promise<{ name: string; bytes: Uint8Array }> {
   const image = sniffImage(bytes);
   const stem = name.replace(/\.[^.]*$/, '');
+  if (image?.type === 'heic') return { name: `${stem}.jpg`, bytes: await transcode(bytes, 'jpeg', HEIC_JPEG_QUALITY) };
   if (image && (image.type === 'png' || image.type === 'jpeg' || image.type === 'webp')) return { name, bytes };
   if (image) return { name: `${stem}.png`, bytes: await transcode(bytes, 'png') };
   // Not a raster type we know: SVG is drawn by an <img>, which is the one thing that renders it everywhere.

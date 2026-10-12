@@ -1,0 +1,43 @@
+/* The frame around the picture selected in a document (see pictureFrame.ts). */
+
+.wm-picture-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  border: 3px solid var(--wm-hot-border);
+  /* A light ring outside and a tint inside, so it shows on any picture. */
+  box-shadow: 0 0 0 1.5px #fff, inset 0 0 0 1.5px #fff;
+  background: rgb(60 120 220 / 0.14);
+  pointer-events: none;
+}
+
+.wm-picture-frame[hidden] {
+  display: none;
+}
+
+/* Drawn like every other handle, with a wider area around it to grab. */
+.wm-picture-handle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.wm-picture-handle::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-width: 2px;
+  box-sizing: border-box;
+  border: 2px solid var(--wm-hot-border);
+  background: #fff;
+}
+
+.wm-picture-handle[data-handle='nw'] { left: 0; top: 0; cursor: nwse-resize; }
+.wm-picture-handle[data-handle='ne'] { left: 100%; top: 0; cursor: nesw-resize; }
+.wm-picture-handle[data-handle='se'] { left: 100%; top: 100%; cursor: nwse-resize; }
+.wm-picture-handle[data-handle='sw'] { left: 0; top: 100%; cursor: nesw-resize; }

@@ -3,7 +3,7 @@
 // picture is opened, saved or exported.
 
 import { applyImageEdit } from '../imageEdit.ts';
-import { transcode } from '../imageCodec.ts';
+import { toPng, transcode } from '../imageCodec.ts';
 import type { OutputType } from '../imageCodec.ts';
 import { documentToImage } from '../pageImage.ts';
 import { firstPicture, imageToDocument, isPictureDocument } from '../imageDoc.ts';
@@ -14,7 +14,10 @@ import type { FormatHandler } from '../convert.ts';
 function handler(type: OutputType): FormatHandler {
   return {
     async read(bytes) {
-      const image = sniffImage(bytes);
+      let image = sniffImage(bytes);
+      if (!image) throw new Error(t('app.notImage'));
+      // A HEIC photo is kept as a JPEG: the document holds only types every viewer can show.
+      if (image.type === 'heic') image = sniffImage((await toPng('picture.heic', bytes)).bytes);
       if (!image) throw new Error(t('app.notImage'));
       return { document: await imageToDocument(image), extensions: {} };
     },

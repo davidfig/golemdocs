@@ -50,6 +50,12 @@ const handler: ExportedHandler = {
         return new Response(null, { status: 308, headers: { location: url.href } });
       }
 
+      // Dev only: this port serves just /api (see assets in wrangler.jsonc); the page is Vite's.
+      if (env.ENVIRONMENT !== 'production' && !path.startsWith('/api/')) {
+        const page = new URL(url.pathname + url.search, 'http://localhost:5173');
+        return new Response(`This is the API server. The app is at ${page.href}`, { status: 302, headers: { location: page.href, 'content-type': 'text/plain; charset=utf-8' } });
+      }
+
       if (request.method === 'GET' && path === '/api/health') return json({ ok: true });
 
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);

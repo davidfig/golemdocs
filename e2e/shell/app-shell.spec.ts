@@ -179,7 +179,7 @@ test.describe('search-engine text and metadata', () => {
     await expect(page.locator('meta[name=description]')).toHaveAttribute('content', /Golem Docs is a document editor/);
     await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', 'https://golemdocs.com/');
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Golem Docs/);
-    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /icon-512\.png$/);
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /og\.png$/);
     const ld = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent())!);
     expect(ld).toMatchObject({ '@type': 'SoftwareApplication', name: 'Golem Docs' });
   });

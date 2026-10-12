@@ -75,7 +75,7 @@ test.describe('Insert Hyperlink dialog', () => {
     await expect(link(app.page)).toHaveCount(0);
     await app.menu('Insert', 'Hyperlink');
     await expect(link(app.page)).toBeVisible();
-    await link(app.page).getByRole('button', { name: 'Close' }).click();
+    await app.page.keyboard.press('Escape');
     await expect(link(app.page)).toHaveCount(0);
   });
 

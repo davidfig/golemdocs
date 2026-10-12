@@ -53,6 +53,9 @@ import { FormLayer } from './ui/formLayer.ts';
 import { PdfEditTools } from './ui/pdfEditTools.ts';
 import { PdfTextLayer } from './ui/pdfTextLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
+import { PictureFrame } from './ui/pictureFrame.ts';
+import { showPopupMenu } from './ui/popupMenu.ts';
+import { PictureDetourBar } from './ui/pictureDetourBar.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { checkoutUrl, fetchSubscription, portalUrl, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
@@ -87,7 +90,6 @@ import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
 import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect } from './ui/autoCorrect.ts';
 import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
-import { livePreviewOn, onLivePreview } from './ui/livePreview.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
 import { loadIgnored, saveIgnored, withIgnored, type Ignored } from './spelling/ignored.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
@@ -122,7 +124,8 @@ import { DEFAULT_DRAW_STYLE, paintOf } from './formats/imageDraw.ts';
 import type { DrawStyle, Shape } from './formats/imageDraw.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, ImageOp } from './ui/actions.ts';
-import { opensLink, showLinkDialog } from './ui/linkDialog.ts';
+import { opensLink } from './ui/linkDialog.ts';
+import { LinkPopover, type LinkDraft } from './ui/linkPopover.ts';
 import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
@@ -136,9 +139,9 @@ import type { Collaboration } from './assistant/appTools.ts';
 import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
 import { rewriteDocumentLinks } from './formats/docLinks.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
-import { decodeImage, encodeCanvas, makeCanvas, toPng } from './formats/imageCodec.ts';
+import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
-import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, pointerTip, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 import { modalOpen } from './ui/dom.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
@@ -373,11 +376,16 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean };
+type OpenOptions = { detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
   keepCamera = !!options.pictureEdit && source.kind === 'svg';
+  // Going anywhere but back to the document leaves the picture that was taken from it.
+  if (!options.detour && pictureDetour) {
+    pictureDetour = null;
+    pictureDetourBar.update(null);
+  }
   const name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   rememberView();
@@ -410,6 +418,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
     newFolder: options.localId ? null : newDocumentFolder,
     name,
     kind: kindOfSource(source),
+    ...(options.detour && { detour: true }),
   };
   if (!current.builtIn) rememberNewKind(current.kind);
   // Meant for this document only: a later one isn't filed there by mistake.
@@ -431,6 +440,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   pdfTextLayer.update(null);
   pdfTools.update(null, null);
   pointerLayer.update([]);
+  setSelectedPicture(null);
   formMode = 'fill';
   formLayer.setMode(formMode);
   pdfTools.setMode(formMode);
@@ -440,7 +450,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   window.clearTimeout(footerTimer);
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
-  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded);
+  renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded, requestRender);
   grid = options.grid ?? false;
   loaded = false;
   cameraPlaced = false;
@@ -496,12 +506,13 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
       worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() });
-      worker.command({ kind: 'livePreview', on: livePreviewOn() });
       setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
       if (!firstPage && update.pages.length) firstPage = performance.now() - start;
       applyLayout(update);
+      // The first pages are the document: the rest is laid out behind them while they are looked at (the status bar counts them).
+      if (loadingScreen.visible && update.pages.length && pages.length) loadingScreen.hide();
       if (update.selection) applySelection(update.selection);
       if (!loaded) setStatus(t('app.layingOutPages', { name, count: pages.length, pages: pages.length.toLocaleString(getLocale()) }));
     },
@@ -530,6 +541,8 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
         pendingJump = null;
         if (jump.source === viewDocKey) goToHit(jump);
       }
+      if (pendingPicture && pendingPicture.source === viewDocKey) putEditedPicture(pendingPicture);
+      pendingPicture = null;
       if (pendingNotice) {
         setStatus(pendingNotice);
         pendingNotice = null;
@@ -540,6 +553,9 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     },
     selection(update) {
       applySelection(update);
+    },
+    selectionHtml(text, html) {
+      selectionHtml = { text, html };
     },
     roomReplace() {
       const doc = current;
@@ -994,6 +1010,7 @@ const loadingScreen = new LoadingScreen(document.getElementById('viewport')!);
 
 /** Covers the editor (and the dashboard) with the loading screen until the document is open. */
 function showLoading(name: string): void {
+  document.dispatchEvent(new Event('wm-caret-off'));
   loadingScreen.show(name);
   dashboard.hide();
 }
@@ -1071,6 +1088,8 @@ interface OpenDocument {
   name: string;
   /** What it is edited as: Word, PDF, Markdown, text… It decides which tools are on offer. */
   kind: DocumentKind;
+  /** A picture taken from a document to be edited, and put back when done: never saved on its own (see `editPicture`). */
+  detour?: boolean;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
@@ -1086,6 +1105,10 @@ let saving: Promise<unknown> = Promise.resolve();
 
 /** Schedules a save for once editing pauses. */
 function documentEdited(): void {
+  if (current.detour) {
+    if (pictureDetour) pictureDetour.edited = true;
+    return;
+  }
   if (current.shared) return sharedEdited();
   const now = performance.now();
   if (!current.unsavedSince) current.unsavedSince = now;
@@ -1699,7 +1722,7 @@ let cleared = false;
 /** Saves the open document in this browser. Returns its id, or null if that failed. */
 function saveInBrowser(): Promise<string | null> {
   clearTimeout(autosaveTimer);
-  if (cleared) return Promise.resolve(null);
+  if (cleared || current.detour) return Promise.resolve(null);
   const doc = current;
   doc.unsavedSince = 0;
   const name = fileName();
@@ -2150,6 +2173,7 @@ async function openShared(id: string): Promise<void> {
       return;
     }
     setStatus(t('app.openingShared'));
+    worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
@@ -2186,12 +2210,22 @@ async function openCloud(id: string): Promise<void> {
     const cloud = library.cloud.find((d) => d.id === id) ?? (await listDocuments().catch(() => [])).find((d) => d.id === id);
     const name = cloud?.name ?? t('app.cloudDocumentName');
     setStatus(t('app.opening', { name }));
+    worker.warm(); // the fonts load while the document downloads
     // A copy here with changes not uploaded yet opens as it is; uploading it sorts out the rest. So
     // whatever is still being saved to it lands first.
     await saving;
-    const { info, bytes } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id);
-    // Listed at once: what asks about the open document's copy (File › Share, say) finds it.
-    if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
+    const { info, bytes, stored } = await openFromCloud({ id, name, updatedAt: cloud?.updatedAt }, account?.id, {
+      early: true,
+      progress: (share) => setStatus(t('app.openingProgress', { name, percent: Math.round(share * 100) })),
+    });
+    // The browser copy is written while the document opens; whatever saves next waits for it, so an edit can't be overwritten by it.
+    if (stored) {
+      const writing = stored.then((real) => {
+        // Listed once it is there: what asks about the open document's copy (File › Share, say) finds it.
+        if ((real.owner ?? null) === (account?.id ?? null)) library.putLocal(real);
+      });
+      saving = Promise.all([saving, writing]).catch(() => null);
+    } else if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
     if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
     const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
     if (usesTextEngine(source.kind, bytes.byteLength)) openLarge(info.name, new Uint8Array(bytes), { localId: info.id });
@@ -2379,6 +2413,87 @@ const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
 /** A vector drawing is open: a page showing it, looked at as a whole like a picture. */
 const isDrawing = (): boolean => VECTOR_KINDS.includes(current.kind);
 
+// --- A picture of the text, edited in the image editor -------------------------------------------------------------
+// The document is saved and put away, the picture opens as a picture of its own (which is never saved), and Done opens the
+// document again with the picture it came to in place of the old one.
+
+/** The document a picture was taken from: where to open it again, which picture it was (paragraph and offset), and whether the picture was changed. */
+let pictureDetour: { source: string; name: string; at: { paragraph: number; offset: number }; edited: boolean } | null = null;
+/** An edited picture waiting for its document to open again, to be put in place of the old one. */
+let pendingPicture: { source: string; at: { paragraph: number; offset: number }; bytes: Uint8Array; ext: string; aspect: number } | null = null;
+const pictureDetourBar = new PictureDetourBar(
+  document.getElementById('viewport')!,
+  () => void finishPictureDetour(true),
+  () => void finishPictureDetour(false),
+);
+
+async function editPicture(picture: NonNullable<SelectionUpdate['picture']>): Promise<void> {
+  if (!picture.at || pictureDetour || current.detour || refuseWhileWatching() || current.room?.role === 'viewer') return;
+  // The document is opened again afterwards, which would take it out of a room.
+  if (sharedLive() || current.shared) return reportError(t('picture.detour.unavailable'));
+  const doc = current;
+  try {
+    const bytes = await worker.media(picture.part);
+    const type = sniffImage(bytes)?.type;
+    if (!type) return reportError(t('app.notImage'));
+    const id = await saveNow();
+    if (!id) return reportError(t('picture.detour.unavailable'));
+    if (doc !== current) return;
+    const source = `local:${id}`;
+    pictureDetour = { source, name: doc.name, at: picture.at, edited: false };
+    pictureDetourBar.update(doc.name);
+    open({ kind: 'image', name: `${t('picture.detour.fileName')}.${type === 'jpeg' ? 'jpg' : type === 'webp' ? 'webp' : 'png'}`, bytes: bytes.slice().buffer }, { detour: true });
+  } catch (e) {
+    pictureDetour = null;
+    pictureDetourBar.update(null);
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+  }
+}
+
+/** Back to the document: with the edited picture in place of the old one (`apply`), or as it was. */
+async function finishPictureDetour(apply: boolean): Promise<void> {
+  const back = pictureDetour;
+  if (!back || !current.detour) return;
+  try {
+    if (apply && back.edited) {
+      const bytes = await pictureBytes();
+      const size = sniffImage(bytes);
+      if (size) pendingPicture = { source: back.source, at: back.at, bytes, ext: size.type, aspect: size.width > 0 ? size.height / size.width : 0 };
+    }
+  } catch (e) {
+    reportError(t('picture.editFailed', { message: (e as Error).message }));
+    return;
+  }
+  pictureDetour = null;
+  pictureDetourBar.update(null);
+  openSource(back.source, 'none');
+}
+
+/** The document is open again: its picture is the one selected, and the edited one goes in its place. */
+function putEditedPicture(back: NonNullable<typeof pendingPicture>): void {
+  worker.command({ kind: 'select', paragraph: back.at.paragraph, from: back.at.offset, to: back.at.offset + 1 });
+  worker.replacePicture(back.bytes, back.ext, back.aspect);
+  documentEdited();
+}
+
+/** The assistant opens the picture it selected in the image editor, once the page has heard which is selected. */
+async function editTextPicture(): Promise<string | null> {
+  if (pictureDetour || current.detour) return 'a picture is already open in the image editor.';
+  if (!FORMATS[current.kind].editable) return 'this document cannot be changed.';
+  for (let waited = 0; waited < 3000 && !selectedPicture; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+  if (!selectedPicture) return 'the picture is not selected.';
+  if (selectedPicture.svg) return 'that is a vector drawing: open it with text_drawings.';
+  await editPicture(selectedPicture);
+  for (let waited = 0; waited < 5000 && !current.detour; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+  return current.detour ? null : 'the picture could not be opened.';
+}
+
+async function finishTextPicture(apply: boolean): Promise<string | null> {
+  if (!pictureDetour || !current.detour) return 'no picture from the document is open in the image editor.';
+  await finishPictureDetour(apply);
+  return pictureDetour ? 'the picture could not be put back.' : null;
+}
+
 /** The picture whose own pixels the Draw layer has been given (a fill finds its region in them), or null. */
 let baseFor: object | null = null;
 
@@ -2405,7 +2520,7 @@ const pictureBytes = (): Promise<Uint8Array> => worker.convert(current.kind as F
 
 /** Opens a picture in place of the open one, and saves it soon. */
 function showPicture(bytes: Uint8Array): void {
-  open({ kind: 'image', name: current.name, bytes: bytes.slice().buffer }, { grid, localId: current.localId ?? undefined, pictureEdit: true });
+  open({ kind: 'image', name: current.name, bytes: bytes.slice().buffer }, { grid, localId: current.localId ?? undefined, pictureEdit: true, detour: current.detour });
   documentEdited();
 }
 
@@ -2695,14 +2810,26 @@ async function openDocumentLink(title: string): Promise<void> {
 // A picture file can be opened (as a picture, to change with the picture tools) or put in the open
 // document. Insert ▸ Picture inserts; dropping one on a document asks which was meant.
 
-const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
+const PICTURE_FILE = /\.(png|jpe?g|webp|gif|bmp|heic|heif|svg)$/i;
 const isPictureFile = (file: File): boolean => PICTURE_FILE.test(file.name) || (file.type.startsWith('image/') && file.type !== 'image/tiff');
 
-/** Whether a picture can go into the open document now. */
-const canInsertPicture = (): boolean => loaded && !isPicture() && !isDrawing() && !annotating && !dashboard.visible && FORMATS[current.kind].images;
+/** Where a picture can go in the open document now: in its text, embedded in a Markdown note (as a stored file), or onto a PDF page. */
+type PictureTarget = 'text' | 'embed' | 'pdf';
+function pictureTarget(): PictureTarget | null {
+  if (!loaded || isPicture() || isDrawing() || dashboard.visible) return null;
+  if (annotating) return current.kind === 'pdf' ? 'pdf' : null;
+  if (FORMATS[current.kind].images) return 'text';
+  return current.kind === 'md' && !current.builtIn && !sharedLive() ? 'embed' : null;
+}
+
+/** Whether the point of the screen is on a page of the open document. */
+function onPageAt(x: number, y: number): boolean {
+  const rect = canvas.getBoundingClientRect();
+  return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom && pageAt(x - rect.left, y - rect.top) !== null;
+}
 
 async function dropped(drop: Dropped, x: number, y: number): Promise<void> {
-  if (drop?.kind === 'file' && isPictureFile(drop.file) && canInsertPicture()) {
+  if (drop?.kind === 'file' && isPictureFile(drop.file) && pictureTarget()) {
     const choice = await askDropChoice(drop.file.name, x, y);
     if (choice === undefined) return focusInput();
     if (choice === 'insert') return insertPicture(drop.file, { x, y });
@@ -2726,8 +2853,68 @@ function dropFile(drop: Dropped, folderId: string | null): void {
 /** Whether a link can be dropped on the document at this point of the screen: it is on a page, of a document that holds links. */
 function canLinkDropAt(x: number, y: number): boolean {
   if (!loaded || current.builtIn || isPicture() || annotating || dashboard.visible || !FORMATS[current.kind].links) return false;
-  const rect = canvas.getBoundingClientRect();
-  return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom && pageAt(x - rect.left, y - rect.top) !== null;
+  return onPageAt(x, y);
+}
+
+/** Whether a picture dropped at this point of the screen can go in the open document. */
+const canPictureDropAt = (x: number, y: number): boolean => pictureTarget() !== null && onPageAt(x, y);
+
+/**
+ * A document dragged from the Files panel onto the open one. A picture is put in (or, where the document holds links, the choice
+ * is asked: the picture or a link to it); any other document becomes a link.
+ */
+async function dropLibraryDocument(key: string, x: number, y: number): Promise<void> {
+  const entry = library.entries.find((e) => e.key === key);
+  if (!entry) return;
+  const canLink = canLinkDropAt(x, y);
+  if (PICTURE_FILE.test(entry.name) && canPictureDropAt(x, y)) {
+    if (canLink) {
+      const choice = await askDropChoice(entry.name, x, y, ['insert', 'link']);
+      if (choice === undefined) return focusInput();
+      if (choice === 'link') return linkDroppedDocument(key, x, y);
+    }
+    return insertLibraryPicture(entry, x, y);
+  }
+  if (canLink) linkDroppedDocument(key, x, y);
+}
+
+/** Puts a picture of the library in the document at the point of the screen: a Markdown note embeds the stored file, the others take a copy. */
+async function insertLibraryPicture(entry: LibraryEntry, x: number, y: number): Promise<void> {
+  try {
+    if (pictureTarget() === 'embed') {
+      await embedInNote(entry.name, { x, y });
+      if (current.localId) openSource(`local:${current.localId}`, 'replace');
+      return;
+    }
+    const bytes = (entry.local && !opensFromCloud(entry) ? (await getSaved(entry.local.id))?.bytes : null) ?? (entry.cloud ? await downloadDocument(entry.cloud.id) : null);
+    if (!bytes) throw new Error(entry.name);
+    const picture = new Uint8Array(await pictureFileOf(bytes));
+    // Say what was found, so a stored file that holds no picture is not a mystery.
+    if (!sniffImage(picture) && !/<svg[\s>]/i.test(new TextDecoder().decode(picture.subarray(0, 2048)))) {
+      throw new Error(`${entry.name}: ${picture.length} bytes starting ${[...picture.subarray(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
+    }
+    await insertPicture(new File([picture], entry.name), { x, y });
+  } catch (e) {
+    reportError(t('picture.insertFailed', { message: (e as Error).message }));
+  }
+}
+
+/** The picture a stored picture file holds: it is kept as a saved document of its own page (with the shapes drawn over it), so the picture is taken out and the shapes are drawn on it. */
+async function pictureFileOf(stored: ArrayBuffer): Promise<ArrayBuffer | Uint8Array<ArrayBuffer>> {
+  const bytes = new Uint8Array(stored);
+  if (sniffImage(bytes)) return stored;
+  const { readWdoc, isWdoc } = await import('./formats/wdoc.ts');
+  if (!isWdoc(bytes)) throw new Error(t('app.notImage'));
+  const { document: docx, extensions } = await readWdoc(bytes);
+  // A drawing is kept as its SVG text.
+  if (extensions.svg?.source && !extensions.svg.gzip) return new TextEncoder().encode(extensions.svg.source) as Uint8Array<ArrayBuffer>;
+  if (!docx) throw new Error(t('app.notImage'));
+  const { readDocument } = await import('./formats/convert.ts');
+  const { firstPicture } = await import('./formats/imageDoc.ts');
+  const picture = await firstPicture(await readDocument('docx', docx));
+  if (!picture) throw new Error(t('app.notImage'));
+  const shapes = extensions.img?.shapes ?? [];
+  return (shapes.length ? (await applyImageEdit(picture.image.bytes, { op: 'draw', shapes })).bytes : picture.image.bytes) as Uint8Array<ArrayBuffer>;
 }
 
 /** A document dragged from the Files panel onto the open one: a link to it where it was dropped, named as `[[Note]]` would. */
@@ -2741,19 +2928,19 @@ function linkDroppedDocument(key: string, x: number, y: number): void {
   if (!target || !hit) return;
   const title = shortestTitle(target, documents, linkPlaces().from ?? []);
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
-  // Where Markdown shows at the caret, the paragraph is its source text: the link goes in written out, and is a link once the caret leaves.
-  if (current.kind === 'md' && livePreviewOn()) send({ kind: 'insertText', text: `[[${title}]]` });
-  else send({ kind: 'setLink', url: docAddress(title), text: title });
+  send({ kind: 'setLink', url: docAddress(title), text: title });
   focusInput();
 }
 
 /** Puts a picture file in the document, at `at` (a point on the screen) or else the caret. */
 async function insertPicture(file: File, at?: { x: number; y: number }): Promise<void> {
+  const target = pictureTarget();
+  if (!target) return;
   try {
     let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
     let name = file.name;
     // An SVG goes into a Word document as a drawing that can be edited there; in other documents it is drawn to a PNG (they hold pictures), and the other types go in as they are.
-    if (current.kind === 'docx' && !sniffImage(bytes) && /\.svg$/i.test(name)) {
+    if (target === 'text' && current.kind === 'docx' && !sniffImage(bytes) && /\.svg$/i.test(name)) {
       const svg = new TextDecoder().decode(bytes).replace(/^\uFEFF/, '');
       try {
         return await putDrawing(svg, name.replace(/\.[^.]*$/, ''), at);
@@ -2761,9 +2948,13 @@ async function insertPicture(file: File, at?: { x: number; y: number }): Promise
         // Not a drawing the editor reads: it goes in as a picture.
       }
     }
-    if (!sniffImage(bytes)) ({ bytes, name } = await toPng(name, bytes));
+    // What the document can't hold as it is (SVG, a HEIC photo) is turned into a PNG or JPEG.
+    const sniffed = sniffImage(bytes);
+    if (!sniffed || sniffed.type === 'heic') ({ bytes, name } = await toPng(name, bytes));
     const image = sniffImage(bytes);
     if (!image) throw new Error(t('app.notImage'));
+    if (target === 'pdf') return await pdfTools.addPicture(new File([bytes as Uint8Array<ArrayBuffer>], name), at);
+    if (target === 'embed') return await embedPicture(bytes, name, at);
     if (at) {
       const rect = canvas.getBoundingClientRect();
       const hit = pageAt(at.x - rect.left, at.y - rect.top);
@@ -2822,15 +3013,7 @@ async function insertStoredDrawing(size: { width?: number; height?: number } = {
     const info = await saveSaved({ name, bytes: await newStoredDrawing(session.blank(size.width ?? 480, size.height ?? 320)), owner: account?.id });
     library.putLocal(info);
     if (account) scheduleUpload(info.id);
-    // In a paragraph of its own at the end, with the caret after it (a paragraph the caret is in shows its Markdown, not the picture).
-    const { embedPlaceholder } = await import('./formats/embedMarks.ts');
-    const link = embedPlaceholder(name);
-    if (!link) throw new Error(name);
-    send({ kind: 'move', to: 'documentEnd' });
-    send({ kind: 'insertParagraph' });
-    send({ kind: 'insertContent', content: [link] });
-    send({ kind: 'insertParagraph' });
-    await saveNow();
+    await embedInNote(name);
     if (!current.localId) return;
     const known = new Set<string>();
     newDrawingSince = known;
@@ -2841,9 +3024,45 @@ async function insertStoredDrawing(size: { width?: number; height?: number } = {
   }
 }
 
+/**
+ * Embeds the stored file `name` (`![[name]]`) in the Markdown note in a paragraph of its own, at the point of the screen or else the end,
+ * with the caret after it (a paragraph the caret is in shows its Markdown, not the picture), and saves. The note has to be opened
+ * again to show the picture.
+ */
+async function embedInNote(name: string, at?: { x: number; y: number }): Promise<void> {
+  const { embedPlaceholder } = await import('./formats/embedMarks.ts');
+  const link = embedPlaceholder(name);
+  if (!link) throw new Error(name);
+  const rect = canvas.getBoundingClientRect();
+  const hit = at && pageAt(at.x - rect.left, at.y - rect.top);
+  if (hit) send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
+  else send({ kind: 'move', to: 'documentEnd' });
+  send({ kind: 'insertParagraph' });
+  send({ kind: 'insertContent', content: [link] });
+  send({ kind: 'insertParagraph' });
+  await saveNow();
+}
+
+/** A picture put in a Markdown note: kept as a file of its own beside it and embedded. */
+async function embedPicture(bytes: Uint8Array, fileName: string, at?: { x: number; y: number }): Promise<void> {
+  // The note is opened again to show the picture, which would take it out of the room.
+  if (sharedLive()) return reportError(t('picture.embedNotInRoom'));
+  const taken = new Set(library.entries.map((e) => e.name.toLowerCase()));
+  const dot = fileName.lastIndexOf('.');
+  const stemName = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const extension = dot > 0 ? fileName.slice(dot) : '';
+  let name = fileName;
+  for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${stemName} ${n}${extension}`;
+  const info = await saveSaved({ name, bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, owner: account?.id });
+  library.putLocal(info);
+  if (account) scheduleUpload(info.id);
+  await embedInNote(name, at);
+  if (current.localId) openSource(`local:${current.localId}`, 'replace');
+}
+
 /** Insert ▸ Picture: choose a file, then put it in the document. */
 function pickPicture(): void {
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml' });
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif,image/svg+xml' });
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (file) void insertPicture(file);
@@ -2870,6 +3089,77 @@ let link: SelectionUpdate['link'] = null;
 let math: SelectionUpdate['math'] = null;
 /** The last click was a double click: change the equation it lands on, once the selection says which. */
 let editMathUntil = 0;
+/** The picture the selection is, with the frame around it. */
+let selectedPicture: SelectionUpdate['picture'] = null;
+
+function setSelectedPicture(picture: SelectionUpdate['picture']): void {
+  selectedPicture = picture ?? null;
+  awaitingSelection = false;
+  const waiting = selectionWaiters;
+  selectionWaiters = [];
+  for (const resolve of waiting) resolve();
+  pictureFrame.update(selectedPicture);
+  if (pressed && !pressed.settled) settlePress();
+  // A double click came before the worker said the first click had picked a picture.
+  const wanted = pendingPictureEdit;
+  pendingPictureEdit = null;
+  if (wanted && selectedPicture && !selectedPicture.svg && onSelectedPicture(wanted.page, wanted.x, wanted.y)) void editPicture(selectedPicture);
+}
+
+/** A click was sent and the worker has not yet said what is selected now. */
+let awaitingSelection = false;
+/** Runs once the worker next says what is selected. */
+let selectionWaiters: (() => void)[] = [];
+const nextSelection = (): Promise<void> => new Promise((resolve) => selectionWaiters.push(resolve));
+
+/**
+ * Puts the selected picture on the clipboard as a PNG (what other apps take), and for a cut takes it out of the document.
+ * Whether a picture was selected. The clipboard is given a promise of the picture, so the write starts while the click still counts.
+ */
+function copySelectedPicture(cut: boolean): boolean {
+  const picture = selectedPicture;
+  if (!picture || textView.active) return false;
+  const png = worker
+    .media(picture.part)
+    .then((bytes) => transcode(bytes, 'png'))
+    .then((bytes) => new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'image/png' }));
+  navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).catch((e: Error) => reportError(t('picture.frame.copyFailed', { message: e.message })));
+  if (cut) send({ kind: 'delete', direction: 'backward' });
+  return true;
+}
+
+/** The menu for a picture of the text (a right click on it): it is selected first. */
+async function pictureMenu(hit: { page: GpuPage; x: number; y: number }, at: { x: number; y: number }): Promise<boolean> {
+  if (!onSelectedPicture(hit.page.id, hit.x, hit.y)) {
+    send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
+    // Other updates (spelling marks) can arrive first: wait for the one that picks the picture.
+    const until = performance.now() + 1500;
+    while (!onSelectedPicture(hit.page.id, hit.x, hit.y) && performance.now() < until) await Promise.race([nextSelection(), new Promise((resolve) => setTimeout(resolve, 100))]);
+  }
+  const picture = selectedPicture;
+  if (!picture || !onSelectedPicture(hit.page.id, hit.x, hit.y)) return false;
+  const label = (key: Parameters<typeof t>[0]) => t(key).replace('&', '');
+  showPopupMenu(
+    [
+      { label: label('chrome.edit.cut'), run: () => copySelectedPicture(true) },
+      { label: label('chrome.edit.copy'), run: () => copySelectedPicture(false) },
+      { label: label('chrome.pdfEdit.delete'), run: () => send({ kind: 'delete', direction: 'backward' }) },
+      'separator',
+      { label: t('picture.frame.edit'), run: () => void editPicture(picture), disabled: !!picture.svg || sharedLive() || !!current.shared },
+    ],
+    at.x,
+    at.y,
+    t('picture.detour.fileName'),
+    focusInput,
+  );
+  return true;
+}
+
+/** Where a double click was, when the picture it is on had not been picked yet: it is opened in the image editor once it is. */
+let pendingPictureEdit: { page: number; x: number; y: number } | null = null;
+
+/** Whether a point of a page is on the selected picture. */
+const onSelectedPicture = (page: number, x: number, y: number): boolean => !!selectedPicture && selectedPicture.page === page && x >= selectedPicture.x && x <= selectedPicture.x + selectedPicture.width && y >= selectedPicture.y && y <= selectedPicture.y + selectedPicture.height;
 /** The document's comments, in order (for Go To). */
 let comments: SelectionUpdate['comments'] = [];
 let canUndo = false;
@@ -2877,6 +3167,12 @@ let canRedo = false;
 let blinkTimer = 0;
 /** When the last edit command was sent, for the latency readout. */
 let editSent = 0;
+
+/** The selection as HTML, once the layout worker has written it (it follows a moment after the selection settles). */
+let selectionHtml: { text: string; html: string } | null = null;
+function selectedHtml(): string | undefined {
+  return selectionHtml && selectionHtml.text === selection.text ? selectionHtml.html : undefined;
+}
 
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
@@ -2889,6 +3185,7 @@ function applySelection(update: SelectionUpdate): void {
   sectionPage = update.page;
   link = update.link ?? null;
   math = update.math ?? null;
+  setSelectedPicture(update.picture ?? null);
   if (editMathUntil > performance.now()) {
     editMathUntil = 0;
     if (math) chromeHost.perform({ kind: 'insertMath' });
@@ -2957,11 +3254,10 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
 /** Commands the app sends by itself as a document opens (spelling, word counts): they say nothing about the user having touched it. */
-const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'autoFormat', 'autoCorrect', 'livePreview']);
+const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'autoFormat', 'autoCorrect']);
 
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
-onLivePreview((on) => worker.command({ kind: 'livePreview', on }));
 /** Commands the user caused so far: the saved caret and selection are only put back if there have been none since the document opened. */
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
@@ -2971,7 +3267,7 @@ function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
   if (!BACKGROUND_COMMANDS.has(command.kind)) commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -3147,6 +3443,7 @@ function render(): void {
   pdfTextLayer.position();
   pdfTools.position();
   pointerLayer.position();
+  pictureFrame.position();
   commentsPanel.position();
   syncPagesPanel();
   updateFooter();
@@ -3183,6 +3480,8 @@ if (visual) {
   const fitVisual = () => {
     const covered = window.innerHeight - visual.height > 1;
     document.documentElement.style.setProperty('--app-height', covered ? `${visual.height}px` : '100%');
+    // Where the keyboard starts, for the sheets and bars fixed to the bottom of the page (iOS leaves them under it).
+    document.documentElement.style.setProperty('--keyboard-inset', covered ? `${Math.max(0, window.innerHeight - visual.height - visual.offsetTop)}px` : '0px');
     if (covered && (window.scrollY || visual.offsetTop)) window.scrollTo(0, 0);
   };
   visual.addEventListener('resize', fitVisual);
@@ -3255,6 +3554,8 @@ type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 
 
 function press(e: Press): void {
   focusInput();
+  // Putting the caret down is what shows the phone's typing bar (see Chrome.trackTyping).
+  document.dispatchEvent(new Event('wm-caret'));
   if (textView.active) {
     textView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e));
     return;
@@ -3278,16 +3579,83 @@ function press(e: Press): void {
     // A drawing embedded from another document is saved into that document, and this one reopened: that takes it out of a room.
     if (image?.svg && !(image.embed !== undefined && sharedLive())) return void editEmbeddedDrawing(hit.page.id, image.svg, image.embed);
   }
+  // ...and on a picture, in the image editor: the click before it selected the picture.
+  if (clicks === 2 && FORMATS[current.kind].editable) {
+    if (selectedPicture && !selectedPicture.svg && onSelectedPicture(hit.page.id, hit.x, hit.y)) return void editPicture(selectedPicture);
+    if (awaitingSelection) pendingPictureEdit = { page: hit.page.id, x: hit.x, y: hit.y };
+  }
   const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   if (clicks === 2) editMathUntil = performance.now() + 1000;
   send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
+  awaitingSelection = true;
   selecting = unit === 'character';
+  // Whether this press landed on a picture is known once the worker answers: until then a drag waits.
+  pressed = selecting && !e.shiftKey ? { page: hit.page.id, x: hit.x, y: hit.y, clientX: e.clientX, clientY: e.clientY, settled: false, grab: false } : null;
+  pictureDrag = null;
+  waitingDrag = null;
+}
+
+/** The press that is still down: where it was, and, once the worker has answered it, whether it took hold of a picture (a drag then moves the picture instead of selecting text). */
+let pressed: { page: number; x: number; y: number; clientX: number; clientY: number; settled: boolean; grab: boolean } | null = null;
+/** A selecting drag that came before the worker said what the press hit. */
+let waitingDrag: { x: number; y: number } | null = null;
+/** A picture being dragged: how far the pointer has gone (CSS pixels). */
+let pictureDrag: { dx: number; dy: number } | null = null;
+const PICTURE_DRAG_SLOP_PX = 4;
+
+function settlePress(): void {
+  const down = pressed;
+  if (!down) return;
+  down.settled = true;
+  down.grab = onSelectedPicture(down.page, down.x, down.y);
+  if (down.grab) {
+    selecting = false;
+    pendingDrag = null;
+    waitingDrag = null;
+    return;
+  }
+  const drag = waitingDrag;
+  waitingDrag = null;
+  const hit = drag && selecting && pageAt(drag.x, drag.y);
+  if (hit) send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: true });
+}
+
+/** The pointer moved with the button down over a picture: the frame follows it. */
+function dragPicture(e: PointerEvent): void {
+  const down = pressed;
+  if (!down) return;
+  const dx = e.clientX - down.clientX;
+  const dy = e.clientY - down.clientY;
+  if (!pictureDrag && Math.hypot(dx, dy) < PICTURE_DRAG_SLOP_PX) return;
+  pictureDrag = { dx, dy };
+  pictureFrame.shift(dx, dy);
+  canvas.style.cursor = 'move';
+}
+
+/** The button went up: a dragged picture is put where the pointer is. */
+function dropPicture(e: PointerEvent): void {
+  const dragged = pictureDrag;
+  const picture = selectedPicture;
+  const down = pressed;
+  pictureDrag = null;
+  pressed = null;
+  waitingDrag = null;
+  pictureFrame.shift(0, 0);
+  if (!dragged || !picture || !down) return;
+  const hit = pageAt(e.offsetX, e.offsetY);
+  if (!hit) return;
+  // A floating picture keeps the grip it was taken by; one in line with the text goes to the text at the pointer.
+  const x = picture.floating ? hit.x - (down.x - picture.x) : hit.x;
+  const y = picture.floating ? hit.y - (down.y - picture.y) : hit.y;
+  send({ kind: 'moveDrawing', page: hit.page.id, x, y });
 }
 
 // Touch: one finger drags the page, two pinch and pan it, and a tap (a press that never moved) puts the caret down.
 const TOUCH_SLOP_PX = 8;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
+/** Two or more fingers were down in this gesture: until every finger is up, nothing in it is a tap. */
+let touchMulti = false;
 let lastMoveAt = 0;
 let pinch: { distance: number; x: number; y: number } | null = null;
 
@@ -3325,8 +3693,14 @@ function startFling(): void {
 function touchDown(e: PointerEvent): void {
   stopFling();
   flingVelocity = { x: 0, y: 0 };
+  // A first finger starts a new gesture; a finger whose release was never seen must not count as a second one.
+  if (e.isPrimary) {
+    touches.clear();
+    touchMulti = false;
+  }
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (touches.size === 1) {
+  if (touches.size > 1) touchMulti = true;
+  if (touches.size === 1 && !touchMulti) {
     touchTap = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false };
   } else {
     touchTap = null;
@@ -3363,8 +3737,9 @@ function touchUp(e: PointerEvent): void {
   touches.delete(e.pointerId);
   pinch = touches.size === 2 ? pinchState() : null;
   if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
-  if (touchTap && e.type === 'pointerup') press(touchTap);
+  if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') press(touchTap);
   touchTap = null;
+  if (touches.size === 0) touchMulti = false;
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -3438,13 +3813,15 @@ let hoverInside = false;
 let overLink = false;
 /** The pointer is over the check box of a task list item: a click changes it. */
 let overCheckbox = false;
+/** The pointer is over the selected picture: a drag moves it. */
+let overPicture = false;
 let linkKeyDown = false;
 function updateCursor(): void {
   // The vector editor sets the cursor itself, from what is under the pointer.
   if (isDrawing() && vector?.editor.active) return;
   // The picture tools do the same.
   if (isPicture() && drawLayer.active) return;
-  const cursor = painting ? 'copy' : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
+  const cursor = painting ? 'copy' : overPicture && !selecting && !pan ? 'move' : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
   if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
 }
 function linkKeyChanged(e: { metaKey: boolean; ctrlKey: boolean }): void {
@@ -3454,6 +3831,25 @@ function linkKeyChanged(e: { metaKey: boolean; ctrlKey: boolean }): void {
 window.addEventListener('keydown', linkKeyChanged, true);
 window.addEventListener('keyup', linkKeyChanged, true);
 window.addEventListener('blur', () => linkKeyChanged({ metaKey: false, ctrlKey: false }));
+/** The form that opens over a link: its text and address to change, or to take the link off. */
+const linkPopover = new LinkPopover({
+  editable: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && !annotating,
+  open: followLink,
+  apply: (target, choice) => {
+    // The caret goes into the link (the commands run in order), so the change is to that link.
+    send({ kind: 'pointer', page: target.page, x: target.x, y: target.y });
+    send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
+    focusInput();
+  },
+});
+for (const type of ['keydown', 'wheel']) window.addEventListener(type, () => linkPopover.hideHover(), true);
+/** Opens the link form over the document at a window point, and applies what it comes back with to the selection. */
+function editLink(draft: LinkDraft, at: { clientX: number; clientY: number }): void {
+  void linkPopover.edit(draft, at).then((choice) => {
+    if (choice !== undefined) send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
+    focusInput();
+  });
+}
 function hoverLink(at: Hover): void {
   hoverAt = at;
   if (hoverBusy) return;
@@ -3468,7 +3864,8 @@ function hoverLink(at: Hover): void {
     overLink = url !== null && hoverInside;
     overCheckbox = !!found?.checkbox && hoverInside;
     updateCursor();
-    if (asked && hoverInside) pointerTip(url ? t(MAC ? 'app.linkTip.cmd' : 'app.linkTip.ctrl', { url }) : null, asked.clientX, asked.clientY);
+    if (asked && hit && hoverInside && url) linkPopover.show({ url, text: found!.text, page: hit.page.id, x: hit.x, y: hit.y, clientX: asked.clientX, clientY: asked.clientY });
+    else linkPopover.leave();
     const moved = hoverAt as Hover | null; // the pointer may have moved while asking
     if (moved && hoverInside) hoverLink(moved);
   });
@@ -3479,8 +3876,9 @@ canvas.addEventListener('pointerleave', () => {
   hoverAt = null;
   overLink = false;
   overCheckbox = false;
+  overPicture = false;
   updateCursor();
-  pointerTip(null, 0, 0);
+  linkPopover.leave();
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -3489,6 +3887,10 @@ canvas.addEventListener('pointermove', (e) => {
   else spellHoverStop();
   pointerMoved(e.offsetX, e.offsetY);
   hoverInside = true;
+  const over = selectedPicture ? pageAt(e.offsetX, e.offsetY) : null;
+  const overBefore = overPicture;
+  overPicture = !!over && onSelectedPicture(over.page.id, over.x, over.y) && !pressed?.grab;
+  if (overPicture !== overBefore) updateCursor();
   linkKeyChanged(e);
   if (textView.active) {
     // A big text file: a drag selects (or pans, with the middle button), and there are no links to hover.
@@ -3508,7 +3910,13 @@ canvas.addEventListener('pointermove', (e) => {
     requestRender();
     return;
   }
+  if (pressed?.grab) return dragPicture(e);
   if (!selecting) return;
+  // Still waiting to hear what the press landed on.
+  if (pressed && !pressed.settled) {
+    waitingDrag = { x: e.offsetX, y: e.offsetY };
+    return;
+  }
   if (!pendingDrag) {
     requestAnimationFrame(() => {
       const drag = pendingDrag;
@@ -3527,11 +3935,19 @@ const endPointer = () => {
 };
 canvas.addEventListener('pointerup', (e) => {
   if (e.pointerType === 'touch') return touchUp(e);
+  if (pressed?.grab) dropPicture(e);
+  pressed = null;
   endPointer();
   // With the Format Painter picked up, what was just selected is painted.
   if (painting) send({ kind: 'applyPainter' });
 });
-canvas.addEventListener('pointercancel', (e) => (e.pointerType === 'touch' ? touchUp(e) : endPointer()));
+canvas.addEventListener('pointercancel', (e) => {
+  if (e.pointerType === 'touch') return touchUp(e);
+  pictureDrag = null;
+  pressed = null;
+  pictureFrame.shift(0, 0);
+  endPointer();
+});
 
 // Trackpad pinch arrives as ctrl+wheel; cmd/ctrl+wheel zooms with a mouse; plain wheel scrolls.
 // Browsers don't flag macOS momentum events, so while a scroll is still coasting, cmd only takes
@@ -3560,6 +3976,18 @@ canvas.addEventListener(
   },
   { passive: false },
 );
+
+// A pinch or ctrl/cmd+wheel anywhere else (toolbars, panels, dialogs) would zoom the whole page and break the
+// layout; the document's own zoom is the canvas's (above). Safari's pinch is a separate gesture event.
+// Keyboard browser zoom (Cmd/Ctrl +/-) is left alone, so it still works as an accessibility tool.
+window.addEventListener(
+  'wheel',
+  (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  },
+  { passive: false },
+);
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(type, (e) => e.preventDefault());
 
 // --- Keyboard and text input -----------------------------------------------------------
 
@@ -3737,6 +4165,8 @@ attachTextInput(input, {
     for (const command of editingCommand(key) ?? []) send(command);
   },
   copy: () => selection.text,
+  copyHtml: selectedHtml,
+  copyOther: (cut) => copySelectedPicture(cut),
   cut: () => {
     if (selection.text) send({ kind: 'delete', direction: 'backward' });
   },
@@ -3853,11 +4283,13 @@ const chromeHost = createChromeHost({
   showLinkDialog: () => {
     const selected = selection.text;
     if (selected.includes('\n')) return reportError(t('app.linkOneParagraph'));
-    void showLinkDialog(link ?? null, selected).then((choice) => {
-      if (choice === undefined) return;
-      send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
-      focusInput();
-    });
+    // The form opens at the caret, over the document.
+    const caret = selection.caret;
+    const page = caret && pagesById.get(caret.page);
+    const rect = canvas.getBoundingClientRect();
+    const scale = camera.zoom * CSS_PX_PER_POINT;
+    const at = caret && page ? { clientX: rect.left + (page.x + caret.x - camera.x) * scale, clientY: rect.top + (page.y + caret.y + caret.height - camera.y) * scale - 14 } : { clientX: rect.left + 40, clientY: rect.top + 40 };
+    editLink(link ? { url: link.url, text: link.text, existing: true } : { url: '', text: selected, existing: false }, at);
   },
   showMathDialog: () => {
     // The LaTeX parser is only fetched when an equation is asked for.
@@ -3896,6 +4328,8 @@ const chromeHost = createChromeHost({
   author: commentAuthor,
   startComment: () => commentsPanel.startDraft(),
   selectedText: () => selection.text,
+  selectedHtml,
+  copyPicture: (cut) => !textView.active && copySelectedPicture(cut),
   focusEditor: focusInput,
   notify: reportError,
   toggleGrid,
@@ -4201,9 +4635,23 @@ canvas.addEventListener('contextmenu', (e) => {
     });
     return;
   }
-  if (annotating || !spellDialog.checkingLive) return;
+  if (annotating) return;
   const hit = pageAt(e.offsetX, e.offsetY);
   if (!hit) return;
+  // A picture of the text has its own menu (a mistake under a picture is not shown, so it is the picture's).
+  if (FORMATS[current.kind].editable && !isPicture() && !isDrawing() && hit.page.images.some((i) => hit.x >= i.x && hit.x <= i.x + i.width && hit.y >= i.y && hit.y <= i.y + i.height)) {
+    e.preventDefault();
+    focusInput();
+    const at = { x: e.clientX, y: e.clientY };
+    void pictureMenu(hit, at).then((shown) => {
+      if (!shown && spellDialog.checkingLive) {
+        spellMenuAt = at;
+        send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y });
+      }
+    });
+    return;
+  }
+  if (!spellDialog.checkingLive) return;
   e.preventDefault();
   focusInput();
   spellMenuAt = { x: e.clientX, y: e.clientY };
@@ -4483,6 +4931,8 @@ const assistantTools = appTools({
   openTextDrawing,
   closeTextDrawing,
   insertTextDrawing,
+  editTextPicture,
+  finishTextPicture,
   collaboration,
   pictureShapes: () => drawLayer.shapes,
   setPictureShapes: (shapes) =>
@@ -4510,6 +4960,12 @@ chrome.update({ clip: assistant.visible });
 
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
+// The frame around the picture selected in the text (see ui/pictureFrame.ts).
+const pictureFrame = new PictureFrame(document.getElementById('viewport')!, {
+  camera,
+  page: (id) => pagesById.get(id),
+  resized: (box, framed) => send({ kind: 'resizeDrawing', width: box.width, height: box.height, ...(framed.floating && { page: framed.page, x: box.x, y: box.y }) }),
+});
 const watchBanner = new WatchBanner(document.getElementById('viewport')!, () => void takeOverEditing());
 
 /** Shows who holds the open document, if someone else does (see WatchBanner). */
@@ -5081,13 +5537,13 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
 window.addEventListener('dragover', (e) => {
   e.preventDefault();
   // A document from the Files panel is dropped as a link, where the document can hold one.
-  if (e.dataTransfer && isDocumentDrag(e.dataTransfer)) e.dataTransfer.dropEffect = canLinkDropAt(e.clientX, e.clientY) ? 'link' : 'none';
+  if (e.dataTransfer && isDocumentDrag(e.dataTransfer)) e.dataTransfer.dropEffect = canLinkDropAt(e.clientX, e.clientY) || canPictureDropAt(e.clientX, e.clientY) ? 'link' : 'none';
 });
 window.addEventListener('drop', (e) => {
   e.preventDefault();
   if (isDocumentDrag(e.dataTransfer)) {
     const key = droppedDocumentKey(e.dataTransfer);
-    if (key && canLinkDropAt(e.clientX, e.clientY)) linkDroppedDocument(key, e.clientX, e.clientY);
+    if (key) void dropLibraryDocument(key, e.clientX, e.clientY);
     return;
   }
   const drop = takeDropped(e.dataTransfer);

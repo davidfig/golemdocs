@@ -116,7 +116,7 @@ export class Dashboard {
       this.notice.textContent = library.problem ?? '';
       this.render();
     });
-    this.search = h('input', { class: 'wm-dash-search', attrs: { type: 'search', placeholder: t('panels.dashboard.search'), 'aria-label': t('panels.dashboard.search') } });
+    this.search = h('input', { class: 'wm-input wm-dash-search', attrs: { type: 'search', placeholder: t('panels.dashboard.search'), 'aria-label': t('panels.dashboard.search') } });
     this.notice = h('p', { class: 'wm-dash-notice', attrs: { role: 'status' } });
     this.grid = h('div', { class: 'wm-dash-grid' });
     this.crumbs = h('nav', { class: 'wm-dash-crumbs', attrs: { 'aria-label': t('panels.dashboard.location') } });
@@ -149,7 +149,7 @@ export class Dashboard {
       );
     });
     const action = (icon: string, label: string, aria: string, onClick: () => void): HTMLButtonElement => {
-      const button = h('button', { class: 'wm-dash-action', attrs: { type: 'button', 'aria-label': aria } });
+      const button = h('button', { class: 'wm-button wm-dash-action', attrs: { type: 'button', 'aria-label': aria } });
       this.setLabel(button, label, icon);
       button.addEventListener('click', onClick);
       return button;
@@ -179,7 +179,7 @@ export class Dashboard {
     this.selectionBar.hidden = true;
     // The arrow beside New lists the types, last used first; New itself makes the one used last.
     const typeLabel = t('panels.dashboard.newBlank');
-    const typeButton = h('button', { class: 'wm-dash-action wm-dash-new-arrow', title: typeLabel, attrs: { type: 'button', 'aria-label': typeLabel, 'aria-haspopup': 'true' } });
+    const typeButton = h('button', { class: 'wm-button wm-dash-action wm-dash-new-arrow', title: typeLabel, attrs: { type: 'button', 'aria-label': typeLabel, 'aria-haspopup': 'true' } });
     typeButton.innerHTML = ICONS.dropdown;
     typeButton.addEventListener('click', () => {
       const box = typeButton.getBoundingClientRect();
@@ -825,7 +825,7 @@ export class Dashboard {
 
   /** A button that needs a second click, within a few seconds, to do something that can't be undone. */
   private confirmButton(label: string, run: () => Promise<void>, icon?: string, confirmLabel?: string, iconOnly = false): HTMLButtonElement {
-    const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
+    const button = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
     this.setLabel(button, label, icon, iconOnly);
     button.addEventListener('click', () => {
       if (this.confirming?.button === button) {
@@ -850,7 +850,7 @@ export class Dashboard {
 
   /** A Delete button: asks first, in a dialog listing everything that would go, then runs `run`. */
   private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: (before: Listed, items: { docs: LibraryEntry[]; folders: Folder[] }) => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
-    const button = h('button', { class: 'wm-danger', attrs: { type: 'button' } });
+    const button = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
     this.setLabel(button, label, icon, iconOnly);
     button.addEventListener('click', async () => {
       this.resetConfirm();

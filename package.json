@@ -2,7 +2,7 @@
   "name": "golemdocs",
   "private": true,
   "description": "GolemDocs monorepo root (private, not published to npm)",
-  "version": "0.14.1",
+  "version": "0.17.1",
   "type": "module",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
@@ -17,7 +17,8 @@
     "test:coverage": "tsx scripts/coverage.ts",
     "e2e": "tsx scripts/e2e.ts",
     "e2e:rest": "tsx scripts/e2e.ts rest",
-    "record:home": "tsx scripts/marketing/record-war-and-peace.ts"
+    "record:home": "tsx scripts/marketing/record-war-and-peace.ts",
+    "og:image": "tsx scripts/marketing/og-image.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

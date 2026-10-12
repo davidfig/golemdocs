@@ -1,6 +1,5 @@
 export const link = {
   'link.title': 'Insert Hyperlink',
-  'link.close': 'Close',
   'link.textLabel': 'Text to display',
   'link.textField': 'Text to display:',
   'link.addressField': 'Address:',
@@ -10,4 +9,5 @@ export const link = {
   'link.remove': 'Remove Link',
   'link.badAddress': 'That isn’t an address a link can open (use http, https, mailto, tel or ftp).',
   'link.noAddress': 'Enter an address.',
+  'link.pop.open': 'Open link',
 } as const;

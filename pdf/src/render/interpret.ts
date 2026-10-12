@@ -8,11 +8,13 @@
 //    and mirrored runs are skipped and counted in the warnings. Render mode 3 and 7 are skipped;
 //    stroke-only modes draw with the stroke color.
 //  * Fills: axis-aligned rectangles (re, or closed 4-point paths), including rectangle-in-
-//    rectangle holes. Other filled paths (curves, polygons) and shading/pattern fills are skipped.
+//    rectangle holes. Other filled paths (curves, polygons) are filled in strips; shading/pattern fills are skipped.
 //  * Strokes: horizontal and vertical straight segments (dashes honored) become thin rectangles.
 //    Curves and diagonals are skipped.
-//  * Clipping is ignored. Rectangles are clamped to the page.
-//  * Images: axis-aligned placements (mirroring allowed); rotated ones are skipped.
+//  * Callers that ask for `paths` also get every filled or stroked shape itself (with its clips, gradients and
+//    tiling patterns), to draw as vectors.
+//  * Clipping is ignored by the rectangles. Rectangles are clamped to the page.
+//  * Images: axis-aligned placements (mirroring allowed); rotated ones are skipped, unless `paths` is asked for.
 //  * Form XObjects recurse to a depth limit; annotation appearance streams are drawn;
 //    hidden optional-content layers are honored.
 
@@ -22,9 +24,10 @@ import type { PdfDocument } from '../document.ts';
 import type { PdfPage } from '../page.ts';
 import { IDENTITY, MAX_OPERATIONS, appearanceMatrix, multiply, transformPoint, type Matrix } from '../text/extract.ts';
 import { TextFont } from '../text/font.ts';
-import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, parseColorSpace, type ColorSpace } from './color.ts';
+import { DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, packRgb, parseColorSpace, type ColorSpace } from './color.ts';
 import { describeFont, type FontStyle } from './fontinfo.ts';
 import { imageSupported } from './image.ts';
+import { shadingPaint, type DisplayPaint } from './shading.ts';
 import { isFieldWidget } from '../write/forms.ts';
 
 export interface DisplayGlyph {
@@ -71,11 +74,47 @@ export interface DisplayImage {
   stream: PdfStream;
   flipX: boolean;
   flipY: boolean;
+  /** Rotated or skewed placements (only when asked for with `paths`): where the image's unit square lands, as the drawing's matrix in display coordinates. x, y, w and h are then its bounding box. */
+  matrix?: Matrix;
   /** Stencil masks: the fill color to paint with. */
   maskColor?: number;
   alpha: number;
   over: boolean;
 }
+
+/** A clip: only what lies inside these shapes (and inside `parent`'s) was painted. */
+export interface DisplayClip {
+  parent?: DisplayClip;
+  subpaths: { pts: number[] }[];
+  evenOdd: boolean;
+  /** A single rectangle, exactly. */
+  rect: boolean;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** A filled and/or stroked path as the page painted it, in points from the page's top-left, curves flattened to short lines. */
+export interface DisplayPath {
+  subpaths: { pts: number[]; closed: boolean }[];
+  /** Filled: closed implicitly, by even-odd or non-zero winding. */
+  fill?: { color: number; alpha: number; evenOdd: boolean; paint?: DisplayPaint };
+  stroke?: { color: number; alpha: number; width: number; cap: number; join: number; miter: number; dash: number[]; phase: number; paint?: DisplayPaint };
+  /** What cut it, outermost first; clips that cut nothing of it are left out. */
+  clips?: DisplayClip[];
+  /** Its extent, a stroke's width included and its clips applied. */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** Every edge runs across or down the page (a rectangle or a rule), as opposed to a curve or a slant. */
+  plain: boolean;
+  /** Painted after text or an image it overlaps. */
+  over: boolean;
+}
+
+export type { DisplayPaint, GradientStop } from './shading.ts';
 
 export interface PageDisplay {
   width: number;
@@ -83,6 +122,8 @@ export interface PageDisplay {
   glyphRuns: GlyphRun[];
   rects: DisplayRect[];
   images: DisplayImage[];
+  /** Only with `interpretPage`'s `paths` option: every filled or stroked path, in painting order (their rectangles are in `rects` as well). */
+  paths: DisplayPath[];
   /** Things skipped or worked around on this page (deduplicated). */
   warnings: string[];
 }
@@ -91,6 +132,8 @@ const MAX_FORM_DEPTH = 12;
 const MAX_WARNINGS = 30;
 /** Rectangles a page may spend on drawings that aren't rectangles. */
 const VECTOR_BUDGET = 400_000;
+/** Points of paths a page may keep for `DisplayPath`s. */
+const MAX_PATH_POINTS = 1_500_000;
 /** How thick the strips are that slanted lines and shapes are drawn in, points (about a third of a pixel at 100%). */
 const STRIP = 0.35;
 
@@ -107,6 +150,12 @@ interface GS {
   strokeCS: ColorSpace;
   fillPattern: boolean;
   strokePattern: boolean;
+  /** What a pattern color paints, when it could be read. */
+  fillPaint?: DisplayPaint;
+  strokePaint?: DisplayPaint;
+  clip?: DisplayClip;
+  join: number;
+  miter: number;
   fillAlpha: number;
   strokeAlpha: number;
   lineWidth: number;
@@ -146,6 +195,12 @@ interface Ctx {
   skippedPaths: number;
   /** Rectangles left to spend on slanted strokes, curves and filled shapes (they are drawn as many thin ones). */
   budget: number;
+  /** Rotated images are kept (with their matrix) instead of skipped. */
+  rotatedImages: boolean;
+  /** Tiling patterns already read, by pattern and color. */
+  tilings: WeakMap<PdfStream, Map<string, DisplayPaint | null>>;
+  /** Path points left to keep for `DisplayPath`s, or -1 when they are not asked for. */
+  pathPoints: number;
   /** Content operations left to run, form XObjects' included (MAX_OPERATIONS). */
   opsLeft: number;
   /** Form XObjects being run: one that draws itself is not run again. */
@@ -159,14 +214,13 @@ export function forgetDisplayFonts(doc: PdfDocument): void {
   fontCaches.delete(doc);
 }
 
-const pack = (rgb: [number, number, number]): number => (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
 
 /** Interprets one page. Never throws: problems are collected in `warnings`. */
-/** `hideFields`: leave out fillable form fields' widgets (the app draws those itself, as inputs). */
-export function interpretPage(page: PdfPage, options: { hideFields?: boolean } = {}): PageDisplay {
+/** `hideFields`: leave out fillable form fields' widgets (the app draws those itself, as inputs). `paths`: also keep the shapes drawn (`PageDisplay.paths`). */
+export function interpretPage(page: PdfPage, options: { hideFields?: boolean; paths?: boolean } = {}): PageDisplay {
   const doc = page.doc;
   const size = page.size;
-  const out: PageDisplay = { width: size.width, height: size.height, glyphRuns: [], rects: [], images: [], warnings: [] };
+  const out: PageDisplay = { width: size.width, height: size.height, glyphRuns: [], rects: [], images: [], paths: [], warnings: [] };
   let fonts = fontCaches.get(doc);
   if (!fonts) fontCaches.set(doc, (fonts = new Map()));
   const ctx: Ctx = {
@@ -184,6 +238,9 @@ export function interpretPage(page: PdfPage, options: { hideFields?: boolean } =
     skippedRotated: 0,
     skippedPaths: 0,
     budget: VECTOR_BUDGET,
+    rotatedImages: !!options.paths,
+    tilings: new WeakMap(),
+    pathPoints: options.paths ? MAX_PATH_POINTS : -1,
     opsLeft: MAX_OPERATIONS,
     active: new Set(),
   };
@@ -230,6 +287,8 @@ function initialState(ctm: Matrix): GS {
     dash: [],
     dashPhase: 0,
     cap: 0,
+    join: 0,
+    miter: 10,
     charSpace: 0,
     wordSpace: 0,
     scale: 1,
@@ -330,6 +389,8 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   let tlm: Matrix = IDENTITY;
   let path: Sub[] = [];
   let cur: Sub | undefined;
+  /** Set by W and W*: the path painted next becomes the clip (true: even-odd). */
+  let clipRule: boolean | undefined;
   const marks: boolean[] = [];
   const hiddenAtStart = ctx.hidden;
   const num = (o: PdfObject | undefined) => (typeof o === 'number' ? o : 0);
@@ -347,24 +408,28 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   };
 
   const setColor = (stroke: boolean, cs: ColorSpace, comps: number[]) => {
-    const rgb = pack(cs.toRgb(comps));
+    const rgb = packRgb(cs.toRgb(comps));
     if (stroke) {
       gs.stroke = rgb;
       gs.strokePattern = false;
+      gs.strokePaint = undefined;
     } else {
       gs.fill = rgb;
       gs.fillPattern = false;
+      gs.fillPaint = undefined;
     }
   };
   const setSpace = (stroke: boolean, cs: ColorSpace) => {
     if (stroke) {
       gs.strokeCS = cs;
       gs.strokePattern = cs.pattern === true;
-      if (!cs.pattern) gs.stroke = pack(cs.toRgb(cs.initial));
+      gs.strokePaint = undefined;
+      if (!cs.pattern) gs.stroke = packRgb(cs.toRgb(cs.initial));
     } else {
       gs.fillCS = cs;
       gs.fillPattern = cs.pattern === true;
-      if (!cs.pattern) gs.fill = pack(cs.toRgb(cs.initial));
+      gs.fillPaint = undefined;
+      if (!cs.pattern) gs.fill = packRgb(cs.toRgb(cs.initial));
     }
   };
 
@@ -507,11 +572,112 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     }
   };
 
-  const fillPath = (evenOdd: boolean) => {
-    if (ctx.hidden || gs.fillPattern) {
-      if (gs.fillPattern && path.length) warn(ctx, 'pattern/shading fills skipped');
+  /** Keeps a shape just painted, for callers that want the shapes and not just rectangles. */
+  const keepShape = (subpaths: { pts: number[]; closed: boolean }[], fill?: DisplayPath['fill'], stroke?: DisplayPath['stroke']) => {
+    if (ctx.pathPoints < 0 || !subpaths.length) return;
+    let points = 0;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    let plain = true;
+    for (const sp of subpaths) {
+      const p = sp.pts;
+      const n = p.length / 2;
+      points += n;
+      for (let i = 0; i < n; i++) {
+        x0 = Math.min(x0, p[2 * i]);
+        x1 = Math.max(x1, p[2 * i]);
+        y0 = Math.min(y0, p[2 * i + 1]);
+        y1 = Math.max(y1, p[2 * i + 1]);
+        const j = i + 1 < n ? i + 1 : sp.closed ? 0 : -1;
+        if (j >= 0 && Math.abs(p[2 * i] - p[2 * j]) > 0.02 && Math.abs(p[2 * i + 1] - p[2 * j + 1]) > 0.02) plain = false;
+      }
+    }
+    const grow = stroke ? stroke.width / 2 : 0;
+    const over = overlaps(x0, y0, x1, y1);
+    [x0, y0, x1, y1] = [x0 - grow, y0 - grow, x1 + grow, y1 + grow];
+    // Only the clips that cut something of it matter; what is outside them all was never seen.
+    const clips: DisplayClip[] = [];
+    for (let c = gs.clip; c; c = c.parent) {
+      if (c.rect && x0 >= c.x0 - 0.01 && y0 >= c.y0 - 0.01 && x1 <= c.x1 + 0.01 && y1 <= c.y1 + 0.01) continue;
+      clips.unshift(c);
+      x0 = Math.max(x0, c.x0);
+      y0 = Math.max(y0, c.y0);
+      x1 = Math.min(x1, c.x1);
+      y1 = Math.min(y1, c.y1);
+    }
+    if (!(x1 > x0) || !(y1 > y0)) return;
+    if ((ctx.pathPoints -= points) < 0) {
+      warn(ctx, 'too many shapes: the rest of the page left out of its drawings');
       return;
     }
+    ctx.out.paths.push({ subpaths, ...(fill && { fill }), ...(stroke && { stroke }), ...(clips.length && { clips }), x0, y0, x1, y1, plain, over });
+  };
+  const keepPath = (close: boolean, fill?: DisplayPath['fill'], stroke?: DisplayPath['stroke']) => {
+    if (ctx.pathPoints < 0) return;
+    keepShape(path.filter((sp) => sp.pts.length >= 4).map((sp) => ({ pts: sp.pts, closed: sp.closed || close || !!fill })), fill, stroke);
+  };
+
+  /** Ends a path: a pending clip (W) takes the shape, and the next path starts afresh. */
+  const finishPath = () => {
+    if (clipRule !== undefined) {
+      const subpaths = path.filter((sp) => sp.pts.length >= 6).map((sp) => ({ pts: sp.pts }));
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const sp of subpaths)
+        for (let i = 0; i + 1 < sp.pts.length; i += 2) {
+          x0 = Math.min(x0, sp.pts[i]);
+          x1 = Math.max(x1, sp.pts[i]);
+          y0 = Math.min(y0, sp.pts[i + 1]);
+          y1 = Math.max(y1, sp.pts[i + 1]);
+        }
+      // Nothing to see through an empty clip: a box with no area.
+      if (!subpaths.length) [x0, y0, x1, y1] = [0, 0, 0, 0];
+      gs.clip = { ...(gs.clip && { parent: gs.clip }), subpaths, evenOdd: clipRule, rect: subpaths.length === 1 && !!asRect(path.find((sp) => sp.pts.length >= 6)!), x0, y0, x1, y1 };
+      ctx.pathPoints = ctx.pathPoints < 0 ? ctx.pathPoints : ctx.pathPoints - subpaths.reduce((n, sp) => n + sp.pts.length / 2, 0);
+    }
+    clipRule = undefined;
+    path = [];
+    cur = undefined;
+  };
+
+  /** What a pattern color (`scn` with a name) paints: a gradient, or a cell repeated; undefined when it can't be read. */
+  const patternPaint = (name: PdfName, comps: number[], cs: ColorSpace): DisplayPaint | undefined => {
+    const obj = doc.resolve(doc.dict(resources?.get('Pattern'))?.get(name.name));
+    const dict = obj instanceof PdfStream ? obj.dict : obj instanceof PdfDict ? obj : undefined;
+    if (!dict) return undefined;
+    const m = doc.array(dict.get('Matrix'))?.map((x) => doc.number(x) ?? 0);
+    const matrix = multiply(m && m.length === 6 ? (m as Matrix) : IDENTITY, start.ctm);
+    if (doc.number(dict.get('PatternType')) === 2) return shadingPaint(doc, dict.get('Shading'), resources, matrix) ?? undefined;
+    if (!(obj instanceof PdfStream) || depth >= MAX_FORM_DEPTH || ctx.active.has(obj)) return undefined;
+    const uncolored = doc.number(dict.get('PaintType')) === 2;
+    const rgb = uncolored && cs.base ? packRgb(cs.base.toRgb(comps)) : 0;
+    const key = `${matrix.map((v) => Math.round(v * 1000)).join(',')}|${uncolored ? rgb : ''}`;
+    let cached = ctx.tilings.get(obj);
+    if (!cached) ctx.tilings.set(obj, (cached = new Map()));
+    if (cached.has(key)) return cached.get(key) ?? undefined;
+    const box = doc.array(dict.get('BBox'))?.map((x) => doc.number(x) ?? 0);
+    let paint: DisplayPaint | null = null;
+    if (box && box.length === 4) {
+      const xstep = doc.number(dict.get('XStep')) || box[2] - box[0];
+      const ystep = doc.number(dict.get('YStep')) || box[3] - box[1];
+      const inner: GS = { ...initialState(IDENTITY), ...(uncolored && { fill: rgb, stroke: rgb }) };
+      const sub: Ctx = { ...ctx, out: { width: 1e7, height: 1e7, glyphRuns: [], rects: [], images: [], paths: [], warnings: [] }, boxes: [], hidden: 0, active: new Set(ctx.active).add(obj), pathPoints: Math.min(ctx.pathPoints, 100_000), rotatedImages: false };
+      run(sub, parseContent(doc.streamData(obj)), doc.dict(dict.get('Resources')) ?? resources, inner, depth + 1);
+      ctx.pathPoints -= Math.min(ctx.pathPoints, 100_000) - sub.pathPoints;
+      ctx.opsLeft = sub.opsLeft;
+      if (sub.out.paths.length && xstep && ystep) paint = { kind: 'tiling', matrix, bbox: [box[0], box[1], box[2], box[3]], xstep, ystep, paths: sub.out.paths };
+    }
+    cached.set(key, paint);
+    return paint ?? undefined;
+  };
+
+  const fillPath = (evenOdd: boolean) => {
+    if (ctx.hidden || gs.fillPattern) {
+      if (gs.fillPattern && path.length) {
+        if (gs.fillPaint) keepPath(false, { color: 0, alpha: gs.fillAlpha, evenOdd, paint: gs.fillPaint });
+        else warn(ctx, 'pattern/shading fills skipped');
+      }
+      return;
+    }
+    keepPath(false, { color: gs.fill, alpha: gs.fillAlpha, evenOdd });
     // Anything that isn't a rectangle (a triangle, an ellipse...) is filled in strips; rectangles alone are exact.
     if (path.some((sp) => sp.pts.length >= 6 && !asRect(sp))) {
       scanFill(ctx, path.filter((sp) => sp.pts.length >= 6).map((sp) => sp.pts), evenOdd, gs.fill, gs.fillAlpha, pushRect);
@@ -541,16 +707,17 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
 
   const strokePath = (close: boolean) => {
     if (ctx.hidden) return;
-    if (gs.strokePattern) {
-      warn(ctx, 'pattern/shading strokes skipped');
-      return;
-    }
     const scale = Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1;
     const w = Math.max(gs.lineWidth * scale, 0.25);
     const color = gs.stroke;
     const alpha = gs.strokeAlpha;
     const dash = gs.dash.length && gs.dash.some((d) => d > 0) ? (gs.dash.length % 2 ? [...gs.dash, ...gs.dash] : gs.dash).map((d) => Math.max(d * scale, 0)) : [];
     const total = dash.reduce((a, b) => a + b, 0);
+    keepPath(close, undefined, { color, alpha, width: w, cap: gs.cap, join: gs.join, miter: gs.miter, dash: total > 0 ? dash : [], phase: gs.dashPhase * scale, ...(gs.strokePattern && gs.strokePaint && { paint: gs.strokePaint }) });
+    if (gs.strokePattern) {
+      if (!gs.strokePaint) warn(ctx, 'pattern/shading strokes skipped');
+      return;
+    }
     for (const sp of path) {
       const p = sp.pts;
       const n = p.length / 2;
@@ -637,13 +804,40 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     if (ctx.hidden) return;
     const dict = stream.dict;
     if (!imageSupported(doc, stream)) {
-      warn(ctx, 'JPEG 2000, CCITT or JBIG2 images skipped');
+      warn(ctx, 'JPEG 2000 or JBIG2 images skipped');
       return;
     }
     const [a, b, c, d, e, f] = gs.ctm;
     const tol = 0.01 * Math.max(Math.abs(a), Math.abs(d)) + 0.01;
     if (Math.abs(b) > tol || Math.abs(c) > tol) {
-      warn(ctx, 'rotated images skipped');
+      // Turned (or skewed): kept, with its matrix, for callers that can place it, unless it is cut at an angle.
+      const skewed = Math.abs(a * c + b * d) > 0.02 * Math.hypot(a, b) * Math.hypot(c, d);
+      if (!ctx.rotatedImages || skewed) {
+        warn(ctx, 'rotated images skipped');
+        return;
+      }
+      const xs = [e, e + a, e + c, e + a + c];
+      const ys = [f, f + b, f + d, f + b + d];
+      const [x, y] = [Math.min(...xs), Math.min(...ys)];
+      const [w, h] = [Math.max(...xs) - x, Math.max(...ys) - y];
+      if (w < 0.05 || h < 0.05 || x >= ctx.out.width || y >= ctx.out.height || x + w <= 0 || y + h <= 0) return;
+      ctx.out.images.push({
+        id: key + '|rot' + [a, b, c, d, e, f].map((v) => Math.round(v * 100)).join(','),
+        x,
+        y,
+        w,
+        h,
+        pixelWidth: doc.number(dict.get('Width') ?? dict.get('W')) ?? 0,
+        pixelHeight: doc.number(dict.get('Height') ?? dict.get('H')) ?? 0,
+        stream,
+        flipX: false,
+        flipY: false,
+        matrix: [a, b, c, d, e, f],
+        ...(doc.resolve(dict.get('ImageMask') ?? dict.get('IM')) === true && { maskColor: gs.fillPattern ? 0 : gs.fill }),
+        alpha: gs.fillAlpha,
+        over: overlaps(x, y, x + w, y + h),
+      });
+      ctx.boxes.push([x, y, x + w, y + h]);
       return;
     }
     const w = Math.abs(a);
@@ -718,6 +912,12 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     if (!g) return;
     const lw = doc.number(g.get('LW'));
     if (lw !== undefined) gs.lineWidth = lw;
+    const lc = doc.number(g.get('LC'));
+    if (lc !== undefined) gs.cap = lc;
+    const lj = doc.number(g.get('LJ'));
+    if (lj !== undefined) gs.join = lj;
+    const ml = doc.number(g.get('ML'));
+    if (ml !== undefined) gs.miter = ml;
     const ca = doc.number(g.get('ca'));
     if (ca !== undefined) gs.fillAlpha = ca;
     const CA = doc.number(g.get('CA'));
@@ -753,6 +953,12 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
           break;
         case 'J':
           gs.cap = num(a[0]);
+          break;
+        case 'j':
+          gs.join = num(a[0]);
+          break;
+        case 'M':
+          gs.miter = num(a[0]);
           break;
         case 'd':
           gs.dash = Array.isArray(a[0]) ? a[0].map(num) : [];
@@ -799,8 +1005,14 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
           const stroke = name === 'SC' || name === 'SCN';
           const cs = stroke ? gs.strokeCS : gs.fillCS;
           if (a.length && a[a.length - 1] instanceof PdfName) {
-            if (stroke) gs.strokePattern = true;
-            else gs.fillPattern = true;
+            const paint = ctx.pathPoints >= 0 ? patternPaint(a[a.length - 1] as PdfName, a.slice(0, -1).map(num), cs) : undefined;
+            if (stroke) {
+              gs.strokePattern = true;
+              gs.strokePaint = paint;
+            } else {
+              gs.fillPattern = true;
+              gs.fillPaint = paint;
+            }
           } else if (!cs.pattern) setColor(stroke, cs, a.map(num));
           break;
         }
@@ -898,42 +1110,50 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
         }
         case 'S':
           strokePath(false);
-          path = [];
-          cur = undefined;
+          finishPath();
           break;
         case 's':
           strokePath(true);
-          path = [];
-          cur = undefined;
+          finishPath();
           break;
         case 'f':
         case 'F':
         case 'f*':
           fillPath(name === 'f*');
-          path = [];
-          cur = undefined;
+          finishPath();
           break;
         case 'B':
         case 'B*':
           fillPath(name === 'B*');
           strokePath(false);
-          path = [];
-          cur = undefined;
+          finishPath();
           break;
         case 'b':
         case 'b*':
           fillPath(name === 'b*');
           strokePath(true);
-          path = [];
-          cur = undefined;
+          finishPath();
           break;
         case 'n':
-          path = [];
-          cur = undefined;
+          finishPath();
           break;
-        case 'sh':
-          warn(ctx, 'shadings skipped');
+        case 'W':
+        case 'W*':
+          clipRule = name === 'W*';
           break;
+        case 'sh': {
+          const found = a[0] instanceof PdfName ? doc.dict(resources?.get('Shading'))?.get(a[0].name) : undefined;
+          const paint = ctx.pathPoints >= 0 && !ctx.hidden && found !== undefined ? shadingPaint(doc, found, resources, gs.ctm) : null;
+          if (!paint) {
+            if (!ctx.hidden) warn(ctx, 'shadings skipped');
+            break;
+          }
+          // It paints everything inside the clip: the clip's box, or the page.
+          let [x0, y0, x1, y1] = [0, 0, ctx.out.width, ctx.out.height];
+          for (let c = gs.clip; c; c = c.parent) [x0, y0, x1, y1] = [Math.max(x0, c.x0), Math.max(y0, c.y0), Math.min(x1, c.x1), Math.min(y1, c.y1)];
+          if (x1 > x0 && y1 > y0) keepShape([{ pts: [x0, y0, x1, y0, x1, y1, x0, y1], closed: true }], { color: 0, alpha: gs.fillAlpha, evenOdd: false, paint });
+          break;
+        }
         case 'Do':
           doXObject(a[0]);
           break;

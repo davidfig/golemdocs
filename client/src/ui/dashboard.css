@@ -40,11 +40,9 @@
 
 .wm-dash-search {
   flex: 1;
+  width: auto;
   max-width: 360px;
-  padding: 5px 8px;
-  border: 1px solid var(--wm-field-border);
-  background: var(--wm-field-bg);
-  color: var(--wm-text);
+  margin: 0;
 }
 
 .wm-dash-actions {
@@ -56,7 +54,7 @@
   border-bottom: 1px solid var(--wm-border, #b9b9b9);
 }
 
-.wm-dashboard button {
+.wm-dashboard button:not(.wm-button) {
   padding: 4px 10px;
   border: 1px solid var(--wm-border, #b9b9b9);
   border-radius: 3px;
@@ -64,12 +62,14 @@
   cursor: pointer;
 }
 
-.wm-dashboard button:hover:not(:disabled) {
-  border-color: var(--wm-hot-border);
-  background: var(--wm-hot, #c1d2ee);
+@media (hover: hover) {
+  .wm-dashboard button:not(.wm-button):hover:not(:disabled) {
+    border-color: var(--wm-hot-border);
+    background: var(--wm-hot, #c1d2ee);
+  }
 }
 
-.wm-dashboard button:disabled {
+.wm-dashboard button:not(.wm-button):disabled {
   color: var(--wm-disabled, #a0a0a0);
   cursor: default;
 }
@@ -130,8 +130,10 @@
   text-align: left;
 }
 
-.wm-dashboard .wm-card-open:hover:not(:disabled) {
-  background: none;
+@media (hover: hover) {
+  .wm-dashboard .wm-card-open:hover:not(:disabled) {
+    background: none;
+  }
 }
 
 .wm-thumb {
@@ -144,9 +146,11 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
 }
 
-.wm-card-open:hover .wm-thumb,
-.wm-card-open:focus-visible .wm-thumb {
-  border-color: var(--wm-hot-border);
+@media (hover: hover) {
+  .wm-card-open:hover .wm-thumb,
+  .wm-card-open:focus-visible .wm-thumb {
+    border-color: var(--wm-hot-border);
+  }
 }
 
 .wm-thumb img {
@@ -231,6 +235,8 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 }
 
 .wm-card-actions button {
+  min-width: 0;
+  height: auto;
   font-size: 11px;
   padding: 2px 6px;
   display: inline-flex;
@@ -346,9 +352,11 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
 }
 
-.wm-card-open:hover .wm-folder-mini,
-.wm-card-open:focus-visible .wm-folder-mini {
-  border-color: var(--wm-border, #b9b9b9);
+@media (hover: hover) {
+  .wm-card-open:hover .wm-folder-mini,
+  .wm-card-open:focus-visible .wm-folder-mini {
+    border-color: var(--wm-border, #b9b9b9);
+  }
 }
 
 .wm-folder-shape::before {
@@ -365,9 +373,11 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   background: #e8c872;
 }
 
-.wm-card-open:hover .wm-folder-art,
-.wm-card-open:focus-visible .wm-folder-art {
-  border-color: transparent;
+@media (hover: hover) {
+  .wm-card-open:hover .wm-folder-art,
+  .wm-card-open:focus-visible .wm-folder-art {
+    border-color: transparent;
+  }
 }
 
 .wm-folder-name-input {
@@ -474,11 +484,17 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   cursor: pointer;
 }
 
-.wm-card:hover .wm-select,
 .wm-select:focus-visible,
 .wm-select:checked,
 .wm-selecting .wm-select {
   opacity: 1;
+}
+
+/* Not on touch screens: a hover reveal there makes the first tap on a card only "hover" it, and a second tap open it. */
+@media (hover: hover) {
+  .wm-card:hover .wm-select {
+    opacity: 1;
+  }
 }
 
 .wm-card.wm-selected .wm-thumb {
@@ -491,6 +507,19 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 0 10px;
+  cursor: default;
+}
+
+/* Icons beside a label in a button: sized to the text, not the 20px toolbar size. */
+.wm-dashboard .wm-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.wm-dashboard .wm-button .icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* The delete confirmation (see deleteDialog.ts): over the whole window, with a list box of what goes. */
@@ -536,7 +565,8 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   border-bottom-right-radius: 0;
 }
 
-.wm-dash-new-arrow {
+.wm-dash-split .wm-dash-new-arrow {
+  min-width: 0;
   margin-left: -1px;
   padding-inline: 6px;
   border-top-left-radius: 0;

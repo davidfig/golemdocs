@@ -285,3 +285,66 @@ test('year-led entries stay separate, and an address set in from the edge keeps 
   const address = ps[ps.length - 1];
   assert.deepEqual(runs(address).flatMap((r) => r.content.map((c) => c.kind)), ['text', 'break', 'text']);
 });
+
+const drawingsOf = (doc: WordDocument) => paragraphs(doc).flatMap((p) => runs(p).flatMap((r) => r.content.filter((c) => c.kind === 'drawing')));
+
+test('a drawing made of many small squares (a QR code) becomes one picture', async () => {
+  const pdf = PdfDocument.create();
+  const font = pdf.standardFont('Helvetica');
+  const page = pdf.addPage([595, 842]).draw({ origin: 'top-left' });
+  page.text('Scan me.', 72, 60, { font, size: 12 });
+  for (let row = 0; row < 12; row++) for (let col = 0; col < 12; col++) if ((row + col) % 2 === 0) page.rect(100 + col * 6, 200 + row * 6, 6, 6, { fill: [0, 0, 0] });
+  page.finish();
+  const found = drawingsOf(await pdfToDocument(await pdf.save()));
+  assert.equal(found.length, 1);
+  const picture = found[0];
+  assert.ok(picture.kind === 'drawing' && !picture.inline && picture.image && picture.svg);
+  assert.deepEqual([picture.width, picture.height], [72 * 12700, 72 * 12700]);
+});
+
+test('curved vector art becomes a picture with an SVG; rules, boxes and bullets stay out', async () => {
+  const pdf = PdfDocument.create();
+  const page = pdf.addPage([595, 842]).draw({ origin: 'top-left' });
+  page.ellipse(200, 300, 60, 40, { fill: [1, 0, 0], stroke: { color: [0, 0, 1], width: 3 } });
+  page.line(50, 100, 545, 100, { color: [0, 0, 0], width: 1 });
+  page.rect(50, 500, 495, 80, { stroke: { color: [0, 0, 0], width: 1 } });
+  page.rect(60, 650, 200, 20, { fill: [0.9, 0.9, 0.9] });
+  page.ellipse(70, 700, 2, 2, { fill: [0, 0, 0] });
+  page.finish();
+  const found = drawingsOf(await pdfToDocument(await pdf.save()));
+  assert.equal(found.length, 1);
+  const picture = found[0];
+  assert.ok(picture.kind === 'drawing' && picture.image && picture.svg);
+  // The ellipse and its 3pt outline: 120 + 3 wide, 80 + 3 tall.
+  assert.ok(Math.abs(picture.width / 12700 - 123) < 1 && Math.abs(picture.height / 12700 - 83) < 1);
+});
+
+test('a page whose text starts far down keeps it there, titles keep their weight, and the running head and foot become the header and footer', async () => {
+  const pdf = PdfDocument.create();
+  const regular = pdf.standardFont('Helvetica');
+  const bold = pdf.standardFont('Helvetica-Bold');
+  for (let i = 0; i < 2; i++) {
+    const page = pdf.addPage([612, 792]).draw({ origin: 'top-left' });
+    page.text('Running title', 250, 30, { font: regular, size: 8 });
+    page.text('Big Title', 150, 450, { font: bold, size: 20 });
+    page.text('Some body text under the title.', 150, 480, { font: regular, size: 11 });
+    page.text(`Page ${i + 1} of 2`, 150, 770, { font: regular, size: 8 });
+    page.finish();
+  }
+  const doc = await pdfToDocument(await pdf.save());
+  const first = paragraphs(doc)[0];
+  assert.equal(text(first), 'Big Title');
+  // The margin is kept to a third of the page; what is left of the 430 points before the title is space before it.
+  assert.ok((first.properties.spacing?.before ?? 0) > 150 * 20, JSON.stringify(first.properties.spacing));
+  assert.equal(runs(first)[0].properties.bold, true);
+  const [header] = doc.section.headers;
+  const [footer] = doc.section.footers;
+  const partText = (name: string) => JSON.stringify(doc.headersFooters.get(name)?.children);
+  assert.match(partText(header.part), /Running title/);
+  const foot = partText(footer.part);
+  assert.match(foot, /PAGE/);
+  assert.match(foot, /NUMPAGES/);
+  assert.match(foot, /Page /);
+  // Neither is in the body.
+  assert.ok(!paragraphs(doc).some((p) => /Running title|Page \d/.test(text(p))));
+});

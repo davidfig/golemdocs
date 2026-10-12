@@ -78,8 +78,6 @@ export const chrome: Partial<Messages> = {
   'chrome.tools.trackChanges': 'Traccia &modifiche',
   'chrome.tools.autoFormat': '&Formattazione automatica durante la digitazione',
   'chrome.tools.autoFormat.tip': 'Trasforma le scorciatoie Markdown come «# », «- » e «**grassetto**» in formattazione mentre scrivi',
-  'chrome.tools.livePreview': 'Mostra il &Markdown al cursore',
-  'chrome.tools.livePreview.tip': 'Nei documenti Markdown, mostra il codice Markdown del paragrafo in cui si trova il cursore (sperimentale)',
   'chrome.tools.options': '&Opzioni…',
   'chrome.tools.language': '&Lingua',
   'chrome.format.bold': '&Grassetto',

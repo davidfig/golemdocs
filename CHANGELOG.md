@@ -1,10 +1,67 @@
 # What’s New in Golem Docs
 
-## 0.14.1 - 2026-10-10
+## 0.17.2 - Unreleased
 
 ### Fixed
 - Reopening a document now puts the caret and any selected text back exactly where they were, even in a window of another size or another view, and remembers where you left it however you opened it (from the Documents screen, the Files Sidebar or its address). The scroll position is kept too when you moved it by typing or with the keyboard, not only by scrolling.
 - The status bar no longer shows the Wrap Long Lines button for documents, or the Print Layout, Flow and Page Grid buttons for plain text files, where they did nothing.
+
+## 0.17.1 - 2026-10-09
+
+### Fixed
+- The Down and Up arrow keys no longer skip short or empty lines when the caret is near the right end of a long line.
+
+## 0.17.0 - 2026-10-09
+
+### Added
+- Resting the pointer on a link in a document opens a small form over it with the link's text and address, to change them (OK), take the link off (Remove Link) or open it. Insert › Hyperlink (Ctrl/Cmd+K) opens the same form at the caret, instead of a separate dialog.
+- New guides on the website for converting a PDF to Word, converting Markdown to Word and back, redacting a PDF, and opening Word files without Word.
+
+### Changed
+- A fresher look for dialogs, buttons and text fields: flat surfaces with a slim accent line along the top of each dialog, a plain title and close button, and the main action (OK, Save, Apply) filled with the theme's color. The menu bar and toolbars are flatter too.
+- Pinching or Ctrl/Cmd+scrolling over the toolbars and panels no longer zooms the whole page, which broke the layout; it still zooms the document over the page itself.
+- The buttons and search box on the Documents screen now look like the ones in dialogs.
+- Markdown documents are edited as formatted text again: Tools › Show Markdown at the Caret is gone. Autoformat as You Type stays, and now works on every line, so `* ` starts a bullet list and `*word*` and `**word**` make italic and bold as you type.
+- Large documents opened from your account appear as soon as they have downloaded, instead of waiting for the copy kept in this browser to be written first, and the status bar shows how much of the download has arrived.
+- Large documents get to their first page a little sooner: the default fonts load while the document downloads, and the check for which characters a document needs is faster.
+- Links to Golem Docs shared in chat apps and social networks now show a large preview card.
+
+### Fixed
+- On a phone or tablet, a document or folder on the Documents screen opens with one tap instead of two.
+- Very long documents no longer sit behind the loading screen until every page is laid out: the first pages appear as soon as they are ready, and the rest fill in behind them. Opening a long document is also about twice as fast, because the page sidebar and spelling underlines no longer redo all their work after every batch of pages.
+- Copying or cutting text now keeps its formatting (bold, italics, links, headings, lists) when pasted into other apps.
+- Clicking a task-list check box in a Markdown document checks or unchecks it again, even when its Markdown is shown, and no longer moves the cursor.
+- In a large text file, the “Replaced n matches” message after Replace All stays on screen instead of being replaced by “No matches” a moment later.
+
+## 0.16.0 - 2026-10-08
+
+### Added
+- Pictures in a document can be picked with a click: a frame with handles appears, Delete removes the picture, a drag moves it (in line with the text, or to a new place on the page for a floating one), the corner handles resize it, and a double click opens it in the image editor (Done puts the changed picture back in the document, Cancel leaves it as it was). Right-clicking a picture offers Cut, Copy (the picture itself goes on the clipboard), Delete and Edit Picture. The assistant can do the same with its new text_pictures tool.
+- HEIC and HEIF photos (the iPhone's picture format) open, can be inserted into documents (Insert › Picture, drag and drop, the assistant's picture button) and are shown to the assistant. They are kept as high-quality JPEGs. Safari reads them itself; other browsers load a decoder the first time you use one, so nothing extra is downloaded otherwise.
+
+### Changed
+- Error and warning messages that pop up at the bottom of the window are now bold white text on a red background in every theme, so they are easier to notice.
+
+### Fixed
+- A "(conflicted copy)" is only made when the two versions really differ; if both are the same (a blank document, say), nothing extra is created.
+- Dragging a picture from your computer onto a Markdown note (it is embedded as a file of its own) or a PDF page (it is placed where you drop it) now offers to insert it, as it does in Word documents.
+- Dragging a picture from the Files panel onto a document asks whether to insert the picture or a link to it (a PDF takes the picture), instead of always making a link.
+- Converting a PDF to Word keeps the text where the PDF had it: a page whose text starts far down the page no longer starts at the top (over the pictures), headings keep their bold and the text its color, and a page's last line is not pushed onto a new page.
+- Converting a PDF to Word keeps the running header and footer text (dates, titles, web addresses, page numbers, which are now page fields) as the document's header and footer instead of dropping it.
+- Pictures made of vector shapes (QR codes, logos) are drawn sharply in the converted document, not blurred.
+- Drawings in a document (such as the vector art from a converted PDF) are drawn from their SVG, so they stay sharp however far you zoom in, and zooming stays smooth. Tiling patterns in an SVG are drawn too.
+- A double letter such as the “ll” in “All” is no longer taken for bold text when converting a PDF.
+
+## 0.15.0 - 2026-10-08
+
+### Fixed
+- Converting a PDF to Word keeps vector drawings (logos, charts, line art, QR codes and barcodes) as pictures, drawn as SVG so they stay sharp, with their gradients, patterns, clipping, dashes and line joins. They used to be left out. A PDF with no text on it also keeps its pictures now.
+- Converting a PDF to Word keeps pictures that are turned or mirrored (including mirrored JPEGs), and small ones. They used to be dropped or shown the wrong way round.
+- PDFs with black-and-white fax (CCITT) scans now show and convert those images.
+
+### Changed
+- On a phone, drop-downs (New, font, size, colors, the “…” buttons and more) open as sheets from the bottom of the screen, above the keyboard, instead of small pop-ups, and New is one button that lists the document types.
+- On a phone, the top toolbar is for files (New, Open, Undo, Redo, Find, Share, and “…” for the rest), and while you type, a formatting bar (Bold, Italic, Underline, lists, Link, Image, Comment, and “…” for the rest) sits right above the keyboard.
 
 ## 0.14.0 - 2026-10-06
 

@@ -93,10 +93,12 @@ export type LegalPage = 'privacy' | 'terms';
 
 /** An editor command as sent from the page: pages are referred to by id. */
 export type WireCommand =
-  | Exclude<Command, { kind: 'pointer' | 'select' | 'formatText' | 'formatParagraphs' | 'changeCase' }>
+  | Exclude<Command, { kind: 'pointer' | 'select' | 'moveDrawing' | 'resizeDrawing' | 'formatText' | 'formatParagraphs' | 'changeCase' }>
   /** `quiet`: the view is left where it is (a selection put back as a document reopens, where the view was put back too). */
   | (Extract<Command, { kind: 'select' }> & { quiet?: boolean })
   | (Omit<Extract<Command, { kind: 'pointer' }>, 'page'> & { page: number })
+  | (Omit<Extract<Command, { kind: 'moveDrawing' }>, 'page'> & { page: number })
+  | (Omit<Extract<Command, { kind: 'resizeDrawing' }>, 'page'> & { page?: number })
   | { kind: 'undo' }
   | { kind: 'redo' }
   /** Formatting from the menus and toolbars (see formatting.ts). */
@@ -116,8 +118,6 @@ export type WireCommand =
   | { kind: 'autoFormat'; on: boolean }
   /** Which autocorrect rules are on: smart quotes, dashes, symbols and so on (see autocorrect.ts). */
   | { kind: 'autoCorrect'; options: AutoCorrectOptions; /** The user's replacement list: text, and what replaces it. */ replacements: [string, string][] }
-  /** Whether the paragraph the caret is in shows its Markdown source, in Markdown documents (see livePreview.ts). */
-  | { kind: 'livePreview'; on: boolean }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
   | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean }
@@ -242,6 +242,8 @@ export type ToWorker =
   | { type: 'marks'; on: boolean }
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
+  /** A document is on its way (still downloading): load the faces nearly every document uses now, so they are there when its bytes are. */
+  | { type: 'warm' }
   /** `keepRoom`: the same picture or drawing, changed, opened in place of the open one: it keeps that one's room. */
   | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions; keepRoom?: boolean; /** With `keepRoom`: the saved version this is. */ version?: number }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
@@ -262,6 +264,7 @@ export type ToWorker =
   | { type: 'linkAt'; doc: number; request: number; page: number; x: number; y: number }
   | { type: 'command'; doc: number; command: WireCommand }
   /** Puts a picture in the document at the caret (its bytes go into the document; its size is in EMUs). */
+  | { type: 'replacePicture'; doc: number; bytes: ArrayBuffer; ext: string; aspect: number }
   | { type: 'insertImage'; doc: number; bytes: ArrayBuffer; ext: string; width: number; height: number; description?: string }
   /** A vector drawing at the caret, or (`replace`: the part of the SVG it replaces) in place of the one it is an edited version of; sizes in EMUs. */
   /** A picture's shapes are now these (the person drew, erased or moved something); or step back over (undo) or forward again (redo) over the person's own changes to them. */
@@ -350,6 +353,8 @@ export interface SelectionUpdate {
   link?: { url: string; text: string } | null;
   /** The equation the selection is (exactly), for Insert Equation to change. */
   math?: MathEquation | null;
+  /** The picture the selection is exactly, and where it is: page id and rectangle in points (for the frame around it). */
+  picture?: { page: number; x: number; y: number; width: number; height: number; floating: boolean; /** Which picture of the text it is: its paragraph (among the document's) and its offset in it. */ at: { paragraph: number; offset: number }; /** The picture's part of the package, to fetch its bytes. */ part: string; svg?: string } | null;
   /** The Format Painter has picked up formatting and is waiting for a selection. */
   painting?: boolean;
   /** Set once after a Find (whether it found a match) or Replace All (how many it replaced). */
@@ -392,6 +397,8 @@ export type FromWorker =
   /** The first full layout finished. */
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }
   | ({ type: 'selection'; doc: number } & SelectionUpdate)
+  /** The selected text as HTML (`text` is the plain text it was made from, to match it with the selection), for copy. */
+  | { type: 'selectionHtml'; doc: number; text: string; html: string }
   | { type: 'error'; doc: number; message: string }
   /** Something to tell the person that isn't a failure to open (a picture that could not be shared, say). */
   | { type: 'notice'; doc: number; message: string }
@@ -417,7 +424,7 @@ export type FromWorker =
   | { type: 'media'; request: number; bytes: ArrayBuffer | null }
   /** A Markdown document being opened embeds a picture or note (`![[title]]`): the stored document of that title, as `embedFile`. */
   | { type: 'embed'; request: number; title: string }
-  | { type: 'linkAt'; request: number; url: string | null; checkbox: boolean }
+  | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
   /** What an assistant tool did or found. */
   /** `images` are pictures the tool fetched for the model to look at (data: URIs). */

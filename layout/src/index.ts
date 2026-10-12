@@ -6,7 +6,6 @@ export type * from './fonts/fontTypes.ts';
 export { invalidateStyles, layoutDocument, LayoutSession, type DocumentLayout, type LayoutOptions, type PageStart, type RunResult, type SectionGeometry } from './document.ts';
 export * from './offsets.ts';
 export { formattingMarksOn, setFormattingMarks } from './marks.ts';
-export { setShowingSource } from './source.ts';
 export { reflowWidth, setReflowWidth } from './reflow.ts';
 export { layoutParagraph, type LineLayout, type ParagraphLayout } from './paragraph.ts';
 export * from './wire.ts';

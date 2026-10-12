@@ -15,6 +15,8 @@
     "allow-vault-write",
     "allow-vault-remove",
     "allow-set-native-menu",
+    "allow-update-check",
+    "allow-update-install",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     "core:event:allow-listen",

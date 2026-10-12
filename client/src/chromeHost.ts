@@ -63,6 +63,8 @@ export interface AppHooks {
   showTrash(): void;
   /** File ▸ Vault Folder (desktop app): choose the folder that keeps a copy of the documents. */
   showVault(): void;
+  /** Help ▸ Check for Updates (desktop app): look for a newer version of the app and offer to install it. */
+  showUpdates(): void;
   /** Ask for the page size, margins and orientation, then set them. */
   showPageSetup(): void;
   /** Show the document's word, character, paragraph, line and page counts. */
@@ -325,7 +327,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'versionHistory' || action.name === 'trash' || action.name === 'vault' || action.name === 'pasteSpecial' || action.name === 'searchAll';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'versionHistory' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates' || action.name === 'pasteSpecial' || action.name === 'searchAll';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode !== 'flow' || !(app.annotating() || app.isPicture());
@@ -377,6 +379,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (action.name === 'versionHistory') return app.showVersionHistory();
           if (action.name === 'trash') return app.showTrash();
           if (action.name === 'vault') return app.showVault();
+          if (action.name === 'updates') return app.showUpdates();
           if (action.name === 'pasteSpecial') return app.showPasteSpecial();
           if (action.name === 'searchAll') return app.showSearchAll();
           if (action.name === 'find' || action.name === 'replace' || action.name === 'goTo') return app.showFind(action.name);

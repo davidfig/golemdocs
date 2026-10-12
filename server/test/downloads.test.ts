@@ -21,6 +21,15 @@ test('anyone, signed in or not, can read the latest release', async () => {
   assert.deepEqual(await r.json(), JSON.parse(MANIFEST));
 });
 
+test('the updater manifest is served the same way, and only as itself', async () => {
+  const updater = JSON.stringify({ version: '0.18.1', platforms: { 'darwin-aarch64': { signature: 's', url: 'https://golemdocs.com/api/downloads/x.app.tar.gz' } } });
+  put('downloads/desktop/updater.json', updater);
+  const r = await w.call(null, 'GET', '/api/downloads/updater.json');
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), JSON.parse(updater));
+  assert.equal((await w.call(null, 'HEAD', '/api/downloads/updater.json')).status, 200);
+});
+
 test('before the first release there is nothing to read', async () => {
   assert.equal((await w.call(null, 'GET', '/api/downloads')).status, 404);
 });
@@ -60,4 +69,26 @@ test('installers are told apart from the other files a build leaves beside them'
   assert.equal(installerPlatform('GolemDocs_0.18.0_amd64.deb'), 'linux');
   assert.equal(installerPlatform('GolemDocs-0.18.0-1.x86_64.rpm'), 'linux');
   for (const other of ['GolemDocs.app.tar.gz', 'GolemDocs_0.18.0_x64-setup.exe.sig', 'latest.json', 'notes.txt']) assert.equal(installerPlatform(other), null, other);
+});
+
+test('the update files and the manifest the app reads', async () => {
+  const { updaterPlatforms, updaterManifest } = await import('../src/downloads.ts');
+  assert.deepEqual(updaterPlatforms('GolemDocs.app.tar.gz'), ['darwin-aarch64', 'darwin-x86_64']);
+  assert.deepEqual(updaterPlatforms('GolemDocs_0.18.1_x64-setup.exe'), ['windows-x86_64']);
+  assert.deepEqual(updaterPlatforms('GolemDocs_0.18.1_amd64.AppImage'), ['linux-x86_64']);
+  for (const other of ['GolemDocs_0.18.1_universal.dmg', 'GolemDocs_0.18.1_x64_en-US.msi', 'a.deb', 'x.sig']) assert.deepEqual(updaterPlatforms(other), [], other);
+  const manifest = updaterManifest('0.18.1', 'notes', new Date('2026-10-12T00:00:00Z'), [
+    { platforms: ['darwin-aarch64', 'darwin-x86_64'], url: 'https://x/mac.tar.gz', signature: 'sigM' },
+    { platforms: ['linux-x86_64'], url: 'https://x/l.AppImage', signature: 'sigL' },
+  ]);
+  assert.deepEqual(manifest, {
+    version: '0.18.1',
+    notes: 'notes',
+    pub_date: '2026-10-12T00:00:00.000Z',
+    platforms: {
+      'darwin-aarch64': { signature: 'sigM', url: 'https://x/mac.tar.gz' },
+      'darwin-x86_64': { signature: 'sigM', url: 'https://x/mac.tar.gz' },
+      'linux-x86_64': { signature: 'sigL', url: 'https://x/l.AppImage' },
+    },
+  });
 });

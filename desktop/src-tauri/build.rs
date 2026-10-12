@@ -11,6 +11,8 @@ fn main() {
             "vault_write",
             "vault_remove",
             "set_native_menu",
+            "update_check",
+            "update_install",
         ])),
     )
     .expect("failed to run tauri-build");

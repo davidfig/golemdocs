@@ -4,7 +4,7 @@ name: Desktop release
 # Push the tag (git push origin vX.Y.Z) after the version bump; publish the draft once the installers are checked.
 # The Mac app is signed and notarized when the Apple secrets exist (docs/architecture/desktop-release.md);
 # without them the build still runs and makes an unsigned one.
-# Windows and Linux builds are not signed yet.
+# Windows and Linux builds are not signed yet. Every build's update files are signed with the Tauri update key.
 
 on:
   push:
@@ -86,6 +86,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: The update signing key exists
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: '[ -n "$KEY" ] || { echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set: the update files cannot be signed (docs/architecture/desktop-release.md)"; exit 1; }'
+
       - name: Rust tests
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
 
@@ -112,10 +118,18 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update files; the matching public key is in tauri.conf.json (plugins.updater.pubkey).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
           tauriScript: npx --yes ${{ env.TAURI_CLI }}
-          args: ${{ matrix.args }}
+          # The release config turns on the signed update files (bundle.createUpdaterArtifacts); it is not in tauri.conf.json
+          # because a local `cargo tauri build` has no signing key.
+          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+          # Our own updater.json (scripts/publish-desktop.ts) points at golemdocs.com, so the action's one for GitHub is not wanted.
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: true
           tagName: ${{ env.TAG }}
           releaseName: GolemDocs ${{ env.TAG }}
           releaseBody: See What's New in the app (Help › What's New) for what changed.

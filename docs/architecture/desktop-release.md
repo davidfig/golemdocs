@@ -24,7 +24,7 @@ The Tauri command line comes from `npx @tauri-apps/cli@<pinned>` in the workflow
 
 ## One-time setup: Apple signing and notarization
 
-Needs a paid Apple Developer account. Six secrets go into the repository's **Settings › Secrets and variables › Actions**:
+Needs a paid Apple Developer account. Seven secrets go into the repository's **Settings › Secrets and variables › Actions**:
 
 | Secret | What |
 | --- | --- |
@@ -34,10 +34,29 @@ Needs a paid Apple Developer account. Six secrets go into the repository's **Set
 | `APPLE_ID` | the Apple ID email used for notarization |
 | `APPLE_PASSWORD` | an **app-specific password** for that Apple ID (appleid.apple.com › Sign-In and Security › App-Specific Passwords), not the account password |
 | `APPLE_TEAM_ID` | the 10-character team id (developer.apple.com › Membership details) |
+| `TAURI_SIGNING_PRIVATE_KEY` | the update signing key, the contents of `~/.tauri/golemdocs-updater.key` (see "Updating the shell"); the build refuses to run without it |
 
-A *Developer ID Application* certificate is the right one for distribution outside the App Store; create it in developer.apple.com › Certificates if there is none. Missing any secret does not fail the build: the Mac job logs a warning (`Mac signing`) and produces an unsigned app.
+The Apple rows are for the Mac build; the last one is for every platform. A *Developer ID Application* certificate is the right one for distribution outside the App Store; create it in developer.apple.com › Certificates if there is none. Missing any secret does not fail the build: the Mac job logs a warning (`Mac signing`) and produces an unsigned app.
 
 Tauri signs with the hardened runtime and then submits the app to Apple's notary service and staples the ticket; the notarization wait is part of the job (typically a few minutes).
+
+## Updating the shell
+
+The page updates itself (it is the website), so only the shell, the Rust code and `tauri.conf.json`, needs this. `tauri-plugin-updater` does it, driven from the page through two commands of ours (`desktop/src-tauri/src/update.rs`: `update_check`, `update_install`), so the page never names a URL or a file.
+
+```
+ app opens (+10 s), then every 6 h --> UpdateService.checkQuietly --> update_check --> GET /api/downloads/updater.json
+   newer version, not put off --> Software Update dialog (ui/updateDialog.ts): Update and Restart / Later (a day, per version)
+   Help ▸ Check for Updates … --> the same dialog, always answers
+   Update and Restart --> update_install: download, verify the signature against the public key in tauri.conf.json, replace the app, restart
+```
+
+- **The update key** is a minisign key pair, separate from the Apple certificate. The public half is `plugins.updater.pubkey` in `tauri.conf.json`; the private half signs every release's update files (CI secret `TAURI_SIGNING_PRIVATE_KEY`). **Keep a backup of the private key (a password manager, not the repository): an installed app only accepts updates signed by the key it shipped with, so losing the key means every installed copy has to be reinstalled by hand.** It was made with `npx @tauri-apps/cli signer generate -w ~/.tauri/golemdocs-updater.key -p ""` (no password, so there is no second secret; `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is read if one is ever set).
+- **What CI builds**: `src-tauri/tauri.release.conf.json` turns on `bundle.createUpdaterArtifacts` for CI only (a local `cargo tauri build` has no key). That adds a `.app.tar.gz` for the Mac (universal, so it serves both Macs), and a `.sig` file beside it and beside the Windows `-setup.exe` and the Linux `.AppImage`.
+- **What publishing does** (`pnpm publish:desktop`): uploads the update files (the Mac one under a versioned name, because a name never changes its bytes once served) and writes `updater.json`: `{ version, notes (that version's changelog section), pub_date, platforms: { darwin-aarch64, darwin-x86_64, windows-x86_64, linux-x86_64: { signature, url } } }`, with each url on golemdocs.com/api/downloads. It refuses a release whose update files are unsigned or missing a platform.
+- **Only builds that carry the plugin and this key can update.** Installers from before the plugin, and any build made with another key, never see updates. The first release that carries it must be installed by hand.
+- **Nothing is installed unasked**; the app restarts only after the person chooses Update and Restart, and the vault sync and unsaved edits are not specially waited for (the page saves as it goes, but a restart in the middle of typing can lose the last seconds), so the dialog says it will restart.
+- **Not covered by automated tests**: the plugin and the restart need a real signed build. The offer logic (`updateService.ts`) and the manifest format (`updaterManifest`) are.
 
 ## The download page
 
@@ -50,5 +69,4 @@ golemdocs.com/download redirects to the **Download** section of the home page (`
 ## Not done yet
 
 - **Windows signing**: needs a code-signing certificate (or Azure Trusted Signing). Until then, the first run on Windows shows a SmartScreen warning ("More info › Run anyway").
-- **Auto-update** (`tauri-plugin-updater`, a new dependency, so it needs approval): without it a user reinstalls to get a new shell. The web content always updates itself.
 - **Linux/Windows window chrome**: the window uses an overlay title bar and the menus in the page; the native menu bar is Mac-only. Check both on real machines before announcing them.

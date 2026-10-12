@@ -62,6 +62,10 @@ The vault keeps Word, ODT, RTF, HTML, Markdown, plain text and source files, CSV
 
 Conversion runs on another thread. `convertWorker.ts` (started through `convertWorkerEntry.ts`) runs `vaultCodec.ts`; `convertClient.ts` (`ConvertWorker`, the `VaultCodec` the sync uses) sends it bytes and gets bytes back. The worker starts with the first conversion and ends after 30 seconds with nothing to do, so a vault that is only watched holds no converters in memory; one that dies fails what it was doing and the next sync retries it. The page asks only `vaultFormats.ts` (names, no converters) which files the vault keeps. Like the layout worker, the build keeps the worker's code in a chunk of its own (`vaultCore`, see `worker` in `client/vite.config.ts`), because WebKit, which Tauri uses on macOS, runs a worker's entry script again when a lazy chunk imports it. The converters are only fetched in the desktop app; the sync code in the page is about 14 kB (5 kB gzipped), too small for a chunk of its own.
 
+## Updates
+
+The shell updates itself through `tauri-plugin-updater`: `UpdateService` (`client/src/desktop/updateService.ts`) asks the shell shortly after start and every 6 hours whether a newer signed version exists (`update_check`, `desktop/src-tauri/src/update.rs`), the Software Update dialog (`ui/updateDialog.ts`, also Help › Check for Updates) offers it, and `update_install` replaces the app and restarts it. "Later" holds an offer back for a day per version (`word.updateSnooze`, per device). How releases are signed and published is in [Releasing the desktop app](desktop-release.md#updating-the-shell).
+
 ## The Mac menu bar
 
 On a Mac the desktop app shows the menus in the system's menu bar and hides the ones above the document (`MenuBar.setNative`); other systems keep the in-page menus. There is still one list of menus (`Chrome.menus()` in `ui/chrome.ts`) and one set of commands, so nothing is defined twice:
@@ -112,6 +116,8 @@ pnpm desktop:dev
 | `client/src/desktop/vaultCodec.ts` | stored document bytes to and from the vault's file formats (runs in the worker) |
 | `client/src/desktop/convertWorker.ts`, `convertWorkerEntry.ts`, `convertClient.ts` | the worker that runs the codec, and the page's client for it |
 | `client/src/desktop/vaultFormats.ts` | which file names the vault keeps (no converters) |
+| `desktop/src-tauri/src/update.rs` | `update_check` and `update_install` over the updater plugin |
+| `client/src/desktop/updateService.ts`, `client/src/ui/updateDialog.ts` | when to look for an update, and the dialog that offers it |
 | `client/src/desktop/vaultGuest.ts` | the signed-out side: this browser's documents as a `VaultCloud` |
 | `client/src/desktop/vaultService.ts` | the running sync: looks every few seconds, syncs on change |
 | `client/src/ui/vaultDialog.ts` | File › Vault Folder |

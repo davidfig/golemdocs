@@ -102,8 +102,10 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
-import { isDesktopApp } from './desktop/bridge.ts';
+import { desktopUpdater, isDesktopApp } from './desktop/bridge.ts';
 import { VaultService } from './desktop/vaultService.ts';
+import { UpdateService } from './desktop/updateService.ts';
+import { UpdateDialog } from './ui/updateDialog.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
 import { loadTrash, restoreById, type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
@@ -4255,6 +4257,7 @@ const chromeHost = createChromeHost({
   },
   showTrash: () => trashDialog.open(),
   showVault: () => vaultDialog.open(),
+  showUpdates: () => updateDialog.open(),
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
@@ -4472,6 +4475,11 @@ const vaultDialog = new VaultDialog({
   tell: say,
   focusEditor: focusInput,
 });
+
+// Help ▸ Check for Updates (the desktop app only), and the offer that comes by itself when the app finds a newer shell.
+const updateService: UpdateService | null = isDesktopApp() ? UpdateService.create(desktopUpdater(), (offer) => updateDialog.open(offer)) : null;
+const updateDialog = new UpdateDialog({ service: updateService, focusEditor: focusInput });
+updateService?.start();
 
 const VAULT_ASKED_KEY = 'word.vaultAsked';
 

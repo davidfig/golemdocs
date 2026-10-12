@@ -589,6 +589,7 @@ export class Chrome {
       a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
       a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
       a('help.changelog', t('chrome.help.changelog'), { kind: 'openSample', id: 'changelog' }),
+      dialog('help.updates', t('update.menu'), 'updates', { visible: () => isDesktopApp() }),
       a('help.clip', t('chrome.help.clip'), { kind: 'toggleClip' }, { checked: (s) => s.clip }),
     );
   }
@@ -996,7 +997,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
+        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.updates'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).

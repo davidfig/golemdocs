@@ -3,6 +3,7 @@
 ## 0.18.1 - Unreleased
 
 ### Added
+- The desktop app now updates itself: it looks for a new version when it opens and every few hours, asks before installing, and Help › Check for Updates looks right away.
 - A Download section on the home page (golemdocs.com/download) with the desktop app's installers for Mac, Windows and Linux, the one for your computer first.
 
 ## 0.18.0 - 2026-10-12

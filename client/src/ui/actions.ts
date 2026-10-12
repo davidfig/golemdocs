@@ -73,7 +73,9 @@ export type DialogName =
   /** File ▸ Trash: the account's deleted documents. */
   | 'trash'
   /** File ▸ Vault Folder (desktop app): the folder on this computer that keeps a copy of the documents. */
-  | 'vault';
+  | 'vault'
+  /** Help ▸ Check for Updates (desktop app): look for a newer version of the app and install it. */
+  | 'updates';
 
 export type Action =
   // File

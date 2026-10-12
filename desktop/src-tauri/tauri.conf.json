@@ -19,5 +19,11 @@
     "targets": "all",
     "category": "Productivity",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJCQkRDNjMxRjNFNjY5NDIKUldSQ2FlYnpNY2E5dSt6clltRkJjT3FCcXkzaFR3eFZsQzk4TWVVRjZEcnl5YzdVLzdTaEIvWWwK",
+      "endpoints": ["https://golemdocs.com/api/downloads/updater.json"]
+    }
   }
 }

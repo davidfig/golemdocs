@@ -47,6 +47,23 @@ export function desktopBridge(): DesktopBridge | null {
   };
 }
 
+/** Updating the app's shell (the page is the website and updates itself). The endpoint and the key that signatures are checked against are in tauri.conf.json. */
+export interface DesktopUpdater {
+  /** The update on offer, or null when this version is the latest. Rejects when the update server can't be reached. */
+  check(): Promise<{ version: string; notes: string | null } | null>;
+  /** Downloads, verifies and installs the update, then restarts the app (so it only returns by rejecting). */
+  install(): Promise<void>;
+}
+
+export function desktopUpdater(): DesktopUpdater | null {
+  const core = tauriCore();
+  if (!core) return null;
+  return {
+    check: () => core.invoke<{ version: string; notes: string | null } | null>('update_check'),
+    install: () => core.invoke<void>('update_install'),
+  };
+}
+
 /** The native menu bar (macOS): the page sends its menus, a click comes back as the item's id. */
 export interface DesktopMenu {
   set(menus: unknown): Promise<void>;

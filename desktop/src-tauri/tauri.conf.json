@@ -10,7 +10,7 @@
   "app": {
     "withGlobalTauri": true,
     "windows": [
-      { "label": "main", "title": "GolemDocs", "width": 1280, "height": 860, "minWidth": 480, "minHeight": 400 }
+      { "label": "main", "title": "GolemDocs", "width": 1280, "height": 860, "minWidth": 480, "minHeight": 400, "titleBarStyle": "Overlay", "hiddenTitle": true }
     ],
     "security": { "csp": null }
   },

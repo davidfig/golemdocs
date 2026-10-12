@@ -10,6 +10,7 @@ fn main() {
             "vault_read",
             "vault_write",
             "vault_remove",
+            "set_native_menu",
         ])),
     )
     .expect("failed to run tauri-build");

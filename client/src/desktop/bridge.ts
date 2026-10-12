@@ -47,5 +47,27 @@ export function desktopBridge(): DesktopBridge | null {
   };
 }
 
+/** The native menu bar (macOS): the page sends its menus, a click comes back as the item's id. */
+export interface DesktopMenu {
+  set(menus: unknown): Promise<void>;
+  /** Calls `callback` with the id of each item chosen. Returns a function that stops listening. */
+  onClick(callback: (id: string) => void): Promise<() => void>;
+}
+
+interface TauriEvents {
+  listen<T>(event: string, handler: (event: { payload: T }) => void): Promise<() => void>;
+}
+
+export function desktopMenu(): DesktopMenu | null {
+  const tauri = (globalThis as { __TAURI__?: { core?: TauriCore; event?: TauriEvents } }).__TAURI__;
+  const core = tauri?.core;
+  const events = tauri?.event;
+  if (!core || typeof core.invoke !== 'function' || !events) return null;
+  return {
+    set: (menus) => core.invoke<void>('set_native_menu', { menus }),
+    onClick: (callback) => events.listen<string>('native-menu', (event) => callback(event.payload)),
+  };
+}
+
 /** True inside the desktop app. */
 export const isDesktopApp = (): boolean => tauriCore() !== null;

@@ -62,6 +62,24 @@ The vault keeps Word, ODT, RTF, HTML, Markdown, plain text and source files, CSV
 
 Conversion runs on another thread. `convertWorker.ts` (started through `convertWorkerEntry.ts`) runs `vaultCodec.ts`; `convertClient.ts` (`ConvertWorker`, the `VaultCodec` the sync uses) sends it bytes and gets bytes back. The worker starts with the first conversion and ends after 30 seconds with nothing to do, so a vault that is only watched holds no converters in memory; one that dies fails what it was doing and the next sync retries it. The page asks only `vaultFormats.ts` (names, no converters) which files the vault keeps. Like the layout worker, the build keeps the worker's code in a chunk of its own (`vaultCore`, see `worker` in `client/vite.config.ts`), because WebKit, which Tauri uses on macOS, runs a worker's entry script again when a lazy chunk imports it. The converters are only fetched in the desktop app; the sync code in the page is about 14 kB (5 kB gzipped), too small for a chunk of its own.
 
+## The Mac menu bar
+
+On a Mac the desktop app shows the menus in the system's menu bar and hides the ones above the document (`MenuBar.setNative`); other systems keep the in-page menus. There is still one list of menus (`Chrome.menus()` in `ui/chrome.ts`) and one set of commands, so nothing is defined twice:
+
+```
+ Chrome.refresh() --> NativeMenuSync.schedule()  (150 ms, then only if the menus differ)
+                          snapshotMenus(): labels without mnemonics, accelerators, enabled/checked, ids
+                          --> invoke set_native_menu --> menu.rs builds the Menu --> app.set_menu
+ click or shortcut --> menu.rs emits "native-menu" (item id) --> NativeMenuSync.run(id) --> the command
+```
+
+- **Snapshot** (`client/src/desktop/nativeMenu.ts`): the same filtering as the page (`visibleItems`, `hasAvailable`); submenus built on open (Open Recent, samples) are read when the snapshot is made; a heading becomes a row that cannot be chosen. Ids belong to one snapshot; the actions are kept beside it.
+- **Native side** (`desktop/src-tauri/src/menu.rs`): adds the app menu (About, Services, Hide, Quit) and a Window menu around the page's menus. An accelerator the system cannot parse drops only the shortcut, not the item.
+- **Shortcuts are bound by the menu**: the system takes a key that matches a menu item before the page sees it, so every command with a shortcut in a menu runs from the menu event. Not bound: Cut, Copy and Paste (system items, so the editor receives real clipboard events); shortcuts without ⌘ or ⌃ (Shift+Enter must stay a key press); the drawing tools' bare keys.
+- **Guard** (`NativeMenuSync.run`): nothing runs while a dialog is open, and an item that has a shortcut does not run while a text field has the keyboard, as the page's own shortcuts behave. A click cannot be told from a shortcut, so a click on such an item while typing in a field is ignored too.
+- **Title bar**: the window uses `titleBarStyle: Overlay` with a hidden title (`tauri.conf.json`, macOS only), so the page draws under the system's title bar and the menu bar's row becomes it (`MenuBar.setTitleBar`): the document name and the controls on the right sit in that row, a 78 px inset keeps clear of the close, minimize and zoom buttons, and `data-tauri-drag-region` makes the row drag the window (double-click zooms; both need the `core:window` permissions in the capability file). In full screen the buttons go and the inset stays.
+- **Text fields**: the menu takes ⌘A, ⌘Z and ⇧⌘Z from a focused field (the document title, a dialog's box), so `NativeMenuSync` does them in the field (`document.execCommand`) instead of running the document's command. Other menu shortcuts are ignored there. Clicking the document title selects all of it: WebKit drops the selection a focus makes when the mouse button is released, so `DocumentTitle` selects again on that release.
+
 ## Not built yet
 
 - A bundled client that works offline: it needs token auth on the API, because the page would no longer be same-origin with it. It is also the step the iOS and Android targets (`cargo tauri ios init` / `android init`) depend on.
@@ -97,3 +115,5 @@ pnpm desktop:dev
 | `client/src/desktop/vaultGuest.ts` | the signed-out side: this browser's documents as a `VaultCloud` |
 | `client/src/desktop/vaultService.ts` | the running sync: looks every few seconds, syncs on change |
 | `client/src/ui/vaultDialog.ts` | File › Vault Folder |
+| `client/src/desktop/nativeMenu.ts` | the menus as a snapshot for the Mac menu bar; `NativeMenuSync` |
+| `desktop/src-tauri/src/menu.rs` | builds the native menu bar from the snapshot; sends clicks back |

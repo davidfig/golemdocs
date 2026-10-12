@@ -31,7 +31,7 @@ import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
-import { isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
+import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { installFullScreen, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
@@ -46,7 +46,8 @@ import { SyncButton } from './syncButton.ts';
 import { DocumentTitle } from './documentTitle.ts';
 import { displayDocumentName } from '../documentName.ts';
 import { DEFAULT_LAYOUT, MOBILE_KEYS, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
-import { isDesktopApp } from '../desktop/bridge.ts';
+import { desktopMenu, isDesktopApp } from '../desktop/bridge.ts';
+import { NativeMenuSync } from '../desktop/nativeMenu.ts';
 import './ui.css';
 
 export interface ChromeOptions {
@@ -112,6 +113,8 @@ export class Chrome {
   readonly registry: CommandRegistry;
   private state: ChromeState = DEFAULT_STATE;
   private readonly menuBar: MenuBar;
+  /** The desktop app on a Mac shows the menus in the system's menu bar instead of the menu bar above the document. */
+  private nativeMenu: NativeMenuSync | null = null;
   private readonly toolbars: Toolbar[] = [];
   private readonly toolbarsEl: HTMLDivElement;
   private readonly layer: HTMLDivElement;
@@ -149,6 +152,17 @@ export class Chrome {
     setPopupLayer(this.layer);
 
     this.menuBar = new MenuBar(this.registry, this.menus(), this.layer, () => this.mobileMenu());
+    const native = IS_MAC ? desktopMenu() : null;
+    if (native) {
+      this.menuBar.setNative(true);
+      this.menuBar.setTitleBar(true);
+      this.nativeMenu = new NativeMenuSync(this.registry, () => this.menus(), native, {
+        fieldFocused: () => isFormField(document.activeElement),
+        dialogOpen: modalOpen,
+        editField: (edit) => void document.execCommand(edit),
+      });
+      void this.nativeMenu.start();
+    }
     this.toolbarsEl = h('div', { class: 'wm-toolbars' });
     this.toolbarsEl.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -223,6 +237,7 @@ export class Chrome {
   /** Who is signed in changed: the Admin menu appears or goes. */
   accountChanged(): void {
     this.menuBar.refresh();
+    this.nativeMenu?.schedule();
   }
 
   /** The toolbars' row goes when the toolbars are turned off, or when none of them has anything to show. */
@@ -234,6 +249,7 @@ export class Chrome {
     for (const toolbar of this.toolbars) toolbar.refresh(this.state);
     this.syncToolbarsHidden();
     this.menuBar.refresh();
+    this.nativeMenu?.schedule();
     this.syncFormatBox();
     this.syncButton.update(this.state.sync);
     this.accountButton.update(this.state.sync, this.state.subscription);

@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.17.2 - Unreleased
+## 0.17.2 - 2026-10-12
 
 ### Added
 - A desktop app for Mac, Windows and Linux. File › Vault Folder keeps a copy of your documents as ordinary files in a folder on your computer (Markdown, text, Word and the other text formats stay in their own format) and sends changes you make to those files back to your account. If a document changed in both places, the file in your folder wins, and your account keeps the earlier version in its history. Files you delete from the folder go to your account's trash for 30 days. PDFs, pictures and drawings stay in your account. You do not need an account: signed out, the folder is kept in step with the documents saved on this computer in the same way (deleted files go to the trash there), and when you sign in later the folder carries on with your account. A document open in the editor is reloaded when its file is changed in the folder (unless you have unsaved edits in it). The first time you open the desktop app, it opens the Vault Folder dialog so you can choose the folder (or skip it and choose later).

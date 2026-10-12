@@ -153,6 +153,11 @@
 
       #performance .split { grid-template-columns: 1fr 1.6fr; align-items: center; }
       .demo { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+      .dl-meta { margin: 14px 0 0; color: var(--muted); font-size: 0.95rem; }
+      .dl-all { margin-top: 18px; color: var(--muted); font-size: 0.95rem; }
+      .dl-all summary { cursor: pointer; }
+      .dl-all ul { margin: 10px 0 0; padding-left: 1.2rem; }
+      .dl-all li { margin: 4px 0; }
       .closing { text-align: center; }
       .closing .cta { justify-content: center; }
       .closing .sub { margin-inline: auto; }
@@ -198,6 +203,7 @@
           <a href="#formats">格式</a>
           <a href="#pricing">價格</a>
           <a href="#privacy">隱私權</a>
+          <a href="#download">下載</a>
           <a class="btn" href="/">開啟 Golem Docs</a>
         </nav>
       </div>
@@ -433,6 +439,24 @@
         </div>
       </section>
 
+      <section id="download">
+        <div class="wrap">
+          <h2 class="title">桌面版 Golem Docs。</h2>
+          <p class="sub">同一個編輯器，擁有獨立的視窗，並透過保管庫資料夾把你的文件以一般檔案存放在電腦上。在其他應用程式中變更檔案，變更會顯示在這裡，反之亦然。</p>
+          <div id="dl" hidden>
+            <div class="cta"><a class="btn" id="dl-main" href="/api/downloads"></a></div>
+            <p class="dl-meta" id="dl-version"></p>
+            <p class="dl-meta" id="dl-note" hidden>Windows 可能會提示應用程式來自未知的發行者。請選擇「其他資訊」，然後選擇「仍要執行」。</p>
+            <details class="dl-all">
+              <summary>其他下載</summary>
+              <ul id="dl-list"></ul>
+            </details>
+          </div>
+          <p class="dl-meta" id="dl-soon" hidden>桌面版目前還不能下載。</p>
+          <span hidden id="dl-text" data-get="下載 {platform} 版" data-version="版本 {version}" data-mac="Mac" data-windows="Windows" data-linux="Linux"></span>
+        </div>
+      </section>
+
       <section class="closing">
         <div class="wrap">
           <h2 class="title">開啟一份文件，親自看看。</h2>
@@ -484,6 +508,42 @@
             if (entries[0].isIntersecting) { observer.disconnect(); load(); }
           }, { rootMargin: '200px' }).observe(video);
         } else load();
+      })();
+    </script>
+    <script>
+      // The download section: the installers of the latest release (published by `pnpm publish:desktop`), with the one for this computer first.
+      (function () {
+        var box = document.getElementById('dl');
+        if (!box || !window.fetch) return;
+        var text = document.getElementById('dl-text').dataset;
+        var kinds = { mac: /\.dmg$/i, windows: /-setup\.exe$|\.exe$/i, linux: /\.appimage$/i };
+        var agent = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+        var ua = navigator.userAgent || '';
+        var mine = /android|iphone|ipad/i.test(ua) ? '' : /mac/i.test(agent) ? 'mac' : /win/i.test(agent) ? 'windows' : /linux|x11|cros/i.test(agent + ua) ? 'linux' : '';
+        function size(bytes) { return (bytes / 1048576).toFixed(0) + ' MB'; }
+        function link(file) { var a = document.createElement('a'); a.href = '/api/downloads/' + encodeURIComponent(file.name); a.textContent = file.name + ' (' + size(file.size) + ')'; return a; }
+        fetch('/api/downloads').then(function (r) { if (!r.ok) throw new Error('none'); return r.json(); }).then(function (release) {
+          var files = release.files || [];
+          var main = null;
+          if (mine) for (var i = 0; i < files.length && !main; i++) if (files[i].platform === mine && kinds[mine].test(files[i].name)) main = files[i];
+          var button = document.getElementById('dl-main');
+          if (main) {
+            button.href = '/api/downloads/' + encodeURIComponent(main.name);
+            button.textContent = text.get.replace('{platform}', text[mine]);
+            document.getElementById('dl-note').hidden = mine !== 'windows';
+          } else button.parentNode.hidden = true;
+          document.getElementById('dl-version').textContent = text.version.replace('{version}', release.version);
+          var list = document.getElementById('dl-list');
+          ['mac', 'windows', 'linux'].forEach(function (platform) {
+            files.filter(function (f) { return f.platform === platform; }).forEach(function (f) {
+              var li = document.createElement('li');
+              li.appendChild(document.createTextNode(text[platform] + ': '));
+              li.appendChild(link(f));
+              list.appendChild(li);
+            });
+          });
+          box.hidden = false;
+        }).catch(function () { document.getElementById('dl-soon').hidden = false; });
       })();
     </script>
     <script>

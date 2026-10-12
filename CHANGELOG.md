@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.18.1 - Unreleased
+
+### Added
+- A Download section on the home page (golemdocs.com/download) with the desktop app's installers for Mac, Windows and Linux, the one for your computer first.
+
 ## 0.18.0 - 2026-10-12
 
 ### Added

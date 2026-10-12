@@ -5,6 +5,7 @@ import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
+import { handleDownloads } from './downloads.ts';
 import { handleDocuments, ownStorage, resolveAccess, type DocumentRoute } from './documents.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
@@ -57,6 +58,9 @@ const handler: ExportedHandler = {
       }
 
       if (request.method === 'GET' && path === '/api/health') return json({ ok: true });
+
+      // The desktop app's installers are public: they are downloaded before there is an account (downloads.ts).
+      if (path === '/api/downloads' || path.startsWith('/api/downloads/')) return await handleDownloads(request, env, path);
 
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 

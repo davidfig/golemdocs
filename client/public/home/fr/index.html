@@ -153,6 +153,11 @@
 
       #performance .split { grid-template-columns: 1fr 1.6fr; align-items: center; }
       .demo { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+      .dl-meta { margin: 14px 0 0; color: var(--muted); font-size: 0.95rem; }
+      .dl-all { margin-top: 18px; color: var(--muted); font-size: 0.95rem; }
+      .dl-all summary { cursor: pointer; }
+      .dl-all ul { margin: 10px 0 0; padding-left: 1.2rem; }
+      .dl-all li { margin: 4px 0; }
       .closing { text-align: center; }
       .closing .cta { justify-content: center; }
       .closing .sub { margin-inline: auto; }
@@ -198,6 +203,7 @@
           <a href="#formats">Formats</a>
           <a href="#pricing">Tarifs</a>
           <a href="#privacy">Confidentialité</a>
+          <a href="#download">Télécharger</a>
           <a class="btn" href="/">Ouvrir Golem Docs</a>
         </nav>
       </div>
@@ -433,6 +439,24 @@
         </div>
       </section>
 
+      <section id="download">
+        <div class="wrap">
+          <h2 class="title">Golem Docs sur votre ordinateur.</h2>
+          <p class="sub">Le même éditeur dans sa propre fenêtre, avec un dossier coffre qui garde vos documents sous forme de fichiers ordinaires sur votre ordinateur. Modifiez un fichier dans une autre application et la modification apparaît ici, et inversement.</p>
+          <div id="dl" hidden>
+            <div class="cta"><a class="btn" id="dl-main" href="/api/downloads"></a></div>
+            <p class="dl-meta" id="dl-version"></p>
+            <p class="dl-meta" id="dl-note" hidden>Windows peut indiquer que l’application provient d’un éditeur inconnu. Choisissez Informations complémentaires, puis Exécuter quand même.</p>
+            <details class="dl-all">
+              <summary>Autres téléchargements</summary>
+              <ul id="dl-list"></ul>
+            </details>
+          </div>
+          <p class="dl-meta" id="dl-soon" hidden>L’application de bureau n’est pas encore prête à être téléchargée.</p>
+          <span hidden id="dl-text" data-get="Télécharger pour {platform}" data-version="Version {version}" data-mac="Mac" data-windows="Windows" data-linux="Linux"></span>
+        </div>
+      </section>
+
       <section class="closing">
         <div class="wrap">
           <h2 class="title">Ouvrez un document et jugez.</h2>
@@ -484,6 +508,42 @@
             if (entries[0].isIntersecting) { observer.disconnect(); load(); }
           }, { rootMargin: '200px' }).observe(video);
         } else load();
+      })();
+    </script>
+    <script>
+      // The download section: the installers of the latest release (published by `pnpm publish:desktop`), with the one for this computer first.
+      (function () {
+        var box = document.getElementById('dl');
+        if (!box || !window.fetch) return;
+        var text = document.getElementById('dl-text').dataset;
+        var kinds = { mac: /\.dmg$/i, windows: /-setup\.exe$|\.exe$/i, linux: /\.appimage$/i };
+        var agent = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+        var ua = navigator.userAgent || '';
+        var mine = /android|iphone|ipad/i.test(ua) ? '' : /mac/i.test(agent) ? 'mac' : /win/i.test(agent) ? 'windows' : /linux|x11|cros/i.test(agent + ua) ? 'linux' : '';
+        function size(bytes) { return (bytes / 1048576).toFixed(0) + ' MB'; }
+        function link(file) { var a = document.createElement('a'); a.href = '/api/downloads/' + encodeURIComponent(file.name); a.textContent = file.name + ' (' + size(file.size) + ')'; return a; }
+        fetch('/api/downloads').then(function (r) { if (!r.ok) throw new Error('none'); return r.json(); }).then(function (release) {
+          var files = release.files || [];
+          var main = null;
+          if (mine) for (var i = 0; i < files.length && !main; i++) if (files[i].platform === mine && kinds[mine].test(files[i].name)) main = files[i];
+          var button = document.getElementById('dl-main');
+          if (main) {
+            button.href = '/api/downloads/' + encodeURIComponent(main.name);
+            button.textContent = text.get.replace('{platform}', text[mine]);
+            document.getElementById('dl-note').hidden = mine !== 'windows';
+          } else button.parentNode.hidden = true;
+          document.getElementById('dl-version').textContent = text.version.replace('{version}', release.version);
+          var list = document.getElementById('dl-list');
+          ['mac', 'windows', 'linux'].forEach(function (platform) {
+            files.filter(function (f) { return f.platform === platform; }).forEach(function (f) {
+              var li = document.createElement('li');
+              li.appendChild(document.createTextNode(text[platform] + ': '));
+              li.appendChild(link(f));
+              list.appendChild(li);
+            });
+          });
+          box.hidden = false;
+        }).catch(function () { document.getElementById('dl-soon').hidden = false; });
       })();
     </script>
     <script>

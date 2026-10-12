@@ -94,7 +94,7 @@ The dev server must be running (`pnpm dev`, started by you, see AGENTS.md); then
 pnpm desktop:dev
 ```
 
-`pnpm desktop:test` runs the Rust tests; the planner is tested with the rest of the client (`client/test/vaultPlan.test.ts`). `pnpm desktop:build` makes the installer. It needs Rust and `cargo-tauri` (`cargo install tauri-cli`); there is no npm dependency.
+`pnpm desktop:test` runs the Rust tests; the planner is tested with the rest of the client (`client/test/vaultPlan.test.ts`). `pnpm desktop:build` makes the installer for this machine (unsigned); the signed installers for a release are built by CI, see [Releasing the desktop app](desktop-release.md). It needs Rust and `cargo-tauri` (`cargo install tauri-cli`); there is no npm dependency.
 
 ## Key files
 

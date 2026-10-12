@@ -1,0 +1,123 @@
+name: Desktop release
+
+# Builds the desktop app's installers for a release and attaches them to a DRAFT GitHub Release.
+# Push the tag (git push origin vX.Y.Z) after the version bump; publish the draft once the installers are checked.
+# The Mac app is signed and notarized when the Apple secrets exist (docs/architecture/desktop-release.md);
+# without them the build still runs and makes an unsigned one.
+# Windows and Linux builds are not signed yet.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach to (for example v0.18.0)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  # The Tauri command line, from npm without adding it to the workspace (the repository keeps no npm dependency on it).
+  TAURI_CLI: '@tauri-apps/cli@2.12.2'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: The tag matches the app's version
+        run: |
+          want="${TAG#v}"
+          conf=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' desktop/src-tauri/Cargo.toml | head -1)
+          root=$(node -p "require('./package.json').version")
+          echo "tag $want, tauri.conf.json $conf, Cargo.toml $cargo, package.json $root"
+          [ "$conf" = "$want" ] && [ "$cargo" = "$want" ] && [ "$root" = "$want" ] || { echo "::error::version mismatch: bump every version before tagging"; exit 1; }
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon and Intel)
+            os: macos-latest
+            args: --target universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - name: Windows
+            os: windows-latest
+            args: ''
+            rust_targets: ''
+          - name: Linux
+            os: ubuntu-22.04
+            args: ''
+            rust_targets: ''
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust tests
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
+
+      # macOS signing and notarization. The Apple secrets are handed to the build only when they exist, so a repository
+      # without them (or a test run) still makes an unsigned app instead of failing on an empty identity.
+      - name: Mac signing
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::warning::Apple signing secrets are missing: this Mac app will be unsigned and not notarized."
+            exit 0
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            echo "$name=${!name}" >> "$GITHUB_ENV"
+          done
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tauriScript: npx --yes ${{ env.TAURI_CLI }}
+          args: ${{ matrix.args }}
+          tagName: ${{ env.TAG }}
+          releaseName: GolemDocs ${{ env.TAG }}
+          releaseBody: See What's New in the app (Help › What's New) for what changed.
+          releaseDraft: true
+          prerelease: false

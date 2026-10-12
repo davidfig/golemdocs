@@ -2,7 +2,7 @@
   "name": "@golemdocs/docx",
   "private": true,
   "description": "Word (.docx) document model, reader and writer (private workspace package, not on npm)",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

@@ -43,6 +43,14 @@ export abstract class EditorBase {
     return this.list;
   }
 
+  /** The selection as paragraph indexes (among `paragraphs()`) and offsets, or null when it is outside the body (a header, a text box). */
+  selectionIndex(): { anchor: [number, number]; focus: [number, number] } | null {
+    const anchor = this.indexOf(this.selection.anchor.paragraph);
+    const focus = this.indexOf(this.selection.focus.paragraph);
+    if (anchor < 0 || focus < 0) return null;
+    return { anchor: [anchor, this.selection.anchor.offset], focus: [focus, this.selection.focus.offset] };
+  }
+
   protected indexOf(p: Paragraph): number {
     this.paragraphs();
     return this.order!.get(p) ?? -1;

@@ -39,7 +39,7 @@ Database `word`, version 7. Object stores:
 | `folders` | the guest (signed-out) folder hierarchy |
 | `search` | per-document full-text index cache (`search/searchLibrary.ts`) |
 
-Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/shared/folder lists as last listed, for an instant dashboard; `sync.ts`), `golem.account` (last signed-in user, so offline still shows their documents; `auth.ts`), `golem.settingsSync` (settings baseline), `golemdocs.views` (per-document scroll and zoom, `viewMemory.ts`, capped at 200).
+Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/shared/folder lists as last listed, for an instant dashboard; `sync.ts`), `golem.account` (last signed-in user, so offline still shows their documents; `auth.ts`), `golem.settingsSync` (settings baseline), `golemdocs.views` (per-document scroll, zoom, caret and selection, `viewMemory.ts`, capped at 200).
 
 ## Ownership rules for local copies
 

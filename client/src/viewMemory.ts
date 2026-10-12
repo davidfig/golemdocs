@@ -1,5 +1,5 @@
-// Where each document was left: the scroll position and zoom, kept in this browser so reopening a
-// document puts the view back. Keyed by the document's source ("local:<id>", "cloud:<id>", ...),
+// Where each document was left: the scroll position, zoom, caret and selection, kept in this
+// browser so reopening a document puts them back. Keyed by the document's source ("local:<id>", "cloud:<id>", ...),
 // newest first, and capped so it never grows without bound.
 
 const STORAGE_KEY = 'golemdocs.views';
@@ -14,17 +14,20 @@ export interface SavedCamera {
   reflow: boolean;
 }
 
-/** Where the caret was: a page's index and a point on it (points from the page's corner). */
-export interface SavedCaret {
-  page: number;
-  x: number;
-  y: number;
+/** A place in the text: a paragraph's index among the document's paragraphs, and an offset in it. */
+export type TextPlace = [paragraph: number, offset: number];
+
+/** Where the caret and selection were, as places in the text (so they survive a different window width, view or zoom). */
+export interface SavedSelection {
+  anchor: TextPlace;
+  /** Where the caret is; the same as `anchor` with nothing selected. */
+  focus: TextPlace;
 }
 
-/** Where a document was left. Either part is missing when it was never moved. */
+/** Where a document was left. A part is missing when there was none to keep. */
 export interface SavedView {
   camera?: SavedCamera;
-  caret?: SavedCaret;
+  selection?: SavedSelection;
 }
 
 const numbers = (o: Record<string, unknown>, keys: string[]) => keys.every((k) => typeof o[k] === 'number' && Number.isFinite(o[k]));
@@ -32,9 +35,10 @@ const isCamera = (v: unknown): v is SavedCamera => {
   const o = v as Record<string, unknown> | null;
   return !!o && numbers(o, ['x', 'y', 'zoom']) && (o.zoom as number) > 0 && typeof o.reflow === 'boolean';
 };
-const isCaret = (v: unknown): v is SavedCaret => {
+const isPlace = (v: unknown): v is TextPlace => Array.isArray(v) && v.length === 2 && v.every((n) => Number.isInteger(n) && n >= 0);
+const isSelection = (v: unknown): v is SavedSelection => {
   const o = v as Record<string, unknown> | null;
-  return !!o && numbers(o, ['page', 'x', 'y']) && (o.page as number) >= 0;
+  return !!o && isPlace(o.anchor) && isPlace(o.focus);
 };
 /** A stored view with only its valid parts, or null if none is. */
 const cleanView = (v: unknown): SavedView | null => {
@@ -42,8 +46,8 @@ const cleanView = (v: unknown): SavedView | null => {
   if (!o || typeof o !== 'object') return null;
   const view: SavedView = {};
   if (isCamera(o.camera)) view.camera = o.camera;
-  if (isCaret(o.caret)) view.caret = o.caret;
-  return view.camera || view.caret ? view : null;
+  if (isSelection(o.selection)) view.selection = { anchor: o.selection.anchor, focus: o.selection.focus };
+  return view.camera || view.selection ? view : null;
 };
 
 /** The saved views, most recently left first. */

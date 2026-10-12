@@ -93,7 +93,9 @@ export type LegalPage = 'privacy' | 'terms';
 
 /** An editor command as sent from the page: pages are referred to by id. */
 export type WireCommand =
-  | Exclude<Command, { kind: 'pointer' | 'formatText' | 'formatParagraphs' | 'changeCase' }>
+  | Exclude<Command, { kind: 'pointer' | 'select' | 'formatText' | 'formatParagraphs' | 'changeCase' }>
+  /** `quiet`: the view is left where it is (a selection put back as a document reopens, where the view was put back too). */
+  | (Extract<Command, { kind: 'select' }> & { quiet?: boolean })
   | (Omit<Extract<Command, { kind: 'pointer' }>, 'page'> & { page: number })
   | { kind: 'undo' }
   | { kind: 'redo' }
@@ -320,6 +322,8 @@ export interface SelectionUpdate {
   /** Highlight rectangles: page id, x, y, width, height per rectangle. */
   rects: Float64Array;
   focus: { page: number; x: number; y: number; height: number } | null;
+  /** The selection as positions in the text (paragraph index, offset), or null when it is outside the body. */
+  at?: { anchor: [number, number]; focus: [number, number] } | null;
   /** Scroll the focus into view (keyboard and edits, not clicks). */
   reveal: boolean;
   /** Selected text, for copy and cut. */

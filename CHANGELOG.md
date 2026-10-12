@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.14.1 - 2026-10-10
+
+### Fixed
+- Reopening a document now puts the caret and any selected text back exactly where they were, even in a window of another size or another view, and remembers where you left it however you opened it (from the Documents screen, the Files Sidebar or its address). The scroll position is kept too when you moved it by typing or with the keyboard, not only by scrolling.
+- The status bar no longer shows the Wrap Long Lines button for documents, or the Print Layout, Flow and Page Grid buttons for plain text files, where they did nothing.
+
 ## 0.14.0 - 2026-10-06
 
 ### Added

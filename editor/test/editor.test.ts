@@ -343,6 +343,18 @@ test('select puts the selection on a range of a paragraph', skip, async () => {
   assert.equal(editor.selectedText(), 'two', 'a paragraph that is not there changes nothing');
 });
 
+test('the selection as paragraph indexes comes back through select, backwards across paragraphs too', skip, async () => {
+  const { editor, apply } = await setup(['One two', 'three four', 'five']);
+  await apply({ kind: 'select', paragraph: 2, from: 2, toParagraph: 0, to: 4 });
+  assert.equal(editor.selectedText(), 'two\nthree four\nfi');
+  assert.deepEqual(editor.selectionIndex(), { anchor: [2, 2], focus: [0, 4] }, 'the caret is at the end it was taken to');
+  await apply({ kind: 'select', paragraph: 1, from: 3, toParagraph: 1, to: 3 });
+  assert.equal(editor.collapsed, true);
+  assert.deepEqual(editor.selectionIndex(), { anchor: [1, 3], focus: [1, 3] });
+  await apply({ kind: 'select', paragraph: 0, from: 0, toParagraph: 2, to: 99 });
+  assert.deepEqual(editor.selectionIndex(), { anchor: [0, 0], focus: [2, 4] }, 'past the end stops at the end');
+});
+
 test('whole-word find and replace, and replace all staying at the selected match', skip, async () => {
   const { editor, apply, texts } = await setup(['ab abc ab', 'cab ab']);
   await apply({ kind: 'move', to: 'documentStart' });

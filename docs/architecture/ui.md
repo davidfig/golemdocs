@@ -40,7 +40,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/dashboard.ts` | Documents screen (thumbnails, folders, selection) |
 | `client/src/ui/*Layer.ts`, `vectorEditor.ts`, `vectorSession.ts` | DOM layers over the canvas (forms, PDF text, pointers, vector editing) |
 | `client/src/view/camera.ts` | `Camera`: document points to canvas; zoom and scroll only change uniforms |
-| `client/src/viewMemory.ts` | Per-document scroll and zoom (device-local) |
+| `client/src/viewMemory.ts` | Per-document scroll, zoom, caret and selection (device-local) |
 | `client/src/settingsSync.ts` | Account-synced preferences |
 | `client/src/spelling/` | `dictionary.ts` (Hunspell reader), `check.ts`, `grammar.ts`, `languages.ts`, `appWords.ts` |
 | `client/src/i18n/` | `t()`, `en/` catalog, `locales.ts`, `locales/` translations |

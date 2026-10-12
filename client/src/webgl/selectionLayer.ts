@@ -45,6 +45,8 @@ export class SelectionLayer {
   caretPage: number | null = null;
   caret: SelectionUpdate['caret'] = null;
   focus: SelectionUpdate['focus'] = null;
+  /** The selection as positions in the text, or null when it is outside the body. */
+  at: SelectionUpdate['at'] = null;
   /** Other people's carets, as last received. */
   others: SelectionUpdate['remote'] = [];
   text = '';
@@ -69,6 +71,7 @@ export class SelectionLayer {
     this.updateSquiggles(selection.spellMarks);
     this.caret = selection.caret;
     this.focus = selection.focus;
+    this.at = selection.at ?? null;
     this.text = selection.text;
     this.others = selection.remote;
     // Other people's carets: a bar in their color with a small flag on top.
@@ -167,6 +170,7 @@ export class SelectionLayer {
     this.caretPage = null;
     this.caret = null;
     this.focus = null;
+    this.at = null;
     this.text = '';
   }
 }

@@ -307,7 +307,7 @@ let loaded = false;
 let cameraPlaced = false;
 /** The user has scrolled or zoomed since opening (streaming then stops moving the camera). */
 let userMoved = false;
-/** The source of the open document (`local:<id>`, ...), which its scroll position and zoom are remembered under. */
+/** The source of the open document (`local:<id>`, ...); its view is remembered under `viewMemoryKey`. */
 let viewDocKey: string | null = null;
 /** The source the next open() is for, until that call takes it as `viewKey`. */
 let wantedDocKey: string | null = null;
@@ -316,18 +316,24 @@ let pendingView: SavedView | null = null;
 /** `pendingView` was used to place the camera. */
 let viewRestored = false;
 
+/**
+ * What a document's view is remembered under: its copy in this browser when it has one, so it is the same
+ * however it was opened (`cloud:<id>` opens the account's copy through this browser's), else its source.
+ */
+const viewMemoryKey = (localId: string | null | undefined, source: string | null): string | null => (localId ? `local:${localId}` : source);
+
 /** The caret is in text that a click can put it back in (not a picture, a grid or a PDF's own pages). */
 const textCaret = (): boolean => !grid && !annotating && !isPicture() && !isDrawing();
 
-/** Remembers where the open document is scrolled to and its zoom, so opening it again returns there. */
+/** Remembers where the open document is scrolled to, its zoom, caret and selection, so opening it again returns there. */
 function rememberView(): void {
-  if (!viewDocKey || !loaded || !cameraPlaced) return;
+  const key = viewMemoryKey(current.localId, viewDocKey);
+  if (!key || !loaded || !cameraPlaced) return;
   const view: SavedView = {};
-  if (userMoved && !grid) view.camera = { x: camera.x, y: camera.y, zoom: camera.zoom, reflow: reflowing() };
-  const caret = selection.caret;
-  const page = caret ? pages.findIndex((p) => p.id === caret.page) : -1;
-  if (caret && page >= 0 && textCaret()) view.caret = { page, x: caret.x, y: caret.y + caret.height / 2 };
-  if (view.camera || view.caret) saveView(viewDocKey, view);
+  if (!grid) view.camera = { x: camera.x, y: camera.y, zoom: camera.zoom, reflow: reflowing() };
+  const at = selection.at;
+  if (at && textCaret()) view.selection = { anchor: at.anchor, focus: at.focus };
+  if (view.camera || view.selection) saveView(key, view);
 }
 
 /**
@@ -377,7 +383,8 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   rememberView();
   viewDocKey = wantedDocKey;
   wantedDocKey = null;
-  pendingView = viewDocKey ? loadView(viewDocKey) : null;
+  const key = viewMemoryKey(options.localId, viewDocKey);
+  pendingView = (key && loadView(key)) || (viewDocKey && loadView(viewDocKey)) || null;
   commandsAtOpen = commandsSent;
   viewRestored = false;
   cropLayer.cancel();
@@ -507,10 +514,12 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       if (pendingView) {
         // Streaming is over, so the restored position can be held to the real page bounds now.
         if (viewRestored) userMoved = true;
-        const caret = pendingView.caret;
-        const page = caret && textCaret() ? pages[caret.page] : undefined;
+        const saved = pendingView.selection;
         // Not in a document with comments: a caret put back inside commented text would open that thread (even a resolved one).
-        if (caret && page && commandsSent === commandsAtOpen && comments.length === 0) send({ kind: 'pointer', page: page.id, x: caret.x, y: caret.y });
+        if (saved && textCaret() && commandsSent === commandsAtOpen && comments.length === 0) {
+          // Where the view was put back too, it stays; otherwise the caret is scrolled into view.
+          send({ kind: 'select', paragraph: saved.anchor[0], from: saved.anchor[1], toParagraph: saved.focus[0], to: saved.focus[1], quiet: viewRestored });
+        }
         pendingView = null;
       }
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
@@ -2947,10 +2956,13 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 /** Commands that change a PDF's annotations (on its own pages, nothing else changes). */
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
-/** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
+/** Commands the app sends by itself as a document opens (spelling, word counts): they say nothing about the user having touched it. */
+const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'autoFormat', 'autoCorrect', 'livePreview']);
+
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
 onLivePreview((on) => worker.command({ kind: 'livePreview', on }));
+/** Commands the user caused so far: the saved caret and selection are only put back if there have been none since the document opened. */
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
 let commandsAtOpen = 0;
@@ -2958,8 +2970,8 @@ let commandsAtOpen = 0;
 function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
-  commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (!BACKGROUND_COMMANDS.has(command.kind)) commandsSent++;
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'livePreview' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }

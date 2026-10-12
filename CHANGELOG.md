@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.18.0 - Unreleased
+
+### Added
+- A page left open now notices when Golem Docs has been updated and offers to reload into the new version, saving what is open first.
+
 ## 0.17.1 - 2026-10-09
 
 ### Fixed

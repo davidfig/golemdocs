@@ -71,6 +71,10 @@ export const dialogs: Partial<Messages> = {
   'dialogs.newVersion.view': '새로운 기능 보기',
   'dialogs.newVersion.off': '다시 표시 안 함',
   'dialogs.newVersion.close': '닫기',
+  'dialogs.update.label': '업데이트 사용 가능',
+  'dialogs.update.message': 'Golem Docs의 새 버전이 있습니다. 작업 내용이 먼저 저장됩니다.',
+  'dialogs.update.reload': '새로 고침',
+  'dialogs.update.later': '나중에',
 
   // Shared computer notice
   'dialogs.sharedDevice.label': '공용 컴퓨터',

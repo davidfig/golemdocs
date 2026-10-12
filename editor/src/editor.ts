@@ -136,9 +136,12 @@ export class Editor extends EditorTables {
           const length = paragraphLength(paragraph);
           // Ending in another paragraph (`until`, at its start): the selection runs from here to there, across table cells too.
           const end = command.until === undefined ? undefined : list[command.until];
+          const other = command.toParagraph === undefined ? undefined : list[command.toParagraph];
           this.selection = end
             ? { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph: end, offset: 0 } }
-            : { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph, offset: Math.min(command.to, length) } };
+            : other
+              ? { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph: other, offset: Math.min(command.to, paragraphLength(other)) } }
+              : { anchor: { paragraph, offset: Math.min(command.from, length) }, focus: { paragraph, offset: Math.min(command.to, length) } };
         }
         return NO_CHANGE;
       }

@@ -347,7 +347,7 @@ function applySettings(wire: WireCommand): void {
   else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -647,6 +647,7 @@ class OpenDocument {
       commentRects,
       spellMarks: this.spellMarks(editor),
       focus: caret(g.focus),
+      at: editor.selectionIndex(),
       reveal: this.reveal,
       text: editor.selectedText(CLIPBOARD_LIMIT),
       format: this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
@@ -2016,7 +2017,7 @@ class OpenDocument {
     // Shown as PDF: selecting and moving only.
     if ((this.format === 'pdf' || this.readOnly) && !VIEW_COMMANDS.has(wire.kind)) return;
     if (wire.kind === 'insertParagraph' && this.endEmptyListItem(editor)) return;
-    this.reveal = wire.kind !== 'pointer';
+    this.reveal = wire.kind !== 'pointer' && !(wire.kind === 'select' && wire.quiet);
     this.commandAt = performance.now();
     // Backspace right after a shortcut turned into formatting takes it back to the characters typed.
     const converted = this.converted;

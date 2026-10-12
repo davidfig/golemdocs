@@ -267,6 +267,28 @@
   background: var(--wm-face);
 }
 
+.wm-titlebar-inset {
+  flex: none;
+  /* The window's close, minimize and zoom buttons, drawn over this corner by the system. */
+  width: 78px;
+}
+
+/* The desktop app on a Mac: the row is the title bar (see MenuBar.setTitleBar), a little taller for the buttons. */
+html.wm-titlebar .wm-menubar {
+  height: 30px;
+  padding-top: 0;
+}
+
+html.wm-titlebar .wm-doctitle,
+html.wm-titlebar .wm-format {
+  top: 5px;
+}
+
+.wm-menubar.wm-native .wm-title,
+.wm-menubar.wm-native .wm-hamburger {
+  display: none;
+}
+
 .wm-title {
   padding: 0 7px;
   margin: 0;
@@ -2879,6 +2901,12 @@ body.wm-fullscreen .wm-toolbars {
 
 .wm-footer-view:disabled {
   color: var(--wm-disabled);
+}
+
+/* The class's display would otherwise beat the attribute: documents show the views, text files the wrap button. */
+.wm-footer-views[hidden],
+.wm-footer-view[hidden] {
+  display: none;
 }
 
 .wm-footer-view:focus-visible {

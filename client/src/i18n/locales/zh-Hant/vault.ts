@@ -1,0 +1,28 @@
+import type { Catalog } from '../../index.ts';
+
+export const vault: Catalog = {
+  'vault.menu': '保管庫資料夾…',
+  'vault.menu.tip': '在這台電腦的資料夾中以檔案形式保留文件副本，並讓兩者保持同步',
+  'vault.title': '保管庫資料夾',
+  'vault.intro': '你的文件會以檔案形式存放在這台電腦的資料夾中。在那裡變更檔案，變更會傳送到你的帳號；在帳號中變更文件，檔案也會隨之更新。如果兩邊都變更了，以資料夾中的檔案為準，帳號會在紀錄中保留先前的版本。',
+  'vault.noFolder': '尚未選擇資料夾。',
+  'vault.folder': '資料夾：{path}',
+  'vault.choose': '選擇資料夾…',
+  'vault.change': '更換資料夾…',
+  'vault.stop': '停止同步',
+  'vault.syncNow': '立即同步',
+  'vault.close': '關閉',
+  'vault.signedOut': '此資料夾與某個帳號相關聯。請登入該帳號以繼續同步。',
+  'vault.status.syncing': '正在同步…',
+  'vault.status.idle': '已是最新。上次同步：{when}。',
+  'vault.status.waiting': '等待同步。',
+  'vault.status.offline': '你已離線。恢復連線後將繼續同步。',
+  'vault.status.error': '有些檔案無法同步：{message}',
+  'vault.status.wrongAccount': '此資料夾屬於另一個帳號。請選擇其他資料夾。',
+  'vault.status.blocked': '資料夾中缺少 {count} 個檔案。如果你是有意刪除，它們會在帳號的資源回收筒中保留 30 天。',
+  'vault.deleteMissing': '刪除 {count} 份文件',
+  'vault.skipped': '{count} 份文件（PDF、圖片或繪圖）會保留在你的帳號中，不會複製到資料夾。',
+  'vault.introLocal': '你的文件會以檔案形式存放在這台電腦的資料夾中。在那裡變更檔案，這裡的文件會隨之更新；在這裡變更文件，檔案也會更新。如果兩邊都變更了，以資料夾中的檔案為準，先前的版本會保留在文件的紀錄中。',
+  'vault.status.blockedLocal': '資料夾中缺少 {count} 個檔案。如果你是有意刪除，它們會在資源回收筒中保留 30 天。',
+  'vault.skippedLocal': '{count} 份文件（PDF、圖片或繪圖）不會複製到資料夾。',
+};

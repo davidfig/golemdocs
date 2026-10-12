@@ -79,7 +79,8 @@ export default defineConfig({
         // starts a second copy of the worker with no open document and takes over its messages.
         // The worker's code is kept in its own chunk, so the entry (layoutWorkerEntry.ts) is a stub
         // that nothing imports.
-        manualChunks: (id) => (/[\\/]src[\\/]layout[\\/]layoutWorker\.ts$/.test(id) ? 'layoutCore' : undefined),
+        // The desktop app's convert worker (src/desktop/convertWorker.ts) is the same: its formats are lazy chunks too.
+        manualChunks: (id) => (/[\\/]src[\\/]layout[\\/]layoutWorker\.ts$/.test(id) ? 'layoutCore' : /[\\/]src[\\/]desktop[\\/]convertWorker\.ts$/.test(id) ? 'vaultCore' : undefined),
       },
     },
   },

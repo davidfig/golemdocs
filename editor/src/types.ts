@@ -83,8 +83,11 @@ export type Command =
   | { kind: 'find'; text: string; matchCase?: boolean; backward?: boolean; wholeWord?: boolean; regex?: boolean }
   /** Replaces every match of `text` in the document. */
   | { kind: 'replaceAll'; text: string; with: string; matchCase?: boolean; wholeWord?: boolean; regex?: boolean }
-  /** Selects positions [from, to) of the paragraph at `paragraph` (its index among the document's paragraphs); with `until`, from `from` there to the start of paragraph `until`. */
-  | { kind: 'select'; paragraph: number; from: number; to: number; until?: number }
+  /**
+   * Selects positions [from, to) of the paragraph at `paragraph` (its index among the document's paragraphs); with `until`, from `from` there to the start of paragraph `until`;
+   * with `toParagraph`, from `from` in `paragraph` to `to` in `toParagraph` (either way round: the caret ends at `to`).
+   */
+  | { kind: 'select'; paragraph: number; from: number; to: number; until?: number; toParagraph?: number }
   /**
    * Makes the selected text a link to `url` (keeping its formatting when `text` is what it says),
    * or inserts a link showing `text` at the caret. Inside a link, changes that link instead.

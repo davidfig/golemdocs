@@ -48,6 +48,19 @@ export class DocumentTitle {
     this.measure = h('span', { class: 'wm-doctitle-measure', attrs: { 'aria-hidden': 'true' } });
     this.presence = h('div', { class: 'wm-presence', attrs: { role: 'img' } });
     this.el = h('div', { class: 'wm-doctitle', attrs: { hidden: '' } }, this.input, this.presence, this.measure);
+    // Clicking the name selects all of it, so typing replaces it. Chrome keeps the selection a focus makes; WebKit (Safari, and the
+    // desktop app's window) lets the mouse button's release put the caret at the click and drop it, so that release is cancelled
+    // when it ends the click that gave the field focus.
+    let focusedByPress = false;
+    this.input.addEventListener('mousedown', () => {
+      focusedByPress = document.activeElement !== this.input;
+    });
+    this.input.addEventListener('mouseup', (e) => {
+      if (!focusedByPress) return;
+      focusedByPress = false;
+      e.preventDefault();
+      this.input.select();
+    });
     this.input.addEventListener('focus', () => {
       this.editing = true;
       this.input.select();

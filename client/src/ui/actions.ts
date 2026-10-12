@@ -71,7 +71,9 @@ export type DialogName =
   /** File ▸ Version History: the earlier versions of the open document. */
   | 'versionHistory'
   /** File ▸ Trash: the account's deleted documents. */
-  | 'trash';
+  | 'trash'
+  /** File ▸ Vault Folder (desktop app): the folder on this computer that keeps a copy of the documents. */
+  | 'vault';
 
 export type Action =
   // File

@@ -356,6 +356,8 @@ export class MenuBar {
   cues = false;
   /** Alt went down with no other key since. */
   private altAlone = false;
+  /** The menus are in the system's menu bar (the desktop app on a Mac): the titles here are hidden and Alt and F10 do nothing. */
+  private native = false;
 
   constructor(
     readonly registry: CommandRegistry,
@@ -391,8 +393,8 @@ export class MenuBar {
       this.el.append(title);
     });
 
-    window.addEventListener('keydown', (e) => this.keydown(e), true);
-    window.addEventListener('keyup', (e) => this.keyup(e), true);
+    window.addEventListener('keydown', (e) => !this.native && this.keydown(e), true);
+    window.addEventListener('keyup', (e) => !this.native && this.keyup(e), true);
     window.addEventListener(
       'pointerdown',
       (e) => {
@@ -405,6 +407,34 @@ export class MenuBar {
     window.addEventListener('blur', () => this.close(false));
     window.addEventListener('resize', () => this.close(false));
   }
+
+  /** Hands the menus to the system's menu bar, or takes them back. */
+  setNative(on: boolean): void {
+    this.native = on;
+    if (on) this.close(false);
+    this.el.classList.toggle('wm-native', on);
+  }
+
+  /**
+   * The bar is the window's title bar (the desktop app on a Mac lets the page draw under the system's): room is kept at the left
+   * for the window's close, minimize and zoom buttons, and the bar moves the window when dragged. The document name and the controls
+   * at the right sit in this row, so the space the menus left is used instead of lost.
+   */
+  setTitleBar(on: boolean): void {
+    document.documentElement.classList.toggle('wm-titlebar', on);
+    this.inset?.remove();
+    this.inset = null;
+    if (on) {
+      // `data-tauri-drag-region` drags the window from the element it is on, not from what is inside it.
+      this.inset = h('div', { class: 'wm-titlebar-inset', attrs: { 'data-tauri-drag-region': '' } });
+      this.el.prepend(this.inset);
+      this.el.setAttribute('data-tauri-drag-region', '');
+    } else {
+      this.el.removeAttribute('data-tauri-drag-region');
+    }
+  }
+
+  private inset: HTMLElement | null = null;
 
   get active(): boolean {
     return this.mode !== 'idle';

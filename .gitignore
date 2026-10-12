@@ -27,3 +27,7 @@ e2e/.state-*
 e2e/.results-*
 e2e/.progress
 server/.no-assets/
+
+# Tauri desktop app
+desktop/src-tauri/target
+desktop/src-tauri/gen

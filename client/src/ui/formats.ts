@@ -455,6 +455,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
         case 'properties':
         case 'versionHistory':
         case 'trash':
+        case 'vault':
           return true;
         case 'replace':
         case 'pasteSpecial':

@@ -12,6 +12,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Document model and editing](architecture/document-model.md) | Commands to operations, undo and redo, selection, clipboard, find and replace, the other editors |
 | [Formats](architecture/formats.md) | `FormatHandler` registry, the `.wdoc` container, DOCX, ODT, PDF, Markdown, conversion loss, adding a format |
 | [Storage and sync](architecture/storage-and-sync.md) | IndexedDB, local and cloud copies, ownership, the upload queue, offline behavior, settings sync |
+| [Desktop app](architecture/desktop.md) | The Tauri shell, the vault folder and how it syncs with the account |
 | [Server](architecture/server.md) | Worker routing, sign-in, D1 and R2 layout, sharing, billing, search, environments |
 | [Collaboration](architecture/collaboration.md) | Rooms, the central log, handoff and settle, one gateway and one transport |
 | [Assistant](architecture/assistant.md) | The AI assistant loop, tools, the parity rule, search, limits |

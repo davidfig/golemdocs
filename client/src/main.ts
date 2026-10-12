@@ -102,6 +102,9 @@ import { attachTextInput, editKey, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
+import { VaultDialog } from './ui/vaultDialog.ts';
+import { isDesktopApp } from './desktop/bridge.ts';
+import { VaultService } from './desktop/vaultService.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
 import { loadTrash, restoreById, type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
@@ -311,7 +314,7 @@ let loaded = false;
 let cameraPlaced = false;
 /** The user has scrolled or zoomed since opening (streaming then stops moving the camera). */
 let userMoved = false;
-/** The source of the open document (`local:<id>`, ...), which its scroll position and zoom are remembered under. */
+/** The source of the open document (`local:<id>`, ...); its view is remembered under `viewMemoryKey`. */
 let viewDocKey: string | null = null;
 /** The source the next open() is for, until that call takes it as `viewKey`. */
 let wantedDocKey: string | null = null;
@@ -320,18 +323,24 @@ let pendingView: SavedView | null = null;
 /** `pendingView` was used to place the camera. */
 let viewRestored = false;
 
+/**
+ * What a document's view is remembered under: its copy in this browser when it has one, so it is the same
+ * however it was opened (`cloud:<id>` opens the account's copy through this browser's), else its source.
+ */
+const viewMemoryKey = (localId: string | null | undefined, source: string | null): string | null => (localId ? `local:${localId}` : source);
+
 /** The caret is in text that a click can put it back in (not a picture, a grid or a PDF's own pages). */
 const textCaret = (): boolean => !grid && !annotating && !isPicture() && !isDrawing();
 
-/** Remembers where the open document is scrolled to and its zoom, so opening it again returns there. */
+/** Remembers where the open document is scrolled to, its zoom, caret and selection, so opening it again returns there. */
 function rememberView(): void {
-  if (!viewDocKey || !loaded || !cameraPlaced) return;
+  const key = viewMemoryKey(current.localId, viewDocKey);
+  if (!key || !loaded || !cameraPlaced) return;
   const view: SavedView = {};
-  if (userMoved && !grid) view.camera = { x: camera.x, y: camera.y, zoom: camera.zoom, reflow: reflowing() };
-  const caret = selection.caret;
-  const page = caret ? pages.findIndex((p) => p.id === caret.page) : -1;
-  if (caret && page >= 0 && textCaret()) view.caret = { page, x: caret.x, y: caret.y + caret.height / 2 };
-  if (view.camera || view.caret) saveView(viewDocKey, view);
+  if (!grid) view.camera = { x: camera.x, y: camera.y, zoom: camera.zoom, reflow: reflowing() };
+  const at = selection.at;
+  if (at && textCaret()) view.selection = { anchor: at.anchor, focus: at.focus };
+  if (view.camera || view.selection) saveView(key, view);
 }
 
 /**
@@ -386,7 +395,8 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   rememberView();
   viewDocKey = wantedDocKey;
   wantedDocKey = null;
-  pendingView = viewDocKey ? loadView(viewDocKey) : null;
+  const key = viewMemoryKey(options.localId, viewDocKey);
+  pendingView = (key && loadView(key)) || (viewDocKey && loadView(viewDocKey)) || null;
   commandsAtOpen = commandsSent;
   viewRestored = false;
   cropLayer.cancel();
@@ -519,10 +529,12 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       if (pendingView) {
         // Streaming is over, so the restored position can be held to the real page bounds now.
         if (viewRestored) userMoved = true;
-        const caret = pendingView.caret;
-        const page = caret && textCaret() ? pages[caret.page] : undefined;
+        const saved = pendingView.selection;
         // Not in a document with comments: a caret put back inside commented text would open that thread (even a resolved one).
-        if (caret && page && commandsSent === commandsAtOpen && comments.length === 0) send({ kind: 'pointer', page: page.id, x: caret.x, y: caret.y });
+        if (saved && textCaret() && commandsSent === commandsAtOpen && comments.length === 0) {
+          // Where the view was put back too, it stays; otherwise the caret is scrolled into view.
+          send({ kind: 'select', paragraph: saved.anchor[0], from: saved.anchor[1], toParagraph: saved.focus[0], to: saved.focus[1], quiet: viewRestored });
+        }
         pendingView = null;
       }
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
@@ -1263,6 +1275,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   if ((account?.id ?? null) !== drawnFor) library.reset();
   drawnFor = account?.id ?? null;
   await refreshLibrary();
+  void connectVault();
   if (account) {
     uploads.add(...library.local.filter(hasUnsentChanges).map((info) => info.id));
     void flushUploads();
@@ -3245,9 +3258,12 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 /** Commands that change a PDF's annotations (on its own pages, nothing else changes). */
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
-/** Commands sent so far: the saved caret is only put back if the user has sent none since the document opened. */
+/** Commands the app sends by itself as a document opens (spelling, word counts): they say nothing about the user having touched it. */
+const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'autoFormat', 'autoCorrect']);
+
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
+/** Commands the user caused so far: the saved caret and selection are only put back if there have been none since the document opened. */
 let commandsSent = 0;
 /** `commandsSent` when the document being opened was asked for. */
 let commandsAtOpen = 0;
@@ -3255,8 +3271,8 @@ let commandsAtOpen = 0;
 function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
-  commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (!BACKGROUND_COMMANDS.has(command.kind)) commandsSent++;
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -4239,6 +4255,7 @@ const chromeHost = createChromeHost({
     void saving.then(() => versionHistoryDialog.open());
   },
   showTrash: () => trashDialog.open(),
+  showVault: () => vaultDialog.open(),
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
@@ -4446,6 +4463,54 @@ const trashDeps: TrashDeps = {
     if (account && (!item || item.source === 'account')) await purgeTrash(item?.id);
   },
 };
+// File ▸ Vault Folder (the desktop app only): a folder on this computer that keeps a copy of the account's documents. The sync
+// code is about 11 kB, too small to be worth a chunk of its own (see AGENTS.md); it only runs in the desktop app.
+let vaultService: VaultService | null = null;
+const vaultDialog = new VaultDialog({
+  get service() {
+    return vaultService;
+  },
+  tell: say,
+  focusEditor: focusInput,
+});
+
+const VAULT_ASKED_KEY = 'word.vaultAsked';
+
+/**
+ * A sync changed documents: the list is read again, and the open document, if a file in the folder just replaced it (or it
+ * was renamed or deleted there), is opened again from what is stored. The file wins, as in the sync. One with edits not yet saved
+ * (or one other people are editing at once) is left as it is: it is saved or merged the ordinary way, and the next sync decides.
+ */
+async function vaultChanged(touched: string[]): Promise<void> {
+  await refreshLibrary();
+  const doc = current;
+  if (!doc.localId || doc.shared || doc.unsavedSince !== 0 || doc.room?.mode === 'shared') return;
+  const entry = library.entries.find((e) => e.local?.id === doc.localId);
+  const cloudId = entry?.cloud?.id ?? entry?.local?.cloudId;
+  if (!touched.includes(doc.localId) && !(cloudId && touched.includes(cloudId))) return;
+  // The account's copy has the file's text now: make this browser's copy that, unless it has edits the account hasn't got.
+  if (account && entry?.cloud) await openFromCloud(entry.cloud, account.id).catch(() => {});
+  if (current === doc && doc.unsavedSince === 0) await openLocal(doc.localId);
+}
+
+/** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
+async function connectVault(): Promise<void> {
+  if (!isDesktopApp()) return;
+  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched) });
+  await vaultService?.start();
+  // First launch with no folder: show the Vault Folder dialog once (it explains the folder and has Choose), signed in or not.
+  // Closing it without choosing is an answer; File ▸ Vault Folder is
+  // still there. Per device, so not in SYNCED_KEYS.
+  if (!vaultService || vaultService.current.root) return;
+  try {
+    if (localStorage.getItem(VAULT_ASKED_KEY)) return;
+    localStorage.setItem(VAULT_ASKED_KEY, 'yes');
+  } catch {
+    return; // no storage: better never asked than asked on every launch
+  }
+  vaultDialog.open();
+}
+
 const trashDialog = new TrashDialog({ deps: trashDeps, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });
 
 // Tools ▸ Word Count.

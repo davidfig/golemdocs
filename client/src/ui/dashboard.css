@@ -230,18 +230,23 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 
 .wm-card-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 4px;
 }
 
+/* One row of equal buttons, whatever the card's width or the number of actions (the delete button is a .wm-button, which would otherwise be wider). */
 .wm-card-actions button {
+  flex: 1 1 0;
   min-width: 0;
-  height: auto;
-  font-size: 11px;
-  padding: 2px 6px;
+  height: 28px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+}
+
+.wm-card-actions button svg {
+  flex: none;
 }
 
 /* Actions stay out of the way until the card is pointed at (and always show on touch screens). */
@@ -274,6 +279,15 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 
   .wm-dash-scroll {
     padding: 12px;
+  }
+
+  .wm-dash-grid {
+    gap: 14px 8px;
+  }
+
+  /* Bigger touch targets, always shown here. */
+  .wm-card-actions button {
+    height: 32px;
   }
 }
 

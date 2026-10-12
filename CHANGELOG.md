@@ -5,6 +5,9 @@
 ### Added
 - A page left open now notices when Golem Docs has been updated and offers to reload into the new version, saving what is open first.
 
+### Changed
+- On a phone, the Open view starts with smaller cards (three across), and the buttons under each document or folder are one even row that no longer wraps or changes size with the icons.
+
 ## 0.17.1 - 2026-10-09
 
 ### Fixed

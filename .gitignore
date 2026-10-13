@@ -30,4 +30,4 @@ server/.no-assets/
 
 # Tauri desktop app
 desktop/src-tauri/target
-desktop/src-tauri/gen
+desktop/src-tauri/gen/schemas

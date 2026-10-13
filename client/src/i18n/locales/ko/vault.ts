@@ -42,4 +42,7 @@ export const vault: Catalog = {
   'update.failed': '업데이트를 설치할 수 없습니다: {message}',
   'update.checkFailed': '업데이트를 확인할 수 없습니다: {message}',
   'update.close': '닫기',
+  'vault.icloud': '문서는 iCloud Drive › GolemDocs에 파일로 저장되므로 파일 앱과 다른 Apple 기기에서도 볼 수 있습니다. 그곳에서 파일을 바꾸면 Golem Docs를 열 때 계정으로 전송되고, 문서를 바꾸면 파일에 기록됩니다. 둘 다 바뀐 경우 파일이 우선하며 이전 버전은 문서 기록에 남습니다.',
+  'vault.icloud.off': 'Golem Docs에 대해 iCloud Drive가 꺼져 있습니다. 설정 › 내 이름 › iCloud에서 켠 다음 앱을 다시 여세요.',
+  'vault.status.downloading': 'iCloud Drive에서 파일을 가져오는 중…',
 };

@@ -3996,6 +3996,22 @@ canvas.addEventListener(
   { passive: false },
 );
 
+// Safari and the desktop app's WebKit view send a trackpad pinch as gesture events (with a running `scale`), not as
+// ctrl+wheel; zoom the canvas by the change in scale since the last event.
+type GestureEvent = Event & { scale: number; clientX: number; clientY: number };
+let gestureScale = 1;
+canvas.addEventListener('gesturestart', (ev) => {
+  gestureScale = (ev as GestureEvent).scale || 1;
+});
+canvas.addEventListener('gesturechange', (ev) => {
+  const g = ev as GestureEvent;
+  const rect = canvas.getBoundingClientRect();
+  userMoved = true;
+  camera.zoomAt(g.clientX - rect.left, g.clientY - rect.top, g.scale / gestureScale);
+  gestureScale = g.scale;
+  requestRender();
+});
+
 // A pinch or ctrl/cmd+wheel anywhere else (toolbars, panels, dialogs) would zoom the whole page and break the
 // layout; the document's own zoom is the canvas's (above). Safari's pinch is a separate gesture event.
 // Keyboard browser zoom (Cmd/Ctrl +/-) is left alone, so it still works as an accessibility tool.
@@ -4522,7 +4538,6 @@ async function vaultChanged(touched: string[]): Promise<void> {
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
 let vaultWatched = false;
 async function connectVault(): Promise<void> {
-  if (!isDesktopApp()) return;
   vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched) });
   if (vaultService && !vaultWatched) {
     vaultWatched = true;
@@ -4537,7 +4552,7 @@ async function connectVault(): Promise<void> {
   // First launch with no folder: show the Vault Folder dialog once (it explains the folder and has Choose), signed in or not.
   // Closing it without choosing is an answer; File ▸ Vault Folder is
   // still there. Per device, so not in SYNCED_KEYS.
-  if (!vaultService || vaultService.current.root) return;
+  if (!vaultService || vaultService.current.root || vaultService.fixed) return;
   try {
     if (localStorage.getItem(VAULT_ASKED_KEY)) return;
     localStorage.setItem(VAULT_ASKED_KEY, 'yes');

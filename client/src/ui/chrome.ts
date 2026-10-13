@@ -46,7 +46,7 @@ import { SyncButton } from './syncButton.ts';
 import { DocumentTitle } from './documentTitle.ts';
 import { displayDocumentName } from '../documentName.ts';
 import { DEFAULT_LAYOUT, MOBILE_KEYS, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
-import { desktopMenu, isDesktopApp } from '../desktop/bridge.ts';
+import { desktopBridge, desktopMenu, isDesktopApp } from '../desktop/bridge.ts';
 import { NativeMenuSync } from '../desktop/nativeMenu.ts';
 import './ui.css';
 
@@ -318,7 +318,7 @@ export class Chrome {
       dialog('file.properties', t('chrome.file.properties'), 'properties', { icon: 'properties' }),
       dialog('file.versionHistory', t('history.menu'), 'versionHistory', { tooltip: t('history.menu.tip') }),
       dialog('file.trash', t('history.trashMenu'), 'trash', { tooltip: t('history.trashMenu.tip') }),
-      dialog('file.vault', t('vault.menu'), 'vault', { tooltip: t('vault.menu.tip'), visible: () => isDesktopApp() }),
+      dialog('file.vault', t('vault.menu'), 'vault', { tooltip: t('vault.menu.tip'), visible: () => desktopBridge() !== null }),
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
       // Signed out, Subscribe signs in first. Once subscribed, the same place manages it.
       a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' }),

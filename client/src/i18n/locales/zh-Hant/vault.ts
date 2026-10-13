@@ -42,4 +42,7 @@ export const vault: Catalog = {
   'update.failed': '無法安裝更新：{message}',
   'update.checkFailed': '無法檢查更新：{message}',
   'update.close': '關閉',
+  'vault.icloud': '您的文件以檔案形式儲存在 iCloud 雲碟 › GolemDocs 中，因此也會出現在「檔案」App 和您的其他 Apple 裝置上。在那裡修改檔案後，開啟 Golem Docs 時會傳送到您的帳號；修改文件則會寫入檔案。如果兩者都已更改，以檔案為準，先前的版本會保留在文件的歷史記錄中。',
+  'vault.icloud.off': 'Golem Docs 的 iCloud 雲碟已關閉。請在「設定」›［您的姓名］› iCloud 中開啟，然後重新開啟 App。',
+  'vault.status.downloading': '正在從 iCloud 雲碟取得您的檔案…',
 };

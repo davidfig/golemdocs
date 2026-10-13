@@ -1,8 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "identifier": "com.golemdocs.app",
-  "bundle": { "iOS": { "minimumSystemVersion": "15.0" } },
+  "identifier": "com.golemdocs.mobile",
+  "bundle": {
+    "iOS": {
+      "minimumSystemVersion": "15.0",
+      "developmentTeam": "C57E343UU5"
+    }
+  },
   "app": {
-    "windows": [{ "label": "main", "title": "GolemDocs" }]
+    "windows": [
+      {
+        "label": "main",
+        "title": "GolemDocs"
+      }
+    ]
   }
 }

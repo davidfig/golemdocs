@@ -1,7 +1,7 @@
 // File ▸ Vault Folder (desktop app only): which folder on this computer keeps a copy of the documents, and how the last
 // sync went. The work is in ../desktop/vaultService.ts; this only shows it.
 
-import type { VaultService, VaultStatus } from '../desktop/vaultService.ts';
+import { ICLOUD_DOWNLOADING, type VaultService, type VaultStatus } from '../desktop/vaultService.ts';
 import { getLocale, t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
@@ -51,7 +51,7 @@ export class VaultDialog {
         case 'signedOut':
           return t('vault.signedOut');
         case 'waiting':
-          return t('vault.status.waiting');
+          return t(s.message === ICLOUD_DOWNLOADING ? 'vault.status.downloading' : 'vault.status.waiting');
         case 'syncing':
           return t('vault.status.syncing');
         case 'idle':
@@ -70,13 +70,14 @@ export class VaultDialog {
     };
 
     const render = (s: VaultStatus) => {
-      intro.textContent = t(service.signedIn ? 'vault.intro' : 'vault.introLocal');
-      folder.textContent = s.root ? t('vault.folder', { path: s.root }) : t('vault.noFolder');
+      intro.textContent = service.fixed ? t('vault.icloud') : t(service.signedIn ? 'vault.intro' : 'vault.introLocal');
+      folder.textContent = service.fixed ? (s.root ? '' : t('vault.icloud.off')) : s.root ? t('vault.folder', { path: s.root }) : t('vault.noFolder');
       status.textContent = describe(s);
       const skippedCount = s.report?.skipped ?? 0;
       skipped.textContent = skippedCount ? t(service.signedIn ? 'vault.skipped' : 'vault.skippedLocal', { count: skippedCount }) : '';
       choose.textContent = s.root ? t('vault.change') : t('vault.choose');
-      stop.hidden = !s.root;
+      choose.hidden = service.fixed;
+      stop.hidden = !s.root || service.fixed;
       syncNow.hidden = !s.root;
       syncNow.disabled = s.state === 'syncing' || s.state === 'signedOut' || s.state === 'access';
       retry.hidden = s.state !== 'access' && s.state !== 'error';

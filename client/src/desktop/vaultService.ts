@@ -29,6 +29,9 @@ export interface VaultHooks {
   changed(touched: string[]): void;
 }
 
+/** What the shell answers to a scan while iCloud Drive is still downloading files into the folder (desktop/src-tauri/src/icloud.rs). */
+export const ICLOUD_DOWNLOADING = 'icloud-downloading';
+
 const LOOK_MS = 4000;
 const ACCOUNT_MS = 60_000;
 
@@ -61,6 +64,11 @@ export class VaultService {
     return this.account() !== null;
   }
 
+  /** The folder is fixed (iCloud Drive on a phone): it cannot be chosen or stopped. */
+  get fixed(): boolean {
+    return this.bridge.fixed;
+  }
+
   get current(): VaultStatus {
     return this.status;
   }
@@ -82,6 +90,7 @@ export class VaultService {
     this.timer ??= setInterval(() => void this.look(), LOOK_MS);
     addEventListener('focus', this.onWake);
     addEventListener('online', this.onWake);
+    addEventListener('visibilitychange', this.onShown);
     if (root) this.wanted = true;
     this.lastAccountLook = 0; // signing in or out changes what the folder is kept with
     this.set({ state: root ? 'waiting' : 'off' });
@@ -93,7 +102,13 @@ export class VaultService {
     this.timer = null;
     removeEventListener('focus', this.onWake);
     removeEventListener('online', this.onWake);
+    removeEventListener('visibilitychange', this.onShown);
   }
+
+  /** A phone only syncs while the app is in front, so coming back to it is when to look (focus doesn't fire there). */
+  private onShown = (): void => {
+    if (document.visibilityState === 'visible') this.onWake();
+  };
 
   private onWake = (): void => {
     this.lastAccountLook = 0;
@@ -138,6 +153,7 @@ export class VaultService {
   private async look(): Promise<void> {
     // A refused folder waits for the person (Try Again, or coming back to the window), not for a retry every few seconds.
     if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;
+    if (this.status.state === 'waiting' && this.status.message === ICLOUD_DOWNLOADING) return void (await this.syncNow());
     try {
       const local = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
       const due = Date.now() - this.lastAccountLook >= ACCOUNT_MS;
@@ -158,6 +174,15 @@ export class VaultService {
       } catch (error) {
         this.set({ state: 'access', message: error instanceof Error ? error.message : String(error) }); // the shell rejects with a string
         return;
+      }
+      // Files still coming down from iCloud Drive: wait, and the next look tries again.
+      try {
+        await this.bridge.scan();
+      } catch (error) {
+        if (String(error) === ICLOUD_DOWNLOADING) {
+          this.set({ state: 'waiting', message: ICLOUD_DOWNLOADING });
+          return;
+        }
       }
       if (this.account()) await this.hooks.settled();
       const account = this.account(); // signing out can happen while waiting

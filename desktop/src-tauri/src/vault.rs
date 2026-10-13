@@ -8,6 +8,9 @@
 //! The one exception is `.golemdocs/`, where the sync state lives; `vault_read` and `vault_write` may use it
 //! and nothing else may.
 
+// The folder is chosen and remembered on desktop; on a phone it is fixed (see icloud.rs).
+#![cfg_attr(mobile, allow(dead_code))]
+
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -24,6 +27,9 @@ const REMEMBERED: &str = "vault.json";
 #[derive(Default)]
 pub struct Vault {
     root: Mutex<Option<PathBuf>>,
+    /// A folder to keep `.golemdocs/` in instead of the vault. Set on a phone, where the vault is shared through iCloud
+    /// with other devices, each of which must have its own sync state; None keeps the state inside the vault.
+    state_home: Mutex<Option<PathBuf>>,
 }
 
 #[derive(Serialize, Debug, PartialEq, Eq)]
@@ -183,6 +189,33 @@ impl Vault {
         *self.root.lock().unwrap() = root;
     }
 
+    /// Where a path is looked up: the sync state goes to `state_home` when there is one, everything else to the vault.
+    fn locate(&self, path: &str) -> Result<PathBuf, String> {
+        let in_state = path.strip_prefix(STATE_DIR).is_some_and(|rest| rest.starts_with('/'));
+        if in_state {
+            if let Some(home) = self.state_home.lock().unwrap().clone() {
+                return Ok(home);
+            }
+        }
+        self.root()
+    }
+
+    /// Whether the folder is fixed (iCloud on a phone): there is nothing for the person to choose or stop.
+    fn fixed(&self) -> bool {
+        self.state_home.lock().unwrap().is_some()
+    }
+
+    /// Makes the app's iCloud folder the vault (iPhone and iPad). Says why not when iCloud is off.
+    #[cfg_attr(desktop, allow(dead_code))]
+    pub fn use_icloud(&self, app: &AppHandle) -> Result<(), String> {
+        let root = crate::icloud::documents().ok_or("iCloud Drive is off, or this device is not signed in to iCloud")?;
+        let home = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+        fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+        *self.state_home.lock().unwrap() = Some(home);
+        self.set(Some(root));
+        Ok(())
+    }
+
     /// Picks up the folder chosen in an earlier run, if it is still there.
     pub fn restore(&self, app: &AppHandle) {
         let Ok(dir) = app.path().app_config_dir() else { return };
@@ -220,6 +253,19 @@ pub fn vault_root(vault: State<'_, Vault>) -> Option<String> {
 /// Asks the person for a folder and makes it the vault. Null if they cancel.
 #[tauri::command]
 pub async fn vault_choose(app: AppHandle, vault: State<'_, Vault>) -> Result<Option<String>, String> {
+    if vault.fixed() {
+        return Err("the vault is the app's iCloud Drive folder".to_string());
+    }
+    choose(app, vault).await
+}
+
+#[cfg(mobile)]
+async fn choose(_app: AppHandle, _vault: State<'_, Vault>) -> Result<Option<String>, String> {
+    Err("choosing a folder is not available on this device".to_string())
+}
+
+#[cfg(desktop)]
+async fn choose(app: AppHandle, vault: State<'_, Vault>) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let Some(picked) = app.dialog().file().blocking_pick_folder() else { return Ok(None) };
     let root = picked.into_path().map_err(|e| e.to_string())?;
@@ -232,6 +278,9 @@ pub async fn vault_choose(app: AppHandle, vault: State<'_, Vault>) -> Result<Opt
 /// Stops using the vault folder. Its files stay where they are.
 #[tauri::command]
 pub fn vault_forget(app: AppHandle, vault: State<'_, Vault>) -> Result<(), String> {
+    if vault.fixed() {
+        return Err("the vault is the app's iCloud Drive folder".to_string());
+    }
     remember(&app, None)?;
     vault.set(None);
     Ok(())
@@ -273,12 +322,23 @@ pub fn vault_reveal(vault: State<'_, Vault>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn vault_scan(vault: State<'_, Vault>) -> Result<Vec<Entry>, String> {
-    scan(&vault.root()?)
+    let root = vault.root()?;
+    if vault.fixed() {
+        // Files that are only placeholders here would look deleted: get them first, and let the page ask again.
+        let pending = crate::icloud::placeholders(&root).map_err(|e| e.to_string())?;
+        if !pending.is_empty() {
+            for file in &pending {
+                crate::icloud::download(file);
+            }
+            return Err(crate::icloud::DOWNLOADING.to_string());
+        }
+    }
+    scan(&root)
 }
 
 #[tauri::command]
 pub fn vault_read(path: String, vault: State<'_, Vault>) -> Result<tauri::ipc::Response, String> {
-    let file = resolve(&vault.root()?, &path, true)?;
+    let file = resolve(&vault.locate(&path)?, &path, true)?;
     fs::read(file).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
 }
 
@@ -289,7 +349,8 @@ pub fn vault_write(request: tauri::ipc::Request<'_>, vault: State<'_, Vault>) ->
         return Err("expected the file's bytes".to_string());
     };
     let path = request.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("missing path")?;
-    write(&vault.root()?, &percent_decode(path)?, bytes)
+    let path = percent_decode(path)?;
+    write(&vault.locate(&path)?, &path, bytes)
 }
 
 #[tauri::command]

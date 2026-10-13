@@ -12,6 +12,8 @@ interface TauriCore {
 }
 
 export interface DesktopBridge {
+  /** The folder is fixed (iCloud Drive on a phone): there is nothing to choose or stop. */
+  readonly fixed: boolean;
   /** The vault folder, or null when none is chosen. */
   root(): Promise<string | null>;
   /** Asks the person for a folder (a native dialog). Null if they cancel. */
@@ -44,17 +46,22 @@ export function isTouchDevice(nav: Pick<Navigator, 'userAgent' | 'platform' | 'm
 /** True inside the iOS or Android app: the same shell as the desktop app, with none of its native commands. */
 export const isMobileApp = (): boolean => shellCore() !== null && isTouchDevice();
 
-// The vault, the menu bar and the updater are desktop only (desktop/src-tauri/src/lib.rs).
+/** True in the iOS app (an iPhone or iPad running the shell). */
+export const isIosApp = (nav: Pick<Navigator, 'userAgent' | 'platform' | 'maxTouchPoints'> = navigator): boolean => shellCore() !== null && isTouchDevice(nav) && !/Android/i.test(nav.userAgent);
+
+// The menu bar and the updater are desktop only (desktop/src-tauri/src/lib.rs).
 function tauriCore(): TauriCore | null {
   return isTouchDevice() ? null : shellCore();
 }
 
 /** The native side, or null when the page is running in a browser. */
 export function desktopBridge(): DesktopBridge | null {
-  const core = tauriCore();
+  // The vault is on desktop and in the iOS app (its folder is in iCloud Drive and cannot be chosen).
+  const core = isIosApp() ? shellCore() : tauriCore();
   if (!core) return null;
   const bytes = (data: unknown): Uint8Array => (data instanceof ArrayBuffer ? new Uint8Array(data) : Uint8Array.from(data as ArrayLike<number>));
   return {
+    fixed: isIosApp(),
     root: () => core.invoke<string | null>('vault_root'),
     choose: () => core.invoke<string | null>('vault_choose'),
     forget: () => core.invoke<void>('vault_forget'),

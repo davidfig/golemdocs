@@ -47,4 +47,7 @@ export const vault: Catalog = {
   'update.failed': 'No se pudo instalar la actualización: {message}',
   'update.checkFailed': 'No se pudo buscar actualizaciones: {message}',
   'update.close': 'Cerrar',
+  'vault.icloud': 'Tus documentos se guardan como archivos en iCloud Drive › GolemDocs, así que también están en la app Archivos y en tus otros dispositivos Apple. Un cambio hecho allí en un archivo se envía a tu cuenta al abrir Golem Docs, y un cambio en un documento se escribe en el archivo. Si ambos cambiaron, gana el archivo y la versión anterior queda en el historial del documento.',
+  'vault.icloud.off': 'iCloud Drive está desactivado para Golem Docs. Actívalo en Ajustes › tu nombre › iCloud y vuelve a abrir la app.',
+  'vault.status.downloading': 'Obteniendo tus archivos de iCloud Drive…',
 };

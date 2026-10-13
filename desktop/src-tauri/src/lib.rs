@@ -1,14 +1,17 @@
-// The vault folder, the menu bar and the self-updater are desktop only. The phone apps are the same shell showing the
-// website, updated through the App Store and Play, with no folder to keep in sync.
+// The menu bar and the self-updater are desktop only (the phone apps are updated through the App Store and Play). The
+// vault is on desktop (a folder the person chooses) and on iOS (the app's iCloud Drive folder, see icloud.rs).
 #[cfg(desktop)]
 mod menu;
 #[cfg(desktop)]
 mod update;
-#[cfg(desktop)]
+mod icloud;
+#[cfg(any(desktop, target_os = "ios"))]
 mod vault;
 
+#[cfg(any(desktop, target_os = "ios"))]
+use tauri::Manager;
 #[cfg(desktop)]
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 #[cfg(desktop)]
 fn builder() -> tauri::Builder<tauri::Wry> {
@@ -41,7 +44,27 @@ fn builder() -> tauri::Builder<tauri::Wry> {
         ])
 }
 
-#[cfg(mobile)]
+// A phone has the vault (in iCloud, with nothing to choose) but not the menu bar or the updater.
+#[cfg(target_os = "ios")]
+fn builder() -> tauri::Builder<tauri::Wry> {
+    tauri::Builder::default()
+        .manage(vault::Vault::default())
+        .setup(|app| {
+            // Without iCloud the vault stays unset and the page shows no folder; the documents are still in the account.
+            let _ = app.state::<vault::Vault>().use_icloud(app.handle());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            vault::vault_root,
+            vault::vault_check,
+            vault::vault_scan,
+            vault::vault_read,
+            vault::vault_write,
+            vault::vault_remove,
+        ])
+}
+
+#[cfg(all(mobile, not(target_os = "ios")))]
 fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
 }

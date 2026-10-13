@@ -60,6 +60,10 @@ targets:
         CFBundleVersion: "0.20.0"
     entitlements:
       path: golemdocs-desktop_iOS/golemdocs-desktop_iOS.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.golemdocs.mobile]
+        com.apple.developer.icloud-services: [CloudDocuments]
+        com.apple.developer.ubiquity-container-identifiers: [iCloud.com.golemdocs.mobile]
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full

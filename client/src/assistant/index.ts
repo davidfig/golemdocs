@@ -228,11 +228,15 @@ export class Assistant {
     return !this.el.hidden;
   }
 
-  /** Clip stays over the document, clear of the panels at its right (Layers, a picture's layers) as they open, close or change width. */
+  /** Clip stays over the document: clear of the panels at its right (Layers, a picture's layers) as they open, close or change width, and above whatever is under the document (the status bar, a phone's typing bar and the home indicator). */
   private keepOverDocument(): void {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
-    const place = (): void => this.el.style.setProperty('--wm-clip-right', `${Math.max(0, Math.round(window.innerWidth - viewport.getBoundingClientRect().right))}px`);
+    const place = (): void => {
+      const box = viewport.getBoundingClientRect();
+      this.el.style.setProperty('--wm-clip-right', `${Math.max(0, Math.round(window.innerWidth - box.right))}px`);
+      this.el.style.setProperty('--wm-clip-bottom', `${Math.max(0, Math.round(window.innerHeight - box.bottom))}px`);
+    };
     new ResizeObserver(place).observe(viewport);
     window.addEventListener('resize', place);
   }

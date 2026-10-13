@@ -163,9 +163,21 @@ html[data-pages='dark'] .wm-pages-thumb {
   color: #fff;
 }
 
-.wm-pages-editable .wm-pages-item:hover .wm-pages-delete,
 .wm-pages-editable .wm-pages-item:focus-within .wm-pages-delete {
   display: block;
+}
+
+/* Pointed at on a computer; always there on a touch screen, where a hover reveal makes the first tap on a page only "hover" it. */
+@media (hover: hover) {
+  .wm-pages-editable .wm-pages-item:hover .wm-pages-delete {
+    display: block;
+  }
+}
+
+@media (hover: none) {
+  .wm-pages-editable .wm-pages-item .wm-pages-delete {
+    display: block;
+  }
 }
 
 .wm-pages-editable .wm-pages-item {

@@ -3,9 +3,9 @@
 
 .wm-clip {
   position: fixed;
-  /* Over the document, left of any panel at its right (see keepOverDocument), and above the status bar when it is shown (see ui/footer.ts). */
+  /* Over the document, left of any panel at its right and above whatever is under the document (see keepOverDocument). */
   right: calc(16px + var(--wm-clip-right, 0px));
-  bottom: calc(16px + var(--wm-footer-height, 0px));
+  bottom: calc(16px + var(--wm-clip-bottom, 0px));
   z-index: 15;
   width: 85px;
   height: 93px;
@@ -37,8 +37,11 @@
   animation: wm-clip-fidget 7s ease-in-out infinite;
 }
 
-.wm-clip-body:hover {
-  animation: wm-clip-hop 0.5s ease-out;
+/* Only where a pointer can really hover: on a phone a tap that changes something on hover (this, the hide button) is taken as the hover, and iOS then withholds the click that opens the bubble. */
+@media (hover: hover) {
+  .wm-clip-body:hover {
+    animation: wm-clip-hop 0.5s ease-out;
+  }
 }
 
 .wm-clip-body:focus-visible {
@@ -168,9 +171,14 @@
   transition: opacity var(--wm-ease, 120ms ease-out);
 }
 
-.wm-clip:hover .wm-clip-hide,
 .wm-clip:focus-within .wm-clip-hide {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .wm-clip:hover .wm-clip-hide {
+    opacity: 1;
+  }
 }
 
 /* The speech bubble. */

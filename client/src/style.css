@@ -10,6 +10,9 @@ body {
 body {
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  /* The phone apps draw the page under the status bar, the Dynamic Island and the home indicator (viewport-fit=cover); keep the interface clear of them. These are 0 in a desktop browser. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--safe-bottom, env(safe-area-inset-bottom)) env(safe-area-inset-left);
   /* The font of all the interface, so anything added to the page (menus, dialogs) has it too. */
   font: 13px/1.2 var(--wm-font, system-ui, sans-serif);
   color: var(--wm-text, #000);

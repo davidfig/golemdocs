@@ -2468,11 +2468,6 @@ html.wm-titlebar .wm-format {
 /* Narrow screens: the menu bar and each toolbar scroll sideways in one row instead of wrapping into
    several, which would leave the document little room. */
 @media (max-width: 720px) {
-  .wm-chrome {
-    padding-top: env(safe-area-inset-top);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
   /* The menu titles give way to one hamburger button that opens the drawer (menuDrawer.ts). */
   .wm-title {
     display: none;

@@ -3489,6 +3489,9 @@ if (visual) {
     document.documentElement.style.setProperty('--app-height', covered ? `${visual.height}px` : '100%');
     // Where the keyboard starts, for the sheets and bars fixed to the bottom of the page (iOS leaves them under it).
     document.documentElement.style.setProperty('--keyboard-inset', covered ? `${Math.max(0, window.innerHeight - visual.height - visual.offsetTop)}px` : '0px');
+    // The home indicator is under the keyboard, so there is nothing at the bottom to keep clear of (see style.css).
+    if (covered) document.documentElement.style.setProperty('--safe-bottom', '0px');
+    else document.documentElement.style.removeProperty('--safe-bottom');
     if (covered && (window.scrollY || visual.offsetTop)) window.scrollTo(0, 0);
   };
   visual.addEventListener('resize', fitVisual);
@@ -3740,11 +3743,26 @@ function touchMove(e: PointerEvent): void {
   requestRender();
 }
 
+// iOS follows a tap with a synthesized click, and that click takes the focus off the text input (it blurs whatever is focused when the clicked element can't take focus), which closes the keyboard a moment after it opened. Cancelling `touchend` stops the click. iOS also only opens the keyboard for a focus() made inside a touch event, and `pointerup` doesn't always count, so the tap focuses again here.
+let tappedAt = -Infinity;
+canvas.addEventListener(
+  'touchend',
+  (e) => {
+    if (performance.now() - tappedAt >= 500) return;
+    if (e.cancelable) e.preventDefault();
+    focusInput();
+  },
+  { passive: false },
+);
+
 function touchUp(e: PointerEvent): void {
   touches.delete(e.pointerId);
   pinch = touches.size === 2 ? pinchState() : null;
   if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
-  if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') press(touchTap);
+  if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') {
+    tappedAt = performance.now();
+    press(touchTap);
+  }
   touchTap = null;
   if (touches.size === 0) touchMulti = false;
 }

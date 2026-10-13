@@ -1,11 +1,17 @@
+// The vault folder, the menu bar and the self-updater are desktop only. The phone apps are the same shell showing the
+// website, updated through the App Store and Play, with no folder to keep in sync.
+#[cfg(desktop)]
 mod menu;
+#[cfg(desktop)]
 mod update;
+#[cfg(desktop)]
 mod vault;
 
+#[cfg(desktop)]
 use tauri::{Emitter, Manager};
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+#[cfg(desktop)]
+fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -33,6 +39,14 @@ pub fn run() {
             update::update_check,
             update::update_install,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running GolemDocs");
+}
+
+#[cfg(mobile)]
+fn builder() -> tauri::Builder<tauri::Wry> {
+    tauri::Builder::default()
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    builder().run(tauri::generate_context!()).expect("error while running GolemDocs");
 }

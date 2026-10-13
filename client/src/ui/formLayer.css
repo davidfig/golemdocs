@@ -120,9 +120,17 @@ select.wm-field {
   border: 1px solid var(--wm-hot-border);
 }
 
-.wm-field-box-checkbox:is(:hover, .wm-field-selected) .wm-field-name,
-.wm-field-box-radio:is(:hover, .wm-field-selected) .wm-field-name {
+.wm-field-box-checkbox.wm-field-selected .wm-field-name,
+.wm-field-box-radio.wm-field-selected .wm-field-name {
   display: block;
+}
+
+/* Not on touch screens: a hover reveal there makes the first tap only "hover" the field. */
+@media (hover: hover) {
+  .wm-field-box-checkbox:hover .wm-field-name,
+  .wm-field-box-radio:hover .wm-field-name {
+    display: block;
+  }
 }
 
 .wm-field-handle {

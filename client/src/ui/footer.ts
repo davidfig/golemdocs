@@ -122,8 +122,6 @@ export class Footer {
     this.wrap.addEventListener('mousedown', (e) => e.preventDefault());
     this.wrap.addEventListener('click', () => actions.wrap());
     el.replaceChildren(this.items, group, this.wrap);
-    // What floats over the bottom of the window (Clip, the assistant) is lifted by the bar's height: 0 while it is hidden.
-    new ResizeObserver(() => document.documentElement.style.setProperty('--wm-footer-height', `${el.offsetHeight}px`)).observe(el);
   }
 
   setVisible(visible: boolean): void {

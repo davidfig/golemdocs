@@ -8,6 +8,7 @@
 - A Requests section on the home page: there is no plugin store, missing features are built into the app, and it says how to ask for one. The feature cards are fewer, and the smaller extras have their own section.
 
 ### Changed
+- On a phone or tablet, File › Download and Download All (ZIP) open the system share sheet (Save to Files, AirDrop, Mail and other apps) instead of a browser download.
 - In the desktop app, the save indicator at the top right shows the folder that keeps your documents as files, with a link to show it in Finder (or File Explorer), or to choose one.
 - The home page now says that a file type Golem Docs doesn’t support, or a missing feature, will be added.
 - The home page says that Golem Docs is free in the desktop app and, when they arrive, the mobile apps, not only in the browser.

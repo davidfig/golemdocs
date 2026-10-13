@@ -104,6 +104,7 @@ import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
 import { desktopUpdater, isDesktopApp } from './desktop/bridge.ts';
+import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { UpdateService } from './desktop/updateService.ts';
 import { UpdateDialog } from './ui/updateDialog.ts';
@@ -1523,10 +1524,7 @@ async function downloadAll(): Promise<void> {
       })),
     );
     const name = t('app.downloadAllName');
-    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/zip' }));
-    Object.assign(document.createElement('a'), { href: url, download: name }).click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(t('app.downloadedAll', { count: docs.length }));
+    if (await saveFile(name, bytes, 'application/zip')) setStatus(t('app.downloadedAll', { count: docs.length }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
   }
@@ -2255,11 +2253,7 @@ async function download(): Promise<void> {
     const name = large ? textView.fileName : fileName();
     const type = large ? 'text/plain' : FORMATS[current.kind].mime;
     const bytes = large ?? (await worker.convert(current.kind as Format));
-    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
-    const link = Object.assign(document.createElement('a'), { href: url, download: name });
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(t('app.downloaded', { name }));
+    if (await saveFile(name, bytes, type)) setStatus(t('app.downloaded', { name }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
   }

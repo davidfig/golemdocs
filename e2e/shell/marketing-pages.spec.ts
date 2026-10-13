@@ -30,8 +30,8 @@ test.describe('home page', () => {
     await expect(page).toHaveTitle(/^Golem Docs: edit Word, PDF, Markdown, and more in your browser$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('I wanted one editor for everything.');
     const nav = page.getByRole('navigation', { name: 'Main' });
-    await expect(nav.getByRole('link')).toHaveText(['Features', 'Formats', 'Pricing', 'Privacy', 'Open Golem Docs']);
-    for (const id of ['features', 'formats', 'pricing', 'privacy']) await expect(page.locator(`section#${id}`)).toHaveCount(1);
+    await expect(nav.getByRole('link')).toHaveText(['Features', 'Formats', 'Pricing', 'Privacy', 'Download', 'Open Golem Docs']);
+    for (const id of ['features', 'formats', 'pricing', 'privacy', 'download']) await expect(page.locator(`section#${id}`)).toHaveCount(1);
     await expect(page.getByRole('contentinfo')).toBeVisible();
   });
 
@@ -69,6 +69,51 @@ test.describe('home page', () => {
     await expect(page).toHaveURL(/\/$/);
     await page.waitForFunction(() => (window as unknown as { loaded?: boolean }).loaded === true, null, { timeout: 30_000 });
     await expect(page.getByRole('menubar')).toBeVisible();
+  });
+
+  test.describe('download section', () => {
+    const release = {
+      version: '9.9.9',
+      date: '2026-10-12',
+      files: [
+        { name: 'GolemDocs_9.9.9_universal.dmg', platform: 'mac', size: 4_000_000 },
+        { name: 'GolemDocs_9.9.9_x64-setup.exe', platform: 'windows', size: 9_000_000 },
+        { name: 'GolemDocs_9.9.9_amd64.AppImage', platform: 'linux', size: 80_000_000 },
+      ],
+    };
+
+    test('says the app is not ready before a release is published', async ({ page }) => {
+      await page.goto('/home');
+      await expect(page.getByText('The desktop app is not ready to download yet.')).toBeVisible();
+      await expect(page.locator('#dl')).toBeHidden();
+    });
+
+    test('offers the installer for this computer first and lists the others', async ({ browser }) => {
+      const context = await browser.newContext({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36' });
+      const page = await context.newPage();
+      await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' }));
+      await page.route('**/api/downloads', (route) => route.fulfill({ json: release }));
+      await page.goto('/home');
+      const button = page.getByRole('link', { name: 'Download for Mac' });
+      await expect(button).toBeVisible();
+      await expect(button).toHaveAttribute('href', '/api/downloads/GolemDocs_9.9.9_universal.dmg');
+      await expect(page.getByText('Version 9.9.9')).toBeVisible();
+      await expect(page.locator('#dl-note')).toBeHidden(); // the SmartScreen note is for Windows only
+      await page.getByText('Other downloads').click();
+      await expect(page.locator('#dl-list li')).toHaveText([/^Mac: GolemDocs_9\.9\.9_universal\.dmg/, /^Windows: GolemDocs_9\.9\.9_x64-setup\.exe/, /^Linux: GolemDocs_9\.9\.9_amd64\.AppImage/]);
+      await context.close();
+    });
+
+    test('a Windows visitor gets the Windows installer and the SmartScreen note', async ({ browser }) => {
+      const context = await browser.newContext({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36' });
+      const page = await context.newPage();
+      await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'Win32' }));
+      await page.route('**/api/downloads', (route) => route.fulfill({ json: release }));
+      await page.goto('/home');
+      await expect(page.getByRole('link', { name: 'Download for Windows' })).toHaveAttribute('href', '/api/downloads/GolemDocs_9.9.9_x64-setup.exe');
+      await expect(page.locator('#dl-note')).toBeVisible();
+      await context.close();
+    });
   });
 
   test('every internal link on the page works', async ({ page, request }) => {

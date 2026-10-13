@@ -2,6 +2,9 @@
 
 ## 0.19.1 - Unreleased
 
+### Fixed
+- www.golemdocs.com now opens golemdocs.com instead of failing to load.
+
 ### Changed
 - On a phone, the Open view starts with smaller cards (three across), and the buttons under each document or folder are one even row that no longer wraps or changes size with the icons.
 

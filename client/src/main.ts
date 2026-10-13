@@ -63,6 +63,7 @@ import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { NewVersionNotice } from './ui/newVersionNotice.ts';
+import { UpdateNotice } from './ui/updateNotice.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { WatchBanner } from './ui/watchBanner.ts';
 import { Assistant } from './assistant/index.ts';
@@ -1284,7 +1285,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   showSync();
 }
 
-/** Reloads the page to show settings that came from the account, once what is open is saved. */
+/** Reloads the page, once what is open is saved: to show settings that came from the account, or a new version of the site. */
 async function reloadForSettings(): Promise<void> {
   if (cleared) return;
   saveIfEdited();
@@ -4772,6 +4773,8 @@ const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clea
 
 // A new release: offer What's New (once per version, unless turned off).
 new NewVersionNotice(document.body, () => openSource('changelog'));
+// The site updated while this page was open: offer a reload, once what is open is saved.
+new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForSettings());
 
 /**
  * The person's other documents, for the assistant: this browser's copies and the account's, and

@@ -71,6 +71,10 @@ export const dialogs: Partial<Messages> = {
   'dialogs.newVersion.view': 'Voir les nouveautés',
   'dialogs.newVersion.off': 'Ne plus afficher',
   'dialogs.newVersion.close': 'Fermer',
+  'dialogs.update.label': 'Mise à jour disponible',
+  'dialogs.update.message': 'Une nouvelle version de Golem Docs est disponible. Votre travail est d’abord enregistré.',
+  'dialogs.update.reload': 'Recharger',
+  'dialogs.update.later': 'Plus tard',
 
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Ordinateur partagé',

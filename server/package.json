@@ -2,7 +2,7 @@
   "name": "@golemdocs/server",
   "private": true,
   "description": "GolemDocs API server: documents, collaboration, accounts and assistant (private workspace package, not on npm)",
-  "version": "0.18.0",
+  "version": "0.19.1",
   "type": "module",
   "scripts": {
     "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p .no-assets && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",
@@ -15,7 +15,8 @@
     "cf:migrate:dev": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env dev --remote",
     "cf:migrate:local": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env local --local",
     "cf:migrate": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env=\"\" --remote",
-    "deploy:prod": "pnpm --filter @golemdocs/client build && tsx ../scripts/wrangler-config.ts && wrangler deploy --config wrangler.generated.jsonc --env=\"\""
+    "deploy:prod": "pnpm --filter @golemdocs/client build && tsx ../scripts/wrangler-config.ts && wrangler deploy --config wrangler.generated.jsonc --env=\"\"",
+    "deploy:www": "wrangler deploy --config wrangler.www.jsonc"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -69,6 +69,10 @@ export const dialogs = {
   'dialogs.newVersion.view': 'See What’s New',
   'dialogs.newVersion.off': 'Don’t show again',
   'dialogs.newVersion.close': 'Close',
+  'dialogs.update.label': 'Update available',
+  'dialogs.update.message': 'A new version of Golem Docs is available. Your work is saved first.',
+  'dialogs.update.reload': 'Reload',
+  'dialogs.update.later': 'Later',
 
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Shared computer',

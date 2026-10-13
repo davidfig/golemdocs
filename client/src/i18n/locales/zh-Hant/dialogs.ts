@@ -71,6 +71,10 @@ export const dialogs: Partial<Messages> = {
   'dialogs.newVersion.view': '查看新功能',
   'dialogs.newVersion.off': '不再顯示',
   'dialogs.newVersion.close': '關閉',
+  'dialogs.update.label': '有可用更新',
+  'dialogs.update.message': 'Golem Docs 有新版本。您的工作會先被儲存。',
+  'dialogs.update.reload': '重新載入',
+  'dialogs.update.later': '稍後',
 
   // Shared computer notice
   'dialogs.sharedDevice.label': '共用電腦',

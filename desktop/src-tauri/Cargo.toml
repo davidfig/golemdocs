@@ -1,6 +1,6 @@
 [package]
 name = "golemdocs-desktop"
-version = "0.18.0"
+version = "0.19.0"
 description = "GolemDocs desktop app: the web app in a native window, with a folder of files kept in sync"
 edition = "2021"
 publish = false

@@ -25,6 +25,7 @@ import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { showPopupMenu } from './popupMenu.ts';
+import { narrow } from './popup.ts';
 import { newKindItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import './dashboard.css';
@@ -33,6 +34,8 @@ const SIZE_KEY = 'golemdocs.dashboardIconSize';
 const SIZE_MIN = 80;
 const SIZE_MAX = 260;
 const SIZE_DEFAULT = 120;
+/** On a phone the default is smaller, so three cards fit across. */
+const SIZE_DEFAULT_NARROW = 100;
 
 /** What the dashboard asks of the application. */
 export interface DashboardHost {
@@ -231,7 +234,7 @@ export class Dashboard {
 
   /** The icon-size slider: sets the card width (remembered in this browser). */
   private sizeSlider(): HTMLElement {
-    let size = SIZE_DEFAULT;
+    let size = narrow().matches ? SIZE_DEFAULT_NARROW : SIZE_DEFAULT;
     try {
       const saved = Number(localStorage.getItem(SIZE_KEY));
       if (saved >= SIZE_MIN && saved <= SIZE_MAX) size = saved;

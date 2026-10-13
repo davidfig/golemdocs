@@ -71,6 +71,10 @@ export const dialogs: Catalog = {
   'dialogs.newVersion.view': 'Что нового',
   'dialogs.newVersion.off': 'Больше не показывать',
   'dialogs.newVersion.close': 'Закрыть',
+  'dialogs.update.label': 'Доступно обновление',
+  'dialogs.update.message': 'Доступна новая версия Golem Docs. Ваша работа сначала сохранится.',
+  'dialogs.update.reload': 'Перезагрузить',
+  'dialogs.update.later': 'Позже',
 
   // Shared computer notice
   'dialogs.sharedDevice.label': 'Общий компьютер',

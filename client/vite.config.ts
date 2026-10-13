@@ -1,4 +1,5 @@
 import { createReadStream, existsSync, readdirSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { welcomeContent } from './seo';
@@ -43,12 +44,27 @@ function docxCorpus(): Plugin {
   };
 }
 
+/**
+ * Names each production build: `__BUILD_ID__` in the code, and `build.json` (`{ "id": ... }`) in the output.
+ * An open page asks for the file now and then, and offers a reload when the id has changed (src/buildCheck.ts).
+ */
+function buildId(): Plugin {
+  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+  return {
+    name: 'build-id',
+    config: (_, { command }) => ({ define: { __BUILD_ID__: JSON.stringify(command === 'build' ? id : '') } }),
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'build.json', source: JSON.stringify({ id }) });
+    },
+  };
+}
+
 // The end-to-end tests run their own client and server on other ports (see playwright.config.ts).
 const CLIENT_PORT = Number(process.env.WORD_CLIENT_PORT ?? 5173);
 const API_PORT = Number(process.env.WORD_API_PORT ?? 3001);
 
 export default defineConfig({
-  plugins: [docxCorpus(), welcomeContent()],
+  plugins: [docxCorpus(), welcomeContent(), buildId()],
   // Each end-to-end client keeps its own dependency cache: two dev servers sharing one (a second e2e run
   // alongside the first, or `pnpm dev`) can invalidate each other's, and a server that dies takes the run with it.
   cacheDir: process.env.WORD_CLIENT_PORT ? path.resolve(import.meta.dirname, `node_modules/.vite-e2e-${CLIENT_PORT}`) : undefined,

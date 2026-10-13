@@ -129,6 +129,7 @@ export const dialogs = {
   'dialogs.options.title': 'Options',
   'dialogs.options.view': 'View',
   'dialogs.options.fullScreenMenu': 'Keep the menu bar in full screen',
+  'dialogs.options.macInAppMenu': 'Also show the menus in the window on a Mac',
   'dialogs.options.drawing': 'Drawing',
   'dialogs.options.selectAfterPencil': 'Select a pencil stroke when it is finished',
   'dialogs.options.returnToSelect': 'Switch back to the Select tool after drawing a shape or pen path',

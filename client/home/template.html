@@ -111,17 +111,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -228,7 +234,7 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">{{story.title}}</h2>
           <p class="sub" style="margin-bottom: 16px">{{story.p1}}</p>
@@ -242,12 +248,6 @@
           <p class="sub">{{features.sub}}</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>{{f.convert.h}}</h3>
-              <p>{{f.convert.p}}</p>
-              <a class="more-link" href="/home/convert">{{f.convert.link}}</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>{{f.pdf.h}}</h3>
               <p>{{f.pdf.p}}</p>
@@ -255,14 +255,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>{{f.images.h}}</h3>
-              <p>{{f.images.p}}</p>
+              <h3>{{f.art.h}}</h3>
+              <p>{{f.art.p}}</p>
               <a class="more-link" href="/home/images">{{f.images.link}}</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>{{f.vector.h}}</h3>
-              <p>{{f.vector.p}}</p>
               <a class="more-link" href="/home/vector">{{f.vector.link}}</a>
             </div>
             <div class="card">
@@ -278,27 +273,10 @@
               <a class="more-link" href="/home/collaborate">{{f.live.link}}</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>{{f.ai.h}}</h3>
-              <p>{{f.ai.p}}</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>{{f.save.h}}</h3>
-              <p>{{f.save.p}}</p>
-              <a class="more-link" href="/home/documents">{{f.save.link}}</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>{{f.word.h}}</h3>
               <p>{{f.word.p}}</p>
               <a class="more-link" href="/home/customize">{{f.word.link}}</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>{{f.you.h}}</h3>
-              <p>{{f.you.p}}</p>
-              <a class="more-link" href="/home/customize">{{f.you.link}}</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -312,28 +290,27 @@
               <p>{{f.import.p}}</p>
               <a class="more-link" href="/home/import">{{f.import.link}}</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>{{f.search.h}}</h3>
-              <p>{{f.search.p}}</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>{{f.obsidian.h}}</h3>
-              <p>{{f.obsidian.p}}</p>
-              <a class="more-link" href="/home/obsidian">{{f.obsidian.link}}</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">{{perf.title}}</h2>
             <p class="sub" style="margin-bottom: 0">{{perf.sub}}</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="{{perf.alt}}"></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">{{more.title}}</h2>
+          <div class="extras">
+            <p><b>{{f.convert.h}}</b> {{f.convert.p}} <a href="/home/convert">{{f.convert.link}}</a> <b>{{f.search.h}}</b> {{f.search.p}}</p>
+            <p><b>{{f.obsidian.h}}</b> {{f.obsidian.p}} <a href="/home/obsidian">{{f.obsidian.link}}</a> <b>{{f.you.h}}</b> {{f.you.p}} <a href="/home/customize">{{f.you.link}}</a></p>
+          </div>
         </div>
       </section>
 
@@ -377,7 +354,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">{{steps.title}}</h2>
           <p class="sub">{{steps.sub}}</p>
@@ -413,7 +390,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">{{requests.title}}</h2>
+            <p class="sub">{{requests.sub}}</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject={{requests.subject}}">{{requests.send}}</a></div>
+            <p class="fine">{{requests.fine}}</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">{{requests.p1}}</p>
+            <p class="sub" style="margin-bottom: 16px">{{requests.p2}}</p>
+            <p class="sub" style="margin-bottom: 0">{{requests.p3}}</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">{{privacy.title}}</h2>

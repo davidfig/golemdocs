@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs：在浏览器中编辑 Word、PDF、Markdown 等文档</title>
-    <meta name="description" content="Golem Docs 是一款运行在浏览器中的文档编辑器。免费且无需账户，即可打开、编辑和转换 Word、OpenDocument、PDF、Markdown、HTML 和纯文本。订阅后可跨设备同步、共享并实时共同编辑，还可使用 AI 助手。" />
+    <meta name="description" content="Golem Docs 是一款可在浏览器和桌面使用的文档编辑器，手机应用即将推出。免费且无需账户，即可打开、编辑和转换 Word、OpenDocument、PDF、Markdown、HTML 和纯文本。订阅后可跨设备同步、共享并实时共同编辑，还可使用 AI 助手。" />
     <link rel="canonical" href="https://golemdocs.com/home/zh-Hans" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="zh_CN" />
     <meta property="og:title" content="Golem Docs：在浏览器中编辑 Word、PDF、Markdown 等文档" />
-    <meta property="og:description" content="一个编辑器，处理各种文档。在浏览器中免费且无需账户，即可打开、编辑和转换 Word、PDF、Markdown 等。订阅后可同步、共享、共同编辑，并使用 AI 助手。" />
+    <meta property="og:description" content="一个编辑器，处理各种文档。在浏览器和桌面应用中免费且无需账户，即可打开、编辑和转换 Word、PDF、Markdown 等。订阅后可同步、共享、共同编辑，并使用 AI 助手。" />
     <meta property="og:url" content="https://golemdocs.com/home/zh-Hans" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -122,17 +122,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -219,7 +225,7 @@
               <a class="btn" href="/">来试试，免费</a>
               <a class="btn ghost" href="#features">看看它能做什么</a>
             </div>
-            <p class="fine">在浏览器中免费使用，无需账户，没有广告。同步、共享和 AI 助手每月 5 美元。</p>
+            <p class="fine">在浏览器和桌面应用中免费使用（手机应用即将推出），无需账户，没有广告。同步、共享和 AI 助手每月 5 美元。</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -239,11 +245,11 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">我为什么做这个</h2>
           <p class="sub" style="margin-bottom: 16px">我是 David。Obsidian 管着我的生活，可 PDF 总来添乱：我老得到处找工具来转换或编辑它。ZIP 文件让事情更有意思，因为压缩包里什么都可能有，所以能打开它的编辑器，就得能打开里面的一切。我想，要是它能打开世上所有类型的文档，那该多好玩，从那以后我就一直朝这个方向做。</p>
-          <p class="sub" style="margin-bottom: 0">大部分代码是和 Claude 一起写的，由我掌舵（我保证自己也能写，只是得花上好几年）。Golem Docs 还在成长，所以如果哪个文件没能正常打开，告诉我，我会把它记到清单上。</p>
+          <p class="sub" style="margin-bottom: 0">大部分代码是和 Claude 一起写的，由我掌舵（我保证自己也能写，只是得花上好几年）。Golem Docs 还在成长：如果有不支持的文件类型，或缺少某个功能，我会把它加上。</p>
         </div>
       </section>
 
@@ -253,12 +259,6 @@
           <p class="sub">多数编辑器只擅长一种格式。我想要一个全都能处理的。</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>更换格式，不丢任何内容</h3>
-              <p>在 Word、Markdown 和网页之间切换。切换回来，格式也会恢复。</p>
-              <a class="more-link" href="/home/convert">转换格式 →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>编辑 PDF，而不只是标注</h3>
               <p>就地编辑文字、涂黑隐去内容、重新排列页面、填写表单并添加批注。</p>
@@ -266,14 +266,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>编辑图片</h3>
-              <p>裁剪、旋转、调整大小和颜色，处理 PNG、JPEG 和 WebP 图片。还能绘制、添加文字和编号标记，或对需要遮盖的部分打马赛克。</p>
+              <h3>编辑图片，绘制矢量图</h3>
+              <p>裁剪、缩放、调色，在 PNG、JPEG 和 WebP 图片上绘画，并对需要隐藏的部分打马赛克。打开并编辑带有形状、钢笔路径、渐变和图层的 SVG 图画。</p>
               <a class="more-link" href="/home/images">编辑图片 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>绘制矢量图</h3>
-              <p>打开并编辑 SVG 矢量图：形状、钢笔路径、渐变、画笔描边、图层和布尔运算。</p>
               <a class="more-link" href="/home/vector">编辑矢量图 →</a>
             </div>
             <div class="card">
@@ -289,27 +284,10 @@
               <a class="more-link" href="/home/collaborate">共享如何运作 →</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>AI 助手</h3>
-              <p>AI 助手会阅读你的文档，改写或添加段落、更改样式并留下批注。撤销可以还原任何更改。它包含在订阅中，因为每次请求都要我花钱。</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>自动保存</h3>
-              <p>没有“保存”按钮。你所做的更改会随时保留，离线时也一样。</p>
-              <a class="more-link" href="/home/documents">写作与保存 →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>我记忆中的 Word</h3>
               <p>Word 2003 的菜单、工具栏和对话框。不用在功能区里翻找。</p>
               <a class="more-link" href="/home/customize">Word 2003 的感觉 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>打造专属于你的样子</h3>
-              <p>选择带深色模式的配色方案，自行排列工具栏，并可使用 11 种语言。</p>
-              <a class="more-link" href="/home/customize">主题与语言 →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -323,28 +301,27 @@
               <p>导入单个文件、整个文件夹或 ZIP，并保留其中的文件夹。从 Obsidian 迁移？可以导入你的库。</p>
               <a class="more-link" href="/home/import">导入文件和文件夹 →</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>搜索所有文档</h3>
-              <p>在所有文档中查找文字和 #标签，结果会在匹配的段落处打开。借助浏览器自带的索引，离线也能使用。</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>从 Obsidian 迁移</h3>
-              <p>你的库就是一个装满 Markdown 笔记的文件夹。导入后，笔记会出现在各自的文件夹里。</p>
-              <a class="more-link" href="/home/obsidian">导入 Obsidian 库 →</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">就算是《战争与和平》，也很流畅。</h2>
             <p class="sub" style="margin-bottom: 0">这是它全部 1,006 页在“网格线”视图中的样子，从整本书缩放到单个段落，再缩放回来。编辑器自己在你的显卡上绘制每一页，所以大文档也能保持流畅响应。</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="《战争与和平》全部 1,006 页的屏幕录像：从“网格线”视图放大到清晰可读的文字，再缩小回来。"></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">还有几样东西。</h2>
+          <div class="extras">
+            <p><b>更换格式，不丢任何内容</b> 在 Word、Markdown 和网页之间切换。切换回来，格式也会恢复。 <a href="/home/convert">转换格式 →</a> <b>搜索所有文档</b> 在所有文档中查找文字和 #标签，结果会在匹配的段落处打开。借助浏览器自带的索引，离线也能使用。</p>
+            <p><b>从 Obsidian 迁移</b> 你的库就是一个装满 Markdown 笔记的文件夹。导入后，笔记会出现在各自的文件夹里。 <a href="/home/obsidian">导入 Obsidian 库 →</a> <b>打造专属于你的样子</b> 选择带深色模式的配色方案，自行排列工具栏，并可使用 11 种语言。 <a href="/home/customize">主题与语言 →</a></p>
+          </div>
         </div>
       </section>
 
@@ -388,7 +365,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">一分钟即可上手。</h2>
           <p class="sub">无需安装，也无需注册。</p>
@@ -413,10 +390,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">免费使用。付费是为了我的服务器和 AI 开销。</h2>
-            <p class="sub" style="margin-bottom: 0">编辑在你的浏览器中运行，免费提供对我没有成本，Golem Docs 无需账户即可完整使用。同步和共享需要服务器和存储空间，AI 助手每次回答都要花钱。订阅每月 5 美元：它用来支付这些开销，剩下的钱让我能继续改进 Golem Docs。随时可取消。</p>
+            <p class="sub" style="margin-bottom: 0">编辑在你自己的设备上运行，免费提供对我没有成本，Golem Docs 无需账户即可完整使用：在浏览器、桌面应用中，手机应用推出后也一样。同步和共享需要服务器和存储空间，AI 助手每次回答都要花钱。订阅每月 5 美元：它用来支付这些开销，剩下的钱让我能继续改进 Golem Docs。随时可取消。</p>
           </div>
           <ul class="checks">
-            <li><b>免费，无需账户</b><span>编辑、转换和下载，想用多少用多少。文档保存在你的浏览器中，不会发送给我。</span></li>
+            <li><b>免费，无需账户</b><span>编辑、转换和下载，在浏览器、桌面应用和即将推出的手机应用中，想用多少用多少。文档保存在你的设备上，不会发送给我。</span></li>
             <li><b>这 5 美元花在哪里</b><span>同步会把你的文档保存在我的服务器上，方便在任何设备上打开。共享让大家实时共同编辑。AI 助手每次请求都要我来付费。使用 Google、Microsoft、GitHub 或 Apple 登录即可订阅。</span></li>
             <li><b>打开他人共享的文档是免费的</b><span>如果订阅用户与你共享了文档，你只需登录即可打开，对方允许时还可以编辑。</span></li>
             <li><b>如果你取消订阅</b><span>你的文档会保留在浏览器中，下载单个文件或打包成 ZIP 的所有文件，都不需要账户或订阅。</span></li>
@@ -424,7 +401,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">缺了什么？告诉我，它就会进入应用。</h2>
+            <p class="sub">Golem Docs 没有插件商店，以后也不会有。功能和改进，我会一直自己做进应用里。</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject=功能请求">提交功能请求</a></div>
+            <p class="fine">免费用户和订阅用户都可以提。订阅不能插队。登录后，也可以在应用里使用“帮助 › 发送反馈”。</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">插件曾经很有意义，因为缺一个功能就意味着某人好几周的业余时间。如今有 AI 帮我写代码，缺的功能直接做出来就行，所以我把它连同测试一起做进应用，而不是让你去找附加组件。</p>
+            <p class="sub" style="margin-bottom: 16px">这样一切都更简单。你的文档旁边不会运行任何第三方代码。新功能的外观和用法与应用的其他部分一致，支持全部 11 种语言，AI 助手也能使用。应用更新时，功能随之更新，所以不会失灵。</p>
+            <p class="sub" style="margin-bottom: 0">如果有你在文档里想做、Golem Docs 却做不到的事，或者它打不开的文件类型，请告诉我。每一条请求我都会读。我无法承诺日期，但大家常提的需求往往会先做。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">你的文档属于你。</h2>

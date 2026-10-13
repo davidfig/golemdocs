@@ -16,13 +16,16 @@ import type { DesktopMenu } from './bridge.ts';
 
 export type NativeEntry =
   | { kind: 'separator' }
-  | { kind: 'item'; id: string; label: string; accelerator?: string; enabled: boolean; checked?: boolean; role?: 'cut' | 'copy' | 'paste' | 'selectAll' }
+  | { kind: 'item'; id: string; label: string; accelerator?: string; enabled: boolean; checked?: boolean; role?: 'cut' | 'copy' | 'paste' | 'selectAll'; appMenu?: boolean }
   | { kind: 'submenu'; label: string; enabled: boolean; items: NativeEntry[] };
 
 export interface NativeTop {
   label: string;
   items: NativeEntry[];
 }
+
+/** Commands that belong in the app menu (macOS puts Settings there, with ⌘,) rather than where the page lists them. */
+const APP_MENU = new Set(['tools.options']);
 
 /** Commands the system runs itself, so the editor gets a real clipboard event. */
 const ROLES: Record<string, 'cut' | 'copy' | 'paste'> = { 'edit.cut': 'cut', 'edit.copy': 'copy', 'edit.paste': 'paste' };
@@ -93,7 +96,7 @@ export function snapshotMenus(registry: CommandRegistry, menus: readonly TopMenu
       const accelerator = !role && command ? acceleratorFor(command.shortcutParsed) : null;
       const id = `n${next++}`;
       const checked = info.role === 'menuitem' ? undefined : info.checked;
-      out.push({ kind: 'item', id, label, enabled: info.enabled, ...(checked !== undefined && { checked }), ...(accelerator && { accelerator }), ...(role && { role }) });
+      out.push({ kind: 'item', id, label, enabled: info.enabled, ...(checked !== undefined && { checked }), ...(accelerator && { accelerator }), ...(role && { role }), ...(command && APP_MENU.has(command.id) && { appMenu: true }) });
       actions.set(id, { run: info.run, shortcut: accelerator !== null, command: command?.id });
     }
     return out;

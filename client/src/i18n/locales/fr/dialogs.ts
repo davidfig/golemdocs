@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': 'Options',
   'dialogs.options.view': 'Affichage',
   'dialogs.options.fullScreenMenu': 'Garder la barre de menus en plein écran',
+  'dialogs.options.macInAppMenu': 'Afficher aussi les menus dans la fenêtre sur Mac',
   'dialogs.options.drawing': 'Dessin',
   'dialogs.options.selectAfterPencil': 'Sélectionner le trait du crayon une fois terminé',
   'dialogs.options.returnToSelect': 'Revenir à l’outil Sélection après avoir dessiné une forme ou un tracé à la plume',

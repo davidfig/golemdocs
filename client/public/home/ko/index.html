@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs: Word, PDF, Markdown 등을 브라우저에서 편집하세요</title>
-    <meta name="description" content="Golem Docs는 브라우저 안에서 동작하는 문서 편집기입니다. Word, OpenDocument, PDF, Markdown, HTML, 일반 텍스트를 무료로, 계정 없이 열고 편집하고 변환하세요. 구독하면 기기 간 동기화, 공유와 실시간 공동 편집, AI 도우미가 추가됩니다." />
+    <meta name="description" content="Golem Docs는 브라우저와 데스크톱에서 쓰는 문서 편집기입니다(모바일 앱은 곧 출시). Word, OpenDocument, PDF, Markdown, HTML, 일반 텍스트를 무료로, 계정 없이 열고 편집하고 변환하세요. 구독하면 기기 간 동기화, 공유와 실시간 공동 편집, AI 도우미가 추가됩니다." />
     <link rel="canonical" href="https://golemdocs.com/home/ko" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="ko_KR" />
     <meta property="og:title" content="Golem Docs: Word, PDF, Markdown 등을 브라우저에서 편집하세요" />
-    <meta property="og:description" content="모든 종류의 문서를 하나의 편집기로. Word, PDF, Markdown 등을 브라우저에서 무료로, 계정 없이 열고 편집하고 변환하세요. 구독하면 동기화, 공유, 공동 편집, AI 도우미를 사용할 수 있습니다." />
+    <meta property="og:description" content="모든 종류의 문서를 하나의 편집기로. Word, PDF, Markdown 등을 브라우저와 데스크톱 앱에서 무료로, 계정 없이 열고 편집하고 변환하세요. 구독하면 동기화, 공유, 공동 편집, AI 도우미를 사용할 수 있습니다." />
     <meta property="og:url" content="https://golemdocs.com/home/ko" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -122,17 +122,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -219,7 +225,7 @@
               <a class="btn" href="/">써 보세요, 무료입니다</a>
               <a class="btn ghost" href="#features">기능 살펴보기</a>
             </div>
-            <p class="fine">브라우저에서 무료이며 계정도 광고도 없습니다. 동기화, 공유, AI는 월 5달러입니다.</p>
+            <p class="fine">브라우저와 데스크톱 앱에서 무료이며(모바일 앱은 곧 출시) 계정도 광고도 없습니다. 동기화, 공유, AI는 월 5달러입니다.</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -239,11 +245,11 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">이걸 만든 이유</h2>
           <p class="sub" style="margin-bottom: 16px">David입니다. 제 삶은 Obsidian이 이끌고 있지만, PDF가 자꾸 발목을 잡았습니다. PDF를 변환하거나 편집할 도구를 늘 찾아 헤맸지요. ZIP 파일 때문에 더 흥미로워졌습니다. 압축 파일에는 무엇이든 들어 있을 수 있으니, ZIP을 여는 편집기라면 그 안의 무엇이든 열어야 하니까요. 세상의 모든 문서를 열 수 있다면 재미있겠다고 생각했고, 그때부터 계속 그 방향으로 만들고 있습니다.</p>
-          <p class="sub" style="margin-bottom: 0">코드의 상당 부분은 Claude와 함께 썼고, 방향은 제가 잡았습니다(직접 짤 수도 있었다고 장담하지만, 몇 년은 걸렸을 겁니다). Golem Docs는 아직 자라는 중이니, 어떤 파일이 제대로 열리지 않으면 알려 주세요. 목록에 올려 두겠습니다.</p>
+          <p class="sub" style="margin-bottom: 0">코드의 상당 부분은 Claude와 함께 썼고, 방향은 제가 잡았습니다(직접 짤 수도 있었다고 장담하지만, 몇 년은 걸렸을 겁니다). Golem Docs는 아직 자라는 중이니, 지원하지 않는 파일 형식이나 빠진 기능이 있으면 추가하겠습니다.</p>
         </div>
       </section>
 
@@ -253,12 +259,6 @@
           <p class="sub">대부분의 편집기는 한 가지 형식만 잘 다룹니다. 저는 전부 다루는 편집기를 원했습니다.</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>아무것도 잃지 않고 형식 바꾸기</h3>
-              <p>Word, Markdown, 웹 페이지 사이를 오가세요. 다시 돌아오면 서식도 되살아납니다.</p>
-              <a class="more-link" href="/home/convert">형식 변환 →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>PDF에 표시만 하지 말고 편집하세요</h3>
               <p>텍스트를 제자리에서 편집하고, 가리고, 페이지를 재정렬하고, 양식을 채우고, 주석을 달 수 있습니다.</p>
@@ -266,14 +266,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>그림 편집</h3>
-              <p>PNG, JPEG, WebP 이미지를 자르고, 회전하고, 크기와 색을 조정하세요. 그림을 그리고, 텍스트와 번호 표시를 넣거나, 숨기려는 부분을 픽셀화할 수 있어요.</p>
+              <h3>그림 편집, 벡터 그리기</h3>
+              <p>PNG, JPEG, WebP 이미지를 자르고, 크기를 바꾸고, 색을 조정하고, 그림을 그리고, 가릴 부분을 모자이크 처리하세요. 도형, 펜 경로, 그라데이션, 레이어가 있는 SVG 그림도 열어서 편집할 수 있습니다.</p>
               <a class="more-link" href="/home/images">그림 편집 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>벡터 그리기</h3>
-              <p>SVG 그림을 열고 편집하세요: 도형, 펜 경로, 그라디언트, 브러시 스트로크, 레이어, 불리언 연산.</p>
               <a class="more-link" href="/home/vector">벡터 편집 →</a>
             </div>
             <div class="card">
@@ -289,27 +284,10 @@
               <a class="more-link" href="/home/collaborate">공유 방법 →</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>AI 도우미</h3>
-              <p>AI 도우미는 문서를 읽고, 문단을 다시 쓰거나 추가하고, 스타일을 바꾸고, 댓글을 남깁니다. 실행 취소로 어떤 변경이든 되돌릴 수 있습니다. 요청할 때마다 제게 비용이 들기 때문에 구독에 포함되어 있습니다.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>저절로 저장</h3>
-              <p>저장 버튼이 없습니다. 변경 사항은 입력하는 즉시 보관되며, 오프라인에서도 마찬가지입니다.</p>
-              <a class="more-link" href="/home/documents">작성과 저장 →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>제가 기억하는 그 Word</h3>
               <p>Word 2003의 메뉴, 도구 모음, 대화 상자. 리본에서 헤맬 필요가 없습니다.</p>
               <a class="more-link" href="/home/customize">Word 2003의 느낌 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>내 방식대로</h3>
-              <p>다크 모드가 있는 색 구성표를 고르고, 도구 모음을 배치하고, 11개 언어로 사용하세요.</p>
-              <a class="more-link" href="/home/customize">테마와 언어 →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -323,28 +301,27 @@
               <p>파일, 폴더 전체, ZIP을 가져오고 폴더 구조도 그대로 유지합니다. Obsidian에서 옮겨 오시나요? 보관함도 가져올 수 있습니다.</p>
               <a class="more-link" href="/home/import">파일과 폴더 가져오기 →</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>모든 문서 검색</h3>
-              <p>모든 문서에서 단어와 #태그를 찾고, 결과는 해당 단락에서 열립니다. 브라우저 자체 색인을 사용하므로 오프라인에서도 작동합니다.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>Obsidian에서 오셨나요</h3>
-              <p>보관함은 Markdown 노트가 담긴 폴더입니다. 가져오면 노트가 각자의 폴더에 들어옵니다.</p>
-              <a class="more-link" href="/home/obsidian">Obsidian 보관함 가져오기 →</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">전쟁과 평화도 거뜬합니다.</h2>
             <p class="sub" style="margin-bottom: 0">1,006쪽 전체를 페이지 눈금으로 펼친 모습입니다. 책 전체에서 한 문단까지 확대했다가 다시 축소합니다. 편집기가 모든 페이지를 그래픽 카드로 직접 그리기 때문에 큰 문서도 반응이 빠릅니다.</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="전쟁과 평화 전체 1,006쪽을 페이지 눈금 보기에서 읽을 수 있는 텍스트까지 확대했다가 다시 축소하는 화면 녹화."></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">그리고 몇 가지 더.</h2>
+          <div class="extras">
+            <p><b>아무것도 잃지 않고 형식 바꾸기</b> Word, Markdown, 웹 페이지 사이를 오가세요. 다시 돌아오면 서식도 되살아납니다. <a href="/home/convert">형식 변환 →</a> <b>모든 문서 검색</b> 모든 문서에서 단어와 #태그를 찾고, 결과는 해당 단락에서 열립니다. 브라우저 자체 색인을 사용하므로 오프라인에서도 작동합니다.</p>
+            <p><b>Obsidian에서 오셨나요</b> 보관함은 Markdown 노트가 담긴 폴더입니다. 가져오면 노트가 각자의 폴더에 들어옵니다. <a href="/home/obsidian">Obsidian 보관함 가져오기 →</a> <b>내 방식대로</b> 다크 모드가 있는 색 구성표를 고르고, 도구 모음을 배치하고, 11개 언어로 사용하세요. <a href="/home/customize">테마와 언어 →</a></p>
+          </div>
         </div>
       </section>
 
@@ -388,7 +365,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">1분이면 시작할 수 있습니다.</h2>
           <p class="sub">설치할 것도, 가입할 것도 없습니다.</p>
@@ -413,10 +390,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">무료로 쓰세요. 구독료는 서버와 AI 비용을 댑니다.</h2>
-            <p class="sub" style="margin-bottom: 0">편집은 브라우저에서 실행되므로 제가 비용을 들이지 않고 무료로 드릴 수 있고, Golem Docs는 계정 없이도 완전히 동작합니다. 동기화와 공유에는 서버와 저장 공간이 필요하고, AI 도우미는 답할 때마다 비용이 듭니다. 구독은 월 5달러이며 그 비용을 충당하고, 남는 돈으로 Golem Docs를 계속 만들어 갑니다. 언제든 해지할 수 있습니다.</p>
+            <p class="sub" style="margin-bottom: 0">편집은 사용자의 기기에서 실행되므로 제가 비용을 들이지 않고 무료로 드릴 수 있고, Golem Docs는 계정 없이도 브라우저, 데스크톱 앱, 그리고 출시되면 모바일 앱에서 완전히 동작합니다. 동기화와 공유에는 서버와 저장 공간이 필요하고, AI 도우미는 답할 때마다 비용이 듭니다. 구독은 월 5달러이며 그 비용을 충당하고, 남는 돈으로 Golem Docs를 계속 만들어 갑니다. 언제든 해지할 수 있습니다.</p>
           </div>
           <ul class="checks">
-            <li><b>무료, 계정 불필요</b><span>원하는 만큼 편집하고, 변환하고, 다운로드하세요. 문서는 브라우저에 저장되며 제게 전송되지 않습니다.</span></li>
+            <li><b>무료, 계정 불필요</b><span>브라우저, 데스크톱 앱, 곧 나올 모바일 앱에서 원하는 만큼 편집하고, 변환하고, 다운로드하세요. 문서는 기기에 저장되며 제게 전송되지 않습니다.</span></li>
             <li><b>5달러가 쓰이는 곳</b><span>동기화는 문서를 제 서버에 보관해서 어떤 기기에서든 따라오게 합니다. 공유로는 사람들이 실시간으로 함께 편집할 수 있습니다. AI 도우미는 요청마다 제게 비용이 청구됩니다. 구독하려면 Google, Microsoft, GitHub 또는 Apple로 로그인하세요.</span></li>
             <li><b>다른 사람이 공유한 문서를 여는 것은 무료</b><span>구독자가 문서를 공유하면 로그인만 하면 열 수 있고, 허용해 준 경우 편집도 할 수 있습니다.</span></li>
             <li><b>해지하면</b><span>문서는 브라우저에 그대로 남으며, 파일 하나든 모든 파일을 ZIP으로 묶든 다운로드에는 계정도 구독도 필요하지 않습니다.</span></li>
@@ -424,7 +401,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">빠진 게 있나요? 알려 주세요. 앱에 넣겠습니다.</h2>
+            <p class="sub">Golem Docs에는 플러그인 스토어가 없고, 앞으로도 만들지 않습니다. 기능과 개선은 제가 직접 앱 안에 계속 만들어 넣습니다.</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject=기능 요청">기능 요청 보내기</a></div>
+            <p class="fine">무료 사용자와 구독자 모두 요청할 수 있습니다. 구독한다고 순서가 앞당겨지지는 않습니다. 로그인했다면 앱의 도움말 › 의견 보내기로도 보낼 수 있습니다.</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">플러그인은 없는 기능 하나가 누군가의 몇 주치 여가 시간을 뜻하던 때에는 의미가 있었습니다. AI가 코드 작성을 돕는 지금은 없는 기능을 그냥 만들 수 있습니다. 그래서 부가 기능을 찾게 하는 대신 테스트와 함께 앱에 직접 넣습니다.</p>
+            <p class="sub" style="margin-bottom: 16px">그래서 모든 것이 단순합니다. 문서 옆에서 실행되는 서드파티 코드가 없습니다. 새 기능은 앱의 나머지 부분과 똑같이 보이고 동작하며, 11개 언어를 모두 지원하고, AI 어시스턴트도 쓸 수 있습니다. 앱이 바뀌면 기능도 함께 바뀌므로 망가지는 일이 없습니다.</p>
+            <p class="sub" style="margin-bottom: 0">문서에서 하고 싶은데 Golem Docs로는 안 되는 일이나 열리지 않는 파일 형식이 있으면 알려 주세요. 요청은 모두 읽습니다. 날짜는 약속할 수 없지만, 사람들이 많이 요청한 것은 먼저 만들어지는 경우가 많습니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">문서는 당신의 것입니다.</h2>

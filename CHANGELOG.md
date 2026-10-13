@@ -2,12 +2,23 @@
 
 ## 0.21.0 - Unreleased
 
+### Added
+- Options open with ⌘, (Ctrl+, elsewhere); in the Mac desktop app they are also in the app menu.
+- Desktop app on a Mac: Tools › Options can also show the menus in the window, alongside the system menu bar (off by default).
+- A Requests section on the home page: there is no plugin store, missing features are built into the app, and it says how to ask for one. The feature cards are fewer, and the smaller extras have their own section.
+
 ### Changed
 - In the desktop app, the save indicator at the top right shows the folder that keeps your documents as files, with a link to show it in Finder (or File Explorer), or to choose one.
+- The home page now says that a file type Golem Docs doesn’t support, or a missing feature, will be added.
+- The home page says that Golem Docs is free in the desktop app and, when they arrive, the mobile apps, not only in the browser.
 
 ### Fixed
 - The desktop app now checks that it may use the vault folder before every sync, which makes macOS ask for permission. If the folder can’t be read or written, it says so (in a notice, in Vault Folder and in the save indicator) and offers Try Again and, on a Mac, a button to open Privacy settings. Before, a folder it couldn’t read failed silently.
 - In the Mac desktop app, the window’s close, minimize and zoom buttons no longer cover the Documents heading.
+- On the home page, no two neighboring sections share a background color any more.
+- On a phone, tapping the document puts the caret down and opens the keyboard on the first tap (iOS closed it again a moment later), and tapping the AI assistant opens it on the first tap instead of the second.
+- On a phone, the menu bar and status bar are no longer hidden by the notch, the rounded corners or the home indicator, and the assistant no longer sits on top of the status bar or the typing bar.
+- On a touch screen, the delete button on a page in the page sidebar is always shown, so a tap on a page no longer needs a second tap.
 
 ## 0.20.0 - 2026-10-13
 

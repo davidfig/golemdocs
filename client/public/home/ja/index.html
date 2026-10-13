@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs: Word、PDF、Markdown などをブラウザーで編集</title>
-    <meta name="description" content="Golem Docs は、ブラウザーの中で動くドキュメントエディターです。Word、OpenDocument、PDF、Markdown、HTML、テキストを、無料でアカウント不要のまま開き、編集し、変換できます。サブスクリプションでは、デバイス間の同期、共有とリアルタイムの共同編集、AI アシスタントが加わります。" />
+    <meta name="description" content="Golem Docs は、ブラウザーとデスクトップで使えるドキュメントエディターです（モバイルアプリは近日公開）。Word、OpenDocument、PDF、Markdown、HTML、テキストを、無料でアカウント不要のまま開き、編集し、変換できます。サブスクリプションでは、デバイス間の同期、共有とリアルタイムの共同編集、AI アシスタントが加わります。" />
     <link rel="canonical" href="https://golemdocs.com/home/ja" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="ja_JP" />
     <meta property="og:title" content="Golem Docs: Word、PDF、Markdown などをブラウザーで編集" />
-    <meta property="og:description" content="あらゆる種類のドキュメントを、ひとつのエディターで。Word、PDF、Markdown などを、ブラウザーで無料・アカウント不要のまま開き、編集し、変換できます。サブスクリプションで同期、共有、共同編集、AI アシスタントも利用できます。" />
+    <meta property="og:description" content="あらゆる種類のドキュメントを、ひとつのエディターで。Word、PDF、Markdown などを、ブラウザーとデスクトップアプリで無料・アカウント不要のまま開き、編集し、変換できます。サブスクリプションで同期、共有、共同編集、AI アシスタントも利用できます。" />
     <meta property="og:url" content="https://golemdocs.com/home/ja" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -122,17 +122,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -219,7 +225,7 @@
               <a class="btn" href="/">無料で試す</a>
               <a class="btn ghost" href="#features">機能を見る</a>
             </div>
-            <p class="fine">ブラウザーで無料。アカウント不要、広告なし。同期、共有、AI は月額 $5 です。</p>
+            <p class="fine">ブラウザーとデスクトップアプリで無料（モバイルアプリは近日公開）。アカウント不要、広告なし。同期、共有、AI は月額 $5 です。</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -239,11 +245,11 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">作った理由</h2>
           <p class="sub" style="margin-bottom: 16px">David といいます。私の生活は Obsidian が支えていますが、PDF がいつも邪魔をしました。変換したり編集したりするツールを、そのたびに探し回っていたのです。ZIP ファイルのおかげで話がおもしろくなりました。アーカイブには何でも入るので、それを開けるエディターは中身が何であれ開けなければなりません。あらゆる種類のドキュメントを開けたら楽しいだろうと思い、それ以来ずっと、その目標に向かって作り続けています。</p>
-          <p class="sub" style="margin-bottom: 0">コードの多くは Claude と一緒に、私が舵を取りながら書きました (自分で書こうと思えば書けたと誓って言えますが、何年もかかったでしょう)。Golem Docs はまだ成長中です。思いどおりに開けないファイルがあれば教えてください。リストに加えます。</p>
+          <p class="sub" style="margin-bottom: 0">コードの多くは Claude と一緒に、私が舵を取りながら書きました (自分で書こうと思えば書けたと誓って言えますが、何年もかかったでしょう)。Golem Docs はまだ成長中です。対応していないファイル形式や足りない機能があれば、追加します。</p>
         </div>
       </section>
 
@@ -253,12 +259,6 @@
           <p class="sub">多くのエディターは 1 つの形式しか得意としません。私は、全部こなせるものが欲しかったのです。</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>何も失わずに形式を変更</h3>
-              <p>Word、Markdown、Web ページの間で切り替えられます。元に戻せば、書式も元どおりになります。</p>
-              <a class="more-link" href="/home/convert">形式を変換する →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>PDF に書き込むだけでなく編集も</h3>
               <p>テキストをその場で編集し、墨消しやページの並べ替え、フォームへの入力、注釈の追加ができます。</p>
@@ -266,14 +266,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>画像を編集</h3>
-              <p>PNG、JPEG、WebP の画像をトリミング、回転、サイズ変更、色調整できます。描画やテキスト、番号マーカーの追加、隠したい部分へのモザイクも可能です。</p>
+              <h3>画像を編集、ベクターを描く</h3>
+              <p>PNG・JPEG・WebP 画像のトリミング、サイズ変更、色調整、描き込み、隠したい部分のモザイク処理ができます。SVG 図形も、シェイプ、ペンパス、グラデーション、レイヤーつきで開いて編集できます。</p>
               <a class="more-link" href="/home/images">画像を編集する →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>ベクターを描く</h3>
-              <p>SVG 図形を開いて編集：図形、ペンのパス、グラデーション、ブラシストローク、レイヤー、パスの演算。</p>
               <a class="more-link" href="/home/vector">ベクターを編集 →</a>
             </div>
             <div class="card">
@@ -289,27 +284,10 @@
               <a class="more-link" href="/home/collaborate">共有のしくみ →</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>AI アシスタント</h3>
-              <p>AI アシスタントはドキュメントを読み、段落を書き直したり追加したり、スタイルを変更したり、コメントを残したりします。元に戻す操作で、どの変更も取り消せます。リクエストのたびに私にお金がかかるので、サブスクリプションに含まれます。</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>自動で保存</h3>
-              <p>保存ボタンはありません。変更は入力するそばから保持され、オフラインでも大丈夫です。</p>
-              <a class="more-link" href="/home/documents">書くことと保存 →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>私が覚えている Word</h3>
               <p>Word 2003 のメニュー、ツールバー、ダイアログ。リボンの中を探し回る必要はありません。</p>
               <a class="more-link" href="/home/customize">Word 2003 の操作感 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>自分好みに</h3>
-              <p>ダークモード付きの配色を選び、ツールバーを並べ替え、11 の言語で使えます。</p>
-              <a class="more-link" href="/home/customize">テーマと言語 →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -323,28 +301,27 @@
               <p>ファイル、フォルダー丸ごと、ZIP を読み込んで、フォルダー構成も保てます。Obsidian から移行するなら、Vault も読み込めます。</p>
               <a class="more-link" href="/home/import">ファイルとフォルダーの読み込み →</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>すべての文書を検索</h3>
-              <p>すべての文書から単語や #タグ を探せます。結果は該当する段落で開きます。ブラウザー自身のインデックスを使うので、オフラインでも動作します。</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>Obsidian から移行</h3>
-              <p>Vault は Markdown ノートのフォルダーです。読み込めば、ノートがそれぞれのフォルダーに入ります。</p>
-              <a class="more-link" href="/home/obsidian">Obsidian Vault の読み込み →</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">『戦争と平和』でも速いです。</h2>
             <p class="sub" style="margin-bottom: 0">1,006 ページすべてを、ページ グリッドで表示しています。本全体から 1 つの段落まで拡大し、また戻します。エディターはすべてのページを、グラフィックスカードで自分で描画するので、大きなドキュメントでも軽快に動きます。</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="『戦争と平和』全 1,006 ページの画面録画。ページ グリッド表示から読めるテキストまで拡大し、また縮小します。"></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">ほかにも、いくつか。</h2>
+          <div class="extras">
+            <p><b>何も失わずに形式を変更</b> Word、Markdown、Web ページの間で切り替えられます。元に戻せば、書式も元どおりになります。 <a href="/home/convert">形式を変換する →</a> <b>すべての文書を検索</b> すべての文書から単語や #タグ を探せます。結果は該当する段落で開きます。ブラウザー自身のインデックスを使うので、オフラインでも動作します。</p>
+            <p><b>Obsidian から移行</b> Vault は Markdown ノートのフォルダーです。読み込めば、ノートがそれぞれのフォルダーに入ります。 <a href="/home/obsidian">Obsidian Vault の読み込み →</a> <b>自分好みに</b> ダークモード付きの配色を選び、ツールバーを並べ替え、11 の言語で使えます。 <a href="/home/customize">テーマと言語 →</a></p>
+          </div>
         </div>
       </section>
 
@@ -388,7 +365,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">1 分で始められます。</h2>
           <p class="sub">インストールも、登録も必要ありません。</p>
@@ -413,10 +390,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">無料で使えます。購読料は、サーバー代と AI 代に充てています。</h2>
-            <p class="sub" style="margin-bottom: 0">編集はブラウザーの中で動くので、無料で提供しても私にはお金がかかりません。Golem Docs はアカウントなしで完全に動作します。同期と共有にはサーバーとストレージが必要で、AI アシスタントは答えるたびにお金がかかります。サブスクリプションは月額 $5 で、その費用をまかない、残りは Golem Docs の開発を続けるために使います。いつでも解約できます。</p>
+            <p class="sub" style="margin-bottom: 0">編集はお使いの端末の中で動くので、無料で提供しても私にはお金がかかりません。Golem Docs はアカウントなしで、ブラウザーでもデスクトップアプリでも、登場後はモバイルアプリでも完全に動作します。同期と共有にはサーバーとストレージが必要で、AI アシスタントは答えるたびにお金がかかります。サブスクリプションは月額 $5 で、その費用をまかない、残りは Golem Docs の開発を続けるために使います。いつでも解約できます。</p>
           </div>
           <ul class="checks">
-            <li><b>無料、アカウント不要</b><span>編集、変換、ダウンロードを好きなだけ。ドキュメントはブラウザーに保存され、私に送られることはありません。</span></li>
+            <li><b>無料、アカウント不要</b><span>編集、変換、ダウンロードをブラウザー、デスクトップアプリ、そしてまもなくモバイルアプリで、好きなだけ。ドキュメントは端末に保存され、私に送られることはありません。</span></li>
             <li><b>$5 の使い道</b><span>同期は、ドキュメントを私のサーバーに置いて、どのデバイスにもついてくるようにします。共有は、みんなでリアルタイムに編集できるようにします。AI アシスタントは、リクエストのたびに私に請求が来ます。登録するには、Google、Microsoft、GitHub、Apple でサインインします。</span></li>
             <li><b>共有されたドキュメントを開くのは無料</b><span>購読者があなたとドキュメントを共有した場合、開くにはサインインするだけで、許可されていれば編集もできます。</span></li>
             <li><b>解約した場合</b><span>ドキュメントはブラウザーに残ります。ファイル 1 つでも、すべてのファイルを ZIP にまとめても、ダウンロードにアカウントやサブスクリプションは必要ありません。</span></li>
@@ -424,7 +401,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">足りないものがありますか？ 教えてください。アプリに入れます。</h2>
+            <p class="sub">Golem Docs にプラグインストアはなく、今後も作りません。機能や改善は、私自身がアプリの中に作り込み続けます。</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject=機能リクエスト">機能をリクエストする</a></div>
+            <p class="fine">無料ユーザーも購読者もリクエストできます。購読しても順番は早くなりません。サインインしている場合は、アプリの「ヘルプ › フィードバックを送信」からも送れます。</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">プラグインに意味があったのは、足りない機能が誰かの数週間の余暇を意味した時代です。AI がコードを書く手伝いをしてくれる今は、足りない機能はそのまま作れます。だから、アドオンを探してもらうのではなく、テストつきでアプリに組み込みます。</p>
+            <p class="sub" style="margin-bottom: 16px">そのほうがシンプルです。文書のそばで動くサードパーティのコードはありません。新しい機能は、アプリのほかの部分と同じ見た目と動作で、11 言語すべてに対応し、AI アシスタントも使えます。アプリが変わるときは機能も一緒に変わるので、壊れることはありません。</p>
+            <p class="sub" style="margin-bottom: 0">文書の中でやりたいのに Golem Docs でできないことや、開けないファイル形式があれば、教えてください。リクエストはすべて読んでいます。日付はお約束できませんが、よく求められるものは先に作られることが多いです。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">あなたのドキュメントは、あなたのものです。</h2>

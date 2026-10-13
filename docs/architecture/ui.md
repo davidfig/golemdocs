@@ -81,6 +81,7 @@ Reuse before you build, and centralize what you would copy. One implementation p
 - `client/site/clip.js`/`clip.css` are a scripted, no-AI demo of the assistant.
 - `client/public/home/war-and-peace.webm` is a recording of the real app; re-record with `pnpm record:home` when the look of toolbars, menus, status bar, Page Grid or the mascot changes (needs the user's dev server on :5173).
 - Home page changes, even copy about an existing feature, get a CHANGELOG line.
+- **Section backgrounds must alternate.** No two neighbouring `<section>`s in `<main>` may share a background. This is automatic: CSS shades every odd `main > section` (`:nth-of-type(odd)`) with `--surface`, and the even ones stay `--bg`, so there is no per-section class to keep in step. When you add, remove or reorder a section, check the page still alternates (a section is a direct child of `<main>`; the hero is a `<div>`, so it is not counted and the first section is shaded). Don't give a section its own background or reintroduce an `alt` class.
 
 ## Invariants and gotchas
 

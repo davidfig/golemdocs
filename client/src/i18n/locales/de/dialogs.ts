@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': 'Optionen',
   'dialogs.options.view': 'Ansicht',
   'dialogs.options.fullScreenMenu': 'Menüleiste im Vollbildmodus beibehalten',
+  'dialogs.options.macInAppMenu': 'Menüs auf dem Mac zusätzlich im Fenster anzeigen',
   'dialogs.options.drawing': 'Zeichnen',
   'dialogs.options.selectAfterPencil': 'Strich nach dem Zeichnen mit dem Stift auswählen',
   'dialogs.options.returnToSelect': 'Nach einer Form oder einem Zeichenstiftpfad zum Auswahlwerkzeug zurückwechseln',

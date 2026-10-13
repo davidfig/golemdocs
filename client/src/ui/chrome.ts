@@ -32,7 +32,7 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
-import { installFullScreen, toggleFullScreen } from './fullScreen.ts';
+import { inAppMenuOnMac, installFullScreen, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
@@ -154,7 +154,10 @@ export class Chrome {
     this.menuBar = new MenuBar(this.registry, this.menus(), this.layer, () => this.mobileMenu());
     const native = IS_MAC ? desktopMenu() : null;
     if (native) {
-      this.menuBar.setNative(true);
+      // Both menus work: the system's always, and the one in the window too when the option asks for it.
+      const showInWindow = (): void => this.menuBar.setNative(!inAppMenuOnMac());
+      showInWindow();
+      onInAppMenuChange(showInWindow);
       this.menuBar.setTitleBar(true);
       this.nativeMenu = new NativeMenuSync(this.registry, () => this.menus(), native, {
         fieldFocused: () => isFormField(document.activeElement),
@@ -476,7 +479,7 @@ export class Chrome {
       dialog('tools.spelling', t('chrome.tools.spelling'), 'spelling', { icon: 'spelling', shortcut: 'F7' }),
       dialog('tools.wordCount', t('chrome.tools.wordCount'), 'wordCount', { icon: 'wordCount' }),
       a('tools.trackChanges', t('chrome.tools.trackChanges'), { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
-      dialog('tools.options', t('chrome.tools.options'), 'options'),
+      dialog('tools.options', t('chrome.tools.options'), 'options', { shortcut: 'Mod+,' }),
       { id: 'tools.autoFormat', label: t('chrome.tools.autoFormat'), tooltip: t('chrome.tools.autoFormat.tip'), run: () => setAutoFormat(!autoFormatOn()), checked: autoFormatOn },
     );
 

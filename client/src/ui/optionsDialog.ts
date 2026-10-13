@@ -6,7 +6,9 @@ import { SMOOTHING_LEVELS, lockGuidesOn, penPressureOn, pencilSmoothing, returnT
 import { AUTOCORRECT_KEYS } from '../layout/autocorrect.ts';
 import { autoCorrectOptions, setAutoCorrect } from './autoCorrect.ts';
 import { h } from './dom.ts';
-import { keepMenuInFullScreen, setKeepMenuInFullScreen } from './fullScreen.ts';
+import { desktopMenu } from '../desktop/bridge.ts';
+import { IS_MAC } from './shortcuts.ts';
+import { inAppMenuOnMac, keepMenuInFullScreen, setInAppMenuOnMac, setKeepMenuInFullScreen } from './fullScreen.ts';
 import { showDialog } from './popup.ts';
 import { showReplacements } from './replacementsDialog.ts';
 
@@ -28,7 +30,7 @@ export function optionsPanel(): HTMLElement {
   return h(
     'div',
     { class: 'wm-options' },
-    h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen)),
+    h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen), ...(IS_MAC && desktopMenu() ? [check(t('dialogs.options.macInAppMenu'), inAppMenuOnMac(), setInAppMenuOnMac)] : [])),
     h('fieldset', {}, h('legend', { text: t('dialogs.options.autocorrect') }), ...AUTOCORRECT_KEYS.map((rule) => check(t(`dialogs.options.${rule}`), autoCorrectOptions()[rule], (on) => setAutoCorrect(rule, on))), editList),
     h(
       'fieldset',

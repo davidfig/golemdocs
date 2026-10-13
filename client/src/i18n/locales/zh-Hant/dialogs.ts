@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': '選項',
   'dialogs.options.view': '檢視',
   'dialogs.options.fullScreenMenu': '在全螢幕時保留功能表列',
+  'dialogs.options.macInAppMenu': '在 Mac 上同時於視窗中顯示選單',
   'dialogs.options.drawing': '繪圖',
   'dialogs.options.selectAfterPencil': '完成鉛筆筆畫後將其選取',
   'dialogs.options.returnToSelect': '繪製形狀或鋼筆路徑後切換回選取工具',

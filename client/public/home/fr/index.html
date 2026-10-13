@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs : modifiez Word, PDF, Markdown et plus dans votre navigateur</title>
-    <meta name="description" content="Golem Docs est un éditeur de documents qui vit dans votre navigateur. Ouvrez, modifiez et convertissez Word, OpenDocument, PDF, Markdown, HTML et texte brut, gratuitement et sans compte. Un abonnement ajoute la synchronisation entre appareils, le partage et l’édition à plusieurs en direct, ainsi qu’un assistant IA." />
+    <meta name="description" content="Golem Docs est un éditeur de documents pour votre navigateur et votre bureau, avec des apps mobiles bientôt. Ouvrez, modifiez et convertissez Word, OpenDocument, PDF, Markdown, HTML et texte brut, gratuitement et sans compte. Un abonnement ajoute la synchronisation entre appareils, le partage et l’édition à plusieurs en direct, ainsi qu’un assistant IA." />
     <link rel="canonical" href="https://golemdocs.com/home/fr" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="fr_FR" />
     <meta property="og:title" content="Golem Docs : modifiez Word, PDF, Markdown et plus dans votre navigateur" />
-    <meta property="og:description" content="Un seul éditeur pour tous les types de documents. Ouvrez, modifiez et convertissez Word, PDF, Markdown et plus, gratuitement dans votre navigateur et sans compte. Abonnez-vous pour synchroniser, partager et modifier à plusieurs, et pour utiliser l’assistant IA." />
+    <meta property="og:description" content="Un seul éditeur pour tous les types de documents. Ouvrez, modifiez et convertissez Word, PDF, Markdown et plus, gratuitement dans votre navigateur et l’app de bureau, sans compte. Abonnez-vous pour synchroniser, partager et modifier à plusieurs, et pour utiliser l’assistant IA." />
     <meta property="og:url" content="https://golemdocs.com/home/fr" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -122,17 +122,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -219,7 +225,7 @@
               <a class="btn" href="/">Essayez, c’est gratuit</a>
               <a class="btn ghost" href="#features">Découvrir ce qu’il fait</a>
             </div>
-            <p class="fine">Gratuit dans votre navigateur, sans compte et sans publicité. La synchronisation, le partage et l’IA coûtent 5 $ par mois.</p>
+            <p class="fine">Gratuit dans votre navigateur et dans l’app de bureau (apps mobiles bientôt), sans compte et sans publicité. La synchronisation, le partage et l’IA coûtent 5 $ par mois.</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -239,11 +245,11 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">Pourquoi je l’ai fait</h2>
           <p class="sub" style="margin-bottom: 16px">Je m’appelle David. Obsidian organise ma vie, mais les PDF me gênaient sans cesse : je cherchais toujours un outil pour en convertir ou en modifier un. Les fichiers ZIP ont rendu le tout plus intéressant : une archive peut contenir n’importe quoi, donc un éditeur qui en ouvre une doit ouvrir tout ce qu’elle contient. Je me suis dit que ce serait amusant s’il pouvait ouvrir tous les types de documents qui existent, et je construis dans cette direction depuis.</p>
-          <p class="sub" style="margin-bottom: 0">Une grande partie du code a été écrite avec Claude, sous ma direction (je promets que j’aurais pu le coder moi-même, mais ça m’aurait pris des années). Golem Docs grandit encore : si un fichier ne s’ouvre pas comme il le devrait, dites-le-moi et il passe sur la liste.</p>
+          <p class="sub" style="margin-bottom: 0">Une grande partie du code a été écrite avec Claude, sous ma direction (je promets que j’aurais pu le coder moi-même, mais ça m’aurait pris des années). Golem Docs grandit encore : si un type de fichier n’est pas pris en charge ou s’il vous manque une fonction, je l’ajouterai.</p>
         </div>
       </section>
 
@@ -253,12 +259,6 @@
           <p class="sub">La plupart des éditeurs gèrent bien un seul format. Je voulais un éditeur qui les gère tous.</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>Changez de forme sans rien perdre</h3>
-              <p>Passez de Word à Markdown et aux pages web. Revenez en arrière et votre mise en forme revient.</p>
-              <a class="more-link" href="/home/convert">Convertir les formats →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>Modifiez les PDF, pas seulement les annoter</h3>
               <p>Modifiez le texte sur place, caviardez, réorganisez les pages, remplissez des formulaires et annotez.</p>
@@ -266,14 +266,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>Modifiez les images</h3>
-              <p>Rognez, faites pivoter, redimensionnez et retouchez les couleurs d’images PNG, JPEG et WebP. Dessinez, ajoutez du texte et des repères numérotés, ou pixellisez ce qu’il faut cacher.</p>
+              <h3>Retouchez des images, dessinez des vecteurs</h3>
+              <p>Recadrez, redimensionnez, recolorez, dessinez sur des images PNG, JPEG et WebP et pixellisez ce qu’il faut cacher. Ouvrez et modifiez des dessins SVG avec formes, tracés à la plume, dégradés et calques.</p>
               <a class="more-link" href="/home/images">Modifier des images →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>Dessinez en vectoriel</h3>
-              <p>Ouvrez et modifiez des dessins SVG : formes, tracés à la plume, dégradés, coups de pinceau, calques et opérations booléennes.</p>
               <a class="more-link" href="/home/vector">Modifier des vecteurs →</a>
             </div>
             <div class="card">
@@ -289,27 +284,10 @@
               <a class="more-link" href="/home/collaborate">Comment fonctionne le partage →</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>Un assistant IA</h3>
-              <p>L’assistant IA lit votre document, réécrit ou ajoute des paragraphes, modifie les styles et laisse des commentaires. Annuler défait n’importe quelle modification. Il fait partie de l’abonnement, car chaque requête me coûte de l’argent.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>S’enregistre tout seul</h3>
-              <p>Pas de bouton Enregistrer. Les modifications sont conservées au fur et à mesure, même hors connexion.</p>
-              <a class="more-link" href="/home/documents">Écrire et enregistrer →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>Le Word dont je me souviens</h3>
               <p>Les menus, barres d’outils et boîtes de dialogue de Word 2003. Pas de ruban dans lequel chercher.</p>
               <a class="more-link" href="/home/customize">L’esprit de Word 2003 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>Faites-en le vôtre</h3>
-              <p>Choisissez un jeu de couleurs avec mode sombre, organisez les barres d’outils et utilisez 11 langues.</p>
-              <a class="more-link" href="/home/customize">Thèmes et langues →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -323,28 +301,27 @@
               <p>Importez un fichier, un dossier entier ou un ZIP, en gardant ses dossiers. Vous venez d'Obsidian ? Importez votre coffre.</p>
               <a class="more-link" href="/home/import">Importer fichiers et dossiers →</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>Cherchez dans tous vos documents</h3>
-              <p>Trouvez des mots et des #étiquettes dans tous vos documents ; les résultats s'ouvrent au paragraphe concerné. Cela fonctionne hors ligne grâce à l'index de votre navigateur.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>Vous venez d'Obsidian</h3>
-              <p>Votre coffre est un dossier de notes Markdown. Importez-le et vos notes arrivent dans leurs dossiers.</p>
-              <a class="more-link" href="/home/obsidian">Importer un coffre Obsidian →</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">Rapide, même sur Guerre et Paix.</h2>
             <p class="sub" style="margin-bottom: 0">Voici ses 1 006 pages dans la Grille de page, avec un zoom du livre entier jusqu’à un seul paragraphe, puis retour. L’éditeur dessine lui-même chaque page sur votre carte graphique, donc les gros documents restent fluides.</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="Un enregistrement d’écran de Guerre et Paix, ses 1 006 pages, qui zoome depuis la vue Grille de page jusqu’à du texte lisible, puis dézoome."></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">Et quelques autres choses.</h2>
+          <div class="extras">
+            <p><b>Changez de forme sans rien perdre</b> Passez de Word à Markdown et aux pages web. Revenez en arrière et votre mise en forme revient. <a href="/home/convert">Convertir les formats →</a> <b>Cherchez dans tous vos documents</b> Trouvez des mots et des #étiquettes dans tous vos documents ; les résultats s'ouvrent au paragraphe concerné. Cela fonctionne hors ligne grâce à l'index de votre navigateur.</p>
+            <p><b>Vous venez d'Obsidian</b> Votre coffre est un dossier de notes Markdown. Importez-le et vos notes arrivent dans leurs dossiers. <a href="/home/obsidian">Importer un coffre Obsidian →</a> <b>Faites-en le vôtre</b> Choisissez un jeu de couleurs avec mode sombre, organisez les barres d’outils et utilisez 11 langues. <a href="/home/customize">Thèmes et langues →</a></p>
+          </div>
         </div>
       </section>
 
@@ -388,7 +365,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">Opérationnel en une minute.</h2>
           <p class="sub">Il n’y a rien à installer et rien à quoi s’inscrire.</p>
@@ -413,10 +390,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">Gratuit à utiliser. Votre abonnement couvre mon serveur et l’IA.</h2>
-            <p class="sub" style="margin-bottom: 0">La modification s’exécute dans votre navigateur, donc la donner ne me coûte rien, et Golem Docs fonctionne entièrement sans compte. La synchronisation et le partage demandent un serveur et du stockage, et l’assistant IA coûte de l’argent à chaque réponse. L’abonnement est de 5 $ par mois : il paie tout cela, et ce qui reste me permet de continuer à travailler sur Golem Docs. Résiliable à tout moment.</p>
+            <p class="sub" style="margin-bottom: 0">La modification s’exécute sur votre propre appareil, donc la donner ne me coûte rien, et Golem Docs fonctionne entièrement sans compte : dans votre navigateur, dans l’app de bureau et dans les apps mobiles à leur arrivée. La synchronisation et le partage demandent un serveur et du stockage, et l’assistant IA coûte de l’argent à chaque réponse. L’abonnement est de 5 $ par mois : il paie tout cela, et ce qui reste me permet de continuer à travailler sur Golem Docs. Résiliable à tout moment.</p>
           </div>
           <ul class="checks">
-            <li><b>Gratuit, sans compte</b><span>Modifiez, convertissez et téléchargez autant que vous voulez. Les documents sont enregistrés dans votre navigateur et ne me sont jamais envoyés.</span></li>
+            <li><b>Gratuit, sans compte</b><span>Modifiez, convertissez et téléchargez autant que vous voulez, dans le navigateur, dans l’app de bureau et bientôt dans les apps mobiles. Les documents sont enregistrés sur votre appareil et ne me sont jamais envoyés.</span></li>
             <li><b>Ce que paient les 5 $</b><span>La synchronisation garde vos documents sur mon serveur pour qu’ils vous suivent sur tous vos appareils. Le partage permet de modifier ensemble, en direct. Chaque requête de l’assistant IA m’est facturée. Connectez-vous avec Google, Microsoft, GitHub ou Apple pour vous abonner.</span></li>
             <li><b>Ouvrir ce que d’autres partagent est gratuit</b><span>Si un abonné partage un document avec vous, il suffit de vous connecter pour l’ouvrir, et pour le modifier s’il vous y autorise.</span></li>
             <li><b>Si vous résiliez</b><span>Vos documents restent dans votre navigateur, et télécharger un fichier, ou tous vos fichiers en ZIP, ne nécessite jamais de compte ni d’abonnement.</span></li>
@@ -424,7 +401,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">Il vous manque quelque chose ? Demandez, et ça entre dans l’app.</h2>
+            <p class="sub">Golem Docs n’a pas de boutique de modules, et n’en aura pas. Je continue d’intégrer moi-même fonctions et améliorations à l’app.</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject=Demande de fonction">Envoyer une demande de fonction</a></div>
+            <p class="fine">Les utilisateurs gratuits comme les abonnés peuvent demander. Un abonnement n’achète pas de place dans la file. Connecté, vous pouvez aussi utiliser Aide › Envoyer un commentaire dans l’app.</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">Les modules avaient du sens quand une fonction manquante coûtait des semaines de temps libre à quelqu’un. Avec l’IA pour m’aider à coder, une fonction manquante peut simplement être construite : je l’intègre donc à l’app, avec des tests, plutôt que de vous laisser chercher un module complémentaire.</p>
+            <p class="sub" style="margin-bottom: 16px">Cela garde les choses simples. Aucun code tiers ne tourne à côté de vos documents. Une nouvelle fonction a le même aspect et fonctionne comme le reste de l’app, dans les 11 langues, et l’assistant IA peut aussi l’utiliser. Quand l’app change, la fonction change avec elle, donc rien ne casse.</p>
+            <p class="sub" style="margin-bottom: 0">S’il y a quelque chose que vous faites dans un document et que Golem Docs ne sait pas faire, ou un type de fichier qu’il n’ouvre pas, dites-le-moi. Je lis chaque demande. Je ne peux pas promettre de date, mais ce que les gens demandent est souvent construit en premier.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">Vos documents sont à vous.</h2>

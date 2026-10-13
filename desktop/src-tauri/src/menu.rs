@@ -24,6 +24,8 @@ pub enum Entry {
         checked: Option<bool>,
         /// A system item the page leaves to the system: "cut", "copy", "paste" or "selectAll".
         role: Option<String>,
+        /// Belongs in the app menu (Settings, ⌘,) instead of the menu the page listed it in.
+        app_menu: Option<bool>,
     },
     Submenu {
         label: String,
@@ -38,6 +40,15 @@ pub struct Top {
     pub items: Vec<Entry>,
 }
 
+/// The first item the page marked for the app menu.
+fn find_app_item(items: &[Entry]) -> Option<&Entry> {
+    items.iter().find_map(|entry| match entry {
+        Entry::Item { app_menu: Some(true), .. } => Some(entry),
+        Entry::Submenu { items, .. } => find_app_item(items),
+        _ => None,
+    })
+}
+
 fn append_all<R: Runtime>(app: &AppHandle<R>, into: &Submenu<R>, items: &[Entry]) -> tauri::Result<()> {
     for entry in items {
         match entry {
@@ -47,7 +58,8 @@ fn append_all<R: Runtime>(app: &AppHandle<R>, into: &Submenu<R>, items: &[Entry]
                 append_all(app, &sub, items)?;
                 into.append(&sub)?;
             }
-            Entry::Item { id, label, accelerator, enabled, checked, role } => {
+            Entry::Item { app_menu: Some(true), .. } => {}
+            Entry::Item { id, label, accelerator, enabled, checked, role, .. } => {
                 if let Some(role) = role {
                     let label = Some(label.as_str());
                     let item = match role.as_str() {
@@ -100,6 +112,17 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, tops: &[Top]) -> tauri::Result<Menu
     let application = Submenu::new(app, &name, true)?;
     application.append(&PredefinedMenuItem::about(app, None, None)?)?;
     application.append(&PredefinedMenuItem::separator(app)?)?;
+    if let Some(Entry::Item { id, label, accelerator, enabled, .. }) = tops.iter().find_map(|top| find_app_item(&top.items)) {
+        let build = |accelerator: Option<&String>| {
+            let mut b = MenuItemBuilder::with_id(id.as_str(), label).enabled(*enabled);
+            if let Some(a) = accelerator {
+                b = b.accelerator(a);
+            }
+            b.build(app)
+        };
+        application.append(&build(accelerator.as_ref()).or_else(|_| build(None))?)?;
+        application.append(&PredefinedMenuItem::separator(app)?)?;
+    }
     #[cfg(target_os = "macos")]
     {
         application.append(&PredefinedMenuItem::services(app, None)?)?;

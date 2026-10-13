@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs: редактируйте Word, PDF, Markdown и не только прямо в браузере</title>
-    <meta name="description" content="Golem Docs — редактор документов, который работает в вашем браузере. Открывайте, редактируйте и конвертируйте Word, OpenDocument, PDF, Markdown, HTML и обычный текст — бесплатно и без аккаунта. Подписка добавляет синхронизацию между устройствами, общий доступ и совместное редактирование в реальном времени, а также ИИ-ассистента." />
+    <meta name="description" content="Golem Docs — редактор документов для браузера и настольного компьютера, мобильные приложения скоро. Открывайте, редактируйте и конвертируйте Word, OpenDocument, PDF, Markdown, HTML и обычный текст — бесплатно и без аккаунта. Подписка добавляет синхронизацию между устройствами, общий доступ и совместное редактирование в реальном времени, а также ИИ-ассистента." />
     <link rel="canonical" href="https://golemdocs.com/home/ru" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="ru_RU" />
     <meta property="og:title" content="Golem Docs: редактируйте Word, PDF, Markdown и не только прямо в браузере" />
-    <meta property="og:description" content="Один редактор для документов любого вида. Открывайте, редактируйте и конвертируйте Word, PDF, Markdown и другое — бесплатно в браузере и без аккаунта. Оформите подписку, чтобы синхронизировать, делиться, редактировать вместе и пользоваться ИИ-ассистентом." />
+    <meta property="og:description" content="Один редактор для документов любого вида. Открывайте, редактируйте и конвертируйте Word, PDF, Markdown и другое — бесплатно в браузере и в настольном приложении, без аккаунта. Оформите подписку, чтобы синхронизировать, делиться, редактировать вместе и пользоваться ИИ-ассистентом." />
     <meta property="og:url" content="https://golemdocs.com/home/ru" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -122,17 +122,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -219,7 +225,7 @@
               <a class="btn" href="/">Попробуйте, это бесплатно</a>
               <a class="btn ghost" href="#features">Посмотреть возможности</a>
             </div>
-            <p class="fine">Бесплатно в браузере, без аккаунта и без рекламы. Синхронизация, общий доступ и ИИ — 5 $ в месяц.</p>
+            <p class="fine">Бесплатно в браузере и в настольном приложении (мобильные скоро), без аккаунта и без рекламы. Синхронизация, общий доступ и ИИ — 5 $ в месяц.</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -239,11 +245,11 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">Зачем я это сделал</h2>
           <p class="sub" style="margin-bottom: 16px">Меня зовут Давид. Вся моя жизнь живёт в Obsidian, но PDF вечно путались под ногами: то я искал, чем его конвертировать, то чем отредактировать. ZIP-файлы сделали задачу интереснее: в архиве может лежать что угодно, а значит, редактор, который его открывает, должен открывать всё, что внутри. Я подумал, что было бы здорово, если бы он открывал вообще любые документы, и с тех пор двигаюсь к этому.</p>
-          <p class="sub" style="margin-bottom: 0">Значительную часть кода написал Claude, а я направлял (честное слово, я мог бы написать всё сам, но это заняло бы годы). Golem Docs всё ещё растёт, так что если файл открывается не так, как должен, напишите мне — и он попадёт в список.</p>
+          <p class="sub" style="margin-bottom: 0">Значительную часть кода написал Claude, а я направлял (честное слово, я мог бы написать всё сам, но это заняло бы годы). Golem Docs всё ещё растёт: если тип файла не поддерживается или вам не хватает функции, я её добавлю.</p>
         </div>
       </section>
 
@@ -253,12 +259,6 @@
           <p class="sub">Большинство редакторов хорошо работают с одним форматом. Я хотел такой, который справляется со всеми.</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>Меняйте формат, ничего не теряя</h3>
-              <p>Переключайтесь между Word, Markdown и веб-страницами. Вернитесь обратно — и форматирование вернётся.</p>
-              <a class="more-link" href="/home/convert">Конвертация форматов →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>Редактируйте PDF, а не только размечайте</h3>
               <p>Правьте текст на месте, скрывайте данные, переставляйте страницы, заполняйте формы и делайте пометки.</p>
@@ -266,14 +266,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>Редактируйте изображения</h3>
-              <p>Обрезайте, поворачивайте, изменяйте размер и цвета изображений PNG, JPEG и WebP. Рисуйте, добавляйте текст и нумерованные метки или пикселизируйте то, что нужно скрыть.</p>
+              <h3>Правьте картинки, рисуйте векторы</h3>
+              <p>Обрезайте, масштабируйте, меняйте цвета и рисуйте на изображениях PNG, JPEG и WebP, пикселизируйте то, что нужно скрыть. Открывайте и правьте SVG-рисунки: фигуры, контуры пером, градиенты и слои.</p>
               <a class="more-link" href="/home/images">Редактирование изображений →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>Рисуйте векторы</h3>
-              <p>Открывайте и редактируйте рисунки SVG: фигуры, контуры пером, градиенты, мазки кистью, слои и булевы операции.</p>
               <a class="more-link" href="/home/vector">Редактирование векторов →</a>
             </div>
             <div class="card">
@@ -289,27 +284,10 @@
               <a class="more-link" href="/home/collaborate">Как работает общий доступ →</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>ИИ-ассистент</h3>
-              <p>ИИ-ассистент читает ваш документ, переписывает или добавляет абзацы, меняет стили и оставляет комментарии. «Отменить» возвращает любое изменение. Он входит в подписку, потому что каждый запрос стоит мне денег.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>Сохраняется сам</h3>
-              <p>Кнопки «Сохранить» нет. Изменения сохраняются по мере ввода, даже без подключения к сети.</p>
-              <a class="more-link" href="/home/documents">Работа и сохранение →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>Тот самый Word, который я помню</h3>
               <p>Меню, панели инструментов и диалоги Word 2003. Никакой ленты, в которой нужно что-то искать.</p>
               <a class="more-link" href="/home/customize">Ощущение Word 2003 →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>Настройте под себя</h3>
-              <p>Выбирайте цветовую схему с тёмным режимом, расставляйте панели инструментов и пользуйтесь 11 языками.</p>
-              <a class="more-link" href="/home/customize">Темы и языки →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -323,28 +301,27 @@
               <p>Импортируйте файл, целую папку или ZIP-архив с сохранением папок. Переходите с Obsidian? Импортируйте своё хранилище.</p>
               <a class="more-link" href="/home/import">Импорт файлов и папок →</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>Поиск по всем документам</h3>
-              <p>Находите слова и #теги во всех своих документах; результаты открываются на нужном абзаце. Работает без интернета благодаря индексу вашего браузера.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>Переходите с Obsidian</h3>
-              <p>Хранилище — это папка с заметками Markdown. Импортируйте её, и заметки появятся в своих папках.</p>
-              <a class="more-link" href="/home/obsidian">Импорт хранилища Obsidian →</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">Быстро, даже на «Войне и мире».</h2>
             <p class="sub" style="margin-bottom: 0">Вот все 1 006 страниц в режиме «Сетка страницы»: масштаб меняется от всей книги до одного абзаца и обратно. Редактор сам рисует каждую страницу на вашей видеокарте, поэтому большие документы остаются отзывчивыми.</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="Запись экрана с «Войной и миром», всеми 1 006 страницами: масштаб меняется от вида «Сетка страницы» до читаемого текста и обратно."></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">И ещё кое-что.</h2>
+          <div class="extras">
+            <p><b>Меняйте формат, ничего не теряя</b> Переключайтесь между Word, Markdown и веб-страницами. Вернитесь обратно — и форматирование вернётся. <a href="/home/convert">Конвертация форматов →</a> <b>Поиск по всем документам</b> Находите слова и #теги во всех своих документах; результаты открываются на нужном абзаце. Работает без интернета благодаря индексу вашего браузера.</p>
+            <p><b>Переходите с Obsidian</b> Хранилище — это папка с заметками Markdown. Импортируйте её, и заметки появятся в своих папках. <a href="/home/obsidian">Импорт хранилища Obsidian →</a> <b>Настройте под себя</b> Выбирайте цветовую схему с тёмным режимом, расставляйте панели инструментов и пользуйтесь 11 языками. <a href="/home/customize">Темы и языки →</a></p>
+          </div>
         </div>
       </section>
 
@@ -388,7 +365,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">Начните работу за минуту.</h2>
           <p class="sub">Ничего не нужно устанавливать и нигде не нужно регистрироваться.</p>
@@ -413,10 +390,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">Бесплатно. Подписка оплачивает мой сервер и ИИ.</h2>
-            <p class="sub" style="margin-bottom: 0">Редактирование работает в вашем браузере, поэтому раздавать его мне ничего не стоит, и Golem Docs полностью работает без аккаунта. Синхронизации и общему доступу нужны сервер и хранилище, а ИИ-ассистент стоит денег каждый раз, когда отвечает. Подписка — 5 $ в месяц: она оплачивает всё это, а то, что останется, позволяет мне и дальше работать над Golem Docs. Отменить можно в любой момент.</p>
+            <p class="sub" style="margin-bottom: 0">Редактирование работает на вашем устройстве, поэтому раздавать его мне ничего не стоит, и Golem Docs полностью работает без аккаунта: в браузере, в настольном приложении и в мобильных, когда они появятся. Синхронизации и общему доступу нужны сервер и хранилище, а ИИ-ассистент стоит денег каждый раз, когда отвечает. Подписка — 5 $ в месяц: она оплачивает всё это, а то, что останется, позволяет мне и дальше работать над Golem Docs. Отменить можно в любой момент.</p>
           </div>
           <ul class="checks">
-            <li><b>Бесплатно, без аккаунта</b><span>Редактируйте, конвертируйте и скачивайте сколько угодно. Документы сохраняются в вашем браузере и никогда не отправляются мне.</span></li>
+            <li><b>Бесплатно, без аккаунта</b><span>Редактируйте, конвертируйте и скачивайте сколько угодно, в браузере, в настольном приложении и скоро в мобильных. Документы сохраняются на вашем устройстве и никогда не отправляются мне.</span></li>
             <li><b>За что платят эти 5 $</b><span>Синхронизация хранит ваши документы на моём сервере, чтобы они были с вами на любом устройстве. Общий доступ позволяет редактировать вместе, в реальном времени. За каждый запрос ИИ-ассистента счёт приходит мне. Для подписки войдите через Google, Microsoft, GitHub или Apple.</span></li>
             <li><b>Открывать чужие документы бесплатно</b><span>Если подписчик делится с вами документом, достаточно войти, чтобы открыть его, а также редактировать, если он вам это разрешит.</span></li>
             <li><b>Если вы отмените подписку</b><span>Ваши документы останутся в браузере, а для скачивания файла, или всех файлов одним ZIP-архивом, никогда не нужны ни аккаунт, ни подписка.</span></li>
@@ -424,7 +401,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">Чего-то не хватает? Попросите, и это появится в приложении.</h2>
+            <p class="sub">В Golem Docs нет магазина плагинов, и его не будет. Функции и улучшения я продолжаю встраивать в само приложение.</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject=Пожелание по функции">Отправить пожелание</a></div>
+            <p class="fine">Просить могут и бесплатные пользователи, и подписчики. Подписка не покупает место в очереди. Если вы вошли, можно также воспользоваться пунктом «Справка › Отправить отзыв» в приложении.</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">Плагины имели смысл, когда недостающая функция стоила кому-то недель свободного времени. Теперь, когда ИИ помогает мне писать код, недостающую функцию можно просто сделать. Поэтому я встраиваю её в приложение, с тестами, а не заставляю вас искать дополнение.</p>
+            <p class="sub" style="margin-bottom: 16px">Так всё проще. Рядом с вашими документами не работает чужой код. Новая функция выглядит и работает так же, как всё остальное приложение, на всех 11 языках, и ИИ-помощник тоже может ею пользоваться. Когда приложение меняется, функция меняется вместе с ним, так что ничего не ломается.</p>
+            <p class="sub" style="margin-bottom: 0">Если есть что-то, что вы делаете в документе, а Golem Docs не умеет, или тип файла, который он не открывает, напишите мне. Я читаю каждую просьбу. Сроков обещать не могу, но то, о чём просят, часто делается первым.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">Ваши документы принадлежат вам.</h2>

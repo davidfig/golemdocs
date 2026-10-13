@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs: edit Word, PDF, Markdown, and more in your browser</title>
-    <meta name="description" content="Golem Docs is a document editor that lives in your browser. Open, edit and convert Word, OpenDocument, PDF, Markdown, HTML, and plain text, free and with no account. A subscription adds sync across devices, sharing and live editing together, and an AI assistant." />
+    <meta name="description" content="Golem Docs is a document editor for your browser and your desktop, with mobile apps coming soon. Open, edit and convert Word, OpenDocument, PDF, Markdown, HTML, and plain text, free and with no account. A subscription adds sync across devices, sharing and live editing together, and an AI assistant." />
     <link rel="canonical" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="Golem Docs: edit Word, PDF, Markdown, and more in your browser" />
-    <meta property="og:description" content="One editor for every kind of document. Open, edit and convert Word, PDF, Markdown, and more, free in your browser with no account. Subscribe to sync, share and edit together, and use the AI assistant." />
+    <meta property="og:description" content="One editor for every kind of document. Open, edit and convert Word, PDF, Markdown, and more, free in your browser and the desktop app, with no account. Subscribe to sync, share and edit together, and use the AI assistant." />
     <meta property="og:url" content="https://golemdocs.com/home" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -137,17 +137,23 @@
 
       section { padding: 64px 0; }
       section[id] { scroll-margin-top: 60px; }
-      section.alt { background: var(--surface); border-block: 1px solid var(--line); }
+      main > section:nth-of-type(odd) { background: var(--surface); border-block: 1px solid var(--line); }
       h2.title { margin: 0 0 12px; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; letter-spacing: -0.015em; }
       .sub { margin: 0 0 40px; max-width: 42rem; color: var(--muted); font-size: 1.1rem; }
 
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 20px; }
       .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-      section.alt .card { background: var(--bg); }
+      main > section:nth-of-type(odd) .card { background: var(--bg); }
       .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
       .card p { margin: 0; color: var(--muted); font-size: 0.98rem; }
       .card .more-link { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none; }
       .card .more-link:hover { text-decoration: underline; }
+      .more { padding-bottom: 0; }
+      .extras { max-width: 42rem; margin-top: 20px; }
+      .extras p { margin: 0 0 16px; color: var(--muted); font-size: 1.05rem; }
+      .extras b { color: var(--ink); }
+      .extras a { font-weight: 600; text-decoration: none; }
+      .extras a:hover { text-decoration: underline; }
       .card .ico { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 10px; background: var(--tint); color: var(--brand); font-size: 1.2rem; }
 
       .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -234,7 +240,7 @@
               <a class="btn" href="/">Try it, it's free</a>
               <a class="btn ghost" href="#features">See what it does</a>
             </div>
-            <p class="fine">Free in your browser, with no account and no ads. Sync, sharing, and AI are $5 a month.</p>
+            <p class="fine">Free in your browser and the desktop app (mobile apps coming soon), with no account and no ads. Sync, sharing, and AI are $5 a month.</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -254,11 +260,11 @@
         </div>
       </div>
 
-      <section id="story" class="alt">
+      <section id="story">
         <div class="wrap">
           <h2 class="title">Why I built this</h2>
           <p class="sub" style="margin-bottom: 16px">I'm David. Obsidian runs my life, but PDFs kept getting in the way: I was always hunting for a tool to convert one or edit one. ZIP files made it more interesting, because an archive can hold anything, so an editor that opens one has to open whatever is inside. I thought it would be fun if it could open every kind of document there is, and I have been building toward that ever since.</p>
-          <p class="sub" style="margin-bottom: 0">Much of the code was written with Claude, with me steering (I promise I could have coded it myself, but it would have taken years). Golem Docs is still growing, so if a file won't open the way it should, tell me and it goes on the list.</p>
+          <p class="sub" style="margin-bottom: 0">Much of the code was written with Claude, with me steering (I promise I could have coded it myself, but it would have taken years). Golem Docs is still growing: if a file type isn't supported or you're missing a feature, I'll add it.</p>
         </div>
       </section>
 
@@ -268,12 +274,6 @@
           <p class="sub">Most editors handle one format well. I wanted one that handles them all.</p>
           <div class="grid">
             <div class="card">
-              <div class="ico" aria-hidden="true">⇄</div>
-              <h3>Change shape without losing anything</h3>
-              <p>Switch between Word, Markdown, and web pages. Switch back and your formatting returns.</p>
-              <a class="more-link" href="/home/convert">Convert formats →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">✎</div>
               <h3>Edit PDFs, not just mark them up</h3>
               <p>Edit text in place, redact, rearrange pages, fill in forms, and annotate.</p>
@@ -281,14 +281,9 @@
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">🖼</div>
-              <h3>Edit pictures</h3>
-              <p>Crop, rotate, resize, and adjust the colors of PNG, JPEG, and WebP images. Draw, add text and numbered markers, or pixelate what to hide.</p>
+              <h3>Edit pictures, draw vectors</h3>
+              <p>Crop, resize, recolor, draw on and pixelate PNG, JPEG, and WebP images. Open and edit SVG drawings with shapes, pen paths, gradients, and layers.</p>
               <a class="more-link" href="/home/images">Editing pictures →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">✒</div>
-              <h3>Draw vectors</h3>
-              <p>Open and edit SVG drawings: shapes, pen paths, gradients, brush strokes, layers, and boolean operations.</p>
               <a class="more-link" href="/home/vector">Editing vectors →</a>
             </div>
             <div class="card">
@@ -304,27 +299,10 @@
               <a class="more-link" href="/home/collaborate">How sharing works →</a>
             </div>
             <div class="card">
-              <div class="ico" aria-hidden="true">✨</div>
-              <h3>An AI assistant</h3>
-              <p>The AI assistant reads your document, rewrites or adds paragraphs, changes styles, and leaves comments. Undo takes any change back. It is part of the subscription because every request costs me money.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">💾</div>
-              <h3>Saves itself</h3>
-              <p>No Save button. Changes are kept as you make them, even offline.</p>
-              <a class="more-link" href="/home/documents">Writing and saving →</a>
-            </div>
-            <div class="card">
               <div class="ico" aria-hidden="true">▤</div>
               <h3>The Word I remember</h3>
               <p>Word 2003 menus, toolbars, and dialogs. No ribbon to hunt through.</p>
               <a class="more-link" href="/home/customize">The Word 2003 feel →</a>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🎨</div>
-              <h3>Make it yours</h3>
-              <p>Choose a color scheme with dark mode, arrange toolbars, and use 11 languages.</p>
-              <a class="more-link" href="/home/customize">Themes and languages →</a>
             </div>
             <div class="card">
               <div class="ico" aria-hidden="true">📜</div>
@@ -338,28 +316,27 @@
               <p>Import a file, a whole folder, or a ZIP, and keep its folders. Moving from Obsidian? Import your vault.</p>
               <a class="more-link" href="/home/import">Import files and folders →</a>
             </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔍</div>
-              <h3>Search every document</h3>
-              <p>Find words and #tags across all your documents, with results that open at the matching paragraph. It works offline from your browser's own index.</p>
-            </div>
-            <div class="card">
-              <div class="ico" aria-hidden="true">🔮</div>
-              <h3>Coming from Obsidian</h3>
-              <p>Your vault is a folder of Markdown notes. Import it and your notes arrive in their folders.</p>
-              <a class="more-link" href="/home/obsidian">Import an Obsidian vault →</a>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="performance" class="alt">
+      <section id="performance">
         <div class="wrap split">
           <div>
             <h2 class="title">Fast, even on War and Peace.</h2>
             <p class="sub" style="margin-bottom: 0">Here is all 1,006 pages of it in Page Grid, zooming from the whole book down to a single paragraph and back. The editor draws every page itself on your graphics card, so big documents stay responsive.</p>
           </div>
           <video class="demo" data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="A screen recording of War and Peace, all 1,006 pages, zooming from the Page Grid view in to readable text and back out."></video>
+        </div>
+      </section>
+
+      <section id="more" class="more">
+        <div class="wrap">
+          <h2 class="title">And a few more things.</h2>
+          <div class="extras">
+            <p><b>Change shape without losing anything</b> Switch between Word, Markdown, and web pages. Switch back and your formatting returns. <a href="/home/convert">Convert formats →</a> <b>Search every document</b> Find words and #tags across all your documents, with results that open at the matching paragraph. It works offline from your browser's own index.</p>
+            <p><b>Coming from Obsidian</b> Your vault is a folder of Markdown notes. Import it and your notes arrive in their folders. <a href="/home/obsidian">Import an Obsidian vault →</a> <b>Make it yours</b> Choose a color scheme with dark mode, arrange toolbars, and use 11 languages. <a href="/home/customize">Themes and languages →</a></p>
+          </div>
         </div>
       </section>
 
@@ -403,7 +380,7 @@
         </div>
       </section>
 
-      <section class="alt">
+      <section>
         <div class="wrap">
           <h2 class="title">Up and running in a minute.</h2>
           <p class="sub">There is nothing to install and nothing to sign up for.</p>
@@ -428,10 +405,10 @@
         <div class="wrap split">
           <div>
             <h2 class="title">Free to use. Paying covers my server and AI bills.</h2>
-            <p class="sub" style="margin-bottom: 0">Editing runs in your browser, so it costs me nothing to give away, and Golem Docs works fully without an account. Sync and sharing need a server and storage, and the AI assistant costs money every time it answers. The subscription is $5 a month: it pays for those, and what is left over lets me keep working on Golem Docs. Cancel any time.</p>
+            <p class="sub" style="margin-bottom: 0">Editing runs on your own device, so it costs me nothing to give away, and Golem Docs works fully without an account: in your browser, in the desktop app, and in the mobile apps when they arrive. Sync and sharing need a server and storage, and the AI assistant costs money every time it answers. The subscription is $5 a month: it pays for those, and what is left over lets me keep working on Golem Docs. Cancel any time.</p>
           </div>
           <ul class="checks">
-            <li><b>Free, with no account</b><span>Edit, convert, and download as much as you like. Documents are saved in your browser and never sent to me.</span></li>
+            <li><b>Free, with no account</b><span>Edit, convert, and download as much as you like, in your browser, in the desktop app, and soon in the mobile apps. Documents are saved on your device and never sent to me.</span></li>
             <li><b>What the $5 pays for</b><span>Sync keeps your documents on my server so they follow you to any device. Sharing lets people edit together, live. The AI assistant is billed to me for each request. Sign in with Google, Microsoft, GitHub, or Apple to subscribe.</span></li>
             <li><b>Opening what others share is free</b><span>If a subscriber shares a document with you, you only need to sign in to open it, and to edit it if they let you.</span></li>
             <li><b>If you cancel</b><span>Your documents stay in your browser, and downloading a file, or all your files zipped, never needs an account or a subscription.</span></li>
@@ -439,7 +416,23 @@
         </div>
       </section>
 
-      <section id="privacy" class="alt">
+      <section id="requests">
+        <div class="wrap split">
+          <div>
+            <h2 class="title">Missing something? Ask, and it goes in the app.</h2>
+            <p class="sub">Golem Docs has no plugin store, and it won't get one. I keep building features and improvements into the app myself.</p>
+            <div class="cta"><a class="btn" href="mailto:david@golemdocs.com?subject=Feature request">Send a feature request</a></div>
+            <p class="fine">Free users and subscribers can both ask. A subscription doesn't buy a place in the queue. Signed in, you can also use Help › Send Feedback in the app.</p>
+          </div>
+          <div>
+            <p class="sub" style="margin-bottom: 16px">Plugins made sense when a missing feature meant weeks of someone's spare time. With AI helping me write code, a missing feature can just be built, so I build it into the app, with tests, instead of leaving you to find an add-on.</p>
+            <p class="sub" style="margin-bottom: 16px">That keeps things simple. There's no third-party code running next to your documents. A new feature looks and works like the rest of the app, in all 11 languages, and the AI assistant can use it too. When the app changes, the feature changes with it, so nothing breaks.</p>
+            <p class="sub" style="margin-bottom: 0">If there's something you do in a document that Golem Docs can't, or a file type it doesn't open, tell me. I read every request. I can't promise a date, but what people ask for often gets built first.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
         <div class="wrap split">
           <div>
             <h2 class="title">Your documents are yours.</h2>

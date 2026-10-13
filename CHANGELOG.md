@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.19.1 - Unreleased
+## 0.19.1 - 2026-10-12
 
 ### Fixed
 - www.golemdocs.com now opens golemdocs.com instead of failing to load.

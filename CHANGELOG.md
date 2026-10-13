@@ -14,6 +14,7 @@
 - The home page says that Golem Docs is free in the desktop app and, when they arrive, the mobile apps, not only in the browser.
 
 ### Fixed
+- Renaming a document from the title at the top: the box is now just a little wider than the name, and grows as you type, instead of filling the whole bar.
 - Pinching on a trackpad zooms the document in the Mac desktop app (and in Safari).
 - The desktop app now checks that it may use the vault folder before every sync, which makes macOS ask for permission. If the folder can’t be read or written, it says so (in a notice, in Vault Folder and in the save indicator) and offers Try Again and, on a Mac, a button to open Privacy settings. Before, a folder it couldn’t read failed silently.
 - In the Mac desktop app, the window’s close, minimize and zoom buttons no longer cover the Documents heading.

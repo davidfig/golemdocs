@@ -12,6 +12,8 @@ const MIN_WIDTH = 72;
 /** Room for the field's padding and border around the text, plus a few pixels' slack: the field and the measuring span round
  *  the text's width differently, and with none to spare a name that just fits is cut short with "…". */
 const PADDING = 18 + 4;
+/** While editing, the field is this much wider than the name, so there is room to type and it is easy to find. */
+const EDIT_SLACK = 20;
 /** The people editing together: each avatar's diameter, how far the next starts, and the gap after the title. */
 const AVATAR = 18;
 const STEP = 12;
@@ -28,6 +30,8 @@ export class DocumentTitle {
   private shown = '';
   private editing = false;
   private fits = true;
+  /** Where the field's left edge sat when not editing: it stays there while typing, so the text does not shift. */
+  private restLeft = 0;
   private readonly presence: HTMLDivElement;
   private people: People = [];
   /** How many avatars the presence is built with (the rest are the "…"), and for whom; to rebuild only on a change. */
@@ -138,7 +142,11 @@ export class DocumentTitle {
     const titleWidth = Math.min(room, Math.ceil(this.measure.offsetWidth) + PADDING);
     const shown = this.showPeople(room - Math.min(titleWidth, TITLE_MIN) - PEOPLE_GAP);
     const beside = shown ? shown + PEOPLE_GAP : 0;
-    let width = this.editing ? room : Math.min(room, titleWidth + beside);
+    const rest = left + GAP + (room - Math.min(room, titleWidth + beside)) / 2 - origin;
+    if (!this.editing) this.restLeft = rest;
+    const start = this.editing ? this.restLeft : rest;
+    const roomFrom = this.editing ? room - (start - (left + GAP - origin)) : room;
+    let width = this.editing ? Math.min(roomFrom, titleWidth + EDIT_SLACK + beside) : Math.min(room, titleWidth + beside);
     this.el.style.width = `${width}px`;
     // The field has the last word: if its text still overflows (the span measured it short), widen by what is cut off.
     const cut = this.input.scrollWidth - this.input.clientWidth;
@@ -146,7 +154,7 @@ export class DocumentTitle {
       width = Math.min(room, width + cut);
       this.el.style.width = `${width}px`;
     }
-    this.el.style.left = `${left + GAP + (room - width) / 2 - origin}px`;
+    this.el.style.left = this.editing ? `${start}px` : `${left + GAP + (room - width) / 2 - origin}px`;
   }
 
   /** Draws the avatars that fit in `space` pixels (all of them, or some and a "…"); returns the width used. */

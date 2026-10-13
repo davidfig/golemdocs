@@ -18,6 +18,12 @@ export interface DesktopBridge {
   choose(): Promise<string | null>;
   /** Stops using the folder; its files stay. */
   forget(): Promise<void>;
+  /** Shows the vault folder in Finder (Explorer, the file manager). */
+  reveal(): Promise<void>;
+  /** Whether the app may read and write in the folder; rejects with the reason. The first call on a protected folder makes macOS ask the person. */
+  check(): Promise<void>;
+  /** Opens the system's privacy settings for files and folders (macOS). */
+  openPrivacy(): Promise<void>;
   scan(): Promise<LocalFile[]>;
   read(path: string): Promise<Uint8Array>;
   /** Writes through a temporary file and a rename. Returns the new modification time in milliseconds. */
@@ -25,9 +31,22 @@ export interface DesktopBridge {
   remove(path: string): Promise<void>;
 }
 
-function tauriCore(): TauriCore | null {
+function shellCore(): TauriCore | null {
   const found = (globalThis as { __TAURI__?: { core?: TauriCore } }).__TAURI__?.core;
   return found && typeof found.invoke === 'function' ? found : null;
+}
+
+/** True on a phone or tablet (iOS, Android, and an iPad that reports itself as a Mac). */
+export function isTouchDevice(nav: Pick<Navigator, 'userAgent' | 'platform' | 'maxTouchPoints'> = navigator): boolean {
+  return /iPhone|iPad|iPod|Android/i.test(nav.userAgent) || (/Mac/.test(nav.platform) && nav.maxTouchPoints > 1);
+}
+
+/** True inside the iOS or Android app: the same shell as the desktop app, with none of its native commands. */
+export const isMobileApp = (): boolean => shellCore() !== null && isTouchDevice();
+
+// The vault, the menu bar and the updater are desktop only (desktop/src-tauri/src/lib.rs).
+function tauriCore(): TauriCore | null {
+  return isTouchDevice() ? null : shellCore();
 }
 
 /** The native side, or null when the page is running in a browser. */
@@ -39,6 +58,9 @@ export function desktopBridge(): DesktopBridge | null {
     root: () => core.invoke<string | null>('vault_root'),
     choose: () => core.invoke<string | null>('vault_choose'),
     forget: () => core.invoke<void>('vault_forget'),
+    reveal: () => core.invoke<void>('vault_reveal'),
+    check: () => core.invoke<void>('vault_check'),
+    openPrivacy: () => core.invoke<void>('vault_open_privacy'),
     scan: async () => (await core.invoke<{ path: string; size: number; mtimeMs: number }[]>('vault_scan')).map(({ path, size, mtimeMs }) => ({ path, size, mtimeMs })),
     read: async (path) => bytes(await core.invoke<unknown>('vault_read', { path })),
     // The bytes are the body and the path rides in a header, percent-encoded because a header is ASCII.
@@ -77,7 +99,7 @@ interface TauriEvents {
 
 export function desktopMenu(): DesktopMenu | null {
   const tauri = (globalThis as { __TAURI__?: { core?: TauriCore; event?: TauriEvents } }).__TAURI__;
-  const core = tauri?.core;
+  const core = isTouchDevice() ? undefined : tauri?.core;
   const events = tauri?.event;
   if (!core || typeof core.invoke !== 'function' || !events) return null;
   return {

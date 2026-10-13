@@ -4258,6 +4258,12 @@ const chromeHost = createChromeHost({
   },
   showTrash: () => trashDialog.open(),
   showVault: () => vaultDialog.open(),
+  vaultFolder: () => {
+    const service = vaultService;
+    if (!service) return null;
+    const { root, state, message } = service.current;
+    return { path: root, problem: state === 'access' || state === 'error' ? (message ?? '') : null, retry: () => void service.retry(), reveal: () => void service.reveal().catch((e: unknown) => say(e instanceof Error ? e.message : String(e))) };
+  },
   showUpdates: () => updateDialog.open(),
   showPageSetup: () => {
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
@@ -4502,9 +4508,19 @@ async function vaultChanged(touched: string[]): Promise<void> {
 }
 
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
+let vaultWatched = false;
 async function connectVault(): Promise<void> {
   if (!isDesktopApp()) return;
   vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched) });
+  if (vaultService && !vaultWatched) {
+    vaultWatched = true;
+    let last = vaultService.current.state;
+    vaultService.subscribe(({ state, message }) => {
+      // Said once when a problem starts, not on every retry: the Vault Folder dialog and the save panel keep showing it.
+      if ((state === 'access' || state === 'error') && last !== state) notify(t(state === 'access' ? 'vault.problem.access' : 'vault.problem.error', { message: message ?? '' }));
+      last = state;
+    });
+  }
   await vaultService?.start();
   // First launch with no folder: show the Vault Folder dialog once (it explains the folder and has Choose), signed in or not.
   // Closing it without choosing is an answer; File ▸ Vault Folder is

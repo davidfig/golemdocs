@@ -1656,6 +1656,22 @@ html.wm-titlebar .wm-format {
   opacity: 0.7;
 }
 
+.wm-sync-path {
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.wm-sync-link {
+  padding: 0;
+  font: inherit;
+  color: var(--wm-hot-border);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .wm-sync-action {
   display: block;
   width: 100%;

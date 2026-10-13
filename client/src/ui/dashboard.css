@@ -32,6 +32,11 @@
   background: var(--wm-face, #f0f0f0);
 }
 
+/* The desktop app on a Mac draws the page under the title bar: keep the heading clear of the window's close, minimize and zoom buttons. */
+html.wm-titlebar .wm-dash-head {
+  padding-left: 90px;
+}
+
 .wm-dash-head h1 {
   margin: 0;
   font-size: 18px;

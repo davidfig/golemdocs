@@ -24,6 +24,12 @@ function formatSavedAt(ms: number): string {
   return d.toLocaleString(undefined, today ? { timeStyle: 'short' } : { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+/** What the system calls its file manager, for "Show in Finder". */
+function fileManagerName(): string {
+  const platform = navigator.platform;
+  return /Mac/.test(platform) ? 'Finder' : /Win/.test(platform) ? 'File Explorer' : 'Files';
+}
+
 export class SyncButton {
   readonly el: HTMLButtonElement;
   private readonly label: HTMLSpanElement;
@@ -91,6 +97,37 @@ export class SyncButton {
         panel.append(run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true));
         break;
     }
+    this.addVault(panel);
     return panel;
+  }
+
+  /** The desktop app: where the documents are kept as files on this computer, with a link to show the folder in Finder. */
+  private addVault(panel: HTMLElement): void {
+    const vault = this.host.vaultFolder?.();
+    if (!vault) return;
+    panel.append(h('hr'));
+    if (vault.path) {
+      const link = h('button', { class: 'wm-sync-link', text: t('dialogs.sync.vault.reveal', { manager: fileManagerName() }), attrs: { type: 'button' } });
+      link.addEventListener('click', () => {
+        closePopup();
+        vault.reveal();
+      });
+      panel.append(h('div', { class: 'wm-sync-title', text: t('dialogs.sync.vault.title') }), h('p', { class: 'wm-sync-path', text: vault.path }), link);
+      if (vault.problem !== null && vault.problem !== undefined) {
+        const retry = h('button', { class: 'wm-sync-link', text: t('vault.tryAgain'), attrs: { type: 'button' } });
+        retry.addEventListener('click', () => {
+          closePopup();
+          vault.retry();
+        });
+        panel.append(h('p', { class: 'wm-sync-note', text: t('dialogs.sync.vault.problem', { message: vault.problem }) }), retry);
+      }
+    } else {
+      const choose = h('button', { class: 'wm-sync-link', text: t('dialogs.sync.vault.choose'), attrs: { type: 'button' } });
+      choose.addEventListener('click', () => {
+        closePopup();
+        void Promise.resolve(this.host.perform({ kind: 'dialog', name: 'vault' })).catch((e: unknown) => this.host.notify(e instanceof Error ? e.message : String(e)));
+      });
+      panel.append(h('div', { class: 'wm-sync-title', text: t('dialogs.sync.vault.title') }), h('p', { text: t('dialogs.sync.vault.none') }), choose);
+    }
   }
 }

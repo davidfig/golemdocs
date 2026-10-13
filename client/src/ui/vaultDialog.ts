@@ -12,6 +12,8 @@ export interface VaultHost {
   focusEditor(): void;
 }
 
+const isMac = (): boolean => /Mac/.test(navigator.platform);
+
 export class VaultDialog {
   private dialog: HTMLDialogElement | null = null;
 
@@ -27,6 +29,8 @@ export class VaultDialog {
     const skipped = h('p', { class: 'wm-history-note' });
     const choose = h('button', { class: 'wm-button', attrs: { type: 'button' } });
     const stop = h('button', { class: 'wm-button wm-danger', text: t('vault.stop'), attrs: { type: 'button' } });
+    const retry = h('button', { class: 'wm-button', text: t('vault.tryAgain'), attrs: { type: 'button' } });
+    const privacy = h('button', { class: 'wm-button', text: t('vault.openPrivacy'), attrs: { type: 'button' } });
     const syncNow = h('button', { class: 'wm-button', text: t('vault.syncNow'), attrs: { type: 'button' } });
     const confirm = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
     const close = h('button', { class: 'wm-button', text: t('vault.close'), attrs: { type: 'button' } });
@@ -36,7 +40,7 @@ export class VaultDialog {
       { class: 'wm-dialog wm-history', attrs: { 'aria-label': t('vault.title') } },
       dialogTitleBar(t('vault.title'), () => dialog.close()),
       body,
-      h('div', { class: 'wm-dialog-buttons spread' }, h('span', {}, choose, stop, syncNow, confirm), close),
+      h('div', { class: 'wm-dialog-buttons spread' }, h('span', {}, choose, stop, syncNow, retry, privacy, confirm), close),
     );
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
 
@@ -58,6 +62,8 @@ export class VaultDialog {
           return t('vault.status.error', { message: s.message ?? '' });
         case 'wrongAccount':
           return t('vault.status.wrongAccount');
+        case 'access':
+          return t('vault.status.access', { message: s.message ?? '', hint: isMac() ? t('vault.status.access.mac') : '' });
         case 'blocked':
           return t(service.signedIn ? 'vault.status.blocked' : 'vault.status.blockedLocal', { count: s.report?.blocked?.count ?? 0 });
       }
@@ -72,7 +78,9 @@ export class VaultDialog {
       choose.textContent = s.root ? t('vault.change') : t('vault.choose');
       stop.hidden = !s.root;
       syncNow.hidden = !s.root;
-      syncNow.disabled = s.state === 'syncing' || s.state === 'signedOut';
+      syncNow.disabled = s.state === 'syncing' || s.state === 'signedOut' || s.state === 'access';
+      retry.hidden = s.state !== 'access' && s.state !== 'error';
+      privacy.hidden = s.state !== 'access' || !isMac();
       confirm.hidden = s.state !== 'blocked';
       confirm.textContent = t('vault.deleteMissing', { count: s.report?.blocked?.count ?? 0 });
     };
@@ -82,6 +90,8 @@ export class VaultDialog {
     choose.addEventListener('click', () => void service.choose().catch((error: unknown) => this.host.tell((error as Error).message)));
     stop.addEventListener('click', () => void service.forget());
     syncNow.addEventListener('click', () => void service.syncNow());
+    retry.addEventListener('click', () => void service.retry());
+    privacy.addEventListener('click', () => void service.openPrivacy().catch((error: unknown) => this.host.tell(String(error))));
     confirm.addEventListener('click', () => void service.syncNow({ allowMassDelete: true }));
     close.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {

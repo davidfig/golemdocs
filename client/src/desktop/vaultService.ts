@@ -9,7 +9,7 @@ import { ConvertWorker, startConvertWorker } from './convertClient.ts';
 import { realHost } from './vaultHost.ts';
 import { syncVault, type SyncReport, type VaultCodec } from './vaultSync.ts';
 
-export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'blocked' | 'wrongAccount';
+export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'access' | 'blocked' | 'wrongAccount';
 
 export interface VaultStatus {
   state: VaultState;
@@ -17,7 +17,7 @@ export interface VaultStatus {
   root: string | null;
   lastSync: number | null;
   report: SyncReport | null;
-  /** The first error of the last sync. */
+  /** The first error of the last sync (for `access`: why the folder can't be read or written). */
   message?: string;
 }
 
@@ -97,7 +97,9 @@ export class VaultService {
 
   private onWake = (): void => {
     this.lastAccountLook = 0;
-    void this.look();
+    // Back from System Settings: ask again.
+    if (this.status.state === 'access') void this.syncNow();
+    else void this.look();
   };
 
   /** Asks for a folder and starts keeping it. Returns false if the person cancelled. */
@@ -111,6 +113,21 @@ export class VaultService {
     return true;
   }
 
+  /** Shows the folder in Finder (Explorer, the file manager). */
+  reveal(): Promise<void> {
+    return this.bridge.reveal();
+  }
+
+  /** Asks again, after the person allowed the folder or fixed what was wrong. Macs ask for permission again only after the first refusal is undone in System Settings. */
+  async retry(): Promise<void> {
+    await this.syncNow();
+  }
+
+  /** Opens the system's privacy settings, where a refused folder is allowed. */
+  openPrivacy(): Promise<void> {
+    return this.bridge.openPrivacy();
+  }
+
   /** Stops using the folder. Its files stay where they are. */
   async forget(): Promise<void> {
     await this.bridge.forget();
@@ -119,13 +136,14 @@ export class VaultService {
   }
 
   private async look(): Promise<void> {
-    if (!this.wanted || this.running || !this.status.root) return;
+    // A refused folder waits for the person (Try Again, or coming back to the window), not for a retry every few seconds.
+    if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;
     try {
       const local = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
       const due = Date.now() - this.lastAccountLook >= ACCOUNT_MS;
       if (local !== this.signature || due || this.status.state === 'offline' || this.status.state === 'error') await this.syncNow();
     } catch {
-      /* the folder was moved or is unreadable: the next sync says so */
+      await this.syncNow(); // the folder was moved or is unreadable: the sync checks it and says why
     }
   }
 
@@ -135,6 +153,12 @@ export class VaultService {
     this.running = true;
     this.set({ state: 'syncing' });
     try {
+      try {
+        await this.bridge.check();
+      } catch (error) {
+        this.set({ state: 'access', message: error instanceof Error ? error.message : String(error) }); // the shell rejects with a string
+        return;
+      }
       if (this.account()) await this.hooks.settled();
       const account = this.account(); // signing out can happen while waiting
       const report = await syncVault(realHost(this.bridge, this.codec, account), options);

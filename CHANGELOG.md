@@ -1,5 +1,14 @@
 # What’s New in Golem Docs
 
+## 0.21.0 - Unreleased
+
+### Changed
+- In the desktop app, the save indicator at the top right shows the folder that keeps your documents as files, with a link to show it in Finder (or File Explorer), or to choose one.
+
+### Fixed
+- The desktop app now checks that it may use the vault folder before every sync, which makes macOS ask for permission. If the folder can’t be read or written, it says so (in a notice, in Vault Folder and in the save indicator) and offers Try Again and, on a Mac, a button to open Privacy settings. Before, a folder it couldn’t read failed silently.
+- In the Mac desktop app, the window’s close, minimize and zoom buttons no longer cover the Documents heading.
+
 ## 0.20.0 - 2026-10-13
 
 ### Added

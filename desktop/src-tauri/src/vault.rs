@@ -73,6 +73,21 @@ pub fn resolve(root: &Path, relative: &str, allow_state: bool) -> Result<PathBuf
     Ok(path)
 }
 
+/// Whether the app may read and write in the vault folder. The first read of a protected folder (Documents, Desktop,
+/// Downloads, iCloud Drive) is what makes macOS ask the person for permission, so this is called before every sync: a
+/// refusal comes back as a message to show, and asking again after the person allowed it works.
+pub fn check_access(root: &Path) -> Result<(), String> {
+    let shown = root.display();
+    if !root.is_dir() {
+        return Err(format!("The folder {shown} is missing."));
+    }
+    fs::read_dir(root).map_err(|e| format!("Can't read {shown}: {e}"))?;
+    let probe = root.join(".golemdocs-access");
+    fs::write(&probe, b"").map_err(|e| format!("Can't write in {shown}: {e}"))?;
+    let _ = fs::remove_file(&probe);
+    Ok(())
+}
+
 /// Every document in the vault, sorted by path. Hidden names, links and anything that is not a file are left out.
 pub fn scan(root: &Path) -> Result<Vec<Entry>, String> {
     let mut found = Vec::new();
@@ -222,6 +237,40 @@ pub fn vault_forget(app: AppHandle, vault: State<'_, Vault>) -> Result<(), Strin
     Ok(())
 }
 
+/// Checks that the vault folder can be read and written, which also makes macOS ask for permission the first time.
+#[tauri::command]
+pub async fn vault_check(vault: State<'_, Vault>) -> Result<(), String> {
+    check_access(&vault.root()?)
+}
+
+/// Opens the system's privacy settings for files and folders (macOS), where the person allows the app a folder.
+#[tauri::command]
+pub fn vault_open_privacy() -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Err("not available on this system".to_string());
+    }
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Shows the vault folder in the system's file manager (Finder, Explorer). The page names nothing: it is always the
+/// vault's own root.
+#[tauri::command]
+pub fn vault_reveal(vault: State<'_, Vault>) -> Result<(), String> {
+    let root = vault.root()?;
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    std::process::Command::new(opener).arg(root).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn vault_scan(vault: State<'_, Vault>) -> Result<Vec<Entry>, String> {
     scan(&vault.root()?)
@@ -254,6 +303,15 @@ mod tests {
 
     fn vault() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn check_access_passes_for_a_folder_and_fails_for_a_missing_one() {
+        let dir = vault();
+        assert!(check_access(dir.path()).is_ok());
+        assert!(fs::read_dir(dir.path()).unwrap().next().is_none(), "the probe file is removed");
+        let message = check_access(&dir.path().join("gone")).unwrap_err();
+        assert!(message.contains("missing"));
     }
 
     #[test]

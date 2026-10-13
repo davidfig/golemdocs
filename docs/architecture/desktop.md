@@ -52,6 +52,8 @@ Files are followed by their cloud id in the manifest (`.golemdocs/state.json`), 
 
 - **`vaultHost.ts`** is the real host: the native bridge, `cloud.ts` (a save without `base`, because the file wins; `saveCloudVersion` first when the account changed too; the trash for deletes) and folder creation by name.
 - **`vaultService.ts`** keeps it running while the app is open: a stat-only scan every 4 seconds (no file-watcher dependency), the account every minute and when the window is shown or the connection returns. A sync's own writes are not counted as changes. Syncs never overlap. It is started from `connect()` in `main.ts`, so it follows sign-in and sign-out.
+- **Permission.** `vault_check` (`vault::check_access`) reads the folder and writes then removes a hidden probe file. `VaultService.syncNow` calls it first on every sync: the first read of a protected folder (Documents, Desktop, iCloud Drive) is what makes macOS ask the person, and a refusal becomes the `access` state with the reason in `message`. An `access` folder is not retried every few seconds: Try Again (`retry`), or coming back to the window, asks again, and on a Mac `vault_open_privacy` opens System Settings › Files & Folders. A scan that fails in `look` now runs a sync, so the reason is reported instead of swallowed. The problem is shown once as a notice (`main.ts`), in the Vault Folder dialog and in the save indicator's panel.
+- **Show in Finder.** `vault_reveal` opens the vault's root in the system file manager (`open`, `explorer`, `xdg-open`); the page names no path. The save indicator's panel (`ui/syncButton.ts`, through `ChromeHost.vaultFolder`) shows the folder with this link, or a link to the Vault Folder dialog while none is chosen.
 - **`ui/vaultDialog.ts`** (File › Vault Folder, desktop only): choose or change the folder, stop, sync now, status, and the confirmation for a held-back mass delete.
 
 ## What a file is on disk
@@ -84,9 +86,19 @@ On a Mac the desktop app shows the menus in the system's menu bar and hides the 
 - **Title bar**: the window uses `titleBarStyle: Overlay` with a hidden title (`tauri.conf.json`, macOS only), so the page draws under the system's title bar and the menu bar's row becomes it (`MenuBar.setTitleBar`): the document name and the controls on the right sit in that row, a 78 px inset keeps clear of the close, minimize and zoom buttons, and `data-tauri-drag-region` makes the row drag the window (double-click zooms; both need the `core:window` permissions in the capability file). In full screen the buttons go and the inset stays.
 - **Text fields**: the menu takes ⌘A, ⌘Z and ⇧⌘Z from a focused field (the document title, a dialog's box), so `NativeMenuSync` does them in the field (`document.execCommand`) instead of running the document's command. Other menu shortcuts are ignored there. Clicking the document title selects all of it: WebKit drops the selection a focus makes when the mouse button is released, so `DocumentTitle` selects again on that release.
 
+## The phone apps
+
+The iOS app (Android is not started) is the same crate and the same launcher page (`desktop/frontend`) as the desktop app, so the phone shows the live website.
+
+- **What is desktop only**: the vault, the native menu bar and the updater. `src/lib.rs` compiles them under `#[cfg(desktop)]`, `tauri-plugin-dialog` and `tauri-plugin-updater` are desktop-only dependencies in `Cargo.toml`, and on a phone the invoke handler is empty (the stores update the app). The page must not offer them there: `bridge.ts` returns null from `desktopBridge()`, `desktopUpdater()`, `desktopMenu()` and `isDesktopApp()` on a touch device (`isTouchDevice`: iPhone, iPad, Android, or an iPad that calls itself a Mac), and `isMobileApp()` says it is the phone shell.
+- **Config**: `src-tauri/tauri.ios.conf.json` overrides the identifier (`com.golemdocs.app`) and sets the minimum iOS (15). The Xcode project is generated, not committed (`src-tauri/gen` is ignored): run `cargo tauri ios init` (not through `npx`, or the generated build script calls `npm run tauri`, which does not exist here).
+- **Safe areas**: the page is drawn under the status bar and home indicator (`viewport-fit=cover`), so `body` pads itself with `env(safe-area-inset-*)` (`style.css`). The insets are 0 in a desktop browser.
+- **Try it in the simulator**: `cd desktop && cargo tauri ios build --debug --target aarch64-sim --ci`, then install `src-tauri/gen/apple/build/arm64-sim/GolemDocs.app` (`xcrun simctl install booted <app>`; `xcrun simctl launch booted com.golemdocs.app`). It needs the Rust targets `aarch64-apple-ios-sim` and `aarch64-apple-ios`, Xcode, `xcodegen` and CocoaPods. A device or App Store build needs `bundle > iOS > developmentTeam` (or `APPLE_DEVELOPMENT_TEAM`), not set yet.
+- **Not done**: the phone layout is the website's `mobile` profile as it is (menus and toolbars are the desktop's), no document or share extensions, no App Store signing, and billing (Apple requires its own in-app purchase for digital subscriptions).
+
 ## Not built yet
 
-- A bundled client that works offline: it needs token auth on the API, because the page would no longer be same-origin with it. It is also the step the iOS and Android targets (`cargo tauri ios init` / `android init`) depend on.
+- A bundled client that works offline: it needs token auth on the API, because the page would no longer be same-origin with it. The phone apps show the website too, so they need a connection until this exists.
 - An assistant tool for the vault: choosing a folder needs the native dialog, which only the person can use, so the AI cannot do it. Syncing itself is automatic.
 - An end-to-end test: Playwright drives Chromium, which has no native shell. The driver and codec are covered by `vaultSync.test.ts` and `vaultCodec.test.ts`, the folder rules by the Rust tests.
 

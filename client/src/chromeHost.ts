@@ -63,6 +63,8 @@ export interface AppHooks {
   showTrash(): void;
   /** File ▸ Vault Folder (desktop app): choose the folder that keeps a copy of the documents. */
   showVault(): void;
+  /** The vault folder (desktop app), or null in a browser. */
+  vaultFolder(): { path: string | null; problem?: string | null; reveal(): void; retry(): void } | null;
   /** Help ▸ Check for Updates (desktop app): look for a newer version of the app and offer to install it. */
   showUpdates(): void;
   /** Ask for the page size, margins and orientation, then set them. */
@@ -528,6 +530,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     renameDocument: app.renameDocument,
     samples: app.samples,
     saved: app.saved,
+    vaultFolder: app.vaultFolder,
     fonts: app.fonts,
   };
 }

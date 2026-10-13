@@ -348,6 +348,8 @@ export interface ChromeHost {
   notify(message: string): void;
   /** Gives the document a new name (cleaned for a file name); returns the name kept, or null if it can't be renamed. */
   renameDocument(name: string): string | null;
+  /** The vault folder (desktop app), or null in a browser: where it is (null while none is chosen) and a way to show it in the file manager. */
+  vaultFolder?(): { path: string | null; problem?: string | null; reveal(): void; retry(): void } | null;
   /** Samples for File ▸ Open Sample, read each time the menu opens. */
   samples?(): Sample[];
   /** The user's documents, for File ▸ Open Recent. */

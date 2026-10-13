@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.20.0 - Unreleased
+## 0.20.0 - 2026-10-13
 
 ### Added
 - The desktop app now updates itself: it looks for a new version when it opens and every few hours, asks before installing, and Help › Check for Updates looks right away.

@@ -1,4 +1,9 @@
 fn main() {
+    // On iOS the app (Swift, gen/apple/Sources/.../ICloud.swift) defines the iCloud functions that src/icloud.rs calls, and
+    // only the static library is linked into it. Cargo also links a dylib, which has no such definitions: leave them open.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        println!("cargo:rustc-link-arg=-Wl,-undefined,dynamic_lookup");
+    }
     // Each vault command gets its own permission (allow-vault-scan ...), so a page is given only the ones
     // capabilities/default.json lists.
     tauri_build::try_build(

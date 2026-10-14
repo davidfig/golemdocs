@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': 'Autorisez-le dans Réglages Système › Confidentialité et sécurité › Fichiers et dossiers (ou Accès complet au disque), puis choisissez Réessayer.',
   'vault.tryAgain': 'Réessayer',
   'vault.openPrivacy': 'Ouvrir les réglages de confidentialité',
+  'vault.shellTooOld': 'Cela nécessite une version plus récente de l’application de bureau. Utilisez Aide › Rechercher des mises à jour.',
   'vault.problem.access': 'Le dossier du coffre est inutilisable : vos documents ne sont pas synchronisés. Ouvrez Fichier › Dossier du coffre pour les détails.',
   'vault.problem.error': 'Certains documents n’ont pas pu être synchronisés : {message}',
   'update.menu': 'Rechercher les mises à jour…',

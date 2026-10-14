@@ -3,7 +3,7 @@
 // back to the front. It never reloads by itself: "Reload" saves what is open first (the caller's
 // `reload`), and "Later" hides the note until the next check finds the site still ahead.
 
-import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, isOutOfDate } from '../buildCheck.ts';
+import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, shouldOfferReload } from '../buildCheck.ts';
 import { t } from '../i18n/index.ts';
 import { CLOSE_ICON, h, iconButton } from './dom.ts';
 import './newVersionNotice.css';
@@ -13,7 +13,13 @@ export class UpdateNotice {
   private lastCheck = 0;
   private checking = false;
 
-  constructor(parent: HTMLElement, private readonly running: string, private readonly reload: () => void) {
+  constructor(
+    parent: HTMLElement,
+    private readonly running: string,
+    private readonly reload: () => void,
+    /** In the desktop app: whether a newer shell is on offer, which makes its own dialog the only message (see `shouldOfferReload`). */
+    private readonly shellUpdateOnOffer?: () => Promise<boolean>,
+  ) {
     const close = iconButton('wm-version-notice-close', CLOSE_ICON, t('dialogs.update.later'));
     const now = h('button', { class: 'wm-button', text: t('dialogs.update.reload'), attrs: { type: 'button' } });
     const later = h('button', { class: 'wm-version-notice-off', text: t('dialogs.update.later'), attrs: { type: 'button' } });
@@ -34,7 +40,7 @@ export class UpdateNotice {
     });
     window.addEventListener('online', () => void this.check());
     // A lazily loaded chunk (a format, a font page) that the new deploy removed can't be fetched by the old page: the page is out of date, whatever build.json says.
-    window.addEventListener('vite:preloadError', () => (this.el.hidden = false));
+    window.addEventListener('vite:preloadError', () => void this.show());
     const footer = document.getElementById('footer');
     if (footer) new ResizeObserver(() => this.el.style.setProperty('--wm-footer-clearance', `${footer.offsetHeight}px`)).observe(footer);
   }
@@ -45,9 +51,19 @@ export class UpdateNotice {
     this.checking = true;
     this.lastCheck = now;
     try {
-      if (await isOutOfDate(this.running)) this.el.hidden = false;
+      if (await shouldOfferReload(this.running, this.shellUpdateOnOffer)) this.el.hidden = false;
     } finally {
       this.checking = false;
     }
+  }
+
+  /** The page knows it is out of date (a chunk is gone), so only the shell's own update can take the place of the note. */
+  private async show(): Promise<void> {
+    try {
+      if (this.shellUpdateOnOffer && (await this.shellUpdateOnOffer())) return;
+    } catch {
+      /* ask no more: show the note */
+    }
+    this.el.hidden = false;
   }
 }

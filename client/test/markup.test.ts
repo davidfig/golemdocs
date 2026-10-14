@@ -146,7 +146,7 @@ test('reStructuredText: reads sections by adornment order, literal blocks and gr
 
 test('Org: reads headings without keywords or tags, lists, and tables', async () => {
   const doc = (
-    await org.read(bytes('#+TITLE: T\n* TODO Head :tag:\n- item *b*\n  - sub\n\n| a | b |\n|---+---|\n| 1 | 2 |\n')),
+    await org.read(bytes('#+TITLE: T\n* TODO Head :tag:\n- item *b*\n  - sub\n\n| a | b |\n|---+---|\n| 1 | 2 |\n'))
   ).document;
   const outline = documentToOutline(doc);
   assert.deepEqual(outline.map((n) => n.t), ['heading', 'heading', 'list', 'table']);

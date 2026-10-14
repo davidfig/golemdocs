@@ -32,6 +32,7 @@ export const vault = {
   'vault.status.access.mac': 'Allow it in System Settings › Privacy & Security › Files & Folders (or Full Disk Access), then choose Try Again.',
   'vault.tryAgain': 'Try Again',
   'vault.openPrivacy': 'Open Privacy Settings',
+  'vault.shellTooOld': 'This needs a newer version of the desktop app. Use Help › Check for Updates.',
   'vault.problem.access': 'The vault folder can’t be used, so your documents aren’t being synced. Open File › Vault Folder for details.',
   'vault.problem.error': 'Some documents couldn’t be synced: {message}',
   'update.menu': 'Check for Updates…',

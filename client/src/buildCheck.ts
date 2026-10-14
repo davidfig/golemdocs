@@ -25,3 +25,18 @@ export async function isOutOfDate(running: string, fetcher: typeof fetch = fetch
   const latest = await fetchBuildId(fetcher);
   return latest !== null && latest !== running;
 }
+
+/**
+ * Whether to tell the person the site has been updated. The desktop app is the site inside a shell, and when a newer shell is on offer
+ * its Software Update dialog covers this: restarting loads the current site, so the reload note would only be a second message
+ * for the same update. `shellUpdateOnOffer` is absent in a browser. A shell that can't be asked is treated as having no update.
+ */
+export async function shouldOfferReload(running: string, shellUpdateOnOffer?: () => Promise<boolean>, fetcher: typeof fetch = fetch): Promise<boolean> {
+  if (!(await isOutOfDate(running, fetcher))) return false;
+  if (!shellUpdateOnOffer) return true;
+  try {
+    return !(await shellUpdateOnOffer());
+  } catch {
+    return true;
+  }
+}

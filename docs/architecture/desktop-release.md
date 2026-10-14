@@ -17,10 +17,26 @@ The Tauri command line comes from `npx @tauri-apps/cli@<pinned>` in the workflow
 
 ## Releasing
 
-1. Do the normal release ([build-and-testing.md](build-and-testing.md)): changelog, version bump, commit, tag, push `main` and the tag, deploy the website first. The version must be bumped in `tauri.conf.json`, `Cargo.toml` and the `golemdocs-desktop` entry of `Cargo.lock` too, or the check job fails.
+**The website is deployed last.** The desktop app is the live website inside a shell, so a web deploy reaches every desktop user at once, while a new shell reaches them only as they accept the update. Everything that ships with the site (the app, the home page and its Download section, the marketing copy: one Worker, one deploy) therefore waits until the installers are built, checked and published. The site is the switch.
+
+1. Do the release in [build-and-testing.md](build-and-testing.md): changelog, version bump, commit, tag, push `main` and the tag. The version must be bumped in `tauri.conf.json`, `Cargo.toml` and the `golemdocs-desktop` entry of `Cargo.lock` too, or the check job fails. **Do not deploy the website yet.**
 2. Wait for the **Desktop release** run to finish, open the draft release on GitHub, install the `.dmg` on a Mac and open it (no Gatekeeper warning on a signed build), check File › Vault Folder and the menu bar, then publish the draft.
-3. **Publish the installers on the website:** `pnpm publish:desktop` (needs `gh` and `wrangler` signed in). The repository is private, so the GitHub release cannot be linked; the script downloads the draft's installers and uploads them to the files bucket under `downloads/desktop/`, then writes `latest.json` last. See "The download page" below. Publishing the GitHub draft itself is optional.
-4. To rebuild a tag without a new version (a failed runner, a secret fixed later): Actions › Desktop release › Run workflow, with the tag. The draft's files are replaced.
+3. **Publish the installers on the website:** `pnpm publish:desktop` (needs `gh` and `wrangler` signed in). The repository is private, so the GitHub release cannot be linked; the script downloads the draft's installers and uploads them to the files bucket under `downloads/desktop/`, then writes `latest.json` last. See "The download page" below. Publishing the GitHub draft itself is optional. From now on installed apps are offered the new shell.
+4. **Deploy the website** (`pnpm --filter @golemdocs/server deploy:prod`). Now the new page, home page and Download section go live.
+5. To rebuild a tag without a new version (a failed runner, a secret fixed later): Actions › Desktop release › Run workflow, with the tag. The draft's files are replaced.
+
+A release that does not touch `desktop/` needs no installers worth waiting for: skip 2 and 3 and deploy.
+
+### The page and the shell are different versions
+
+Even in that order the page and the shell are never the same version for everyone: a person who answers Later to the update, or whose app is closed, keeps the old shell while the site moves on. Two rules keep that harmless:
+
+- **The page works with the previous shell.** A command the shell has gained is called through `desktop/bridge.ts`, which treats a "command not found" rejection (`isMissingCommand`) as a shell that is too old: an optional step is skipped (`vault_check`), and a feature says to update the app (`ShellTooOldError`). Add new calls the same way, with a test in `client/test/bridge.test.ts`. Never let a missing command surface as an error about the person's files.
+- **The shell changes only by adding.** A release never removes or renames a command, or changes what one takes or returns, so a page older than its shell also keeps working.
+
+### One message per update
+
+The page asks for a reload when `/build.json` names a newer site (`ui/updateNotice.ts`), and the shell asks for a restart when `updater.json` names a newer shell (the Software Update dialog). In the desktop app, when a newer shell is on offer, only the Software Update dialog is shown: restarting loads the current site anyway (`shouldOfferReload` in `buildCheck.ts`). With the order above, the site changes after the shell is on offer, so a person on the old shell sees one message, and a person already on the new shell sees only the reload note.
 
 ## One-time setup: Apple signing and notarization
 

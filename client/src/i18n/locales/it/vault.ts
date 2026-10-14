@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': 'Consentilo in Impostazioni di Sistema › Privacy e sicurezza › File e cartelle (o Accesso completo al disco), poi scegli Riprova.',
   'vault.tryAgain': 'Riprova',
   'vault.openPrivacy': 'Apri le impostazioni di privacy',
+  'vault.shellTooOld': 'Serve una versione più recente dell’app desktop. Usa Aiuto › Controlla aggiornamenti.',
   'vault.problem.access': 'La cartella del vault non è utilizzabile, quindi i documenti non vengono sincronizzati. Apri File › Cartella del vault per i dettagli.',
   'vault.problem.error': 'Alcuni documenti non sono stati sincronizzati: {message}',
   'update.menu': 'Verifica aggiornamenti…',

@@ -29,6 +29,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': '시스템 설정 › 개인정보 보호 및 보안 › 파일 및 폴더(또는 전체 디스크 접근 권한)에서 허용한 뒤 다시 시도를 선택하세요.',
   'vault.tryAgain': '다시 시도',
   'vault.openPrivacy': '개인정보 보호 설정 열기',
+  'vault.shellTooOld': '이 기능에는 더 새로운 버전의 데스크톱 앱이 필요합니다. 도움말 › 업데이트 확인을 사용하세요.',
   'vault.problem.access': 'Vault 폴더를 사용할 수 없어 문서가 동기화되지 않습니다. 파일 › Vault 폴더에서 자세한 내용을 확인하세요.',
   'vault.problem.error': '일부 문서를 동기화하지 못했습니다: {message}',
   'update.menu': '업데이트 확인…',

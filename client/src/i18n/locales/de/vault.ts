@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': 'Erlaube es in Systemeinstellungen › Datenschutz & Sicherheit › Dateien & Ordner (oder Voller Festplattenzugriff) und wähle dann Erneut versuchen.',
   'vault.tryAgain': 'Erneut versuchen',
   'vault.openPrivacy': 'Datenschutzeinstellungen öffnen',
+  'vault.shellTooOld': 'Dafür wird eine neuere Version der Desktop-App benötigt. Wählen Sie Hilfe › Nach Updates suchen.',
   'vault.problem.access': 'Der Tresorordner kann nicht verwendet werden, daher werden deine Dokumente nicht synchronisiert. Details unter Datei › Tresorordner.',
   'vault.problem.error': 'Einige Dokumente konnten nicht synchronisiert werden: {message}',
   'update.menu': 'Nach Updates suchen…',

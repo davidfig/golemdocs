@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fetchBuildId, isOutOfDate } from '../src/buildCheck.ts';
+import { fetchBuildId, isOutOfDate, shouldOfferReload } from '../src/buildCheck.ts';
 
 const replying = (body: BodyInit, status = 200): typeof fetch => async () => new Response(body, { status });
 const failing: typeof fetch = async () => {
@@ -36,4 +36,13 @@ test('a development page (no build id) never asks', async () => {
   };
   assert.equal(await isOutOfDate('', spy), false);
   assert.deepEqual(asked, []);
+});
+
+test('the reload note is for a page that is out of date, unless the desktop app has a newer shell on offer', async () => {
+  const newer = replying('{"id":"def"}');
+  assert.equal(await shouldOfferReload('abc', undefined, newer), true); // a browser
+  assert.equal(await shouldOfferReload('abc', async () => false, newer), true); // the shell is current
+  assert.equal(await shouldOfferReload('abc', async () => true, newer), false); // the shell update's dialog says it
+  assert.equal(await shouldOfferReload('abc', async () => Promise.reject(new Error('offline')), newer), true); // can't ask: say it
+  assert.equal(await shouldOfferReload('abc', async () => true, replying('{"id":"abc"}')), false); // not out of date at all
 });

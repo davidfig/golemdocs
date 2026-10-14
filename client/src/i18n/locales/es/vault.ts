@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': 'Permítelo en Ajustes del Sistema › Privacidad y seguridad › Archivos y carpetas (o Acceso total al disco) y elige Reintentar.',
   'vault.tryAgain': 'Reintentar',
   'vault.openPrivacy': 'Abrir ajustes de privacidad',
+  'vault.shellTooOld': 'Esto requiere una versión más reciente de la aplicación de escritorio. Usa Ayuda › Buscar actualizaciones.',
   'vault.problem.access': 'La carpeta de la bóveda no se puede usar, así que tus documentos no se sincronizan. Abre Archivo › Carpeta de la bóveda para ver los detalles.',
   'vault.problem.error': 'No se pudieron sincronizar algunos documentos: {message}',
   'update.menu': 'Buscar actualizaciones…',

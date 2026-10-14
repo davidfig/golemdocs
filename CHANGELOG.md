@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.21.1 - Unreleased
+
+### Fixed
+- In the desktop app, an update of the app is announced once: while a newer version of the app is on offer, the note about a new version of the site is not shown as well. A site that is newer than the installed app no longer reports the vault folder as unusable, and Show in Finder and Open Privacy Settings say to update the app instead of failing.
+
 ## 0.21.0 - 2026-10-14
 
 ### Added

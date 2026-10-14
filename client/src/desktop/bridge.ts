@@ -5,6 +5,7 @@
 // calls the page makes are typed here. Which commands a page may call at all is decided by
 // desktop/src-tauri/capabilities/default.json, not by this file.
 
+import { t } from '../i18n/index.ts';
 import type { LocalFile } from './vaultPlan.ts';
 
 interface TauriCore {
@@ -31,6 +32,32 @@ export interface DesktopBridge {
   /** Writes through a temporary file and a rename. Returns the new modification time in milliseconds. */
   write(path: string, bytes: Uint8Array): Promise<number>;
   remove(path: string): Promise<void>;
+}
+
+/**
+ * True when the shell rejected a call because it has no such command, or does not allow the page that command: the page is
+ * the live website, so it can be newer than the installed shell. Tauri rejects with a string ("Command x not found",
+ * "x not allowed by ACL"). A page must keep working against the previous shell: see docs/architecture/desktop-release.md.
+ */
+export function isMissingCommand(error: unknown): boolean {
+  return /^Command \S+ not found|\bnot allowed by ACL\b|\bnot allowed\. Command not found\b/i.test(error instanceof Error ? error.message : String(error));
+}
+
+/** A command only a newer shell has; the message says to update the app. */
+export class ShellTooOldError extends Error {
+  constructor() {
+    super(t('vault.shellTooOld'));
+    this.name = 'ShellTooOldError';
+  }
+}
+
+/** Calls a command that a shell older than this page may not have, and throws `ShellTooOldError` when it doesn't. */
+async function needsNewerShell<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    throw isMissingCommand(error) ? new ShellTooOldError() : error;
+  }
 }
 
 function shellCore(): TauriCore | null {
@@ -65,9 +92,12 @@ export function desktopBridge(): DesktopBridge | null {
     root: () => core.invoke<string | null>('vault_root'),
     choose: () => core.invoke<string | null>('vault_choose'),
     forget: () => core.invoke<void>('vault_forget'),
-    reveal: () => core.invoke<void>('vault_reveal'),
-    check: () => core.invoke<void>('vault_check'),
-    openPrivacy: () => core.invoke<void>('vault_open_privacy'),
+    reveal: () => needsNewerShell(() => core.invoke<void>('vault_reveal')),
+    // Only there to make macOS ask for access: an older shell has no such step, and its sync fails with its own error if it can't read the folder.
+    check: () => core.invoke<void>('vault_check').catch((error: unknown) => {
+      if (!isMissingCommand(error)) throw error;
+    }),
+    openPrivacy: () => needsNewerShell(() => core.invoke<void>('vault_open_privacy')),
     scan: async () => (await core.invoke<{ path: string; size: number; mtimeMs: number }[]>('vault_scan')).map(({ path, size, mtimeMs }) => ({ path, size, mtimeMs })),
     read: async (path) => bytes(await core.invoke<unknown>('vault_read', { path })),
     // The bytes are the body and the path rides in a header, percent-encoded because a header is ASCII.

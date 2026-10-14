@@ -29,6 +29,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': 'システム設定 › プライバシーとセキュリティ › ファイルとフォルダ(またはフルディスクアクセス)で許可してから、「再試行」を選んでください。',
   'vault.tryAgain': '再試行',
   'vault.openPrivacy': 'プライバシー設定を開く',
+  'vault.shellTooOld': 'この機能にはデスクトップアプリの新しいバージョンが必要です。ヘルプ › アップデートを確認 を使ってください。',
   'vault.problem.access': 'Vault フォルダを使用できないため、ドキュメントは同期されていません。詳細はファイル › Vault フォルダで確認してください。',
   'vault.problem.error': '同期できなかったドキュメントがあります: {message}',
   'update.menu': 'アップデートを確認…',

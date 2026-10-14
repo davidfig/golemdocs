@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': 'Permita em Ajustes do Sistema › Privacidade e Segurança › Arquivos e Pastas (ou Acesso Total ao Disco) e escolha Tentar de novo.',
   'vault.tryAgain': 'Tentar de novo',
   'vault.openPrivacy': 'Abrir ajustes de privacidade',
+  'vault.shellTooOld': 'Isso exige uma versão mais recente do aplicativo de desktop. Use Ajuda › Verificar atualizações.',
   'vault.problem.access': 'A pasta do cofre não pode ser usada, então seus documentos não estão sendo sincronizados. Abra Arquivo › Pasta do cofre para ver os detalhes.',
   'vault.problem.error': 'Alguns documentos não puderam ser sincronizados: {message}',
   'update.menu': 'Verificar atualizações…',

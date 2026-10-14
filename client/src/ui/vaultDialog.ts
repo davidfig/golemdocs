@@ -92,7 +92,7 @@ export class VaultDialog {
     stop.addEventListener('click', () => void service.forget());
     syncNow.addEventListener('click', () => void service.syncNow());
     retry.addEventListener('click', () => void service.retry());
-    privacy.addEventListener('click', () => void service.openPrivacy().catch((error: unknown) => this.host.tell(String(error))));
+    privacy.addEventListener('click', () => void service.openPrivacy().catch((error: unknown) => this.host.tell(error instanceof Error ? error.message : String(error))));
     confirm.addEventListener('click', () => void service.syncNow({ allowMassDelete: true }));
     close.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {

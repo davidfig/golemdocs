@@ -4817,7 +4817,7 @@ const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clea
 // A new release: offer What's New (once per version, unless turned off).
 new NewVersionNotice(document.body, () => openSource('changelog'));
 // The site updated while this page was open: offer a reload, once what is open is saved.
-new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForSettings());
+new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForSettings(), updateService ? async () => (await updateService.check()) !== null : undefined);
 
 /**
  * The person's other documents, for the assistant: this browser's copies and the account's, and

@@ -29,6 +29,7 @@ export const vault: Catalog = {
   'vault.status.access.mac': '请在“系统设置 › 隐私与安全性 › 文件与文件夹”(或“完全磁盘访问权限”)中允许访问，然后选择“重试”。',
   'vault.tryAgain': '重试',
   'vault.openPrivacy': '打开隐私设置',
+  'vault.shellTooOld': '这需要更新版本的桌面应用。请使用“帮助 › 检查更新”。',
   'vault.problem.access': '无法使用保险库文件夹，因此你的文档没有同步。请在“文件 › 保险库文件夹”中查看详情。',
   'vault.problem.error': '部分文档无法同步：{message}',
   'update.menu': '检查更新…',

@@ -3275,7 +3275,24 @@ function send(command: WireCommand): void {
   worker.command(command);
 }
 
+// On Android the web view raises the keyboard for a focused text input as soon as it is touched anywhere (even the menu button), and
+// any focus made in a tap or click handler raises it too. So there, the document's input is focused only by a tap on the document
+// (`focusByTap`): not when a document opens, nor when a dialog or menu hands the focus back.
+const ANDROID = /Android/i.test(navigator.userAgent);
+let focusAllowed = !ANDROID;
+
+function focusByTap(): void {
+  const before = focusAllowed;
+  focusAllowed = true;
+  try {
+    focusInput();
+  } finally {
+    focusAllowed = before;
+  }
+}
+
 function focusInput(): void {
+  if (!focusAllowed) return;
   if (textView.active) return textEngine.focus();
   input.focus({ preventScroll: true });
 }
@@ -3557,7 +3574,7 @@ let pendingDrag: { x: number; y: number } | null = null;
 type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 'timeStamp' | 'shiftKey' | 'metaKey' | 'ctrlKey'>;
 
 function press(e: Press): void {
-  focusInput();
+  focusByTap();
   // Putting the caret down is what shows the phone's typing bar (see Chrome.trackTyping).
   document.dispatchEvent(new Event('wm-caret'));
   if (textView.active) {
@@ -3744,7 +3761,7 @@ canvas.addEventListener(
   (e) => {
     if (performance.now() - tappedAt >= 500) return;
     if (e.cancelable) e.preventDefault();
-    focusInput();
+    focusByTap();
   },
   { passive: false },
 );

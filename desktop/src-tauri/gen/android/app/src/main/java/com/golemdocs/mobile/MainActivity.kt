@@ -2,6 +2,7 @@ package com.golemdocs.mobile
 
 import android.os.Bundle
 import android.view.View
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -21,5 +22,10 @@ class MainActivity : TauriActivity() {
       view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
       WindowInsetsCompat.CONSUMED
     }
+  }
+
+  // The page shares files through this (see ShareBridge.kt and client/src/ui/saveFile.ts).
+  override fun onWebViewCreate(webView: WebView) {
+    webView.addJavascriptInterface(ShareBridge(this, webView), "GolemShare")
   }
 }

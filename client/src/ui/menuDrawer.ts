@@ -33,13 +33,21 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
   // Pressing in the drawer never takes focus from the document.
   drawer.addEventListener('mousedown', (e) => e.preventDefault());
 
+  // The drawer closes when the window is turned (its width changes), not when only its height does: the keyboard and the system bars
+  // change that, and on Android the window is resized as the drawer opens.
+  let width = window.innerWidth;
+  const onResize = () => {
+    if (window.innerWidth !== width) close();
+    width = window.innerWidth;
+  };
+
   const close = () => {
     if (open?.close !== close) return;
     open = null;
     backdrop.remove();
     drawer.remove();
     window.removeEventListener('keydown', keydown, true);
-    window.removeEventListener('resize', close);
+    window.removeEventListener('resize', onResize);
     registry.focusEditor();
   };
   const keydown = (e: KeyboardEvent) => {
@@ -99,7 +107,7 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
   closeButton.addEventListener('click', close);
   backdrop.addEventListener('click', close);
   window.addEventListener('keydown', keydown, true);
-  window.addEventListener('resize', close);
+  window.addEventListener('resize', onResize);
   open = { close };
   render();
   layer.append(backdrop, drawer);

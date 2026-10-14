@@ -29,6 +29,12 @@ export function takeDropped(data: DataTransfer | null): Dropped {
   };
 }
 
+/** Files handed to the app by the system (opened or shared into it): one opens as it is, several are imported like a drop (null: none). */
+export function droppedFromFiles(files: File[]): Dropped {
+  if (!files.length) return null;
+  return files.length === 1 ? { kind: 'file', file: files[0]! } : importOf(files.map((file) => ({ path: file.name, file: () => Promise.resolve(file) })));
+}
+
 /** A folder picked with the file picker (`webkitdirectory`): its files, each with its path from the picked folder's parent. */
 export function pickedFolder(files: FileList): Extract<Dropped, { kind: 'import' }> {
   const list = [...files].map((file) => ({ path: file.webkitRelativePath || file.name, file: () => Promise.resolve(file) }));

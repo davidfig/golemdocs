@@ -13,7 +13,7 @@ import java.io.OutputStream
 //
 // The page sends the bytes in chunks (begin, chunk..., finish), so a big file (File > Download All) is never one string.
 // They go to a file in the app's cache, which the share sheet reads through the FileProvider (res/xml/file_paths.xml).
-// Only golemdocs.com (and localhost, for development) may use it: the web view could end up on another page.
+// Only golemdocs.com (and localhost, for development) may use it: the web view could end up on another page (OpenBridge.isOurPage).
 class ShareBridge(private val activity: MainActivity, private val webView: WebView) {
   private var out: OutputStream? = null
   private var file: File? = null
@@ -65,8 +65,5 @@ class ShareBridge(private val activity: MainActivity, private val webView: WebVi
   }
 
   // Runs on the main thread (WebView.getUrl needs it).
-  private fun fromOurPage(): Boolean {
-    val host = android.net.Uri.parse(webView.url ?: return false).host ?: return false
-    return host == "golemdocs.com" || host.endsWith(".golemdocs.com") || host == "localhost" || host.endsWith(".localhost")
-  }
+  private fun fromOurPage(): Boolean = OpenBridge.isOurPage(webView)
 }

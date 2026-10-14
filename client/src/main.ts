@@ -8,7 +8,8 @@ import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { zipDocuments } from './storage/archive.ts';
-import { pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
+import { droppedFromFiles, pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
+import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { rememberNewKind } from './ui/newKinds.ts';
@@ -5721,6 +5722,9 @@ window.addEventListener('popstate', () => {
     chrome.accountChanged();
   });
   firstConnect = connect(accountLookup);
+  // The phone apps: files opened in or shared to the app arrive here (desktop/incoming.ts), once the library is ready.
+  const incoming = incomingBridge();
+  if (incoming) void Promise.resolve(firstConnect).catch(() => {}).then(() => watchIncoming(incoming, (files) => dropFile(droppedFromFiles(files), null)));
   // Back from signing in to subscribe, or from paying at Polar.
   const subscribing = params.get('subscribe') === '1';
   const subscribed = params.get('subscribed') === '1';

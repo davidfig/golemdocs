@@ -223,6 +223,21 @@ test('reflow lays pages out at the window width, and off again restores the page
   assert.equal((await layoutDocument(doc, fonts!)).pages[0].width, 612);
 });
 
+test('reflow ignores page breaks and leaves no margin at the cuts', skip, async () => {
+  const doc = await WordDocument.create();
+  const broken = paragraph([run('after the break')]);
+  broken.properties = { pageBreakBefore: true };
+  doc.body = [paragraph([run('before the break')]), broken];
+  assert.equal((await layoutDocument(doc, fonts!)).pages.length, 2);
+  setReflowWidth(300);
+  try {
+    const { pages } = await layoutDocument(doc, fonts!);
+    assert.equal(pages.length, 1, 'no page break in Flow view');
+  } finally {
+    setReflowWidth(null);
+  }
+});
+
 // --- Columns -----------------------------------------------------------------------------
 
 const textParagraph = (text: string, extra: Paragraph['properties'] = {}): Paragraph => ({

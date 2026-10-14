@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.21.2 - Unreleased
+
+### Fixed
+- The web (Flow) view no longer shows page breaks: page and section breaks are ignored and the text runs on without gaps. Page breaks only show in the print view.
+- The assistant moves up out of the way of messages and progress cards at the bottom of the screen.
+
 ## 0.21.1 - 2026-10-14
 
 ### Fixed

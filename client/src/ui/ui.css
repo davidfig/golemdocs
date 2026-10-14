@@ -2827,7 +2827,9 @@ body.wm-fullscreen .wm-toolbars {
   flex: none;
   align-items: center;
   gap: 2px 18px;
-  padding: 1px 6px 1px 10px;
+  /* On a phone the bar runs to the bottom edge: pad its ends clear of the rounded corners. */
+  --footer-corner: calc(var(--safe-bottom, env(safe-area-inset-bottom)) * 0.6);
+  padding: 1px max(6px, var(--footer-corner)) 1px max(10px, var(--footer-corner));
   border-top: 1px solid var(--wm-border);
   background: var(--wm-face);
   color: var(--wm-muted);

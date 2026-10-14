@@ -5,7 +5,8 @@
   position: fixed;
   /* Over the document, left of any panel at its right and above whatever is under the document (see keepOverDocument). */
   right: calc(16px + var(--wm-clip-right, 0px));
-  bottom: calc(16px + var(--wm-clip-bottom, 0px));
+  bottom: max(calc(16px + var(--wm-clip-bottom, 0px)), calc(var(--wm-clip-snack, 0px) + 8px));
+  transition: bottom 0.15s;
   z-index: 15;
   width: 85px;
   height: 93px;

@@ -18,6 +18,14 @@ body {
   color: var(--wm-text, #000);
 }
 
+/* The status bar fills the home indicator's strip itself (its ends are padded clear of the screen's rounded corners, see #footer), so the page leaves no gap there. */
+body:has(#footer:not([hidden])) {
+  padding-bottom: 0;
+}
+body.wm-fullscreen:has(#footer) {
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom));
+}
+
 /* Form controls don't inherit the font by default. */
 button,
 input,

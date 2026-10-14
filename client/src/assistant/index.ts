@@ -234,11 +234,27 @@ export class Assistant {
     if (!viewport) return;
     const place = (): void => {
       const box = viewport.getBoundingClientRect();
+      // Snackbars (the message toast, the progress cards) sit at the bottom of the window: Clip rides above any that would cover it.
+      const left = window.innerWidth - parseFloat(getComputedStyle(this.el).right) - this.el.offsetWidth;
+      let snack = 0;
+      for (const bar of document.querySelectorAll<HTMLElement>('.wm-toast:not([hidden]), .wm-progress-stack')) {
+        const r = bar.getBoundingClientRect();
+        if (r.width && r.height && r.right > left && r.left < left + this.el.offsetWidth) snack = Math.max(snack, Math.round(window.innerHeight - r.top));
+      }
+      this.el.style.setProperty('--wm-clip-snack', `${snack}px`);
       this.el.style.setProperty('--wm-clip-right', `${Math.max(0, Math.round(window.innerWidth - box.right))}px`);
       this.el.style.setProperty('--wm-clip-bottom', `${Math.max(0, Math.round(window.innerHeight - box.bottom))}px`);
     };
-    new ResizeObserver(place).observe(viewport);
+    const sizes = new ResizeObserver(place);
+    sizes.observe(viewport);
     window.addEventListener('resize', place);
+    const watchSnacks = (): void => {
+      for (const bar of document.querySelectorAll('.wm-toast, .wm-progress-stack')) sizes.observe(bar);
+      place();
+    };
+    // The toast and the progress stack are created on demand and added to or removed from the body.
+    new MutationObserver(watchSnacks).observe(document.body, { childList: true });
+    watchSnacks();
   }
 
   setVisible(visible: boolean, remember = true): void {

@@ -116,8 +116,8 @@ function geometry(props: SectionProperties, previous: SectionGeometry | undefine
       properties: props,
       width: reflow,
       height,
-      top: REFLOW_VERTICAL,
-      bottom: REFLOW_VERTICAL,
+      top: 0,
+      bottom: 0,
       left: REFLOW_SIDE,
       right: REFLOW_SIDE,
       header: 0,
@@ -841,10 +841,15 @@ export class LayoutSession {
       pendingAfter?: number;
     }
 
+    // Flow view (web): one unbroken column; page and section breaks are ignored.
+    const flowing = reflowWidth() !== null;
+
     const bodyArea = (first: boolean, number: number) => {
       const header = partHeight(partFor(doc, section.headers, section, first, number), section.contentWidth);
       const footer = partHeight(partFor(doc, section.footers, section, first, number), section.contentWidth);
       // Negative margins fix the body position regardless of header/footer size.
+      // Flow view has no pages to see: only the very start of the document gets some room above.
+      if (flowing) return { top: from + pages.length === 0 ? REFLOW_VERTICAL : 0, bottom: section.height };
       return {
         top: section.top < 0 ? -section.top : Math.max(section.top, section.header + header),
         bottom: section.height - (section.bottom < 0 ? -section.bottom : Math.max(section.bottom, section.footer + footer)),
@@ -966,7 +971,7 @@ export class LayoutSession {
       const lines = p.lines;
       let i = fromLine;
       if (fromLine === 0) {
-        if (p.pageBreakBefore && !atTop) newPage(false, { blockIndex: index }, true);
+        if (p.pageBreakBefore && !atTop && !flowing) newPage(false, { blockIndex: index }, true);
         const suppress = atTop && naturalBreak;
         y += suppress ? 0 : spaceAbove;
         const room = bottom - y;
@@ -974,7 +979,7 @@ export class LayoutSession {
         // Keep with next: a chain of keep-with-next paragraphs that doesn't fit starts on a new
         // page (checked where the chain starts; one longer than a page then breaks normally).
         // Keep lines together: a paragraph that doesn't fit but would fit a page moves as a whole.
-        if (!atTop) {
+        if (!atTop && !flowing) {
           const chainStart = !previous?.keepNext;
           if (p.keepNext && chainStart && index + 1 < blocks.length && keepChainHeight(index) > room) newPage(true, { blockIndex: index });
           if (!atTop && p.keepLines && p.height > bottom - y && p.height <= pageRoom) newPage(true, { blockIndex: index });
@@ -991,9 +996,9 @@ export class LayoutSession {
           if (h + line.height > room + 0.01 && !(atTop && fit === 0)) break;
           h += line.height;
           fit++;
-          if (line.pageBreak) break;
+          if (line.pageBreak && !flowing) break;
         }
-        const endsWithBreak = fit > 0 && lines[i + fit - 1].pageBreak;
+        const endsWithBreak = !flowing && fit > 0 && lines[i + fit - 1].pageBreak;
         // A column break goes on to the next column; a page break always starts a page.
         const forcePage = endsWithBreak && !lines[i + fit - 1].columnBreak;
         if (i + fit < lines.length && !endsWithBreak && p.widowControl && lines.length > 1) {
@@ -1145,7 +1150,7 @@ export class LayoutSession {
           const type = sb.properties.type ?? 'nextPage';
           const prevSection = sections[s - 1];
           const samePageSize = prevSection && prevSection.width === section.width && prevSection.height === section.height;
-          if (s === 0 || type !== 'continuous' || !samePageSize || pages.length === 0) {
+          if (s === 0 || (!flowing && (type !== 'continuous' || !samePageSize)) || pages.length === 0) {
             // Odd/even section starts may need a blank page first.
             const blank = (type === 'oddPage' && pageNumber % 2 === 1) || (type === 'evenPage' && pageNumber % 2 === 0);
             if (blank) newPage(false, { blockIndex: 0, restartable: false }, true);

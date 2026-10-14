@@ -131,6 +131,7 @@ export const dialogs: Catalog = {
   'dialogs.options.title': 'Параметры',
   'dialogs.options.view': 'Вид',
   'dialogs.options.fullScreenMenu': 'Оставлять строку меню в полноэкранном режиме',
+  'dialogs.options.scrollPastEnd': 'Разрешить прокрутку на пол-экрана за конец документа',
   'dialogs.options.macInAppMenu': 'Показывать меню также в окне на Mac',
   'dialogs.options.drawing': 'Рисование',
   'dialogs.options.selectAfterPencil': 'Выделять штрих карандаша после его завершения',

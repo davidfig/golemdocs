@@ -30,6 +30,7 @@ export const SYNCED_KEYS: readonly string[] = [
   'word.ruler',
   'word.footer', // status bar
   'word.fullScreenMenus', // Tools › Options: keep the menu bar in full screen
+  'word.scrollPastEnd', // Tools › Options: scroll half a screen past the end of the document
   'golem.macInAppMenu', // Tools › Options: menus in the window on a Mac
   'word.toolbarsShown', // View › Toolbars › Show Toolbars
   'wm.largeWrap',

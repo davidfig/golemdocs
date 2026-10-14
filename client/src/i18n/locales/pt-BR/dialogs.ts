@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': 'Opções',
   'dialogs.options.view': 'Exibir',
   'dialogs.options.fullScreenMenu': 'Manter a barra de menus em tela inteira',
+  'dialogs.options.scrollPastEnd': 'Permitir rolar meia tela além do fim do documento',
   'dialogs.options.macInAppMenu': 'Mostrar também os menus na janela no Mac',
   'dialogs.options.drawing': 'Desenho',
   'dialogs.options.selectAfterPencil': 'Selecionar o traço do lápis ao terminá-lo',

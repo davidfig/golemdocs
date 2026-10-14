@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': '选项',
   'dialogs.options.view': '视图',
   'dialogs.options.fullScreenMenu': '全屏时保留菜单栏',
+  'dialogs.options.scrollPastEnd': '允许滚动到文档末尾之后半屏',
   'dialogs.options.macInAppMenu': '在 Mac 上同时于窗口中显示菜单',
   'dialogs.options.drawing': '绘图',
   'dialogs.options.selectAfterPencil': '完成铅笔笔画后将其选中',

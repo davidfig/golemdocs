@@ -17,6 +17,8 @@ export class Camera {
   width = 1;
   height = 1;
   dpr = 1;
+  /** Whether the view may scroll until the end of the document is half a screen up from the bottom (an option; on by default in the app). */
+  scrollPastEnd = false;
 
   /** Device pixels per document point. */
   get scale(): number {
@@ -51,13 +53,14 @@ export class Camera {
 
   /**
    * Keeps the view over the document: per axis the view may extend at most `padding` CSS px past
-   * `bounds`, and a document smaller than the view is centered instead.
+   * `bounds`, and a document smaller than the view is centered instead
+   * (unless `scrollPastEnd` lets the view run half a screen past the end, which then wins).
    */
   clamp(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24): void {
     if (bounds.width <= 0 || bounds.height <= 0) return;
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
     this.x = clampAxis(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, padding * pointsPerCss);
-    this.y = clampAxis(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss);
+    this.y = clampAxis(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss, this.scrollPastEnd ? 0.5 : 0);
   }
 
   /**
@@ -67,7 +70,7 @@ export class Camera {
   clampToStart(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24): void {
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
     this.x = clampAxisToStart(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, padding * pointsPerCss);
-    this.y = clampAxisToStart(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss);
+    this.y = clampAxisToStart(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss, this.scrollPastEnd ? 0.5 : 0);
   }
 
   toDocument(cssX: number, cssY: number): { x: number; y: number } {
@@ -76,14 +79,17 @@ export class Camera {
   }
 }
 
-/** Clamps one axis of the view origin so the view stays within the content plus padding (all in points); centers when it can't fit. */
-function clampAxis(origin: number, start: number, size: number, view: number, pad: number): number {
+/**
+ * Clamps one axis of the view origin so the view stays within the content plus padding (all in points); centers when it can't fit.
+ * `slack` is how much of the view may also run past the end (0.5 = half a screen).
+ */
+function clampAxis(origin: number, start: number, size: number, view: number, pad: number, slack = 0): number {
   const min = start - pad;
-  const max = start + size + pad - view;
+  const max = start + size + pad - view + view * slack;
   return max < min ? (min + max) / 2 : Math.min(Math.max(origin, min), max);
 }
 
 /** Clamps one axis of the view origin to at least the content's start and at most its end plus padding less the view (all in points). */
-function clampAxisToStart(origin: number, start: number, size: number, view: number, pad: number): number {
-  return Math.max(Math.min(origin, start + size + pad - view), start);
+function clampAxisToStart(origin: number, start: number, size: number, view: number, pad: number, slack = 0): number {
+  return Math.max(Math.min(origin, start + size + pad - view + view * slack), start);
 }

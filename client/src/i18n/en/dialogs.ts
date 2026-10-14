@@ -129,6 +129,7 @@ export const dialogs = {
   'dialogs.options.title': 'Options',
   'dialogs.options.view': 'View',
   'dialogs.options.fullScreenMenu': 'Keep the menu bar in full screen',
+  'dialogs.options.scrollPastEnd': 'Allow scrolling half a screen past the end of the document',
   'dialogs.options.macInAppMenu': 'Also show the menus in the window on a Mac',
   'dialogs.options.drawing': 'Drawing',
   'dialogs.options.selectAfterPencil': 'Select a pencil stroke when it is finished',

@@ -41,6 +41,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/pictureFrame.ts`, `pictureDetourBar.ts` | The frame and resize handles around the picture selected in the text; the Done / Cancel bar while a picture of the text is open in the image editor |
 | `client/src/ui/*Layer.ts`, `vectorEditor.ts`, `vectorSession.ts` | DOM layers over the canvas (forms, PDF text, pointers, vector editing) |
 | `client/src/view/camera.ts` | `Camera`: document points to canvas; zoom and scroll only change uniforms |
+| `client/src/ui/scrollOptions.ts` | Tools › Options: scroll half a screen past the end (`Camera.scrollPastEnd`; synced, on by default) |
 | `client/src/viewMemory.ts` | Per-document scroll, zoom, caret and selection (device-local) |
 | `client/src/settingsSync.ts` | Account-synced preferences |
 | `client/src/spelling/` | `dictionary.ts` (Hunspell reader), `check.ts`, `grammar.ts`, `languages.ts`, `appWords.ts` |

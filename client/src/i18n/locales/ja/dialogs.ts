@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': 'オプション',
   'dialogs.options.view': '表示',
   'dialogs.options.fullScreenMenu': '全画面表示でもメニュー バーを表示する',
+  'dialogs.options.scrollPastEnd': '文書の末尾より半画面分先までスクロールできるようにする',
   'dialogs.options.macInAppMenu': 'Mac でメニューをウインドウ内にも表示する',
   'dialogs.options.drawing': '描画',
   'dialogs.options.selectAfterPencil': '鉛筆のストロークを描き終えたら選択する',

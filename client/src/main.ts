@@ -84,6 +84,7 @@ import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, ty
 import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from './webgl/text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
+import { onScrollPastEndChange, scrollPastEndOn } from './ui/scrollOptions.ts';
 import { GpuPage } from './webgl/gpuPage.ts';
 import { PageRenderer, type FrameStats } from './webgl/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
@@ -185,6 +186,11 @@ if (!gl) {
 }
 
 const camera = new Camera();
+camera.scrollPastEnd = scrollPastEndOn();
+onScrollPastEndChange(() => {
+  camera.scrollPastEnd = scrollPastEndOn();
+  requestRender();
+});
 const renderer = new PageRenderer(gl);
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 const selection = new SelectionLayer(gl);

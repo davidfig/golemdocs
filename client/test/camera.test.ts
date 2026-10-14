@@ -164,3 +164,29 @@ test('clamp ignores empty bounds and follows the zoom', () => {
   c.clamp({ x: 0, y: 0, width: 1000, height: 1000 }, 400, 400, 12);
   near(c.x, -(12 / (2 * CSS_PX_PER_POINT)));
 });
+
+test('scrollPastEnd lets the view run half a screen past the end, and is off by default', () => {
+  const c = new Camera();
+  const bounds = { x: 0, y: 0, width: 600, height: 5000 };
+  const pointsPerCss = 1 / (c.zoom * CSS_PX_PER_POINT);
+  const view = 800 * pointsPerCss;
+  c.y = 1e9;
+  c.clamp(bounds, 800, 800);
+  near(c.y, 5000 + 24 * pointsPerCss - view);
+  c.scrollPastEnd = true;
+  c.y = 1e9;
+  c.clamp(bounds, 800, 800);
+  near(c.y, 5000 + 24 * pointsPerCss - view / 2);
+  c.y = -1e9;
+  c.clamp(bounds, 800, 800);
+  near(c.y, -24 * pointsPerCss);
+});
+
+test('scrollPastEnd also applies to text that starts at the top-left corner', () => {
+  const c = new Camera();
+  c.scrollPastEnd = true;
+  const pointsPerCss = 1 / (c.zoom * CSS_PX_PER_POINT);
+  c.y = 1e9;
+  c.clampToStart({ x: 0, y: 0, width: 600, height: 5000 }, 800, 800);
+  near(c.y, 5000 + 24 * pointsPerCss - 400 * pointsPerCss);
+});

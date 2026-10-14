@@ -131,6 +131,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.title': '옵션',
   'dialogs.options.view': '보기',
   'dialogs.options.fullScreenMenu': '전체 화면에서도 메뉴 표시줄 유지',
+  'dialogs.options.scrollPastEnd': '문서 끝 아래로 반 화면만큼 더 스크롤할 수 있게 하기',
   'dialogs.options.macInAppMenu': 'Mac에서 메뉴를 창 안에도 표시',
   'dialogs.options.drawing': '그리기',
   'dialogs.options.selectAfterPencil': '연필 획을 그린 후 선택',

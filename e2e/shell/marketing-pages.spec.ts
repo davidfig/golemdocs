@@ -37,7 +37,7 @@ test.describe('home page', () => {
 
   test('has description, canonical URL and social-card metadata', async ({ page }) => {
     await page.goto('/home');
-    await expect(page.locator('meta[name=description]')).toHaveAttribute('content', /document editor that lives in your browser/);
+    await expect(page.locator('meta[name=description]')).toHaveAttribute('content', /document editor for your browser and your desktop/);
     await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', 'https://golemdocs.com/home');
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', 'https://golemdocs.com/home');
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://golemdocs.com/og.png');

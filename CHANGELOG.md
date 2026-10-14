@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.21.0 - Unreleased
+## 0.21.0 - 2026-10-14
 
 ### Added
 - Options open with ⌘, (Ctrl+, elsewhere); in the Mac desktop app they are also in the app menu.

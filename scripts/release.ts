@@ -10,6 +10,7 @@
 //       For the version in package.json, after `git push origin main vX.Y.Z` (which starts the "Desktop release" workflow):
 //       waits for that workflow to finish, stops so the Mac installer can be checked by hand (--yes skips the stop), publishes
 //       the installers (publish:desktop), and only then deploys the website, so the website is the switch for everyone
+//       (it refuses unless HEAD is the tag and the checkout is clean: the website is built from the checkout)
 //       (docs/architecture/desktop-release.md). It ends by checking that the site serves the new build and downloads.
 //
 // Needs `gh` signed in to GitHub and `wrangler` signed in to Cloudflare.
@@ -78,6 +79,16 @@ async function ship(): Promise<void> {
 
   say(`Releasing ${tag}`);
   if (!out('git', ['ls-remote', '--tags', 'origin', tag])) throw new Error(`${tag} is not on origin: git push origin main ${tag} first`);
+  // The website is built from this checkout, so it must be exactly what the tag says: no later commits, nothing uncommitted.
+  const tagged = out('git', ['rev-parse', `${tag}^{commit}`]);
+  const problems = [
+    out('git', ['rev-parse', 'HEAD']) !== tagged && `HEAD is not ${tag} (${tagged.slice(0, 7)}): check out the tag, or release what is on main as a new version`,
+    out('git', ['status', '--porcelain']) !== '' && 'the working tree has uncommitted changes',
+  ].filter((p): p is string => typeof p === 'string');
+  if (problems.length > 0) {
+    if (!dryRun) throw new Error(`the website would not be ${tag}: ${problems.join('; ')}`);
+    console.log(`  (a real run would stop: ${problems.join('; ')})`);
+  }
   if (/Unreleased/.test(read('CHANGELOG.md').split('\n').find((l) => l.startsWith(`## ${version}`)) ?? 'Unreleased')) throw new Error(`CHANGELOG.md has no released ${version} entry: pnpm release bump ${version}`);
 
   say(`Waiting for the "${WORKFLOW}" run of ${tag}`);

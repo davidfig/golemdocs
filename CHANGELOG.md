@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.21.2 - Unreleased
+## 0.22.0 - 2026-10-14
 
 ### Added
 - On a phone or tablet, files opened in Golem Docs from Files, Mail or another app (Open in…, Share) open as documents, and several at once are imported.

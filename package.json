@@ -20,6 +20,7 @@
     "desktop:dev": "cd desktop && cargo tauri dev",
     "desktop:build": "cd desktop && cargo tauri build",
     "publish:desktop": "tsx scripts/publish-desktop.ts",
+    "release": "tsx scripts/release.ts",
     "desktop:test": "cd desktop/src-tauri && cargo test",
     "record:home": "tsx scripts/marketing/record-war-and-peace.ts",
     "og:image": "tsx scripts/marketing/og-image.ts"

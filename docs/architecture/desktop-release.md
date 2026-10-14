@@ -25,6 +25,8 @@ The Tauri command line comes from `npx @tauri-apps/cli@<pinned>` in the workflow
 4. **Deploy the website** (`pnpm --filter @golemdocs/server deploy:prod`). Now the new page, home page and Download section go live.
 5. To rebuild a tag without a new version (a failed runner, a secret fixed later): Actions › Desktop release › Run workflow, with the tag. The draft's files are replaced.
 
+`scripts/release.ts` does the mechanical parts: `pnpm release bump X.Y.Z --commit` sets every version, dates the changelog heading, commits and tags (it never pushes); after pushing the tag, `pnpm release ship` waits for the build, stops so the Mac installer can be checked, runs `publish:desktop`, deploys the website, and checks that the site serves the new downloads and build.
+
 A release that does not touch `desktop/` needs no installers worth waiting for: skip 2 and 3 and deploy.
 
 ### The page and the shell are different versions

@@ -190,3 +190,18 @@ test('scrollPastEnd also applies to text that starts at the top-left corner', ()
   c.clampToStart({ x: 0, y: 0, width: 600, height: 5000 }, 800, 800);
   near(c.y, 5000 + 24 * pointsPerCss - 400 * pointsPerCss);
 });
+
+test('scrollPastEnd leaves a document that fits in the view centered', () => {
+  const c = new Camera();
+  c.scrollPastEnd = true;
+  const bounds = { x: 0, y: 0, width: 600, height: 300 };
+  c.y = 1e9;
+  c.clamp(bounds, 800, 800);
+  const above = c.y;
+  c.y = -1e9;
+  c.clamp(bounds, 800, 800);
+  near(c.y, above); // the same place wherever the view was: the document is centered
+  const off = new Camera();
+  off.clamp(bounds, 800, 800);
+  near(c.y, off.y);
+});

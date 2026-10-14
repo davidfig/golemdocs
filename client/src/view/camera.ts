@@ -81,15 +81,18 @@ export class Camera {
 
 /**
  * Clamps one axis of the view origin so the view stays within the content plus padding (all in points); centers when it can't fit.
- * `slack` is how much of the view may also run past the end (0.5 = half a screen).
+ * `slack` is how much of the view may also run past the end (0.5 = half a screen), but only for content longer than the view: a
+ * drawing, a picture or a short page that fits stays centered.
  */
 function clampAxis(origin: number, start: number, size: number, view: number, pad: number, slack = 0): number {
   const min = start - pad;
-  const max = start + size + pad - view + view * slack;
-  return max < min ? (min + max) / 2 : Math.min(Math.max(origin, min), max);
+  const fit = start + size + pad - view;
+  if (fit < min) return (min + fit) / 2;
+  return Math.min(Math.max(origin, min), fit + view * slack);
 }
 
-/** Clamps one axis of the view origin to at least the content's start and at most its end plus padding less the view (all in points). */
+/** Clamps one axis of the view origin to at least the content's start and at most its end plus padding less the view (all in points); `slack` as in `clampAxis`. */
 function clampAxisToStart(origin: number, start: number, size: number, view: number, pad: number, slack = 0): number {
-  return Math.max(Math.min(origin, start + size + pad - view + view * slack), start);
+  const fit = start + size + pad - view;
+  return Math.max(Math.min(origin, fit > start ? fit + view * slack : fit), start);
 }

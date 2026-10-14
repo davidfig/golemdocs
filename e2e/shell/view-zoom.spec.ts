@@ -196,7 +196,7 @@ test.describe('zoom with the keyboard and pointer', () => {
     await expect.poll(async () => (await camera(page)).y).toBeLessThan(down);
   });
 
-  test('the view cannot be scrolled far past the ends of the document', async ({ app, page }) => {
+  test('the view can be scrolled half a screen past the end of the document, and no further', async ({ app, page }) => {
     await threePages(app);
     await choose(app, 'View', 'Zoom', '100%');
     await page.mouse.move(640, 400);
@@ -204,11 +204,14 @@ test.describe('zoom with the keyboard and pointer', () => {
     await expect.poll(async () => (await camera(page)).y).toBeGreaterThan(500);
     const end = (await camera(page)).y;
     const g = await geometry(page);
-    // The last page's bottom is about at the window's bottom edge (plus a small padding).
+    // Tools › Options › View lets the end of the document come up to the middle of the window (on by default): the last page's
+    // bottom runs past the window's bottom edge, by at most half the window (plus a small padding).
     const pagesBottom = await page.evaluate(() => {
       const p = (window as unknown as { pages: { y: number; height: number }[] }).pages;
       return p[p.length - 1].y + p[p.length - 1].height;
     });
-    expect(end + g.view.height / CSS_PX_PER_POINT).toBeLessThan(pagesBottom + 60);
+    const viewHeight = g.view.height / CSS_PX_PER_POINT;
+    expect(end + viewHeight / 2).toBeLessThan(pagesBottom + 60);
+    expect(end + viewHeight).toBeGreaterThan(pagesBottom + viewHeight / 4);
   });
 });

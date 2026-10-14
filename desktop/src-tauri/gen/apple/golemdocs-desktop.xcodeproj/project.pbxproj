@@ -40,6 +40,7 @@
 		8AED5DF5733364ECE59309E0 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		8D0C5371023BC7CE372CE54A /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		914CC824075A359E3826099E /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		A7D5659F807CC4E1FBD1B096 /* incoming.rs */ = {isa = PBXFileReference; path = incoming.rs; sourceTree = "<group>"; };
 		B57254ABABC40E7216F8AFE4 /* golemdocs-desktop_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "golemdocs-desktop_iOS.entitlements"; sourceTree = "<group>"; };
 		C6818B6AFB6931C902BAF96C /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		C6E0D7CB23B53E7C2F761849 /* golemdocs-desktop_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "golemdocs-desktop_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -170,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				0260244C03AA75BC0A37413F /* icloud.rs */,
+				A7D5659F807CC4E1FBD1B096 /* incoming.rs */,
 				F0C9A09C428143FA7E8E737A /* lib.rs */,
 				50B7FD01CA342447D4BF1419 /* main.rs */,
 				4D0727CF535AC3BD09B987A4 /* menu.rs */,
@@ -180,7 +182,7 @@
 			path = ../../src;
 			sourceTree = "<group>";
 		};
-		"TEMP_209015E3-7E10-4138-BB60-3A7D29C69640" /* x86_64 */ = {
+		"TEMP_7649C778-2716-455A-823B-D1B50BA40B95" /* x86_64 */ = {
 			isa = PBXGroup;
 			children = (
 			);

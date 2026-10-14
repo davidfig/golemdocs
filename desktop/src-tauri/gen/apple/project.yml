@@ -51,6 +51,33 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # Open in GolemDocs / Share to GolemDocs: the types the app opens (the iOS side of client/src/desktop/incoming.ts).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Document
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - org.openxmlformats.wordprocessingml.document
+              - org.oasis-open.opendocument.text
+              - com.microsoft.word.doc
+              - public.rtf
+              - com.adobe.pdf
+              - public.plain-text
+              - public.html
+              - public.comma-separated-values-text
+              - public.tab-separated-values-text
+              - net.daringfireball.markdown
+              - org.idpf.epub-container
+              - public.zip-archive
+              - public.image
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: net.daringfireball.markdown
+            UTTypeDescription: Markdown
+            UTTypeConformsTo: [public.plain-text]
+            UTTypeTagSpecification:
+              public.filename-extension: [md, markdown]
+              public.mime-type: text/markdown
+        LSSupportsOpeningDocumentsInPlace: false
         NSUbiquitousContainers:
           iCloud.com.golemdocs.mobile:
             NSUbiquitousContainerIsDocumentScopePublic: true

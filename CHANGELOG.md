@@ -3,6 +3,7 @@
 ## 0.21.2 - Unreleased
 
 ### Added
+- On a phone or tablet, files opened in Golem Docs from Files, Mail or another app (Open in…, Share) open as documents, and several at once are imported.
 - Tools › Options › View › “Allow scrolling half a screen past the end of the document” lets you scroll the last page up to the middle of the screen so you can keep typing there. It is on by default and never scrolls for you.
 
 ### Fixed

@@ -21,6 +21,9 @@ fn main() {
             "set_native_menu",
             "update_check",
             "update_install",
+            "incoming_pending",
+            "incoming_read",
+            "incoming_done",
         ])),
     )
     .expect("failed to run tauri-build");

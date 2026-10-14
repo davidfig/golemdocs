@@ -5,6 +5,7 @@ mod menu;
 #[cfg(desktop)]
 mod update;
 mod icloud;
+mod incoming;
 #[cfg(any(desktop, target_os = "ios"))]
 mod vault;
 
@@ -49,6 +50,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
 fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .manage(vault::Vault::default())
+        .manage(incoming::Incoming::default())
         .setup(|app| {
             // Without iCloud the vault stays unset and the page shows no folder; the documents are still in the account.
             let _ = app.state::<vault::Vault>().use_icloud(app.handle());
@@ -61,6 +63,9 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_read,
             vault::vault_write,
             vault::vault_remove,
+            incoming::incoming_pending,
+            incoming::incoming_read,
+            incoming::incoming_done,
         ])
 }
 
@@ -71,5 +76,12 @@ fn builder() -> tauri::Builder<tauri::Wry> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    builder().run(tauri::generate_context!()).expect("error while running GolemDocs");
+    let app = builder().build(tauri::generate_context!()).expect("error while building GolemDocs");
+    app.run(|_app, _event| {
+        // Files opened in the iPhone or iPad app (see incoming.rs).
+        #[cfg(target_os = "ios")]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            incoming::opened(_app, urls);
+        }
+    });
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-incoming-done"
+description = "Enables the incoming_done command without any pre-configured scope."
+commands.allow = ["incoming_done"]
+
+[[permission]]
+identifier = "deny-incoming-done"
+description = "Denies the incoming_done command without any pre-configured scope."
+commands.deny = ["incoming_done"]

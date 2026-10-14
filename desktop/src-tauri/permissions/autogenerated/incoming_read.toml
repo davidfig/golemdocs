@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-incoming-read"
+description = "Enables the incoming_read command without any pre-configured scope."
+commands.allow = ["incoming_read"]
+
+[[permission]]
+identifier = "deny-incoming-read"
+description = "Denies the incoming_read command without any pre-configured scope."
+commands.deny = ["incoming_read"]

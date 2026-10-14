@@ -6,6 +6,7 @@
 - Tools › Options › View › “Allow scrolling half a screen past the end of the document” lets you scroll the last page up to the middle of the screen so you can keep typing there. It is on by default and never scrolls for you.
 
 ### Fixed
+- On Android, the keyboard no longer opens when you tap the menu button or when a document opens (it opens when you tap the document), and the menu stays open when the window changes height.
 - The web (Flow) view no longer shows page breaks: page and section breaks are ignored and the text runs on without gaps. Page breaks only show in the print view.
 - The assistant moves up out of the way of messages and progress cards at the bottom of the screen.
 

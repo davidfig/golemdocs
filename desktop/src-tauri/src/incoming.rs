@@ -41,7 +41,7 @@ pub struct Info {
 /// A file name that is safe to use as one: the last part of the path, without characters a file system or the page's
 /// download names would trip on.
 pub fn safe_name(raw: &str) -> String {
-    let last = raw.rsplit('/').next().unwrap_or(raw);
+    let last = raw.rsplit(['/', '\\']).next().unwrap_or(raw);
     let cleaned: String = last
         .chars()
         .map(|c| if matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control() { '_' } else { c })
@@ -64,7 +64,7 @@ impl Incoming {
 
     /// Copies a file into `dir` and lists it. Returns false if it could not be read.
     pub fn take(&self, dir: &Path, source: &Path) -> bool {
-        let name = safe_name(&source.to_string_lossy());
+        let name = safe_name(&source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
         let id = self.next_id();
         let target_dir = dir.join(&id);
         if fs::create_dir_all(&target_dir).is_err() {
@@ -146,6 +146,7 @@ mod tests {
     #[test]
     fn names_are_made_safe() {
         assert_eq!(safe_name("/private/var/mobile/Inbox/Report 1.docx"), "Report 1.docx");
+        assert_eq!(safe_name("C:\\Users\\me\\Inbox\\Report 1.docx"), "Report 1.docx", "a Windows path too");
         assert_eq!(safe_name("a:b*c?.md"), "a_b_c_.md");
         assert_eq!(safe_name("/x/.."), "document");
         assert_eq!(safe_name(""), "document");

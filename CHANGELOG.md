@@ -1,5 +1,10 @@
 # What’s New in Golem Docs
 
+## 0.22.1 - Unreleased
+
+### Fixed
+- The Windows installer builds again (0.22.0 had none: a check of the new phone file-opening code failed there). Nothing else changed.
+
 ## 0.22.0 - 2026-10-14
 
 ### Added

@@ -152,6 +152,35 @@ test('a sync reports what it found and each step as it goes', async () => {
   assert.deepEqual(steps, ['account', 'folder', 'compare', 'apply 0/2 Notes/one.md', 'apply 1/2 two.txt']);
 });
 
+test('a sync that fails five files in a row gives up and says so', async () => {
+  const s = setup();
+  for (let i = 0; i < 12; i++) s.add(`f${i}.txt`, 'x');
+  const write = s.folder.disk.write;
+  s.folder.disk.write = async (path, bytes) => {
+    if (!path.startsWith('.golemdocs/')) throw new Error('denied');
+    return write(path, bytes);
+  };
+  const report = await s.sync();
+  assert.equal(report.errors.length, 5);
+  assert.equal(report.gaveUp, 5);
+});
+
+test('a document with no file in the account is reported, and the others still come down', async () => {
+  const s = setup();
+  s.add('gone.md', 'x');
+  s.add('here.md', 'y');
+  const download = s.cloud.download;
+  s.cloud.download = async (id) => {
+    const bytes = await download(id);
+    if (read(bytes) === 'wdoc:x') throw Object.assign(new Error('document file is missing'), { status: 404 });
+    return bytes;
+  };
+  const report = await s.sync();
+  assert.deepEqual(report.missing, ['gone.md']);
+  assert.deepEqual(report.errors, []);
+  assert.deepEqual(s.folder.paths(), ['here.md']);
+});
+
 test('a file edited in the vault replaces the document, and settles', async () => {
   const s = setup();
   const id = s.add('one.md', 'old');

@@ -52,7 +52,8 @@ export class VaultDialog {
       if (!p) return t('vault.status.syncing');
       const text = t(`vault.progress.${p.phase}`, { accountDocs: p.accountDocs ?? 0, folderFiles: p.folderFiles ?? 0, done: (p.done ?? 0) + 1, total: p.total ?? 0, path: p.path ?? '' });
       const seconds = Math.round((Date.now() - p.since) / 1000);
-      return seconds >= 20 ? `${text} ${t('vault.progress.slow', { seconds })}` : text;
+      const failing = p.failed ? ` ${t('vault.progress.failing', { failed: p.failed, message: p.lastError ?? '' })}` : '';
+      return seconds >= 20 ? `${text}${failing} ${t('vault.progress.slow', { seconds })}` : text + failing;
     };
 
     const describe = (s: VaultStatus): string => {
@@ -98,6 +99,8 @@ export class VaultDialog {
                 created: r.created,
                 removed: r.deletedHere + r.trashed,
               });
+      if (r?.missing.length) detail.textContent += ` ${t('vault.missing', { count: r.missing.length, example: r.missing[0]! })}`;
+      if (r?.gaveUp) detail.textContent += ` ${t('vault.gaveUp', { count: r.gaveUp })}`;
       // Each failure with its file, not only the first one's message.
       problems.textContent = (r?.errors ?? [])
         .slice(0, 5)

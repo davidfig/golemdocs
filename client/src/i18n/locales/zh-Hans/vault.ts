@@ -56,4 +56,7 @@ export const vault: Catalog = {
   'vault.result': '文件夹中有 {folderFiles} 个文件,您的账户有 {accountDocs} 份文档。上次同步:复制到文件夹 {downloaded} 份,更新账户中的 {uploaded} 份,添加到账户 {created} 份,删除 {removed} 份。',
   'vault.resultLocal': '文件夹中有 {folderFiles} 个文件,此浏览器中保存了 {accountDocs} 份文档。上次同步:复制到文件夹 {downloaded} 份,在此更新 {uploaded} 份,在此添加 {created} 份,删除 {removed} 份。',
   'vault.result.empty': '暂无可复制的文档:文件夹为空,文档列表也为空。',
+  'vault.progress.failing': '目前已有 {failed} 个失败。最近:{message}',
+  'vault.gaveUp': '连续失败 {count} 次后同步已停止,其余未尝试。请先解决下面的问题,然后选择“立即同步”。',
+  'vault.missing': '账户中有 {count} 份文档没有文件,无法复制(例如 {example})。',
 };

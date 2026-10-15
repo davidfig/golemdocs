@@ -162,13 +162,14 @@ export class VaultService {
   }
 
   private async look(): Promise<void> {
+    // A sync that ended with errors is not started again every few seconds (that would repeat the same failures for ever): it tries again with the next look at the account.
     // A refused folder waits for the person (Try Again, or coming back to the window), not for a retry every few seconds.
     if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;
     if (this.status.state === 'waiting' && this.status.message === ICLOUD_DOWNLOADING) return void (await this.syncNow());
     try {
       const local = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
       const due = Date.now() - this.lastAccountLook >= ACCOUNT_MS;
-      if (local !== this.signature || due || this.status.state === 'offline' || this.status.state === 'error') await this.syncNow();
+      if (local !== this.signature || due || this.status.state === 'offline') await this.syncNow();
     } catch {
       await this.syncNow(); // the folder was moved or is unreadable: the sync checks it and says why
     }

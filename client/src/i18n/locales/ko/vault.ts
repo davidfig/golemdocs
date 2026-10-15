@@ -56,4 +56,7 @@ export const vault: Catalog = {
   'vault.result': '폴더에는 파일 {folderFiles}개가 있고 계정에는 문서 {accountDocs}개가 있습니다. 마지막 동기화: 폴더로 복사 {downloaded}개, 계정에서 업데이트 {uploaded}개, 계정에 추가 {created}개, 삭제 {removed}개.',
   'vault.resultLocal': '폴더에는 파일 {folderFiles}개가 있고 이 브라우저에는 문서 {accountDocs}개가 저장되어 있습니다. 마지막 동기화: 폴더로 복사 {downloaded}개, 여기서 업데이트 {uploaded}개, 여기에 추가 {created}개, 삭제 {removed}개.',
   'vault.result.empty': '복사할 문서가 아직 없습니다. 폴더가 비어 있고 문서 목록도 비어 있습니다.',
+  'vault.progress.failing': '지금까지 {failed}개 실패. 최근: {message}',
+  'vault.gaveUp': '연속 {count}번 실패하여 동기화를 중단했습니다. 나머지는 시도하지 않았습니다. 아래 문제를 해결한 뒤 지금 동기화를 선택하세요.',
+  'vault.missing': '계정에 파일이 없는 문서가 {count}개 있어 복사할 수 없었습니다(예: {example}).',
 };

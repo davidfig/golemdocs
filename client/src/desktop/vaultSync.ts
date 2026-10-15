@@ -7,6 +7,9 @@
 
 import { cloudPaths, needsHash, planVault, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction } from './vaultPlan.ts';
 
+/** Failures in a row after which a sync stops: a bad file is skipped, but every file failing is a problem to show now. */
+const GIVE_UP_AFTER = 5;
+
 export const STATE_PATH = '.golemdocs/state.json';
 
 /** The `account` of a vault kept while nobody is signed in (its documents are the ones saved in this browser). */
@@ -67,6 +70,9 @@ export interface SyncProgress {
   folderFiles?: number;
   done?: number;
   total?: number;
+  /** Actions that have failed so far, and the latest reason. */
+  failed?: number;
+  lastError?: string;
   /** The vault path being worked on. */
   path?: string;
 }
@@ -89,6 +95,10 @@ export interface SyncReport {
   touched: string[];
   /** The plan was not run because it would delete most of the vault; confirm and sync again with `allowMassDelete`. */
   blocked?: { reason: 'mass-delete'; count: number };
+  /** Documents the account lists but has no file for (paths they would have): not copied. */
+  missing: string[];
+  /** The sync gave up after this many failures in a row (something is wrong for every file, so going on would only repeat it); the rest was not tried. */
+  gaveUp?: number;
   /** The vault belongs to another account (or, signed out, to an account at all); nothing was done. */
   wrongAccount?: boolean;
 }
@@ -108,7 +118,7 @@ async function loadState(host: VaultHost): Promise<State | null> {
 const saveState = (host: VaultHost, state: State) => host.disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify(state)));
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
-  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [] };
+  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [], missing: [] };
   const { disk, cloud, codec } = host;
 
   const saved = await loadState(host);
@@ -153,7 +163,18 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         const name = baseName(action.path);
         const existing = entries.get(action.id);
         if (taken.has(action.path) && existing?.path !== action.path) throw new Error(`a different file is already at ${action.path}`);
-        const file = await codec.toFile(await cloud.download(action.id), name);
+        let stored: Uint8Array;
+        try {
+          stored = await cloud.download(action.id);
+        } catch (error) {
+          // The account lists the document but has no file for it: nothing to copy, and no reason to stop the others.
+          if ((error as { status?: number }).status === 404) {
+            report.missing.push(action.path);
+            return;
+          }
+          throw error;
+        }
+        const file = await codec.toFile(stored, name);
         if (!file) {
           report.skipped++;
           return;
@@ -226,12 +247,19 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   }
 
   let done = 0;
+  let inARow = 0;
   for (const action of plan.actions) {
+    if (inARow >= GIVE_UP_AFTER) {
+      report.gaveUp = inARow;
+      break;
+    }
     const path = 'path' in action ? action.path : 'to' in action ? action.to : undefined;
-    tell({ phase: 'apply', accountDocs: report.accountDocs, folderFiles: report.folderFiles, done, total: plan.actions.length, path });
+    tell({ phase: 'apply', accountDocs: report.accountDocs, folderFiles: report.folderFiles, done, total: plan.actions.length, path, failed: report.errors.length, lastError: report.errors.at(-1)?.message });
     try {
       await run(action);
+      inARow = 0;
     } catch (error) {
+      inARow++;
       report.errors.push({ action, message: error instanceof Error ? error.message : String(error) });
     }
     done++;

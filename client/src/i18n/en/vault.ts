@@ -59,4 +59,7 @@ export const vault = {
   'vault.result': 'The folder has {folderFiles} files and your account has {accountDocs} documents. Last sync: {downloaded} copied to the folder, {uploaded} updated in your account, {created} added to your account, {removed} removed.',
   'vault.resultLocal': 'The folder has {folderFiles} files and {accountDocs} documents are saved in this browser. Last sync: {downloaded} copied to the folder, {uploaded} updated here, {created} added here, {removed} removed.',
   'vault.result.empty': 'There are no documents to copy yet: the folder is empty and the list of documents came back empty.',
+  'vault.progress.failing': '{failed} failed so far. Latest: {message}',
+  'vault.gaveUp': 'The sync stopped after {count} failures in a row; the rest was not tried. Fix the problem below, then choose Sync Now.',
+  'vault.missing': '{count} documents are in your account without a file, so they could not be copied (for example {example}).',
 };

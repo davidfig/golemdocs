@@ -61,4 +61,7 @@ export const vault: Catalog = {
   'vault.result': 'Le dossier contient {folderFiles} fichiers et votre compte {accountDocs} documents. Dernière synchronisation : {downloaded} copiés dans le dossier, {uploaded} mis à jour dans votre compte, {created} ajoutés à votre compte, {removed} supprimés.',
   'vault.resultLocal': 'Le dossier contient {folderFiles} fichiers et {accountDocs} documents sont enregistrés dans ce navigateur. Dernière synchronisation : {downloaded} copiés dans le dossier, {uploaded} mis à jour ici, {created} ajoutés ici, {removed} supprimés.',
   'vault.result.empty': 'Aucun document à copier pour l’instant : le dossier est vide et la liste des documents est vide.',
+  'vault.progress.failing': '{failed} en échec jusqu’ici. Dernier : {message}',
+  'vault.gaveUp': 'La synchronisation s’est arrêtée après {count} échecs de suite ; le reste n’a pas été essayé. Corrigez le problème ci-dessous, puis choisissez Synchroniser maintenant.',
+  'vault.missing': '{count} documents sont dans votre compte sans fichier et n’ont pas pu être copiés (par exemple {example}).',
 };

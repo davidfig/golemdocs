@@ -56,4 +56,7 @@ export const vault: Catalog = {
   'vault.result': 'フォルダには {folderFiles} 個のファイルがあり、アカウントには {accountDocs} 件の書類があります。前回の同期: フォルダにコピー {downloaded} 件、アカウントで更新 {uploaded} 件、アカウントに追加 {created} 件、削除 {removed} 件。',
   'vault.resultLocal': 'フォルダには {folderFiles} 個のファイルがあり、このブラウザには {accountDocs} 件の書類が保存されています。前回の同期: フォルダにコピー {downloaded} 件、ここで更新 {uploaded} 件、ここに追加 {created} 件、削除 {removed} 件。',
   'vault.result.empty': 'コピーする書類はまだありません。フォルダは空で、書類の一覧も空でした。',
+  'vault.progress.failing': 'これまでに {failed} 件失敗。直近: {message}',
+  'vault.gaveUp': '連続 {count} 件失敗したため同期を停止しました。残りは試していません。下の問題を解決してから「今すぐ同期」を選んでください。',
+  'vault.missing': 'アカウントにファイルのない書類が {count} 件あり、コピーできませんでした(例: {example})。',
 };

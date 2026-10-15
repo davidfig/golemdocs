@@ -61,4 +61,7 @@ export const vault: Catalog = {
   'vault.result': 'Der Ordner enthält {folderFiles} Dateien, und Ihr Konto hat {accountDocs} Dokumente. Letzte Synchronisierung: {downloaded} in den Ordner kopiert, {uploaded} im Konto aktualisiert, {created} zum Konto hinzugefügt, {removed} entfernt.',
   'vault.resultLocal': 'Der Ordner enthält {folderFiles} Dateien, und in diesem Browser sind {accountDocs} Dokumente gespeichert. Letzte Synchronisierung: {downloaded} in den Ordner kopiert, {uploaded} hier aktualisiert, {created} hier hinzugefügt, {removed} entfernt.',
   'vault.result.empty': 'Es gibt noch keine Dokumente zu kopieren: Der Ordner ist leer, und die Dokumentliste war leer.',
+  'vault.progress.failing': '{failed} fehlgeschlagen. Zuletzt: {message}',
+  'vault.gaveUp': 'Die Synchronisierung wurde nach {count} Fehlern in Folge beendet; der Rest wurde nicht versucht. Beheben Sie das Problem unten und wählen Sie dann „Jetzt synchronisieren“.',
+  'vault.missing': '{count} Dokumente sind ohne Datei in Ihrem Konto und konnten nicht kopiert werden (zum Beispiel {example}).',
 };

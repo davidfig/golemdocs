@@ -61,4 +61,7 @@ export const vault: Catalog = {
   'vault.result': 'La cartella contiene {folderFiles} file e il tuo account {accountDocs} documenti. Ultima sincronizzazione: {downloaded} copiati nella cartella, {uploaded} aggiornati nell’account, {created} aggiunti all’account, {removed} rimossi.',
   'vault.resultLocal': 'La cartella contiene {folderFiles} file e in questo browser ci sono {accountDocs} documenti. Ultima sincronizzazione: {downloaded} copiati nella cartella, {uploaded} aggiornati qui, {created} aggiunti qui, {removed} rimossi.',
   'vault.result.empty': 'Non ci sono ancora documenti da copiare: la cartella è vuota e l’elenco dei documenti è vuoto.',
+  'vault.progress.failing': '{failed} non riusciti finora. Ultimo: {message}',
+  'vault.gaveUp': 'La sincronizzazione si è fermata dopo {count} errori di fila; il resto non è stato provato. Risolvi il problema qui sotto e scegli Sincronizza ora.',
+  'vault.missing': '{count} documenti sono nel tuo account senza file e non è stato possibile copiarli (ad esempio {example}).',
 };

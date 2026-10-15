@@ -46,7 +46,7 @@ interface Item {
 const THUMB_MARGIN = 52;
 /** Thumbnails drawn at once, before giving the editor a turn. */
 const BATCH = 2;
-/** How long to wait before redrawing thumbnails of pages that changed, so typing isn't slowed by it. */
+/** How long a document must stay unchanged before the thumbnails of pages that changed are redrawn: each redraw reads the GPU back, which stalls typing. */
 const REDRAW_DELAY = 250;
 
 export class PagesPanel {
@@ -167,7 +167,7 @@ export class PagesPanel {
     this.list.classList.toggle('wm-pages-single', next.length < 2);
     if (this.current >= next.length) this.current = -1;
     if (!appended || !before.length) this.mark();
-    this.schedule(REDRAW_DELAY);
+    this.schedule(REDRAW_DELAY, true);
   }
 
   /** Every thumbnail is drawn again (a font or picture they use has arrived since they were drawn). */
@@ -252,8 +252,13 @@ export class PagesPanel {
 
   // --- Drawing ----------------------------------------------------------------------------
 
-  private schedule(delay: number): void {
-    if (this.timer || this.el.hidden) return;
+  /** Draws after `delay`; with `restart`, a wait already under way starts over (so a run of edits draws once, after it). */
+  private schedule(delay: number, restart = false): void {
+    if (this.el.hidden) return;
+    if (this.timer) {
+      if (!restart) return;
+      window.clearTimeout(this.timer);
+    }
     this.timer = window.setTimeout(() => {
       this.timer = 0;
       this.drawSome();

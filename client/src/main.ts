@@ -508,6 +508,8 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   current.roomRequested = keptRoom !== null || requestedRoom !== undefined;
   current.room = keptRoom;
   showWatch();
+  // Flow view: the worker lays the document out at the window's width from the start, not after a re-layout once the first frame asks.
+  syncReflow(true);
   worker.open(source, {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;

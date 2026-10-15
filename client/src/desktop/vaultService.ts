@@ -7,7 +7,7 @@ import { CloudError } from '../cloud.ts';
 import { desktopBridge, type DesktopBridge } from './bridge.ts';
 import { ConvertWorker, startConvertWorker } from './convertClient.ts';
 import { realHost } from './vaultHost.ts';
-import { syncVault, type SyncReport, type VaultCodec } from './vaultSync.ts';
+import { syncVault, type SyncProgress, type SyncReport, type VaultCodec } from './vaultSync.ts';
 
 export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'access' | 'blocked' | 'wrongAccount';
 
@@ -17,6 +17,8 @@ export interface VaultStatus {
   root: string | null;
   lastSync: number | null;
   report: SyncReport | null;
+  /** While `syncing`: the step the sync is on, and when it moved to it (a step that lasts for minutes is stuck, and the dialog says so). */
+  progress?: SyncProgress & { since: number };
   /** The first error of the last sync (for `access`: why the folder can't be read or written). */
   message?: string;
 }
@@ -34,6 +36,8 @@ export const ICLOUD_DOWNLOADING = 'icloud-downloading';
 
 const LOOK_MS = 4000;
 const ACCOUNT_MS = 60_000;
+/** The longest the page's own uploads are waited for before a sync looks anyway. */
+const SETTLE_MS = 20_000;
 
 export class VaultService {
   private status: VaultStatus = { state: 'off', root: null, lastSync: null, report: null };
@@ -150,6 +154,13 @@ export class VaultService {
     this.set({ root: null, state: 'off', report: null, message: undefined });
   }
 
+  /** Moves the running sync to a step. The time only restarts when the step changes, so the dialog can tell a long step from progress. */
+  private progress(progress: SyncProgress): void {
+    const previous = this.status.progress;
+    const same = previous?.phase === progress.phase && previous.path === progress.path;
+    this.set({ state: 'syncing', progress: { ...progress, since: same ? previous.since : Date.now() } });
+  }
+
   private async look(): Promise<void> {
     // A refused folder waits for the person (Try Again, or coming back to the window), not for a retry every few seconds.
     if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;
@@ -167,12 +178,12 @@ export class VaultService {
   async syncNow(options: { allowMassDelete?: boolean } = {}): Promise<void> {
     if (this.running || !this.status.root) return;
     this.running = true;
-    this.set({ state: 'syncing' });
+    this.progress({ phase: 'access' });
     try {
       try {
         await this.bridge.check();
       } catch (error) {
-        this.set({ state: 'access', message: error instanceof Error ? error.message : String(error) }); // the shell rejects with a string
+        this.set({ state: 'access', progress: undefined, message: error instanceof Error ? error.message : String(error) }); // the shell rejects with a string
         return;
       }
       // Files still coming down from iCloud Drive: wait, and the next look tries again.
@@ -180,23 +191,27 @@ export class VaultService {
         await this.bridge.scan();
       } catch (error) {
         if (String(error) === ICLOUD_DOWNLOADING) {
-          this.set({ state: 'waiting', message: ICLOUD_DOWNLOADING });
+          this.set({ state: 'waiting', progress: undefined, message: ICLOUD_DOWNLOADING });
           return;
         }
       }
-      if (this.account()) await this.hooks.settled();
+      if (this.account()) {
+        this.progress({ phase: 'uploads' });
+        // Uploads that never finish (offline, a failing save) must not keep the vault from looking.
+        await Promise.race([this.hooks.settled(), new Promise((resolve) => setTimeout(resolve, SETTLE_MS))]);
+      }
       const account = this.account(); // signing out can happen while waiting
-      const report = await syncVault(realHost(this.bridge, this.codec, account), options);
+      const report = await syncVault(realHost(this.bridge, this.codec, account), { ...options, progress: (p) => this.progress(p) });
       // What the sync itself wrote is not a change to sync again.
       this.signature = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
       this.lastAccountLook = Date.now();
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
-      this.set({ state, report, lastSync: Date.now(), message: report.errors[0]?.message });
+      this.set({ state, report, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
       if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed > 0) this.hooks.changed(report.touched);
     } catch (error) {
       const offline = error instanceof TypeError || (error instanceof CloudError && error.status >= 500);
-      this.set({ state: offline ? 'offline' : error instanceof CloudError && error.status === 401 ? 'signedOut' : 'error', message: error instanceof Error ? error.message : String(error) });
+      this.set({ progress: undefined, state: offline ? 'offline' : error instanceof CloudError && error.status === 401 ? 'signedOut' : 'error', message: error instanceof Error ? error.message : String(error) });
     } finally {
       this.running = false;
     }

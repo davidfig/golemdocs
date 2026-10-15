@@ -142,6 +142,16 @@ test('the first sync brings the account into the vault, in its folders, and the 
   assert.equal(s.calls.filter((c) => c.startsWith('download')).length, 2, 'nothing was downloaded twice');
 });
 
+test('a sync reports what it found and each step as it goes', async () => {
+  const s = setup();
+  s.add('Notes/one.md', '# one');
+  s.add('two.txt', 'two');
+  const steps: string[] = [];
+  const report = await syncVault(s.host, { progress: (p) => steps.push(`${p.phase}${p.total ? ` ${p.done}/${p.total}` : ''}${p.path ? ` ${p.path}` : ''}`) });
+  assert.deepEqual([report.accountDocs, report.folderFiles], [2, 0]);
+  assert.deepEqual(steps, ['account', 'folder', 'compare', 'apply 0/2 Notes/one.md', 'apply 1/2 two.txt']);
+});
+
 test('a file edited in the vault replaces the document, and settles', async () => {
   const s = setup();
   const id = s.add('one.md', 'old');

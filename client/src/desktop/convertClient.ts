@@ -15,6 +15,8 @@ export interface ConvertWorkerHandle {
 }
 
 const IDLE_MS = 30_000;
+/** A conversion that takes longer than this is stuck (a worker that never started, a file it can't finish): it fails, so the sync reports it instead of waiting for ever. */
+const JOB_MS = 60_000;
 
 export class ConvertWorker implements VaultCodec {
   private worker: ConvertWorkerHandle | null = null;
@@ -25,6 +27,7 @@ export class ConvertWorker implements VaultCodec {
   constructor(
     private readonly start: () => ConvertWorkerHandle,
     private readonly idleMs = IDLE_MS,
+    private readonly jobMs = JOB_MS,
   ) {}
 
   kept(name: string): boolean {
@@ -48,7 +51,8 @@ export class ConvertWorker implements VaultCodec {
     // A copy goes: the caller still holds its bytes (a file that is also hashed and recorded).
     const bytes = input.slice().buffer as ArrayBuffer;
     return new Promise<Uint8Array | null>((resolve, reject) => {
-      this.waiting.set(id, { resolve, reject });
+      const timer = setTimeout(() => this.stop(new Error(`converting ${name} did not finish in ${Math.round(this.jobMs / 1000)} seconds`)), this.jobMs);
+      this.waiting.set(id, { resolve: (value) => (clearTimeout(timer), resolve(value)), reject: (error) => (clearTimeout(timer), reject(error)) });
       try {
         worker.postMessage({ id, op, bytes, name }, [bytes]);
       } catch (e) {

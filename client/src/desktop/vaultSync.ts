@@ -59,7 +59,22 @@ interface State {
   entries: ManifestEntry[];
 }
 
+/** Where a running sync is, for the dialog: the step, and for the last one how many of the changes are done and which file is being worked on. */
+export interface SyncProgress {
+  phase: 'access' | 'uploads' | 'account' | 'folder' | 'compare' | 'apply';
+  /** Documents the account listed (once `account` is done) and files found in the folder (once `folder` is done). */
+  accountDocs?: number;
+  folderFiles?: number;
+  done?: number;
+  total?: number;
+  /** The vault path being worked on. */
+  path?: string;
+}
+
 export interface SyncReport {
+  /** Documents the account has, and files the folder has, when the sync looked (before it changed anything). */
+  accountDocs: number;
+  folderFiles: number;
   downloaded: number;
   uploaded: number;
   created: number;
@@ -92,8 +107,8 @@ async function loadState(host: VaultHost): Promise<State | null> {
 
 const saveState = (host: VaultHost, state: State) => host.disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify(state)));
 
-export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean } = {}): Promise<SyncReport> {
-  const report: SyncReport = { downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [] };
+export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
+  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [] };
   const { disk, cloud, codec } = host;
 
   const saved = await loadState(host);
@@ -103,14 +118,21 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   if (saved && saved.account !== host.account && (saved.account !== GUEST_ACCOUNT || host.account === GUEST_ACCOUNT)) return { ...report, wrongAccount: true };
   const state: State = saved && saved.account === host.account ? saved : { version: 1, account: host.account, entries: [] };
 
+  const tell = options.progress ?? (() => {});
+  tell({ phase: 'account' });
   const listing = await cloud.list();
+  report.accountDocs = listing.docs.length;
+  tell({ phase: 'folder', accountDocs: report.accountDocs });
   const all = cloudPaths(listing.docs, listing.folders);
   const nameOf = new Map(listing.docs.map((d) => [d.id, d.name]));
   const kept: CloudFile[] = all.filter((c) => codec.kept(nameOf.get(c.id) ?? ''));
   report.skipped = all.length - kept.length;
-  const local = (await disk.scan()).filter((f) => codec.kept(baseName(f.path)));
+  const scanned = await disk.scan();
+  report.folderFiles = scanned.length;
+  const local = scanned.filter((f) => codec.kept(baseName(f.path)));
   const localByPath = new Map(local.map((f) => [f.path, f]));
 
+  tell({ phase: 'compare', accountDocs: report.accountDocs, folderFiles: report.folderFiles });
   const hashes = new Map<string, string>();
   for (const path of needsHash(local, state.entries)) hashes.set(path, await host.hash(await disk.read(path)));
 
@@ -203,12 +225,16 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     }
   }
 
+  let done = 0;
   for (const action of plan.actions) {
+    const path = 'path' in action ? action.path : 'to' in action ? action.to : undefined;
+    tell({ phase: 'apply', accountDocs: report.accountDocs, folderFiles: report.folderFiles, done, total: plan.actions.length, path });
     try {
       await run(action);
     } catch (error) {
       report.errors.push({ action, message: error instanceof Error ? error.message : String(error) });
     }
+    done++;
   }
 
   // Renaming or moving a document in the account changes its time there too; take the new one, or the next sync would download it again.

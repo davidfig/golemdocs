@@ -106,3 +106,9 @@ test('kept answers from the name, without a worker', () => {
   assert.equal(worker.kept('a.pdf'), false);
   assert.equal(log.started, 0);
 });
+
+test('a conversion that never answers fails after the time limit instead of waiting for ever', async () => {
+  const handle = { postMessage() {}, onmessage: null, onerror: null, terminate() {} };
+  const worker = new ConvertWorker(() => handle, 5, 20);
+  await assert.rejects(worker.fromFile(text('x'), 'a.txt'), /did not finish/);
+});

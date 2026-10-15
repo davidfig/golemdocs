@@ -44,6 +44,8 @@ export interface DashboardHost {
   /** The document open behind the dashboard (its ids in this browser and in the account), whose folder the dashboard starts in. */
   currentDocument(): { localId: string | null; cloudId: string | null };
   open(entry: LibraryEntry): void;
+  /** Called as the dashboard opens: draws any thumbnail still waiting for a pause in typing (the open document's card shows it). Resolves when it is stored. */
+  settleThumbnail?(): Promise<void>;
   /** The pointer is on this document: a chance to start fetching what opening it needs. */
   warm(entry: LibraryEntry): void;
   /** Asks for a file on this computer and opens it, to be filed in `folderId` when it is first saved. */
@@ -284,6 +286,7 @@ export class Dashboard {
     setTimeout(() => {
       if (this.visible) this.search.focus({ preventScroll: true });
     }, 0);
+    await this.host.settleThumbnail?.();
     await this.refresh();
   }
 

@@ -35,7 +35,7 @@ Database `word`, version 7. Object stores:
 | `manifests`, `chunks`, `chunkRefs` | for documents of 2 MiB or more: id -> `StoredManifest` (chunk hashes, lengths, `syncedHashes`), hash -> bytes, hash -> reference count (a chunk is deleted when the last document lets go). Details in [Chunked storage](../chunked-storage.md) |
 | `history`, `historyData` | a document's earlier versions: id -> its versions' details (small), `<id>/<version>` -> a small version's bytes or a chunked one's manifest (a hold on its chunks through `chunkRefs`). See [Version history](../history.md) |
 | `trash` | document id -> `{ info, deletedAt }`: the catalogue record of a document the person deleted, moved out of `meta` so every list stops showing it; its bytes, chunks, history and thumbnail stay. Restored or deleted for good by the trash dialog, or after 30 days. See [Version history](../history.md) |
-| `thumbs` | id -> `{ blob, forUpdatedAt }`, the first-page thumbnail rendered by `thumbnail.ts` on every save |
+| `thumbs` | id -> `{ blob, forUpdatedAt }`, the first-page thumbnail rendered by `thumbnail.ts` on every save (drawn after 3 s without edits, when the document is left, or when the dashboard opens) |
 | `folders` | the guest (signed-out) folder hierarchy |
 | `search` | per-document full-text index cache (`search/searchLibrary.ts`) |
 

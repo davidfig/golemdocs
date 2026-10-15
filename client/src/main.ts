@@ -1125,6 +1125,8 @@ let saving: Promise<unknown> = Promise.resolve();
 /** A save's thumbnail waits this long after the last edit (and for an idle moment) before it is drawn. */
 const THUMBNAIL_QUIET_MS = 3000;
 const thumbnailQuiet = new QuietRunner(THUMBNAIL_QUIET_MS);
+/** The thumbnail being drawn now, if any. */
+let thumbnailDrawing: Promise<void> = Promise.resolve();
 
 /** Schedules a save for once editing pauses. */
 function documentEdited(): void {
@@ -1768,7 +1770,7 @@ function saveInBrowser(): Promise<string | null> {
       if (doc === current) {
         // Drawing it stalls the GPU, so it waits for a pause in typing. If the document is gone by then, opening it again draws it (backfillThumbnail).
         thumbnailQuiet.run(() => {
-          if (current === doc) void traced('thumbnail', () => makeThumbnail(info));
+          if (current === doc) thumbnailDrawing = traced('thumbnail', () => makeThumbnail(info));
         });
         rememberInUrl(`local:${info.id}`);
         // Signed in, the button at the top right says how saving is going.
@@ -4846,6 +4848,10 @@ const openDocumentIds = (): { localId: string | null; cloudId: string | null } =
 const dashboard = new Dashboard(document.body, {
   ...libraryHost,
   currentDocument: openDocumentIds,
+  settleThumbnail: () => {
+    thumbnailQuiet.flush();
+    return thumbnailDrawing;
+  },
   openShared: (doc) => {
     sharedDocs.set(doc.id, doc);
     openSource(`shared:${doc.id}`);

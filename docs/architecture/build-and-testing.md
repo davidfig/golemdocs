@@ -82,6 +82,19 @@ Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `
 - During development run only the specs you added or changed (`pnpm e2e e2e/shell/themes.spec.ts`). For a second concurrent run give it its own ports, state and output: `E2E_CLIENT_PORT=5274 E2E_API_PORT=3102 E2E_STATE=e2e/.state-2 pnpm e2e <paths> --workers=2 --output=e2e/.results-2`, and clean up afterwards. Never `pkill -f playwright`.
 - A feature that adds or changes UI gets a spec. Billing and the model-backed assistant are not covered; `e2e/shell/ai-assistant.spec.ts` only checks Clip's visibility.
 
+## Performance traces (`golem:*`)
+
+Main-thread work that can stall typing is timed with `traced(name, fn)` (`client/src/quietRunner.ts`), which records a User Timing measure called `golem:<name>` around `fn` (sync or async; the span is still recorded if it throws). They cost almost nothing and stay on in every build. Today: `golem:chunkBytes` (cutting and hashing a file of 2 MiB or more, in a save and in a shared upload), `golem:snapshot` (a large text file's bytes for a save), `golem:thumbnail` (a save's thumbnail) and `golem:pagesPanelThumbnail` (one pages-panel thumbnail). A span of an `async` function includes time spent waiting (an IndexedDB write, a WebP encode), so compare it with the long tasks rather than reading it as blocked time.
+
+To use them:
+
+- **DevTools:** open Performance, record while typing in a big document and pause, stop. The `golem:*` bars are on the Timings track; a long task (red corner) that lines up with one names the culprit.
+- **Console, without a recording:** `performance.getEntriesByType('measure').filter(m => m.name.startsWith('golem:'))`, and `new PerformanceObserver(l => console.log(l.getEntries().map(e => e.duration))).observe({ entryTypes: ['longtask'] })` for tasks over 50 ms. `performance.clearMeasures()` between runs.
+- **The Browser pane or a script:** the same calls through `javascript_tool` / Playwright's `page.evaluate`. A large text file can be loaded by dispatching `dragenter`, `dragover` and `drop` events carrying a `DataTransfer` with a `File` on `#viewport`; a long document by dispatching a `paste` `ClipboardEvent` on `#input`.
+- **Add one** around any new main-thread step that touches the GPU (`readPixels`), walks a whole document or file, or loops over every page, and name it `area` or `area-step`. Don't wrap work that already runs in a worker.
+
+Last measured (one run each, dev server, generated documents): no long task over 50 ms while typing in a 652-page document or a 17 MB text file; the worst was a 66 ms task on a session's first save of a large file, and `chunkBytes` of 27 to 58 ms at 17 MB (about 50 ms of hashing at the 50 MiB limit). A save's thumbnail and the pages panel's redraws wait for a pause in typing (`QuietRunner`, `PagesPanel.schedule`).
+
 ## CI
 
 `.github/workflows/ci.yml` on push to `main` and every PR (ubuntu, Node 24, pnpm 10): `pnpm install --frozen-lockfile`, `pnpm typecheck`, fetch the docx corpus, `pnpm test`, `pnpm test:coverage`, `pnpm --filter @golemdocs/client build`. **CI does not run e2e**; the full e2e suite is a manual pre-release step.

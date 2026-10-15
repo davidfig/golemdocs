@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.22.2 - Unreleased
+
+### Fixed
+
+- Clicking a task list's check box no longer selects the line (or lines) around it.
+
 ## 0.22.1 - 2026-10-14
 
 ### Fixed

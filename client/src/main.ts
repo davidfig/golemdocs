@@ -3600,6 +3600,16 @@ function press(e: Press): void {
   if (!hit) return;
   // The link is read where the pointer is, before the click moves the caret: with Markdown at the caret on, the caret's paragraph turns into its source and the link is no longer there to find.
   if (e.metaKey || e.ctrlKey) void worker.linkAt(hit.page.id, hit.x, hit.y).then((found) => found.url && followLink(found.url));
+  // A press on a task item's check box only toggles it: no selection, drag or double click (the worker toggles it on a plain click).
+  if (overCheckbox && FORMATS[current.kind].editable) {
+    lastClick.count = 0;
+    send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y });
+    selecting = false;
+    pressed = null;
+    pictureDrag = null;
+    waitingDrag = null;
+    return;
+  }
   const clicks = clickCount(e);
   // A double click on a vector drawing in the text edits the drawing.
   if (clicks === 2 && !embeddedDrawing && FORMATS[current.kind].editable && !isDrawing()) {
@@ -3806,6 +3816,7 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   e.preventDefault();
+  if (overCheckbox) e.stopPropagation();
   press(e);
 });
 

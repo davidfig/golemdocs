@@ -17,6 +17,7 @@ import {
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h, isFormField, modalOpen, segmented } from './dom.ts';
+import { sameValue } from './sameValue.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
@@ -199,8 +200,8 @@ export class Chrome {
     for (const key of Object.keys(partial) as (keyof ChromeState)[]) {
       const next = partial[key];
       const prev = this.state[key];
-      if (next === prev) continue;
-      if ((key === 'format' || key === 'sync') && JSON.stringify(next) === JSON.stringify(prev)) continue;
+      // The frame loop passes fresh objects (draw, vector, people, format...) every frame: only a change of contents refreshes the controls.
+      if (sameValue(next, prev)) continue;
       changed = true;
     }
     if (!changed) return;

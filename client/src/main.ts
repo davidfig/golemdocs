@@ -45,6 +45,7 @@ import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
 import { stopSettingsSync, syncSettings } from './settingsSync.ts';
 import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
+import { QuietRunner, traced } from './quietRunner.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage, textThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
@@ -1119,8 +1120,13 @@ let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
 
+/** A save's thumbnail waits this long after the last edit (and for an idle moment) before it is drawn. */
+const THUMBNAIL_QUIET_MS = 3000;
+const thumbnailQuiet = new QuietRunner(THUMBNAIL_QUIET_MS);
+
 /** Schedules a save for once editing pauses. */
 function documentEdited(): void {
+  thumbnailQuiet.touch();
   if (current.detour) {
     if (pictureDetour) pictureDetour.edited = true;
     return;
@@ -1135,6 +1141,7 @@ function documentEdited(): void {
 
 /** Saves now if there are unsaved edits (another document is opening, or the page is going away). */
 function saveIfEdited(): void {
+  thumbnailQuiet.flush(); // the document may be about to go: its last save's thumbnail is drawn from what is on screen
   if (current.shared) {
     if (current.shared.dirty) void uploadShared();
     return;
@@ -1173,7 +1180,7 @@ async function uploadShared(): Promise<void> {
     const bytes = (textView.active ? textEngine.snapshot() : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
-      const { manifest, fresh } = await chunkBytes(bytes);
+      const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
       const byHash = new Map(fresh.map((c) => [c.hash, c.bytes]));
       putDocInCatalogue(await saveChunked(shared.id, manifest, async (hashes) => hashes.map((hash) => ({ hash, bytes: byHash.get(hash)! })), shared.known ?? new Set()));
       shared.known = new Set(manifest.chunks.map((c) => c.h));
@@ -1757,7 +1764,10 @@ function saveInBrowser(): Promise<string | null> {
       doc.localId = info.id;
       rememberIgnored(doc);
       if (doc === current) {
-        await makeThumbnail(info);
+        // Drawing it stalls the GPU, so it waits for a pause in typing. If the document is gone by then, opening it again draws it (backfillThumbnail).
+        thumbnailQuiet.run(() => {
+          if (current === doc) void traced('thumbnail', () => makeThumbnail(info));
+        });
         rememberInUrl(`local:${info.id}`);
         // Signed in, the button at the top right says how saving is going.
         if (!owner) setStatus(t('app.savedInBrowser', { name: info.name }));
@@ -5414,7 +5424,7 @@ drawLayer.onUpdate(() => pagesPanel.refresh()); // a picture's shapes are in its
  * edited, which the laid-out page only catches up with when the drawing is opened again).
  */
 function thumbnailPixels(page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
-  const pixels = gl ? readPage(gl, renderer, page, width, height, pagesDark()) : null;
+  const pixels = gl ? traced('pagesPanelThumbnail', () => readPage(gl!, renderer, page, width, height, pagesDark())) : null;
   if (page !== pages[0] || (!isPicture() && !isDrawing())) return pixels;
   const thumb = document.createElement('canvas');
   thumb.width = width;

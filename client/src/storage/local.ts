@@ -5,6 +5,7 @@ import type { DocIndex } from '@golemdocs/docx';
 import { LOCAL_LIMITS, TRASH_MS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
+import { traced } from '../quietRunner.ts';
 import { CHUNK_ALGO, CHUNK_MIN_FILE, assemble, chunkBytes } from './chunker.ts';
 import type { Chunked } from './chunker.ts';
 
@@ -182,7 +183,7 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
   let plan: Chunked | null = null;
   if (view.length >= CHUNK_MIN_FILE) {
     const before = input.id ? await readManifest(db, input.id) : undefined;
-    plan = await chunkBytes(view, new Set(before?.hashes));
+    plan = await traced('chunkBytes', () => chunkBytes(view, new Set(before?.hashes)));
   }
   // Does this save replace a version worth keeping? Decided before, while it can still be read (see "History").
   const previous = input.id ? await versionDue(db, input.id, view.length) : null;
@@ -193,7 +194,7 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
       return info;
     }
     // What was stored changed while this was being made ready (another tab saved it): everything is sent again, nothing assumed.
-    plan = await chunkBytes(view, new Set());
+    plan = await traced('chunkBytes', () => chunkBytes(view, new Set()));
   }
 }
 

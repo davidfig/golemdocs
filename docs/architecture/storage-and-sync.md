@@ -87,6 +87,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 
 ## Invariants and gotchas
 
+- A save's thumbnail is not drawn with the save: it waits for 3 s without edits and an idle moment (`QuietRunner`, `client/src/quietRunner.ts`), because `readPage` stalls the GPU on the main thread. `saveIfEdited` flushes it first, so leaving a document still draws it; a document gone by then gets its thumbnail at the next open (`backfillThumbnail`). `chunkBytes`, the thumbnails and the pages panel's draws are timed as `golem:*` User Timing spans (`traced`), visible in a DevTools Performance recording.
 - Save locally first, always. No code path may make a local save wait for the network. A version kept by a save is stored after the save (a small one) or inside its transaction as counters only (a chunked one), so history can cost a version but never a save.
 - `getSaved` returns `null` for a chunked copy with a missing chunk: a damaged copy reads as no copy.
 - `uploadToCloud` re-reads `cloudUpdatedAt` on a 409 and retries once before making a conflicted copy, because another tab may have just uploaded.

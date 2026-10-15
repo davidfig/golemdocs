@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- The desktop app's vault no longer refuses every file with "expected the file's bytes" when the web view sends data the slow way.
 - A vault sync no longer starts over every few seconds after it hit errors, and a document the account has no file for is reported instead of counted as a failure.
 - A vault sync now stops after five files in a row fail, and shows the reason, instead of working through every file.
 - A vault sync that got stuck (a file conversion that never finished, or uploads that never completed) now reports the problem instead of saying "Syncing…" for ever.

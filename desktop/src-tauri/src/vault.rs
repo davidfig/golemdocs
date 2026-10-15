@@ -343,14 +343,29 @@ pub fn vault_read(path: String, vault: State<'_, Vault>) -> Result<tauri::ipc::R
 }
 
 /// The bytes are the request body and the percent-encoded path is the `path` header (a body can't carry both).
+/// The file's bytes from a request body. The page sends them raw, but when the web view refuses the custom-protocol
+/// request (a page on another origin, or one failed fetch, makes it use `postMessage` for the rest of the session) they
+/// arrive as a JSON array of numbers instead.
+pub fn body_bytes(body: &tauri::ipc::InvokeBody) -> Result<std::borrow::Cow<'_, [u8]>, String> {
+    use std::borrow::Cow;
+    match body {
+        tauri::ipc::InvokeBody::Raw(bytes) => Ok(Cow::Borrowed(bytes)),
+        tauri::ipc::InvokeBody::Json(serde_json::Value::Array(items)) => items
+            .iter()
+            .map(|item| item.as_u64().and_then(|n| u8::try_from(n).ok()))
+            .collect::<Option<Vec<u8>>>()
+            .map(Cow::Owned)
+            .ok_or_else(|| "expected the file's bytes".to_string()),
+        _ => Err("expected the file's bytes".to_string()),
+    }
+}
+
 #[tauri::command]
 pub fn vault_write(request: tauri::ipc::Request<'_>, vault: State<'_, Vault>) -> Result<u64, String> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err("expected the file's bytes".to_string());
-    };
+    let bytes = body_bytes(request.body())?;
     let path = request.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("missing path")?;
     let path = percent_decode(path)?;
-    write(&vault.locate(&path)?, &path, bytes)
+    write(&vault.locate(&path)?, &path, &bytes)
 }
 
 #[tauri::command]
@@ -425,6 +440,15 @@ mod tests {
         assert!(!root.join("Notes").exists(), "the empty folder goes too");
         assert!(root.exists());
         assert!(remove(root, ".golemdocs/state.json").is_err());
+    }
+
+    #[test]
+    fn a_body_is_raw_bytes_or_a_json_array_of_them() {
+        use tauri::ipc::InvokeBody;
+        assert_eq!(body_bytes(&InvokeBody::Raw(vec![1, 2, 3])).unwrap().as_ref(), [1, 2, 3]);
+        assert_eq!(body_bytes(&InvokeBody::Json(serde_json::json!([4, 5, 255]))).unwrap().as_ref(), [4, 5, 255]);
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!([4, 256]))).is_err());
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!({ "a": 1 }))).is_err());
     }
 
     #[test]

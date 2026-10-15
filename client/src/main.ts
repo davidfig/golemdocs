@@ -1751,7 +1751,7 @@ function saveInBrowser(): Promise<string | null> {
   const name = fileName();
   // Asked for now, while the worker (or the large-text editor) still has this document.
   const large = textView.active;
-  const bytes = large ? Promise.resolve(textView.snapshot()!) : worker.save();
+  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : worker.save();
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;

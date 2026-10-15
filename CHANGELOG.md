@@ -6,6 +6,7 @@
 
 - Clicking a task list's check box no longer selects the line (or lines) around it.
 - In Flow view, a document no longer lays out twice when it opens (the text re-wrapped a moment after appearing).
+- Text in the default font no longer pops in a moment after a document opens: its fonts now start loading as the app starts.
 
 ## 0.22.1 - 2026-10-14
 

@@ -84,6 +84,28 @@ export class AtlasLibrary {
     private readonly onLoad: () => void,
   ) {}
 
+  /** Atlas images fetched and decoded ahead of their face (see warm()), by key. Each is used once. */
+  private readonly warmed = new Map<string, Promise<ImageBitmap>>();
+
+  /**
+   * Starts fetching and decoding atlas images before any document asks for them, so the default
+   * font's text is there as soon as its first layout arrives instead of popping in after.
+   */
+  warm(keys: Iterable<string>): void {
+    for (const key of keys) {
+      if (this.faces.has(key) || this.warmed.has(key)) continue;
+      const image = this.fetchAtlas(key);
+      image.catch(() => this.warmed.delete(key));
+      this.warmed.set(key, image);
+    }
+  }
+
+  private async fetchAtlas(key: string): Promise<ImageBitmap> {
+    const response = await fetch(new URL(key, new URL(this.baseUrl, location.href)));
+    if (!response.ok) throw new Error(`${key}: HTTP ${response.status}`);
+    return createImageBitmap(await response.blob(), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+  }
+
   get(key: string): GpuFace | undefined {
     return this.faces.get(key);
   }
@@ -106,10 +128,9 @@ export class AtlasLibrary {
 
   private async load(face: GpuFace): Promise<void> {
     try {
-      const response = await fetch(new URL(face.key, new URL(this.baseUrl, location.href)));
-      if (!response.ok) throw new Error(`${face.key}: HTTP ${response.status}`);
-      const image = await createImageBitmap(await response.blob(), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-      face.setAtlas(image);
+      const warm = this.warmed.get(face.key);
+      this.warmed.delete(face.key);
+      face.setAtlas(await (warm ?? this.fetchAtlas(face.key)).catch(() => this.fetchAtlas(face.key)));
       this.onLoad();
     } catch (e) {
       console.error(e);

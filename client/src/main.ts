@@ -195,6 +195,8 @@ onScrollPastEndChange(() => {
 });
 const renderer = new PageRenderer(gl);
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
+// The default font nearly every document uses: fetch its atlases now, not after the first layout.
+atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);
 const selection = new SelectionLayer(gl);
 // The document, layout and editing live in a worker; it streams pages here as GPU-ready
 // buffers and answers input with page updates and selection geometry. This thread draws.

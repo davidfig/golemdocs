@@ -6,6 +6,10 @@
 
 - Right-clicking in a table now opens a menu to insert rows above or below, insert columns to the left or right, and delete rows, columns or the whole table.
 
+### Fixed
+
+- After the computer woke from sleep, a document in your account could stop taking any typing until it was reopened.
+
 ## 0.22.2 - 2026-10-15
 
 ### Changed

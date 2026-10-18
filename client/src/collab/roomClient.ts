@@ -445,6 +445,8 @@ export class RoomClient {
     // Refused for good: our view is stale, or we were let go.
     const final = code === ROOM_CLOSE.revoked || code === ROOM_CLOSE.badMessage;
     if (final) return this.giveUp();
+    // This session connected again on another socket (the room let this one go as a ghost): nothing to do.
+    if (code === ROOM_CLOSE.replaced) return;
     if (this.attempts >= this.timing.reconnectMs.length) return this.alone() ? this.lose() : this.giveUp();
     const delay = this.timing.reconnectMs[this.attempts++]!;
     setTimeout(() => void this.reconnect(), delay);
@@ -454,6 +456,7 @@ export class RoomClient {
     if (this.closedByUs) return;
     try {
       const wasAttached = this.attached;
+      const wasAlone = this.alone();
       const epoch = this.epoch;
       const welcome = await this.open();
       this.attempts = 0;
@@ -462,12 +465,20 @@ export class RoomClient {
       this.welcomed(welcome);
       // What we have is only good to continue with if the room is where we left it. (A watched room is never shared: whoever holds
       // its document now, what we have is the document as saved, or our own edits to save.)
-      if (wasAttached ? welcome.mode === 'shared' && welcome.epoch === epoch : welcome.mode === 'solo' && (this.watched || welcome.people.length <= 1)) {
+      // Our own earlier connection may still be listed (the room had not heard it drop): it is not someone else.
+      const others = welcome.people.filter((p) => p.client !== this.o.client).length;
+      if (wasAttached ? welcome.mode === 'shared' && welcome.epoch === epoch : welcome.mode === 'solo' && (this.watched || others === 0)) {
         if (wasAttached) {
           this.reconnected = true;
           this.send({ type: 'sync', epoch, version: this.o.host.sync()!.version });
         }
         this.announce();
+      } else if (wasAlone) {
+        // Alone, someone arrived while we were away: what we have is ours to save, so the room is let go of (as if it could not be
+        // reached) rather than the document made read-only. The next save joins it again, handing our document over as usual.
+        this.lose();
+        this.socket?.close(1000);
+        this.socket = null;
       } else this.giveUp();
     } catch {
       this.onClose(0);

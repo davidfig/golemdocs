@@ -208,7 +208,15 @@ export class RoomCore {
 
   private hello(peer: Peer, message: Extract<MultiplayerClientMessage, { type: 'hello' }>): void {
     if (peer.state.client !== null) return;
-    Object.assign(peer.state, { client: String(message.client).slice(0, 64), name: String(message.name).slice(0, 80), color: Number(message.color) | 0, selection: null, pointer: null, synced: false });
+    // The same session again, back from a sleep or a network change before its old connection was heard to drop: the old one is a
+    // ghost. Let it go quietly (no departure: the session is still here), or the session would count itself as a second person.
+    const client = String(message.client).slice(0, 64);
+    for (const ghost of this.members) {
+      if (ghost === peer || ghost.state.client !== client || ghost.state.userId !== peer.state.userId) continue;
+      this.peers.delete(ghost);
+      ghost.close(ROOM_CLOSE.replaced, 'connected again');
+    }
+    Object.assign(peer.state, { client, name: String(message.name).slice(0, 80), color: Number(message.color) | 0, selection: null, pointer: null, synced: false });
     peer.persist();
     // The first to join an empty room says what its changes are (it is a property of the document, the same for everyone).
     if (this.meta.mode === 'solo' && this.members.length === 1) this.store.setMeta({ kind: message.kind === 'objects' || message.kind === 'layers' || message.kind === 'nodes' || message.kind === 'text' ? message.kind : 'doc' });

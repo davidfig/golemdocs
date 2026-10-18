@@ -124,4 +124,6 @@ export const ROOM_CLOSE = {
   revoked: 4003,
   /** Not a message the room understands. */
   badMessage: 4004,
+  /** The same session connected again (after a sleep or a network change) before the room heard this connection drop: it is let go. */
+  replaced: 4005,
 } as const;

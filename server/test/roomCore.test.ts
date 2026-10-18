@@ -270,6 +270,31 @@ test('presence is relayed to others and included for newcomers', async () => {
   assert.deepEqual((c.inbox[0] as any).people.find((p: any) => p.client === 'a').selection, selection);
 });
 
+test('the same session connecting again lets its old connection go, so it is still alone (no handoff)', async () => {
+  const t = await setup();
+  const ghost = await t.join('a');
+  // Back from a sleep: the old connection never said it closed.
+  const back = await t.join('a');
+  assert.equal(ghost.closed, ROOM_CLOSE.replaced);
+  assert.deepEqual(t.types(ghost), ['welcome'], 'no people or handoff sent to the ghost');
+  assert.deepEqual(t.types(back), ['welcome']);
+  assert.equal((back.inbox[0] as any).mode, 'solo');
+  assert.deepEqual((back.inbox[0] as any).people.map((p: any) => p.client), ['a']);
+  assert.equal(t.core.clientsMaySave, true);
+  // Its close arriving later changes nothing.
+  await t.core.disconnect(ghost);
+  const b = await t.join('b');
+  assert.ok(t.types(back).includes('handoff'), 'a real second person still starts a handoff');
+  assert.equal(b.closed, null);
+});
+
+test('another account using the same session id does not push the first one out', async () => {
+  const t = await setup();
+  const a = await t.join('a');
+  await t.join('a', 'editor', undefined, 'mallory');
+  assert.equal(a.closed, null);
+});
+
 test('kicking a user closes their connections', async () => {
   const t = await shared();
   t.core.kick('b');

@@ -404,6 +404,46 @@ test('alone, a room that cannot be reached again is let go of: the document goes
   assert.equal(t.sockets.length, tried, 'no more attempts: the page joins again when it next saves');
 });
 
+test('alone, reconnecting after a sleep is not spoiled by our own earlier connection still being listed', async () => {
+  const t = setup();
+  t.client.ready(await t.join());
+  t.socket.drop(1006);
+  await tick(20);
+  t.socket.onopen?.();
+  // The room had not yet heard the old connection drop: we are listed twice.
+  t.socket.deliver(welcome({ people: [person('me'), person('me')] }));
+  await tick();
+  assert.equal(t.client.state.mode, 'solo');
+  assert.equal(t.client.canEdit, true);
+  assert.ok(!t.log.includes('lost'));
+});
+
+test('alone, someone who arrived while we were away does not make the document read-only: the room is let go of', async () => {
+  const t = setup();
+  t.client.ready(await t.join());
+  t.socket.drop(1006);
+  await tick(20);
+  const back = t.socket;
+  back.onopen?.();
+  back.deliver(welcome({ mode: 'handoff', people: [person('me'), person('ann')] }));
+  await tick();
+  assert.deepEqual(t.log.filter((l) => l === 'lost'), ['lost']);
+  assert.notEqual(t.client.state.mode, 'offline', 'never read-only');
+  assert.equal(t.client.canEdit, true);
+  assert.equal(back.closed, 1000, 'the new connection is closed: the next save joins again');
+  await tick(40);
+  assert.equal(t.sockets.length, 2, 'no more attempts');
+});
+
+test('our socket let go of by the room as a ghost (we connected again elsewhere) does nothing', async () => {
+  const t = setup();
+  t.client.ready(await t.join());
+  t.socket.drop(ROOM_CLOSE.replaced);
+  await tick(20);
+  assert.equal(t.sockets.length, 1);
+  assert.equal(t.client.canEdit, true);
+});
+
 test('alone while handing the document over, a lost room is not let go of (the room may have it)', async () => {
   const t = setup({ joinMs: 100, handoffMs: 200, reconnectMs: [5] });
   t.client.ready(await t.join());

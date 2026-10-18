@@ -410,6 +410,22 @@ test('spellAt selects the mistake at a point and reports it for the right-click 
   assert.equal(miss.spell?.issue, null);
 });
 
+test('spellAt in a table moves the caret into the cell and says so, for the table menu', async () => {
+  const doc = await openMarkdown('Intro text\n\n| alpha | beta |\n| --- | --- |\n| gamma | delta |\n');
+  const page = pageIds(doc)[0];
+  // Where the last cell is: put the caret there, then back at the start.
+  const cell = (await run(doc, { kind: 'move', to: 'documentEnd' })).caret!;
+  assert.equal((await run(doc, { kind: 'move', to: 'documentStart' })).inTable, false);
+  const inTable = await run(doc, { kind: 'spellAt', page, x: cell.x - 2, y: cell.y + cell.height / 2, check: false });
+  assert.equal(inTable.spell?.table, true);
+  assert.equal(inTable.inTable, true, 'the caret moved into the cell, so the table commands act on it');
+  await run(doc, { kind: 'format', action: { kind: 'table', op: 'insertRowBelow' } });
+  assert.equal((await md(doc)).split('\n').filter((l) => l.startsWith('|')).length, 4);
+  const outside = await run(doc, { kind: 'spellAt', page, x: 80, y: 80, check: false });
+  assert.equal(outside.spell?.table, undefined);
+  assert.equal(outside.spell?.issue, null);
+});
+
 // --- find and replace -------------------------------------------------------------------------
 
 test('find selects the match and says whether there was one', async () => {

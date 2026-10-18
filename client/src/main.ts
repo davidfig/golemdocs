@@ -152,7 +152,7 @@ import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type Libra
 import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
-import { modalOpen } from './ui/dom.ts';
+import { modalOpen, stripMnemonic } from './ui/dom.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -3179,6 +3179,22 @@ async function pictureMenu(hit: { page: GpuPage; x: number; y: number }, at: { x
   return true;
 }
 
+/** The right-click menu in a table: the Table menu's Insert and Delete commands, run through the same registry. */
+function tableMenu(at: { x: number; y: number }): void {
+  const item = (id: string) => ({ label: chrome.registry.get(id).plainLabel, run: () => void chrome.registry.execute(id) });
+  const label = (key: Parameters<typeof t>[0]) => stripMnemonic(t(key));
+  showPopupMenu(
+    [
+      { label: label('chrome.table.insert'), items: [item('table.insertRowAbove'), item('table.insertRowBelow'), item('table.insertColumnLeft'), item('table.insertColumnRight')] },
+      { label: label('chrome.table.delete'), items: [item('table.deleteRows'), item('table.deleteColumns'), item('table.deleteTable')] },
+    ],
+    at.x,
+    at.y,
+    stripMnemonic(t('chrome.menu.table')),
+    focusInput,
+  );
+}
+
 /** Where a double click was, when the picture it is on had not been picked yet: it is opened in the image editor once it is. */
 let pendingPictureEdit: { page: number; x: number; y: number } | null = null;
 
@@ -3217,7 +3233,8 @@ function applySelection(update: SelectionUpdate): void {
   updateCursor();
   if (update.search) findDialog.report(update.search);
   if (update.spell?.menu) {
-    showSpellMenu(update.spell.issue, spellMenuAt);
+    if (!update.spell.issue && update.spell.table && spellMenuAt && !spellMenuAt.hover) tableMenu(spellMenuAt);
+    else showSpellMenu(update.spell.issue, spellMenuAt);
     spellMenuAt = null;
   } else if (update.spell) spellDialog.report(update.spell);
   if (update.stats !== undefined) {
@@ -4800,18 +4817,19 @@ canvas.addEventListener('contextmenu', (e) => {
     focusInput();
     const at = { x: e.clientX, y: e.clientY };
     void pictureMenu(hit, at).then((shown) => {
-      if (!shown && spellDialog.checkingLive) {
+      if (!shown) {
         spellMenuAt = at;
-        send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y });
+        send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y, check: spellDialog.checkingLive });
       }
     });
     return;
   }
-  if (!spellDialog.checkingLive) return;
+  // A mistake under the pointer has its menu; otherwise a table has its own (the worker says which).
+  if (!spellDialog.checkingLive && !FORMATS[current.kind].editable) return;
   e.preventDefault();
   focusInput();
   spellMenuAt = { x: e.clientX, y: e.clientY };
-  send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y });
+  send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y, check: spellDialog.checkingLive });
 });
 
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the

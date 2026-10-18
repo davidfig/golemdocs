@@ -46,7 +46,7 @@ Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into posit
 
 ## Spelling and grammar hooks
 
-- `spellCheck` (live on/off and the user's dictionary), `spellWords`, `spellNext`, `spellAt` are `WireCommand`s. `OpenDocument.spellMarks(editor)` asks `issuesOf(paragraph, ...)` for each visible paragraph (`editor.marks` maps text offsets to line rectangles) and returns squiggle rects with kind 0 (spelling) or 1 (grammar). The word being typed is not marked until the caret leaves it.
+- `spellCheck` (live on/off and the user's dictionary), `spellWords`, `spellNext`, `spellAt` are `WireCommand`s. `OpenDocument.spellMarks(editor)` asks `issuesOf(paragraph, ...)` for each visible paragraph (`editor.marks` maps text offsets to line rectangles) and returns squiggle rects with kind 0 (spelling) or 1 (grammar). The word being typed is not marked until the caret leaves it. A right click sends `spellAt` (with `check: false` while live checking is off): with no mistake under the point but a table cell, the worker moves the caret into that cell (unless the point is inside the selection) and answers `spell.table`, and the page shows the table menu (the Table menu's Insert and Delete commands) instead of the spelling one.
 - Dictionaries (`client/src/spelling/`) load lazily per language the first time a paragraph in that language is checked; marks are re-sent when they arrive (`loadingMarks`). Grammar rules are English only (`spelling/grammar.ts`). Squiggles are drawn on the main thread by `SelectionLayer` (see [Rendering](rendering.md)).
 - `spellText` checks plain-text file lines without any document (used by the large-text editor).
 

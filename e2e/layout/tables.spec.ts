@@ -187,6 +187,32 @@ test.describe('editing table structure', () => {
     const text = await app.selectedText();
     for (const cell of ['a1', 'b1', 'c1', 'a2', 'b2', 'c2']) expect(text).toContain(cell);
   });
+
+  test('right-clicking a cell moves the caret there and offers Insert and Delete for rows and columns', async ({ app }) => {
+    const last = (await caretOf(app.page))!;
+    await inCell(app, 5); // a1, selected
+    await app.press('ArrowLeft'); // a caret at its start
+    await expect.poll(async () => (await caretOf(app.page))?.y ?? Infinity).toBeLessThan(last.y);
+    const cell = (await caretOf(app.page))!;
+    await app.press('ControlOrMeta+End'); // out of the table, below it
+    await expect.poll(async () => (await caretOf(app.page))?.y ?? 0).toBeGreaterThan(last.y);
+    const at = await screenPoint(app.page, 0, cell.x + 4, cell.y + cell.height / 2);
+    const popup = app.page.locator('.wm-popup-menu');
+    await app.page.mouse.click(at.x, at.y, { button: 'right' });
+    await popup.getByRole('menuitem', { name: 'Insert', exact: true }).hover();
+    await popup.getByRole('menuitem', { name: 'Rows Above', exact: true }).click();
+    await expect.poll(async () => (await firstTable(app)).map((r) => r[0])).toEqual(['', 'a1', 'a2']);
+    await expect(popup).toHaveCount(0);
+
+    await app.page.mouse.click(at.x, at.y + cell.height * 1.5, { button: 'right' });
+    await popup.getByRole('menuitem', { name: 'Delete', exact: true }).hover();
+    await popup.getByRole('menuitem', { name: 'Columns', exact: true }).click();
+    await expect.poll(async () => await firstTable(app)).toEqual([
+      ['', ''],
+      ['b1', 'c1'],
+      ['b2', 'c2'],
+    ]);
+  });
 });
 
 test.describe('typing and moving between cells', () => {

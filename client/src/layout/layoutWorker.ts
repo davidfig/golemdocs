@@ -1887,15 +1887,18 @@ class OpenDocument {
     return { url: link?.url ?? null, text: link?.text ?? '', checkbox };
   }
 
-  /** Selects the mistake under the point (unless `select` is false) and reports it for the menu (nothing, if there is none). */
-  private async spellAt(pageId: number, x: number, y: number, select: boolean): Promise<void> {
+  /**
+   * Selects the mistake under the point (unless `select` is false) and reports it for the menu (nothing, if there is none).
+   * With no mistake there, a point in a table moves the caret into its cell (unless it is in the selection already) and says so, for the table's commands.
+   */
+  private async spellAt(pageId: number, x: number, y: number, select: boolean, check: boolean): Promise<void> {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session || this.closed || this.annotator) return;
     const page = session.displayPages.find((p) => p.id === pageId);
     const hit = page && editor.hitTest(page, x, y);
     const documentLang = documentLanguageOf(editor);
-    const language = hit && paragraphLanguageOf(hit.paragraph, documentLang);
+    const language = hit && check && paragraphLanguageOf(hit.paragraph, documentLang);
     const dictionary = language && language !== 'none' ? await loadDictionary(language) : null;
     this.spell = { issue: null, menu: true };
     if (hit && dictionary) {
@@ -1904,6 +1907,15 @@ class OpenDocument {
         this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
         if (select) editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });
       }
+    }
+    if (hit && !this.spell.issue && select && !this.readOnly && editor.paragraphInTable(hit.paragraph)) {
+      const list = editor.paragraphs();
+      const at = list.indexOf(hit.paragraph);
+      const [start, end] = editor.ordered();
+      // Where a position is against the point: negative before it, positive after.
+      const against = (p: typeof start) => list.indexOf(p.paragraph) - at || p.offset - hit.offset;
+      if (editor.collapsed || against(start) > 0 || against(end) < 0) editor.apply({ kind: 'select', paragraph: at, from: hit.offset, to: hit.offset });
+      this.spell = { issue: null, menu: true, table: true };
     }
     this.reveal = false;
     this.sendSelection();
@@ -2000,7 +2012,7 @@ class OpenDocument {
       setAutoCorrect(wire);
       return;
     }
-    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true);
+    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true, wire.check ?? true);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
     if (isPdfCommand(wire)) return;

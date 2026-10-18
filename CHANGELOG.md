@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.23.0 - Unreleased
+
+### Added
+
+- Right-clicking in a table now opens a menu to insert rows above or below, insert columns to the left or right, and delete rows, columns or the whole table.
+
 ## 0.22.2 - 2026-10-15
 
 ### Changed

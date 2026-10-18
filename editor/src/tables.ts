@@ -104,7 +104,12 @@ export abstract class EditorTables extends EditorSections {
 
   /** Whether the selection is in a table cell (for the Table menu). */
   inTable(): boolean {
-    return !!this.replica.engine.index.locate(this.selection.focus.paragraph);
+    return this.paragraphInTable(this.selection.focus.paragraph);
+  }
+
+  /** Whether a paragraph is in a table cell (a right click there offers the table's commands). */
+  paragraphInTable(paragraph: Paragraph): boolean {
+    return !!this.replica.engine.index.locate(paragraph);
   }
 
   /** Each real row of a table with its cells and the grid columns [from, to) each covers. */

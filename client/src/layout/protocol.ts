@@ -120,7 +120,7 @@ export type WireCommand =
   | { kind: 'autoCorrect'; options: AutoCorrectOptions; /** The user's replacement list: text, and what replaces it. */ replacements: [string, string][] }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
-  | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean }
+  | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean; /** False while spell checking is off: only whether the point is in a table is reported. */ check?: boolean }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
   | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean; /** The status bar is asking: the answer comes back as `footerStats`, not `stats`. */ footer?: boolean }
   /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */
@@ -334,7 +334,7 @@ export interface SelectionUpdate {
   /** Formatting at the caret or across the selection, for the toolbar. */
   format: FormatState;
   /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
-  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean };
+  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean; /** After a `spellAt`: the point is in an editable table (the caret is moved there unless it was already in the selection), so the menu can offer the table's commands. */ table?: boolean };
   /** The squiggles under what is wrong (check-as-you-type): page id, x, y, width, height, kind (0 spelling, 1 grammar) per mark. */
   spellMarks?: Float64Array;
   /** Set once after `getProperties`. */

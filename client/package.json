@@ -2,7 +2,7 @@
   "name": "@golemdocs/client",
   "private": true,
   "description": "GolemDocs web app: canvas editor, UI and layout worker (private workspace package, not on npm)",
-  "version": "0.22.2",
+  "version": "0.23.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

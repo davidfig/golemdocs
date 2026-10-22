@@ -32,7 +32,7 @@ Root scripts (`package.json`): `dev`, `dev:client`, `dev:server`, `kill`, `build
 
 ## Client build and lazy chunks
 
-`pnpm --filter @golemdocs/client build` runs `tsc && vite build` (`client/vite.config.ts`). Output goes to `client/dist`, which `server/wrangler.jsonc` serves as an SPA (`assets.directory`, `not_found_handling: single-page-application`, with `/api/*` first through the Worker). That is production only: in the `dev` and `local` environments `assets.directory` is an empty, git-ignored `server/.no-assets`, and `run_worker_first` is `/*`, so `:3001` serves just `/api` and the Worker redirects everything else to Vite on :5173, where the page comes from.
+`pnpm --filter @golemdocs/client build` runs `tsc && vite build` (`client/vite.config.ts`). Output goes to `client/dist`, which `server/wrangler.jsonc` serves as an SPA (`assets.directory`, `not_found_handling: single-page-application`, `html_handling: drop-trailing-slash` so `home/de/index.html` answers at `/home/de`, the URL its canonical tag and the sitemap name, with `/api/*` first through the Worker). That is production only: in the `dev` and `local` environments `assets.directory` is an empty, git-ignored `server/.no-assets`, and `run_worker_first` is `/*`, so `:3001` serves just `/api` and the Worker redirects everything else to Vite on :5173, where the page comes from.
 
 Rules (AGENTS.md "Bundle size and lazy loading"): split into its own chunk only code that is about 20 kB or more minified and not needed by most sessions; one feature, one chunk behind a single entry module that is only ever `import()`ed (never also imported statically).
 

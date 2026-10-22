@@ -14,6 +14,10 @@
 	// The client is a static SPA. Only /api/* runs the Worker; everything else is served from assets.
 	"assets": {
 		"directory": "../client/dist",
+		// Serve home/de/index.html at /home/de, the URL the canonical tags, hreflang and sitemap name.
+		// The default (auto-trailing-slash) redirects /home/de to /home/de/, so search engines saw every
+		// home page as a redirect whose target named the redirect as its canonical.
+		"html_handling": "drop-trailing-slash",
 		"not_found_handling": "single-page-application",
 		"run_worker_first": [
 			"/api/*"

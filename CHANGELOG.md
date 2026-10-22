@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.23.1 - Unreleased
+
+### Fixed
+
+- The home page and its translations no longer redirect to an address ending in a slash, so search engines can index them.
+
 ## 0.23.0 - 2026-10-18
 
 ### Added

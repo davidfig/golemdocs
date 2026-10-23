@@ -62,6 +62,7 @@ export const dialogs: Catalog = {
   'dialogs.signIn.unavailable': 'Вход сейчас недоступен.',
   'dialogs.signIn.continueWith': 'Продолжить через {provider}',
   'dialogs.signIn.note': 'Войдите, чтобы оформить подписку на синхронизацию, делиться документами и открывать то, чем с вами поделились. Без аккаунта Golem Docs тоже работает и сохраняет документы в этом браузере.',
+  'dialogs.signIn.noteApp': 'Войдите, чтобы открывать документы из своей учётной записи Golem Docs и те, которыми с вами поделились. Без учётной записи Golem Docs тоже работает и хранит документы на этом устройстве.',
   'dialogs.signIn.notNow': 'Не сейчас',
   'dialogs.signIn.subscribeNote': 'Войдите, чтобы оформить подписку. После входа вы сразу перейдёте к оплате.',
 
@@ -87,6 +88,7 @@ export const dialogs: Catalog = {
   'dialogs.account.guest.title': 'Вход не выполнен',
   'dialogs.account.plan.active': 'Ваша подписка на синхронизацию активна.',
   'dialogs.account.plan.none': 'У вас нет подписки на синхронизацию. Оформите подписку, чтобы хранить документы в аккаунте, открывать их на любом устройстве и делиться ими.',
+  'dialogs.account.plan.notIncluded': 'Синхронизация не входит в эту учётную запись, поэтому документы хранятся на этом устройстве.',
   'dialogs.sync.panelLabel': 'Сохранение',
   'dialogs.sync.ariaLabel': 'Сохранение: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

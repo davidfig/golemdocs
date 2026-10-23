@@ -14,6 +14,7 @@ export const assistant: Partial<Messages> = {
   'assistant.signIn.message': '登入後即可向 AI 求助。',
   'assistant.signIn.button': '登入',
   'assistant.subscribe.message': 'AI 助理包含在 Golem Docs 訂閱方案中。',
+  'assistant.subscribe.notIncluded': '此帳戶不包含 AI 助理。',
   'assistant.subscribe.button': '訂閱',
   'assistant.noCredits': '你已用完本月的 AI 額度。額度將於下個月初恢復。',
   'assistant.credits': '本月 AI 額度剩餘 {percent}%',

@@ -60,7 +60,7 @@ import { showPopupMenu } from './ui/popupMenu.ts';
 import { PictureDetourBar } from './ui/pictureDetourBar.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
-import { checkoutUrl, fetchSubscription, portalUrl, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
+import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
@@ -1844,8 +1844,9 @@ async function goToPolar(address: () => Promise<string>, failed: 'app.subscribeF
   location.assign(url);
 }
 
-/** Subscribe…: to Polar's checkout. Signed out, they sign in first and come back to go on. */
+/** Subscribe…: to Polar's checkout. Signed out, they sign in first and come back to go on. Never in the phone apps. */
 async function subscribe(): Promise<void> {
+  if (!sellsSubscriptions()) return;
   if (!signedIn) {
     const id = await saveNow();
     showSignInDialog(returnTo(id ? { doc: `local:${id}`, subscribe: '1' } : { subscribe: '1' }), { subscribe: true });
@@ -1855,8 +1856,9 @@ async function subscribe(): Promise<void> {
   await goToPolar(checkoutUrl, 'app.subscribeFailed');
 }
 
-/** Manage Subscription…: Polar's customer portal. */
+/** Manage Subscription…: Polar's customer portal. Never in the phone apps. */
 async function manageSubscription(): Promise<void> {
+  if (!sellsSubscriptions()) return;
   if (!signedIn) return signIn();
   await goToPolar(portalUrl, 'app.portalFailed');
 }
@@ -2217,7 +2219,7 @@ async function share(): Promise<void> {
   if (current.localId && !library.local.some((d) => d.id === current.localId)) await library.reloadLocal();
   const info = library.local.find((d) => d.id === current.localId);
   const people = !account
-    ? { unavailable: signedIn ? t('app.subscribeToShare') : t('app.signInToShare') }
+    ? { unavailable: !signedIn ? t('app.signInToShare') : sellsSubscriptions() ? t('app.subscribeToShare') : t('app.shareNotIncluded') }
     : current.shared
       ? { unavailable: t('app.ownerOnlyShare') }
       : !info
@@ -5145,7 +5147,7 @@ const assistantTools = appTools({
 });
 
 // Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).
-const assistant = new Assistant(document.body, { tool: assistantTools.run, begin: assistantTools.begin, signIn: () => void signIn(), subscribe: () => void subscribe() });
+const assistant = new Assistant(document.body, { tool: assistantTools.run, begin: assistantTools.begin, signIn: () => void signIn(), subscribe: sellsSubscriptions() ? () => void subscribe() : undefined });
 assistant.onVisibility = (clip) => chrome.update({ clip });
 chrome.update({ clip: assistant.visible });
 

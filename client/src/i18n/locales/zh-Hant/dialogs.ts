@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': '目前無法登入。',
   'dialogs.signIn.continueWith': '使用 {provider} 繼續',
   'dialogs.signIn.note': '登入後可訂閱同步、共用文件，並開啟他人與你共用的文件。沒有帳戶時 Golem Docs 依然可用，文件會儲存在此瀏覽器中。',
+  'dialogs.signIn.noteApp': '登入後可開啟你 Golem Docs 帳戶中的文件，以及他人與你共用的文件。沒有帳戶也能使用 Golem Docs，文件會保存在此裝置上。',
   'dialogs.signIn.notNow': '暫時不要',
   'dialogs.signIn.subscribeNote': '登入後即可訂閱。登入後將直接前往結帳頁面。',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': '未登入',
   'dialogs.account.plan.active': '你的同步訂閱已生效。',
   'dialogs.account.plan.none': '你還沒有同步訂閱。訂閱後，可將文件儲存在帳戶中，在任何裝置上開啟並共用。',
+  'dialogs.account.plan.notIncluded': '此帳戶不包含同步功能，因此你的文件保存在此裝置上。',
   'dialogs.sync.panelLabel': '儲存',
   'dialogs.sync.ariaLabel': '儲存:{status}',
   'dialogs.sync.failedWithReason': '{tooltip}:{error}',

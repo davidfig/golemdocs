@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': '現在サインインを利用できません。',
   'dialogs.signIn.continueWith': '{provider} で続行',
   'dialogs.signIn.note': 'サインインして同期を購読すると、ドキュメントの共有や、他の人が共有したドキュメントを開くことができます。アカウントがなくても Golem Docs は使え、ドキュメントはこのブラウザーに保存されます。',
+  'dialogs.signIn.noteApp': 'サインインすると、Golem Docs アカウントのドキュメントや、他の人が共有したドキュメントを開くことができます。アカウントがなくても Golem Docs は使え、ドキュメントはこのデバイスに保存されます。',
   'dialogs.signIn.notNow': '後で',
   'dialogs.signIn.subscribeNote': '購読するにはサインインしてください。サインイン後、そのままお支払いに進みます。',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': 'サインインしていません',
   'dialogs.account.plan.active': '同期の購読は有効です。',
   'dialogs.account.plan.none': '同期を購読していません。購読すると、ドキュメントをアカウントに保存し、どのデバイスでも開き、共有できます。',
+  'dialogs.account.plan.notIncluded': 'このアカウントには同期が含まれていないため、ドキュメントはこのデバイスに保存されます。',
   'dialogs.sync.panelLabel': '保存',
   'dialogs.sync.ariaLabel': '保存: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

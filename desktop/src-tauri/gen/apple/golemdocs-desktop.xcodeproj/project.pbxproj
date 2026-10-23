@@ -11,6 +11,7 @@
 		3042B6D0F3167657B9E20E71 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 82FDEC00EA57CC3FD6001A8B /* assets */; };
 		44BA52E506E08C93551AFF61 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 914CC824075A359E3826099E /* main.mm */; };
 		4DD5B61E50A17A19C07CFA69 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CCB52C1F9FBFEA2DF2D775F7 /* MetalKit.framework */; };
+		7A3C1E5B9D2F4A6B8C0E1F24 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7A3C1E5B9D2F4A6B8C0E1F23 /* PrivacyInfo.xcprivacy */; };
 		4F8EE62D05569403F9545F34 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0A55494DF86A15E6DFFD9BF2 /* LaunchScreen.storyboard */; };
 		80F64F07ED4C7891D4B1D76A /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2FE987648915B02040CC0B1D /* libapp.a */; };
 		8BE3781CBC67537ABABFF948 /* ICloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64008740188BB086EBC1DCF2 /* ICloud.swift */; };
@@ -32,6 +33,7 @@
 		2FE987648915B02040CC0B1D /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		4D0727CF535AC3BD09B987A4 /* menu.rs */ = {isa = PBXFileReference; path = menu.rs; sourceTree = "<group>"; };
 		50B7FD01CA342447D4BF1419 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		7A3C1E5B9D2F4A6B8C0E1F23 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		62BC5C2928A3D88D20EDF225 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		64008740188BB086EBC1DCF2 /* ICloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloud.swift; sourceTree = "<group>"; };
 		6D231BA110B0B56D65E223F2 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
@@ -75,6 +77,7 @@
 			children = (
 				B57254ABABC40E7216F8AFE4 /* golemdocs-desktop_iOS.entitlements */,
 				62BC5C2928A3D88D20EDF225 /* Info.plist */,
+				7A3C1E5B9D2F4A6B8C0E1F23 /* PrivacyInfo.xcprivacy */,
 			);
 			path = "golemdocs-desktop_iOS";
 			sourceTree = "<group>";
@@ -250,6 +253,7 @@
 				F17E1DEDDEBB3FE0F34132F7 /* Assets.xcassets in Resources */,
 				4F8EE62D05569403F9545F34 /* LaunchScreen.storyboard in Resources */,
 				3042B6D0F3167657B9E20E71 /* assets in Resources */,
+				7A3C1E5B9D2F4A6B8C0E1F24 /* PrivacyInfo.xcprivacy in Resources */,
 				1139CC1FCABF2E7406D06098 /* libapp.a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { checkoutUrl, fetchSubscription, portalUrl, SubscriptionError, waitForSubscription } from '../src/subscription.ts';
+import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, SubscriptionError, waitForSubscription } from '../src/subscription.ts';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -59,4 +59,23 @@ test('waiting gives up after the attempts it was given', async () => {
   });
   assert.equal(await waitForSubscription({ attempts: 4, delayMs: 1 }), null);
   assert.equal(asked, 4);
+});
+
+test('the subscription is sold on the website and in the desktop app, never in the phone apps', () => {
+  const g = globalThis as Record<string, unknown>;
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const as = (userAgent: string, shell: boolean) => {
+    Object.defineProperty(globalThis, 'navigator', { value: { userAgent, platform: 'iPhone', maxTouchPoints: 5 }, configurable: true });
+    if (shell) g.__TAURI__ = { core: { invoke: async () => undefined } };
+    else delete g.__TAURI__;
+    return sellsSubscriptions();
+  };
+  try {
+    assert.equal(as('Mozilla/5.0 (iPhone)', false), true, 'the website on a phone');
+    assert.equal(as('Mozilla/5.0 (iPhone)', true), false, 'the iOS app');
+    assert.equal(as('Mozilla/5.0 (Linux; Android 15)', true), false, 'the Android app');
+  } finally {
+    delete g.__TAURI__;
+    if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator);
+  }
 });

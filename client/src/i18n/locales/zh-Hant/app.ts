@@ -70,6 +70,7 @@ export const app: Partial<Messages> = {
   'app.conflictNotice': '「{before}」在其他地方也被修改過，因此這些變更已另存為「{name}」',
   'app.signInToShare': '請登入以分享此文件',
   'app.subscribeToShare': '訂閱以共用此文件',
+  'app.shareNotIncluded': '此帳戶不包含共用功能',
   'app.ownerOnlyShare': '只有擁有者可以分享此文件',
   'app.notInAccountYet': '此文件尚未加入你的帳號：請稍候片刻等待上傳完成，然後再試一次',
   'app.notSavedYet': '請先進行一項變更：文件經過編輯後才會儲存到你的帳號',

@@ -13,6 +13,17 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// The Play upload key for a release build: from key.properties next to this file (gitignored), or from
+// ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD in CI.
+// Without one, the release build is unsigned and Play refuses it.
+val keyProperties = Properties().apply {
+    val propFile = file("key.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+fun signingValue(key: String, env: String): String? = keyProperties.getProperty(key) ?: System.getenv(env)
+
 android {
     compileSdk = 36
     namespace = "com.golemdocs.mobile"
@@ -23,6 +34,17 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    val storePath = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
+    if (storePath != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(storePath)
+                storePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -37,6 +59,7 @@ android {
             }
         }
         getByName("release") {
+            if (storePath != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': '当前无法登录。',
   'dialogs.signIn.continueWith': '使用 {provider} 继续',
   'dialogs.signIn.note': '登录后可订阅同步、共享文档，并打开他人与你共享的文档。没有账户时 Golem Docs 依然可用，文档会保存在此浏览器中。',
+  'dialogs.signIn.noteApp': '登录后可打开你 Golem Docs 账户中的文档以及他人与你共享的文档。没有账户也能使用 Golem Docs，文档会保存在此设备上。',
   'dialogs.signIn.notNow': '暂时不要',
   'dialogs.signIn.subscribeNote': '登录后即可订阅。登录后将直接进入结账页面。',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': '未登录',
   'dialogs.account.plan.active': '你的同步订阅已生效。',
   'dialogs.account.plan.none': '你还没有同步订阅。订阅后，可将文档保存在账户中，在任何设备上打开并共享。',
+  'dialogs.account.plan.notIncluded': '此账户不包含同步功能，因此你的文档保存在此设备上。',
   'dialogs.sync.panelLabel': '保存',
   'dialogs.sync.ariaLabel': '保存：{status}',
   'dialogs.sync.failedWithReason': '{tooltip}：{error}',

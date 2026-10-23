@@ -60,6 +60,7 @@ export const dialogs = {
   'dialogs.signIn.unavailable': 'Sign-in is unavailable right now.',
   'dialogs.signIn.continueWith': 'Continue with {provider}',
   'dialogs.signIn.note': 'Sign in to subscribe to sync, share documents and open what others share with you. Without an account, Golem Docs still works and saves your documents in this browser.',
+  'dialogs.signIn.noteApp': 'Sign in to open the documents in your Golem Docs account and the ones others share with you. Without an account, Golem Docs still works and keeps your documents on this device.',
   'dialogs.signIn.notNow': 'Not now',
   'dialogs.signIn.subscribeNote': 'Sign in to subscribe. Once you are signed in, you go straight to checkout.',
 
@@ -85,6 +86,7 @@ export const dialogs = {
   'dialogs.account.guest.title': 'Not signed in',
   'dialogs.account.plan.active': 'Your sync subscription is active.',
   'dialogs.account.plan.none': 'You don’t have a sync subscription. Subscribe to keep your documents in your account, open them on any device and share them.',
+  'dialogs.account.plan.notIncluded': 'Sync isn’t included with this account, so your documents are kept on this device.',
   'dialogs.sync.panelLabel': 'Saving',
   'dialogs.sync.ariaLabel': 'Saving: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

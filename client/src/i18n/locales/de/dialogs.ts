@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': 'Die Anmeldung ist derzeit nicht verfügbar.',
   'dialogs.signIn.continueWith': 'Weiter mit {provider}',
   'dialogs.signIn.note': 'Melden Sie sich an, um die Synchronisierung zu abonnieren, Dokumente freizugeben und zu öffnen, was andere mit Ihnen teilen. Auch ohne Konto funktioniert Golem Docs und speichert Ihre Dokumente in diesem Browser.',
+  'dialogs.signIn.noteApp': 'Melden Sie sich an, um die Dokumente in Ihrem Golem-Docs-Konto und die von anderen mit Ihnen geteilten zu öffnen. Auch ohne Konto funktioniert Golem Docs und speichert Ihre Dokumente auf diesem Gerät.',
   'dialogs.signIn.notNow': 'Nicht jetzt',
   'dialogs.signIn.subscribeNote': 'Melden Sie sich an, um zu abonnieren. Nach der Anmeldung gelangen Sie direkt zur Kasse.',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': 'Nicht angemeldet',
   'dialogs.account.plan.active': 'Ihr Synchronisierungs-Abonnement ist aktiv.',
   'dialogs.account.plan.none': 'Sie haben kein Synchronisierungs-Abonnement. Abonnieren Sie, um Ihre Dokumente in Ihrem Konto zu behalten, auf jedem Gerät zu öffnen und freizugeben.',
+  'dialogs.account.plan.notIncluded': 'Die Synchronisierung ist in diesem Konto nicht enthalten, daher bleiben Ihre Dokumente auf diesem Gerät.',
   'dialogs.sync.panelLabel': 'Speichern',
   'dialogs.sync.ariaLabel': 'Speichern: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

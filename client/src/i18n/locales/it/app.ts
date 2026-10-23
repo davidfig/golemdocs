@@ -73,6 +73,7 @@ export const app: Partial<Messages> = {
   'app.conflictNotice': '“{before}” è stato modificato anche altrove, quindi queste modifiche sono state salvate come “{name}”',
   'app.signInToShare': 'Accedi per condividere questo documento',
   'app.subscribeToShare': 'Abbonati per condividere questo documento',
+  'app.shareNotIncluded': 'La condivisione non è inclusa in questo account',
   'app.ownerOnlyShare': 'Solo il proprietario può condividere questo documento',
   'app.notInAccountYet': 'Questo documento non è ancora nel tuo account: attendi un attimo che venga caricato, poi riprova',
   'app.notSavedYet': 'Prima apporta una modifica: il documento viene salvato nel tuo account dopo essere stato modificato',

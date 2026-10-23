@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': 'La connexion est indisponible pour le moment.',
   'dialogs.signIn.continueWith': 'Continuer avec {provider}',
   'dialogs.signIn.note': 'Connectez-vous pour vous abonner à la synchronisation, partager des documents et ouvrir ceux que d’autres partagent avec vous. Sans compte, Golem Docs fonctionne quand même et enregistre vos documents dans ce navigateur.',
+  'dialogs.signIn.noteApp': 'Connectez-vous pour ouvrir les documents de votre compte Golem Docs et ceux que d’autres partagent avec vous. Sans compte, Golem Docs fonctionne toujours et conserve vos documents sur cet appareil.',
   'dialogs.signIn.notNow': 'Plus tard',
   'dialogs.signIn.subscribeNote': 'Connectez-vous pour vous abonner. Une fois connecté, vous passez directement au paiement.',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': 'Non connecté',
   'dialogs.account.plan.active': 'Votre abonnement à la synchronisation est actif.',
   'dialogs.account.plan.none': 'Vous n’avez pas d’abonnement à la synchronisation. Abonnez-vous pour garder vos documents dans votre compte, les ouvrir sur n’importe quel appareil et les partager.',
+  'dialogs.account.plan.notIncluded': 'La synchronisation n’est pas incluse dans ce compte : vos documents restent sur cet appareil.',
   'dialogs.sync.panelLabel': 'Enregistrement',
   'dialogs.sync.ariaLabel': 'Enregistrement : {status}',
   'dialogs.sync.failedWithReason': '{tooltip} : {error}',

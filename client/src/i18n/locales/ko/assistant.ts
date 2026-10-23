@@ -14,6 +14,7 @@ export const assistant: Partial<Messages> = {
   'assistant.signIn.message': 'AI에게 도움을 요청하려면 로그인하세요.',
   'assistant.signIn.button': '로그인',
   'assistant.subscribe.message': 'AI 도우미는 Golem Docs 구독에 포함되어 있어요.',
+  'assistant.subscribe.notIncluded': '이 계정에는 AI 도우미가 포함되어 있지 않습니다.',
   'assistant.subscribe.button': '구독하기',
   'assistant.noCredits': '이번 달 AI 크레딧을 모두 사용했어요. 다음 달 초에 다시 채워져요.',
   'assistant.credits': '이번 달 AI 크레딧 {percent}% 남음',

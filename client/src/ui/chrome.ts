@@ -20,6 +20,7 @@ import { h, isFormField, modalOpen, segmented } from './dom.ts';
 import { sameValue } from './sameValue.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
+import { sellsSubscriptions } from '../subscription.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
 import { dropdown, lineSample } from './dropdown.ts';
@@ -321,9 +322,9 @@ export class Chrome {
       dialog('file.trash', t('history.trashMenu'), 'trash', { tooltip: t('history.trashMenu.tip') }),
       dialog('file.vault', t('vault.menu'), 'vault', { tooltip: t('vault.menu.tip'), visible: () => desktopBridge() !== null }),
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
-      // Signed out, Subscribe signs in first. Once subscribed, the same place manages it.
-      a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' }),
-      a('file.manageSubscription', t('chrome.file.manageSubscription'), { kind: 'manageSubscription' }, { tooltip: t('chrome.file.manageSubscription.tip'), visible: (s) => s.subscription === 'active' }),
+      // Signed out, Subscribe signs in first. Once subscribed, the same place manages it. Neither is in the phone apps.
+      a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' && sellsSubscriptions() }),
+      a('file.manageSubscription', t('chrome.file.manageSubscription'), { kind: 'manageSubscription' }, { tooltip: t('chrome.file.manageSubscription.tip'), visible: (s) => s.subscription === 'active' && sellsSubscriptions() }),
     );
     for (const kind of new Set([...CONVERT_ORDER, ...PICTURE_CONVERT_ORDER, ...VECTOR_CONVERT_ORDER])) {
       const profile = FORMATS[kind];

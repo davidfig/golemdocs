@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': 'L’accesso non è disponibile al momento.',
   'dialogs.signIn.continueWith': 'Continua con {provider}',
   'dialogs.signIn.note': 'Accedi per abbonarti alla sincronizzazione, condividere documenti e aprire ciò che altri condividono con te. Senza un account Golem Docs funziona comunque e salva i tuoi documenti in questo browser.',
+  'dialogs.signIn.noteApp': 'Accedi per aprire i documenti del tuo account Golem Docs e quelli che altri condividono con te. Senza un account, Golem Docs funziona comunque e conserva i tuoi documenti su questo dispositivo.',
   'dialogs.signIn.notNow': 'Non ora',
   'dialogs.signIn.subscribeNote': 'Accedi per abbonarti. Dopo l’accesso passi direttamente al pagamento.',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': 'Accesso non effettuato',
   'dialogs.account.plan.active': 'Il tuo abbonamento alla sincronizzazione è attivo.',
   'dialogs.account.plan.none': 'Non hai un abbonamento alla sincronizzazione. Abbonati per tenere i tuoi documenti nel tuo account, aprirli su qualsiasi dispositivo e condividerli.',
+  'dialogs.account.plan.notIncluded': 'La sincronizzazione non è inclusa in questo account, quindi i tuoi documenti restano su questo dispositivo.',
   'dialogs.sync.panelLabel': 'Salvataggio',
   'dialogs.sync.ariaLabel': 'Salvataggio: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

@@ -70,6 +70,7 @@ export const app: Partial<Messages> = {
   'app.conflictNotice': '“{before}”이(가) 다른 곳에서도 변경되어, 이 변경 사항을 “{name}”(으)로 저장했습니다',
   'app.signInToShare': '이 문서를 공유하려면 로그인하십시오',
   'app.subscribeToShare': '구독하여 이 문서 공유',
+  'app.shareNotIncluded': '이 계정에는 공유가 포함되어 있지 않습니다',
   'app.ownerOnlyShare': '소유자만 이 문서를 공유할 수 있습니다',
   'app.notInAccountYet': '이 문서는 아직 계정에 없습니다. 업로드될 때까지 잠시 기다린 후 다시 시도하십시오',
   'app.notSavedYet': '먼저 변경해 주십시오. 문서는 편집된 후에 계정에 저장됩니다',

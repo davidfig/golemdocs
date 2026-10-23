@@ -5,6 +5,8 @@ import type { Action, ChromeHost, SubscriptionState, SyncStatus } from './action
 import { avatar } from './avatar.ts';
 import { h, setAttr } from './dom.ts';
 import { t } from '../i18n/index.ts';
+import { sellsSubscriptions } from '../subscription.ts';
+import { signInNote } from './signIn.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -75,13 +77,15 @@ export class AccountButton {
       return button;
     };
     if (!this.signedIn()) {
-      panel.append(h('div', { class: 'wm-sync-title', text: t('dialogs.account.guest.title') }), h('p', { text: t('dialogs.signIn.note') }), run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true));
+      panel.append(h('div', { class: 'wm-sync-title', text: t('dialogs.account.guest.title') }), h('p', { text: signInNote() }), run(t('dialogs.sync.signIn'), { kind: 'signIn' }, true));
       return panel;
     }
     const user = this.status?.user;
     panel.append(h('div', { class: 'wm-sync-title', text: user ? t('dialogs.sync.signedInAs', { user }) : t('dialogs.sync.signedInAsYou') }));
-    if (this.subscription === 'active') panel.append(h('p', { text: t('dialogs.account.plan.active') }), run(t('dialogs.sync.manageSubscription'), { kind: 'manageSubscription' }));
-    else if (this.subscription === 'none') panel.append(h('p', { text: t('dialogs.account.plan.none') }), run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }, true));
+    // The phone apps say what the account has but offer nothing to buy or manage (sellsSubscriptions).
+    const sells = sellsSubscriptions();
+    if (this.subscription === 'active') panel.append(h('p', { text: t('dialogs.account.plan.active') }), ...(sells ? [run(t('dialogs.sync.manageSubscription'), { kind: 'manageSubscription' })] : []));
+    else if (this.subscription === 'none') panel.append(h('p', { text: sells ? t('dialogs.account.plan.none') : t('dialogs.account.plan.notIncluded') }), ...(sells ? [run(t('dialogs.sync.subscribe'), { kind: 'subscribe' }, true)] : []));
     panel.append(h('hr'), run(t('dialogs.sync.signOut'), { kind: 'signOut' }));
     return panel;
   }

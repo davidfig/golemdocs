@@ -14,6 +14,7 @@ export const assistant: Partial<Messages> = {
   'assistant.signIn.message': 'Connectez-vous pour demander de l’aide à l’IA.',
   'assistant.signIn.button': 'Se connecter',
   'assistant.subscribe.message': 'L’assistant IA est inclus dans l’abonnement Golem Docs.',
+  'assistant.subscribe.notIncluded': 'L’assistant IA n’est pas inclus dans ce compte.',
   'assistant.subscribe.button': 'S’abonner',
   'assistant.noCredits': 'Vous avez utilisé tous vos crédits IA de ce mois-ci. Ils reviennent au début du mois prochain.',
   'assistant.credits': 'Il vous reste {percent} % de vos crédits IA de ce mois-ci',

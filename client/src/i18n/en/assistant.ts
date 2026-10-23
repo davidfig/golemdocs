@@ -13,6 +13,7 @@ export const assistant = {
   'assistant.signIn.message': 'Sign in to ask AI for help.',
   'assistant.signIn.button': 'Sign in',
   'assistant.subscribe.message': 'The AI assistant comes with a Golem Docs subscription.',
+  'assistant.subscribe.notIncluded': 'The AI assistant isn’t included with this account.',
   'assistant.subscribe.button': 'Subscribe',
   'assistant.noCredits': 'You’ve used all of this month’s AI credits. They come back at the start of next month.',
   'assistant.credits': '{percent}% of this month’s AI credits left',

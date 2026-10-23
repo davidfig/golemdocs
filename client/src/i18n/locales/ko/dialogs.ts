@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': '지금은 로그인할 수 없습니다.',
   'dialogs.signIn.continueWith': '{provider}(으)로 계속',
   'dialogs.signIn.note': '로그인하여 동기화를 구독하면 문서를 공유하고 다른 사람이 공유한 문서를 열 수 있습니다. 계정이 없어도 Golem Docs를 사용할 수 있으며 문서는 이 브라우저에 저장됩니다.',
+  'dialogs.signIn.noteApp': '로그인하면 Golem Docs 계정의 문서와 다른 사람이 공유한 문서를 열 수 있습니다. 계정이 없어도 Golem Docs는 작동하며 문서는 이 기기에 보관됩니다.',
   'dialogs.signIn.notNow': '나중에',
   'dialogs.signIn.subscribeNote': '구독하려면 로그인하세요. 로그인하면 바로 결제 화면으로 이동합니다.',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': '로그인하지 않음',
   'dialogs.account.plan.active': '동기화 구독이 활성화되어 있습니다.',
   'dialogs.account.plan.none': '동기화 구독이 없습니다. 구독하면 문서를 계정에 보관하고, 모든 기기에서 열고, 공유할 수 있습니다.',
+  'dialogs.account.plan.notIncluded': '이 계정에는 동기화가 포함되어 있지 않으므로 문서는 이 기기에 보관됩니다.',
   'dialogs.sync.panelLabel': '저장 중',
   'dialogs.sync.ariaLabel': '저장: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

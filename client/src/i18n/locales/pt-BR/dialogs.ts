@@ -62,6 +62,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.signIn.unavailable': 'A entrada não está disponível no momento.',
   'dialogs.signIn.continueWith': 'Continuar com {provider}',
   'dialogs.signIn.note': 'Entre para assinar a sincronização, compartilhar documentos e abrir o que outras pessoas compartilham com você. Sem uma conta, o Golem Docs continua funcionando e salva seus documentos neste navegador.',
+  'dialogs.signIn.noteApp': 'Entre para abrir os documentos da sua conta do Golem Docs e os que outras pessoas compartilham com você. Sem uma conta, o Golem Docs continua funcionando e guarda seus documentos neste dispositivo.',
   'dialogs.signIn.notNow': 'Agora não',
   'dialogs.signIn.subscribeNote': 'Entre para assinar. Depois de entrar, você vai direto para o pagamento.',
 
@@ -87,6 +88,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.account.guest.title': 'Sem login',
   'dialogs.account.plan.active': 'Sua assinatura de sincronização está ativa.',
   'dialogs.account.plan.none': 'Você não tem uma assinatura de sincronização. Assine para manter seus documentos na sua conta, abri-los em qualquer dispositivo e compartilhá-los.',
+  'dialogs.account.plan.notIncluded': 'A sincronização não está incluída nesta conta, então seus documentos ficam neste dispositivo.',
   'dialogs.sync.panelLabel': 'Salvamento',
   'dialogs.sync.ariaLabel': 'Salvamento: {status}',
   'dialogs.sync.failedWithReason': '{tooltip}: {error}',

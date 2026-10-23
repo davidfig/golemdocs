@@ -5,6 +5,7 @@
 
 import { pictureForModel } from '../formats/imageForModel.ts';
 import { t } from '../i18n/index.ts';
+import { sellsSubscriptions } from '../subscription.ts';
 import { h } from '../ui/dom.ts';
 import { askServer, fetchStatus, type Status } from './api.ts';
 import { CLIP_SVG } from './clipArt.ts';
@@ -124,7 +125,7 @@ function gateMessage(gate: Exclude<Gate, null>): string {
     case 'signin':
       return t('assistant.signIn.message');
     case 'subscription':
-      return t('assistant.subscribe.message');
+      return sellsSubscriptions() ? t('assistant.subscribe.message') : t('assistant.subscribe.notIncluded');
     case 'credits':
       return t('assistant.noCredits');
     case 'unavailable':

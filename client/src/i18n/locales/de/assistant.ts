@@ -14,6 +14,7 @@ export const assistant: Partial<Messages> = {
   'assistant.signIn.message': 'Melde dich an, um die KI um Hilfe zu bitten.',
   'assistant.signIn.button': 'Anmelden',
   'assistant.subscribe.message': 'Der KI-Assistent ist im Golem-Docs-Abo enthalten.',
+  'assistant.subscribe.notIncluded': 'Der KI-Assistent ist in diesem Konto nicht enthalten.',
   'assistant.subscribe.button': 'Abonnieren',
   'assistant.noCredits': 'Du hast alle KI-Guthaben dieses Monats verbraucht. Sie sind zu Beginn des nächsten Monats wieder da.',
   'assistant.credits': 'Noch {percent} % der KI-Guthaben dieses Monats übrig',

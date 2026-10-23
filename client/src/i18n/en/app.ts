@@ -73,6 +73,7 @@ export const app = {
   'app.conflictNotice': '“{before}” was also changed somewhere else, so these changes were saved as “{name}”',
   'app.signInToShare': 'Sign in to share this document',
   'app.subscribeToShare': 'Subscribe to share this document',
+  'app.shareNotIncluded': 'Sharing isn’t included with this account',
   'app.ownerOnlyShare': 'Only the owner can share this document',
   'app.notInAccountYet': 'This document isn’t in your account yet: give it a moment to upload, then try again',
   'app.notSavedYet': 'Make a change first: the document is saved to your account once it has been edited',

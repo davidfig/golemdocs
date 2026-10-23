@@ -3,6 +3,7 @@
 
 import { availableProviders, signInUrl, takeAuthError } from '../auth.ts';
 import { t } from '../i18n/index.ts';
+import { sellsSubscriptions } from '../subscription.ts';
 import { dialogTitleBar } from './popup.ts';
 
 /** One button per available provider. Signing in comes back to `returnTo` (a path on this site). */
@@ -36,6 +37,9 @@ export async function mountSignIn(root: HTMLElement, returnTo?: string): Promise
   root.replaceChildren(panel);
 }
 
+/** What signing in gives, for someone signed out. The phone apps don't mention subscribing (`sellsSubscriptions`). */
+export const signInNote = (): string => (sellsSubscriptions() ? t('dialogs.signIn.note') : t('dialogs.signIn.noteApp'));
+
 /**
  * A modal asking the user to sign in. They come back to `returnTo` afterwards. `subscribe`: they
  * asked to pay for sync, so it says they go on to checkout after signing in.
@@ -46,7 +50,7 @@ export function showSignInDialog(returnTo: string, options: { subscribe?: boolea
   dialog.style.maxWidth = '380px';
 
   const note = document.createElement('p');
-  note.textContent = options.subscribe ? t('dialogs.signIn.subscribeNote') : t('dialogs.signIn.note');
+  note.textContent = options.subscribe ? t('dialogs.signIn.subscribeNote') : signInNote();
   note.style.cssText = 'margin:0 0 12px';
   const providers = document.createElement('div');
   const cancel = document.createElement('button');

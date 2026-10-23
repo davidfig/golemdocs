@@ -1,7 +1,7 @@
 // The layers of a picture: its shapes as a tree. A `group` shape is a layer (or a folder of layers) that other shapes name as
 // their `parent`; the order of the flat list is the stacking order, back to front, and a group's children keep their places in
 // it. Hiding, locking, opacity and blend mode of a group apply to everything inside it. All of this is pure (it takes a list of
-// shapes and gives a new one), so the panel, the tools, the assistant and the final edit agree on what the picture looks like.
+// shapes and gives a new one), so the panel, the tools and the final edit agree on what the picture looks like.
 
 import { EFFECT_TOOLS, MARKER_WIDTH, brushRadius, bubbleGeometry, hitShape, fontSize, paintBackground, paintShape, rotatePoint, shapeCenter, shiftShape, stepRadius, textBox } from './imageDraw.ts';
 import type { BasePixels, Point, Shape } from './imageDraw.ts';

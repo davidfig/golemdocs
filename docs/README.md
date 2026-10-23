@@ -16,7 +16,6 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Releasing the desktop app](architecture/desktop-release.md) | Installer builds on a tag, Apple signing and notarization, what is not done yet |
 | [Server](architecture/server.md) | Worker routing, sign-in, D1 and R2 layout, sharing, billing, search, environments |
 | [Collaboration](architecture/collaboration.md) | Rooms, the central log, handoff and settle, one gateway and one transport |
-| [Assistant](architecture/assistant.md) | The AI assistant loop, tools, the parity rule, search, limits |
 | [UI](architecture/ui.md) | App shell, actions and commands, shared components, spelling, the home site |
 | [Build and testing](architecture/build-and-testing.md) | Workspace, lazy chunks, unit and e2e tests, CI, deploy, release |
 
@@ -55,9 +54,7 @@ Docs that disagree with the code:
 
 - `ops/README.md` still describes the removed dev-server and SharedWorker rooms.
 - `client/src/ui/shareDialog.ts` builds a native `<select>`, which AGENTS.md forbids.
-- AGENTS.md says app tools are `APP_TOOLS` in `main.ts`; they are `appTools()` in `client/src/assistant/appTools.ts`. It also describes `EDITS` as undo grouping; it only controls the "Undo takes it back" hint.
 - The comment in `server/wrangler.jsonc` says cloud documents are off in the `local` environment; they work there.
-- `playwright.config.ts` says the assistant is not covered by e2e; two specs touch it, though never the model.
 
 ## Keeping these docs current
 

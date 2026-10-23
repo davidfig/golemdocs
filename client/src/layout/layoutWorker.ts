@@ -71,11 +71,9 @@ async function legalText(page: LegalPage): Promise<string> {
 async function changelogText(): Promise<string> {
   return (await import('../../../CHANGELOG.md?raw')).default;
 }
-import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
+import { DICTIONARY_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
-import { runAgentTool } from './agentTools.ts';
-import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { AUTOCORRECT_DEFAULTS, AUTOCORRECT_KEYS, autoCorrect, ordinalAt, urlAt } from './autocorrect.ts';
 import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
@@ -86,6 +84,9 @@ import { countText, tableShape } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
 import { resolveEmbeds, type Embedded } from '../formats/embeds.ts';
 import { sourceFromFile } from '../formats/source.ts';
+import { fontFile, loadAppFonts } from '../formats/appFonts.ts';
+import { withDrawingText } from '../formats/drawingText.ts';
+import { annotatedPdf, reflow } from '../formats/pdfFile.ts';
 import { APP_WORDS } from '../spelling/appWords.ts';
 import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../spelling/dictionary.ts';
 import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLanguage, type Unchecked } from '../spelling/languages.ts';
@@ -97,18 +98,7 @@ const CLIPBOARD_LIMIT = 4_000_000;
 /** A selection longer than this is copied as plain text only (writing its HTML after every change would be slow). */
 const SELECTION_HTML_LIMIT = 200_000;
 
-const fontsReady = FontSet.load(
-  async (path) => {
-    const response = await fetch(FONT_BASE + path);
-    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}. Run \`pnpm fonts\`.`);
-    return response.json();
-  },
-  async (path) => {
-    const response = await fetch(FONT_BASE + path);
-    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
-    return new Uint8Array(await response.arrayBuffer());
-  },
-);
+const fontsReady = loadAppFonts();
 
 /** Loads the faces of the default font, which nearly every document uses, ahead of one that is still arriving. Never fails the document. */
 async function warmFonts(): Promise<void> {
@@ -189,22 +179,6 @@ async function showEmbeds(document: WordDocument, fonts: FontSet): Promise<void>
   } catch (e) {
     console.error(e);
   }
-}
-
-/**
- * A drawing's SVG is the part beside its picture in the document, and the extension keeps the same text for saving as SVG. Others
- * may have changed the drawing in a room, which writes only the document: the extension is made to follow it.
- */
-async function withDrawingText(document: WordDocument | null, lens: Format, extensions: Extensions): Promise<Extensions> {
-  if (!document || (lens !== 'svg' && lens !== 'svgz')) return extensions;
-  // A drawing edited together is its objects (a room writes only those): the SVG is made from them.
-  const vec = extensions.vec;
-  if (vec?.meta[0]) {
-    const [{ objectsToScene }, { writeSvg }] = await Promise.all([import('../vector/nodes.ts'), import('../vector/svgWrite.ts')]);
-    return { ...extensions, svg: { ...extensions.svg, source: writeSvg(objectsToScene({ meta: vec.meta[0], nodes: vec.nodes, defs: vec.defs })) } };
-  }
-  const text = await (await import('../formats/vectorDoc.ts')).svgOfDocument(document).catch(() => null);
-  return text === null ? extensions : { ...extensions, svg: { ...extensions.svg, source: text } };
 }
 
 /** The most a picture added to a shared PDF may be, as the text that carries it: one change is one message to the room. */
@@ -997,7 +971,7 @@ class OpenDocument {
     if (index < 0 || !original || !this.pdf) return;
     try {
       const { PdfDocument, openPdfView } = await import('../formats/handlers/pdf.ts');
-      const doc = PdfDocument.load(await annotatedPdf(original, currentExtensions(this)));
+      const doc = PdfDocument.load(await annotatedPdf(original, currentExtensions(this), async () => editFontsFor(await fontsReady)));
       const page = doc.pages[index];
       switch (wire.op) {
         case 'delete':
@@ -1518,13 +1492,6 @@ class OpenDocument {
     if (holder) this.notice(holder.mine ? t('room.watchingMineNoEdit') : t('room.watchingNoEdit', { name: holder.name }));
   }
 
-  /** Why the document can't be changed, for the assistant. */
-  whyReadOnly(): string {
-    const holder = this.net?.state.holder;
-    if (this.net?.watching && holder) return holder.mine ? 'this document is being edited on another of the person’s devices; take it over (take_over_editing) to change it here.' : `${holder.name} is editing this document now; take it over (take_over_editing) to change it.`;
-    return 'this document cannot be changed (it can only be viewed, or its connection was lost).';
-  }
-
   /** The document as the room holds it: what it is edited as and what only that format keeps go with it. */
   private async roomDocument(): Promise<Uint8Array> {
     await this.document!.fetchMissingMedia();
@@ -1666,62 +1633,6 @@ class OpenDocument {
     if (this.waiting) return this.later(() => this.runCommand(wire));
     const done = this.runCommand(wire);
     if (done) this.later(() => done);
-  }
-
-  /** One of the assistant's tools, run on this document (see agentTools.ts). Settles with its answer once its edits have taken effect. */
-  async agent(name: string, args: string, show: (images: string[]) => void = () => {}): Promise<string> {
-    // Asked for while the document is still loading: once it has, and the commands sent before have run.
-    if (!this.isSetUp) await this.turn();
-    if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
-    const editor = this.editor;
-    if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
-    return runAgentTool(
-      {
-        editor,
-        readOnly: this.readOnly || this.format === 'pdf',
-        run: async (wire) => {
-          // Another document was opened meanwhile: this one's editor is no longer the page's.
-          if (this.closed) throw new Error('the document was closed');
-          this.command(wire);
-          while (this.waiting) await this.waiting;
-        },
-        format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
-        show,
-      },
-      name,
-      args,
-    );
-  }
-
-  /** One of the assistant's tools on a PDF shown as its own pages (see agentPdfTools.ts). */
-  private agentPdf(annotator: PdfAnnotator, name: string, args: string): Promise<string> {
-    const ids = () => this.pdfPages;
-    const pageCount = () => this.pdf?.view.pageCount ?? 0;
-    const readOnly = (): string | null => (this.readOnly ? this.whyReadOnly() : null);
-    return runPdfTool(
-      {
-        annotator,
-        get pageCount() {
-          return pageCount();
-        },
-        characters: (index) => this.pdf?.view.characters(index) ?? [],
-        pageId: (index) => ids()[index]?.id,
-        pageSize: (index) => ids()[index] && { width: ids()[index]!.width, height: ids()[index]!.height },
-        fields: () => annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
-        run: async (wire) => {
-          if (this.closed) throw new Error('the document was closed');
-          this.command(wire);
-          while (this.waiting) await this.waiting;
-        },
-        get readOnly() {
-          return readOnly();
-        },
-        pageOp: (index, op) => this.pdfPageOp(annotator, { kind: 'pdfPageOp', page: ids()[index]!.id, op }),
-        pick: (index, x, y) => this.pickText(annotator, index, x, y),
-      },
-      name,
-      args,
-    );
   }
 
   /** Formatting from the menus and toolbars. One that starts using a font loads its faces first. */
@@ -2643,48 +2554,16 @@ async function media(doc: number, request: number, part: string): Promise<void> 
   post({ type: 'media', request, bytes }, bytes ? [bytes] : []);
 }
 
-/** A PDF reflowed into a flowing document, its markup annotations carried into the text. */
-async function reflow(original: Uint8Array, extensions: Extensions): Promise<WordDocument> {
-  const { pdfToDocument, markupToDocument, PdfDocument, readAnnotations } = await import('../formats/handlers/pdf.ts');
-  const document = await pdfToDocument(original, { edits: extensions.pdf?.edits });
-  const pdf = PdfDocument.load(original);
-  markupToDocument(document, pdf, extensions.pdf?.annotations ?? readAnnotations(pdf));
-  return document;
-}
-
 /** The font files edits to a PDF need, fetched as asked for (see formats/pdfFonts.ts). */
 async function editFontsFor(fonts: FontSet) {
   const { EditFonts } = await import('../formats/handlers/pdf.ts');
-  return new EditFonts(fonts, async (path) => new Uint8Array(await (await fetchOk(FONT_BASE + path)).arrayBuffer()));
+  return new EditFonts(fonts, fontFile);
 }
 
 /** The document's extensions, with the PDF's annotations and form fields as they are now when its pages are shown. */
 function currentExtensions(open: OpenDocument): Extensions {
   if (!open.annotator) return open.extensions;
   return { ...open.extensions, pdf: { annotations: [...open.annotator.annotations], fields: [...open.annotator.fields], edits: [...open.annotator.edits] } };
-}
-
-/**
- * The original PDF with the document's annotations, form fields and edits written in. Markup and
- * fields go in as an incremental update (the original bytes, then the changes); edits to the page's
- * own content are written in full, so that what they removed isn't left in the file behind them.
- * The original itself when there is nothing to write.
- */
-async function annotatedPdf(original: Uint8Array, extensions: Extensions): Promise<Uint8Array> {
-  const { annotations, fields, edits } = extensions.pdf ?? {};
-  if (!annotations && !fields && !edits?.length) return original.slice();
-  const { PdfDocument, applyAnnotations, applyEdits, applyFields } = await import('../formats/handlers/pdf.ts');
-  const doc = PdfDocument.load(original);
-  if (annotations) applyAnnotations(doc, annotations);
-  if (fields) applyFields(doc, fields);
-  if (edits?.length) {
-    // Fonts the edits set text in are written into the file, from their font files.
-    const editFonts = await editFontsFor(await fontsReady);
-    await editFonts.ensure(edits);
-    applyEdits(doc, edits, editFonts.options);
-    return doc.save();
-  }
-  return doc.save({ incremental: true });
 }
 
 /** The time now as a document property (W3CDTF, to the second, in UTC). */
@@ -2726,7 +2605,7 @@ async function exportAs(doc: number, request: number, to: Format): Promise<void>
     let bytes: Uint8Array;
     // A PDF whose text wasn't edited exports as the original, pages and all.
     await open.document?.fetchMissingMedia();
-    if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open));
+    if (to === 'pdf' && open.original && (!open.document || (open.pagesCurrent && !open.edited))) bytes = await annotatedPdf(open.original, currentExtensions(open), async () => editFontsFor(await fontsReady));
     else bytes = await exportDocument(open.document ?? (await reflow(open.original!, currentExtensions(open))), open.extensions, to, await fontsReady);
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
@@ -2944,16 +2823,6 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'pictureBase':
       void pictureBase(message.doc, message.request);
-      break;
-    case 'agent':
-      // Always answered, even if the tool fails: the page waits for it.
-      const shown: string[] = [];
-      void (current?.doc === message.doc ? current.agent(message.name, message.args, (images) => shown.push(...images)) : Promise.resolve('Error: no document is open.'))
-        .catch((e: unknown) => {
-          console.error(e);
-          return 'Error: that did not work.';
-        })
-        .then((result) => post({ type: 'agentResult', request: message.request, result, ...(shown.length && { images: shown }) }));
       break;
   }
 }

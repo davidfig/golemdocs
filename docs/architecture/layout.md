@@ -1,6 +1,6 @@
 # Layout
 
-Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into positioned pages: glyphs, rectangles and images in page-relative points, independent of any file format or renderer. It runs in a Web Worker that also owns the document, the editor and the multiplayer replica, so typing and big relayouts never block the UI thread. This doc covers the layout engine (`layout/`), the worker and its message protocol (`client/src/layout/`), incremental relayout, the assistant tools that run in the worker, and the spelling hooks.
+Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into positioned pages: glyphs, rectangles and images in page-relative points, independent of any file format or renderer. It runs in a Web Worker that also owns the document, the editor and the multiplayer replica, so typing and big relayouts never block the UI thread. This doc covers the layout engine (`layout/`), the worker and its message protocol (`client/src/layout/`), incremental relayout, and the spelling hooks.
 
 ## How it works
 
@@ -50,10 +50,6 @@ Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into posit
 - Dictionaries (`client/src/spelling/`) load lazily per language the first time a paragraph in that language is checked; marks are re-sent when they arrive (`loadingMarks`). Grammar rules are English only (`spelling/grammar.ts`). Squiggles are drawn on the main thread by `SelectionLayer` (see [Rendering](rendering.md)).
 - `spellText` checks plain-text file lines without any document (used by the large-text editor).
 
-## Assistant tools
-
-`client/src/layout/agentTools.ts` implements the assistant's document tools. `runAgentTool(env, name, argsJson)` looks the name up in `TOOLS` (own properties only), parses JSON args, and returns text for the model. Tools change the document only through `env.run(WireCommand)`, the same path typing and the menus use, so edits undo, lay out and sync to rooms. PDF documents use `agentPdfTools.ts`. Descriptions live in `server/src/assistantTools.ts` and must match names and arguments. See AGENTS.md ("AI assistant parity") and `client/test/agentTools.test.ts`, `assistantParity.test.ts`.
-
 ## Key files
 
 | Path | Role |
@@ -70,7 +66,6 @@ Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into posit
 | `client/src/layout/layoutWorker.ts` | The worker: `OpenDocument`, `pump`, `flush`, command dispatch, spelling, save/convert |
 | `client/src/layout/layoutClient.ts` | Page-side API and listener dispatch |
 | `client/src/layout/protocol.ts` | `ToWorker`, `FromWorker`, `LayoutUpdate`, `SelectionUpdate` |
-| `client/src/layout/agentTools.ts`, `agentPdfTools.ts` | Assistant tools run in the worker |
 | `client/src/layout/formatting.ts`, `selectionFormat.ts` | Menu/toolbar formatting actions and toolbar state |
 | `client/src/layout/autoformat.ts`, `livePreview.ts` | Markdown shortcuts, source shown at the caret |
 | `client/src/layout/autocorrect.ts` | Autocorrect as you type: pure rules (what the text typed so far should become); the worker's `autoCorrected` applies one as a single undoable replacement that Backspace takes back |

@@ -65,6 +65,27 @@ function shellCore(): TauriCore | null {
   return found && typeof found.invoke === 'function' ? found : null;
 }
 
+const BASE64_PIECE = 0x8000;
+
+/** Bytes as base64 text, a piece at a time (one call with millions of arguments overflows the stack). */
+export function toBase64(bytes: Uint8Array): string {
+  const native = (bytes as Uint8Array & { toBase64?: () => string }).toBase64;
+  if (typeof native === 'function') return native.call(bytes);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += BASE64_PIECE) binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_PIECE));
+  return btoa(binary);
+}
+
+/** The bytes base64 text stands for. */
+export function fromBase64(text: string): Uint8Array {
+  const native = (Uint8Array as unknown as { fromBase64?: (text: string) => Uint8Array }).fromBase64;
+  if (typeof native === 'function') return native(text);
+  const binary = atob(text);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
 /** True on a phone or tablet (iOS, Android, and an iPad that reports itself as a Mac). */
 export function isTouchDevice(nav: Pick<Navigator, 'userAgent' | 'platform' | 'maxTouchPoints'> = navigator): boolean {
   return /iPhone|iPad|iPod|Android/i.test(nav.userAgent) || (/Mac/.test(nav.platform) && nav.maxTouchPoints > 1);
@@ -87,6 +108,9 @@ export function desktopBridge(): DesktopBridge | null {
   const core = isIosApp() ? shellCore() : tauriCore();
   if (!core) return null;
   const bytes = (data: unknown): Uint8Array => (data instanceof ArrayBuffer ? new Uint8Array(data) : Uint8Array.from(data as ArrayLike<number>));
+  // Files go as base64 text, which crosses as one string however the web view carries it (raw bytes become a JSON array of
+  // numbers when it falls back to postMessage: far too slow for a large file). A shell without those commands takes the raw form.
+  let base64 = true;
   return {
     fixed: isIosApp(),
     root: () => core.invoke<string | null>('vault_root'),
@@ -99,9 +123,29 @@ export function desktopBridge(): DesktopBridge | null {
     }),
     openPrivacy: () => needsNewerShell(() => core.invoke<void>('vault_open_privacy')),
     scan: async () => (await core.invoke<{ path: string; size: number; mtimeMs: number }[]>('vault_scan')).map(({ path, size, mtimeMs }) => ({ path, size, mtimeMs })),
-    read: async (path) => bytes(await core.invoke<unknown>('vault_read', { path })),
-    // The bytes are the body and the path rides in a header, percent-encoded because a header is ASCII.
-    write: (path, data) => core.invoke<number>('vault_write', data as unknown as Record<string, unknown>, { headers: { path: encodeURIComponent(path).replace(/%2F/gi, '/') } }),
+    async read(path) {
+      if (base64) {
+        try {
+          return fromBase64(await core.invoke<string>('vault_read_base64', { path }));
+        } catch (error) {
+          if (!isMissingCommand(error)) throw error;
+          base64 = false;
+        }
+      }
+      return bytes(await core.invoke<unknown>('vault_read', { path }));
+    },
+    async write(path, data) {
+      if (base64) {
+        try {
+          return await core.invoke<number>('vault_write_base64', { path, data: toBase64(data) });
+        } catch (error) {
+          if (!isMissingCommand(error)) throw error;
+          base64 = false;
+        }
+      }
+      // The bytes are the body and the path rides in a header, percent-encoded because a header is ASCII.
+      return core.invoke<number>('vault_write', data as unknown as Record<string, unknown>, { headers: { path: encodeURIComponent(path).replace(/%2F/gi, '/') } });
+    },
     remove: (path) => core.invoke<void>('vault_remove', { path }),
   };
 }

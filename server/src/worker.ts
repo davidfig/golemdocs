@@ -1,6 +1,5 @@
 import { isAdmin, pictureOf } from './accounts.ts';
 import { userAnalytics } from './analytics.ts';
-import { assistantStatus, handleAssistant } from './assistant.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
@@ -14,9 +13,8 @@ import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
 import { Room } from './room.ts';
 import { joinRoom, roomHeaders } from './roomGate.ts';
-import { handleSearch } from './search.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
-import { CloudflareError, existingUserDb } from './userDb.ts';
+import { CloudflareError } from './userDb.ts';
 
 /**
  * The request's URL as the browser sees it. In development the client's Vite server proxies
@@ -107,16 +105,6 @@ const handler: ExportedHandler = {
       // POST /api/checkout: the Polar page where this user pays for sync. POST /api/portal: where they manage it.
       if (path === '/api/checkout' && request.method === 'POST') return json(await startCheckout(env, userId, `${url.origin}/?subscribed=1`));
       if (path === '/api/portal' && request.method === 'POST') return json(await startPortal(env, userId));
-      // GET /api/assistant: whether the assistant is on, and this user's credits. POST: one model turn (subscribers).
-      if (path === '/api/assistant') {
-        if (request.method === 'GET') return json(await assistantStatus(env, userId));
-        if (request.method === 'POST') return await handleAssistant(request, env, userId, json);
-        throw new HttpError(405, 'method not allowed');
-      }
-
-      // GET /api/assistant/search?q=…: which of this user's documents are about something (see search.ts).
-      if (path === '/api/assistant/search' && request.method === 'GET') return json(await handleSearch(env, userId, url.searchParams.get('q') ?? '', await existingUserDb(env, userId)));
-
       // Everything under /api/admin/ is for admins only. The check is here, once, for the whole prefix, so no
       // admin route can forget it; the client hiding the menu is a convenience, not the protection.
       if (path === '/api/admin' || path.startsWith('/api/admin/')) {

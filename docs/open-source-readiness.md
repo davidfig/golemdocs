@@ -21,10 +21,10 @@ The editor core is already separable. `docx`, `layout`, `ops`, `editor`, `pdf` a
 
 The hosted-service code is concentrated in two places:
 
-- `server/` (the Worker): `billing.ts`, `subscriptions.ts`, `accounts.ts`, `auth*.ts`, `providers.ts`, `assistant*.ts`, `cf.ts`, `userDb.ts`, `room*.ts`. Only `worker.ts` and `assistant.ts` import billing/subscriptions.
-- `client/src/`: `subscription.ts`, `auth.ts`, `ui/billingPanel.ts`, `ui/syncButton.ts`, `ui/signIn.ts`, `ui/accountButton.ts`, `assistant/`, plus the strings for these in `i18n/`.
+- `server/` (the Worker): `billing.ts`, `subscriptions.ts`, `accounts.ts`, `auth*.ts`, `providers.ts`, `cf.ts`, `userDb.ts`, `room*.ts`. Only `worker.ts` and the routes it calls import billing/subscriptions.
+- `client/src/`: `subscription.ts`, `auth.ts`, `ui/billingPanel.ts`, `ui/syncButton.ts`, `ui/signIn.ts`, `ui/accountButton.ts`, plus the strings for these in `i18n/`.
 
-An open-core split would keep the packages above and the `client` editor open and treat `server/`, the billing/auth UI and the assistant as the hosted product. The remaining work is that the `client` imports the account/billing modules directly rather than through an interface, so a build without them would need those seams cut (`main.ts`, `chrome.ts`, `actions.ts`).
+An open-core split would keep the packages above and the `client` editor open and treat `server/` and the billing/auth UI as the hosted product. The remaining work is that the `client` imports the account/billing modules directly rather than through an interface, so a build without them would need those seams cut (`main.ts`, `chrome.ts`, `actions.ts`).
 
 ## 3. Licenses
 
@@ -40,7 +40,7 @@ An open-core split would keep the packages above and the `client` editor open an
 | comic-sans-ms | Comic Relief | OFL-1.1 |
 | libertinus-math, noto-sans-* | Libertinus, Noto (Adobe Source) | OFL-1.1 |
 
-Dictionaries are Hunspell/SCOWL (permissive, `client/public/dictionaries/LICENSE.txt`). The binder-clip mascot is hand-drawn SVG in `client/src/assistant/clipArt.ts`.
+Dictionaries are Hunspell/SCOWL (permissive, `client/public/dictionaries/LICENSE.txt`).
 
 **Gaps to close:**
 

@@ -595,7 +595,6 @@ export class Chrome {
       a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
       a('help.changelog', t('chrome.help.changelog'), { kind: 'openSample', id: 'changelog' }),
       dialog('help.updates', t('update.menu'), 'updates', { visible: () => isDesktopApp() }),
-      a('help.clip', t('chrome.help.clip'), { kind: 'toggleClip' }, { checked: (s) => s.clip }),
     );
   }
 
@@ -777,7 +776,6 @@ export class Chrome {
           sep,
           cmd('view.ruler'),
           cmd('view.formattingMarks'),
-          cmd('help.clip'),
           sep,
           cmd('view.fillForm'),
           cmd('view.editForm'),

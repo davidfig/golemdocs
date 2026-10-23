@@ -7,7 +7,7 @@ Goal: get real people to open the app, and learn which message makes them stay. 
 - **Strong, true hook:** one editor that opens Word, PDF, Markdown, SVG, ZIP and more, in the browser, free, no account, nothing uploaded.
 - **A story:** a solo builder who lives in Obsidian and got tired of PDF tools (the home page's "Why I built this"), with most of the code written with Claude.
 - **Real differentiators to lead with:** privacy (files never leave the browser), PDF text editing and true redaction, Word 2003 feel, 50 MB text files without freezing, Obsidian vault import.
-- **Paid product:** $5 a month for sync, sharing, live editing and the AI assistant. Free use is the funnel, so every channel below sells the free tool.
+- **Paid product:** $5 a month for sync, sharing and live editing. Free use is the funnel, so every channel below sells the free tool.
 
 ## Who to reach (in order)
 
@@ -47,7 +47,7 @@ Rules: be the founder, say what is rough, never ask for upvotes, never use sockp
 
 ### 4. Directories and lists (an afternoon, permanent links)
 
-Submit to: AlternativeTo (as an alternative to Microsoft Word, Google Docs, Adobe Acrobat online, Smallpdf), Product Hunt, Hacker News "Show", Indie Hackers, BetaList, Futurepedia and similar AI-tool lists (for the assistant), awesome-lists for Obsidian and for privacy tools, and `r/selfhosted` only if it can be self-hosted (it cannot, so skip).
+Submit to: AlternativeTo (as an alternative to Microsoft Word, Google Docs, Adobe Acrobat online, Smallpdf), Product Hunt, Hacker News "Show", Indie Hackers, BetaList, awesome-lists for Obsidian and for privacy tools, and `r/selfhosted` only if it can be self-hosted (it cannot, so skip).
 
 ### 5. Comparison pages (high intent)
 

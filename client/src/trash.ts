@@ -1,5 +1,5 @@
 // The trash as the app shows it: what was deleted from this browser (storage/local.ts) and, for an account with sync, from the account
-// (cloud.ts), as one list. Each is kept 30 days. The dialog and the assistant both go through here, with the real storage behind `TrashDeps`.
+// (cloud.ts), as one list. Each is kept 30 days. The dialog goes through here, with the real storage behind `TrashDeps`.
 
 /** Where a deleted document is kept: this browser, or the account. */
 export type TrashSource = 'device' | 'account';
@@ -40,25 +40,4 @@ export async function loadTrash(deps: TrashDeps): Promise<{ items: TrashItem[]; 
       : [],
   ]);
   return { items: [...device, ...account].sort((a, b) => b.deletedAt - a.deletedAt), accountError };
-}
-
-/** Restores the documents with these ids (each id is in one trash only). Says which could not be and why. */
-export async function restoreById(deps: TrashDeps, ids: readonly string[]): Promise<{ restored: string[]; failed: string[] }> {
-  const { items } = await loadTrash(deps);
-  const restored: string[] = [];
-  const failed: string[] = [];
-  for (const id of ids) {
-    const item = items.find((i) => i.id === id);
-    if (!item) {
-      failed.push(`${id}: not in the trash`);
-      continue;
-    }
-    try {
-      await deps.restore(item);
-      restored.push(id);
-    } catch (error) {
-      failed.push(`${id}: ${(error as Error).message}`);
-    }
-  }
-  return { restored, failed };
 }

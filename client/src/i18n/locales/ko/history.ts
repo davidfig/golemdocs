@@ -47,5 +47,4 @@ export const history: Partial<Messages> = {
   'trash.deleteTitle': '{name}을(를) 완전히 삭제할까요?',
   'trash.emptyTitle': '휴지통을 비울까요?',
   'trash.close': '닫기',
-  'assistant.tool.versions': '문서 기록을 확인하는 중…',
 };

@@ -88,7 +88,7 @@ export interface SyncReport {
   movedHere: number;
   deletedHere: number;
   trashed: number;
-  /** Documents the vault does not keep (a PDF, a picture) and so left alone, plus any that had no text form. */
+  /** Documents the vault does not keep (a name with no file format the app opens) and so left alone, plus any that had no file to write. */
   skipped: number;
   errors: { action: VaultAction; message: string }[];
   /** The documents (by the other side's id) whose content, name or place the sync changed there or deleted: one open in an editor is out of date. */

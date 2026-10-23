@@ -3,7 +3,12 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
+import type { FontSet } from '@golemdocs/layout';
+import { PageDrawing, PdfDocument, readAnnotations } from '../../pdf/src/index.ts';
+import { fromVaultFile, toVaultFile, vaultFormat } from '../src/desktop/vaultCodec.ts';
 import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost } from '../src/desktop/vaultSync.ts';
+import { readWdoc, writeWdoc, WDOC_VERSION } from '../src/formats/wdoc.ts';
+import { installFakeCanvas } from './fakeCanvas.ts';
 
 const text = (s: string) => new TextEncoder().encode(s);
 const read = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -114,7 +119,7 @@ const codec: VaultCodec = {
   async fromFile(file) {
     return text(`wdoc:${read(file)}`);
   },
-  kept: (name) => !/\.pdf$/i.test(name),
+  kept: (name) => !/\.zip$/i.test(name),
 };
 
 function setup(account = 'u1') {
@@ -278,8 +283,8 @@ test('a document renamed in the account moves the file', async () => {
 
 test('files the vault does not keep are left alone on both sides', async () => {
   const s = setup();
-  s.add('scan.pdf', 'pdf bytes');
-  s.folder.put('manual.pdf', 'local pdf');
+  s.add('photos.zip', 'zip bytes');
+  s.folder.put('backup.zip', 'local zip');
   const report = await s.sync();
   assert.equal(counts(report), quiet);
   assert.equal(report.skipped, 1);
@@ -363,4 +368,48 @@ test('the sync state is kept in the hidden state file', async () => {
   const state = JSON.parse(s.folder.get(STATE_PATH)!);
   assert.equal(state.account, 'u1');
   assert.equal(state.entries.length, 1);
+});
+
+test('with the real converters, PDFs and pictures go out as the files they are and a changed one comes back in place of the document', async () => {
+  const canvas = installFakeCanvas(() => ({ width: 1, height: 1 }));
+  try {
+    // A picture's and a PDF's own pages need no fonts: a FontSet that is never read.
+    const fonts = { fonts: async () => ({}) as FontSet, file: () => Promise.reject(new Error('no fonts needed')) };
+    const real: VaultCodec = { toFile: (stored, name) => toVaultFile(stored, name, fonts), fromFile: fromVaultFile, kept: (name) => vaultFormat(name) !== null };
+    const s = setup();
+    s.host.codec = real;
+    const page = PdfDocument.create();
+    const d = new PageDrawing(page.addPage([300, 200]), { origin: 'top-left' });
+    d.text('Signed copy', 20, 40, { font: page.standardFont('Courier'), size: 12 });
+    d.finish();
+    const original = await page.save();
+    const note = { id: 'n', page: 0, kind: 'note' as const, rect: [5, 5, 20, 20] as [number, number, number, number], quads: [], color: [1, 1, 0] as [number, number, number], contents: 'Looks good' };
+    const pdfId = s.add('Contract.pdf', '');
+    s.docs.get(pdfId)!.bytes = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original, extensions: { pdf: { annotations: [note] } } });
+    const png = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+    const picture = await readWdoc(await fromVaultFile(png, 'dot.png'));
+    const pictureId = s.add('dot.png', '');
+    s.docs.get(pictureId)!.bytes = await writeWdoc({ ...picture, extensions: { img: { shapes: [{ id: 's', tool: 'rectangle', color: '#f00', width: 1, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }] } } });
+
+    const first = await s.sync();
+    assert.deepEqual(first.errors, []);
+    assert.equal(first.downloaded, 2);
+    assert.equal(first.skipped, 0, 'nothing is left to the account');
+    const onDisk = s.folder.files.get('Contract.pdf')!.bytes;
+    assert.deepEqual(readAnnotations(PdfDocument.load(onDisk)).map((a) => a.contents), ['Looks good'], 'the note is in the file');
+    assert.equal(s.folder.get('dot.png'), 'encoded:image/png', 'the layers are drawn in');
+
+    // Another program signs the PDF: the file replaces the document, which is now just that file.
+    const signed = await PdfDocument.create().save();
+    s.folder.files.set('Contract.pdf', { bytes: signed, mtimeMs: 99_999 });
+    const second = await s.sync();
+    assert.deepEqual(second.errors, []);
+    assert.equal(second.uploaded, 1);
+    const back = await readWdoc(s.docs.get(pdfId)!.bytes);
+    assert.deepEqual(back.original, signed);
+    assert.deepEqual(back.extensions, {}, 'the old annotations are gone with the old original');
+    assert.equal(counts(await s.sync()), quiet);
+  } finally {
+    canvas.restore();
+  }
 });

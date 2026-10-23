@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { fakeIndexedDB } from './fakeIndexedDB.ts';
-import { loadTrash, restoreById, type TrashDeps, type TrashItem } from '../src/trash.ts';
+import { loadTrash, type TrashDeps, type TrashItem } from '../src/trash.ts';
 
 (globalThis as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
 const local = await import('../src/storage/local.ts');
@@ -131,12 +131,4 @@ test('the account’s trash failing does not hide this browser’s, and no accou
   assert.equal(failing.accountError, 'offline');
   const noAccount = await loadTrash(deps([item('device', 'a', 1)], new Error('never asked'), false));
   assert.equal(noAccount.accountError, null);
-});
-
-test('restoring by id finds which trash each is in and says which could not be', async () => {
-  const d = deps([item('device', 'a', 1)], [item('account', 'b', 2)]);
-  const result = await restoreById(d, ['a', 'b', 'zzz']);
-  assert.deepEqual(result.restored, ['a', 'b']);
-  assert.deepEqual(result.failed, ['zzz: not in the trash']);
-  assert.deepEqual(d.restored, ['device:a', 'account:b']);
 });

@@ -199,22 +199,3 @@ export function pageIds(doc: number): number[] {
   return layouts.length ? [...layouts[layouts.length - 1].order] : [];
 }
 
-/** Runs an assistant tool on the document and answers with what it said. */
-export async function agent(doc: number, name: string, args: object | string = {}): Promise<string> {
-  return (await agentResult(doc, name, args)).result;
-}
-
-/** Runs an assistant tool, and answers with its whole result: what it said, and any pictures it fetched. */
-export async function agentResult(doc: number, name: string, args: object | string = {}): Promise<{ result: string; images?: string[] }> {
-  const request = nextRequest++;
-  const json = typeof args === 'string' ? args : JSON.stringify(args);
-  send({ type: 'agent', doc, request, name, args: json });
-  // Not the shared timeout, which is unref'd: an unanswered tool call would end the run silently.
-  let timer: ReturnType<typeof setTimeout>;
-  const late = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`no answer to ${name} ${json}`)), 15000)));
-  try {
-    return await Promise.race([waitFor('agentResult', (m) => m.request === request), late]);
-  } finally {
-    clearTimeout(timer!);
-  }
-}

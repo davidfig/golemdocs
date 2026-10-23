@@ -9,14 +9,12 @@ Eu fiz o Golem Docs porque queria um só editor que abrisse todo tipo de documen
 - **Anota PDFs.** Realce, sublinhe, tache e deixe notas nas próprias páginas de um PDF.
 - **Edita PDFs.** Mude para Editar PDF para alterar o texto de uma página onde ele está, mover, adicionar ou excluir imagens e formas, tarjar dados privados e reorganizar páginas. Preencher digita nos campos de um formulário.
 - **Trabalha em conjunto.** Compartilhar, no menu Arquivo, permite convidar pessoas específicas por correio eletrônico como editores ou leitores. Todos que estiverem com o documento aberto editam a mesma cópia, e as alterações aparecem ao vivo. Compartilhar depende do meu servidor, então faz parte da assinatura; editar sozinho é grátis.
-- **Pergunte à IA.** O assistente de IA no canto pode ler o seu documento, reescrever ou adicionar parágrafos, formatar texto, deixar comentários, preencher formulários e converter para outro formato, e Desfazer reverte as alterações dele. Ele faz parte da assinatura, porque cada pedido me custa dinheiro. Exibir › Assistente de IA o mostra ou oculta.
 
 ## Experimente
 
 1. **Mude de forma.** No menu Arquivo, escolha Converter Em e depois Markdown. Esta página vira texto simples com títulos `#`, e você pode convertê-la de volta.
 2. **Abra alguns dados.** Solte um arquivo CSV na janela. Ele abre como uma tabela que você pode editar e é baixado como o mesmo CSV.
-3. **Pergunte à IA.** Abra o assistente de IA e peça que ele resuma esta página ou destaque um título, depois pressione Desfazer se quiser a alteração de volta. Isso exige uma assinatura.
-4. **Edite em conjunto.** No menu Arquivo, escolha Compartilhar e adicione o endereço de correio eletrônico de alguém que já entrou no Golem Docs. Quando a pessoa abrir o documento em Compartilhados comigo, vocês dois o editam ao vivo. Isso também exige uma assinatura.
+3. **Edite em conjunto.** No menu Arquivo, escolha Compartilhar e adicione o endereço de correio eletrônico de alguém que já entrou no Golem Docs. Quando a pessoa abrir o documento em Compartilhados comigo, vocês dois o editam ao vivo. Isso exige uma assinatura.
 
 Quando estiver pronto, escolha Novo no menu Arquivo para um documento em branco, ou Baixar quando precisar de um arquivo para outra pessoa.
 
@@ -40,7 +38,6 @@ Tudo o que foi descrito acima e roda no seu navegador não me custa nada, então
 
 - **Sincronizar** guarda os seus documentos no meu servidor, para que você possa abri-los em qualquer dispositivo.
 - **Compartilhar e editar em conjunto** com um link ou com pessoas específicas.
-- **IA** já vem integrada, sem nada para configurar. Eu pago por cada pedido que ela faz.
 
 O que sobra me permite continuar trabalhando no Golem Docs. Se uma assinatura terminar, os seus documentos continuam neste navegador, e você ainda pode abrir documentos que um assinante compartilhe com você. Veja os [preços](https://golemdocs.com/home/#pricing) para saber o valor, ou escolha Arquivo › Assinar… para começar.
 

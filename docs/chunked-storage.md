@@ -18,7 +18,7 @@ new first line, or 1 KB deleted each change 2 chunks (about 2.6 MB of 49 MB).
 
 `manifests` (document id → chunk hashes in order, their lengths, and `syncedHashes`), `chunks` (hash → bytes) and `chunkRefs` (hash → how many
 documents hold it; a chunk is deleted when the last one lets go). `getSaved` puts the chunks back together, so every caller (open, search, link
-rewriting, the assistant, Download All) is unchanged; a document under 2 MiB stays one value in `bytes`, and an old whole-file entry is converted
+rewriting, Download All) is unchanged; a document under 2 MiB stays one value in `bytes`, and an old whole-file entry is converted
 the next time it is saved. A save chunks before its transaction, then in one transaction writes the new chunks, adjusts the counts and the manifest.
 If a chunk it counted on has gone (another tab saved), it starts again with nothing assumed.
 

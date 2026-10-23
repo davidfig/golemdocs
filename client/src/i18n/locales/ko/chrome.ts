@@ -160,7 +160,6 @@ export const chrome: Partial<Messages> = {
   'chrome.help.privacy': '개인정보 처리방침(&P)',
   'chrome.help.terms': '이용 약관(&T)',
   'chrome.help.changelog': '새로운 기능(&W)',
-  'chrome.help.clip': 'AI 도우미(&I)',
   'chrome.perform.insert': '삽입',
   'chrome.menu.file': '파일(&F)',
   'chrome.menu.edit': '편집(&E)',

@@ -18,6 +18,6 @@ It looks and feels like Word 2003, with menus and toolbars and no ribbon to hunt
 
 ## Is it free?
 
-Yes. Opening, editing, converting, and downloading are free with no account. A subscription adds saving to your account, sync across devices, sharing, live editing together, and the AI assistant.
+Yes. Opening, editing, converting, and downloading are free with no account. A subscription adds saving to your account, sync across devices, sharing, and live editing together.
 
 More about the editor is on the [Word documents page](/home/documents). To switch a document to another format, see [converting documents](/home/convert).

@@ -92,7 +92,7 @@ The app's native save format (`wdoc.ts`, `WDOC_VERSION = 1`): a ZIP whose first 
 3. Add the name to `Format` and `FORMAT_LIST`, and a line to `HANDLERS` in `convert.ts` (static import only if a few hundred bytes).
 4. If it has extension data: add the interface and key to `Extensions` and to `NAMESPACES` in `wdoc.ts`.
 5. Recognise it: a regex and a `DocumentSource` kind in `source.ts` and `layout/protocol.ts`, a `case` in `load()` in `layout/layoutWorker.ts`, and the extension in `stem`.
-6. Update `conversionIsLossy`, the Open/Save/Export menus and i18n strings, and the assistant tools if any (see `AGENTS.md`).
+6. Update `conversionIsLossy`, the Open/Save/Export menus and i18n strings.
 7. Tests in `client/test/` (`convert.test.ts`, `wdoc.test.ts` are the models), then `pnpm --filter @golemdocs/client build` and read the chunk list.
 
 ## Invariants and gotchas

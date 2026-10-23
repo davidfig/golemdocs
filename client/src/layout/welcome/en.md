@@ -9,14 +9,12 @@ I built Golem Docs because I wanted one editor that opens every kind of document
 - **Mark up PDFs.** Highlight, underline, strike out and leave notes on a PDF's own pages.
 - **Edit PDFs.** Switch to Edit PDF to change a page's text where it sits, move, add or delete pictures and shapes, black out private details, and rearrange pages. Fill In types into a form's fields.
 - **Work together.** Share, in the File menu, lets you invite specific people by email as editors or viewers. Everyone who has the document open edits the same copy, and changes show up live. Sharing needs my server, so it is part of the subscription; editing on your own is free.
-- **Ask the AI.** The AI assistant in the corner can read your document, rewrite or add paragraphs, format text, leave comments, fill in forms and convert to another format, and Undo takes its changes back. It is part of the subscription, because every request costs me money. View › AI Assistant shows or hides it.
 
 ## Try this
 
 1. **Change shape.** In the File menu, choose Convert To, then Markdown. This page turns into plain text with `#` headings, and you can convert it back.
 2. **Open some data.** Drop a CSV file onto the window. It opens as a table you can edit, and downloads as the same CSV.
-3. **Ask the AI.** Open the AI assistant and ask it to summarize this page or make a heading stand out, then press Undo if you want the change back. This one needs a subscription.
-4. **Edit together.** In the File menu, choose Share and add the email of someone who has signed in to Golem Docs. When they open the document from Shared with me, you both edit it live. This one needs a subscription too.
+3. **Edit together.** In the File menu, choose Share and add the email of someone who has signed in to Golem Docs. When they open the document from Shared with me, you both edit it live. This one needs a subscription.
 
 When you're ready, choose New from the File menu for a blank document, or Download when you need a file for someone else.
 
@@ -40,7 +38,6 @@ Everything above that runs in your browser costs me nothing, so it is free. A su
 
 - **Sync** keeps your documents on my server, so you can open them on any device.
 - **Share and edit together** with a link or with specific people.
-- **AI** is built in, with nothing to set up. I pay for every request it makes.
 
 What is left over lets me keep working on Golem Docs. If a subscription ends, your documents stay in this browser, and you can still open documents that a subscriber shares with you. See the [pricing](https://golemdocs.com/home/#pricing) for the cost, or choose File › Subscribe… to get started.
 

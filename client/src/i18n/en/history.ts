@@ -45,5 +45,4 @@ export const history = {
   'trash.deleteTitle': 'Delete {name} for good?',
   'trash.emptyTitle': 'Empty the trash?',
   'trash.close': 'Close',
-  'assistant.tool.versions': 'Looking at the document’s history…',
 } as const;

@@ -3,8 +3,7 @@
 .wm-shared-notice {
   position: fixed;
   right: 16px;
-  /* Above Clip, the assistant, when it is showing (see assistant/). */
-  bottom: calc(16px + var(--wm-clip-clearance, 0px));
+  bottom: 16px;
   z-index: 5;
   width: 260px;
   max-width: calc(100vw - 32px);

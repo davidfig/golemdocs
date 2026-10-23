@@ -1,7 +1,7 @@
 {
   "name": "@golemdocs/server",
   "private": true,
-  "description": "GolemDocs API server: documents, collaboration, accounts and assistant (private workspace package, not on npm)",
+  "description": "GolemDocs API server: documents, collaboration and accounts (private workspace package, not on npm)",
   "version": "0.23.3",
   "type": "module",
   "scripts": {
@@ -10,8 +10,8 @@
     "build": "tsc",
     "typecheck": "tsc",
     "test": "tsx --test \"test/**/*.test.ts\"",
-    "cf:setup": "wrangler d1 create golemdocs-directory && wrangler r2 bucket create golemdocs-files && wrangler vectorize create golemdocs-docs --dimensions=1024 --metric=cosine",
-    "cf:setup:dev": "wrangler d1 create golemdocs-directory-dev && wrangler r2 bucket create golemdocs-files-dev && wrangler vectorize create golemdocs-docs-dev --dimensions=1024 --metric=cosine",
+    "cf:setup": "wrangler d1 create golemdocs-directory && wrangler r2 bucket create golemdocs-files",
+    "cf:setup:dev": "wrangler d1 create golemdocs-directory-dev && wrangler r2 bucket create golemdocs-files-dev",
     "cf:migrate:dev": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env dev --remote",
     "cf:migrate:local": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env local --local",
     "cf:migrate": "tsx ../scripts/wrangler-config.ts && wrangler d1 migrations apply --config wrangler.generated.jsonc DIRECTORY --env=\"\" --remote",

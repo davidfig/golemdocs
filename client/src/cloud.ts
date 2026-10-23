@@ -1,6 +1,7 @@
 // Client for the server's document API (server/src/worker.ts): a user's .docx files, kept in
 // Cloudflare R2 with their catalogue in the user's own D1 database.
 import { decodeIndex, type DocIndex } from '@golemdocs/docx';
+import { ACCOUNT_STORAGE_GB } from '@golemdocs/ops';
 import type { Folder } from './folders.ts';
 import { t } from './i18n/index.ts';
 import type { Manifest } from './storage/chunker.ts';
@@ -67,7 +68,14 @@ export async function send(input: string, init?: RequestInit): Promise<Response>
 async function check(response: Response): Promise<Response> {
   if (response.ok) return response;
   const body = await response.json().then((b: { error?: string; code?: string }) => b, () => undefined);
-  throw new CloudError(response.status, body?.error ?? t('app.requestFailed', { status: response.status }), body?.code);
+  throw new CloudError(response.status, refusalMessage(body?.code) ?? body?.error ?? t('app.requestFailed', { status: response.status }), body?.code);
+}
+
+/** The words for a refusal the person has to act on, in their language (the server's own message is English, for logs). */
+function refusalMessage(code: string | undefined): string | undefined {
+  if (code === 'storage-full') return t('app.storageFull', { limit: ACCOUNT_STORAGE_GB });
+  if (code === 'owner-storage-full') return t('app.ownerStorageFull');
+  return undefined;
 }
 
 /** Where a document's .docx bytes can be fetched (usable as a `docx-url` document source). */

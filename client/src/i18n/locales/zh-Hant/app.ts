@@ -83,6 +83,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': '該文件已不再與你共用',
   'app.noLongerSaved': '該文件已不再儲存於此瀏覽器中',
   'app.requestFailed': '要求失敗（{status}）',
+  'app.storageFull': '你的帳戶已滿：文件、垃圾桶和已命名的版本最多可使用 {limit} GB。請刪除文件或清空垃圾桶以騰出空間。在此之前，你的變更會保存在這台裝置上。',
+  'app.ownerStorageFull': '擁有者的帳戶已滿，你的變更無法儲存到其中。這些變更會保存在這台裝置上。',
   'app.signedOutProblem': '你已被登出。請重新登入以檢視所有文件。',
   'app.cloudUnreachable': '目前只顯示此裝置上的文件：無法連線至你的帳號（{message}）。',
   'app.signOutRequestFailed': '登出失敗（{status}）',

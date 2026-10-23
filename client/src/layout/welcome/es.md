@@ -34,9 +34,9 @@ Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o D
 
 No hay botón de guardar. Cada cambio se conserva en este navegador un momento después de hacerlo, y no necesitas una cuenta. Archivo › Abrir muestra todos tus documentos, y Descargar te da un archivo cuando quieras. Guardar en el navegador y descargar son gratis, sin necesidad de suscripción.
 
-Todo lo anterior que funciona en tu navegador no me cuesta nada, así que es gratis. Una suscripción cuesta 5 $ al mes y paga las partes que me cuesta dinero mantener:
+Todo lo anterior que funciona en tu navegador no me cuesta nada, así que es gratis. Una suscripción cuesta 3 $ al mes y paga las partes que me cuesta dinero mantener:
 
-- **Sincronizar** guarda tus documentos en mi servidor, para que puedas abrirlos en cualquier dispositivo.
+- **Sincronizar** guarda hasta 25 GB de tus documentos en mi servidor, para que puedas abrirlos en cualquier dispositivo.
 - **Compartir y editar en equipo** con un enlace o con personas concretas.
 
 Lo que sobra me permite seguir trabajando en Golem Docs. Si una suscripción termina, tus documentos siguen en este navegador y aún puedes abrir los documentos que un suscriptor comparta contigo. Consulta los [precios](https://golemdocs.com/home/#pricing) para ver el costo, o elige Archivo › Suscribirse… para empezar.

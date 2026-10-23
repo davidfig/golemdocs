@@ -83,6 +83,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': '해당 문서는 더 이상 공유되지 않습니다',
   'app.noLongerSaved': '문서가 더 이상 이 브라우저에 저장되어 있지 않습니다',
   'app.requestFailed': '요청 실패({status})',
+  'app.storageFull': '계정 용량이 가득 찼습니다. 문서, 휴지통, 이름을 붙인 버전은 최대 {limit}GB까지 보관할 수 있습니다. 문서를 삭제하거나 휴지통을 비워 공간을 확보하세요. 그때까지 변경 내용은 이 기기에 보관됩니다.',
+  'app.ownerStorageFull': '소유자의 계정 용량이 가득 차서 변경 내용을 저장할 수 없습니다. 변경 내용은 이 기기에 보관됩니다.',
   'app.signedOutProblem': '로그아웃되었습니다. 모든 문서를 보려면 다시 로그인하십시오.',
   'app.cloudUnreachable': '이 기기에 있는 문서만 표시됩니다. 계정에 연결할 수 없습니다({message}).',
   'app.signOutRequestFailed': '로그아웃 실패({status})',

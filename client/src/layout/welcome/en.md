@@ -34,9 +34,9 @@ When you're ready, choose New from the File menu for a blank document, or Downlo
 
 There is no Save button. Every change is kept in this browser a moment after you make it, and you don't need an account. File › Open shows all your documents, and Download gives you a file whenever you want one. Saving in your browser and downloading are free, with no subscription needed.
 
-Everything above that runs in your browser costs me nothing, so it is free. A subscription is $5 a month and pays for the parts that cost me money to run:
+Everything above that runs in your browser costs me nothing, so it is free. A subscription is $3 a month and pays for the parts that cost me money to run:
 
-- **Sync** keeps your documents on my server, so you can open them on any device.
+- **Sync** keeps up to 25 GB of your documents on my server, so you can open them on any device.
 - **Share and edit together** with a link or with specific people.
 
 What is left over lets me keep working on Golem Docs. If a subscription ends, your documents stay in this browser, and you can still open documents that a subscriber shares with you. See the [pricing](https://golemdocs.com/home/#pricing) for the cost, or choose File › Subscribe… to get started.

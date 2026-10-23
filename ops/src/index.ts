@@ -9,3 +9,4 @@ export * from './multiplayer.ts';
 export * from './objects.ts';
 export * from './textOps.ts';
 export * from './versionPolicy.ts';
+export * from './accountStorage.ts';

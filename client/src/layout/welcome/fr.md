@@ -34,9 +34,9 @@ Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document
 
 Il n'y a pas de bouton Enregistrer. Chaque modification est conservée dans ce navigateur un instant après que vous l'avez faite, et vous n'avez pas besoin de compte. Fichier › Ouvrir affiche tous vos documents, et Télécharger vous donne un fichier quand vous le voulez. L'enregistrement dans votre navigateur et le téléchargement sont gratuits, sans abonnement.
 
-Tout ce qui précède et qui s'exécute dans votre navigateur ne me coûte rien, c'est donc gratuit. Un abonnement coûte 5 $ par mois et paie les parties qui me coûtent de l'argent à faire tourner :
+Tout ce qui précède et qui s'exécute dans votre navigateur ne me coûte rien, c'est donc gratuit. Un abonnement coûte 3 $ par mois et paie les parties qui me coûtent de l'argent à faire tourner :
 
-- **La synchronisation** garde vos documents sur mon serveur, pour les ouvrir sur n'importe quel appareil.
+- **La synchronisation** garde jusqu'à 25 Go de vos documents sur mon serveur, pour les ouvrir sur n'importe quel appareil.
 - **Partager et modifier à plusieurs** avec un lien ou avec des personnes précises.
 
 Ce qui reste me permet de continuer à travailler sur Golem Docs. Si un abonnement prend fin, vos documents restent dans ce navigateur, et vous pouvez toujours ouvrir les documents qu'un abonné partage avec vous. Consultez les [tarifs](https://golemdocs.com/home/#pricing) pour le coût, ou choisissez Fichier › S'abonner… pour commencer.

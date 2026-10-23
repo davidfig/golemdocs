@@ -11,6 +11,7 @@ import type { Env } from './cf.ts';
 import { deleteChunkList, isChunked, previousManifest, type Manifest } from './fileStore.ts';
 import { docxKey, historyKey, historyPrefix } from './keys.ts';
 import { perChunk } from './http.ts';
+import { roomForHistory } from './storage.ts';
 import type { UserDb } from './userDb.ts';
 
 export interface VersionRow {
@@ -34,8 +35,13 @@ export interface Live {
   updated_at: number;
 }
 
-/** How much a checkpoint counts against a document's byte budget: a document kept as chunks shares most of its bytes with its neighbours. */
-const stampOf = (row: VersionRow): VersionStamp => ({ at: row.version, size: row.chunked ? Math.ceil(row.size / 10) : row.size, ...(row.name !== null ? { named: true } : {}) });
+/**
+ * How many bytes a checkpoint counts as keeping, against its document's byte budget and the account's limit (storage.ts): a document
+ * kept as chunks shares most of its bytes with its neighbours.
+ */
+export const storedSize = (row: Pick<VersionRow, 'size' | 'chunked'>): number => (row.chunked ? Math.ceil(row.size / 10) : row.size);
+
+const stampOf = (row: VersionRow): VersionStamp => ({ at: row.version, size: storedSize(row), ...(row.name !== null ? { named: true } : {}) });
 
 const manifestHashes = (manifest: Manifest): string[] => manifest.chunks.map((c) => c.h);
 
@@ -109,11 +115,14 @@ export async function checkpoint(env: Env, ownerId: string, db: UserDb, live: Li
     }
     const chunked = isChunked(object);
     const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+    const size = chunked ? Number(object.customMetadata?.size ?? live.size) : bytes.byteLength;
+    // History lives in the space documents leave in the account: older checkpoints make way, and none is taken when there is no space.
+    if (!(await roomForHistory(env, ownerId, db, storedSize({ size, chunked: chunked ? 1 : 0 })))) return false;
     await env.FILES.put(historyKey(ownerId, live.id, live.updated_at), bytes, {
       httpMetadata: object.httpMetadata ?? {},
       ...(object.customMetadata ? { customMetadata: object.customMetadata } : {}),
     });
-    await db.run('INSERT OR IGNORE INTO versions (doc_id, version, size, name, chunked) VALUES (?, ?, ?, ?, ?)', [live.id, live.updated_at, chunked ? Number(object.customMetadata?.size ?? live.size) : bytes.byteLength, options.name ?? null, chunked ? 1 : 0]);
+    await db.run('INSERT OR IGNORE INTO versions (doc_id, version, size, name, chunked) VALUES (?, ?, ?, ?, ?)', [live.id, live.updated_at, size, options.name ?? null, chunked ? 1 : 0]);
     return true;
   } catch (error) {
     console.error('checkpoint failed', error);

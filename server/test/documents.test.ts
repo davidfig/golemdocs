@@ -184,8 +184,8 @@ test('a batch of many documents takes few requests to Cloudflare', async () => {
   const many = Array.from({ length: 40 }, (_, i) => ({ name: `Doc ${i}.md`, bytes: [i + 1] }));
   const { results } = (await (await call('POST', '/api/documents/batch', { body: batchBody(many) })).json()) as { results: any[] };
   assert.equal(results.filter((r) => r.document).length, 40);
-  // One request for the three inserts (14 rows each), not a folder check and an insert per document.
-  assert.equal(requests, 1);
+  // One request to see that the batch fits in the account, and one for the three inserts (14 rows each), not a folder check and an insert per document.
+  assert.equal(requests, 2);
   assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).length, 41);
 });
 

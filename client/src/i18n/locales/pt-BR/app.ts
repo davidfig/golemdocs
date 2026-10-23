@@ -86,6 +86,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': 'Este documento não está mais compartilhado com você',
   'app.noLongerSaved': 'O documento não está mais salvo neste navegador',
   'app.requestFailed': 'falha na solicitação ({status})',
+  'app.storageFull': 'Sua conta está cheia: ela guarda até {limit} GB de documentos, lixeira e versões com nome. Exclua documentos ou esvazie a lixeira para liberar espaço. Até lá, suas alterações ficam guardadas neste dispositivo.',
+  'app.ownerStorageFull': 'A conta do proprietário está cheia, então suas alterações não podem ser salvas nela. Elas ficam guardadas neste dispositivo.',
   'app.signedOutProblem': 'Você foi desconectado. Entre novamente para ver todos os seus documentos.',
   'app.cloudUnreachable': 'Somente os documentos deste dispositivo são exibidos: não foi possível acessar sua conta ({message}).',
   'app.signOutRequestFailed': 'falha ao sair ({status})',

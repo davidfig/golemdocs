@@ -34,9 +34,9 @@ Quando sei pronto, scegli Nuovo dal menu File per un documento vuoto, oppure Sca
 
 Non c’è alcun pulsante Salva. Ogni modifica viene conservata in questo browser un istante dopo averla fatta, e non serve un account. File › Apri mostra tutti i tuoi documenti, e Scarica ti dà un file quando vuoi. Salvare nel browser e scaricare è gratuito, senza bisogno di abbonamento.
 
-Tutto quello che sta sopra e gira nel tuo browser non mi costa nulla, quindi è gratis. Un abbonamento costa 5 $ al mese e paga le parti che mi costa far funzionare:
+Tutto quello che sta sopra e gira nel tuo browser non mi costa nulla, quindi è gratis. Un abbonamento costa 3 $ al mese e paga le parti che mi costa far funzionare:
 
-- **Sincronizza** tiene i tuoi documenti sul mio server, così puoi aprirli su qualsiasi dispositivo.
+- **Sincronizza** tiene fino a 25 GB dei tuoi documenti sul mio server, così puoi aprirli su qualsiasi dispositivo.
 - **Condividi e modifica insieme** con un collegamento o con persone specifiche.
 
 Quello che avanza mi permette di continuare a lavorare su Golem Docs. Se un abbonamento termina, i tuoi documenti restano in questo browser e puoi comunque aprire i documenti che un abbonato condivide con te. Vedi i [prezzi](https://golemdocs.com/home/#pricing) per il costo, oppure scegli File › Abbonati… per iniziare.

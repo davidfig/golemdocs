@@ -7,7 +7,7 @@ Goal: get real people to open the app, and learn which message makes them stay. 
 - **Strong, true hook:** one editor that opens Word, PDF, Markdown, SVG, ZIP and more, in the browser, free, no account, nothing uploaded.
 - **A story:** a solo builder who lives in Obsidian and got tired of PDF tools (the home page's "Why I built this"), with most of the code written with Claude.
 - **Real differentiators to lead with:** privacy (files never leave the browser), PDF text editing and true redaction, Word 2003 feel, 50 MB text files without freezing, Obsidian vault import.
-- **Paid product:** $5 a month for sync, sharing and live editing. Free use is the funnel, so every channel below sells the free tool.
+- **Paid product:** $3 a month for sync, sharing and live editing. Free use is the funnel, so every channel below sells the free tool.
 
 ## Who to reach (in order)
 

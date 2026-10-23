@@ -41,6 +41,8 @@ function fakeDirectory(): { db: DatabaseSync; binding: any } {
 export interface World {
   env: Env;
   directory: DatabaseSync;
+  /** A user's own database (made on their first change), to look at or arrange directly. */
+  userDatabase(userId: string): DatabaseSync;
   /** R2 objects by key. */
   objects: Map<string, { bytes: ArrayBuffer; contentType?: string; etag?: string; customMetadata?: Record<string, string> }>;
   /** A request to the worker, signed in as `as` (the DEV_USER identity; null: not signed in). */
@@ -150,6 +152,12 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
   return {
     env,
     directory: directory.db,
+    userDatabase: (userId) => {
+      const row = directory.db.prepare('SELECT database_id FROM users WHERE user_id = ?').get(userId) as { database_id: string } | undefined;
+      const db = row && userDatabases.get(row.database_id);
+      if (!db) throw new Error(`${userId} has no database yet`);
+      return db;
+    },
     objects,
     roomCalls,
     background,

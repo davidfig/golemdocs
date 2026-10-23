@@ -34,9 +34,9 @@ Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, 
 
 Es gibt keine Schaltfläche zum Speichern. Jede Änderung wird kurz nach dem Vornehmen in diesem Browser gesichert, und Sie brauchen kein Konto. Datei › Öffnen zeigt alle Ihre Dokumente, und Herunterladen gibt Ihnen jederzeit eine Datei. Das Speichern im Browser und das Herunterladen sind kostenlos, ein Abonnement ist dafür nicht nötig.
 
-Alles oben, was in Ihrem Browser läuft, kostet mich nichts und ist deshalb kostenlos. Ein Abonnement kostet 5 $ im Monat und bezahlt die Teile, deren Betrieb mich Geld kostet:
+Alles oben, was in Ihrem Browser läuft, kostet mich nichts und ist deshalb kostenlos. Ein Abonnement kostet 3 $ im Monat und bezahlt die Teile, deren Betrieb mich Geld kostet:
 
-- **Synchronisieren** speichert Ihre Dokumente auf meinem Server, sodass Sie sie auf jedem Gerät öffnen können.
+- **Synchronisieren** speichert bis zu 25 GB Ihrer Dokumente auf meinem Server, sodass Sie sie auf jedem Gerät öffnen können.
 - **Freigeben und gemeinsam bearbeiten** per Link oder mit bestimmten Personen.
 
 Was übrig bleibt, lässt mich weiter an Golem Docs arbeiten. Wenn ein Abonnement endet, bleiben Ihre Dokumente in diesem Browser, und Sie können weiterhin Dokumente öffnen, die ein Abonnent mit Ihnen teilt. Die Kosten finden Sie unter [Preise](https://golemdocs.com/home/#pricing), oder wählen Sie Datei › Abonnieren…, um loszulegen.

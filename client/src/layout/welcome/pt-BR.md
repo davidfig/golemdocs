@@ -34,9 +34,9 @@ Quando estiver pronto, escolha Novo no menu Arquivo para um documento em branco,
 
 Não há botão Salvar. Cada alteração é mantida neste navegador um instante depois de você fazê-la, e você não precisa de uma conta. Arquivo › Abrir mostra todos os seus documentos, e Baixar dá a você um arquivo quando quiser. Salvar no navegador e baixar são gratuitos, sem precisar de assinatura.
 
-Tudo o que foi descrito acima e roda no seu navegador não me custa nada, então é grátis. A assinatura custa US$ 5 por mês e paga as partes que me custam dinheiro para manter:
+Tudo o que foi descrito acima e roda no seu navegador não me custa nada, então é grátis. A assinatura custa US$ 3 por mês e paga as partes que me custam dinheiro para manter:
 
-- **Sincronizar** guarda os seus documentos no meu servidor, para que você possa abri-los em qualquer dispositivo.
+- **Sincronizar** guarda até 25 GB dos seus documentos no meu servidor, para que você possa abri-los em qualquer dispositivo.
 - **Compartilhar e editar em conjunto** com um link ou com pessoas específicas.
 
 O que sobra me permite continuar trabalhando no Golem Docs. Se uma assinatura terminar, os seus documentos continuam neste navegador, e você ainda pode abrir documentos que um assinante compartilhe com você. Veja os [preços](https://golemdocs.com/home/#pricing) para saber o valor, ou escolha Arquivo › Assinar… para começar.

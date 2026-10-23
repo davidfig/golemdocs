@@ -83,6 +83,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': 'そのドキュメントは共有されなくなりました',
   'app.noLongerSaved': 'このドキュメントはこのブラウザーに保存されていません',
   'app.requestFailed': 'リクエストに失敗しました({status})',
+  'app.storageFull': 'アカウントの容量がいっぱいです。ドキュメント、ごみ箱、名前を付けた版で使えるのは最大 {limit} GB です。ドキュメントを削除するか、ごみ箱を空にして空き容量を作ってください。それまで、変更はこのデバイスに保存されます。',
+  'app.ownerStorageFull': '所有者のアカウントの容量がいっぱいのため、変更をそこに保存できません。変更はこのデバイスに保存されます。',
   'app.signedOutProblem': 'サインアウトされました。すべてのドキュメントを表示するには、もう一度サインインしてください。',
   'app.cloudUnreachable': 'このデバイス上のドキュメントのみを表示しています。アカウントに接続できません({message})。',
   'app.signOutRequestFailed': 'サインアウトに失敗しました({status})',

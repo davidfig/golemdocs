@@ -86,6 +86,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': 'Quel documento non è più condiviso con te',
   'app.noLongerSaved': 'Il documento non è più salvato in questo browser',
   'app.requestFailed': 'richiesta non riuscita ({status})',
+  'app.storageFull': 'Il tuo account è pieno: contiene fino a {limit} GB tra documenti, cestino e versioni con nome. Elimina documenti o svuota il cestino per fare spazio. Fino ad allora, le modifiche restano su questo dispositivo.',
+  'app.ownerStorageFull': 'L’account del proprietario è pieno, quindi le tue modifiche non possono esservi salvate. Restano su questo dispositivo.',
   'app.signedOutProblem': 'Sei stato disconnesso. Accedi di nuovo per vedere tutti i tuoi documenti.',
   'app.cloudUnreachable': 'Vengono mostrati solo i documenti su questo dispositivo: il tuo account non è raggiungibile ({message}).',
   'app.signOutRequestFailed': 'disconnessione non riuscita ({status})',

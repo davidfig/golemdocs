@@ -83,6 +83,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': '该文档已不再与你共享',
   'app.noLongerSaved': '该文档已不再保存于此浏览器中',
   'app.requestFailed': '请求失败（{status}）',
+  'app.storageFull': '你的账户已满：文档、废纸篓和已命名的版本最多可使用 {limit} GB。请删除文档或清空废纸篓以腾出空间。在此之前，你的更改会保存在这台设备上。',
+  'app.ownerStorageFull': '所有者的账户已满，你的更改无法保存到其中。这些更改会保存在这台设备上。',
   'app.signedOutProblem': '你已退出登录。请重新登录以查看所有文档。',
   'app.cloudUnreachable': '当前仅显示此设备上的文档：无法连接至你的账户（{message}）。',
   'app.signOutRequestFailed': '退出登录失败（{status}）',

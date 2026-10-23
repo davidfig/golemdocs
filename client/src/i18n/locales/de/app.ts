@@ -86,6 +86,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': 'Dieses Dokument wird nicht mehr mit Ihnen geteilt',
   'app.noLongerSaved': 'Das Dokument ist nicht mehr in diesem Browser gespeichert',
   'app.requestFailed': 'Anfrage fehlgeschlagen ({status})',
+  'app.storageFull': 'Ihr Konto ist voll: Es fasst bis zu {limit} GB an Dokumenten, Papierkorb und benannten Versionen. Löschen Sie Dokumente oder leeren Sie den Papierkorb, um Platz zu schaffen. Bis dahin bleiben Ihre Änderungen auf diesem Gerät.',
+  'app.ownerStorageFull': 'Das Konto des Eigentümers ist voll, daher können Ihre Änderungen dort nicht gespeichert werden. Sie bleiben auf diesem Gerät.',
   'app.signedOutProblem': 'Sie wurden abgemeldet. Melden Sie sich erneut an, um alle Ihre Dokumente zu sehen.',
   'app.cloudUnreachable': 'Es werden nur die Dokumente auf diesem Gerät angezeigt: Ihr Konto ist nicht erreichbar ({message}).',
   'app.signOutRequestFailed': 'Abmeldung fehlgeschlagen ({status})',

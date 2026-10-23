@@ -10,9 +10,10 @@ import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkFolder, type FolderRow } from './folders.ts';
 import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
-import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, versionsOf, type VersionRow } from './versions.ts';
+import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
+import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, userDb, type UserDb } from './userDb.ts';
 
@@ -165,6 +166,8 @@ async function uploadBatch(env: Env, userId: string, db: UserDb, body: ArrayBuff
     const chunk = wanted.slice(i, i + IDS_PER_QUERY);
     for (const row of await db.all<{ id: string }>(`SELECT id FROM folders WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk)) folders.add(row.id);
   }
+  // The whole batch fits in the account, or none of it goes in.
+  await requireRoom(env, userId, db, items.reduce((sum, item) => sum + (item.size > MAX_BYTES ? 0 : item.size), 0));
 
   const results: Uploaded[] = [];
   const saved: { id: string; name: string; size: number; folderId: string | null; index: number }[] = [];
@@ -374,6 +377,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const name = cleanName(url.searchParams.get('name')) ?? 'Untitled.docx';
     const folderId = url.searchParams.get('folder');
     if (folderId !== null && !(await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
+    await requireRoom(env, userId, ownDb, delta ? deltaSize(bytes, MAX_DELTA_BYTES) : bytes.byteLength);
     const now = Date.now();
     // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
     let size = bytes.byteLength;
@@ -551,6 +555,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         const body = (await request.json().catch(() => null)) as { name?: unknown } | null;
         const name = typeof body?.name === 'string' ? cleanName(body.name) : null;
         if (typeof body?.name === 'string' && !name) throw new HttpError(400, 'expected a name');
+        // A named version counts against the account like a document (as its whole size: whether the file is kept as chunks is not known here).
+        if (name) await requireRoom(env, ownerId, db, row.size, { own: ownerId === userId });
         if (!(await checkpoint(env, ownerId, db, row, { force: true, ...(name ? { name } : {}) }))) throw new HttpError(503, 'could not save the version; try again');
         const saved = await db.first<VersionRow>('SELECT * FROM versions WHERE doc_id = ? AND version = ?', [id, row.updated_at]);
         return json(saved ? describeVersion(saved) : { version: row.updated_at }, 201);
@@ -573,6 +579,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         const body = (await request.json().catch(() => null)) as { name?: unknown } | null;
         const name = body?.name === null ? null : typeof body?.name === 'string' ? cleanName(body.name) : undefined;
         if (name === undefined || (typeof body?.name === 'string' && !name)) throw new HttpError(400, 'expected { name }');
+        // Naming an automatic version makes it count against the account.
+        if (kept.name === null && name !== null) await requireRoom(env, ownerId, db, storedSize(kept), { own: ownerId === userId, alreadyStored: true });
         await db.run('UPDATE versions SET name = ? WHERE doc_id = ? AND version = ?', [name, id, version]);
         return json(describeVersion({ ...kept, name }));
       }
@@ -590,6 +598,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       const bytes = await readDocument(env, historyKey(ownerId, id, version), ownerId, id, MAX_BYTES);
       if (bytes === null) throw new HttpError(404, 'version file is missing');
       if (bytes === 'too-large') throw new HttpError(413, 'document too large');
+      await requireRoom(env, userId, ownDb, bytes.byteLength);
       const docId = crypto.randomUUID();
       const name = cleanName(url.searchParams.get('name')) ?? row.name;
       const now = Date.now();
@@ -661,6 +670,9 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const delta = isDelta(request);
     const body = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
     const name = cleanName(url.searchParams.get('name')) ?? row.name;
+    const nextSize = delta ? deltaSize(body, MAX_DELTA_BYTES) : body.byteLength;
+    // Only what the save adds counts: one that keeps the size or shrinks the document goes in however full the account is.
+    await requireRoom(env, ownerId, db, nextSize - row.size, { own: ownerId === userId });
     // With a base, the bytes go in only if nobody else's did since the row was read: two saves
     // from the same base both pass the check above, and without this the later one's bytes would
     // replace the earlier one's while the row still described the earlier one.
@@ -671,7 +683,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     let added: string[] = [];
     let dropped: string[] = [];
     // Keep what this save replaces, when the rules say it is due (versions.ts). Before the bytes go in, and never a reason to refuse the save.
-    await checkpoint(env, ownerId, db, row, { nextSize: delta ? deltaSize(body, MAX_DELTA_BYTES) : body.byteLength, ...(current ? { etag: current.etag } : {}) });
+    await checkpoint(env, ownerId, db, row, { nextSize, ...(current ? { etag: current.etag } : {}) });
     if (delta) {
       const saved = await applyDelta(env, ownerId, id, row.r2_key, body, await previousManifest(env, row.r2_key), { maxBytes: MAX_BYTES, ...(current ? { etagMatches: current.etag } : {}) });
       ({ added, dropped } = saved);

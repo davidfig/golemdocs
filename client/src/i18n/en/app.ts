@@ -86,6 +86,8 @@ export const app = {
   'app.sharedGone': 'That document is no longer shared with you',
   'app.noLongerSaved': 'The document is no longer saved in this browser',
   'app.requestFailed': 'request failed ({status})',
+  'app.storageFull': 'Your account is full: it keeps up to {limit} GB of documents, trash and versions you named. Delete documents or empty the trash to make room. Until then, your changes are kept on this device.',
+  'app.ownerStorageFull': 'The owner’s account is full, so your changes can’t be saved to it. They are kept on this device.',
   'app.signedOutProblem': 'You’ve been signed out. Sign in again to see all your documents.',
   'app.cloudUnreachable': 'Only the documents on this device are shown: your account can’t be reached ({message}).',
   'app.signOutRequestFailed': 'sign-out failed ({status})',

@@ -86,6 +86,8 @@ export const app: Partial<Messages> = {
   'app.sharedGone': 'Ese documento ya no se comparte contigo',
   'app.noLongerSaved': 'El documento ya no está guardado en este navegador',
   'app.requestFailed': 'la solicitud falló ({status})',
+  'app.storageFull': 'Tu cuenta está llena: guarda hasta {limit} GB de documentos, papelera y versiones con nombre. Elimina documentos o vacía la papelera para liberar espacio. Mientras tanto, tus cambios se guardan en este dispositivo.',
+  'app.ownerStorageFull': 'La cuenta del propietario está llena, así que tus cambios no se pueden guardar en ella. Se guardan en este dispositivo.',
   'app.signedOutProblem': 'Se cerró tu sesión. Inicia sesión de nuevo para ver todos tus documentos.',
   'app.cloudUnreachable': 'Solo se muestran los documentos de este dispositivo: no se puede acceder a tu cuenta ({message}).',
   'app.signOutRequestFailed': 'error al cerrar sesión ({status})',

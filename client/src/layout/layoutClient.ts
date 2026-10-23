@@ -47,7 +47,6 @@ export class LayoutClient {
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
-  private readonly agentRequests = new Map<number, (result: string | { text: string; images: string[] }) => void>();
 
   /** Finds the stored document an embed (`![[Note]]`) names, as its name and bytes (set by the page, which knows what is stored). */
   embeds: ((title: string) => Promise<{ name: string; bytes: ArrayBuffer } | null>) | null = null;
@@ -194,15 +193,6 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'pictureBase', doc: this.doc, request })).then((bytes) => new Uint8Array(bytes));
   }
 
-  /** Runs one of the assistant's tools on the open document (see agentTools.ts). Answers with what it did or found, and any pictures it fetched for the model. */
-  agent(name: string, args: string): Promise<string | { text: string; images: string[] }> {
-    const request = this.nextRequest++;
-    return new Promise((resolve) => {
-      this.agentRequests.set(request, resolve);
-      this.send({ type: 'agent', doc: this.doc, request, name, args });
-    });
-  }
-
   /** What is wrong in each of some lines of a plain text file, or (`at`) the problem under an offset of one of them. */
   spellText(texts: string[], sample: string, what: { spelling: boolean; grammar: boolean }, at?: { index: number; offset: number }): Promise<{ marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }> {
     const request = this.nextRequest++;
@@ -238,11 +228,6 @@ export class LayoutClient {
     if (message.type === 'spellText') {
       this.spellRequests.get(message.request)?.(message);
       this.spellRequests.delete(message.request);
-      return;
-    }
-    if (message.type === 'agentResult') {
-      this.agentRequests.get(message.request)?.(message.images?.length ? { text: message.result, images: message.images } : message.result);
-      this.agentRequests.delete(message.request);
       return;
     }
     if (message.type === 'media' || message.type === 'saved') {

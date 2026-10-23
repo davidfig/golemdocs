@@ -1,16 +1,16 @@
 # Golem Docs - Terms of Service
 
-Last updated: September 30, 2026
+Last updated: October 23, 2026
 
 These terms are the agreement between you and Golem Docs (golemdocs.com) for using the service. By using it, you agree to them. If you don't, please don't use it.
 
 ## The service
 
-Golem Docs is an editor in your browser for Word, PDF, Markdown and other documents, with an optional paid subscription for syncing documents between devices, sharing them, and an AI assistant. We may change, add or remove features, and we may stop the service, though we'll try to give notice when that would affect your documents.
+Golem Docs is an editor in your browser for Word, PDF, Markdown and other documents, with an optional paid subscription for syncing documents between devices and sharing them. We may change, add or remove features, and we may stop the service, though we'll try to give notice when that would affect your documents.
 
 ## Your account
 
-You can use the editor without an account. Syncing, sharing and the assistant need a subscription, described below. To sign in, you use a Google, Microsoft, GitHub or Apple account. Keep that account secure: you're responsible for what happens under it. You must be at least 13 years old, and old enough to accept these terms where you live.
+You can use the editor without an account. Syncing and sharing need a subscription, described below. To sign in, you use a Google, Microsoft, GitHub or Apple account. Keep that account secure: you're responsible for what happens under it. You must be at least 13 years old, and old enough to accept these terms where you live.
 
 ## What is free and what needs a subscription
 
@@ -22,15 +22,11 @@ You can use the editor without an account. Syncing, sharing and the assistant ne
 
 - Saving your documents to your account, so they follow you to your other devices.
 - Sharing documents with a link or with specific people, and editing together live.
-- The AI assistant, which uses AI to read and edit the document you have open.
 
 **Limits.** These apply to the subscription today. We may change them, and if we do we'll say so in the app.
 
 - A single document saved to your account can be at most 50 MB.
 - We don't set a number of documents you may save, but we may limit use that is far beyond normal so the service stays fair for everyone.
-- The assistant has a monthly allowance, measured by how much text it reads and writes for you. The app shows how much is left. It starts over at the beginning of each calendar month (UTC), unused allowance doesn't carry over, and when it is used up the assistant stops until the next month.
-- A single conversation with the assistant can only be so long (about 60,000 characters). After that, start a new one.
-- The assistant may be unavailable from time to time.
 
 ## Subscriptions and payment
 
@@ -66,8 +62,6 @@ We may remove content, or suspend or close accounts, that break these rules or p
 ## Your responsibility for your files
 
 Golem Docs converts documents between formats, and a conversion may not preserve everything. Keep a copy of anything important, and check the result before you rely on it. Files saved only in your browser are lost if you clear your browser's data.
-
-The assistant uses an AI language model. It can be wrong, misread your document, or make changes you didn't ask for. Check what it did before you rely on it; Undo takes its changes back. Don't ask it to read anything you aren't allowed to send to the AI service described in our Privacy Policy.
 
 ## No warranty
 

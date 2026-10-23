@@ -14,7 +14,7 @@ How it works: the text is drawn with WebGL from signed-distance-field glyph atla
 
 It looks like Word 2003 on purpose: menus and toolbars, no ribbon.
 
-It is free with no account. $5 a month adds sync, sharing and live editing, and an AI assistant (the part that costs me money per request).
+It is free with no account. $5 a month adds sync, sharing and live editing (the parts that cost me money to run).
 
 Much of the code was written with Claude with me steering. It is still growing, so if a file does not open the way it should, tell me and it goes on the list.
 
@@ -42,7 +42,7 @@ Short story of the build: the layout engine, the MSDF atlases and why fonts are 
 
 **Tagline (60 characters):** One editor for Word, PDF, Markdown and more, in your browser
 
-**Description:** Open, edit and convert Word, PDF, Markdown, HTML, SVG, images and ZIPs in a Word 2003-style editor. Free with no account and nothing uploaded; $5 a month adds sync, sharing, live editing and an AI assistant.
+**Description:** Open, edit and convert Word, PDF, Markdown, HTML, SVG, images and ZIPs in a Word 2003-style editor. Free with no account and nothing uploaded; $5 a month adds sync, sharing and live editing.
 
 **First comment (from the maker):** the story paragraph from the Show HN post, plus "what file would you like to see open?"
 

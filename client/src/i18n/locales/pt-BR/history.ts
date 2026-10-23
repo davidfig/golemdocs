@@ -47,5 +47,4 @@ export const history: Partial<Messages> = {
   'trash.deleteTitle': 'Excluir {name} de vez?',
   'trash.emptyTitle': 'Esvaziar a lixeira?',
   'trash.close': 'Fechar',
-  'assistant.tool.versions': 'Consultando o histórico do documento…',
 };

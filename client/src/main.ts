@@ -13,7 +13,6 @@ import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { rememberNewKind } from './ui/newKinds.ts';
-import { appTools } from './assistant/appTools.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
 import { keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
@@ -40,7 +39,7 @@ import {
   putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
-import { folderOf, folderPath, type Folder } from './folders.ts';
+import { folderOf, folderPath } from './folders.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
 import { stopSettingsSync, syncSettings } from './settingsSync.ts';
@@ -68,9 +67,6 @@ import { NewVersionNotice } from './ui/newVersionNotice.ts';
 import { UpdateNotice } from './ui/updateNotice.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { WatchBanner } from './ui/watchBanner.ts';
-import { Assistant } from './assistant/index.ts';
-import { searchServer } from './assistant/api.ts';
-import { OtherDocuments, type StoredDocument } from './assistant/libraryDocs.ts';
 import { IndexWorker } from './search/indexClient.ts';
 import { SearchLibrary, type SearchHit } from './search/searchLibrary.ts';
 import { searchableDocuments, type SourceDeps } from './search/sources.ts';
@@ -112,9 +108,9 @@ import { VaultService } from './desktop/vaultService.ts';
 import { UpdateService } from './desktop/updateService.ts';
 import { UpdateDialog } from './ui/updateDialog.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
-import { loadTrash, restoreById, type TrashDeps, type TrashItem } from './trash.ts';
+import { type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
-import { deviceVersionBytes, loadHistory, restoreFromAccount, restoredName, saveNamedVersion, type HistoryEntry, type HistoryTarget } from './history.ts';
+import { deviceVersionBytes, restoreFromAccount, restoredName, type HistoryEntry, type HistoryTarget } from './history.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
 import { showOptions } from './ui/optionsDialog.ts';
 import { Footer } from './ui/footer.ts';
@@ -145,7 +141,6 @@ import { LARGE_TEXT_BYTES, hasExtension, isProseName, textFileName, usesTextEngi
 import { isVectorFormat } from './formats/roomDoc.ts';
 import { ensureUids } from './vector/nodes.ts';
 import type { Scene } from './vector/model.ts';
-import type { Collaboration } from './assistant/appTools.ts';
 import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
 import { rewriteDocumentLinks } from './formats/docLinks.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
@@ -623,9 +618,6 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       drawLayer.bind(state.width, state.height, state.shapes);
       if (isPicture()) void loadPictureBase();
       requestRender();
-      const echo = shapesEcho;
-      shapesEcho = null;
-      echo?.();
     },
   }, requestedRoom, keptRoom !== null, keptRoom ? options.version : undefined);
   focusInput();
@@ -699,14 +691,6 @@ function refuseWhileWatching(): boolean {
   if (!room?.watching) return !!room?.catchingUp;
   reportError(room.holder?.mine ? t('room.watchingMineNoEdit') : t('room.watchingNoEdit', { name: room.holder?.name ?? '' }));
   return true;
-}
-
-/** For the assistant: why the open document can't be changed while someone else holds it. */
-function whyWatching(): string {
-  const holder = current.room?.holder;
-  return holder?.mine
-    ? 'the person is editing this document on another of their devices, so it can only be looked at here; take it over (collaboration take_over) to change it.'
-    : `${holder?.name ?? 'someone else'} is editing this document now, so it can only be looked at; take it over (collaboration take_over) to change it.`;
 }
 
 /**
@@ -1284,7 +1268,6 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
   sharedDeviceNotice.update({ signedIn: signedIn !== null });
-  assistant.update({ signedIn: signedIn !== null });
   // Interface settings follow the account (and a reload shows what came from it); see settingsSync.ts.
   if (account) void syncSettings(account.id, { reload: reloadForSettings });
   else stopSettingsSync();
@@ -1931,7 +1914,7 @@ window.addEventListener('storage', (event) => {
 /** A delete of more than this many documents and folders shows a progress card. */
 const DELETE_PROGRESS_FROM = 200;
 
-/** Deletes documents (from the dashboard, or the assistant): from the account in one request, and this browser's copies. */
+/** Deletes documents (from the dashboard): from the account in one request, and this browser's copies. */
 async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: readonly string[] = []): Promise<void> {
   const deletingOpen = entries.some((entry) => entry.local && entry.local.id === current.localId);
   const open = current;
@@ -2431,8 +2414,6 @@ let layerSteps = { canUndo: false, canRedo: false };
 /** A drawing edited together: whether the person's own changes to it can be stepped back over or forward again, and the drawing as the room last had it (with the ids its nodes have there). */
 let vectorSteps = { canUndo: false, canRedo: false };
 let latestVectorScene: Scene | null = null;
-/** Called when the worker next sends the picture's shapes (the answer to a change of them). */
-let shapesEcho: (() => void) | null = null;
 const isPicture = (): boolean => PICTURE_KINDS.includes(current.kind);
 /** A vector drawing is open: a page showing it, looked at as a whole like a picture. */
 const isDrawing = (): boolean => VECTOR_KINDS.includes(current.kind);
@@ -2498,24 +2479,6 @@ function putEditedPicture(back: NonNullable<typeof pendingPicture>): void {
   worker.command({ kind: 'select', paragraph: back.at.paragraph, from: back.at.offset, to: back.at.offset + 1 });
   worker.replacePicture(back.bytes, back.ext, back.aspect);
   documentEdited();
-}
-
-/** The assistant opens the picture it selected in the image editor, once the page has heard which is selected. */
-async function editTextPicture(): Promise<string | null> {
-  if (pictureDetour || current.detour) return 'a picture is already open in the image editor.';
-  if (!FORMATS[current.kind].editable) return 'this document cannot be changed.';
-  for (let waited = 0; waited < 3000 && !selectedPicture; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
-  if (!selectedPicture) return 'the picture is not selected.';
-  if (selectedPicture.svg) return 'that is a vector drawing: open it with text_drawings.';
-  await editPicture(selectedPicture);
-  for (let waited = 0; waited < 5000 && !current.detour; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
-  return current.detour ? null : 'the picture could not be opened.';
-}
-
-async function finishTextPicture(apply: boolean): Promise<string | null> {
-  if (!pictureDetour || !current.detour) return 'no picture from the document is open in the image editor.';
-  await finishPictureDetour(apply);
-  return pictureDetour ? 'the picture could not be put back.' : null;
 }
 
 /** The picture whose own pixels the Draw layer has been given (a fill finds its region in them), or null. */
@@ -4329,7 +4292,6 @@ const chromeHost = createChromeHost({
   downloadAll,
   importZip,
   importPicked: (files) => importDropped(pickedFolder(files)),
-  toggleClip: () => assistant.setVisible(!assistant.visible),
   print,
   showSearchAll: () => searchPanel.show(),
   showFind: (tab) => (textView.active ? textEngine.find(tab) : findDialog.show(tab)),
@@ -4902,31 +4864,6 @@ new NewVersionNotice(document.body, () => openSource('changelog'));
 // The site updated while this page was open: offer a reload, once what is open is saved.
 new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForSettings(), updateService ? async () => (await updateService.check()) !== null : undefined);
 
-/**
- * The person's other documents, for the assistant: this browser's copies and the account's, and
- * what others shared with them. Everything but the open document.
- */
-const otherDocuments = new OtherDocuments(async () => {
-  const own: StoredDocument[] = library.entries
-    .filter((e) => e.key !== current.localId && e.cloud?.id !== current.shared?.id)
-    .map((e) => ({
-      id: e.key,
-      name: e.name,
-      updatedAt: e.updatedAt,
-      size: e.size,
-      ...(e.cloud && { cloudId: e.cloud.id }),
-      load: async () => (e.local && !opensFromCloud(e) ? (await getSaved(e.local.id))?.bytes : null) ?? downloadDocument(e.cloud!.id),
-    }));
-  const shared: StoredDocument[] = signedIn
-    ? (await listShared().catch(() => [])).filter((d) => d.id !== current.shared?.id).map((d) => ({ id: d.id, name: d.name, updatedAt: d.updatedAt, size: d.size, place: `shared by ${d.owner?.name ?? d.owner?.email ?? 'someone'}`, load: () => downloadDocument(d.id) }))
-    : [];
-  return [...own, ...shared];
-}, searchServer, async (query) => {
-  const docs = await searchableNow();
-  await searchLibrary.sync(docs);
-  return searchLibrary.search(query, docs);
-});
-
 // --- Searching every document ------------------------------------------------------------------
 // Each document has an index kept in this browser (see search/searchLibrary.ts); the panel searches
 // those. Copies kept here are indexed in the background; the rest (documents only the account has,
@@ -4986,168 +4923,6 @@ const searchPanel = new SearchPanel({
   open: openSearchHit,
   focusEditor: focusInput,
 });
-
-/** The folders documents are kept in: the account's, or this browser's. */
-const listFoldersHere = async (): Promise<Folder[]> => (account ? await listFolders() : await listLocalFolders());
-
-// The assistant's tools that act on the app rather than the document's text (see assistant/appTools.ts).
-// --- What the assistant does with drawings in the text and with editing together --------------------------------------------
-
-/** The drawings in the text, in reading order: where each is, and what is needed to open it. */
-function textDrawingRefs(): { number: number; pageId: number; svg: string; embed?: string; width: number; height: number }[] {
-  const out: { number: number; pageId: number; svg: string; embed?: string; width: number; height: number }[] = [];
-  pages.forEach((page, index) => {
-    for (const image of page.images) {
-      if (!image.svg) continue;
-      // Points to pixels at 96 dpi.
-      out.push({ number: index + 1, pageId: page.id, svg: image.svg, ...(image.embed !== undefined && { embed: image.embed }), width: Math.round((image.width * 4) / 3), height: Math.round((image.height * 4) / 3) });
-    }
-  });
-  return out;
-}
-
-async function openTextDrawing(index: number): Promise<string | null> {
-  if (isDrawing()) return 'the open document is a drawing already.';
-  if (embeddedDrawing) return 'a drawing in the text is being edited: close it first (text_drawings close).';
-  const ref = textDrawingRefs()[index];
-  if (!ref) return `there is no drawing ${index}: see text_drawings list.`;
-  if (!FORMATS[current.kind].editable) return 'this document cannot be changed.';
-  // A drawing embedded from another document is saved into that one, and this one is opened again: that takes it out of a room.
-  if (ref.embed !== undefined && sharedLive()) return 'a drawing embedded from another document cannot be edited while others are editing this one.';
-  await editEmbeddedDrawing(ref.pageId, ref.svg, ref.embed);
-  return embeddedDrawing ? null : 'the drawing could not be opened.';
-}
-
-async function closeTextDrawing(): Promise<string | null> {
-  if (!embeddedDrawing) return 'no drawing in the text is open.';
-  await leaveEmbeddedDrawing();
-  return embeddedDrawing ? 'the drawing could not be put back.' : null;
-}
-
-async function insertTextDrawing(size: { width?: number; height?: number }): Promise<string | null> {
-  if (isDrawing() || isPicture()) return 'the open document is not text.';
-  if (embeddedDrawing) return 'a drawing in the text is being edited: close it first (text_drawings close).';
-  if (!FORMATS[current.kind].editable || !chromeHost.supports({ kind: 'insertDrawing' })) return 'a drawing cannot be put in this kind of document (Word and Markdown can hold them).';
-  if (current.kind === 'md' && sharedLive()) return 'a drawing cannot be added to a Markdown note while others are editing it.';
-  insertDrawing(size);
-  // It opens for drawing once it is in the text (a Markdown note is stored, embedded and opened again first).
-  for (let waited = 0; waited < 20_000; waited += 100) {
-    if (embeddedDrawing) return null;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return 'the drawing was not put in the text.';
-}
-
-/** Who is editing the open document with this person. */
-function collaboration(): Collaboration {
-  const net = current.room;
-  const people = net ? net.people.map((p) => (p.me ? `${p.name} (you)` : p.name)) : [];
-  const count = net ? net.people.length : 1;
-  const holder = net?.holder ? { ...net.holder, here: !net.watching } : null;
-  return { shared: count > 1, people, count, holder };
-}
-
-const assistantTools = appTools({
-  textEditor: () => textView.editor,
-  current: () => current,
-  documentName: () => current.name,
-  documentKind: () => current.kind,
-  agent: (name, args) => worker.agent(name, args),
-  files: {
-    cloud: () => account !== null,
-    entries: () => library.entries,
-    folders: listFoldersHere,
-    deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
-    trash: async () => (await loadTrash(trashDeps)).items,
-    restoreFromTrash: (ids) => restoreById(trashDeps, ids),
-    rename: renameListed,
-    changed: () => refreshLibrary(),
-  },
-  history: {
-    async list() {
-      // What was typed a moment ago is part of the history it is about to list.
-      saveIfEdited();
-      await saving;
-      const target = historyTarget();
-      if (!target) return 'Error: this document has not been saved yet, so it has no history.';
-      const { entries, unreachable } = await loadHistory(target);
-      const lines = entries.map((e) => `${e.source} version ${e.version}: saved ${new Date(e.version).toISOString()}, ${e.size} bytes${e.name !== null ? `, named "${e.name}"` : ''}`);
-      const note = unreachable.length ? ` (The versions kept ${unreachable.map((s) => (s === 'account' ? 'in the account' : 'on this device')).join(' and ')} could not be loaded.)` : '';
-      return lines.length ? `${lines.join('\n')}${note}` : `There are no earlier versions yet; they are kept as the document is edited.${note}`;
-    },
-    async save(name) {
-      saveIfEdited();
-      await saving;
-      const target = historyTarget();
-      if (!target) return 'Error: this document has not been saved yet, so it has no history.';
-      if (current.shared?.role === 'viewer') return 'Error: the person can only view this document, not keep versions of it.';
-      await saveNamedVersion(target, name);
-      return `Kept the document as it is now as the version "${name}".`;
-    },
-    async restore(source, version) {
-      const target = historyTarget();
-      if (!target) return 'Error: this document has not been saved yet, so it has no history.';
-      if (current.shared?.role === 'viewer') return 'Error: the person can only view this document, not open its versions.';
-      const entry = (await loadHistory(target)).entries.find((e) => e.source === source && e.version === version);
-      if (!entry) return `Error: there is no ${source} version ${version}; use list.`;
-      const ready = nextDocumentReady();
-      const name = await openVersion(entry);
-      await ready;
-      return `Opened the version as a new document named "${name}". It is the open document now; the one it came from is unchanged.`;
-    },
-  },
-  otherDocuments,
-  renamable,
-  renameDocument,
-  convertTo,
-  inRoom: () => sharedLive(),
-  openEntry: async (entry) => {
-    const ready = nextDocumentReady();
-    newDocumentFolder = null;
-    showLoading(entry.name);
-    openSource(sourceOf(entry));
-    await ready;
-  },
-  newDocument: async (folderId, docKind) => {
-    const ready = nextDocumentReady();
-    await chromeHost.perform({ kind: 'new', folderId, docKind });
-    await ready;
-  },
-  perform: (action) => chromeHost.perform(action),
-  view: () => ({ toolbars: toolbarsOn, statusBar: footerOn, ruler: rulerOn, formattingMarks }),
-  isPicture,
-  pictureBytes,
-  changePicture,
-  textDrawings: () => textDrawingRefs().map((d) => ({ page: d.number, width: d.width, height: d.height, ...(d.embed !== undefined && { embed: d.embed }) })),
-  openTextDrawing,
-  closeTextDrawing,
-  insertTextDrawing,
-  editTextPicture,
-  finishTextPicture,
-  collaboration,
-  pictureShapes: () => drawLayer.shapes,
-  setPictureShapes: (shapes) =>
-    new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 3000);
-      shapesEcho = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      changeShapes(shapes);
-    }),
-  watching: () => (current.room?.watching ? whyWatching() : null),
-  takeOver: takeOverEditing,
-  drawing: async () => {
-    if (!isDrawing() && !embeddedDrawing) return null;
-    const session = await loadVector();
-    return session.editor;
-  },
-});
-
-// Clip, the assistant: a paperclip in the bottom right that reads and edits the open document for subscribers (see assistant/).
-const assistant = new Assistant(document.body, { tool: assistantTools.run, begin: assistantTools.begin, signIn: () => void signIn(), subscribe: () => void subscribe() });
-assistant.onVisibility = (clip) => chrome.update({ clip });
-chrome.update({ clip: assistant.visible });
 
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
@@ -5742,7 +5517,7 @@ window.addEventListener('drop', (e) => {
 });
 
 // Debug/automation hooks.
-Object.assign(window, { camera, requestRender, render, openSource, send, pageAt, assistantTools });
+Object.assign(window, { camera, requestRender, render, openSource, send, pageAt });
 Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },

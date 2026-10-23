@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golem Docs: Word、PDF、Markdown などをブラウザーで編集</title>
-    <meta name="description" content="Golem Docs は、ブラウザーとデスクトップで使えるドキュメントエディターです（モバイルアプリは近日公開）。Word、OpenDocument、PDF、Markdown、HTML、テキストを、無料でアカウント不要のまま開き、編集し、変換できます。サブスクリプションでは、デバイス間の同期、共有とリアルタイムの共同編集、AI アシスタントが加わります。" />
+    <meta name="description" content="Golem Docs は、ブラウザーとデスクトップで使えるドキュメントエディターです（モバイルアプリは近日公開）。Word、OpenDocument、PDF、Markdown、HTML、テキストを、無料でアカウント不要のまま開き、編集し、変換できます。サブスクリプションでは、デバイス間の同期、共有とリアルタイムの共同編集が加わります。" />
     <link rel="canonical" href="https://golemdocs.com/home/ja" />
     <link rel="alternate" hreflang="en" href="https://golemdocs.com/home" />
     <link rel="alternate" hreflang="es" href="https://golemdocs.com/home/es" />
@@ -22,7 +22,7 @@
     <meta property="og:site_name" content="Golem Docs" />
     <meta property="og:locale" content="ja_JP" />
     <meta property="og:title" content="Golem Docs: Word、PDF、Markdown などをブラウザーで編集" />
-    <meta property="og:description" content="あらゆる種類のドキュメントを、ひとつのエディターで。Word、PDF、Markdown などを、ブラウザーとデスクトップアプリで無料・アカウント不要のまま開き、編集し、変換できます。サブスクリプションで同期、共有、共同編集、AI アシスタントも利用できます。" />
+    <meta property="og:description" content="あらゆる種類のドキュメントを、ひとつのエディターで。Word、PDF、Markdown などを、ブラウザーとデスクトップアプリで無料・アカウント不要のまま開き、編集し、変換できます。サブスクリプションで同期、共有、共同編集も利用できます。" />
     <meta property="og:url" content="https://golemdocs.com/home/ja" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -169,8 +169,7 @@
       .closing .sub { margin-inline: auto; }
 
       footer { padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.92rem; }
-      /* The right edge stays clear of Clip, the assistant, which floats there (85px wide, 16px from the edge). */
-      footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; padding-right: 112px; }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
       /* The language picker is drawn like the app's combo boxes and pop-up lists (ui.css: .wm-combo, .wm-popup, .wm-option). */
       footer .langs { position: relative; font: 13px system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif; color: var(--ink); }
       footer .langs summary { display: inline-flex; height: 22px; border: 1px solid var(--field-border); border-radius: 4px; overflow: hidden; background: var(--field-bg); list-style: none; cursor: default; user-select: none; }
@@ -225,7 +224,7 @@
               <a class="btn" href="/">無料で試す</a>
               <a class="btn ghost" href="#features">機能を見る</a>
             </div>
-            <p class="fine">ブラウザーとデスクトップアプリで無料（モバイルアプリは近日公開）。アカウント不要、広告なし。同期、共有、AI は月額 $5 です。</p>
+            <p class="fine">ブラウザーとデスクトップアプリで無料（モバイルアプリは近日公開）。アカウント不要、広告なし。同期と共有は月額 $5 です。</p>
           </div>
           <div class="sheet-stage" aria-hidden="true">
             <div class="sheet">
@@ -389,12 +388,12 @@
       <section id="pricing">
         <div class="wrap split">
           <div>
-            <h2 class="title">無料で使えます。購読料は、サーバー代と AI 代に充てています。</h2>
-            <p class="sub" style="margin-bottom: 0">編集はお使いの端末の中で動くので、無料で提供しても私にはお金がかかりません。Golem Docs はアカウントなしで、ブラウザーでもデスクトップアプリでも、登場後はモバイルアプリでも完全に動作します。同期と共有にはサーバーとストレージが必要で、AI アシスタントは答えるたびにお金がかかります。サブスクリプションは月額 $5 で、その費用をまかない、残りは Golem Docs の開発を続けるために使います。いつでも解約できます。</p>
+            <h2 class="title">無料で使えます。購読料は、サーバー代に充てています。</h2>
+            <p class="sub" style="margin-bottom: 0">編集はお使いの端末の中で動くので、無料で提供しても私にはお金がかかりません。Golem Docs はアカウントなしで、ブラウザーでもデスクトップアプリでも、登場後はモバイルアプリでも完全に動作します。同期と共有にはサーバーとストレージが必要です。サブスクリプションは月額 $5 で、その費用をまかない、残りは Golem Docs の開発を続けるために使います。いつでも解約できます。</p>
           </div>
           <ul class="checks">
             <li><b>無料、アカウント不要</b><span>編集、変換、ダウンロードをブラウザー、デスクトップアプリ、そしてまもなくモバイルアプリで、好きなだけ。ドキュメントは端末に保存され、私に送られることはありません。</span></li>
-            <li><b>$5 の使い道</b><span>同期は、ドキュメントを私のサーバーに置いて、どのデバイスにもついてくるようにします。共有は、みんなでリアルタイムに編集できるようにします。AI アシスタントは、リクエストのたびに私に請求が来ます。登録するには、Google、Microsoft、GitHub、Apple でサインインします。</span></li>
+            <li><b>$5 の使い道</b><span>同期は、ドキュメントを私のサーバーに置いて、どのデバイスにもついてくるようにします。共有は、みんなでリアルタイムに編集できるようにします。登録するには、Google、Microsoft、GitHub、Apple でサインインします。</span></li>
             <li><b>共有されたドキュメントを開くのは無料</b><span>購読者があなたとドキュメントを共有した場合、開くにはサインインするだけで、許可されていれば編集もできます。</span></li>
             <li><b>解約した場合</b><span>ドキュメントはブラウザーに残ります。ファイル 1 つでも、すべてのファイルを ZIP にまとめても、ダウンロードにアカウントやサブスクリプションは必要ありません。</span></li>
           </ul>
@@ -411,7 +410,7 @@
           </div>
           <div>
             <p class="sub" style="margin-bottom: 16px">プラグインに意味があったのは、足りない機能が誰かの数週間の余暇を意味した時代です。AI がコードを書く手伝いをしてくれる今は、足りない機能はそのまま作れます。だから、アドオンを探してもらうのではなく、テストつきでアプリに組み込みます。</p>
-            <p class="sub" style="margin-bottom: 16px">そのほうがシンプルです。文書のそばで動くサードパーティのコードはありません。新しい機能は、アプリのほかの部分と同じ見た目と動作で、11 言語すべてに対応し、AI アシスタントも使えます。アプリが変わるときは機能も一緒に変わるので、壊れることはありません。</p>
+            <p class="sub" style="margin-bottom: 16px">そのほうがシンプルです。文書のそばで動くサードパーティのコードはありません。新しい機能は、アプリのほかの部分と同じ見た目と動作で、11 言語すべてに対応しています。アプリが変わるときは機能も一緒に変わるので、壊れることはありません。</p>
             <p class="sub" style="margin-bottom: 0">文書の中でやりたいのに Golem Docs でできないことや、開けないファイル形式があれば、教えてください。リクエストはすべて読んでいます。日付はお約束できませんが、よく求められるものは先に作られることが多いです。</p>
           </div>
         </div>

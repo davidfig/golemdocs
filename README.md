@@ -36,7 +36,7 @@ The server has three Cloudflare environments in `server/wrangler.jsonc`, and loc
 Set up the dev environment once:
 
 1. `pnpm --filter @golemdocs/server exec wrangler login`, so wrangler can reach your dev resources.
-2. `pnpm --filter @golemdocs/server cf:setup:dev` creates the dev D1 database, R2 bucket and Vectorize index (the assistant's document search; an existing setup needs only `wrangler vectorize create golemdocs-docs-dev --dimensions=1024 --metric=cosine`, and `cf:migrate:dev` for the new table).
+2. `pnpm --filter @golemdocs/server cf:setup:dev` creates the dev D1 database and R2 bucket.
 3. Copy `server/wrangler.local.example.json` to `server/wrangler.local.json` (git-ignored) and fill in `DIRECTORY_DEV_ID` with the printed database id and `ACCOUNT_ID` with your Cloudflare account id. `server/wrangler.jsonc` keeps `REPLACE_…` placeholders for these; the server's scripts merge your values into a git-ignored `wrangler.generated.jsonc` before each wrangler call.
 4. Create an API token with D1 Edit permission and put it in `server/.dev.vars` as `CF_API_TOKEN`. The Worker uses it to create and query the per-user databases, which a Worker can't bind at deploy time. This is separate from the `wrangler login` credential.
 
@@ -80,7 +80,7 @@ pnpm test
 
 One Worker serves both the API and the built client. The steps, in order:
 
-1. `pnpm --filter @golemdocs/server cf:setup` creates the `golemdocs-directory` D1 database, the `golemdocs-files` R2 bucket and the `golemdocs-docs` Vectorize index (1024 dimensions, cosine). The index must exist before you deploy, because `wrangler.jsonc` binds it; `pnpm dev --local` has none, and there the assistant searches documents in the browser, by words. Put the printed database id and your account id in `server/wrangler.local.json` as `DIRECTORY_ID` and `ACCOUNT_ID` (production).
+1. `pnpm --filter @golemdocs/server cf:setup` creates the `golemdocs-directory` D1 database and the `golemdocs-files` R2 bucket. Put the printed database id and your account id in `server/wrangler.local.json` as `DIRECTORY_ID` and `ACCOUNT_ID` (production).
 2. Set secrets with `pnpm --filter @golemdocs/server exec wrangler secret put <NAME> --env=""`: `CF_API_TOKEN` (D1 Edit) plus each sign-in provider's values ([server/AUTH.md](server/AUTH.md)).
 3. `pnpm --filter @golemdocs/server cf:migrate` applies the directory migrations to the remote database.
 4. `pnpm --filter @golemdocs/server deploy:prod` builds the client and deploys.

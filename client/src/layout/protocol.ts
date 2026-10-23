@@ -280,8 +280,6 @@ export type ToWorker =
   | { type: 'convert'; doc: number; request: number; to: Format }
   /** The open picture's own file, without the shapes drawn over it. */
   | { type: 'pictureBase'; doc: number; request: number }
-  /** The assistant uses a tool on the open document (see agentTools.ts): `args` is the JSON the model wrote. */
-  | { type: 'agent'; doc: number; request: number; name: string; args: string }
   /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
   | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null }
   /** What is wrong in each of some lines of a plain text file (no document is involved): `sample` is the beginning of the file, which says its language. `at` asks instead for the problem under an offset of the line `texts[at.index]`. */
@@ -426,9 +424,6 @@ export type FromWorker =
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
-  /** What an assistant tool did or found. */
-  /** `images` are pictures the tool fetched for the model to look at (data: URIs). */
-  | { type: 'agentResult'; request: number; result: string; images?: string[] }
   /** The answer to a `spellText`: the marks of every line (a language whose dictionary is still loading has none yet, and `loading` says so), or the problem at `at`. */
   | { type: 'spellText'; request: number; marks: TextMark[][]; issue: SpellIssue | null; loading: boolean };
 

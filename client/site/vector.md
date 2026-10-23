@@ -35,7 +35,3 @@ Undo and redo step through every change.
 ## Convert it
 
 A drawing converts like any other document. To PDF it stays vector, with its curves, gradients, and clips. To PNG, JPEG, or WebP it becomes a picture at full resolution, and in a Word file it becomes a page with the picture on it. Going the other way, any document can become SVG: its text stays as text, in place, so you can still edit the words. See [what each conversion keeps](/home/convert).
-
-## Ask Clip
-
-Clip, the assistant, can read a drawing and change it for you: add shapes, recolor them, group and arrange them, combine them, and apply gradients and strokes. Each change is one step you can undo.

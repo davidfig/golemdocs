@@ -2,7 +2,6 @@
 
 import type { Messages } from '../../index.ts';
 import { app } from './app.ts';
-import { assistant } from './assistant.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
@@ -23,4 +22,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...app, ...assistant, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

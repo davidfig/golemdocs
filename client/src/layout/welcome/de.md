@@ -9,14 +9,12 @@ Ich habe Golem Docs gebaut, weil ich einen Editor wollte, der jede Art von Dokum
 - **PDFs kommentieren.** Markieren, unterstreichen, durchstreichen und Notizen hinterlassen, direkt auf den Seiten eines PDFs.
 - **PDFs bearbeiten.** Mit „PDF bearbeiten“ ändern Sie den Text einer Seite an Ort und Stelle, verschieben, ergänzen oder löschen Bilder und Formen, schwärzen vertrauliche Angaben und ordnen Seiten neu an. „Formular ausfüllen“ trägt Text in die Felder eines Formulars ein.
 - **Zusammenarbeiten.** Freigeben, im Menü Datei, lässt Sie bestimmte Personen per E-Mail als Bearbeiter oder Betrachter einladen. Alle, die das Dokument geöffnet haben, bearbeiten dieselbe Kopie, und Änderungen erscheinen live. Das Freigeben braucht meinen Server und gehört deshalb zum Abonnement; allein zu bearbeiten ist kostenlos.
-- **Die KI fragen.** Der KI-Assistent in der Ecke kann Ihr Dokument lesen, Absätze umschreiben oder ergänzen, Text formatieren, Kommentare hinterlassen, Formulare ausfüllen und in ein anderes Format konvertieren, und mit Rückgängig nehmen Sie seine Änderungen zurück. Er gehört zum Abonnement, weil mich jede Anfrage Geld kostet. Ansicht › KI-Assistent zeigt ihn an oder blendet ihn aus.
 
 ## Ausprobieren
 
 1. **Die Form wechseln.** Wählen Sie im Menü Datei Konvertieren in, dann Markdown. Diese Seite wird zu reinem Text mit `#`-Überschriften, und Sie können sie zurückkonvertieren.
 2. **Daten öffnen.** Ziehen Sie eine CSV-Datei auf das Fenster. Sie öffnet sich als Tabelle, die Sie bearbeiten können, und wird als dieselbe CSV heruntergeladen.
-3. **Die KI fragen.** Öffnen Sie den KI-Assistenten und bitten Sie ihn, diese Seite zusammenzufassen oder eine Überschrift hervorzuheben, und drücken Sie dann Rückgängig, wenn Sie die Änderung zurückhaben möchten. Dafür ist ein Abonnement nötig.
-4. **Gemeinsam bearbeiten.** Wählen Sie im Menü Datei Freigeben und fügen Sie die E-Mail-Adresse von jemandem hinzu, der sich bei Golem Docs angemeldet hat. Wenn diese Person das Dokument unter „Für mich freigegeben“ öffnet, bearbeiten Sie es beide live. Dafür ist ebenfalls ein Abonnement nötig.
+3. **Gemeinsam bearbeiten.** Wählen Sie im Menü Datei Freigeben und fügen Sie die E-Mail-Adresse von jemandem hinzu, der sich bei Golem Docs angemeldet hat. Wenn diese Person das Dokument unter „Für mich freigegeben“ öffnet, bearbeiten Sie es beide live. Dafür ist ein Abonnement nötig.
 
 Wenn Sie so weit sind, wählen Sie im Menü Datei Neu für ein leeres Dokument, oder Herunterladen, wenn Sie eine Datei für jemand anderen brauchen.
 
@@ -40,7 +38,6 @@ Alles oben, was in Ihrem Browser läuft, kostet mich nichts und ist deshalb kost
 
 - **Synchronisieren** speichert Ihre Dokumente auf meinem Server, sodass Sie sie auf jedem Gerät öffnen können.
 - **Freigeben und gemeinsam bearbeiten** per Link oder mit bestimmten Personen.
-- **KI** ist integriert, ohne dass Sie etwas einrichten müssen. Jede ihrer Anfragen bezahle ich.
 
 Was übrig bleibt, lässt mich weiter an Golem Docs arbeiten. Wenn ein Abonnement endet, bleiben Ihre Dokumente in diesem Browser, und Sie können weiterhin Dokumente öffnen, die ein Abonnent mit Ihnen teilt. Die Kosten finden Sie unter [Preise](https://golemdocs.com/home/#pricing), oder wählen Sie Datei › Abonnieren…, um loszulegen.
 

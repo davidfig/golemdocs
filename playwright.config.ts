@@ -6,7 +6,7 @@
 //   pnpm e2e:rest       run only what the last run did not pass
 //   pnpm e2e --ui       watch mode with the Playwright UI (arguments go straight to Playwright)
 //
-// Billing and the assistant (Clip) are deliberately not covered yet.
+// Billing is deliberately not covered yet.
 
 import os from 'node:os';
 import { defineConfig, devices } from '@playwright/test';

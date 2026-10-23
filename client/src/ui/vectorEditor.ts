@@ -7,7 +7,7 @@
 // phase) while a drawing is open.
 
 import type { XmlElement } from '@golemdocs/docx';
-import type { Matrix, PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
+import type { PathCommand, PathNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import type { BooleanOp } from '../vector/boolean.ts';
 import { backgroundOf, fitCanvasToArtwork, resizeCanvas, setBackground, setCanvasBounds } from '../vector/canvas.ts';
 import type { ResizeMode } from '../vector/canvas.ts';
@@ -712,30 +712,6 @@ export class VectorEditor {
       const released = releaseClippingMask(scene, selection[0]);
       return released.length ? released : selection;
     });
-  }
-
-  /** Puts a shape on the drawing, on top and selected (the assistant's way of drawing one). */
-  addShape(node: SceneNode): void {
-    if (!this.scene) return;
-    const next = cloneScene(this.scene);
-    this.commit(next, [addNode(next, node, this.container(next))]);
-  }
-
-  /** Moves, scales or turns the selection by a matrix in the drawing's coordinates. */
-  transformSelection(m: Matrix): void {
-    this.edit((scene, selection) => {
-      transformNodes(scene, selection, m);
-      return selection;
-    });
-  }
-
-  /** What the nudge tool does in one stroke, for the assistant: pushes the lines within `radius` of a point by `by`; false when none were that close. */
-  pushLines(at: readonly [number, number], by: readonly [number, number], radius: number): boolean {
-    if (!this.scene) return false;
-    const next = cloneScene(this.scene);
-    if (!nudgeScene(next, { x: at[0], y: at[1] }, { x: by[0], y: by[1] }, radius, this._selection)) return false;
-    this.commit(next, this._selection);
-    return true;
   }
 
   nudge(dx: number, dy: number): void {

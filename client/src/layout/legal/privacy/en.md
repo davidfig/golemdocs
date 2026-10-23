@@ -1,6 +1,6 @@
 # Golem Docs - Privacy Policy
 
-Last updated: September 30, 2026
+Last updated: October 23, 2026
 
 Golem Docs (golemdocs.com) is a document editor that runs in your browser. This page says what we collect, why, and what we do with it. It is a document like any other, so you can read it here or download it from the File menu.
 
@@ -8,7 +8,7 @@ Golem Docs (golemdocs.com) is a document editor that runs in your browser. This 
 
 - You don't need an account. Without one, your documents stay in your browser and are never sent to us.
 - If you sign in, we keep your name and your email address. If you also subscribe, we keep the documents you save to your account so they follow you between devices.
-- Syncing, sharing and the AI assistant are part of a paid subscription, which is sold and billed by Polar. We never see your card number.
+- Syncing and sharing are part of a paid subscription, which is sold and billed by Polar. We never see your card number.
 - We don't sell your data, we don't show ads, and we don't use analytics or advertising trackers.
 
 ## What we collect
@@ -23,8 +23,6 @@ Golem Docs (golemdocs.com) is a document editor that runs in your browser. This 
 
 **Your subscription and payments.** Subscriptions are sold and billed by [Polar](https://polar.sh), our merchant of record. When you start to subscribe, we send Polar your account identifier and, if your sign-in provider has verified it, your email address, to fill in the checkout. Polar collects your name, billing details and payment details itself, through its payment processor, and we never receive your card number. We keep only which Polar subscription is yours, its status and its dates, so we know whether you have one. Polar's [privacy policy](https://polar.sh/legal/privacy) applies to what it collects.
 
-**The assistant.** If you subscribe and ask the AI assistant something, your messages and the parts of your document it reads to answer are sent to an AI language model that runs on Cloudflare's Workers AI service. Nothing is sent unless you ask it. We don't keep the conversation on our servers, and the page doesn't save it either. We keep only a running total, per account and month, of how much of your monthly allowance you have used.
-
 **Feedback.** If you use Help › Send Feedback, we keep your message along with your account, so we can read it and reply.
 
 **Sign-in cookie.** Signing in sets one cookie that holds a random session token. It is needed to keep you signed in, lasts 30 days, and we store only a hash of it. We set no advertising or tracking cookies. The app also remembers a few choices, such as your language, theme and the last document you had open, in your browser's local storage on your device.
@@ -33,7 +31,7 @@ Golem Docs (golemdocs.com) is a document editor that runs in your browser. This 
 
 ## How we use it
 
-Only to run Golem Docs: to sign you in, store and sync your documents, let you share and edit together, take payment through Polar and know whether you have a subscription, run the assistant and keep its monthly allowance, keep the service secure, and answer your feedback. We don't sell or rent your information, and we don't use it for advertising.
+Only to run Golem Docs: to sign you in, store and sync your documents, let you share and edit together, take payment through Polar and know whether you have a subscription, keep the service secure, and answer your feedback. We don't sell or rent your information, and we don't use it for advertising.
 
 ## Google user data
 
@@ -41,7 +39,7 @@ Golem Docs' use of information received from Google APIs adheres to the [Google 
 
 ## Who we share it with
 
-- **Cloudflare**, which hosts the app, the database and the file storage that make up the service, and which runs the AI model when you use the assistant.
+- **Cloudflare**, which hosts the app, the database and the file storage that make up the service.
 - **Polar**, our merchant of record, which sells and bills the subscription, and handles payment, tax and refunds. It receives your account identifier and email address when you start to subscribe, and it collects your payment details itself.
 - **The sign-in provider you choose** (Google, Microsoft, GitHub or Apple), which knows that you signed in to Golem Docs.
 - **People you share a document with**, as described above.

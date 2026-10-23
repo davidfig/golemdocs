@@ -9,14 +9,12 @@ Hice Golem Docs porque quería un solo editor que abriera todo tipo de documento
 - **Marcar PDF.** Resalta, subraya, tacha y deja notas en las páginas de un PDF.
 - **Editar PDF.** Cambia a Editar PDF para modificar el texto de una página donde está, mover, añadir o eliminar imágenes y formas, tachar datos privados y reorganizar páginas. Rellenar escribe en los campos de un formulario.
 - **Trabajar en equipo.** Compartir, en el menú Archivo, te permite invitar a personas concretas por correo electrónico como editoras o lectoras. Quien tenga el documento abierto edita la misma copia, y los cambios se ven en directo. Compartir necesita mi servidor, así que forma parte de la suscripción; editar por tu cuenta es gratis.
-- **Pregunta a la IA.** El asistente de IA de la esquina puede leer tu documento, reescribir o añadir párrafos, dar formato al texto, dejar comentarios, rellenar formularios y convertir a otro formato, y Deshacer revierte sus cambios. Forma parte de la suscripción, porque cada petición me cuesta dinero. Ver › Asistente de IA lo muestra u oculta.
 
 ## Pruébalo
 
 1. **Cambia de forma.** En el menú Archivo, elige Convertir a y luego Markdown. Esta página se convierte en texto sin formato con encabezados `#`, y puedes volver a convertirla.
 2. **Abre algunos datos.** Suelta un archivo CSV sobre la ventana. Se abre como una tabla que puedes editar y se descarga como el mismo CSV.
-3. **Pregunta a la IA.** Abre el asistente de IA y pídele que resuma esta página o que destaque un encabezado, y luego pulsa Deshacer si quieres recuperar el cambio. Para esto hace falta una suscripción.
-4. **Edita en equipo.** En el menú Archivo, elige Compartir y añade el correo electrónico de alguien que haya iniciado sesión en Golem Docs. Cuando abra el documento desde Compartidos conmigo, los dos lo editáis en directo. Para esto también hace falta una suscripción.
+3. **Edita en equipo.** En el menú Archivo, elige Compartir y añade el correo electrónico de alguien que haya iniciado sesión en Golem Docs. Cuando abra el documento desde Compartidos conmigo, los dos lo editáis en directo. Para esto hace falta una suscripción.
 
 Cuando quieras, elige Nuevo en el menú Archivo para un documento en blanco, o Descargar cuando necesites un archivo para otra persona.
 
@@ -40,7 +38,6 @@ Todo lo anterior que funciona en tu navegador no me cuesta nada, así que es gra
 
 - **Sincronizar** guarda tus documentos en mi servidor, para que puedas abrirlos en cualquier dispositivo.
 - **Compartir y editar en equipo** con un enlace o con personas concretas.
-- **La IA** viene integrada, sin nada que configurar. Yo pago cada petición que hace.
 
 Lo que sobra me permite seguir trabajando en Golem Docs. Si una suscripción termina, tus documentos siguen en este navegador y aún puedes abrir los documentos que un suscriptor comparta contigo. Consulta los [precios](https://golemdocs.com/home/#pricing) para ver el costo, o elige Archivo › Suscribirse… para empezar.
 

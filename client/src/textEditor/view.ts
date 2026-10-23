@@ -12,7 +12,6 @@ import type { AtlasLibrary } from '../webgl/text/gpuFace.ts';
 import { LineIndex } from './lineIndex.ts';
 import { clampPos, docEnd, isCollapsed, lineEnd, ordered, planBackspace, planDelete, planInsert, offsetOf, posOf, samePos, selectedText as textOfSelection, shown, stepCol, stepWord, wordAt } from './positions.ts';
 import type { Plan, Pos, Selection } from './positions.ts';
-import { describeMatches, planDeleteLines, planInsertLines, planReplaceLines, readLines } from './lineTools.ts';
 import { compileSearch, escapeReplacement, expandReplacement, findInText } from '@golemdocs/editor/pattern';
 import type { SearchOptions } from '@golemdocs/editor/pattern';
 import { MAX_SHARED_REPLACEMENTS, nextMatch, replaceAllLines, replaceRangesOf, searchLines } from './search.ts';
@@ -963,72 +962,10 @@ export class TextEditorView {
     this.keepMessage = !!count;
   }
 
-  // --- For the assistant ---
-  // Lines are numbered from 1, as the gutter shows them. Each answers in words for the model; "Error:" says it did nothing.
-
-  /** What the model is told about the open file. */
-  describe(): string {
-    const index = this.index;
-    if (!index) return '';
-    return `a large text file in the large-text editor: ${index.count.toLocaleString('en-US')} lines, ${sizeText(index.length)}${index.done ? '' : ' (still being indexed: wait before editing)'}. It has lines, not paragraphs`;
-  }
-
-  read(start: number, count: number): string {
-    return this.index ? readLines(this.index, start, count) : 'Error: no large text file is open.';
-  }
-
-  async findAll(options: SearchOptions): Promise<string> {
-    const index = this.index;
-    if (!index) return 'Error: no large text file is open.';
-    if (!options.text) return 'Error: `text` is what to find.';
-    if (!compileSearch(options)) return `Error: ${t('textEditor.badRegex')}.`;
-    const result = await searchLines(index, options, { limit: 100_000 });
-    return describeMatches(index, result.lines, result.truncated);
-  }
-
-  /** Replaces every match in the file (as the Replace all button does). */
-  async replaceFile(options: SearchOptions, replacement: string): Promise<string> {
-    if (!this.doc) return 'Error: no large text file is open.';
-    if (!options.text) return 'Error: `text` is what to find.';
-    if (!compileSearch(options)) return `Error: ${t('textEditor.badRegex')}.`;
-    const count = await this.replaceAllWith(options, options.regex ? replacement : replacement.replace(/\$/g, '$$$$'));
-    if (count === null) return 'Error: it could not be done now (the file is still being indexed, or another change is under way).';
-    return count ? `Replaced ${count.toLocaleString('en-US')} matches; undo steps back.` : 'No line matches, so nothing was replaced.';
-  }
-
-  /** Makes an edit that a line tool planned, or says why not. */
-  private applyPlanned(plan: Plan | string, done: string): string {
-    if (typeof plan === 'string') return plan;
-    const refused = this.refusal(plan);
-    if (refused) return `Error: ${refused}`;
-    return this.edit(plan) ? done : 'Error: nothing changed.';
-  }
-
-  editLines(first: number, last: number, text: string): string {
-    if (!this.index) return 'Error: no large text file is open.';
-    return this.applyPlanned(planReplaceLines(this.index, first, last, text), `Replaced lines ${first} to ${last}; undo steps back. Line numbers after them may have changed.`);
-  }
-
-  insertLines(after: number, text: string): string {
-    if (!this.index) return 'Error: no large text file is open.';
-    return this.applyPlanned(planInsertLines(this.index, after, text), `Inserted the lines after line ${after}; undo steps back. Line numbers after them have moved.`);
-  }
-
-  deleteLines(first: number, last: number): string {
-    if (!this.index) return 'Error: no large text file is open.';
-    return this.applyPlanned(planDeleteLines(this.index, first, last), `Deleted lines ${first} to ${last}; undo steps back. Line numbers after them have moved.`);
-  }
-
-  undoStep(): string {
-    if (!this.canUndo) return 'There is nothing to undo.';
-    this.undo();
-    return 'Undid the last change.';
-  }
-
-  redoStep(): string {
-    if (!this.canRedo) return 'There is nothing to redo.';
-    this.redo();
-    return 'Redid the change.';
+  /** Replaces every match in the file (as the Replace all button does): how many, or null when it can't be done now. */
+  async replaceFile(options: SearchOptions, replacement: string): Promise<number | null> {
+    if (!this.doc || !options.text || !compileSearch(options)) return null;
+    return this.replaceAllWith(options, options.regex ? replacement : replacement.replace(/\$/g, '$$$$'));
   }
 
   // --- Pointer ---

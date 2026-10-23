@@ -160,7 +160,6 @@ export const chrome: Partial<Messages> = {
   'chrome.help.privacy': '隱私權政策(&P)',
   'chrome.help.terms': '服務條款(&T)',
   'chrome.help.changelog': '新增功能(&W)',
-  'chrome.help.clip': 'AI 助理(&I)',
   'chrome.perform.insert': '插入',
   'chrome.menu.file': '檔案(&F)',
   'chrome.menu.edit': '編輯(&E)',

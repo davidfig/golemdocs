@@ -4,7 +4,7 @@
 // computer fetches it instead of reading the document again), so both mean the same by a search.
 //
 // An index says nothing of which version of the document it is for: whoever keeps it stamps it.
-// Paragraph numbers are `paragraphSegments`', the same the assistant and the open document use.
+// Paragraph numbers are `paragraphSegments`', the same the open document uses.
 
 import type { Segment } from '../edit/segments.ts';
 import { normalizeTag, readTag } from './tags.ts';

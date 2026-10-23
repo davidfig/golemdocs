@@ -74,8 +74,6 @@ async function changelogText(): Promise<string> {
 import { DICTIONARY_BASE, FONT_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
-import { runAgentTool } from './agentTools.ts';
-import { runPdfTool } from './agentPdfTools.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
 import { AUTOCORRECT_DEFAULTS, AUTOCORRECT_KEYS, autoCorrect, ordinalAt, urlAt } from './autocorrect.ts';
 import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
@@ -1518,13 +1516,6 @@ class OpenDocument {
     if (holder) this.notice(holder.mine ? t('room.watchingMineNoEdit') : t('room.watchingNoEdit', { name: holder.name }));
   }
 
-  /** Why the document can't be changed, for the assistant. */
-  whyReadOnly(): string {
-    const holder = this.net?.state.holder;
-    if (this.net?.watching && holder) return holder.mine ? 'this document is being edited on another of the person’s devices; take it over (take_over_editing) to change it here.' : `${holder.name} is editing this document now; take it over (take_over_editing) to change it.`;
-    return 'this document cannot be changed (it can only be viewed, or its connection was lost).';
-  }
-
   /** The document as the room holds it: what it is edited as and what only that format keeps go with it. */
   private async roomDocument(): Promise<Uint8Array> {
     await this.document!.fetchMissingMedia();
@@ -1666,62 +1657,6 @@ class OpenDocument {
     if (this.waiting) return this.later(() => this.runCommand(wire));
     const done = this.runCommand(wire);
     if (done) this.later(() => done);
-  }
-
-  /** One of the assistant's tools, run on this document (see agentTools.ts). Settles with its answer once its edits have taken effect. */
-  async agent(name: string, args: string, show: (images: string[]) => void = () => {}): Promise<string> {
-    // Asked for while the document is still loading: once it has, and the commands sent before have run.
-    if (!this.isSetUp) await this.turn();
-    if (this.annotator && !this.closed) return this.agentPdf(this.annotator, name, args);
-    const editor = this.editor;
-    if (!editor || this.closed || this.annotator) return 'Error: this document has no text to work with.';
-    return runAgentTool(
-      {
-        editor,
-        readOnly: this.readOnly || this.format === 'pdf',
-        run: async (wire) => {
-          // Another document was opened meanwhile: this one's editor is no longer the page's.
-          if (this.closed) throw new Error('the document was closed');
-          this.command(wire);
-          while (this.waiting) await this.waiting;
-        },
-        format: () => this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending),
-        show,
-      },
-      name,
-      args,
-    );
-  }
-
-  /** One of the assistant's tools on a PDF shown as its own pages (see agentPdfTools.ts). */
-  private agentPdf(annotator: PdfAnnotator, name: string, args: string): Promise<string> {
-    const ids = () => this.pdfPages;
-    const pageCount = () => this.pdf?.view.pageCount ?? 0;
-    const readOnly = (): string | null => (this.readOnly ? this.whyReadOnly() : null);
-    return runPdfTool(
-      {
-        annotator,
-        get pageCount() {
-          return pageCount();
-        },
-        characters: (index) => this.pdf?.view.characters(index) ?? [],
-        pageId: (index) => ids()[index]?.id,
-        pageSize: (index) => ids()[index] && { width: ids()[index]!.width, height: ids()[index]!.height },
-        fields: () => annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
-        run: async (wire) => {
-          if (this.closed) throw new Error('the document was closed');
-          this.command(wire);
-          while (this.waiting) await this.waiting;
-        },
-        get readOnly() {
-          return readOnly();
-        },
-        pageOp: (index, op) => this.pdfPageOp(annotator, { kind: 'pdfPageOp', page: ids()[index]!.id, op }),
-        pick: (index, x, y) => this.pickText(annotator, index, x, y),
-      },
-      name,
-      args,
-    );
   }
 
   /** Formatting from the menus and toolbars. One that starts using a font loads its faces first. */
@@ -2944,16 +2879,6 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'pictureBase':
       void pictureBase(message.doc, message.request);
-      break;
-    case 'agent':
-      // Always answered, even if the tool fails: the page waits for it.
-      const shown: string[] = [];
-      void (current?.doc === message.doc ? current.agent(message.name, message.args, (images) => shown.push(...images)) : Promise.resolve('Error: no document is open.'))
-        .catch((e: unknown) => {
-          console.error(e);
-          return 'Error: that did not work.';
-        })
-        .then((result) => post({ type: 'agentResult', request: message.request, result, ...(shown.length && { images: shown }) }));
       break;
   }
 }

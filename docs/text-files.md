@@ -5,7 +5,7 @@ go to line, search, filter, level colouring, wrapped lines, format profile and c
 browser on a 51 MB, 500,000-line log: first lines on screen in about 100 ms, search 240 ms, page heap well under the 200 MB
 budget. **Editing is done too** (see *Editing, as built* below): a piece table under a live line index, a caret and
 selection drawn on the canvas with a hidden textarea taking the keyboard, undo and redo, Replace and Replace All,
-autosave in the browser, upload to the account (up to the server's 50 MiB), "Open Selection as Document" and assistant tools.
+autosave in the browser, upload to the account (up to the server's 50 MiB), and "Open Selection as Document".
 **The text is drawn by the app's WebGL renderer, on the same camera as documents** (see *Drawing, as built*): JetBrains Mono,
 smooth zoom and pan, no DOM rows. The editor is its own lazily loaded chunk (`textEditor/view.ts` and what it uses, about 60 kB):
 `textEditor/handle.ts` is what the rest of the app holds.
@@ -39,8 +39,6 @@ Windows-1252 (it is saved as UTF-8, which keeps every character).
   that it reopens as large text; a name with no such extension gets `.txt`) and autosave works as for any document. An
   unedited file is never stored. A file that is edited down below 8 MB reopens as an ordinary document. The account keeps
   files up to the server's 50 MiB; a bigger one stays in this browser, with a message.
-- **Assistant.** The `text_file` tool (info, read, find, replace, edit_lines, insert_lines, delete_lines, undo, redo) acts on
-  the editor; the paragraph tools are refused while it is open, since the document under it is empty.
 
 Goal: open, scroll, search and copy from a 50 MB log (about 500,000 lines) without freezing or
 running out of memory, and edit and save it.

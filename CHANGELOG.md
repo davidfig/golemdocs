@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.24.0 - Unreleased
+
+### Changed
+
+- The built-in AI assistant is gone. To use AI with your documents, point an AI agent such as Claude Code, Codex or Cursor at your documents folder in the desktop app; what it changes syncs back like any other edit.
+
 ## 0.23.3 - 2026-10-23
 
 ### Added

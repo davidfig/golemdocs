@@ -6,9 +6,11 @@
 //       Cargo.lock, and dates the changelog's "## X.Y.Z - Unreleased" heading. With --commit, commits exactly those files
 //       ("Release X.Y.Z") and creates the annotated tag vX.Y.Z. It never pushes.
 //
-//   pnpm release ship [--yes] [--dry-run]
+//   pnpm release ship [--yes] [--by-hand] [--dry-run]
 //       For the version in package.json, after `git push origin main vX.Y.Z` (which starts the "Desktop release" workflow):
-//       waits for that workflow to finish, stops so the Mac installer can be checked by hand (--yes skips the stop), publishes
+//       waits for that workflow to finish, checks the Mac installer (on a Mac: downloads the .dmg and checks its version,
+//       signature, notarization and architectures, and that the app starts and keeps running; elsewhere, or with --by-hand,
+//       it stops so a person can; --yes skips the check), publishes
 //       the installers (publish:desktop), and only then deploys the website, so the website is the switch for everyone
 //       (it refuses unless HEAD is the tag and the checkout is clean: the website is built from the checkout)
 //       (docs/architecture/desktop-release.md). It ends by checking that the site serves the new build and downloads.
@@ -16,7 +18,8 @@
 // Needs `gh` signed in to GitHub and `wrangler` signed in to Cloudflare.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
@@ -112,12 +115,15 @@ async function ship(): Promise<void> {
   }
 
   if (!flags.has('--yes') && !dryRun) {
-    say('Check the Mac build');
-    console.log('Install the .dmg from the draft release (gh release view ' + tag + '), open it, and check File › Vault Folder and the menu bar.');
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = (await rl.question('Publish the installers and then deploy the website? (yes/no) ')).trim().toLowerCase();
-    rl.close();
-    if (answer !== 'yes') throw new Error('stopped before publishing; run again when the build is checked');
+    say('Checking the Mac build');
+    if (process.platform === 'darwin' && !flags.has('--by-hand')) await checkMacBuild(tag, version);
+    else {
+      console.log('Install the .dmg from the draft release (gh release view ' + tag + '), open it, and check File › Vault Folder and the menu bar.');
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const answer = (await rl.question('Publish the installers and then deploy the website? (yes/no) ')).trim().toLowerCase();
+      rl.close();
+      if (answer !== 'yes') throw new Error('stopped before publishing; run again when the build is checked');
+    }
   }
 
   const before = await buildId();
@@ -141,6 +147,81 @@ async function ship(): Promise<void> {
   console.log(`${tag} is live: downloads at ${version}, site build ${before} → ${after}.`);
 }
 
+/** How long the app must keep running after it starts to count as starting. */
+const LAUNCH_MS = 8_000;
+
+/**
+ * What a person would check on the Mac installer, done here: the draft release's .dmg holds the app at `version`, signed with a
+ * Developer ID and the hardened runtime, notarized with the ticket stapled (so it opens with no Gatekeeper warning, even
+ * offline), built for Apple silicon and Intel, and it starts and keeps running. Throws on the first thing that is wrong.
+ * The menus are not looked at: reading another app's menu bar needs Accessibility access for the terminal.
+ */
+async function checkMacBuild(tag: string, version: string): Promise<void> {
+  const dir = mkdtempSync(path.join(tmpdir(), 'golemdocs-release-'));
+  const mount = path.join(dir, 'mnt');
+  let attached = false;
+  try {
+    out('gh', ['release', 'download', tag, '--pattern', '*.dmg', '--dir', dir]);
+    const dmg = out('find', [dir, '-maxdepth', '1', '-name', '*.dmg']).split('\n')[0];
+    if (!dmg) throw new Error(`the draft release of ${tag} has no .dmg`);
+    out('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mount, dmg]);
+    attached = true;
+    const app = out('find', [mount, '-maxdepth', '1', '-name', '*.app']).split('\n')[0];
+    if (!app) throw new Error(`${path.basename(dmg)} holds no app`);
+    const plist = path.join(app, 'Contents', 'Info.plist');
+    const pass = (what: string): void => console.log(`  ✓ ${what}`);
+
+    const shipped = out('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', plist]);
+    if (shipped !== version) throw new Error(`the app in the .dmg is ${shipped}, not ${version}`);
+    pass(`version ${shipped}`);
+
+    // codesign and spctl print their verdicts on stderr.
+    const verdict = (cmd: string, args: string[]): { ok: boolean; text: string } => {
+      const result = spawnSync(cmd, args, { encoding: 'utf8' });
+      return { ok: result.status === 0, text: `${result.stdout}${result.stderr}`.trim() };
+    };
+    const sign = verdict('codesign', ['--verify', '--deep', '--strict', app]);
+    if (!sign.ok) throw new Error(`the app's signature is not valid: ${sign.text}`);
+    const details = verdict('codesign', ['-dv', app]).text;
+    if (!/flags=\S*\(runtime\)/.test(details)) throw new Error('the app is not signed with the hardened runtime');
+    pass('signature valid, hardened runtime');
+
+    const gatekeeper = verdict('spctl', ['-a', '-vv', '-t', 'exec', app]);
+    if (!gatekeeper.ok || !/source=Notarized Developer ID/.test(gatekeeper.text)) throw new Error(`Gatekeeper would warn: ${gatekeeper.text}`);
+    pass(`notarized (${/origin=(.*)/.exec(gatekeeper.text)?.[1] ?? 'Developer ID'})`);
+    const stapled = verdict('xcrun', ['stapler', 'validate', app]);
+    if (!stapled.ok) throw new Error(`no notarization ticket is stapled to the app: ${stapled.text}`);
+    pass('ticket stapled');
+
+    const binary = path.join(app, 'Contents', 'MacOS', out('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleExecutable', plist]));
+    const archs = out('lipo', ['-archs', binary]).split(/\s+/);
+    if (!archs.includes('arm64') || !archs.includes('x86_64')) throw new Error(`the app is built for ${archs.join(', ')}, not Apple silicon and Intel`);
+    pass(`universal (${archs.join(', ')})`);
+
+    // A new instance of the app in the .dmg, told apart from an installed copy by its path.
+    const pids = (): string[] => {
+      const result = spawnSync('pgrep', ['-f', binary], { encoding: 'utf8' });
+      return result.stdout.split('\n').filter(Boolean);
+    };
+    out('open', ['-n', app]);
+    try {
+      for (let waited = 0; pids().length === 0; waited += 500) {
+        if (waited > 15_000) throw new Error('the app did not start');
+        await sleep(500);
+      }
+      await sleep(LAUNCH_MS);
+      if (pids().length === 0) throw new Error(`the app quit within ${LAUNCH_MS / 1000} s of starting`);
+      pass(`starts and keeps running`);
+    } finally {
+      for (const pid of pids()) spawnSync('kill', ['-TERM', pid]);
+      for (let waited = 0; pids().length > 0 && waited < 10_000; waited += 500) await sleep(500);
+    }
+  } finally {
+    if (attached) spawnSync('hdiutil', ['detach', mount, '-quiet', '-force']);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function buildId(): Promise<string | null> {
   try {
     return ((await (await fetch(`${SITE}/build.json`, { cache: 'no-store' })).json()) as { id?: string }).id ?? null;
@@ -162,7 +243,7 @@ try {
   } else if (command === 'ship') {
     await ship();
   } else {
-    console.log('usage: pnpm release bump <X.Y.Z> [--commit]\n       pnpm release ship [--yes] [--dry-run]');
+    console.log('usage: pnpm release bump <X.Y.Z> [--commit]\n       pnpm release ship [--yes] [--by-hand] [--dry-run]');
     process.exitCode = 1;
   }
 } catch (error) {

@@ -48,7 +48,7 @@ export class TextEditor {
     return this.view?.size ?? 0;
   }
 
-  /** The editor, when it is open on a file (for the assistant's tools). */
+  /** The editor, when it is open on a file. */
   get editor(): TextEditorView | null {
     return this.view?.active ? this.view : null;
   }

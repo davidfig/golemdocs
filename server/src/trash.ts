@@ -9,7 +9,6 @@ import { CHUNKED_FROM, deleteChunks } from './fileStore.ts';
 import { indexKey, thumbKey } from './keys.ts';
 import { perChunk } from './http.ts';
 import type { Env } from './cf.ts';
-import { removeManyFromIndex } from './search.ts';
 import { deleteMedia } from './roomMedia.ts';
 import { deleteHistory, TRASH_MS } from './versions.ts';
 import type { UserDb } from './userDb.ts';
@@ -47,7 +46,6 @@ export async function purge(env: Env, ownerId: string, db: UserDb, rows: readonl
   if (!rows.length) return;
   const ids = rows.map((r) => r.id);
   await db.runAll(perChunk(ids, (marks) => `DELETE FROM trash WHERE id IN (${marks})`));
-  await removeManyFromIndex(env, ids).catch(() => {});
   // R2 refuses an empty list and more than 1000 keys at once.
   const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
   for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));

@@ -5,7 +5,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 ## How it works
 
 ```
-   keys / mouse / menus / toolbars / palette / assistant
+   keys / mouse / menus / toolbars / palette
                     │ Action (ui/actions.ts)
                     ▼
  ui/chrome.ts ──► CommandRegistry (ui/commands.ts) ──► ChromeHost.perform(action)
@@ -20,7 +20,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 - **`ui/chrome.ts`** is the catalog: which commands exist, which menus and toolbars show them, and default shortcuts. `Chrome.update(partial ChromeState)` pushes state (format state, view toggles, sync status) down; the chrome never reads the app directly.
 - **Format profiles** (`ui/formats.ts`, `FormatProfile`) say what each `DocumentKind` can express, so one set of menus is disabled correctly for Markdown, PDF, pictures and so on.
 - **`chromeHost.ts`** implements `ChromeHost`: `SUPPORTED` is the set of action kinds the app implements (others are disabled), and `perform()` maps each to the camera, worker or editor. Add a new action kind in both `actions.ts` and here. Status of each action: [actions-status.md](../actions-status.md).
-- **`main.ts`** (about 4,700 lines, sectioned by `// --- Name ---` comments: current document, collaboration, saving, uploading, pictures, text too big to be a document, rendering, pointer, keyboard and text input, navigation, searching every document, assistant tools, status bar) wires it all. Collaboration and layout detail belongs to their own docs.
+- **`main.ts`** (about 4,700 lines, sectioned by `// --- Name ---` comments: current document, collaboration, saving, uploading, pictures, text too big to be a document, rendering, pointer, keyboard and text input, navigation, searching every document, status bar) wires it all. Collaboration and layout detail belongs to their own docs.
 
 ## Key files
 
@@ -79,8 +79,7 @@ Reuse before you build, and centralize what you would copy. One implementation p
 
 - The home page is generated, not hand-written: `client/home/template.html` with `{{key}}` slots plus `client/home/locales/<tag>.json` per language; `pnpm build:home` (`client/home/build.ts`) writes `client/public/home/index.html` (English) and `client/public/home/<tag>/index.html`. Both outputs are committed. The `home` test fails if any app language lacks a translation or markup differs. New language: add its JSON, rebuild, and add the page to `client/public/sitemap.xml`. Changing English copy means updating every language file.
 - Feature pages under `/home/<name>` are Markdown in `client/site/<name>.md` (with optional `.figure.html` illustrations and `figures.css`), rendered by `client/seo.ts` (`sitePages`, `sitePage`, `markdownToHtml`). Legal pages come from `src/layout/legal/<name>/en.md`. The Vite plugin `welcomeContent()` also inlines the English welcome text into `index.html` for crawlers, serves these pages in dev, and writes them into `dist/home/` on build (`closeBundle`).
-- `client/site/clip.js`/`clip.css` are a scripted, no-AI demo of the assistant.
-- `client/public/home/war-and-peace.webm` is a recording of the real app; re-record with `pnpm record:home` when the look of toolbars, menus, status bar, Page Grid or the mascot changes (needs the user's dev server on :5173).
+- `client/public/home/war-and-peace.webm` is a recording of the real app; re-record with `pnpm record:home` when the look of toolbars, menus, status bar or Page Grid changes (needs the user's dev server on :5173).
 - Home page changes, even copy about an existing feature, get a CHANGELOG line.
 - **Section backgrounds must alternate.** No two neighbouring `<section>`s in `<main>` may share a background. This is automatic: CSS shades every odd `main > section` (`:nth-of-type(odd)`) with `--surface`, and the even ones stay `--bg`, so there is no per-section class to keep in step. When you add, remove or reorder a section, check the page still alternates (a section is a direct child of `<main>`; the hero is a `<div>`, so it is not counted and the first section is shaded). Don't give a section its own background or reintroduce an `alt` class.
 
@@ -95,4 +94,4 @@ Reuse before you build, and centralize what you would copy. One implementation p
 
 ## Related docs
 
-[Rendering](rendering.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [Assistant](assistant.md), [Build and testing](build-and-testing.md); [Localization](../localization.md); [Toolbar and file actions status](../actions-status.md).
+[Rendering](rendering.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [Build and testing](build-and-testing.md); [Localization](../localization.md); [Toolbar and file actions status](../actions-status.md).

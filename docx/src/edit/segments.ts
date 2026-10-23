@@ -1,6 +1,5 @@
-// A document as a list of plain paragraphs: what a language model reads, and what a search index
-// holds. The assistant and the server's document search both use it, so a paragraph number
-// means the same thing to each. Numbering is that of `paragraphsIn` (tables included).
+// A document as a list of plain paragraphs: what a search index holds. The browser's and the
+// server's search indexes both use it, so a paragraph number means the same thing to each. Numbering is that of `paragraphsIn` (tables included).
 
 import type { WordDocument } from '../docx/document.ts';
 import { StyleResolver } from '../model/resolve.ts';

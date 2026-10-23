@@ -47,5 +47,4 @@ export const history: Partial<Messages> = {
   'trash.deleteTitle': '要永久刪除 {name} 嗎？',
   'trash.emptyTitle': '要清空資源回收筒嗎？',
   'trash.close': '關閉',
-  'assistant.tool.versions': '正在查看文件的記錄…',
 };

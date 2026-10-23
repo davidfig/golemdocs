@@ -47,5 +47,4 @@ export const history: Partial<Messages> = {
   'trash.deleteTitle': '要彻底删除 {name} 吗？',
   'trash.emptyTitle': '要清空回收站吗？',
   'trash.close': '关闭',
-  'assistant.tool.versions': '正在查看文档的历史记录…',
 };

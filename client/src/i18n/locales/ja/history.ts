@@ -47,5 +47,4 @@ export const history: Partial<Messages> = {
   'trash.deleteTitle': '{name} を完全に削除しますか?',
   'trash.emptyTitle': 'ごみ箱を空にしますか?',
   'trash.close': '閉じる',
-  'assistant.tool.versions': '文書の履歴を確認しています…',
 };

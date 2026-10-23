@@ -1,6 +1,6 @@
 # Server
 
-`server/` is one Cloudflare Worker that serves the API under `/api/*` (the built client is served as static assets, with the Worker run first only for `/api/*`) and hosts the collaboration Durable Object. It does sign-in, per-user cloud catalogues in D1, document files in R2, sharing, subscriptions, the assistant and admin pages. It never edits documents itself outside a room: it stores the `.wdoc` files the client uploads.
+`server/` is one Cloudflare Worker that serves the API under `/api/*` (the built client is served as static assets, with the Worker run first only for `/api/*`) and hosts the collaboration Durable Object. It does sign-in, per-user cloud catalogues in D1, document files in R2, sharing, subscriptions and admin pages. It never edits documents itself outside a room: it stores the `.wdoc` files the client uploads.
 
 ## How it works
 
@@ -10,18 +10,17 @@
    authenticate (session cookie -> user id)  ->  same-origin check on writes
       /api/rooms/:id[/document|/media/:hash] -> sharing.resolveAccess -> roomGate -> Durable Object `Room`
       /api/subscription|checkout|portal      -> subscriptions.ts
-      /api/assistant[/search]                -> assistant.ts, search.ts (Workers AI + Vectorize)
       /api/admin/*  (isAdmin, checked once for the prefix) -> billing, analytics, feedback
       /api/feedback, /api/preferences
       /api/folders, /api/documents, /api/shared -> folders.ts, documents.ts
 
  Storage
    D1  DIRECTORY (migrations/directory)  users->database_id, identities, sessions, document_owners, shares,
-                                          subscriptions, feedback, assistant_usage, doc_index, catalogue_cache
+                                          subscriptions, feedback, catalogue_cache
+                                          (assistant_usage, doc_index: left from the removed assistant, unused)
    D1  one database per user (schema.ts)  documents, folders, preferences, versions, trash   (created via Cloudflare REST API)
    R2  FILES   <owner>/<doc>.docx | .thumb | .idx | .chunks/<sha256> | .media/<hash> | .history/<version>
    DO  ROOMS   one per document: transaction log in its own SQLite
-   Vectorize VECTORS (embeddings), AI (Workers AI)
 ```
 
 Every route throws `HttpError(status, message, code?)` (`http.ts`); `worker.ts` turns it into `{ error, code }`. Cloudflare REST rate limits (`CloudflareError` 429) become a 429 with `retry-after` (max 300 s), which `client/src/cloud.ts` `send` waits out and retries.
@@ -63,16 +62,14 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - `subscriptions.ts`: Polar (merchant of record). A signed webhook (`/api/webhooks/polar`, Standard Webhooks scheme, 5-minute tolerance) upserts the latest state per user into `subscriptions`; the user is linked by the `external_customer_id` set to our user id at checkout, never by email. `hasSync` is true for subscribers (trial counts), admins, everyone when `REQUIRE_SUBSCRIPTION !== 'true'` (the rollout switch, currently `false` in `wrangler.jsonc`), and always when `local`. `subscriptionRequired()` is the 402 refusal.
 - `billing.ts`: admin-only read of Cloudflare's billable usage for the month.
 
-## Assistant, search, analytics, feedback
+## Search, analytics, feedback
 
-- `assistant.ts`, `model.ts`, `assistantTools.ts`: `POST /api/assistant` is one model turn on Workers AI; tools run in the page. Monthly budget per user (`MONTHLY_BUDGET_MICRO`), reserved before the call and settled after (`assistant_usage`). `assistantTools.ts` only *describes* tools; see [Assistant](assistant.md).
-- `search.ts`: assistant search over a user's own documents. Text is chunked (`MAX_CHUNK_CHARS` 1200), embedded with `@cf/baai/bge-m3` (1024 dims) and stored in Vectorize under namespace = owner id; documents are indexed lazily on search (a few per request), never on save. `doc_index` records which version is indexed.
 - `docIndex.ts`: `GET /api/documents/:id/index`, the full-text index from `@golemdocs/docx` search, built lazily and cached at `<owner>/<doc>.idx`, valid while the index version and the row's `updated_at` match.
 - `analytics.ts` (admin, from `identities`/`sessions`), `feedback.ts` (`/api/feedback` for users, `/api/admin/feedback` to read/resolve/delete).
 
 ## Wrangler environments
 
-`wrangler.jsonc` top level is production (custom domain golemdocs.com). `env.dev` (real dev D1/R2/Vectorize, `remote: true`, no routes) and `env.local` (everything simulated) list their own bindings because bindings are not inherited. `scripts/wrangler-config.ts` merges `server/wrangler.local.json` (git-ignored: database ids, account id) into `wrangler.generated.jsonc`, which the scripts pass to wrangler. `pnpm dev` uses `dev` once set up, else `local`; see the root [README](../../README.md) for setup, secrets (`CF_API_TOKEN`, `ADMIN_EMAILS`, `POLAR_*`, provider keys) and deploy steps. `.dev.vars` `DEV_USER` signs you in locally.
+`wrangler.jsonc` top level is production (custom domain golemdocs.com). `env.dev` (real dev D1/R2, `remote: true`, no routes) and `env.local` (everything simulated) list their own bindings because bindings are not inherited. `scripts/wrangler-config.ts` merges `server/wrangler.local.json` (git-ignored: database ids, account id) into `wrangler.generated.jsonc`, which the scripts pass to wrangler. `pnpm dev` uses `dev` once set up, else `local`; see the root [README](../../README.md) for setup, secrets (`CF_API_TOKEN`, `ADMIN_EMAILS`, `POLAR_*`, provider keys) and deploy steps. `.dev.vars` `DEV_USER` signs you in locally.
 
 ## Rooms (Durable Objects)
 
@@ -89,7 +86,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 | `server/src/authRoutes.ts`, `providers.ts`, `accounts.ts`, `session.ts`, `auth.ts`, `crypto.ts` | sign-in |
 | `server/src/sharing.ts`, `roomGate.ts`, `room.ts`, `roomCore.ts`, `roomMedia.ts`, `snapshot.ts` | access rules and rooms |
 | `server/src/subscriptions.ts`, `billing.ts`, `analytics.ts`, `feedback.ts` | payments and admin |
-| `server/src/assistant.ts`, `assistantTools.ts`, `model.ts`, `search.ts`, `docIndex.ts` | AI and search |
+| `server/src/docIndex.ts` | Full-text search index |
 | `server/src/cf.ts`, `http.ts` | hand-declared Cloudflare types (no `@cloudflare/workers-types`), `HttpError`, id/name validators |
 | `server/migrations/directory/`, `server/wrangler.jsonc`, `server/test/` | schema, bindings, tests (`harness.ts` fakes the bindings; run `pnpm --filter @golemdocs/server test`) |
 
@@ -99,10 +96,9 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - Anything that writes a document's file must first ask `roomAllowsSave`, and should give `checkpoint` (`versions.ts`) the file it is about to replace.
 - Never delete a chunk by listing a document's prefix and keeping a set unless the set includes `retainedChunks`: a checkpoint's chunks are not in the live manifest.
 - Append-only: `USER_MIGRATIONS` entries and directory migrations. A migration that fails midway must be safe to rerun (`migrate` records the version in the same batch).
-- Local mode differs: no Vectorize/AI (search runs in the browser), no subscription checks, table-prefix user DB.
+- Local mode differs: no subscription checks, table-prefix user DB.
 - The comment above the `local` env in `wrangler.jsonc` ("cloud documents are switched off") is out of date; the README and `LocalUserDb` say they work locally.
-- New user-visible features need an assistant tool in `assistantTools.ts` (see `AGENTS.md`).
 
 ## Related docs
 
-[Version history and the trash](../history.md) · [Storage and sync](storage-and-sync.md) · [Formats](formats.md) · [Collaboration](collaboration.md) · [Assistant](assistant.md) · [Chunked storage](../chunked-storage.md) · [server/AUTH.md](../../server/AUTH.md) · [README](../../README.md)
+[Version history and the trash](../history.md) · [Storage and sync](storage-and-sync.md) · [Formats](formats.md) · [Collaboration](collaboration.md) · [Chunked storage](../chunked-storage.md) · [server/AUTH.md](../../server/AUTH.md) · [README](../../README.md)

@@ -47,18 +47,6 @@
 			]
 		}
 	],
-	// Workers AI, for the assistant (src/assistant.ts). Billed per token to this account.
-	"ai": {
-		"binding": "AI"
-	},
-	// The assistant's search over people's documents (src/search.ts). Create the index first:
-	// `pnpm --filter @golemdocs/server cf:setup` (1024 dimensions, cosine: what bge-m3 makes).
-	"vectorize": [
-		{
-			"binding": "VECTORS",
-			"index_name": "golemdocs-docs"
-		}
-	],
 	// Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
 	// Create it with `pnpm --filter @golemdocs/server cf:setup`, then put its id in wrangler.local.json (see README).
 	"d1_databases": [
@@ -100,16 +88,6 @@
 					"/*"
 				]
 			},
-			"ai": {
-				"binding": "AI"
-			},
-			"vectorize": [
-				{
-					"binding": "VECTORS",
-					"index_name": "golemdocs-docs-dev",
-					"remote": true
-				}
-			],
 			"r2_buckets": [
 				{
 					"binding": "FILES",

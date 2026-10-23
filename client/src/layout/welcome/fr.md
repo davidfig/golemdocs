@@ -9,14 +9,12 @@ J’ai fait Golem Docs parce que je voulais un seul éditeur qui ouvre tous les 
 - **Annoter les PDF.** Surlignez, soulignez, barrez et laissez des notes sur les pages d'un PDF.
 - **Modifier les PDF.** Passez en mode Modifier le PDF pour changer le texte d'une page à sa place, déplacer, ajouter ou supprimer des images et des formes, noircir des informations confidentielles et réorganiser les pages. Le mode Remplir saisit du texte dans les champs d'un formulaire.
 - **Travailler à plusieurs.** Partager, dans le menu Fichier, vous permet d'inviter des personnes précises par e-mail, comme éditeurs ou lecteurs. Toutes les personnes qui ont le document ouvert modifient la même copie, et les changements s'affichent en direct. Le partage passe par mon serveur, il fait donc partie de l'abonnement ; modifier seul est gratuit.
-- **Demander à l'IA.** L'assistant IA, dans le coin, peut lire votre document, réécrire ou ajouter des paragraphes, mettre le texte en forme, laisser des commentaires, remplir des formulaires et convertir dans un autre format, et Annuler reprend ses modifications. Il fait partie de l'abonnement, car chaque requête me coûte de l'argent. Affichage › Assistant IA l'affiche ou le masque.
 
 ## À essayer
 
 1. **Changer de forme.** Dans le menu Fichier, choisissez Convertir en, puis Markdown. Cette page devient du texte brut avec des titres `#`, et vous pouvez la reconvertir.
 2. **Ouvrir des données.** Déposez un fichier CSV sur la fenêtre. Il s'ouvre sous forme de tableau modifiable, et se télécharge en tant que le même CSV.
-3. **Demander à l'IA.** Ouvrez l'assistant IA et demandez-lui de résumer cette page ou de faire ressortir un titre, puis appuyez sur Annuler si vous voulez revenir en arrière. Cela nécessite un abonnement.
-4. **Modifier à plusieurs.** Dans le menu Fichier, choisissez Partager et ajoutez l'adresse e-mail d'une personne qui s'est connectée à Golem Docs. Quand elle ouvre le document depuis Partagés avec moi, vous le modifiez tous les deux en direct. Cela nécessite aussi un abonnement.
+3. **Modifier à plusieurs.** Dans le menu Fichier, choisissez Partager et ajoutez l'adresse e-mail d'une personne qui s'est connectée à Golem Docs. Quand elle ouvre le document depuis Partagés avec moi, vous le modifiez tous les deux en direct. Cela nécessite un abonnement.
 
 Quand vous êtes prêt, choisissez Nouveau dans le menu Fichier pour un document vierge, ou Télécharger quand il vous faut un fichier pour quelqu'un d'autre.
 
@@ -40,7 +38,6 @@ Tout ce qui précède et qui s'exécute dans votre navigateur ne me coûte rien,
 
 - **La synchronisation** garde vos documents sur mon serveur, pour les ouvrir sur n'importe quel appareil.
 - **Partager et modifier à plusieurs** avec un lien ou avec des personnes précises.
-- **L'IA** est intégrée, sans rien à configurer. Je paie chaque requête qu'elle fait.
 
 Ce qui reste me permet de continuer à travailler sur Golem Docs. Si un abonnement prend fin, vos documents restent dans ce navigateur, et vous pouvez toujours ouvrir les documents qu'un abonné partage avec vous. Consultez les [tarifs](https://golemdocs.com/home/#pricing) pour le coût, ou choisissez Fichier › S'abonner… pour commencer.
 

@@ -9,7 +9,6 @@ import { DOCX, docxKey, historyKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkFolder, type FolderRow } from './folders.ts';
-import { removeManyFromIndex } from './search.ts';
 import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, versionsOf, type VersionRow } from './versions.ts';
 import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
@@ -104,7 +103,6 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
   }
   const cleanup = async () => {
     if (!forgotten) await forgetDocuments(env, ids);
-    await removeManyFromIndex(env, ids);
     await endRooms(env, ids);
     await purgeExpired(env, ownerId, db);
   };

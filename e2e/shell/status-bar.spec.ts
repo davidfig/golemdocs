@@ -16,14 +16,6 @@ test.describe('Status Bar, by default', () => {
     await app.menu('View', 'Status Bar');
     await expect(page.locator('#footer')).toBeVisible();
   });
-
-  test('Clip, the assistant, sits above it', async ({ app, page }) => {
-    await app.blank();
-    const clip = page.locator('.wm-clip');
-    test.skip(!(await clip.isVisible()), 'the assistant is not shown here');
-    const bar = (await page.locator('#footer').boundingBox())!;
-    expect((await clip.boundingBox())!.y + (await clip.boundingBox())!.height).toBeLessThanOrEqual(bar.y);
-  });
 });
 
 test.describe('Status Bar', () => {

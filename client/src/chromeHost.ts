@@ -116,8 +116,6 @@ export interface AppHooks {
   /** Pay for sync (signing in first if needed), or manage the subscription. */
   subscribe(): Promise<void>;
   manageSubscription(): Promise<void>;
-  /** Show or hide Clip, the assistant. */
-  toggleClip(): void;
   /** Delete every document and setting kept in this browser, once the user confirms. */
   clearLocalData(): Promise<void>;
   /** Download every saved document as one ZIP. */
@@ -183,7 +181,6 @@ const SUPPORTED = new Set<ActionKind>([
   'signOut',
   'subscribe',
   'manageSubscription',
-  'toggleClip',
   'clearLocalData',
   'cut',
   'copy',
@@ -403,8 +400,6 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.subscribe();
         case 'manageSubscription':
           return app.manageSubscription();
-        case 'toggleClip':
-          return app.toggleClip();
         case 'downloadAll':
           return app.downloadAll();
         case 'openSelection':

@@ -160,7 +160,6 @@ export const chrome: Partial<Messages> = {
   'chrome.help.privacy': '&Privacy',
   'chrome.help.terms': 'Termini di &servizio',
   'chrome.help.changelog': '&Novità',
-  'chrome.help.clip': 'Assistente &IA',
   'chrome.perform.insert': 'Inserisci',
   'chrome.menu.file': '&File',
   'chrome.menu.edit': '&Modifica',

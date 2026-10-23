@@ -143,19 +143,6 @@ test.describe('home page', () => {
     await page.goto('/home');
     expect(await noHorizontalScroll(page)).toBe(true);
   });
-
-  test('the scripted AI demo opens, says it is not AI and answers', async ({ page }) => {
-    await page.goto('/home');
-    const button = page.getByRole('button', { name: /Chat with the AI assistant/ });
-    await expect(button).toBeVisible();
-    await button.click();
-    const panel = page.getByRole('dialog', { name: /AI assistant/ });
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText('This is a scripted demo, not AI.');
-    await panel.getByRole('textbox', { name: 'Message to the assistant' }).fill('hello');
-    await panel.getByRole('button', { name: 'Send' }).click();
-    await expect(panel.getByRole('log')).toContainText('hello');
-  });
 });
 
 test.describe('feature pages', () => {

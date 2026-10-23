@@ -76,7 +76,7 @@ export interface CheckpointOptions {
   nextSize?: number;
   /** The file's etag as the save saw it: a file that has changed since is not checkpointed under the wrong version. */
   etag?: string;
-  /** Checkpoint whatever the gap says (the person asked, or the assistant is about to edit). */
+  /** Checkpoint whatever the gap says (the person asked). */
   force?: boolean;
   /** Keep it as a named version. */
   name?: string;

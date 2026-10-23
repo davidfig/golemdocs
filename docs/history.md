@@ -44,8 +44,6 @@ A document the person deletes is not deleted when no account's trash is keeping 
 
 File › Version History lists this browser's and the account's versions of the open document together (each marked *On this device* or *In your account*, so one moment may appear twice). A source that cannot be reached (offline, no subscription) is reported and the other still shows. File › Trash and a Trash button on the Documents screen (the menu bar is behind it) open the trash, which lists this browser's and the account's deleted documents together (`client/src/trash.ts`: each marked *On this device* or *In your account*; the account's failing does not hide this browser's). Both are modal dialogs, so a confirmation asked from inside one (`confirmDelete(…, parent)`) is put inside it: everything outside a modal dialog is inert.
 
-The assistant has the same abilities: `versions` (list, save, restore) and the `files` actions `trash` and `restore` (`server/src/assistantTools.ts`, `client/src/assistant/appTools.ts`, `fileTools.ts`). `delete` in `files` now moves documents to the trash.
-
 ## Cost
 
 R2 charges for writes and storage, not for reads out. A checkpoint is one read and one write per burst of editing, not per save; a document kept as chunks adds only its changed chunks; thinning bounds the count and the byte budget bounds the size. The guest (signed-out) history costs nothing: it is the person's own disk.

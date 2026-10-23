@@ -5,6 +5,7 @@
 ### Changed
 
 - Desktop and iPhone apps: your vault folder now holds every document as a real file, including PDFs (with your annotations, form fields and edits written in), pictures (with their layers drawn in), drawings, EPUB and MHTML. A file changed in the folder replaces the document, and your account keeps the earlier version.
+- The built-in AI assistant is gone. To use AI with your documents, point an AI agent such as Claude Code, Codex or Cursor at your documents folder in the desktop app; what it changes syncs back like any other edit.
 
 ### Fixed
 

@@ -94,8 +94,6 @@ export type Action =
   | { kind: 'syncNow' }
   | { kind: 'share' }
   | { kind: 'signIn' }
-  /** Show or hide Clip, the assistant. */
-  | { kind: 'toggleClip' }
   | { kind: 'signOut' }
   /** Pay for sync: sign in first if needed, then go to Polar's checkout. */
   | { kind: 'subscribe' }
@@ -276,8 +274,6 @@ export interface ChromeState {
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
   subscription: SubscriptionState | null;
-  /** Clip, the assistant, is showing. */
-  clip: boolean;
 }
 
 export type SubscriptionState = 'none' | 'active';
@@ -328,7 +324,6 @@ export const DEFAULT_STATE: ChromeState = {
   inTable: false,
   sync: { user: null, document: 'guest', error: null },
   subscription: null,
-  clip: true,
 };
 
 /** A sample document the File menu can open. */

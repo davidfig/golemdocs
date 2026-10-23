@@ -160,7 +160,6 @@ export const chrome: Catalog = {
   'chrome.help.privacy': 'Политика кон&фиденциальности',
   'chrome.help.terms': '&Условия использования',
   'chrome.help.changelog': '&Что нового',
-  'chrome.help.clip': 'По&мощник ИИ',
   'chrome.perform.insert': 'Вставка',
   'chrome.menu.file': '&Файл',
   'chrome.menu.edit': 'Пра&вка',

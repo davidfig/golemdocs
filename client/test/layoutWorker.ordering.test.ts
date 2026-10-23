@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { agent, bytes, command, convert, decode, fixture, media, newRequest, openMarkdown, send, sendOpen, startWorker, stopWorker, text, waitFor } from './workerHarness.ts';
+import { bytes, command, convert, decode, fixture, media, newRequest, openMarkdown, send, sendOpen, startWorker, stopWorker, text, waitFor } from './workerHarness.ts';
 
 before(startWorker);
 after(stopWorker);
@@ -31,17 +31,14 @@ test('save and convert sent with the open are answered with the new document', a
   assert.equal(await exported, 'Beta');
 });
 
-test('an assistant tool, a link lookup and a picture sent with the open all reach the new document', async () => {
+test('a link lookup and a picture sent with the open all reach the new document', async () => {
   await openMarkdown('Alpha\n');
   const doc = sendOpen(md('Beta.md', 'Beta\n'));
   const png = fixture('img-rgb.png');
   send({ type: 'insertImage', doc, bytes: png.slice(0), ext: 'png', width: 914400, height: 914400, description: 'A picture' });
-  const found = agent(doc, 'find_text', { text: 'Beta' });
   const picture = media(doc, 'word/media/image1.png');
   const link = newRequest();
   send({ type: 'linkAt', doc, request: link, page: 0, x: 0, y: 0 });
-  assert.doesNotMatch(await found, /^Error/);
-  assert.match(await found, /Beta/);
   assert.deepEqual(new Uint8Array((await picture)!), new Uint8Array(png), 'the picture was in by the time its bytes were asked for');
   assert.equal(decode(await convert(doc, 'md')), '![A picture](image1.png)Beta\n');
   // Asked before there were pages: answered all the same, with nothing there.
@@ -57,7 +54,6 @@ test('messages for the previous document, sent after a new one is asked for, are
   const answer = await waitFor('saved', (m) => m.request === request);
   assert.equal(answer.bytes, null, 'the old document is no longer open');
   assert.ok(answer.error);
-  assert.equal(await agent(old, 'find_text', { text: 'Alpha' }), 'Error: no document is open.');
   assert.equal(await text(doc), 'Beta', 'the stale command went nowhere');
 });
 
@@ -75,7 +71,6 @@ test('a document that fails to open still answers what was asked of it', async (
   command(doc, { kind: 'insertText', text: 'lost' });
   const request = newRequest();
   send({ type: 'save', doc, request });
-  const found = agent(doc, 'find_text', { text: 'x' });
   const original = console.error;
   console.error = () => {};
   try {
@@ -83,7 +78,6 @@ test('a document that fails to open still answers what was asked of it', async (
     const saved = await waitFor('saved', (m) => m.request === request);
     assert.equal(saved.bytes, null);
     assert.ok(saved.error);
-    assert.match(await found, /^Error/);
   } finally {
     console.error = original;
   }

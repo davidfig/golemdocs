@@ -47,5 +47,4 @@ export const history: Partial<Messages> = {
   'trash.deleteTitle': '{name} endgültig löschen?',
   'trash.emptyTitle': 'Papierkorb leeren?',
   'trash.close': 'Schließen',
-  'assistant.tool.versions': 'Der Verlauf des Dokuments wird angesehen…',
 };

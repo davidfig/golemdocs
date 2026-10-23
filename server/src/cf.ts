@@ -82,29 +82,10 @@ export interface DurableObjectNamespace {
   get(id: unknown): DurableObjectStub;
 }
 
-/** Workers AI. */
-export interface AiBinding {
-  run(model: string, inputs: unknown, options?: { extraHeaders?: Record<string, string> }): Promise<unknown>;
-}
-
-/** A Vectorize index (see search.ts). */
-export interface VectorizeIndex {
-  upsert(vectors: { id: string; values: number[]; namespace?: string; metadata?: Record<string, string | number | boolean> }[]): Promise<unknown>;
-  query(
-    vector: number[],
-    options: { topK: number; namespace?: string; returnMetadata?: 'none' | 'indexed' | 'all' },
-  ): Promise<{ matches?: { id: string; score: number; metadata?: Record<string, unknown> }[] }>;
-  deleteByIds(ids: string[]): Promise<unknown>;
-}
-
 /** Bindings and variables (see wrangler.jsonc and .dev.vars). */
 export interface Env {
   DIRECTORY: D1Database;
-  /** Workers AI, for the assistant (see assistant.ts). Absent locally, where the assistant is off. */
-  AI?: AiBinding;
   FILES: R2Bucket;
-  /** What the assistant searches your documents with (see search.ts). Absent locally; the page then searches them itself. */
-  VECTORS?: VectorizeIndex;
   /** One collaboration room per cloud document (see room.ts). */
   ROOMS: DurableObjectNamespace;
   CF_ACCOUNT_ID: string;

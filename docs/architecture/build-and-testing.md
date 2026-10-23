@@ -12,8 +12,7 @@ pnpm workspace (`pnpm-workspace.yaml`): `client`, `server`, `docx`, `layout`, `o
    │  ├──► pdf  (no workspace deps)
    │  ├──► odt ──► docx
    │  └──► docx, layout, ops
- server ──► docx, ops          (client never imports server; the assistant parity
-                                test reads server/src/assistantTools.ts by path)
+ server ──► docx, ops          (client never imports server)
 ```
 
 Dependencies only point down: `docx` (document model, reader/writer) is the base; `layout` (fonts, text layout, pagination) and `ops` (operation engine for collaboration) build on it; `editor` combines all three; `client` consumes everything; `server` (Cloudflare Worker) uses only `docx` and `ops`. Format and layout code must not import from `client` or `server`. Dependency policy: ask before adding any dependency (AGENTS.md); the client currently has one runtime dependency (`polygon-clipping`).
@@ -21,7 +20,7 @@ Dependencies only point down: `docx` (document model, reader/writer) is the base
 | Package | Role |
 | --- | --- |
 | `client/` | Vite app: WebGL renderer, UI, formats, storage, layout worker host |
-| `server/` | Worker: API, D1/R2/Vectorize, Durable Object rooms; serves `client/dist` as static assets |
+| `server/` | Worker: API, D1/R2, Durable Object rooms; serves `client/dist` as static assets |
 | `docx/`, `odt/`, `pdf/` | Format libraries |
 | `layout/`, `editor/`, `ops/` | Layout, editing core, collaboration ops |
 | `scripts/` | Repo tooling (see below) |
@@ -66,7 +65,7 @@ Run `pnpm test` (all packages, `--no-bail`) or one package: `pnpm --filter @gole
 
 - `docx`, `layout`, `ops`, `editor`, `pdf`, `odt`, `server`: `tsx --test "test/**/*.test.ts"` (Node's built-in runner).
 - `client`: `node --experimental-transform-types --import ./test/setup.ts --test test/*.test.ts` (no bundler). `test/setup.ts` loads the English catalog and turns `.css` imports into empty modules. Layout-worker tests use `workerHarness.ts`; canvas and IndexedDB are faked (`fakeCanvas.ts`, `fakeIndexedDB.ts`).
-- Notable cross-cutting client tests: `consistency.test.ts` (i18n keys, command ids, no literal strings), `i18n.test.ts` (translation completeness), `home.test.ts` (marketing translations), `spelling.test.ts` (welcome documents have no errors), `assistantParity.test.ts` (every server tool has a page implementation), `changelog.test.ts` (top entry is `Unreleased` or dated, only the first may be `Unreleased`).
+- Notable cross-cutting client tests: `consistency.test.ts` (i18n keys, command ids, no literal strings), `i18n.test.ts` (translation completeness), `home.test.ts` (marketing translations), `spelling.test.ts` (welcome documents have no errors), `changelog.test.ts` (top entry is `Unreleased` or dated, only the first may be `Unreleased`).
 - Server tests use `server/test/harness.ts` to fake D1, R2, Durable Objects and the AI binding.
 - Corpora (`pnpm --filter @golemdocs/docx corpus`, pdf `fetch-corpus`) are downloaded, not committed; without the docx corpus the round-trip tests skip.
 - Policy: new logic, bug fix or behavior change that can be tested without a browser gets a test; test pure logic over DOM code.
@@ -80,7 +79,7 @@ Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `
 - GPU: on a non-CI Mac the browser uses Metal; elsewhere SwiftShader software GL (`E2E_SOFTWARE_GL=1` forces it).
 - `scripts/e2e.ts`: pass one runs everything in parallel (workers = a third of the cores, `E2E_WORKERS` overrides; one retry, and a pass on retry is reported flaky); pass two re-runs `{ tag: '@heavy' }` tests with fewer workers. `E2E_SKIP_HEAVY=1` skips pass two. Arguments go straight to `playwright test` (single pass).
 - During development run only the specs you added or changed (`pnpm e2e e2e/shell/themes.spec.ts`). For a second concurrent run give it its own ports, state and output: `E2E_CLIENT_PORT=5274 E2E_API_PORT=3102 E2E_STATE=e2e/.state-2 pnpm e2e <paths> --workers=2 --output=e2e/.results-2`, and clean up afterwards. Never `pkill -f playwright`.
-- A feature that adds or changes UI gets a spec. Billing and the model-backed assistant are not covered; `e2e/shell/ai-assistant.spec.ts` only checks Clip's visibility.
+- A feature that adds or changes UI gets a spec. Billing is not covered.
 
 ## Performance traces (`golem:*`)
 
@@ -101,7 +100,7 @@ Last measured (one run each, dev server, generated documents): no long task over
 
 ## Deployment
 
-One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` builds the client, writes `wrangler.generated.jsonc`, and runs `wrangler deploy --env=""` (production is the top-level config, at golemdocs.com). First-time setup (`cf:setup`: D1 `golemdocs-directory`, R2 `golemdocs-files`, Vectorize `golemdocs-docs`), secrets (`CF_API_TOKEN` and provider keys, [server/AUTH.md](../../server/AUTH.md)) and `cf:migrate` (D1 migrations in `server/migrations/directory/`) are in the README. `dev` and `local` environments exist so development never touches production; never set `DEV_USER` in production. `pnpm --filter @golemdocs/server deploy:www` deploys a second, tiny Worker (`wrangler.www.jsonc`, `src/wwwRedirect.ts`) that owns www.golemdocs.com and 308-redirects it to the bare domain (the main Worker's pages are static assets and never reach it); run it once, it only changes if the redirect does. `client/public/_redirects` redirects `/privacy` and `/terms` to `/home/...`.
+One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` builds the client, writes `wrangler.generated.jsonc`, and runs `wrangler deploy --env=""` (production is the top-level config, at golemdocs.com). First-time setup (`cf:setup`: D1 `golemdocs-directory`, R2 `golemdocs-files`), secrets (`CF_API_TOKEN` and provider keys, [server/AUTH.md](../../server/AUTH.md)) and `cf:migrate` (D1 migrations in `server/migrations/directory/`) are in the README. `dev` and `local` environments exist so development never touches production; never set `DEV_USER` in production. `pnpm --filter @golemdocs/server deploy:www` deploys a second, tiny Worker (`wrangler.www.jsonc`, `src/wwwRedirect.ts`) that owns www.golemdocs.com and 308-redirects it to the bare domain (the main Worker's pages are static assets and never reach it); run it once, it only changes if the redirect does. `client/public/_redirects` redirects `/privacy` and `/terms` to `/home/...`.
 
 **Telling open pages about an update.** The `buildId` plugin in `client/vite.config.ts` names each production build (`__BUILD_ID__` in the code, empty in development) and writes `build.json` (`{ "id" }`) into `dist`. An open page (`ui/updateNotice.ts`, logic in `buildCheck.ts`) fetches `/build.json` with `no-store` every 10 minutes, when a hidden tab comes back to the front, when the browser restores the page from its back/forward cache (iOS keeps old pages alive that way) and when it goes back online, and shows a "Reload" note if the id differs. Reloading goes through `reloadForSettings` in `main.ts`, which saves first; the page is never reloaded on its own. A lazily loaded chunk that a deploy removed (`vite:preloadError`) shows the note at once. A failed fetch, or a reply that isn't the file (the single-page fallback), counts as "no update". Distinct from `ui/newVersionNotice.ts`, which on the *next* load says what the release contained.
 
@@ -122,4 +121,4 @@ One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` 
 
 ## Related docs
 
-[Rendering](rendering.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [UI](ui.md), [Assistant](assistant.md); [Toolbar and file actions status](../actions-status.md); [Localization](../localization.md); README.md for local setup.
+[Rendering](rendering.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [UI](ui.md); [Toolbar and file actions status](../actions-status.md); [Localization](../localization.md); README.md for local setup.

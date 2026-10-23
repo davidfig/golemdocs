@@ -2,7 +2,7 @@
 // next to its file so a second computer fetches it instead of downloading and parsing the .docx.
 //
 // It is made lazily, on the first request after the document changed, never on a save (an autosave
-// must not pay for a whole document; see search.ts). The stored object is stamped with the version
+// must not pay for a whole document). The stored object is stamped with the version
 // of the index format and the catalogue row's `updated_at` (the server's clock, which every save
 // raises, the room's too), and is used only while both still match.
 
@@ -22,7 +22,7 @@ import { readDocument } from "./fileStore.ts";
 import { storedDocx } from "./stored.ts";
 import { indexKey } from "./keys.ts";
 
-/** Documents bigger than this aren't indexed (the same limit as the assistant's search). */
+/** Documents bigger than this aren't indexed. */
 const MAX_BYTES = 6_000_000;
 
 const headers = (size: number, at: number): Record<string, string> => ({

@@ -111,12 +111,6 @@ export function wikiLinkText(address: string, label: string): string | null {
   return label === target ? `[[${target}]]` : `[[${target}|${label}]]`;
 }
 
-/** How an embed of a stored document is written (`![[Note]]`), or null when it can't be (see `wikiLinkText`). */
-export function embedText(address: string, label: string): string | null {
-  const link = wikiLinkText(address, label);
-  return link && `!${link}`;
-}
-
 /**
  * The address of the Markdown link in `source` that covers `offset`: `[[Note]]`, `[text](url)` or an embed. For a paragraph that is
  * showing its Markdown, whose links are characters and not links, so that they can still be followed.

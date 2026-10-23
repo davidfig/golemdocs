@@ -2,7 +2,7 @@
   "name": "golemdocs",
   "private": true,
   "description": "GolemDocs monorepo root (private, not published to npm)",
-  "version": "0.23.1",
+  "version": "0.23.2",
   "type": "module",
   "scripts": {
     "dev": "tsx scripts/dev.ts",

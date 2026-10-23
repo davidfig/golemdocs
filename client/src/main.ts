@@ -15,7 +15,7 @@ import { showProgress } from './ui/progressToast.ts';
 import { rememberNewKind } from './ui/newKinds.ts';
 import { appTools } from './assistant/appTools.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
-import { adoptGuestFolders, createFolder, setLinkKeeper } from './folderOps.ts';
+import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
 import { keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -4852,10 +4852,20 @@ const libraryHost = {
   dropFile,
   delete: deleteEverywhere,
   share: (id: string, name: string) => showShareDialog({ name, people: { id } }),
+  rename: renameListed,
   // Whose documents to list: before the plan is known, the account last signed in here (a head start).
   account: accountForFiles,
   signedIn: () => signedIn,
 };
+
+/** Renames a listed document to `name` (a whole file name): the open one through the editor, so it is saved under it; any other as it is kept. */
+async function renameListed(entry: LibraryEntry, name: string): Promise<void> {
+  const ids = openDocumentIds();
+  const open = (ids.localId !== null && entry.local?.id === ids.localId) || (ids.cloudId !== null && entry.cloud?.id === ids.cloudId);
+  if (!open) return renameEntry(entry, name);
+  if (!renameDocument(name)) throw new Error(t('app.renameRefused'));
+  await saveNow();
+}
 
 /** The open document's ids: in this browser, and in the account (its own copy's, or one shared with this user). */
 const openDocumentIds = (): { localId: string | null; cloudId: string | null } => ({
@@ -5050,6 +5060,7 @@ const assistantTools = appTools({
     deleteEntries: (entries, folderIds) => deleteEverywhere(entries, folderIds),
     trash: async () => (await loadTrash(trashDeps)).items,
     restoreFromTrash: (ids) => restoreById(trashDeps, ids),
+    rename: renameListed,
     changed: () => refreshLibrary(),
   },
   history: {

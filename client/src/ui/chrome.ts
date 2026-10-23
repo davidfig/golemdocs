@@ -30,7 +30,7 @@ import { billingPanel } from './billingPanel.ts';
 import { analyticsPanel } from './analyticsPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
-import type { DrawerEntry } from './menuDrawer.ts';
+import type { DrawerDocument, DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { inAppMenuOnMac, installFullScreen, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
@@ -152,7 +152,7 @@ export class Chrome {
     document.body.append(this.layer);
     setPopupLayer(this.layer);
 
-    this.menuBar = new MenuBar(this.registry, this.menus(), this.layer, () => this.mobileMenu());
+    this.menuBar = new MenuBar(this.registry, this.menus(), this.layer, () => this.mobileMenu(), () => this.drawerDocument());
     const native = IS_MAC ? desktopMenu() : null;
     if (native) {
       // Both menus work: the system's always, and the one in the window too when the option asks for it.
@@ -624,6 +624,13 @@ export class Chrome {
     });
   }
 
+  /** The open document's name at the top of the phone's menu: tapping it renames the document, when that can be done. */
+  private drawerDocument(): DrawerDocument | null {
+    const { documentName, kind, renamable } = this.state;
+    if (!documentName) return null;
+    return { name: displayDocumentName(documentName, kind), rename: renamable ? () => this.registry.execute('file.rename') : null };
+  }
+
   /**
    * The phone's menu: not the desktop menus behind a button but one list of what is used on a
    * phone, grouped under small headings, with the full menus last for everything else.
@@ -635,6 +642,7 @@ export class Chrome {
       cmd('file.new'),
       cmd('file.open'),
       this.openRecentItem(),
+      cmd('file.rename'),
       cmd('file.share'),
       this.convertToItem(),
       cmd('file.download'),
@@ -1617,10 +1625,13 @@ export class Chrome {
     );
   }
 
-  /** File ▸ Rename: edits the name in the menu bar, or asks in a dialog when there is no room to show it there. */
+  /**
+   * File ▸ Rename: edits the name in the menu bar, or asks in a dialog when there is no room to show it there. A touch screen
+   * always asks in the dialog: its field takes the focus during the tap, which is the only time iOS brings up the keyboard.
+   */
   private renameDocument(): void {
     // After the menu has closed and handed the keyboard back to the document.
-    if (this.docTitle.visible) return void setTimeout(() => this.docTitle.focus(), 0);
+    if (this.docTitle.visible && !matchMedia('(hover: none)').matches) return void setTimeout(() => this.docTitle.focus(), 0);
     const input = h('input', { attrs: { type: 'text', maxlength: '120', 'aria-label': t('chrome.title.label') }, class: 'wm-rename-input' });
     input.value = displayDocumentName(this.state.documentName, this.state.kind);
     input.addEventListener('keydown', (e) => {

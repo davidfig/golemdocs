@@ -50,6 +50,7 @@ export const app: Partial<Messages> = {
   'app.importDuplicateOverwrite': '덮어쓰기',
   'app.importDuplicateRename': '둘 다 유지',
   'app.importDuplicateSkip': '건너뛰기',
+  'app.renameRefused': '이 문서의 이름은 바꿀 수 없습니다',
   'app.importedZipUnchanged': '가져온 문서: {count}. 그대로 둠(동일하거나 건너뜀): {unchanged}',
   'app.importZipFailed': '가져오지 못했습니다: {message}',
   'app.importProgress': '{done} / {total}',

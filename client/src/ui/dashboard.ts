@@ -20,7 +20,8 @@ import { t } from '../i18n/index.ts';
 import { Thumbnails } from './dashboardThumbnails.ts';
 import { h, isFileDrag } from './dom.ts';
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
-import { fileIcon, setFileName } from './fileIcons.ts';
+import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
+import { renamedFileName } from '../documentName.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { ICONS, iconElement } from './icons.ts';
@@ -61,6 +62,8 @@ export interface DashboardHost {
   signedIn(): User | null;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
+  /** Gives a document a new file name (its extension kept); fails with why, if it could not. */
+  rename(entry: LibraryEntry, name: string): Promise<void>;
   /** Opens a document someone else shared with the user. */
   openShared(doc: CloudDocument): void;
   /** Opens the trash (the account's deleted documents), which has its own dialog. */
@@ -99,10 +102,10 @@ export class Dashboard {
   private readonly selectionCount: HTMLElement;
   /** The folder being looked at (null: the top level). */
   private folderId: string | null = null;
-  /** The folder whose name is being typed in place (just made, or being renamed). */
+  /** The folder (its id) or document (`doc:<key>`) whose name is being typed in place (a folder just made, or either being renamed). */
   private renaming: string | null = null;
-  /** What has been typed in the folder name field so far (and where the caret is), kept when the cards are rebuilt under it. */
-  private renameDraft: { folder: string; value: string; start: number; end: number } | null = null;
+  /** What has been typed in the name field so far (and where the caret is), kept when the cards are rebuilt under it. */
+  private renameDraft: { id: string; value: string; start: number; end: number } | null = null;
   private dragged: Dragged | null = null;
   /** While the cards are being replaced: the rename field losing its place isn't the user leaving it. */
   private rebuilding = false;
@@ -359,9 +362,9 @@ export class Dashboard {
   // --- Rendering ---------------------------------------------------------------------------
 
   private render(): void {
-    const field = this.grid.querySelector<HTMLInputElement>('.wm-folder-name-input');
+    const field = this.grid.querySelector<HTMLInputElement>('.wm-card-name-input');
     this.renameDraft =
-      field && this.renaming ? { folder: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
+      field && this.renaming ? { id: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
     this.thumbnails.pause();
     // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
     this.resetConfirm();
@@ -385,10 +388,10 @@ export class Dashboard {
     this.grid.replaceChildren(...children);
     this.rebuilding = false;
     this.syncSelection();
-    const renameField = this.grid.querySelector<HTMLInputElement>('.wm-folder-name-input');
+    const renameField = this.grid.querySelector<HTMLInputElement>('.wm-card-name-input');
     if (renameField) {
       renameField.focus({ preventScroll: false });
-      const draft = this.renameDraft?.folder === this.renaming ? this.renameDraft : null;
+      const draft = this.renameDraft?.id === this.renaming ? this.renameDraft : null;
       if (draft) renameField.setSelectionRange(draft.start, draft.end);
       else renameField.select();
     }
@@ -435,12 +438,23 @@ export class Dashboard {
     const thumb = this.thumbnails.forEntry(entry);
 
     const meta = [relativeTime(entry.updatedAt), formatSize(entry.size)].join(' · ');
-    const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', title: entry.name }, fileIcon(entry.name), setFileName(h('span', { class: 'wm-card-title' }), entry.name)), h('span', { class: 'wm-card-meta', text: meta }));
-    warmOnHover(open, () => this.host.warm(entry));
-    open.addEventListener('click', () => {
-      this.hide();
-      this.host.open(entry);
-    });
+    const id = `doc:${entry.key}`;
+    let open: HTMLElement;
+    if (this.renaming === id) {
+      // The name is typed without its extension, which stays (it decides how the document opens).
+      const input = this.nameField(id, splitExtension(entry.name)[0], t('chrome.title.label'), 120, (typed) => {
+        const name = renamedFileName(entry.name, typed);
+        return name ? () => this.renameEntry(entry, name) : null;
+      });
+      open = h('div', { class: 'wm-card-open' }, thumb, h('span', { class: 'wm-card-name' }, fileIcon(entry.name), input), h('span', { class: 'wm-card-meta', text: meta }));
+    } else {
+      open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', title: entry.name }, fileIcon(entry.name), setFileName(h('span', { class: 'wm-card-title' }), entry.name)), h('span', { class: 'wm-card-meta', text: meta }));
+      warmOnHover(open, () => this.host.warm(entry));
+      open.addEventListener('click', () => {
+        this.hide();
+        this.host.open(entry);
+      });
+    }
 
     const badges = h('div', { class: 'wm-badges' });
     const sync = syncBadge(entry.state, this.host.account() !== null);
@@ -455,6 +469,12 @@ export class Dashboard {
     const move = this.iconButton('moveToFolder', t('panels.dashboard.move'));
     move.addEventListener('click', () => this.pickFolder(t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => this.relocate({ kind: 'doc', entry }, to)));
     actions.prepend(move);
+    const rename = this.iconButton('rename', t('panels.dashboard.rename'));
+    rename.addEventListener('click', () => {
+      this.renaming = id;
+      this.render();
+    });
+    actions.prepend(rename);
     const card = h('article', { class: 'wm-card' }, open, badges, actions);
     this.makeDraggable(card, { kind: 'doc', entry });
     this.makeSelectable(card, `doc:${entry.key}`, entry.name);
@@ -470,26 +490,9 @@ export class Dashboard {
     const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }, ...minis));
     let open: HTMLElement;
     if (this.renaming === folder.id) {
-      const draft = this.renameDraft?.folder === folder.id ? this.renameDraft.value : null;
-      const input = h('input', { class: 'wm-folder-name-input', attrs: { type: 'text', value: draft ?? folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
-      let finished = false;
-      const finish = (save: boolean) => {
-        if (finished) return;
-        finished = true;
-        this.renaming = null;
-        const name = input.value.trim();
-        if (save && name && name !== folder.name) void this.run(() => this.changeFolders([{ folder, name }]));
-        else this.render();
-      };
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') finish(true);
-        else if (e.key === 'Escape') {
-          e.stopPropagation();
-          finish(false);
-        }
-      });
-      input.addEventListener('blur', () => {
-        if (!this.rebuilding) finish(true);
+      const input = this.nameField(folder.id, folder.name, t('panels.dashboard.folderName'), 255, (typed) => {
+        const name = typed.trim();
+        return name && name !== folder.name ? () => this.changeFolders([{ folder, name }]) : null;
       });
       open = h('div', { class: 'wm-card-open' }, art, input);
     } else {
@@ -731,6 +734,42 @@ export class Dashboard {
     // Shown at once from what is known (a folder just made is typed in), then as the account has it.
     this.render();
     if (reload) await this.refresh();
+  }
+
+  /**
+   * The field a folder's or document's name is typed in, on its card. Enter or leaving it keeps the name, Escape doesn't;
+   * `change` says what keeping `typed` does (null: nothing, as when it is empty or the same).
+   */
+  private nameField(id: string, value: string, label: string, maxLength: number, change: (typed: string) => (() => Promise<void>) | null): HTMLInputElement {
+    const draft = this.renameDraft?.id === id ? this.renameDraft.value : null;
+    const input = h('input', { class: 'wm-card-name-input', attrs: { type: 'text', value: draft ?? value, 'aria-label': label, maxlength: String(maxLength) } });
+    let finished = false;
+    const finish = (save: boolean) => {
+      if (finished) return;
+      finished = true;
+      this.renaming = null;
+      const run = save ? change(input.value) : null;
+      if (run) void this.run(run);
+      else this.render();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finish(true);
+      else if (e.key === 'Escape') {
+        e.stopPropagation();
+        finish(false);
+      }
+    });
+    input.addEventListener('blur', () => {
+      if (!this.rebuilding) finish(true);
+    });
+    return input;
+  }
+
+  /** Renames a document, showing its new name at once; if saving fails, the lists fetched again put the old one back. */
+  private async renameEntry(entry: LibraryEntry, name: string): Promise<void> {
+    this.entries = this.entries.map((e) => (e.key === entry.key ? { ...e, name } : e));
+    this.render();
+    await this.host.rename(entry, name);
   }
 
   private relocate(item: Dragged, to: string | null): Promise<void> {

@@ -10,7 +10,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 **File**
 - Open (the documents dashboard), New, Import (file picker), Open Sample, Open Recent
 - Download (in the document's own format)
-- Rename (File ▸ Rename, or click the name centred in the menu bar; also an AI tool, `rename_document`). Not for built-in pages or documents shared by someone else
+- Rename (File ▸ Rename, or click the name centred in the menu bar; on a phone, tap the name at the top of the menu, which asks in a dialog; also an AI tool, `rename_document`). Not for built-in pages or documents shared by someone else. Any document in the library can be renamed from its card on the Documents screen or its menu in the Files sidebar (`renameEntry` in `folderOps.ts`, or the editor for the open one; AI tool: `files` action `rename`)
 - Convert To (Word, ODT, HTML, PDF, Markdown, text)
 - Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab)
 - Share: sharing a cloud document with people by email; Sync Now

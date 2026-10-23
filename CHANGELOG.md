@@ -1,5 +1,17 @@
 # What’s New in Golem Docs
 
+## 0.23.3 - Unreleased
+
+### Added
+
+- Documents can be renamed from their card on the Documents screen and from their menu in the Files sidebar, not only while they are open.
+- In the Files sidebar on a touch screen, holding a finger on a document or folder opens its menu.
+
+### Fixed
+
+- On a phone, a document can now be renamed: the menu shows its name at the top (tap it to rename it), and File › Rename is in the menu.
+- The buttons under a document's card on the Documents screen are now all the same width.
+
 ## 0.23.2 - 2026-10-23
 
 ### Fixed

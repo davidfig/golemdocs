@@ -1,11 +1,11 @@
 // Changes to the folder hierarchy. Signed in with sync, the folders are the account's (and a change
 // is made there first, so it only happens if it is saved); otherwise they are this browser's.
 
-import { listFolders, moveDocuments, putFolders, throwIfFailed, type BatchResult } from './cloud.ts';
+import { listFolders, moveDocuments, putFolders, renameCloudDocument, throwIfFailed, type BatchResult } from './cloud.ts';
 import { folderContents, folderOf, folderPath, isInside, parentsFirst, type Folder } from './folders.ts';
-import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder, updateLocalFolder } from './storage/local.ts';
+import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder, setSavedName, updateLocalFolder } from './storage/local.ts';
 import type { LibraryChange } from './linkRename.ts';
-import { addFoldersToCatalogue, moveDocsInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
+import { addFoldersToCatalogue, moveDocsInCatalogue, putDocInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
 
 /** Folders that were not saved by a batch call (the cloud's answer for each), as an error naming the first reason. */
 /**
@@ -133,6 +133,19 @@ export async function moveEntries(entries: readonly LibraryEntry[], folderId: st
   // Links are only written for a move that all happened.
   if (!result.failed.length) linksAfter?.();
   throwIfFailed(result);
+}
+
+/**
+ * Renames a document that is not open (the open one is renamed through the editor, which saves it under the new name). The
+ * account's copy is renamed first, so nothing changes here unless it is saved there; the name is all that changes.
+ */
+export async function renameEntry(entry: LibraryEntry, name: string): Promise<void> {
+  const linksAfter = linkKeeper?.({ kind: 'rename', key: entry.key, name });
+  // A copy linked to the account is renamed there too, even when the account's list hasn't come yet.
+  const cloudId = entry.cloud?.id ?? entry.local?.cloudId;
+  if (cloudId) putDocInCatalogue(await renameCloudDocument(cloudId, name));
+  if (entry.local) await setSavedName(entry.local.id, name);
+  linksAfter?.();
 }
 
 /**

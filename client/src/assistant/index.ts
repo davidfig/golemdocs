@@ -78,6 +78,7 @@ function toolNote(name: string): string {
     case 'list_files':
     case 'create_folders':
     case 'rename_folders':
+    case 'rename_files':
     case 'move_files':
     case 'delete_files':
     case 'download_all':

@@ -51,6 +51,7 @@ export const app: Partial<Messages> = {
   'app.importDuplicateOverwrite': 'Sovrascrivi',
   'app.importDuplicateRename': 'Mantieni entrambi',
   'app.importDuplicateSkip': 'Salta',
+  'app.renameRefused': 'Questo documento non può essere rinominato',
   'app.importedZipUnchanged': 'Documenti importati: {count}. Lasciati invariati (identici o saltati): {unchanged}',
   'app.importZipFailed': 'Importazione non riuscita: {message}',
   'app.importProgress': '{done} di {total}',

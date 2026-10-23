@@ -50,6 +50,7 @@ export const app: Partial<Messages> = {
   'app.importDuplicateOverwrite': '上書き',
   'app.importDuplicateRename': '両方残す',
   'app.importDuplicateSkip': 'スキップ',
+  'app.renameRefused': 'この文書の名前は変更できません',
   'app.importedZipUnchanged': 'インポートしたドキュメント：{count}。変更なし（同一またはスキップ）：{unchanged}',
   'app.importZipFailed': 'インポートに失敗しました：{message}',
   'app.importProgress': '{done} / {total}',

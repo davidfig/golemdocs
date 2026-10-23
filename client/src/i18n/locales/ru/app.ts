@@ -53,6 +53,7 @@ export const app: Catalog = {
   'app.importDuplicateOverwrite': 'Заменить',
   'app.importDuplicateRename': 'Оставить оба',
   'app.importDuplicateSkip': 'Пропустить',
+  'app.renameRefused': 'Этот документ нельзя переименовать',
   'app.importedZipUnchanged': 'Импортировано документов: {count}. Оставлены без изменений (совпадают или пропущены): {unchanged}',
   'app.importZipFailed': 'Не удалось импортировать: {message}',
   'app.importProgress': '{done} из {total}',

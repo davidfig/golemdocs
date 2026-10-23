@@ -168,3 +168,42 @@ test('one row of the tree is in the tab order, it follows the focus, and Left go
   await expect(folder).toHaveAttribute('tabindex', '0');
   await expect(row(page, 'inside')).toHaveAttribute('tabindex', '-1');
 });
+
+test('a document is renamed from its menu, keeping its extension', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
+    await importFile(app, file);
+    await waitForSaved(page, file.name);
+  }
+  await app.menu('View', 'Files Sidebar');
+  await row(page, 'alpha').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Rename' }).click();
+  const field = page.locator('.wm-files-rename');
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('alpha');
+  await field.fill('first');
+  await page.keyboard.press('Enter');
+  await expect(row(page, 'first')).toHaveText(/first\.txt/);
+  await expect(row(page, 'alpha')).toHaveCount(0);
+  await page.reload();
+  await app.ready();
+  await expect(row(page, 'first')).toHaveCount(1);
+});
+
+test('a long press with a finger opens a row\'s menu, and lifting the finger does not open the document', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
+    await importFile(app, file);
+    await waitForSaved(page, file.name);
+  }
+  await app.menu('View', 'Files Sidebar');
+  await expect(row(page, 'beta')).toHaveClass(/wm-files-current/);
+  const box = (await row(page, 'alpha').boundingBox())!;
+  const at = { clientX: box.x + 20, clientY: box.y + box.height / 2, pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true, composed: true };
+  await row(page, 'alpha').dispatchEvent('pointerdown', at);
+  await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
+  await page.evaluate((init) => window.dispatchEvent(new PointerEvent('pointerup', init)), at);
+  await row(page, 'alpha').dispatchEvent('click', { clientX: at.clientX, clientY: at.clientY });
+  await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
+  await expect(row(page, 'beta')).toHaveClass(/wm-files-current/);
+});

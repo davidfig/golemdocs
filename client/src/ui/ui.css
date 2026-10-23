@@ -413,6 +413,38 @@ html.wm-titlebar .wm-format {
   display: none;
 }
 
+/* The open document's name under the head (menuDrawer.ts): a tap renames it. */
+.wm-drawer-doc {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  height: 48px;
+  padding: 0 16px 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--wm-border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.wm-drawer-doc[hidden] {
+  display: none;
+}
+
+.wm-drawer-doc:active {
+  background: var(--wm-hot);
+}
+
+.wm-drawer-doc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .wm-drawer-list {
   flex: 1;
   overflow-y: auto;

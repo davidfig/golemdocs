@@ -14,7 +14,7 @@ export const TOOL_GROUPS: Record<string, Record<string, string>> = {
   pdf_read: { page: 'read_pdf_page', find: 'find_pdf_text', fields: 'list_pdf_fields' },
   pdf_edit: { markup: 'pdf_markup', edit_text: 'pdf_edit_text', add_text: 'pdf_add_text', add_shape: 'pdf_add_shape', page: 'pdf_page', fill_field: 'fill_pdf_field' },
   document: { info: 'get_document_info', count_words: 'count_words', rename: 'rename_document', convert: 'convert_document', download: 'download_document', print: 'print_document' },
-  files: { list: 'list_files', open: 'open_file', new: 'new_document', move: 'move_files', delete: 'delete_files', trash: 'list_trash', restore: 'restore_from_trash', download_all: 'download_all' },
+  files: { list: 'list_files', open: 'open_file', new: 'new_document', rename: 'rename_files', move: 'move_files', delete: 'delete_files', trash: 'list_trash', restore: 'restore_from_trash', download_all: 'download_all' },
   versions: { list: 'list_versions', save: 'save_version', restore: 'restore_version' },
   folders: { create: 'create_folders', rename: 'rename_folders' },
   text_pictures: { select: 'select_text_picture', delete: 'delete_text_picture', resize: 'resize_text_picture', move: 'move_text_picture', edit: 'edit_text_picture' },

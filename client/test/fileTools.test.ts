@@ -24,6 +24,7 @@ function setup(trash: { id: string; name: string; source: 'device' | 'account'; 
   calls.length = 0;
   const deleted: [string[], string[]][] = [];
   const restored: string[] = [];
+  const renamed: [string, string][] = [];
   const entries = [doc('d1', null), doc('d2', 'a'), doc('d3', 'b'), doc('d4', null)];
   const folders = [folder('a', null), folder('b', 'a'), folder('c', null)];
   const tools = fileTools({
@@ -37,9 +38,13 @@ function setup(trash: { id: string; name: string; source: 'device' | 'account'; 
       restored.push(...ids.filter(known));
       return { restored: ids.filter(known), failed: ids.filter((id) => !known(id)).map((id) => `${id}: not found`) };
     },
+    rename: async (entry, name) => {
+      if (entry.key === 'd4') throw new Error('offline');
+      renamed.push([entry.key, name]);
+    },
     changed: () => {},
   });
-  return { tools, deleted, restored };
+  return { tools, deleted, restored, renamed };
 }
 
 test('list_files names every folder and document with its place', async () => {
@@ -48,6 +53,16 @@ test('list_files names every folder and document with its place', async () => {
   assert.match(text, /folder b "B" in a/);
   assert.match(text, /document d2 "d2.docx" in a/);
   assert.match(text, /document d1 "d1.docx" in top level/);
+});
+
+test('rename_files renames documents keeping their extension, and says which could not be', async () => {
+  const { tools, renamed } = setup();
+  const reply = await tools.rename_files!({ renames: [{ file: 'd1', name: 'Plan' }, { file: 'd2', name: '  ' }, { file: 'd4', name: 'Later' }, { file: 'nope', name: 'x' }] });
+  assert.deepEqual(renamed, [['d1', 'Plan.docx']]);
+  assert.match(reply, /renamed 1 document \("Plan.docx"\)/);
+  assert.match(reply, /"d2.docx" needs a new name/);
+  assert.match(reply, /"d4.docx": offline/);
+  assert.match(reply, /no document nope/);
 });
 
 test('move_files moves documents and folders to one place in one request each', async () => {

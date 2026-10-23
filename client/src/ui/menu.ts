@@ -10,7 +10,7 @@ import type { CommandRegistry } from './commands.ts';
 import { h, isFormField, mnemonicLabel, setAttr, stripMnemonic } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { IS_MAC } from './shortcuts.ts';
-import { showMenuDrawer, type DrawerEntry } from './menuDrawer.ts';
+import { showMenuDrawer, type DrawerDocument, type DrawerEntry } from './menuDrawer.ts';
 
 export type MenuItem =
   | { type: 'command'; id: string }
@@ -365,6 +365,8 @@ export class MenuBar {
     layer: HTMLDivElement,
     /** What the phone's drawer lists (built when it opens). */
     mobileMenu: () => DrawerEntry[],
+    /** The open document, named at the top of the drawer. */
+    drawerDocument: () => DrawerDocument | null = () => null,
   ) {
     this.layer = layer;
     this.el = h('div', { class: 'wm-menubar', attrs: { role: 'menubar', 'aria-label': t('menus.menuBar') } });
@@ -374,7 +376,7 @@ export class MenuBar {
     hamburger.innerHTML = ICONS.menu;
     hamburger.addEventListener('click', () => {
       this.close(false);
-      showMenuDrawer(this.registry, mobileMenu(), this.layer);
+      showMenuDrawer(this.registry, mobileMenu(), this.layer, drawerDocument());
     });
     this.el.append(hamburger);
     menus.forEach((menu, i) => {

@@ -2,6 +2,7 @@
 
 import { stem } from './formats/source.ts';
 import { hasExtension } from './formats/textFiles.ts';
+import { splitExtension } from './ui/fileIcons.ts';
 
 const MAX_LENGTH = 120;
 
@@ -21,4 +22,19 @@ export function cleanDocumentName(input: string): string {
 /** What the title shows: the name without its extension, except that a text file keeps the one it came with ("main.py"). */
 export function displayDocumentName(name: string, kind: string): string {
   return kind === 'txt' && hasExtension(name) ? name : stem(name);
+}
+
+/**
+ * A listed document's file name once it is renamed to `typed`: the name it shows (without its extension) is what is typed, and
+ * the extension stays, since it decides how the document opens. Null when nothing is left of it, or nothing changes.
+ */
+export function renamedFileName(old: string, typed: string): string | null {
+  const [, extension] = splitExtension(old);
+  let name = typed.trim();
+  // Typed with its extension ("Plan.docx"): not twice.
+  if (extension && name.toLowerCase().endsWith(extension.toLowerCase())) name = name.slice(0, -extension.length);
+  name = cleanDocumentName(name);
+  if (!name) return null;
+  const renamed = cleanDocumentName(name + extension);
+  return renamed === old ? null : renamed;
 }

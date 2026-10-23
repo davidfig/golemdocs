@@ -79,6 +79,10 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  /* A long press opens the row's menu (contextMenu.ts), not the system's callout or a text selection. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .wm-files-twist {

@@ -50,6 +50,7 @@ export const app: Partial<Messages> = {
   'app.importDuplicateOverwrite': '覆寫',
   'app.importDuplicateRename': '保留兩者',
   'app.importDuplicateSkip': '略過',
+  'app.renameRefused': '無法重新命名此文件',
   'app.importedZipUnchanged': '已匯入的文件：{count}。保持原樣（相同或已略過）：{unchanged}',
   'app.importZipFailed': '匯入失敗：{message}',
   'app.importProgress': '{done} / {total}',

@@ -63,7 +63,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | `client/src/sync.ts` | `SyncState`, `classify`, `mergeLibrary`, `loadLibrary`, `loadLocalLibrary`, the `wm.catalogue` cache and its patch helpers |
 | `client/src/cloud.ts` | typed fetch client for `/api/documents`, `/api/folders`, shares; `CloudError`, 429 retry in `send`, delta (chunk) upload, session-local `deleted` set |
 | `client/src/uploadQueue.ts` | `UploadQueue` (dirty set, 2 s delay, offline retry every 30 s, batch coordination) with a `UploadHost` callback interface |
-| `client/src/folders.ts`, `folderOps.ts` | pure folder rules (`childFolders`, `Placed`) and the create/rename/move/delete operations, cloud-first when signed in |
+| `client/src/folders.ts`, `folderOps.ts` | pure folder rules (`childFolders`, `Placed`) and the create/rename/move/delete operations, cloud-first when signed in; documents are moved (`moveEntries`) and renamed (`renameEntry`: name only, the account's copy first; the open document is renamed through the editor instead) here too |
 | `client/src/auth.ts` | `currentUser` (falls back to `remembered()` offline), `availableProviders`, `signInUrl`, `signOut` |
 | `client/src/subscription.ts` | `fetchSubscription`, checkout/portal URLs; `sync: false` switches the app to guest mode |
 | `client/src/settingsSync.ts` | `SYNCED_KEYS`, `planSync`, `syncSettings`, per-profile (`desktop`/`mobile`) |

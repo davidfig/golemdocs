@@ -51,6 +51,7 @@ export const app = {
   'app.importDuplicateOverwrite': 'Overwrite',
   'app.importDuplicateRename': 'Keep both',
   'app.importDuplicateSkip': 'Skip',
+  'app.renameRefused': 'This document can’t be renamed',
   'app.importedZipUnchanged': 'Imported documents: {count}. Left as they were (identical, or skipped): {unchanged}',
   'app.importZipFailed': 'Import failed: {message}',
   'app.importProgress': '{done} of {total}',

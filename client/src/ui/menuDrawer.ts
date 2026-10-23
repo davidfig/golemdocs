@@ -11,6 +11,12 @@ import { describeItem, visibleItems, type MenuItem, type RowItem } from './menu.
 /** A drawer list holds menu items and small headings that group them. */
 export type DrawerEntry = MenuItem;
 
+/** The open document, named above the list; `rename` (null: it can't be renamed) runs when its name is tapped. */
+export interface DrawerDocument {
+  name: string;
+  rename: (() => void) | null;
+}
+
 interface Level {
   title: string;
   items: DrawerEntry[] | (() => DrawerEntry[]);
@@ -18,7 +24,7 @@ interface Level {
 
 let open: { close: () => void } | null = null;
 
-export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], layer: HTMLElement): void {
+export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], layer: HTMLElement, doc: DrawerDocument | null = null): void {
   open?.close();
   const levels: Level[] = [{ title: t('menus.menuBar'), items: root }];
 
@@ -28,7 +34,9 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
   const closeButton = h('button', { class: 'wm-drawer-close', attrs: { type: 'button', 'aria-label': t('menus.dialog.close') } });
   closeButton.innerHTML = ICONS.close;
   const list = h('div', { class: 'wm-drawer-list', attrs: { role: 'menu' } });
-  const drawer = h('div', { class: 'wm-drawer', attrs: { role: 'dialog', 'aria-label': t('menus.menuBar') } }, h('div', { class: 'wm-drawer-head' }, back, title, closeButton), list);
+  // The document's name, under the head while the top level is shown: a tap on it renames the document (its pencil says so).
+  const docRow = doc ? documentRow(doc, () => close()) : null;
+  const drawer = h('div', { class: 'wm-drawer', attrs: { role: 'dialog', 'aria-label': t('menus.menuBar') } }, h('div', { class: 'wm-drawer-head' }, back, title, closeButton), ...(docRow ? [docRow] : []), list);
   const backdrop = h('div', { class: 'wm-drawer-backdrop' });
   // Pressing in the drawer never takes focus from the document.
   drawer.addEventListener('mousedown', (e) => e.preventDefault());
@@ -90,6 +98,7 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
     const level = levels[levels.length - 1];
     title.textContent = stripMnemonic(level.title);
     back.hidden = levels.length < 2;
+    if (docRow) docRow.hidden = levels.length > 1;
     list.replaceChildren();
     list.scrollTop = 0;
     const entries = typeof level.items === 'function' ? level.items() : level.items;
@@ -111,4 +120,17 @@ export function showMenuDrawer(registry: CommandRegistry, root: DrawerEntry[], l
   open = { close };
   render();
   layer.append(backdrop, drawer);
+}
+
+/** The open document's name, with a pencil when a tap renames it. */
+function documentRow(doc: DrawerDocument, close: () => void): HTMLElement {
+  const name = h('span', { class: 'wm-drawer-doc-name', text: doc.name });
+  const rename = doc.rename;
+  if (!rename) return h('div', { class: 'wm-drawer-doc', title: doc.name }, name);
+  const row = h('button', { class: 'wm-drawer-doc', title: doc.name, attrs: { type: 'button', 'aria-description': t('chrome.file.rename.tip') } }, name, iconElement('rename'));
+  row.addEventListener('click', () => {
+    close();
+    rename();
+  });
+  return row;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cleanDocumentName, displayDocumentName } from '../src/documentName.ts';
+import { cleanDocumentName, displayDocumentName, renamedFileName } from '../src/documentName.ts';
 
 test('cleanDocumentName removes characters a file name cannot hold and tidies spaces', () => {
   assert.equal(cleanDocumentName('  Q3 / budget:  "final"?  '), 'Q3 budget final');
@@ -29,4 +29,22 @@ test('displayDocumentName hides the extension, except for a text file', () => {
   assert.equal(displayDocumentName('main.py', 'txt'), 'main.py');
   assert.equal(displayDocumentName('notes.txt', 'txt'), 'notes.txt');
   assert.equal(displayDocumentName('notes', 'txt'), 'notes');
+});
+
+test('renamedFileName keeps the extension of the name it replaces', () => {
+  assert.equal(renamedFileName('Report.docx', 'Budget'), 'Budget.docx');
+  assert.equal(renamedFileName('main.py', ' util '), 'util.py');
+  assert.equal(renamedFileName('Notes', 'Plans'), 'Plans');
+});
+
+test('renamedFileName does not double an extension typed with the name, and cleans it', () => {
+  assert.equal(renamedFileName('Report.docx', 'Budget.docx'), 'Budget.docx');
+  assert.equal(renamedFileName('Report.docx', 'Budget.DOCX'), 'Budget.docx');
+  assert.equal(renamedFileName('Report.docx', 'Q3: budget'), 'Q3 budget.docx');
+});
+
+test('renamedFileName gives null for an empty name or no change', () => {
+  assert.equal(renamedFileName('Report.docx', '  '), null);
+  assert.equal(renamedFileName('Report.docx', '.docx'), null);
+  assert.equal(renamedFileName('Report.docx', 'Report'), null);
 });

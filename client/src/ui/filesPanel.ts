@@ -12,10 +12,12 @@ import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
 import { CLOSE_ICON, h, iconButton, isFileDrag, toggleClass } from './dom.ts';
 import { setDocumentDrag } from './documentDrag.ts';
-import { fileIcon, setFileName } from './fileIcons.ts';
+import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
+import { renamedFileName } from '../documentName.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { showPopupMenu, type PopupItem } from './popupMenu.ts';
+import { onContextMenu } from './contextMenu.ts';
 import { newKindItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
@@ -38,6 +40,8 @@ export interface FilesPanelHost {
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
+  /** Gives a document a new file name (its extension kept); fails with why, if it could not. */
+  rename(entry: LibraryEntry, name: string): Promise<void>;
   account(): User | null;
   signedIn(): User | null;
   /** The open document's ids, to mark it. */
@@ -58,10 +62,10 @@ export class FilesPanel {
   private readonly tree = h('div', { class: 'wm-files-tree', attrs: { role: 'tree', 'aria-label': t('panels.files.label') } });
   private readonly empty = h('p', { class: 'wm-files-empty', text: t('panels.files.empty') });
   private readonly notice = h('p', { class: 'wm-files-notice', attrs: { role: 'status' } });
-  /** The folder being renamed in place. */
+  /** The folder (its id) or document (`doc:<key>`) being renamed in place. */
   private renaming: string | null = null;
-  /** What has been typed in the folder name field so far (and where the caret is), kept when the rows are rebuilt under it. */
-  private renameDraft: { folder: string; value: string; start: number; end: number } | null = null;
+  /** What has been typed in the name field so far (and where the caret is), kept when the rows are rebuilt under it. */
+  private renameDraft: { id: string; value: string; start: number; end: number } | null = null;
   private dragged: Dragged | null = null;
   private readonly expanded = new Set<string>();
   /** The open document the tree was last opened up to, so a folder closed afterwards stays closed. */
@@ -93,9 +97,9 @@ export class FilesPanel {
     collapse.addEventListener('click', () => this.collapseAll());
     this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.tree, this.empty, this.dropTip());
     this.notice.hidden = true;
-    this.el.addEventListener('contextmenu', (e) => {
-      if ((e.target as HTMLElement).closest('.wm-files-row')) return;
-      e.preventDefault();
+    // Right click, or a long press on a touch screen.
+    onContextMenu(this.el, (e) => {
+      if ((e.target as HTMLElement).closest('.wm-files-row, input')) return false;
       this.menuAt(e.clientX, e.clientY, this.rootItems());
     });
     this.makeDropTarget(this.tree, null);
@@ -211,7 +215,7 @@ export class FilesPanel {
   private render(): void {
     const field = this.tree.querySelector<HTMLInputElement>('input.wm-files-rename');
     this.renameDraft =
-      field && this.renaming ? { folder: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
+      field && this.renaming ? { id: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
     const focused = this.el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.row : undefined;
     const here = this.host.current();
     const rows = treeRows(this.folders, this.entries, this.expanded);
@@ -229,8 +233,8 @@ export class FilesPanel {
     const folder = row.kind === 'folder';
     const id = folder ? `f:${row.folder.id}` : `d:${row.item.key}`;
     const name = folder ? row.folder.name : row.item.name;
-    const renaming = folder && this.renaming === row.folder.id;
-    const label = renaming ? this.renameInput(row.folder) : folder ? h('span', { class: 'wm-files-name', text: name }) : setFileName(h('span', { class: 'wm-files-name' }), name);
+    const renaming = this.renaming === (folder ? row.folder.id : `doc:${row.item.key}`);
+    const label = renaming ? this.renameInput(row) : folder ? h('span', { class: 'wm-files-name', text: name }) : setFileName(h('span', { class: 'wm-files-name' }), name);
     const el = h(
       // A field can't be inside a button.
       renaming ? 'div' : 'button',
@@ -241,8 +245,8 @@ export class FilesPanel {
     );
     if (renaming) {
       el.style.paddingLeft = `${6 + row.depth * 18}px`;
-      el.setAttribute('aria-expanded', String(row.open));
-      const draft = this.renameDraft?.folder === row.folder.id ? this.renameDraft : null;
+      if (folder) el.setAttribute('aria-expanded', String(row.open));
+      const draft = this.renameDraft?.id === this.renaming ? this.renameDraft : null;
       queueMicrotask(() => {
         const input = el.querySelector('input');
         input?.focus();
@@ -271,9 +275,7 @@ export class FilesPanel {
       if (folder) this.toggleFolder(row.folder.id);
       else this.host.open(row.item);
     });
-    el.addEventListener('contextmenu', (event) => {
-      const e = event as MouseEvent;
-      e.preventDefault();
+    onContextMenu(el, (e) => {
       el.focus({ preventScroll: true });
       this.menuAt(e.clientX, e.clientY, folder ? this.folderItems(row.folder, row.open) : this.fileItems(row.item), el);
     });
@@ -283,16 +285,20 @@ export class FilesPanel {
     return el;
   }
 
-  private renameInput(folder: Folder): HTMLInputElement {
-    const draft = this.renameDraft?.folder === folder.id ? this.renameDraft.value : null;
-    const input = h('input', { class: 'wm-files-rename', attrs: { type: 'text', value: draft ?? folder.name, 'aria-label': t('panels.dashboard.folderName'), maxlength: '255' } });
+  /** The field a folder's or document's name is typed in, in its row. A document's is typed without its extension, which stays. */
+  private renameInput(row: TreeRow<LibraryEntry>): HTMLInputElement {
+    const id = row.kind === 'folder' ? row.folder.id : `doc:${row.item.key}`;
+    const value = row.kind === 'folder' ? row.folder.name : splitExtension(row.item.name)[0];
+    const draft = this.renameDraft?.id === id ? this.renameDraft.value : null;
+    const label = row.kind === 'folder' ? t('panels.dashboard.folderName') : t('chrome.title.label');
+    const input = h('input', { class: 'wm-files-rename', attrs: { type: 'text', value: draft ?? value, 'aria-label': label, maxlength: row.kind === 'folder' ? '255' : '120' } });
     let finished = false;
     const finish = (save: boolean) => {
       if (finished) return;
       finished = true;
       this.renaming = null;
-      const name = input.value.trim();
-      if (save && name && name !== folder.name) void this.run(() => this.changeFolder(folder, { name }));
+      const change = save ? this.renameChange(row, input.value) : null;
+      if (change) void this.run(change);
       else this.render();
     };
     input.addEventListener('keydown', (e) => {
@@ -321,6 +327,7 @@ export class FilesPanel {
     const items: PopupItem[] = [
       { label: t('panels.files.openItem'), run: () => this.host.open(entry) },
       ...(entry.cloud ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
+      { label: t('panels.dashboard.rename'), run: () => this.startRename(`doc:${entry.key}`) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(document.body, this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
       'separator',
       { label: t('panels.dashboard.delete'), run: () => void this.ask([], [entry], () => this.host.delete([entry])) },
@@ -381,6 +388,23 @@ export class FilesPanel {
     }
     this.render();
     await this.refresh();
+  }
+
+  /** What keeping `typed` as a row's name does (null: nothing, as when it is empty or the same). */
+  private renameChange(row: TreeRow<LibraryEntry>, typed: string): (() => Promise<void>) | null {
+    if (row.kind === 'folder') {
+      const { folder } = row;
+      const name = typed.trim();
+      return name && name !== folder.name ? () => this.changeFolder(folder, { name }) : null;
+    }
+    const entry = row.item;
+    const name = renamedFileName(entry.name, typed);
+    if (!name) return null;
+    return async () => {
+      // Shown under its new name at once; if saving fails, the list fetched again puts the old one back.
+      this.entries = this.entries.map((e) => (e.key === entry.key ? { ...e, name } : e));
+      await this.host.rename(entry, name);
+    };
   }
 
   private startRename(id: string): void {

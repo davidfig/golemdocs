@@ -238,8 +238,9 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   gap: 4px;
 }
 
-/* One row of equal buttons, whatever the card's width or the number of actions (the delete button is a .wm-button, which would otherwise be wider). */
-.wm-card-actions button {
+/* One row of equal buttons, whatever the card's width or the number of actions (the delete button is a .wm-button, which would otherwise be wider;
+   the others would keep the padding of the screen's other buttons). */
+.wm-dashboard .wm-card-actions button {
   flex: 1 1 0;
   min-width: 0;
   height: 28px;
@@ -399,7 +400,8 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   }
 }
 
-.wm-folder-name-input {
+/* The name of a folder or document being typed on its card. */
+.wm-card-name-input {
   width: 100%;
   box-sizing: border-box;
   padding: 3px 6px;
@@ -407,6 +409,12 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   background: var(--wm-field-bg);
   color: var(--wm-text);
   font-weight: 600;
+}
+
+/* A document's beside its icon. */
+.wm-card-name .wm-card-name-input {
+  flex: 1;
+  min-width: 0;
 }
 
 .wm-card[draggable='true'] {

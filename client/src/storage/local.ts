@@ -339,6 +339,15 @@ export async function setSavedFolder(id: string, folderId: string | null): Promi
   await finished(tx);
 }
 
+/** Gives a saved copy a new name, leaving its contents (and when they were saved) as they are. */
+export async function setSavedName(id: string, name: string): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(META, 'readwrite');
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  if (info) tx.objectStore(META).put({ ...info, name });
+  await finished(tx);
+}
+
 /** The folders kept in this browser: those of someone not signed in (an account's are in the cloud). */
 export async function listLocalFolders(): Promise<Folder[]> {
   const db = await openDb();

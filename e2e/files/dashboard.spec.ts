@@ -204,3 +204,39 @@ test('closing the dashboard leaves the open document as it was', async ({ app, p
   await app.type('!');
   expect(await app.text()).toBe('still here!');
 });
+
+test('a document card\'s Rename names it in place, keeping its extension, and the open document\'s title follows', async ({ app, page }) => {
+  await saveThree(app);
+  await openDashboard(app);
+  const card = (name: string) => cards(page).filter({ has: page.locator('.wm-card-name', { hasText: name }) });
+
+  await card('beta.md').hover();
+  await card('beta.md').getByRole('button', { name: 'Rename' }).click();
+  const field = dashboard(page).locator('.wm-card-name-input');
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('beta');
+  await field.fill('second');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => cardNames(page)).toEqual(['gamma.csv', 'second.md', 'alpha.txt']);
+
+  // Escape leaves it as it was.
+  await card('alpha.txt').hover();
+  await card('alpha.txt').getByRole('button', { name: 'Rename' }).click();
+  await field.fill('never');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => cardNames(page)).toContain('alpha.txt');
+
+  // gamma.csv is the open document: renaming it renames what is open.
+  await card('gamma.csv').hover();
+  await card('gamma.csv').getByRole('button', { name: 'Rename' }).click();
+  await field.fill('table');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => cardNames(page)).toEqual(['table.csv', 'second.md', 'alpha.txt']);
+  await expect(page).toHaveTitle(/^table/);
+
+  // Kept: listed again after a reload.
+  await page.reload();
+  await app.ready();
+  await openDashboard(app);
+  await expect.poll(async () => (await cardNames(page)).sort()).toEqual(['alpha.txt', 'second.md', 'table.csv']);
+});

@@ -5,6 +5,7 @@
 import { createFolders, moveEntries, removeFolderTree, updateFolders } from '../folderOps.ts';
 import { folderContents, isInside, type Folder } from '../folders.ts';
 import type { LibraryEntry } from '../sync.ts';
+import { renamedFileName } from '../documentName.ts';
 
 export interface FileToolsHost {
   /** Whether the folders are the account's (signed in) rather than this browser's. */
@@ -17,6 +18,8 @@ export interface FileToolsHost {
   trash(): Promise<{ id: string; name: string; source: 'device' | 'account'; deletedAt: number; purgeAt: number }[]>;
   /** Puts trashed documents back; each id that could not be is reported with why. */
   restoreFromTrash(ids: string[]): Promise<{ restored: string[]; failed: string[] }>;
+  /** Gives a document a new file name, the same as Rename on the Documents screen (the open one is saved under it). */
+  rename(entry: LibraryEntry, name: string): Promise<void>;
   /** Lists everything again and redraws the screens that show it. */
   changed(): Promise<void> | void;
 }
@@ -120,6 +123,35 @@ export function fileTools(host: FileToolsHost): Record<string, (args: Args) => P
         await host.changed();
       }
       return report(changes.length ? [`renamed ${count(changes.length, 'folder')}`] : [], skipped);
+    },
+
+    async rename_files(args) {
+      const list = args.renames;
+      if (!Array.isArray(list) || !list.length) throw new Error('`renames` must be a list of { file, name }.');
+      const entries = host.entries();
+      const done: string[] = [];
+      const skipped: string[] = [];
+      for (const item of list as { file?: unknown; name?: unknown }[]) {
+        const entry = entries.find((e) => e.key === item?.file);
+        if (!entry) {
+          skipped.push(`no document ${String(item?.file)}`);
+          continue;
+        }
+        // The extension stays: it decides how the document opens (convert changes it).
+        const name = typeof item.name === 'string' ? renamedFileName(entry.name, item.name) : null;
+        if (!name) {
+          skipped.push(`"${entry.name}" needs a new name`);
+          continue;
+        }
+        try {
+          await host.rename(entry, name);
+          done.push(name);
+        } catch (e) {
+          skipped.push(`"${entry.name}": ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      if (done.length) await host.changed();
+      return report(done.length ? [`renamed ${count(done.length, 'document')} (${done.map((n) => `"${n}"`).join(', ')})`] : [], skipped);
     },
 
     async move_files(args) {

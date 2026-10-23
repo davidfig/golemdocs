@@ -47,3 +47,9 @@ test('what the vault does not keep is never converted', async () => {
   assert.equal(await toVaultFile(text('%PDF-1.7'), 'a.pdf'), null);
   await assert.rejects(fromVaultFile(text('x'), 'a.pdf'));
 });
+
+test('a document the account holds in any form the app opens goes out, not just .wdoc and Word', async () => {
+  for (const [name, source] of [['Meeting.md', '# Board meeting\n\n- minutes\n'], ['todo.txt', 'milk\n'], ['a.csv', 'a,b\n1,2\n'], ['page.html', '<p>Hi</p>']]) {
+    assert.equal(read(await toVaultFile(text(source), name)), source, name);
+  }
+});

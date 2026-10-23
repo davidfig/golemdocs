@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.23.2 - Unreleased
+
+### Fixed
+
+- Desktop app: documents uploaded as Markdown, text or other non-Word files sync to your folder again, instead of stopping with “not a ZIP file”.
+
 ## 0.23.1 - 2026-10-22
 
 ### Fixed

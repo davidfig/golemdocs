@@ -25,6 +25,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = 'https://golemdocs.com';
 const WORKFLOW = 'Desktop release';
 const POLL_MS = 30_000;
+const BUILD_POLL_MS = 5_000;
+const BUILD_WAIT_MS = 120_000;
 
 const [command, ...rest] = process.argv.slice(2);
 const flags = new Set(rest.filter((a) => a.startsWith('--')));
@@ -128,8 +130,13 @@ async function ship(): Promise<void> {
   say('Checking the site');
   if (dryRun) return;
   const manifest = (await (await fetch(`${SITE}/api/downloads`, { cache: 'no-store' })).json()) as { version?: string };
-  const after = await buildId();
   if (manifest.version !== version) throw new Error(`/api/downloads serves ${manifest.version}, not ${version}`);
+  // A deploy takes a few seconds to reach every edge, so the first read can still be the old build.
+  let after = await buildId();
+  for (let waited = 0; (after === null || after === before) && waited < BUILD_WAIT_MS; waited += BUILD_POLL_MS) {
+    await sleep(BUILD_POLL_MS);
+    after = await buildId();
+  }
   if (after === null || after === before) throw new Error(`/build.json did not change (${before} → ${after}): the website may not have deployed`);
   console.log(`${tag} is live: downloads at ${version}, site build ${before} → ${after}.`);
 }

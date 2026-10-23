@@ -1,5 +1,15 @@
 # What’s New in Golem Docs
 
+## 0.24.0 - Unreleased
+
+### Changed
+
+- Desktop and iPhone apps: your vault folder now holds every document as a real file, including PDFs (with your annotations, form fields and edits written in), pictures (with their layers drawn in), drawings, EPUB and MHTML. A file changed in the folder replaces the document, and your account keeps the earlier version.
+
+### Fixed
+
+- Desktop app: large files sync to and from your folder much faster (after you update the app).
+
 ## 0.23.3 - 2026-10-23
 
 ### Added

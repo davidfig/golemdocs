@@ -61,8 +61,8 @@ test('the caller keeps its own bytes', async () => {
 
 test('a document the vault does not keep comes back as null, and fromFile refuses it', async () => {
   const worker = new ConvertWorker(loopback().start, 5);
-  assert.equal(await worker.toFile(text('%PDF'), 'a.pdf'), null);
-  await assert.rejects(worker.fromFile(text('x'), 'a.pdf'));
+  assert.equal(await worker.toFile(text('PK'), 'a.zip'), null);
+  await assert.rejects(worker.fromFile(text('x'), 'a.zip'));
   worker.stop();
 });
 
@@ -103,7 +103,8 @@ test('kept answers from the name, without a worker', () => {
   const { start, log } = loopback();
   const worker = new ConvertWorker(start, 5);
   assert.equal(worker.kept('a.md'), true);
-  assert.equal(worker.kept('a.pdf'), false);
+  assert.equal(worker.kept('a.pdf'), true);
+  assert.equal(worker.kept('a.zip'), false);
   assert.equal(log.started, 0);
 });
 

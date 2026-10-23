@@ -17,6 +17,8 @@
     "allow-vault-read",
     "allow-vault-write",
     "allow-vault-remove",
+    "allow-vault-read-base64",
+    "allow-vault-write-base64",
     "allow-set-native-menu",
     "allow-update-check",
     "allow-update-install",

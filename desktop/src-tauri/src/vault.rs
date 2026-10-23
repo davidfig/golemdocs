@@ -368,6 +368,72 @@ pub fn vault_write(request: tauri::ipc::Request<'_>, vault: State<'_, Vault>) ->
     write(&vault.locate(&path)?, &path, &bytes)
 }
 
+/// Base64 (RFC 4648, with padding): how the `_base64` commands carry a file. A string is one JSON value whichever way the web
+/// view sends it, where raw bytes become an array of numbers when it uses `postMessage` (see `body_bytes`), several
+/// times the size and far too slow for a file of tens of megabytes.
+const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub fn base64_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16) | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8) | u32::from(*chunk.get(2).unwrap_or(&0));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(BASE64[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+pub fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
+    let bad = || "expected the file's bytes as base64".to_string();
+    let text = text.as_bytes();
+    if text.len() % 4 != 0 {
+        return Err(bad());
+    }
+    let value = |c: u8| match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    };
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let quads = text.len() / 4;
+    for (q, quad) in text.chunks(4).enumerate() {
+        // Padding only at the very end: one or two `=`.
+        let pad = if q + 1 == quads { quad.iter().rev().take_while(|&&c| c == b'=').count() } else { 0 };
+        if pad > 2 {
+            return Err(bad());
+        }
+        let mut n = 0u32;
+        for &c in &quad[..4 - pad] {
+            n = (n << 6) | u32::from(value(c).ok_or_else(bad)?);
+        }
+        n <<= 6 * pad as u32;
+        out.extend_from_slice(&n.to_be_bytes()[1..4 - pad]);
+    }
+    Ok(out)
+}
+
+/// `vault_read` with the file as base64 (see `BASE64`). An older shell has only `vault_read`.
+#[tauri::command]
+pub fn vault_read_base64(path: String, vault: State<'_, Vault>) -> Result<String, String> {
+    let file = resolve(&vault.locate(&path)?, &path, true)?;
+    fs::read(file).map(|bytes| base64_encode(&bytes)).map_err(|e| e.to_string())
+}
+
+/// `vault_write` with the file as base64 (see `BASE64`). An older shell has only `vault_write`.
+#[tauri::command]
+pub fn vault_write_base64(path: String, data: String, vault: State<'_, Vault>) -> Result<u64, String> {
+    let bytes = base64_decode(&data)?;
+    write(&vault.locate(&path)?, &path, &bytes)
+}
+
 #[tauri::command]
 pub fn vault_remove(path: String, vault: State<'_, Vault>) -> Result<(), String> {
     remove(&vault.root()?, &path)
@@ -449,6 +515,19 @@ mod tests {
         assert_eq!(body_bytes(&InvokeBody::Json(serde_json::json!([4, 5, 255]))).unwrap().as_ref(), [4, 5, 255]);
         assert!(body_bytes(&InvokeBody::Json(serde_json::json!([4, 256]))).is_err());
         assert!(body_bytes(&InvokeBody::Json(serde_json::json!({ "a": 1 }))).is_err());
+    }
+
+    #[test]
+    fn base64_goes_both_ways() {
+        for (bytes, text) in [(&b""[..], ""), (b"f", "Zg=="), (b"fo", "Zm8="), (b"foo", "Zm9v"), (b"foob", "Zm9vYg=="), (&[0, 255, 254, 62, 63][..], "AP/+Pj8=")] {
+            assert_eq!(base64_encode(bytes), text);
+            assert_eq!(base64_decode(text).unwrap(), bytes);
+        }
+        let all: Vec<u8> = (0..=255).cycle().take(1000).collect();
+        assert_eq!(base64_decode(&base64_encode(&all)).unwrap(), all);
+        for bad in ["Zg=", "Z===", "Zg==Zg==", "Zm9*", "Zm 9"] {
+            assert!(base64_decode(bad).is_err(), "{bad:?} should be refused");
+        }
     }
 
     #[test]

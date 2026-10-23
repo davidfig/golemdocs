@@ -18,6 +18,8 @@ fn main() {
             "vault_read",
             "vault_write",
             "vault_remove",
+            "vault_read_base64",
+            "vault_write_base64",
             "set_native_menu",
             "update_check",
             "update_install",

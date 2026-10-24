@@ -105,12 +105,13 @@ test('Open Recent lists what is saved and opens the one chosen', async ({ app, p
   expect(await formatLabel(page)).toBe('Markdown');
 });
 
-test('an address that names a document that is gone opens a blank one and says so', async ({ app, page }) => {
+test('an address that names a document that is gone leaves nothing open and says so', async ({ app, page }) => {
   await page.goto('/?doc=local:does-not-exist');
   await app.ready();
   await expect.poll(() => status(page)).toBe('That document is no longer saved in this browser');
-  await expect(page).toHaveTitle('Document1 - Golem Docs');
-  expect(await app.text()).toBe('');
+  await expect(page).toHaveTitle('Golem Docs');
+  await expect(page.locator('.wm-nothing-open')).toBeVisible();
+  await expect(page).toHaveURL(/doc=none/);
 });
 
 test('an address with an unknown document name opens the fonts sample', async ({ app, page }) => {

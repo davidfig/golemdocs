@@ -1,0 +1,36 @@
+/* No document open (see nothingOpen.ts): over the editor in the desk's color, under the loading
+   screen, so opening a document from here shows its loading screen in front. */
+
+.wm-nothing-open {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wm-desk, #e5e5e5);
+  color: var(--wm-text, #000);
+  font: 13px/1.4 var(--wm-font, system-ui, sans-serif);
+}
+
+.wm-nothing-open[hidden] {
+  display: none;
+}
+
+.wm-nothing-open-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: min(480px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.wm-nothing-open-message {
+  color: var(--wm-muted);
+}
+
+.wm-nothing-open-buttons {
+  display: flex;
+  gap: 8px;
+}

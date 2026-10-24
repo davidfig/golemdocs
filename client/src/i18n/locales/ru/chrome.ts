@@ -3,6 +3,7 @@ import type { Catalog } from '../../index.ts';
 export const chrome: Catalog = {
   'chrome.file.new': '&Создать',
   'chrome.file.open': '&Открыть…',
+  'chrome.file.close': '&Закрыть',
   'chrome.file.import': '&Импорт…',
   'chrome.file.importFolder': 'Импорт &папки…',
   'chrome.file.download': 'Ска&чать',
@@ -108,6 +109,7 @@ export const chrome: Catalog = {
   'chrome.format.case.title': '&Начинать с прописных',
   'chrome.format.case.toggle': 'и&ЗМЕНИТЬ рЕГИСТР',
   'chrome.file.open.tip': 'Показать все ваши документы',
+  'chrome.file.close.tip': 'Закрыть этот документ, не оставляя открытых',
   'chrome.file.import.tip': 'Импортировать файл с компьютера',
   'chrome.file.importFolder.tip': 'Импортировать папку с вашего компьютера',
   'chrome.file.new.tip': 'Создать пустой документ',

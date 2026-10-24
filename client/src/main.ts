@@ -73,6 +73,7 @@ import { searchableDocuments, type SourceDeps } from './search/sources.ts';
 import { SearchPanel } from './ui/searchPanel.ts';
 import { embedTitle, parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
+import { NothingOpenScreen } from './ui/nothingOpen.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
@@ -388,7 +389,7 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean };
+type OpenOptions = { detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -422,7 +423,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   current = {
     localId: options.localId ?? null,
     unsavedSince: 0,
-    builtIn: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
+    builtIn: !!options.none || source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
     room: null,
     roomRequested: false,
     ignored: { words: [], rules: [] },
@@ -431,7 +432,10 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
     name,
     kind: kindOfSource(source),
     ...(options.detour && { detour: true }),
+    ...(options.none && { none: true }),
   };
+  if (options.none) nothingOpenScreen.show();
+  else nothingOpenScreen.hide();
   if (!current.builtIn) rememberNewKind(current.kind);
   // Meant for this document only: a later one isn't filed there by mistake.
   newDocumentFolder = null;
@@ -472,7 +476,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   pendingNotice = null;
   annotating = false;
   sharedDeviceNotice.update({ welcome: source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' });
-  setStatus(t('app.loading', { name }));
+  setStatus(options.none ? t('app.nothingOpen') : t('app.loading', { name }));
 
   layerSteps = { canUndo: false, canRedo: false };
   vectorSteps = { canUndo: false, canRedo: false };
@@ -520,7 +524,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
       worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() });
-      setStatus(t('app.layingOut', { name }));
+      if (!opening.none) setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
       if (!firstPage && update.pages.length) firstPage = performance.now() - start;
@@ -528,7 +532,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       // The first pages are the document: the rest is laid out behind them while they are looked at (the status bar counts them).
       if (loadingScreen.visible && update.pages.length && pages.length) loadingScreen.hide();
       if (update.selection) applySelection(update.selection);
-      if (!loaded) setStatus(t('app.layingOutPages', { name, count: pages.length, pages: pages.length.toLocaleString(getLocale()) }));
+      if (!loaded && !opening.none) setStatus(t('app.layingOutPages', { name, count: pages.length, pages: pages.length.toLocaleString(getLocale()) }));
     },
     done(count, times) {
       loaded = true;
@@ -549,7 +553,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       }
       const glyphs = pages.reduce((n, p) => n + p.glyphCount, 0);
       loadTimes = { pages: count, glyphs, firstPage, total: performance.now() - start, read: times.read, fonts: times.fonts, body: times.body, headers: times.headers };
-      setStatus(t('app.ready', { name }));
+      setStatus(opening.none ? t('app.nothingOpen') : t('app.ready', { name }));
       if (pendingJump) {
         const jump = pendingJump;
         pendingJump = null;
@@ -1011,6 +1015,17 @@ function placeCamera(): void {
 
 const loadingScreen = new LoadingScreen(document.getElementById('viewport')!);
 
+const nothingOpenScreen = new NothingOpenScreen(document.getElementById('viewport')!, {
+  newDocument: () => void Promise.resolve(chromeHost.perform({ kind: 'new' })).then(focusInput),
+  open: () => void dashboard.show(),
+});
+
+/** File › Close: the open document is put away (saved first, as any document left is) and nothing is open in its place. */
+function closeDocument(): void {
+  if (current.none) return;
+  openSource('none');
+}
+
 /** Covers the editor (and the dashboard) with the loading screen until the document is open. */
 function showLoading(name: string): void {
   document.dispatchEvent(new Event('wm-caret-off'));
@@ -1034,6 +1049,8 @@ function openSource(source: string, step: 'push' | 'replace' | 'none' = 'push'):
   params.set('doc', source);
   if (step === 'none') noteAddressDoc(source);
   else setUrl(params, step === 'push');
+  // Coming back, the app carries on with what was open here: a document, or none after File › Close.
+  if (source === 'none' || source.startsWith('local:')) rememberLastDoc(source);
   if (source === 'war-and-peace') {
     open({ kind: 'text-url', name: t('app.warAndPeaceName'), url: warAndPeaceUrl });
   } else if (source.startsWith('corpus:')) {
@@ -1051,6 +1068,8 @@ function openSource(source: string, step: 'push' | 'replace' | 'none' = 'push'):
     open({ kind: 'legal', page: source });
   } else if (source === 'changelog') {
     open({ kind: 'changelog' });
+  } else if (source === 'none') {
+    open({ kind: 'blank', name: '' }, { none: true });
   } else {
     open({ kind: 'fonts' });
   }
@@ -1093,6 +1112,8 @@ interface OpenDocument {
   kind: DocumentKind;
   /** A picture taken from a document to be edited, and put back when done: never saved on its own (see `editPicture`). */
   detour?: boolean;
+  /** Nothing is open (File › Close): an empty document the No Document screen covers, which nothing can change. */
+  none?: boolean;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
@@ -1923,7 +1944,7 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
   const openId = open.localId;
   if (deletingOpen) {
     // The open document: its next autosave (or one under way) would write it back, and upload it
-    // again as a new cloud document. It is replaced by the Welcome document once it is gone.
+    // again as a new cloud document. Once it is gone, nothing is open in its place.
     clearTimeout(autosaveTimer);
     await saving;
     open.localId = null;
@@ -1946,7 +1967,7 @@ async function deleteEverywhere(entries: readonly LibraryEntry[], folderIds: rea
     throw e;
   }
   if (deletingOpen) {
-    if (openId !== null && result.removed.has(openId)) openSource('welcome', 'replace');
+    if (openId !== null && result.removed.has(openId)) openSource('none', 'replace');
     else keepOpen();
   }
   if (result.refused.size) throw new Error([...result.refused.values()][0]);
@@ -2062,7 +2083,8 @@ async function openLocal(id: string): Promise<void> {
   const saved = await (early ?? getSaved(id).catch(() => null));
   if (!latest()) return;
   if (!saved) {
-    open({ kind: 'blank', name: t('app.newDocumentName') });
+    // Gone (deleted, or Back to where it was): nothing is open in its place.
+    openSource('none', 'replace');
     pendingNotice = t('app.localGone');
     return;
   }
@@ -3297,7 +3319,7 @@ function focusByTap(): void {
 }
 
 function focusInput(): void {
-  if (!focusAllowed) return;
+  if (!focusAllowed || current.none) return;
   if (textView.active) return textEngine.focus();
   input.focus({ preventScroll: true });
 }
@@ -3441,6 +3463,7 @@ function render(): void {
   }
   chrome.update({
     documentName: current.name,
+    nothingOpen: !!current.none,
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
     kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
@@ -4200,6 +4223,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (dashboard.visible) return; // the dashboard has the keyboard; the document is behind it
+  if (current.none) return; // nothing open: no keys for a document
   // Other text boxes (comments, Clip, dialogs) keep their keys; `#input` is the document's own.
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (e.target instanceof HTMLTextAreaElement && e.target.id !== 'input') return;
@@ -4263,6 +4287,8 @@ function fontFamilies(withFile = false): Promise<string[]> {
 // Menu bar and toolbars (./ui); chromeHost.ts maps their actions onto this app.
 const chromeHost = createChromeHost({
   dashboard: () => dashboard.toggle(),
+  closeDocument,
+  nothingOpen: () => !!current.none,
   prepareNew: async (folderId) => {
     if (folderId !== undefined) {
       newDocumentFolder = folderId;
@@ -5337,7 +5363,7 @@ function rulerIndents(): { left: number; right: number; firstLine: number } {
 /** The rulers measure the page in view, so they are shown for pages that print: not in Flow, the page grid, a PDF or a picture. */
 function updateRuler(): void {
   const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
-  const page = rulerOn && !textView.active && !reflowing() && !grid && !annotating && !isPicture() ? nearestPage(pages, center.x, center.y) : null;
+  const page = rulerOn && !current.none && !textView.active && !reflowing() && !grid && !annotating && !isPicture() ? nearestPage(pages, center.x, center.y) : null;
   ruler.setVisible(page !== null);
   verticalRuler.setVisible(page !== null);
   if (!page) return;
@@ -5413,7 +5439,7 @@ function updateFooter(): void {
 /** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
 function syncPagesPanel(): void {
   // While a document opens it has no pages yet: a panel already showing stays, empty, rather than closing and opening again.
-  const shown = pagesOpen() && !textView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
+  const shown = pagesOpen() && !current.none && !textView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
   pagesPanel.setVisible(shown);
   if (!shown) return;
   pagesPanel.setEditable(annotating);
@@ -5582,6 +5608,8 @@ window.addEventListener('popstate', () => {
       try {
         const saved = await listSaved();
         const last = lastDoc();
+        // Closed (File › Close) when last here: still nothing open. Only a first visit, with nothing saved, is welcomed.
+        if (last === 'none' && saved.length) return openSource('none', 'replace');
         const id = saved.some((d) => `local:${d.id}` === last) ? last : [...saved].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id;
         openSource(id ? (id.startsWith('local:') ? id : `local:${id}`) : 'welcome', 'replace');
       } catch {

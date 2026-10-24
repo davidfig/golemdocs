@@ -307,6 +307,7 @@ export class Chrome {
     r.add(
       a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
       a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
+      a('file.close', t('chrome.file.close'), { kind: 'close' }, { tooltip: t('chrome.file.close.tip') }),
       a('file.import', t('chrome.file.import'), { kind: 'import' }, { tooltip: t('chrome.file.import.tip') }),
       a('file.importFolder', t('chrome.file.importFolder'), { kind: 'importFolder' }, { tooltip: t('chrome.file.importFolder.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
@@ -642,6 +643,7 @@ export class Chrome {
       cmd('file.new'),
       cmd('file.open'),
       this.openRecentItem(),
+      cmd('file.close'),
       cmd('file.rename'),
       cmd('file.share'),
       this.convertToItem(),
@@ -721,6 +723,7 @@ export class Chrome {
           cmd('file.import'),
           cmd('file.importFolder'),
           this.openRecentItem(),
+          cmd('file.close'),
           sep,
           cmd('file.share'),
           this.convertToItem(),
@@ -1584,7 +1587,7 @@ export class Chrome {
           return kind && t(`menus.format.group.${formatGroup(kind)}`);
         },
         value: (s) => FORMATS[s.kind].label,
-        enabled: () => !this.converting,
+        enabled: (s) => !this.converting && !s.nothingOpen,
         title: (s) =>
           FORMATS[s.kind].editable ? t('chrome.formatBox.editableTip') : t('chrome.formatBox.readOnlyTip'),
         commit: (text) => {

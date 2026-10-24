@@ -3,6 +3,7 @@ import type { Messages } from '../../index.ts';
 export const chrome: Partial<Messages> = {
   'chrome.file.new': '新建(&N)',
   'chrome.file.open': '打开(&O)…',
+  'chrome.file.close': '关闭(&C)',
   'chrome.file.import': '导入(&I)…',
   'chrome.file.importFolder': '导入文件夹(&F)…',
   'chrome.file.download': '下载(&W)',
@@ -108,6 +109,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.title': '每个单词首字母大写(&T)',
   'chrome.format.case.toggle': '切换大小写(&O)',
   'chrome.file.open.tip': '查看所有文档',
+  'chrome.file.close.tip': '关闭此文档，不打开任何文档',
   'chrome.file.import.tip': '从电脑导入文件',
   'chrome.file.importFolder.tip': '从您的计算机导入文件夹',
   'chrome.file.new.tip': '新建空白文档',

@@ -83,6 +83,8 @@ export type Action =
   /** A blank document. `folderId` is where it is filed (null: the top level); left out, the folder of the open document. `docKind` is its type; left out, the one used last. */
   | { kind: 'new'; folderId?: string | null; docKind?: DocumentKind }
   | { kind: 'open' }
+  /** Put the open document away (saved, as it always is), leaving no document open. */
+  | { kind: 'close' }
   /** `folderId`: where the file goes (null: the top level); a ZIP's top level goes there. */
   | { kind: 'import'; folderId?: string | null }
   /** Pick a folder from the computer and import its documents like a ZIP's, in the same folders. */
@@ -237,6 +239,8 @@ export interface FormatState {
 /** Everything the chrome shows that comes from the application. */
 export interface ChromeState {
   documentName: string;
+  /** No document is open (File › Close): only what needs none is enabled (`worksWithoutDocument`). */
+  nothingOpen: boolean;
   /** The other people editing this document together (not this user); empty when on one's own. Shown beside the name. */
   people: { name: string; picture: string | null; color: number }[];
   /** The name may be changed (not a built-in or shared document). */
@@ -301,6 +305,7 @@ export interface SyncStatus {
 
 export const DEFAULT_STATE: ChromeState = {
   documentName: '',
+  nothingOpen: false,
   people: [],
   renamable: false,
   kind: 'docx',

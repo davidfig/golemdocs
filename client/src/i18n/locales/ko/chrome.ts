@@ -3,6 +3,7 @@ import type { Messages } from '../../index.ts';
 export const chrome: Partial<Messages> = {
   'chrome.file.new': '새로 만들기(&N)',
   'chrome.file.open': '열기(&O)…',
+  'chrome.file.close': '닫기(&C)',
   'chrome.file.import': '가져오기(&I)…',
   'chrome.file.importFolder': '폴더 가져오기(&F)…',
   'chrome.file.download': '다운로드(&W)',
@@ -108,6 +109,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.title': '각 단어의 첫 글자를 대문자로(&T)',
   'chrome.format.case.toggle': '대/소문자 전환(&O)',
   'chrome.file.open.tip': '모든 문서 보기',
+  'chrome.file.close.tip': '이 문서를 닫아 열린 문서가 없게 합니다',
   'chrome.file.import.tip': '컴퓨터에서 파일을 가져옵니다',
   'chrome.file.importFolder.tip': '컴퓨터에서 폴더 가져오기',
   'chrome.file.new.tip': '새 빈 문서',

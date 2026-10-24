@@ -1,6 +1,7 @@
 export const chrome = {
   'chrome.file.new': '&New',
   'chrome.file.open': '&Open…',
+  'chrome.file.close': '&Close',
   'chrome.file.import': '&Import…',
   'chrome.file.importFolder': 'I&mport Folder…',
   'chrome.file.download': 'Do&wnload',
@@ -106,6 +107,7 @@ export const chrome = {
   'chrome.format.case.title': '&Title Case',
   'chrome.format.case.toggle': 't&OGGLE cASE',
   'chrome.file.open.tip': 'See all your documents',
+  'chrome.file.close.tip': 'Close this document, leaving no document open',
   'chrome.file.import.tip': 'Import a file from your computer',
   'chrome.file.importFolder.tip': 'Import a folder from your computer',
   'chrome.file.new.tip': 'New Blank Document',

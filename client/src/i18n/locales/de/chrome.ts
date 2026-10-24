@@ -3,6 +3,7 @@ import type { Messages } from '../../index.ts';
 export const chrome: Partial<Messages> = {
   'chrome.file.new': '&Neu',
   'chrome.file.open': '&Öffnen…',
+  'chrome.file.close': '&Schließen',
   'chrome.file.import': '&Importieren…',
   'chrome.file.importFolder': '&Ordner importieren…',
   'chrome.file.download': '&Herunterladen',
@@ -108,6 +109,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.title': 'Jedes &Wort großschreiben',
   'chrome.format.case.toggle': 'Groß-/Kleinschreibung &umkehren',
   'chrome.file.open.tip': 'Alle Ihre Dokumente anzeigen',
+  'chrome.file.close.tip': 'Dieses Dokument schließen, sodass kein Dokument geöffnet ist',
   'chrome.file.import.tip': 'Eine Datei von Ihrem Computer importieren',
   'chrome.file.importFolder.tip': 'Einen Ordner von Ihrem Computer importieren',
   'chrome.file.new.tip': 'Neues leeres Dokument',

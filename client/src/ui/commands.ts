@@ -4,7 +4,7 @@
 // once and every place that shows the command agrees.
 
 import type { Action, ChromeHost, ChromeState } from './actions.ts';
-import { FORMATS, formatAllows } from './formats.ts';
+import { FORMATS, formatAllows, worksWithoutDocument } from './formats.ts';
 import { formatShortcut, loadShortcutOverrides, parseShortcut, saveShortcutOverrides, shortcutSpec, sameShortcut, type Shortcut, type ShortcutOverrides, type ShortcutSpec } from './shortcuts.ts';
 import { t } from '../i18n/index.ts';
 import { stripMnemonic } from './dom.ts';
@@ -157,6 +157,7 @@ export class CommandRegistry {
     const action = this.actionOf(command);
     if (!action) return true;
     if (!formatAllows(FORMATS[state.kind], action)) return false;
+    if (state.nothingOpen && !worksWithoutDocument(action)) return false;
     return this.context.showUnimplemented || this.context.host.supports(action);
   }
 
@@ -213,7 +214,9 @@ export class CommandRegistry {
 
   /** Whether a value-carrying action is available, for combo boxes and color buttons. */
   allows(action: Action): boolean {
-    if (!formatAllows(FORMATS[this.context.state().kind], action)) return false;
+    const state = this.context.state();
+    if (!formatAllows(FORMATS[state.kind], action)) return false;
+    if (state.nothingOpen && !worksWithoutDocument(action)) return false;
     return this.context.showUnimplemented || this.context.host.supports(action);
   }
 }

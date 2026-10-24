@@ -374,6 +374,15 @@ export function acceptList(): string {
     .join(',');
 }
 
+/** What can still be done with no document open: opening or making one, the account, and the app's own settings and views. */
+const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'open', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
+const DIALOGS_WITHOUT_DOCUMENT = new Set<string>(['options', 'trash', 'vault', 'updates', 'searchAll']);
+
+/** Whether the action means anything with no document open (after File › Close). */
+export function worksWithoutDocument(action: Action): boolean {
+  return action.kind === 'dialog' ? DIALOGS_WITHOUT_DOCUMENT.has(action.name) : WITHOUT_DOCUMENT.has(action.kind);
+}
+
 /** Whether a document of this format can express the action at all. */
 export function formatAllows(profile: FormatProfile, action: Action): boolean {
   // The text editor edits text and nothing else: no formatting or document properties (printing and converting open the file as a document first).
@@ -383,6 +392,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'printPreview':
       case 'convert':
       case 'share':
+      case 'close':
       case 'undo':
       case 'redo':
       case 'cut':
@@ -404,6 +414,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'convert':
     case 'new':
     case 'open':
+    case 'close':
     case 'openSample':
     case 'openSaved':
     case 'syncNow':

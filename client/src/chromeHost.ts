@@ -17,12 +17,16 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, type ImageOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type ImageOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
   /** Show (or hide) the dashboard of all documents. */
   dashboard(): void;
+  /** Puts the open document away, leaving no document open. */
+  closeDocument(): void;
+  /** No document is open (it was closed): only what needs none can be done. */
+  nothingOpen(): boolean;
   /** Chooses the folder a new document is filed in: `folderId`, or (left out) the open document's. */
   prepareNew(folderId: string | null | undefined): Promise<void>;
   canvas: HTMLCanvasElement;
@@ -166,6 +170,7 @@ export interface AppHooks {
 const SUPPORTED = new Set<ActionKind>([
   'new',
   'open',
+  'close',
   'import',
   'importFolder',
   'openSample',
@@ -321,6 +326,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     openFile,
 
     supports(action: Action): boolean {
+      if (app.nothingOpen() && !worksWithoutDocument(action)) return false;
       if (ANNOTATION_ACTIONS.has(action.kind) && app.annotating()) return true;
       // Table commands: only the ones the editor can do yet.
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
@@ -353,6 +359,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return;
         case 'open':
           return app.dashboard();
+        case 'close':
+          return app.closeDocument();
         case 'import':
           return pickFile(action.folderId ?? null);
         case 'importFolder':

@@ -1,5 +1,15 @@
 # What’s New in Golem Docs
 
+## 0.25.0 - Unreleased
+
+### Added
+
+- File › Close puts the open document away, leaving no document open, with buttons to start a new one or open another. The app stays that way the next time you come back.
+
+### Changed
+
+- Deleting the document you have open now leaves no document open, instead of opening the Welcome document, and so does going back to a document that is no longer there (instead of an empty new one). Welcome is only shown on your first visit.
+
 ## 0.24.0 - 2026-10-23
 
 ### Changed

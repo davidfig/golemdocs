@@ -9,6 +9,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **File**
 - Open (the documents dashboard), New, Import (file picker), Open Sample, Open Recent
+- Close: the open document is put away and nothing is open (`?doc=none`, remembered as the last document): the editor shows the No Document screen (`ui/nothingOpen.ts`) over an empty built-in document, and only the actions that need no document (`WITHOUT_DOCUMENT` in `chromeHost.ts`) are enabled. Deleting the open document does the same
 - Download (in the document's own format)
 - Rename (File ▸ Rename, or click the name centred in the menu bar; on a phone, tap the name at the top of the menu, which asks in a dialog). Not for built-in pages or documents shared by someone else. Any document in the library can be renamed from its card on the Documents screen or its menu in the Files sidebar (`renameEntry` in `folderOps.ts`, or the editor for the open one)
 - Convert To (Word, ODT, HTML, PDF, Markdown, text)

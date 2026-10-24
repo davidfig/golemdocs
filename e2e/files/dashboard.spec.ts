@@ -142,7 +142,7 @@ test('cancelling the delete dialog keeps the document', async ({ app, page }) =>
   await expect(cards(page)).toHaveCount(3);
 });
 
-test('deleting the open document opens the Welcome document, and deleting another one does not', async ({ app, page }) => {
+test('deleting the open document leaves nothing open, and deleting another one does not', async ({ app, page }) => {
   await saveThree(app);
   // gamma.csv is the open document: deleting alpha.txt leaves it alone.
   await app.menu('File', 'Open…');
@@ -151,13 +151,15 @@ test('deleting the open document opens the Welcome document, and deleting anothe
   await expect(cards(page)).toHaveCount(2);
   await expect(page).toHaveURL(/doc=local/);
   await expect(page).not.toHaveTitle('Welcome to Golem Docs - Golem Docs');
-  // Deleting the open one falls back to Welcome, and the URL no longer names the deleted document.
+  // Deleting the open one leaves nothing open (not Welcome), and the URL no longer names the deleted document.
   await pressDelete(cards(page).filter({ hasText: 'gamma.csv' }));
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
-  await expect(page).toHaveTitle('Welcome to Golem Docs - Golem Docs');
-  await expect(page).toHaveURL(/\/welcome$/);
-  // The Documents screen stays up, with Welcome open behind it; it is built in, so nothing new was saved.
+  await expect(page).toHaveTitle('Golem Docs');
+  await expect(page).toHaveURL(/doc=none/);
+  // The Documents screen stays up, with nothing open behind it, and nothing new was saved.
   expect(await cardNames(page)).toEqual(['beta.md']);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.wm-nothing-open')).toBeVisible();
 });
 
 test('the blank document tile starts a new document', async ({ app, page }) => {

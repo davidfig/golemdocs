@@ -3,6 +3,7 @@ import type { Messages } from '../../index.ts';
 export const chrome: Partial<Messages> = {
   'chrome.file.new': '新規作成(&N)',
   'chrome.file.open': '開く(&O)…',
+  'chrome.file.close': '閉じる(&C)',
   'chrome.file.import': 'インポート(&I)…',
   'chrome.file.importFolder': 'フォルダーをインポート(&F)…',
   'chrome.file.download': 'ダウンロード(&W)',
@@ -108,6 +109,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.case.title': '各単語の先頭文字を大文字にする(&T)',
   'chrome.format.case.toggle': '大文字/小文字を切り替える(&O)',
   'chrome.file.open.tip': 'すべてのドキュメントを表示します',
+  'chrome.file.close.tip': 'このドキュメントを閉じ、何も開いていない状態にします',
   'chrome.file.import.tip': 'コンピューターからファイルをインポートします',
   'chrome.file.importFolder.tip': 'お使いのコンピューターからフォルダーをインポートします',
   'chrome.file.new.tip': '新規白紙ドキュメント',

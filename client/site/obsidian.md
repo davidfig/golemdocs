@@ -10,7 +10,7 @@ An Obsidian vault is an ordinary folder of Markdown files, and Golem Docs opens 
    - Or drag the vault folder onto the Golem Docs window or its Files sidebar.
    - Or compress the vault into a ZIP and choose File ▸ Import, or drop the ZIP on the window.
 3. **Wait for the progress card.** A big vault takes a moment. The card shows a steady bar and the time left, and you can cancel and keep what has come in.
-4. **Open the Files sidebar** (View ▸ Files Sidebar) to see your folders and notes.
+4. **The Files sidebar** shows your folders and notes. If it is closed, choose View ▸ Files Sidebar.
 
 Run it again whenever you like. Folders that already exist are reused, and a note whose name is taken is saved as "Note (2)" rather than replacing the one you have.
 

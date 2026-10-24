@@ -225,13 +225,15 @@ try {
 const roomForPages = matchMedia('(min-width: 900px)');
 const pagesOpen = (): boolean => pagesChoice ?? roomForPages.matches;
 
-// The files sidebar (View > Files Sidebar): optional, so closed until chosen; remembered in this browser.
+// The files sidebar (View > Files Sidebar): open by default in a window wide enough for it beside the page sidebar,
+// closed otherwise (a phone); a choice is remembered in this browser.
 const FILES_KEY = 'word.filesPanel';
-let filesOpen = false;
+let filesOpen = matchMedia('(min-width: 1100px)').matches;
 try {
-  filesOpen = localStorage.getItem(FILES_KEY) === 'on';
+  const saved = localStorage.getItem(FILES_KEY);
+  if (saved === 'on' || saved === 'off') filesOpen = saved === 'on';
 } catch {
-  // Storage unavailable: it starts closed.
+  // Storage unavailable: it follows the default.
 }
 
 // The status bar (View > Status Bar): on until turned off, then remembered in this browser.

@@ -6,7 +6,7 @@ import { dropFileOn, dropFilesOn, importFile, status, text, waitForOpen, waitFor
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
 const row = (page: import('@playwright/test').Page, name: string) => panel(page).locator('.wm-files-file', { hasText: name });
 
-test('it is closed until chosen, lists the documents, opens one on a click, and the choice is kept', async ({ app, page }) => {
+test('View opens it, it lists the documents, opens one on a click, and the choice is kept', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await expect(panel(page)).toBeHidden();
   for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
@@ -29,6 +29,27 @@ test('it is closed until chosen, lists the documents, opens one on a click, and 
   await expect(panel(page)).toBeVisible();
   await panel(page).getByRole('button', { name: 'Close' }).click();
   await expect(panel(page)).toBeHidden();
+});
+
+test.describe('by default', () => {
+  // The suite starts with the sidebar closed; these start from the app's own default.
+  test.use({ filesSidebarDefault: true });
+
+  test('it is open by default in a wide window, until chosen otherwise', async ({ app, page }) => {
+    await app.goto('?doc=welcome');
+    await expect(panel(page)).toBeVisible();
+    await app.menu('View', 'Files Sidebar');
+    await expect(panel(page)).toBeHidden();
+    await page.reload();
+    await app.ready();
+    await expect(panel(page)).toBeHidden();
+  });
+
+  test('it is closed by default in a narrow window', async ({ app, page }) => {
+    await page.setViewportSize({ width: 900, height: 800 });
+    await app.goto('?doc=welcome');
+    await expect(panel(page)).toBeHidden();
+  });
 });
 
 test('dragging its edge resizes it, and the width is kept', async ({ app, page }) => {

@@ -6,6 +6,10 @@
 
 - In the desktop app, Cmd+W (Ctrl+W on Windows) closes the open document, like File › Close.
 
+### Changed
+
+- The Files sidebar is now open when you start, on a screen wide enough for it. Close it, or choose View › Files Sidebar, and it stays the way you left it.
+
 ## 0.26.0 - 2026-10-24
 
 ### Changed

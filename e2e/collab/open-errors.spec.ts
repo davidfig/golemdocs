@@ -73,15 +73,19 @@ test.describe('shared documents', () => {
 });
 
 test.describe('local documents', () => {
-  test('one that is not in this browser says so and opens a blank document', async ({ browser }) => {
+  test('one that is not in this browser says so and leaves nothing open', async ({ browser }) => {
     const context = await signedOutContext(browser);
     const page = await context.newPage();
     const app = new App(page);
     await page.goto('/?doc=local:does-not-exist');
     await app.ready();
     await expect.poll(() => statusLine(page)).toContain('no longer saved in this browser');
+    await expect(page.locator('.wm-nothing-open')).toBeVisible();
+    await page.locator('.wm-nothing-open').getByRole('button', { name: 'New Document' }).click();
+    await app.ready();
+    await app.focus();
     await app.type('fresh start');
-    expect(await app.text()).toBe('fresh start');
+    await expect.poll(() => app.text()).toBe('fresh start');
     await context.close();
   });
 });

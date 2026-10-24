@@ -33,6 +33,26 @@ export function familyName(baseFont: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
+// TeX's own fonts are named by a short code, with the style in it rather than in words: "SFBX1000"
+// is cm-super bold, "CMTT10" Computer Modern typewriter. Their descriptors only say "symbolic", so
+// the code is all there is to go on. Letters: b bold, i italic, s sans, m monospace.
+const EC_CODES: Record<string, string> = {
+  rm: '', rb: 'b', bx: 'b', ti: 'i', sl: 'i', ui: 'i', bi: 'bi', bl: 'bi', cc: '', xc: 'b', ci: 'i', dh: '',
+  ss: 's', sx: 'bs', si: 'is', so: 'bis', tt: 'm', it: 'im', st: 'im', tc: 'm', vt: 'm', vi: 'im',
+};
+const CM_CODES: Record<string, string> = {
+  r: '', b: 'b', bx: 'b', ti: 'i', sl: 'i', u: 'i', bxti: 'bi', bxsl: 'bi', csc: '', mi: 'i', mib: 'bi', sy: '', bsy: 'b', ex: '',
+  ss: 's', ssbx: 'bs', ssdc: 'bs', ssi: 'is', ssq: 's', ssqi: 'is', tt: 'm', itt: 'im', sltt: 'im', tcsc: 'm', vtt: 'm',
+};
+
+/** The style a TeX font's name gives ("sfbx1000", "cmtt10", "ecrm1200"), or undefined for any other font. */
+export function texStyle(name: string): { bold: boolean; italic: boolean; sans: boolean; mono: boolean } | undefined {
+  const m = /^(?:sf|ec|tc)([a-z]{2})\d{3,4}$/.exec(name) ?? /^cm([a-z]+)\d{1,2}$/.exec(name);
+  const flags = m ? (name.startsWith('cm') ? CM_CODES : EC_CODES)[m[1]] : undefined;
+  if (flags === undefined) return undefined;
+  return { bold: flags.includes('b'), italic: flags.includes('i'), sans: flags.includes('s'), mono: flags.includes('m') };
+}
+
 export function describeFont(doc: PdfDocument, dict: PdfDict): FontStyle {
   const r = (o: PdfObject | undefined) => doc.resolve(o);
   const base = r(dict.get('BaseFont'));
@@ -46,12 +66,13 @@ export function describeFont(doc: PdfDocument, dict: PdfDict): FontStyle {
   const weight = doc.number(descriptor?.get('FontWeight')) ?? 0;
   const angle = doc.number(descriptor?.get('ItalicAngle')) ?? 0;
   const lower = name.toLowerCase();
-  const bold = /bold|black|heavy|demi|(^|[-,])bd/.test(lower) || weight >= 600 || (flags & 0x40000) !== 0;
-  const italic = /italic|oblique|slanted|[-,]it(alic)?($|[-,])|kursiv/.test(lower) || (flags & 0x40) !== 0 || angle !== 0;
-  const mono = (flags & 1) !== 0 || /courier|mono|consolas|typewriter|lucida console|menlo|fixed/.test(lower);
-  const sans = /sans|arial|helvet|calibri|verdana|tahoma|segoe|gothic|univers|frutiger|futura|myriad|roboto|open|dejavusans|lato/.test(lower);
+  const tex = texStyle(lower);
+  const bold = tex?.bold || /bold|black|heavy|demi|(^|[-,])bd/.test(lower) || weight >= 600 || (flags & 0x40000) !== 0;
+  const italic = tex?.italic || /italic|oblique|slanted|[-,]it(alic)?($|[-,])|kursiv/.test(lower) || (flags & 0x40) !== 0 || angle !== 0;
+  const mono = tex?.mono || (flags & 1) !== 0 || /courier|mono|consolas|typewriter|lucida console|menlo|fixed/.test(lower);
+  const sans = tex?.sans || /sans|arial|helvet|calibri|verdana|tahoma|segoe|gothic|univers|frutiger|futura|myriad|roboto|open|dejavusans|lato/.test(lower);
   const bareType3 = !name && dict.name('Subtype') === 'Type3'; // TeX bitmap fonts
-  const serif = !sans && !mono && (bareType3 || (flags & 2) !== 0 || /times|serif|roman|georgia|garamond|palatino|minion|cambria|century|bookman|book antiqua|charter|lmroman|cmr|nimbusrom/.test(lower));
+  const serif = !sans && !mono && (!!tex || bareType3 || (flags & 2) !== 0 || /times|serif|roman|georgia|garamond|palatino|minion|cambria|century|bookman|book antiqua|charter|lmroman|cmr|nimbusrom/.test(lower));
   const symbolic = /symbol|zapfdingbats|dingbats|wingdings|webdings/.test(lower);
   return { name, family: familyName(name), bold, italic, serif, mono, symbolic };
 }

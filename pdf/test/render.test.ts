@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { inflateSync } from 'node:zlib';
-import { N, PageDrawing, PdfDict, PdfDocument, PdfStream, PdfString, encodePng, imageBytes, interpretPage, type PageDisplay } from '../src/index.ts';
+import { N, PageDrawing, PdfDict, PdfDocument, PdfStream, PdfString, describeFont, encodePng, imageBytes, interpretPage, type PageDisplay } from '../src/index.ts';
 import { fixture, load } from './helpers.ts';
 
 const ascii = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0));
@@ -378,4 +378,28 @@ test('PageDrawing output survives a save/load round trip', async () => {
   const back = PdfDocument.load(await doc.save());
   const out = interpretPage(back.pages[0]);
   assert.deepEqual([out.rects[0].x, out.rects[0].y, out.rects[0].w, out.rects[0].h, out.rects[0].color], [10, 10, 30, 20, 0x00ff00]);
+});
+
+test('TeX fonts are told apart by the style code in their names', () => {
+  const doc = PdfDocument.create();
+  // As LaTeX writes them: a subset prefix, and a descriptor that only says "symbolic".
+  const style = (name: string) => {
+    const descriptor = new PdfDict({ Type: N('FontDescriptor'), FontName: N(`ABCDEF+${name}`), Flags: 4, ItalicAngle: 0 });
+    const s = describeFont(doc, new PdfDict({ Type: N('Font'), Subtype: N('Type1'), BaseFont: N(`ABCDEF+${name}`), FontDescriptor: descriptor }));
+    return [s.serif, s.bold, s.italic, s.mono].map((b, i) => (b ? 'SBIM'[i] : '-')).join('');
+  };
+  assert.equal(style('SFRM1000'), 'S---');
+  assert.equal(style('SFBX1200'), 'SB--');
+  assert.equal(style('SFTI1000'), 'S-I-');
+  assert.equal(style('SFTT0800'), '---M');
+  assert.equal(style('SFSS1000'), '----');
+  assert.equal(style('ECBI1000'), 'SBI-');
+  assert.equal(style('CMR10'), 'S---');
+  assert.equal(style('CMBX12'), 'SB--');
+  assert.equal(style('CMMI10'), 'S-I-');
+  assert.equal(style('CMITT10'), '--IM');
+  assert.equal(style('CMSSBX10'), '-B--');
+  // Names that only look like TeX codes are left alone.
+  assert.equal(style('SFProText-Regular'), '----');
+  assert.equal(style('SFNS'), '----');
 });

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.25.1 - Unreleased
+
+### Fixed
+
+- PDFs made with LaTeX (most papers from arXiv) are shown in a serif font, with bold headings and monospaced code, instead of all in Arial.
+
 ## 0.25.0 - 2026-10-24
 
 ### Added

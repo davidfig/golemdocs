@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.27.0 - Unreleased
+
+### Added
+
+- In the desktop app, Cmd+W (Ctrl+W on Windows) closes the open document, like File › Close.
+
 ## 0.26.0 - 2026-10-24
 
 ### Changed

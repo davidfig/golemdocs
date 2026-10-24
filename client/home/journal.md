@@ -4,8 +4,11 @@ adds a headline and, if you like, a few words in your own voice. Write `## <vers
 then any paragraphs. A version with nothing here shows its changes without a headline.
 -->
 
+## 0.27.0
+A new website, and Cmd+W closes the document
+
 ## 0.26.0
-Cmd+W closes the document
+PDFs in their own fonts
 
 ## 0.25.0
 Closing means closed

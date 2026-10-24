@@ -81,6 +81,17 @@ Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `
 - During development run only the specs you added or changed (`pnpm e2e e2e/shell/themes.spec.ts`). For a second concurrent run give it its own ports, state and output: `E2E_CLIENT_PORT=5274 E2E_API_PORT=3102 E2E_STATE=e2e/.state-2 pnpm e2e <paths> --workers=2 --output=e2e/.results-2`, and clean up afterwards. Never `pkill -f playwright`.
 - A feature that adds or changes UI gets a spec. Billing is not covered.
 
+### Load-sensitive tests
+
+A test that fails in the full run but passes when run alone (several times, on the e2e servers of a side run) is failing from the run's own load: its workers compete for the CPU and GPU, and a wait times out. It gets `{ tag: '@heavy' }`, so it moves to the quieter second pass, and a line here, so a test that keeps turning up can be looked at for a real race rather than tagged and forgotten (a failure that is not load is fixed, not logged: `pdf/editText.spec.ts`'s check mark and cross test looked like load in October 2026, but failed on its own once the page answered more slowly, and turned out to be a command lost to a page id the worker had just replaced). Add the newest last.
+
+| Date | Test | How it failed in the full run |
+|---|---|---|
+| 2026-10-24 | `e2e/files/large-text.spec.ts` › the next and previous buttons step through matches | Timed out at 30.8 s in pass one, passed on retry; alone, passed twice in about 12 s |
+| 2026-10-24 | `e2e/layout/breaks.spec.ts` › Print Layout and Flow views › the chosen view is remembered in this browser across a reload | Timed out at 32 s in pass one, passed on retry; alone, passed twice in about 5 s. Failed while a side run was also going |
+| 2026-10-24 | `e2e/layout/columns.spec.ts` › Columns dialog › opens from Format ▸ Columns and from the toolbar button, showing one column by default | As the breaks test, in the same minute |
+| 2026-10-24 | `e2e/editing/markdown-shortcuts.spec.ts` › headings, check boxes, marks and rules are made as they are typed | Took 1 min and failed in pass one, passed on retry; alone, passed in 8.6 s |
+
 ## Performance traces (`golem:*`)
 
 Main-thread work that can stall typing is timed with `traced(name, fn)` (`client/src/quietRunner.ts`), which records a User Timing measure called `golem:<name>` around `fn` (sync or async; the span is still recorded if it throws). They cost almost nothing and stay on in every build. Today: `golem:chunkBytes` (cutting and hashing a file of 2 MiB or more, in a save and in a shared upload), `golem:snapshot` (a large text file's bytes for a save), `golem:thumbnail` (a save's thumbnail) and `golem:pagesPanelThumbnail` (one pages-panel thumbnail). A span of an `async` function includes time spent waiting (an IndexedDB write, a WebP encode), so compare it with the long tasks rather than reading it as blocked time.

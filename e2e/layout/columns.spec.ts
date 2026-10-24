@@ -13,7 +13,7 @@ test.describe('Columns dialog', () => {
     await app.blank();
   });
 
-  test('opens from Format ▸ Columns and from the toolbar button, showing one column by default', async ({ app }) => {
+  test('opens from Format ▸ Columns and from the toolbar button, showing one column by default', { tag: '@heavy' }, async ({ app }) => {
     await app.menu('Format', 'Columns…');
     const dlg = dialog(app, 'Columns');
     await expect(dlg.getByRole('spinbutton', { name: 'Number of columns', exact: true })).toHaveValue('1');

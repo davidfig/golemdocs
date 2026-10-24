@@ -108,7 +108,7 @@ test.describe('Print Layout and Flow views', () => {
     await expect.poll(async () => (await caretOf(app.page))?.x).toBeLessThan(before);
   });
 
-  test('the chosen view is remembered in this browser across a reload', async ({ app }) => {
+  test('the chosen view is remembered in this browser across a reload', { tag: '@heavy' }, async ({ app }) => {
     await choose(app, 'View', 'Flow');
     await expect.poll(async () => (await pageBoxes(app.page))[0]?.width).not.toBe(612);
     await app.page.reload();

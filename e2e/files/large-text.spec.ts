@@ -91,7 +91,7 @@ test('Find searches the whole file and lists how many lines match', async ({ app
   await expect.poll(async () => (await state(page)).current).toBe(NEEDLES[1] - 1);
 });
 
-test('the next and previous buttons step through matches', async ({ app, page }) => {
+test('the next and previous buttons step through matches', { tag: '@heavy' }, async ({ app, page }) => {
   await openBig(app);
   await page.keyboard.press(`${MOD}+f`);
   await findBox(page).fill('NEEDLE-XYZ');

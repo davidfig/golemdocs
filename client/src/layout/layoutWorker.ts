@@ -387,6 +387,8 @@ class OpenDocument {
   private pdfPages: PageLayout[] = [];
   /** Ids for PDF pages laid out again (the first layout of page i has id i). */
   private nextPdfPageId = 0;
+  /** The index of each PDF page laid out again, by its old id: the page thread may send a command naming it before it has the new layout. */
+  private replacedPdfPages = new Map<number, number>();
   document: WordDocument | null = null;
   replica: Replica | null = null;
   session: LayoutSession | null = null;
@@ -530,12 +532,19 @@ class OpenDocument {
     return performance.now() - start;
   }
 
+  /** The index of the PDF page with this id, current or replaced by a later layout (see `replacedPdfPages`), or -1. */
+  private pdfIndex(id: number): number {
+    const index = this.pdfPages.findIndex((p) => p.id === id);
+    return index >= 0 ? index : (this.replacedPdfPages.get(id) ?? -1);
+  }
+
   /** Lays PDF pages out again (their annotations changed), and sends them with the selection. */
   private relayoutPdf(pages: number[]): void {
     const { view } = this.pdf!;
     for (const index of pages) {
       if (index >= this.pdfPages.length) continue; // not laid out yet: it will show the change
       const page = view.layoutPage(index, this.nextPdfPageId++);
+      if (this.pdfPages[index]) this.replacedPdfPages.set(this.pdfPages[index].id, index);
       this.pdfPages[index] = page;
       this.pending.push(page);
     }
@@ -815,7 +824,7 @@ class OpenDocument {
   /** A field from the page: its box back in the page's user space (unless it didn't move). */
   private fieldFromWire(wire: WireField, before: Map<string, FormField>): FormField {
     const { pageId, box, ...field } = wire;
-    const page = this.pdfPages.findIndex((p) => p.id === pageId);
+    const page = this.pdfIndex(pageId);
     if (page >= 0) field.page = page;
     const was = before.get(field.id);
     const wasBox = was && was.page === field.page ? this.wireField(was)?.box : undefined;
@@ -836,7 +845,7 @@ class OpenDocument {
     let changed: number[] = [];
     switch (wire.kind) {
       case 'pointer': {
-        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        const index = this.pdfIndex(wire.page);
         if (index < 0) break;
         // Something added to the page is picked by clicking it (Fill In mode: its text isn't for editing); anywhere else this is selecting text.
         if (!wire.extend) {
@@ -880,7 +889,7 @@ class OpenDocument {
         break;
       }
       case 'pdfPick': {
-        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        const index = this.pdfIndex(wire.page);
         if (index < 0) break;
         // Characters added to the text may need faces that stand in for the file's fonts: load them first.
         void this.pickText(annotator, index, wire.x, wire.y);
@@ -917,7 +926,7 @@ class OpenDocument {
         break;
       }
       case 'pdfAddShape': {
-        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        const index = this.pdfIndex(wire.page);
         if (index < 0) break;
         if (wire.shape === 'redact') {
           changed = annotator.addRedaction(index, this.userBox(index, wire.box));
@@ -931,12 +940,12 @@ class OpenDocument {
         break;
       }
       case 'pdfAddImage': {
-        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        const index = this.pdfIndex(wire.page);
         if (index >= 0) changed = annotator.addImage(index, this.userBox(index, wire.box), wire.data);
         break;
       }
       case 'pdfAddText': {
-        const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+        const index = this.pdfIndex(wire.page);
         if (index < 0) break;
         const { view } = this.pdf!;
         const [ux, uy] = view.toUser(index, wire.x, wire.y);
@@ -987,6 +996,8 @@ class OpenDocument {
   /** Lays every page of the PDF out again (its pages changed), and sends them. */
   private async relayoutAllPdf(): Promise<void> {
     this.pdfPages = [];
+    // The pages may have moved: an old id no longer says where its page is.
+    this.replacedPdfPages.clear();
     this.pending = [];
     await this.pumpPdf();
     if (!this.closed) this.sendSelection();
@@ -997,7 +1008,7 @@ class OpenDocument {
    * as they are now written into it; the old one stays in the history, so undo can go back to it.
    */
   private async pdfPageOp(annotator: PdfAnnotator, wire: Extract<WireCommand, { kind: 'pdfPageOp' }>): Promise<void> {
-    const index = this.pdfPages.findIndex((p) => p.id === wire.page);
+    const index = this.pdfIndex(wire.page);
     const original = this.original;
     if (index < 0 || !original || !this.pdf) return;
     try {

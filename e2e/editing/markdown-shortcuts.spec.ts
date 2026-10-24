@@ -5,7 +5,7 @@ import { convertTo, importFile, text } from '../files/helpers';
 import { caretClient, docxPart, waitCaretSettled } from './helpers';
 
 test.describe('Markdown shortcuts as you type', () => {
-  test('headings, check boxes, marks and rules are made as they are typed', async ({ app }) => {
+  test('headings, check boxes, marks and rules are made as they are typed', { tag: '@heavy' }, async ({ app }) => {
     await app.blank();
     await convertTo(app, 'Markdown (.md)', 'Markdown');
     await app.focus();

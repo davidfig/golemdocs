@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- PDF Fill In and Edit PDF: a mark, shape or text box placed right after putting another one down is no longer lost.
 - Text in a PDF that doesn't embed its fonts is shown in a serif font, bold or monospaced as the font's name says, for LaTeX's own fonts too, instead of all in Arial.
 
 ## 0.25.0 - 2026-10-24

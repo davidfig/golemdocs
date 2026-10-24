@@ -2,7 +2,7 @@ import { packColor, RECT_INSTANCE_BYTES } from '@golemdocs/layout';
 import type { SelectionUpdate } from '../layout/protocol.ts';
 import { RectBatch } from './shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';
-import { CARET, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from './overlayColors.ts';
+import { CARET, CHANGED, changeAlpha, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from './overlayColors.ts';
 
 /** Commented text, under the selection. */
 const COMMENTED = packColor(0xffc83d, 0.35);
@@ -50,6 +50,10 @@ export class SelectionLayer {
   /** Other people's carets, as last received. */
   others: SelectionUpdate['remote'] = [];
   text = '';
+  /** Highlights over what a change made outside the app put in (page, x, y, width, height each), and when it came (performance.now()). */
+  private changes: Float64Array | null = null;
+  private changedAt = 0;
+  private changeBatches: RectBatch[] = [];
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
@@ -69,6 +73,8 @@ export class SelectionLayer {
     add(selection.rects, SELECTION);
     for (const [page, list] of byPage) this.highlights.set(page, coloredRects(list));
     this.updateSquiggles(selection.spellMarks);
+    this.changes = selection.changes?.rects.length ? selection.changes.rects : null;
+    if (selection.changes) this.changedAt = performance.now() - selection.changes.age;
     this.caret = selection.caret;
     this.focus = selection.focus;
     this.at = selection.at ?? null;
@@ -130,6 +136,35 @@ export class SelectionLayer {
     return out;
   }
 
+  /** A change made outside the app is still highlighted: keep drawing frames while it fades. */
+  get fading(): boolean {
+    return this.changes !== null;
+  }
+
+  /** The highlights over what a change made outside the app put in, for visible pages, as faded as they are by now. */
+  changesFor(pages: readonly GpuPage[]): RectBatch[] {
+    for (const batch of this.changeBatches) batch.dispose(this.gl);
+    this.changeBatches = [];
+    const marks = this.changes;
+    if (!marks) return [];
+    const alpha = changeAlpha(performance.now() - this.changedAt);
+    if (alpha <= 0) {
+      this.changes = null;
+      return [];
+    }
+    const color = packColor(CHANGED, alpha);
+    for (const page of pages) {
+      const list: number[][] = [];
+      for (let i = 0; i < marks.length; i += 5) if (marks[i] === page.id) list.push([marks[i + 1], marks[i + 2], marks[i + 3], marks[i + 4]]);
+      if (!list.length) continue;
+      const batch = rects(list, color);
+      batch.originX = page.x;
+      batch.originY = page.y;
+      this.changeBatches.push(batch);
+    }
+    return this.changeBatches;
+  }
+
   /** Highlight batches for visible pages, positioned at their pages. */
   highlightsFor(pages: readonly GpuPage[]): RectBatch[] {
     const out: RectBatch[] = [];
@@ -166,6 +201,9 @@ export class SelectionLayer {
 
   clear(): void {
     this.clearSelection();
+    this.changes = null;
+    for (const batch of this.changeBatches) batch.dispose(this.gl);
+    this.changeBatches = [];
     for (const batch of this.squiggles.values()) batch.dispose(this.gl);
     this.squiggles.clear();
     this.builtFrom = undefined;

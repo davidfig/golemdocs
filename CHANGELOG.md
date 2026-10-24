@@ -2,6 +2,10 @@
 
 ## 0.25.1 - Unreleased
 
+### Changed
+
+- Desktop app: when a document's file changes in your vault folder while it is open, only what changed is updated, in place, without the page flickering. The new text is highlighted for a moment, and the caret and what you were looking at stay where they were.
+
 ### Fixed
 
 - PDFs made with LaTeX (most papers from arXiv) are shown in a serif font, with bold headings and monospaced code, instead of all in Arial.

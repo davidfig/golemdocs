@@ -97,6 +97,7 @@ export class PageRenderer {
       );
     this.images?.render(camera, images(true));
     let drawCalls = this.rects.render(camera, this.visible.flatMap((p): RectBatch[] => p.background));
+    if (selection) drawCalls += this.rects.render(camera, selection.changesFor(this.visible));
     if (selection) drawCalls += this.rects.render(camera, selection.highlightsFor(this.visible));
     this.images?.render(camera, images(false));
 

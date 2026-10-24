@@ -921,6 +921,9 @@ function applyLayout(update: LayoutUpdate): void {
   }
   pagesPanel.setPages(pages);
   arrange();
+  // The file changed outside the app: the text that was at the top of the view stays there.
+  const kept = update.keep && pagesById.get(update.keep.page);
+  if (kept) camera.y = kept.y + update.keep!.y;
   if (newDrawingSince) {
     for (const page of pages) {
       const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
@@ -3454,6 +3457,7 @@ function render(): void {
     if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
     if (renderer.flat) camera.x = bounds.x;
     lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
+    if (selection.fading) requestRender();
   }
   const end = performance.now();
   // The caret blinks on an idle document; counting that would make idle read as a steady frame rate.
@@ -4590,7 +4594,27 @@ async function vaultChanged(touched: string[]): Promise<void> {
   if (!touched.includes(doc.localId) && !(cloudId && touched.includes(cloudId))) return;
   // The account's copy has the file's text now: make this browser's copy that, unless it has edits the account hasn't got.
   if (account && entry?.cloud) await openFromCloud(entry.cloud, account.id).catch(() => {});
-  if (current === doc && doc.unsavedSince === 0) await openLocal(doc.localId);
+  if (current === doc && doc.unsavedSince === 0 && !(await refreshFromStore(doc))) await openLocal(doc.localId);
+}
+
+/**
+ * Puts what is stored for the open document into it in place, as edits (see the worker's `refresh`): only what changed is laid out again,
+ * the caret and the view stay on the text they were on, and the new text is highlighted for a moment. False when it has to be opened again.
+ */
+async function refreshFromStore(doc: OpenDocument): Promise<boolean> {
+  if (!doc.localId || !loaded || textView.active || annotating || isPicture() || isDrawing() || embeddedDrawing || grid) return false;
+  const saved = await getSaved(doc.localId).catch(() => null);
+  // Renamed too: opened again, so everything that shows its name has the new one.
+  if (!saved || current !== doc || saved.info.name !== doc.name) return false;
+  const source = sourceFromFile(saved.info.name, saved.bytes) ?? { kind: 'docx', name: saved.info.name, bytes: saved.bytes };
+  if (usesTextEngine(source.kind, saved.bytes.byteLength)) return false;
+  return (await refreshWith(source)) || current !== doc;
+}
+
+/** Puts `source` (the open document's new content) into it in place, keeping the view on the text at its top; false if it can't be. */
+function refreshWith(source: DocumentSource): Promise<boolean> {
+  const top = pageAt(canvas.clientWidth / 2, 0);
+  return worker.refresh(source, top && { page: top.page.id, x: top.x, y: top.y });
 }
 
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
@@ -5545,14 +5569,14 @@ window.addEventListener('drop', (e) => {
 });
 
 // Debug/automation hooks.
-Object.assign(window, { camera, requestRender, render, openSource, send, pageAt });
+Object.assign(window, { camera, requestRender, render, openSource, refreshWith, send, pageAt });
 Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },
   status: { get: () => status },
   room: { get: () => current.room },
   pictureShapes: { get: () => drawLayer.shapes },
-  selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others, squiggles: selection.squiggleCount }) },
+  selectionState: { get: () => ({ caret: selection.caret, text: selection.text, others: selection.others, squiggles: selection.squiggleCount, at: selection.at, fading: selection.fading }) },
 });
 
 // Back and Forward: the document and the Documents screen the address names.

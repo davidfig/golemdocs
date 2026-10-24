@@ -4,7 +4,7 @@
 
 import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
-import { Replica, ROOM_POLICY, type ClientMessage, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
+import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type Pos, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
 import { cloudRoomTransport } from '../collab/cloudRoom.ts';
 import { RoomClient, type RoomHost, type RoomStart } from '../collab/roomClient.ts';
 import {
@@ -71,6 +71,7 @@ async function legalText(page: LegalPage): Promise<string> {
 async function changelogText(): Promise<string> {
   return (await import('../../../CHANGELOG.md?raw')).default;
 }
+import { CHANGE_MS } from '../webgl/overlayColors.ts';
 import { DICTIONARY_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
@@ -406,6 +407,10 @@ class OpenDocument {
   private pumping = false;
   /** Scroll the caret into view with the next selection update. */
   reveal = false;
+  /** Text a change made outside the app put in (see `refresh`), highlighted for a moment from `at`. */
+  private changeMarks: { marks: DocumentChange[]; at: number } | null = null;
+  /** Where the top of the view was in the text before that change (a position, and how far below its line), kept there until it is laid out. */
+  private keepView: { pos: Pos; dy: number } | null = null;
   /** When the last command arrived (for the latency readout). */
   private commandAt = 0;
   /** The result of the last Find or Replace All, sent with the next selection. */
@@ -582,8 +587,33 @@ class OpenDocument {
     transfer.push(order.buffer);
     const selection = this.selection();
     if (selection) transfer.push(selection.rects.buffer, selection.commentRects.buffer, ...(selection.spellMarks ? [selection.spellMarks.buffer] : []));
-    const update: LayoutUpdate = { faces, pages, overlays, order, drop, selection };
+    const kept = this.keptView();
+    const update: LayoutUpdate = { faces, pages, overlays, order, drop, selection, ...(kept && { keep: kept }) };
     post({ type: 'layout', doc: this.doc, ...update }, transfer);
+  }
+
+  /** Where the text that was at the top of the view is now, on the pages being sent (old ones still showing included), until they are all laid out. */
+  private keptView(): LayoutUpdate['keep'] {
+    const { keepView, editor, session } = this;
+    if (!keepView || !editor || !session) return undefined;
+    if (!session.needsLayout) this.keepView = null;
+    const caret = editor.caretAt(keepView.pos);
+    return caret ? { page: caret.page.id, y: caret.y + keepView.dy } : undefined;
+  }
+
+  /** The highlights over what a change made outside the app put in, while they last. */
+  private changeRects(editor: Editor): SelectionUpdate['changes'] {
+    const marks = this.changeMarks;
+    if (!marks) return undefined;
+    const age = performance.now() - marks.at;
+    if (age >= CHANGE_MS) {
+      this.changeMarks = null;
+      return undefined;
+    }
+    const rects = marks.marks.flatMap((m) => editor.rectsFor({ anchor: { paragraph: m.paragraph, offset: m.from }, focus: { paragraph: m.paragraph, offset: m.to } }));
+    const packed = new Float64Array(rects.length * 5);
+    rects.forEach((r, i) => packed.set([r.page.id, r.x, r.y, r.width, r.height], i * 5));
+    return { rects: packed, age };
   }
 
   sendSelection(): void {
@@ -619,6 +649,7 @@ class OpenDocument {
       comments: commented.map((c) => ({ id: c.id, author: c.author, initials: c.initials, date: c.date, parentId: c.parentId, resolved: c.resolved, text: c.text, page: c.rects[0]?.page.id ?? null, y: c.rects[0]?.y ?? 0 })),
       activeComment: editor.activeComment(),
       commentRects,
+      changes: this.changeRects(editor),
       spellMarks: this.spellMarks(editor),
       focus: caret(g.focus),
       at: editor.selectionIndex(),
@@ -1633,6 +1664,49 @@ class OpenDocument {
     if (this.waiting) return this.later(() => this.runCommand(wire));
     const done = this.runCommand(wire);
     if (done) this.later(() => done);
+  }
+
+  /**
+   * The document's file changed outside the app (see the `refresh` message): what changed is put in as edits, so only that is laid out
+   * again, the caret stays on its text, the view stays on what it showed, and the new text is highlighted for a moment. False when it
+   * can't be done that way (not a flowing document, or a change operations can't make): the page opens the document again instead.
+   * Edits made here meanwhile win: the file is left for the next sync to settle.
+   */
+  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean> {
+    const { editor, session, document, replica } = this;
+    if (!this.isSetUp || this.closed || !editor || !session || !document || !replica) return false;
+    if (this.annotator || this.layers || this.vectorLayers || this.shared || this.readOnly || this.format === 'pdf' || isLayeredFormat(this.format)) return false;
+    const typed = this.typedAt;
+    const fonts = await fontsReady;
+    const loaded = await load(source, fonts);
+    if (!loaded.document || loaded.lens !== this.format) return false;
+    if (loaded.lens === 'md') await showEmbeds(loaded.document, fonts);
+    await session.ensureFor(loaded.document);
+    if (this.closed || this.editor !== editor) return false;
+    if (this.typedAt !== typed || this.waiting) return true;
+    const diff = diffDocuments(document, loaded.document, () => replica.newId());
+    if (!diff) return false;
+    this.extensions = loaded.extensions;
+    if (diff.ops.length === 0) return true;
+    // The text at the top of the view, and how far below the top of its line the view starts.
+    let anchor: { pos: Pos; dy: number } | null = null;
+    const page = view && session.displayPages.find((p) => p.id === view.page);
+    const at = page && editor.hitTest(page, view.x, view.y);
+    if (at) {
+      const pos = { paragraph: replica.id(at.paragraph), offset: at.offset };
+      const caret = editor.caretAt(pos);
+      if (caret?.page.id === view!.page) anchor = { pos, dy: view!.y - caret.y };
+    }
+    const { mapping } = editor.external(diff.ops);
+    if (anchor && mapping) {
+      const { paragraph, offset } = mapping.map(anchor.pos, -1);
+      this.keepView = { pos: { paragraph, offset }, dy: anchor.dy };
+    }
+    this.changeMarks = diff.changes.length ? { marks: diff.changes, at: performance.now() } : null;
+    void this.pump();
+    // Once the highlight has faded, the page is told so (nothing else may send a selection by then).
+    if (this.changeMarks) setTimeout(() => !this.closed && this.sendSelection(), CHANGE_MS + 50);
+    return true;
   }
 
   /** Formatting from the menus and toolbars. One that starts using a font loads its faces first. */
@@ -2823,6 +2897,14 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'pictureBase':
       void pictureBase(message.doc, message.request);
+      break;
+    case 'refresh':
+      void (current?.doc === message.doc ? current.refresh(message.source, message.view) : Promise.resolve(false))
+        .catch((e: unknown) => {
+          console.error(e);
+          return false;
+        })
+        .then((ok) => post({ type: 'refreshed', request: message.request, ok }));
       break;
   }
 }

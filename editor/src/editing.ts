@@ -3,7 +3,7 @@ import { type Position, type ParagraphFormat, type CommandResult, NO_CHANGE } fr
 import type { Selection as OpSelection } from '@golemdocs/ops';
 
 import { newParagraphProperties, paragraphLength, runPropertiesAt, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
-import { END, Replica, type Applied, type Operation, type Pos, type RemoteChange, type ServerMessage } from '@golemdocs/ops';
+import { END, Replica, type Applied, type Mapping, type Operation, type Pos, type RemoteChange, type ServerMessage } from '@golemdocs/ops';
 import { EditorNavigation } from './navigation.ts';
 
 export abstract class EditorEditing extends EditorNavigation {
@@ -57,6 +57,14 @@ export abstract class EditorEditing extends EditorNavigation {
     this.session.invalidate(change.changed, { structural: change.structural });
     this.setSelectionIds(selection);
     return { result: { edited: true, changed: change.changed, structural: change.structural, styles: change.styles }, change };
+  }
+
+  /** Edits made outside the app (its file changed on disk), applied as someone else's are: the selection stays where it was in the text. */
+  external(ops: Operation[]): { result: CommandResult; mapping: Mapping | null } {
+    if (ops.length === 0) return { result: NO_CHANGE, mapping: null };
+    const before = this.selectionIds;
+    const { applied, mapping } = this.replica.external(ops);
+    return { result: this.changed(applied, Replica.mapSelection(before, mapping)), mapping };
   }
 
   /** Text (with tabs and line breaks as new paragraphs) at a position. */

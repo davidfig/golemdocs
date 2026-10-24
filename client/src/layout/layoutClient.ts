@@ -47,6 +47,7 @@ export class LayoutClient {
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
+  private readonly refreshRequests = new Map<number, (ok: boolean) => void>();
 
   /** Finds the stored document an embed (`![[Note]]`) names, as its name and bytes (set by the page, which knows what is stored). */
   embeds: ((title: string) => Promise<{ name: string; bytes: ArrayBuffer } | null>) | null = null;
@@ -193,6 +194,18 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'pictureBase', doc: this.doc, request })).then((bytes) => new Uint8Array(bytes));
   }
 
+  /**
+   * The open document's file changed outside the app: puts its new content in as edits, keeping the text at `view` (a point on a page,
+   * the top of the view) where it is. False when that can't be done: open the document again instead.
+   */
+  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.refreshRequests.set(request, resolve);
+      this.send({ type: 'refresh', doc: this.doc, request, source, view });
+    });
+  }
+
   /** What is wrong in each of some lines of a plain text file, or (`at`) the problem under an offset of one of them. */
   spellText(texts: string[], sample: string, what: { spelling: boolean; grammar: boolean }, at?: { index: number; offset: number }): Promise<{ marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }> {
     const request = this.nextRequest++;
@@ -228,6 +241,11 @@ export class LayoutClient {
     if (message.type === 'spellText') {
       this.spellRequests.get(message.request)?.(message);
       this.spellRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'refreshed') {
+      this.refreshRequests.get(message.request)?.(message.ok);
+      this.refreshRequests.delete(message.request);
       return;
     }
     if (message.type === 'media' || message.type === 'saved') {

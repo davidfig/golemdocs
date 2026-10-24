@@ -34,6 +34,7 @@ Key points:
 - **Commands become operations.** The editor never mutates the model directly. Each command plans a list of `Operation`s (plain JSON, see below) and calls `Replica.edit`, which applies them through `Engine`, records the inverses for undo, and (in a room) queues the transaction for the server.
 - **Layout is incremental.** `Applied.changed` is the set of changed paragraphs; `Editor.changed()` passes them to `LayoutSession.invalidate` (`layout/src/document.ts`). `structural` (a section break changed) or `styles` widen the invalidation. See [Layout](layout.md).
 - **Remote edits take the same road.** `Editor.receive(message)` (`editor/src/editing.ts`) applies the server's transactions, maps the selection through them, and invalidates layout.
+- **So do changes to the file on disk.** `diffDocuments` (`ops/src/diff.ts`) turns a document read again into operations against the open one (blocks matched whole, a changed paragraph keeping its id and getting only its changed middle, lists matched by look rather than number, the result verified on a copy), and `Editor.external` / `Replica.external` apply them like a remote edit: not undoable, with the undo history and selection mapped through. See [Desktop](desktop.md) for when this happens.
 
 ## Operations and the Engine (`ops/`)
 

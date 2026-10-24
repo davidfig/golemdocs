@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { paragraphsIn, paragraphText, WordDocument, type Inline, type Paragraph } from '@golemdocs/docx';
 import { FontSet, LayoutSession, layoutDocument } from '@golemdocs/layout';
-import { Replica } from '@golemdocs/ops';
+import { diffDocuments, Replica } from '@golemdocs/ops';
 import { Editor, type Command } from '../src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../../client/public/fonts');
@@ -1157,4 +1157,20 @@ test('Down from the end of a long line visits every short and empty line below i
     await apply({ kind: 'move', to: 'down' });
   }
   assert.deepEqual([...visited], [0, 1, 2, 3, 4, 5], 'no paragraph is skipped');
+});
+
+test('a change made outside the app keeps the caret on its text, and Undo leaves it alone', skip, async () => {
+  const { doc, editor, apply, texts, session } = await setup(['First line.', 'Second line here.']);
+  await apply({ kind: 'select', paragraph: 1, from: 7, to: 7 }, { kind: 'insertText', text: 'x' });
+  const next = await WordDocument.create();
+  const para = (text: string): Paragraph => ({ kind: 'paragraph', properties: {}, children: [{ kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'text', text }] }], attrs: {} });
+  next.body = [para('Added above.'), para('First line, edited.'), para('Second xline here.')];
+  const diff = diffDocuments(doc, next, () => editor.replica.newId())!;
+  const { result } = editor.external(diff.ops);
+  await session.run();
+  assert.equal(result.edited, true);
+  assert.deepEqual(texts(), ['Added above.', 'First line, edited.', 'Second xline here.']);
+  assert.deepEqual(editor.selectionIndex(), { anchor: [2, 8], focus: [2, 8] });
+  editor.undo();
+  assert.deepEqual(texts(), ['Added above.', 'First line, edited.', 'Second line here.']);
 });

@@ -280,6 +280,11 @@ export type ToWorker =
   | { type: 'convert'; doc: number; request: number; to: Format }
   /** The open picture's own file, without the shapes drawn over it. */
   | { type: 'pictureBase'; doc: number; request: number }
+  /**
+   * The open document's file changed outside the app: its new content (`source`) is put in as edits, keeping the view on the text at
+   * `view` (a point on a page: the top of the view). Answered with `refreshed`; not done (`ok` false) means it should be opened again.
+   */
+  | { type: 'refresh'; doc: number; request: number; source: DocumentSource; view: { page: number; x: number; y: number } | null }
   /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
   | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null }
   /** What is wrong in each of some lines of a plain text file (no document is involved): `sample` is the beginning of the file, which says its language. `at` asks instead for the problem under an offset of the line `texts[at.index]`. */
@@ -315,6 +320,8 @@ export interface LayoutUpdate {
   drop: number[];
   /** The selection on these pages, so text and caret change in the same frame. */
   selection?: SelectionUpdate;
+  /** After a change made outside the app: scroll so this point (page id, y on it) is at the top of the view, as the text there was before. */
+  keep?: { page: number; y: number };
 }
 
 /** Caret and selection highlight, in page-relative points. */
@@ -372,6 +379,8 @@ export interface SelectionUpdate {
   activeComment: string | null;
   /** Highlight over commented text: page id, x, y, width, height per rectangle. */
   commentRects: Float64Array;
+  /** Text a change made outside the app just put in (its file changed on disk), highlighted for a moment: page id, x, y, width, height per rectangle, and how long ago it came (ms). */
+  changes?: { rects: Float64Array; age: number };
   /** A PDF shown as its own pages: its form fields on the pages laid out so far. */
   fields?: WireField[];
   /** A PDF shown as its own pages: the text picked to edit in place (null: none). */
@@ -424,6 +433,7 @@ export type FromWorker =
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
+  | { type: 'refreshed'; request: number; ok: boolean }
   /** The answer to a `spellText`: the marks of every line (a language whose dictionary is still loading has none yet, and `loading` says so), or the problem at `at`. */
   | { type: 'spellText'; request: number; marks: TextMark[][]; issue: SpellIssue | null; loading: boolean };
 

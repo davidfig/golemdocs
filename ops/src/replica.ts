@@ -5,7 +5,7 @@ import type { Paragraph, WordDocument } from '@golemdocs/docx';
 import { CollabClient, type ClientMessage, type RemoteChange, type ServerMessage } from './collab.ts';
 import { Engine, type Applied } from './engine.ts';
 import { History, type HistoryEntry, type Selection } from './history.ts';
-import type { Mapping } from './mapping.ts';
+import { Mapping } from './mapping.ts';
 import type { Operation, Transaction } from './types.ts';
 
 export interface ReplicaOptions {
@@ -69,6 +69,19 @@ export class Replica {
     this.history.record(transaction.id, applied.inverse, options.before ?? null, options.after ?? null, options.group);
     this.client?.commit(transaction, applied.steps);
     return { applied, transaction };
+  }
+
+  /**
+   * Applies edits made outside the app (its file changed on disk). Like someone else's, Undo doesn't take them back: the undo
+   * history moves through them, as selections should (with the mapping returned). In a room they go to the server as any edit does.
+   */
+  external(ops: Operation[]): { applied: Applied; mapping: Mapping } {
+    const applied = this.engine.apply(ops);
+    const mapping = new Mapping();
+    mapping.appendAll(applied.maps);
+    this.history.map(mapping, 0, mapping.length);
+    this.client?.commit(this.transaction(ops), applied.steps);
+    return { applied, mapping };
   }
 
   undo(): LocalChange | null {

@@ -508,6 +508,18 @@ class Superseded {}
 
 // --- Session -----------------------------------------------------------------------------
 
+/** Loads the faces, font pages and math font a document's text needs; says what it found, for later pages. */
+async function loadFonts(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): Promise<ReturnType<typeof pagedTextOf>> {
+  await fonts.ensure(facesFor(doc, resolver, fonts));
+  const paged = pagedTextOf(doc, resolver, fonts);
+  await Promise.all([
+    ...[...paged.cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)),
+    ...[...paged.extra].flatMap(([group, styles]) => [...styles.values()].map(({ style, chars }) => fonts.ensurePages(group, chars, [style]))),
+  ]);
+  if (hasMath(doc)) await fonts.ensureMath();
+  return paged;
+}
+
 /**
  * A document's layout, kept up to date as the document changes. Create one per document;
  * call run() to lay it out, and invalidate() + run() after edits.
@@ -556,18 +568,26 @@ export class LayoutSession {
   static async create(doc: WordDocument, fonts: FontSet): Promise<LayoutSession> {
     const t0 = performance.now();
     const resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
-    await fonts.ensure(facesFor(doc, resolver, fonts));
-    const paged = pagedTextOf(doc, resolver, fonts);
-    await Promise.all([
-      ...[...paged.cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)),
-      ...[...paged.extra].flatMap(([group, styles]) => [...styles.values()].map(({ style, chars }) => fonts.ensurePages(group, chars, [style]))),
-    ]);
-    if (hasMath(doc)) await fonts.ensureMath();
+    const paged = await loadFonts(doc, resolver, fonts);
     const session = new LayoutSession(doc, fonts, resolver);
-    for (const lang of paged.cjk.keys()) session.cjkLangs.add(lang);
-    for (const [family, styles] of paged.styles) session.familyStyles.set(family, [...styles.values()]);
+    session.noteFonts(paged);
     session.timings.fonts = performance.now() - t0;
     return session;
+  }
+
+  /** Loads what another document's text needs (faces, font pages, math) before that text is put into this one (its file changed on disk). */
+  async ensureFor(doc: WordDocument): Promise<void> {
+    this.noteFonts(await loadFonts(doc, new StyleResolver(doc.styles, doc.theme, doc.numbering), this.fonts));
+  }
+
+  /** Remembers the languages and family styles a document uses, for the pages its later text may need (`ensurePages`). */
+  private noteFonts(paged: ReturnType<typeof pagedTextOf>): void {
+    for (const lang of paged.cjk.keys()) this.cjkLangs.add(lang);
+    for (const [family, styles] of paged.styles) {
+      const known = this.familyStyles.get(family) ?? [];
+      const added = [...styles.values()].filter((s) => !known.some((k) => k.bold === s.bold && k.italic === s.italic));
+      this.familyStyles.set(family, [...known, ...added]);
+    }
   }
 
   /** Whether the pages are out of date (run() brings them up to date). */

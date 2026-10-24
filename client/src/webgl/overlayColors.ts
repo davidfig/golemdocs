@@ -25,3 +25,15 @@ export function squiggleRects(x: number, y: number, width: number, height: numbe
 export const REMOTE_ALPHA = 0.25;
 export const REMOTE_WIDTH = 1.5;
 export const REMOTE_FLAG = 3;
+
+/** Text a change made outside the app just put in (its file changed on disk): green, as a diff shows added text, fading out over `CHANGE_MS`. */
+export const CHANGED = 0x2fb35a;
+const CHANGED_ALPHA = 0.32;
+export const CHANGE_MS = 2000;
+
+/** How strongly a change `age` ms old is highlighted: fully for the first part, then fading to nothing at `CHANGE_MS`. */
+export function changeAlpha(age: number): number {
+  const hold = CHANGE_MS * 0.4;
+  if (age <= hold) return CHANGED_ALPHA;
+  return Math.max(0, CHANGED_ALPHA * (1 - (age - hold) / (CHANGE_MS - hold)));
+}

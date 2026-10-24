@@ -153,17 +153,20 @@ not every language has that category.)
 
 ## The marketing site
 
-The home page is built in every app language, at `/home` (English) and `/home/<tag>`. Its text is not in the
-app catalogs: `client/home/template.html` holds the page with `{{key}}` slots, `client/home/locales/<tag>.json`
-the text for each language (`en.json` is the source), and `pnpm build:home` writes the pages into `client/public/home/`.
-Commit the generated files; the `home` test fails if they are stale or a language lacks a key.
+The site's eight pages (Home, Your ai, Formats, Pricing, Journal, About, Developers, Download) are built in every app
+language, at `/home`, `/home/<page>` (English) and `/home/<tag>`, `/home/<tag>/<page>`. Their text is not in the app
+catalogs: `client/home/layout.html` and `client/home/pages/<page>.html` hold the pages with `{{key}}` slots, and
+`client/home/locales/<tag>.json` the text for each language (`en.json` is the source). `client/home/build.ts` renders
+them: the dev server on each request, `vite build` into `dist/home/`. Nothing generated is committed; the `home` test
+fails if a language lacks a key, a string's markup or placeholders differ from English, or two menu names share an
+access key.
 
-- The next site being designed (`client/home/next/`, served only in dev at `/home/next`) is English only for now: its text is `client/home/next/locales/en.json`, in the same `{{key}}` style, and it gets every language when it replaces `/home`. See [UI](architecture/ui.md#marketing-site).
-- English `/home` sends visitors to their language (the app's saved `wm.locale`, else the browser's); the
+- English pages send visitors to the same page in their language (the app's saved `wm.locale`, else the browser's); the
   language links in the footer set `wm.locale`, so the choice carries into the app.
 - Strings may hold their own `<a>`/`<em>` markup; keep the tags and `href`s as in English.
-- Use the same terms as the app for menu names (File ▸ Download All, Convert To, File ▸ Share).
+- Use the same terms as the app for menu names (File › Download All, Convert To, File › Share), from the app's own
+  catalogs. Each `nav.*` name marks one access key with `&`, unique within the language (CJK: `ホーム(&H)`).
+- The Journal's entries are `CHANGELOG.md`, which is English; other languages say so under the page's heading.
 - **Adding a language:** after the steps above, copy `en.json` to `client/home/locales/<tag>.json` and translate it,
-  run `pnpm build:home`, add `https://golemdocs.com/home/<tag>` to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in
-  `client/home/build.ts`.
-- The pages under `/home/` that this page links to (Convert, PDF, Privacy…) are not translated yet.
+  add its eight pages to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in `client/home/build.ts`.
+- The guide and legal pages under `/home/` (Convert, PDF, Privacy…) are English only; they use the same frame.

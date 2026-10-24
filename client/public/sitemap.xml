@@ -2,16 +2,93 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://golemdocs.com/</loc></url>
   <url><loc>https://golemdocs.com/home</loc></url>
+  <url><loc>https://golemdocs.com/home/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/about</loc></url>
+  <url><loc>https://golemdocs.com/home/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/download</loc></url>
   <url><loc>https://golemdocs.com/home/es</loc></url>
+  <url><loc>https://golemdocs.com/home/es/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/es/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/es/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/es/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/es/about</loc></url>
+  <url><loc>https://golemdocs.com/home/es/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/es/download</loc></url>
   <url><loc>https://golemdocs.com/home/ru</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/about</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/download</loc></url>
   <url><loc>https://golemdocs.com/home/de</loc></url>
+  <url><loc>https://golemdocs.com/home/de/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/de/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/de/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/de/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/de/about</loc></url>
+  <url><loc>https://golemdocs.com/home/de/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/de/download</loc></url>
   <url><loc>https://golemdocs.com/home/fr</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/about</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/download</loc></url>
   <url><loc>https://golemdocs.com/home/ja</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/about</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/download</loc></url>
   <url><loc>https://golemdocs.com/home/pt-BR</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/about</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/download</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hant</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/about</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/download</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hans</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/about</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/download</loc></url>
   <url><loc>https://golemdocs.com/home/it</loc></url>
+  <url><loc>https://golemdocs.com/home/it/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/it/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/it/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/it/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/it/about</loc></url>
+  <url><loc>https://golemdocs.com/home/it/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/it/download</loc></url>
   <url><loc>https://golemdocs.com/home/ko</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/ai</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/formats</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/pricing</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/journal</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/about</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/developers</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/download</loc></url>
   <url><loc>https://golemdocs.com/home/convert</loc></url>
   <url><loc>https://golemdocs.com/home/pdf</loc></url>
   <url><loc>https://golemdocs.com/home/images</loc></url>

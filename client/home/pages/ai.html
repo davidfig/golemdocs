@@ -9,12 +9,64 @@
           <li><b>{{ai.step2.h}}</b> {{ai.step2.p}}</li>
           <li><b>{{ai.step3.h}}</b> {{ai.step3.p}}</li>
         </ol>
-        <div class="shots">
-          <div><b>Claude</b><span>{{ai.shot}}</span></div>
-          <div><b>ChatGPT</b><span>{{ai.shot}}</span></div>
-          <div><b>Cursor</b><span>{{ai.shot}}</span></div>
+        <div class="apps">
+          <section class="app-guide">
+            <div class="sketch" aria-hidden="true">
+              <div class="sk-box"><span class="sk-plus">+</span><span class="sk-ph">{{ai.sk.ask}}</span><span class="sk-mode">Cowork</span></div>
+              <div class="sk-menu"><span>{{ai.sk.upload}}</span><span class="on">{{ai.sk.addFolder}}</span></div>
+              <span class="pick-folder"><svg viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.5l1.5 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg>Golem Docs</span>
+            </div>
+            <h3>{{ai.claude.h}}</h3>
+            <ol>
+              <li>{{ai.claude.1}}</li>
+              <li>{{ai.claude.2}}</li>
+              <li>{{ai.claude.3}}</li>
+            </ol>
+            <p class="note-small">{{ai.claude.note}}</p>
+          </section>
+          <section class="app-guide">
+            <div class="sketch" aria-hidden="true">
+              <div class="sk-toggle"><span>Chat</span><span class="on">Work</span></div>
+              <div class="sk-box"><span class="sk-ph">{{ai.sk.ask}}</span></div>
+              <span class="pick-folder"><svg viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.5l1.5 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg>Golem Docs</span>
+            </div>
+            <h3>{{ai.chatgpt.h}}</h3>
+            <ol>
+              <li>{{ai.chatgpt.1}}</li>
+              <li>{{ai.chatgpt.2}}</li>
+              <li>{{ai.chatgpt.3}}</li>
+            </ol>
+            <p class="note-small">{{ai.chatgpt.note}}</p>
+          </section>
+          <section class="app-guide">
+            <div class="sketch term-sketch" aria-hidden="true">
+              <div><span class="dim">$</span> cd ~/Documents/Golem\ Docs</div>
+              <div><span class="dim">$</span> codex <span class="dim"># {{ai.sk.or}}</span> claude</div>
+              <div><span class="you">&gt;</span> {{ai.sk.ask}}</div>
+            </div>
+            <h3>{{ai.cli.h}}</h3>
+            <ol>
+              <li>{{ai.cli.1}}</li>
+              <li>{{ai.cli.2}}</li>
+              <li>{{ai.cli.3}}</li>
+            </ol>
+            <p class="note-small">{{ai.cli.note}}</p>
+          </section>
+          <section class="app-guide">
+            <div class="sketch" aria-hidden="true">
+              <div class="sk-menu wide"><span class="sk-title">File</span><span>{{ai.sk.newWindow}}</span><span class="on">{{ai.sk.openFolder}}</span><span>{{ai.sk.recent}}</span></div>
+              <span class="pick-folder"><svg viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.5l1.5 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg>Golem Docs</span>
+            </div>
+            <h3>{{ai.cursor.h}}</h3>
+            <ol>
+              <li>{{ai.cursor.1}}</li>
+              <li>{{ai.cursor.2}}</li>
+              <li>{{ai.cursor.3}}</li>
+            </ol>
+            <p class="note-small">{{ai.cursor.note}}</p>
+          </section>
         </div>
-        <p class="note-small">{{ai.shots.note}}</p>
+        <p class="note-small">{{ai.apps.note}}</p>
 
         <div class="row">
           <div class="text">

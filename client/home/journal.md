@@ -13,8 +13,6 @@ Closing means closed
 ## 0.24.0
 I took the ai out
 
-The best ai feature I could build was getting out of the way of the ai you already have.
-
 ## 0.23.3
 Rename documents from anywhere
 

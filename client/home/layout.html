@@ -3,27 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- A preview while the new site is designed: not indexed. -->
-    <meta name="robots" content="noindex" />
     <title>{{title}}</title>
     <meta name="description" content="{{description}}" />
     <link rel="canonical" href="{{url}}" />
+{{alternates}}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Golem Docs" />
+    <meta property="og:locale" content="{{ogLocale}}" />
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
+    <meta property="og:url" content="{{url}}" />
     <meta property="og:image" content="https://golemdocs.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <script>
+{{redirect}}    <script>
       try {
         var appearance = localStorage.getItem('golem.appearance');
         if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
       } catch (e) {}
     </script>
-    <link rel="stylesheet" href="{{base}}/site.css" />
-    <script src="{{base}}/site.js" defer></script>
+    <link rel="stylesheet" href="{{assets}}/site.css" />
+    <script src="{{assets}}/site.js" defer></script>
   </head>
   <body data-page="{{page}}">
     <header class="chrome">
@@ -49,6 +53,12 @@
           <a href="/home/terms">{{footer.terms}}</a>
           <a href="/">{{footer.app}}</a>
         </span>
+        <details class="langs">
+          <summary><span class="sr">{{footer.language}}: </span><span class="current">{{languageName}}</span><span class="arrow" aria-hidden="true"><svg viewBox="0 0 8 5" width="8" height="5"><path d="M1 1h6L4 4z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" /></svg></span></summary>
+          <ul class="pop" aria-label="{{footer.language}}">
+{{languages}}
+          </ul>
+        </details>
       </div>
     </footer>
   </body>

@@ -1,10 +1,9 @@
 import type { Plugin } from 'vite';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { serve as serveNext } from './home/next/build.ts';
+import { renderAll, renderDocPage, serve as serveHome } from './home/build.ts';
 
 const WELCOME = path.resolve(import.meta.dirname, 'src/layout/welcome/en.md');
-const HOME = path.resolve(import.meta.dirname, 'public/home/index.html');
 const SITE = path.resolve(import.meta.dirname, 'site');
 /** The built-in legal documents (`src/layout/legal/<name>/en.md`), each written as its own plain HTML page (`/home/privacy`, `/home/terms`) that never loads the editor. */
 const LEGAL_PAGES = [
@@ -13,7 +12,7 @@ const LEGAL_PAGES = [
 ];
 /**
  * The feature pages of the marketing site (`site/<name>.md`, served at `/home/<name>`). `label` and `blurb` are the name and line shown where a page
- * is linked from another; the home page (`public/home/index.html`) links each of them by hand.
+ * is linked from another; the Formats page (`home/pages/formats.html`) links the main ones by hand.
  */
 const FEATURE_PAGES = [
   { name: 'convert', label: 'Convert formats', blurb: 'Switch a document between 20+ formats, and back again.', description: 'Convert Word, PDF, Markdown, HTML, OpenDocument, EPUB, CSV, LaTeX and more in your browser. Change a document\u2019s format and keep working, with nothing uploaded.' },
@@ -85,30 +84,6 @@ export function markdownToHtml(md: string): string {
   return out.join('\n');
 }
 
-/** Prose styles for a page inside the marketing site (its colors, fonts and header come from the home page). */
-const PROSE_CSS = `
-      .doc { padding: 56px 0 72px; }
-      .doc article { width: min(46rem, 100% - 32px); margin: 0 auto; }
-      .doc .back { display: inline-block; margin-bottom: 24px; font-size: 0.95rem; text-decoration: none; }
-      .doc h1 { margin: 0 0 20px; font-size: clamp(2rem, 4.5vw, 2.6rem); }
-      .doc.feature h1 + p { font-size: 1.2rem; color: var(--muted); }
-      .doc h2 { margin: 2.2em 0 0.5em; font-size: 1.4rem; line-height: 1.25; letter-spacing: -0.01em; }
-      .doc h3 { margin: 1.6em 0 0.4em; font-size: 1.1rem; }
-      .doc p, .doc li { color: var(--ink); }
-      .doc ul, .doc ol { padding-left: 1.4em; }
-      .doc li { margin-bottom: 0.4em; }
-      .doc code { padding: 1px 6px; border-radius: 4px; background: var(--tint); font-size: 0.9em; }
-      .doc .try { margin: 48px 0 0; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-align: center; }
-      .doc .try p { margin: 0 0 16px; font-size: 1.15rem; font-weight: 600; }
-      .doc .more { margin-top: 56px; }
-      .doc .more h2 { margin-top: 0; }
-      .doc .more ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 14px; padding: 0; list-style: none; }
-      .doc .more li { margin: 0; }
-      .doc .more a { display: block; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-decoration: none; }
-      .doc .more a:hover { border-color: var(--brand); }
-      .doc .more strong { display: block; margin-bottom: 4px; color: var(--brand); }
-      .doc .more span { color: var(--muted); font-size: 0.93rem; }`;
-
 interface SitePage {
   /** The path under `/home`. */
   name: string;
@@ -119,34 +94,25 @@ interface SitePage {
 }
 
 /**
- * A page of the marketing site under `/home`: the home page's header, footer and styles around the Markdown text of a legal
- * document or feature page. Documents link the app's own paths (`/terms`); here those links go to the sibling pages.
+ * A page of the marketing site under `/home` that is English prose: the site's frame (home/build.ts) around the Markdown text
+ * of a legal document or feature page. Documents link the app's own paths (`/terms`); here those links go to the sibling pages.
  */
 function sitePage({ name, description, md, feature }: SitePage): string {
   const heading = /^#\s+(.*)$/m.exec(md)?.[1] ?? name;
-  const title = feature ? `${heading} | Golem Docs` : heading;
-  const url = `https://golemdocs.com/home/${name}`;
-  const meta = (attr: string, key: string, value: string) => (s: string) => s.replace(new RegExp(`(<meta ${attr}="${key}" content=")[^"]*"`), (_, head: string) => `${head}${escapeHtml(value)}"`);
   const extras = feature
-    ? `\n<p class="try"><a class="btn" href="/">Open Golem Docs</a></p>\n<div class="more">\n<h2>More you can do</h2>\n<ul>\n${FEATURE_PAGES.filter((f) => f.name !== name)
-        .map((f) => `<li><a href="/home/${f.name}"><strong>${escapeHtml(f.label)}</strong><span>${escapeHtml(f.blurb)}</span></a></li>`)
+    ? `\n<p class="try"><a class="btn primary big" href="/">Open Golem Docs</a></p>\n<div class="more">\n<h2>More you can do</h2>\n<ul class="guides">\n${FEATURE_PAGES.filter((f) => f.name !== name)
+        .map((f) => `<li><a href="/home/${f.name}"><b>${escapeHtml(f.label)}</b><span>${escapeHtml(f.blurb)}</span></a></li>`)
         .join('\n')}\n</ul>\n</div>`
     : '';
-  let page = readFileSync(HOME, 'utf8')
-    .replace(/<title>.*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`)
-    .replace(/(<link rel="canonical" href=")[^"]*"/, (_, head: string) => `${head}${url}"`)
-    .replace(/(<meta property="og:url" content=")[^"]*"/, (_, head: string) => `${head}${url}"`)
-    .replace(/(<nav[^>]*>[\s\S]*?<\/nav>)/, (nav: string) => nav.replace(/href="#/g, 'href="/home#'))
-    .replace(/<main>[\s\S]*?<\/main>/, () => `<main class="doc${feature ? ' feature' : ''}">\n<article>\n<a class="back" href="/home">&larr; Golem Docs</a>\n${withFigure(markdownToHtml(md), name)}${extras}\n</article>\n</main>`)
-    .replace('</style>', () => `${PROSE_CSS}\n${feature ? readFileSync(path.join(SITE, 'figures.css'), 'utf8') : ''}    </style>`);
-  page = meta('name', 'description', description)(page);
-  page = meta('property', 'og:description', description)(page);
-  page = meta('property', 'og:title', title)(page);
-  return page;
+  const figures = feature ? `<style>\n${readFileSync(path.join(SITE, 'figures.css'), 'utf8')}</style>\n` : '';
+  return renderDocPage({
+    path: `/home/${name}`,
+    title: feature ? `${heading} | Golem Docs` : heading,
+    description,
+    heading,
+    body: `${figures}${withFigure(markdownToHtml(md), name)}${extras}`,
+  });
 }
-
-/** The home page (`public/home/index.html`). */
-const homePage = (): string => readFileSync(HOME, 'utf8');
 
 /**
  * A feature page's illustration (`site/<name>.figure.html`, drawn in HTML and CSS, styled by `site/figures.css`) goes after the
@@ -178,7 +144,7 @@ function sitePages(): SitePage[] {
  * Replaces `<!--welcome-->` in index.html with the welcome document as plain HTML. The editor draws
  * to a canvas, so without this a crawler (or a browser with scripts off) finds no text to read.
  * After the build, plain pages without the editor are written under `home/` (`home/pdf.html`, `home/privacy.html`...), served
- * at `/home/pdf`, `/home/privacy` and so on beside the marketing page (`public/home/index.html`).
+ * at `/home/pdf`, `/home/privacy` and so on beside the site's own pages (home/build.ts, every language).
  * (`/privacy` and `/terms` are the app's own addresses for the same documents, opened in the editor.)
  */
 export function welcomeContent(): Plugin {
@@ -193,7 +159,8 @@ export function welcomeContent(): Plugin {
       handler: (html) => html.replace('<!--welcome-->', () => markdownToHtml(readFileSync(WELCOME, 'utf8'))),
     },
     // In production these addresses are files or redirects (public/_redirects); the dev server answers every unknown path
-    // with the editor, so it does the same here: /home and /home/ are the marketing page, /home/<page> the others, and the old /privacy and /terms redirect to them.
+    // with the editor, so it does the same here: /home, /home/<page> and /home/<lang>/<page> are the site's pages (home/build.ts), /home/<guide> the guides and
+    // legal pages, and the old /privacy and /terms redirect to them.
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split('?')[0] ?? '';
@@ -204,15 +171,11 @@ export function welcomeContent(): Plugin {
           return void res.end();
         }
         try {
-          // The next marketing site (home/next), a preview served only here; it is read from disk on every request.
-          const preview = serveNext(url);
-          if (preview) {
-            res.setHeader('content-type', `${preview.type}; charset=utf-8`);
-            return void res.end(preview.body);
-          }
-          if (url === '/home' || url === '/home/' || url === '/home/index.html') {
-            res.setHeader('content-type', 'text/html');
-            return void res.end(homePage());
+          // The site's own pages, in every language, rendered from home/ on each request.
+          const home = serveHome(url);
+          if (home) {
+            res.setHeader('content-type', 'text/html; charset=utf-8');
+            return void res.end(home);
           }
           const page = sitePages().find(({ name }) => url === `/home/${name}` || url === `/home/${name}.html` || url === `/home/${name}/`);
           if (!page) return next();
@@ -226,7 +189,10 @@ export function welcomeContent(): Plugin {
     closeBundle() {
       if (!existsSync(path.join(outDir, 'index.html'))) return; // not a full build
       mkdirSync(path.join(outDir, 'home'), { recursive: true });
-      writeFileSync(path.join(outDir, 'home', 'index.html'), homePage());
+      for (const [file, html] of renderAll()) {
+        mkdirSync(path.dirname(path.join(outDir, file)), { recursive: true });
+        writeFileSync(path.join(outDir, file), html);
+      }
       for (const page of sitePages()) writeFileSync(path.join(outDir, 'home', `${page.name}.html`), sitePage(page));
     },
   };

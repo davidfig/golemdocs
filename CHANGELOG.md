@@ -8,6 +8,7 @@
 
 ### Changed
 
+- The website has a new look, in every language: separate pages for using Golem Docs with your ai, every format it opens, pricing, a journal of what changed, and downloads, with a home page that shows the editor and an ai at work instead of describing them.
 - The Files sidebar is now open when you start, on a screen wide enough for it. Close it, or choose View › Files Sidebar, and it stays the way you left it.
 
 ## 0.26.0 - 2026-10-24

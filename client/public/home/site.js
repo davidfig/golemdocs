@@ -3,6 +3,23 @@
 (function () {
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // The page's name sits in the middle of the menu bar, as a document's does in the app, unless the menus reach it.
+  (function () {
+    var title = document.querySelector('.doc-title');
+    var menus = document.querySelector('.menus');
+    var open = document.querySelector('.open-app');
+    if (!title || !menus) return;
+    function fit() {
+      title.classList.remove('crowded');
+      var t = title.getBoundingClientRect();
+      var crowded = menus.getBoundingClientRect().right + 8 > t.left || (open && open.getBoundingClientRect().left - 8 < t.right);
+      title.classList.toggle('crowded', !!crowded);
+    }
+    fit();
+    addEventListener('resize', fit);
+    if (document.fonts) document.fonts.ready.then(fit);
+  })();
+
   // The menu bar's access keys, as in the app: holding Alt underlines them, and Alt with the letter opens that page.
   (function () {
     var chrome = document.querySelector('.chrome');

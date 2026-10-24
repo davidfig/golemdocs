@@ -4,11 +4,12 @@
 
 ### Changed
 
+- PDFs are shown in the fonts they were made with, the ones embedded in the file, instead of a stand-in such as Arial or Times New Roman, so a LaTeX paper looks as it does printed, sharp at any zoom.
 - Desktop app: when a document's file changes in your vault folder while it is open, only what changed is updated, in place, without the page flickering. The new text is highlighted for a moment, and the caret and what you were looking at stay where they were.
 
 ### Fixed
 
-- PDFs made with LaTeX (most papers from arXiv) are shown in a serif font, with bold headings and monospaced code, instead of all in Arial.
+- Text in a PDF that doesn't embed its fonts is shown in a serif font, bold or monospaced as the font's name says, for LaTeX's own fonts too, instead of all in Arial.
 
 ## 0.25.0 - 2026-10-24
 

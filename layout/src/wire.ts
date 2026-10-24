@@ -18,6 +18,8 @@ export interface FaceDescriptor {
    * position, y down), then atlas left, top, right, bottom (0-1 UVs). Zeros for blank glyphs.
    */
   glyphTable: Float32Array;
+  /** The atlas image (RGBA, atlasWidth by atlasHeight), for a face built at runtime; otherwise it loads from `key`. */
+  pixels?: Uint8Array;
 }
 
 export function describeFace(metrics: FaceMetrics): FaceDescriptor {
@@ -39,6 +41,7 @@ export function describeFace(metrics: FaceMetrics): FaceDescriptor {
     atlasHeight: atlas.height,
     distanceRangeEm: atlas.distanceRange / atlas.size,
     glyphTable: table,
+    ...(metrics.pixels && { pixels: metrics.pixels }),
   };
 }
 

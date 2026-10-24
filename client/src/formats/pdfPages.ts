@@ -1,11 +1,13 @@
 // Opens a PDF as a stack of read-only PageLayouts: every glyph sits where the PDF puts it (the
-// PDF font's own advances position each character), drawn with our substitute MSDF faces.
+// PDF font's own advances position each character), drawn from the font program the PDF embeds
+// (pdfFaces.ts), or with our substitute MSDF faces where it embeds none.
 // Pages are interpreted lazily, one layoutPage() call each. The page text stays unchanged; what
 // can change is the layer of markup annotations over it (highlights, notes...: see
 // @golemdocs/pdf annotations), which are drawn from the appearance streams they're given.
 
-import { FontSet, PageLayout, isCjk, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
+import { FontSet, PageLayout, isCjk, type GlyphList, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
 import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type FontStyle, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
+import { PdfFaces } from './pdfFaces.ts';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
 import type { EditFonts } from './pdfFonts.ts';
 
@@ -223,6 +225,7 @@ export async function openPdfView(
     return undefined;
   };
 
+  const embedded = new PdfFaces(doc);
   const images = new Map<string, DisplayImage>();
   const partById = new Map<string, string>();
   const bytesByPart = new Map<string, Promise<Uint8Array | null>>();
@@ -231,15 +234,23 @@ export async function openPdfView(
     const choice = choose(run);
     const metrics = choice.metrics ?? fallback.metrics;
     const resolved = choice.metrics ? choice.resolved : fallback.resolved;
-    if (!metrics) return;
-    const list = page.glyphList(resolved, metrics);
+    // Made when a glyph needs it: a run drawn wholly from its own font has no stand-in list.
+    let standIn: GlyphList | undefined;
+    const list = (): GlyphList => (standIn ??= page.glyphList(resolved, metrics!));
     const color = packColor(run.color, run.alpha);
     for (const g of run.glyphs) {
+      // The font's own glyph, where its program has it (null: a blank one).
+      const own = embedded.glyph(run, g.glyph);
+      if (own !== undefined) {
+        if (own) page.glyphList(own.font, own.metrics).push(g.x, g.y, run.size, own.glyph, color);
+        continue;
+      }
+      if (!metrics) continue;
       const cps = Array.from(g.unicode, (ch) => ch.codePointAt(0)!);
       if (cps.length === 1) {
         const glyph = metrics.glyph(cps[0]);
         if (glyph >= 0) {
-          if (metrics.visible[glyph]) list.push(g.x, g.y, run.size, glyph, color);
+          if (metrics.visible[glyph]) list().push(g.x, g.y, run.size, glyph, color);
         } else {
           const drawn = pageFace(run, cps[0]);
           if (drawn?.metrics.visible[drawn.glyph]) page.glyphList(drawn.resolved, drawn.metrics).push(g.x, g.y, run.size, drawn.glyph, color);
@@ -248,7 +259,7 @@ export async function openPdfView(
       }
       const ligature = LIGATURES[g.unicode];
       if (ligature && metrics.has(ligature.codePointAt(0)!)) {
-        list.push(g.x, g.y, run.size, metrics.glyph(ligature.codePointAt(0)!), color);
+        list().push(g.x, g.y, run.size, metrics.glyph(ligature.codePointAt(0)!), color);
         continue;
       }
       // Several characters in one PDF glyph: share its advance in proportion to our glyph widths.
@@ -257,7 +268,7 @@ export async function openPdfView(
       const scale = natural > 0 && g.advance > 0 ? g.advance / natural : 1;
       let x = g.x;
       indices.forEach((gi) => {
-        if (gi >= 0 && metrics.visible[gi]) list.push(x, g.y, run.size, gi, color);
+        if (gi >= 0 && metrics.visible[gi]) list().push(x, g.y, run.size, gi, color);
         x += metrics.advance(gi) * run.size * scale;
       });
     }
@@ -369,6 +380,11 @@ export async function openPdfView(
       for (const w of display.warnings) warn(`page ${index + 1}: ${w}`);
       const page = new PageLayout(id, display.width, display.height, 0, index + 1);
       for (const r of display.rects) (r.over ? page.foreground : page.background).push(r.x, r.y, r.w, r.h, packColor(r.color, r.alpha));
+      try {
+        embedded.prepare(display.glyphRuns);
+      } catch (e) {
+        warn(`page ${index + 1}: embedded fonts could not be drawn (${(e as Error).message})`);
+      }
       for (const run of display.glyphRuns) pushRun(page, run);
       for (const image of display.images) {
         let part = partById.get(image.id);

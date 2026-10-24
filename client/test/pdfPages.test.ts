@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { FontSet, packColor } from '@golemdocs/layout';
+import { FontSet, describeFace, packColor } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument } from '../../pdf/src/index.ts';
 import { N, PdfDict, PdfStream, PdfString } from '../../pdf/src/core/objects.ts';
 import { toUnicodeCMap } from '../../pdf/src/write/fonts.ts';
@@ -32,6 +32,45 @@ async function sample(): Promise<Uint8Array> {
   doc.addPage([400, 500]);
   return doc.save();
 }
+
+test('embedded fonts draw from their own programs, through atlases made at runtime', skip, async () => {
+  // XeLaTeX: Latin Modern as a CID-keyed CFF font.
+  const view = await openPdfView(fixture('xelatex.pdf'), fonts!);
+  const page = view.layoutPage(0);
+  const lists = [...page.glyphs.values()];
+  assert.ok(lists.length > 0);
+  assert.ok(lists.every((l) => l.font.key.startsWith('pdf-font:')), lists.map((l) => l.font.key).join());
+  const face = describeFace(lists[0].metrics);
+  assert.equal(face.pixels?.length, face.atlasWidth * face.atlasHeight * 4);
+  assert.equal(face.distanceRangeEm, 8 / 48);
+  // Laid out again, the page reuses the atlases it made.
+  const again = view.layoutPage(0, 99);
+  assert.deepEqual([...again.glyphs.keys()].sort(), [...page.glyphs.keys()].sort());
+});
+
+test('a character the embedded program lacks is drawn with a stand-in', skip, async () => {
+  // DejaVu Sans, subset without the bullet (WinAnsi 0x95).
+  const bytes = fixture('DejaVuSans-subset.ttf');
+  const doc = PdfDocument.create();
+  const page = doc.addPage([200, 100]);
+  const descriptor = doc.add(new PdfDict({ Type: N('FontDescriptor'), FontName: N('DejaVuSans'), Flags: 32, FontBBox: [0, -200, 1000, 900], ItalicAngle: 0, Ascent: 900, Descent: -200, CapHeight: 729, StemV: 80, FontFile2: doc.add(new PdfStream(new PdfDict(), bytes)) }));
+  const font = doc.add(new PdfDict({ Type: N('Font'), Subtype: N('TrueType'), BaseFont: N('DejaVuSans'), Encoding: N('WinAnsiEncoding'), FirstChar: 72, LastChar: 149, Widths: Array.from({ length: 78 }, () => 600), FontDescriptor: descriptor }));
+  const name = page.addResource('Font', font, 'F');
+  page.setContent([
+    { op: 'BT', operands: [] },
+    { op: 'Tf', operands: [N(name), 20] },
+    { op: 'Td', operands: [10, 50] },
+    { op: 'Tj', operands: [new PdfString(Uint8Array.of(0x48, 0x95))] },
+    { op: 'ET', operands: [] },
+  ]);
+  const view = await openPdfView(await doc.save(), fonts!);
+  const lists = [...view.layoutPage(0).glyphs.values()];
+  const own = lists.filter((l) => l.font.key.startsWith('pdf-font:'));
+  const standIn = lists.filter((l) => !l.font.key.startsWith('pdf-font:'));
+  assert.deepEqual([own.reduce((n, l) => n + l.count, 0), standIn.reduce((n, l) => n + l.count, 0)], [1, 1]);
+  assert.equal(own[0].x(0), 10);
+  assert.equal(standIn[0].x(0), 10 + 12);
+});
 
 test('layoutPage: size, glyphs at PDF positions, colors, rects and images', skip, async () => {
   const view = await openPdfView(await sample(), fonts!);

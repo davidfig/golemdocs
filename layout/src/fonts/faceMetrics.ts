@@ -49,6 +49,8 @@ export class FaceMetrics {
     readonly face: ManifestFace,
     /** The raw msdf-atlas-gen layout, kept for the renderer's glyph table. */
     readonly layout: MsdfLayout,
+    /** The atlas image itself (RGBA), for a face built at runtime (a PDF's embedded font) rather than loaded from `face.atlas`. */
+    readonly pixels?: Uint8Array,
   ) {
     const { glyphs } = layout;
     this.glyphCount = glyphs.length;

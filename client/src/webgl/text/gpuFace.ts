@@ -44,7 +44,8 @@ export class GpuFace {
     return this.atlas !== null;
   }
 
-  setAtlas(image: ImageBitmap): void {
+  /** The atlas: an image, or RGBA pixels (a face built at runtime). */
+  setAtlas(image: ImageBitmap | Uint8Array): void {
     const gl = this.gl;
     this.atlas = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.atlas);
@@ -53,7 +54,8 @@ export class GpuFace {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    if (image instanceof Uint8Array) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.atlasWidth, this.atlasHeight, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
     // No mipmaps: glyphs are packed tightly, so smaller levels bleed neighbors into each
     // other. Minified text is supersampled in the fragment shader instead.
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -61,7 +63,7 @@ export class GpuFace {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    image.close();
+    if (!(image instanceof Uint8Array)) image.close();
   }
 
   dispose(): void {
@@ -122,7 +124,10 @@ export class AtlasLibrary {
     }
     face = new GpuFace(this.gl, descriptor);
     this.faces.set(descriptor.key, face);
-    void this.load(face);
+    if (descriptor.pixels) {
+      face.setAtlas(descriptor.pixels);
+      this.onLoad();
+    } else void this.load(face);
     return face;
   }
 

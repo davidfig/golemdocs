@@ -11,6 +11,8 @@ import { encoding, glyphToUnicode, standardFont, type EncodingName, type Standar
 
 export interface Glyph {
   code: number;
+  /** Composite fonts: the CID the code selects. */
+  cid?: number;
   /** Unicode text ('' if unknown). */
   text: string;
   /** Horizontal advance in text space units per unit font size (glyph width / 1000 for most fonts). */
@@ -181,7 +183,7 @@ export class TextFont {
           this.cidUnicode?.get(cid) ??
           '';
         const w = this.widths.get(cid) ?? this.defaultWidth;
-        out.push({ code, text: unligate(text), width: w * scale, wordSpace: n === 1 && code === 32, length: n });
+        out.push({ code, cid, text: unligate(text), width: w * scale, wordSpace: n === 1 && code === 32, length: n });
       }
       return out;
     }

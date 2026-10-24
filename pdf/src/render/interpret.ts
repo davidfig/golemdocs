@@ -38,9 +38,13 @@ export interface DisplayGlyph {
   y: number;
   /** Distance to the next glyph's origin in points (font width + character/word spacing). */
   advance: number;
+  /** What selects the glyph in the font: its code (simple fonts) or CID (composite fonts), for drawing it from the font's own program. */
+  glyph: number;
 }
 
 export interface GlyphRun extends FontStyle {
+  /** The font dictionary, for drawing with its embedded program (see `FontProgram`). */
+  fontDict: PdfDict;
   /** Font size in points. */
   size: number;
   /** 0xRRGGBB. */
@@ -502,7 +506,8 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
           tm = multiply([1, 0, 0, 1, tx, 0], tm);
           adv = tx * Math.hypot(tmc[0], tmc[1]);
         }
-        if (g.text && g.text !== ' ') glyphs.push({ unicode: g.text, x, y, advance: adv });
+        // A glyph with no known text is still drawn when the font's own program can draw it.
+        if (g.text !== ' ') glyphs.push({ unicode: g.text, x, y, advance: adv, glyph: g.cid ?? g.code });
       }
     }
     if (!first || !glyphs.length || ctx.hidden) return;
@@ -529,7 +534,7 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       ymax = Math.max(ymax, g.y);
     }
     ctx.boxes.push([x0, ymin - ul * 0.8, x1, ymax + ul * 0.2]);
-    ctx.out.glyphRuns.push({ ...fe.style, size: ul, color, alpha, glyphs });
+    ctx.out.glyphRuns.push({ ...fe.style, fontDict: font.dict, size: ul, color, alpha, glyphs });
   };
 
   // --- paths ---

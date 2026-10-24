@@ -1,0 +1,108 @@
+      <article class="page">
+        <p class="kicker">{{ai.kicker}}</p>
+        <h1>{{ai.h1}}</h1>
+        <p class="lede">{{ai.lede}}</p>
+
+        <h2>{{ai.connect.h}}</h2>
+        <ol class="setup">
+          <li><b>{{ai.step1.h}}</b> {{ai.step1.p}}</li>
+          <li><b>{{ai.step2.h}}</b> {{ai.step2.p}}</li>
+          <li><b>{{ai.step3.h}}</b> {{ai.step3.p}}</li>
+        </ol>
+        <div class="shots">
+          <div><b>Claude</b><span>{{ai.shot}}</span></div>
+          <div><b>ChatGPT</b><span>{{ai.shot}}</span></div>
+          <div><b>Cursor</b><span>{{ai.shot}}</span></div>
+        </div>
+        <p class="note-small">{{ai.shots.note}}</p>
+
+        <div class="row">
+          <div class="text">
+            <h2>{{ai.asks.h}}</h2>
+            <ul class="plain-list asks">
+              <li>{{ai.ask1}}</li>
+              <li>{{ai.ask2}}</li>
+              <li>{{ai.ask3}}</li>
+              <li>{{ai.ask4}}</li>
+            </ul>
+          </div>
+          <aside class="balloon" style="margin-top: 76px"><b>David</b>{{ai.asks.balloon}}</aside>
+        </div>
+
+        <h2>{{ai.how.h}}</h2>
+        <p class="text">{{ai.how.p}}</p>
+        <p class="note-small">{{sync.note}}</p>
+        <svg class="flow" viewBox="0 0 760 170" role="img" aria-label="{{ai.flow.label}}">
+          <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)" /></marker></defs>
+          <g fill="var(--page)" stroke="var(--chrome-line)">
+            <rect x="10" y="55" width="150" height="60" rx="4" />
+            <rect x="230" y="55" width="160" height="60" rx="4" stroke="var(--brand)" />
+            <rect x="460" y="55" width="140" height="60" rx="4" />
+            <rect x="640" y="15" width="110" height="40" rx="4" />
+            <rect x="640" y="65" width="110" height="40" rx="4" />
+            <rect x="640" y="115" width="110" height="40" rx="4" />
+          </g>
+          <g fill="var(--ink)" font-size="14" text-anchor="middle">
+            <text x="85" y="81" font-weight="700">{{ai.flow.app}}</text><text x="85" y="100" fill="var(--muted)" font-size="12">{{ai.flow.appSub}}</text>
+            <text x="310" y="81" font-weight="700" fill="var(--brand)">{{ai.flow.folder}}</text><text x="310" y="100" fill="var(--muted)" font-size="12">{{ai.flow.folderSub}}</text>
+            <text x="530" y="81" font-weight="700">{{ai.flow.account}}</text><text x="530" y="100" fill="var(--muted)" font-size="12">{{ai.flow.accountSub}}</text>
+            <text x="695" y="40" font-size="13">{{ai.flow.browser}}</text>
+            <text x="695" y="90" font-size="13">{{ai.flow.phone}}</text>
+            <text x="695" y="140" font-size="13">{{ai.flow.shared}}</text>
+          </g>
+          <g stroke="var(--muted)" stroke-width="1.5" fill="none">
+            <path d="M162 85H226" marker-end="url(#arr)" />
+            <path d="M394 85H456" marker-start="url(#arr)" marker-end="url(#arr)" />
+            <path d="M602 78L636 40" marker-start="url(#arr)" marker-end="url(#arr)" />
+            <path d="M602 85H636" marker-start="url(#arr)" marker-end="url(#arr)" />
+            <path d="M602 92L636 130" marker-start="url(#arr)" marker-end="url(#arr)" />
+          </g>
+        </svg>
+
+        <div class="row">
+          <div class="text">
+            <h2>{{ai.undo.h}}</h2>
+            <p>{{ai.undo.p}}</p>
+            <ul class="history" aria-label="{{home.history.label}}">
+              <li><time>10:42</time><span><span class="who">{{home.history.account}}</span><br />{{home.history.auto}}</span><span class="btn">{{home.history.open}}</span></li>
+              <li><time>09:15</time><span><span class="who">{{home.history.account}}</span><br />{{home.history.auto}}</span><span class="btn">{{home.history.open}}</span></li>
+              <li><time>{{home.files.mon}}</time><span><span class="who">{{home.history.account}}</span><br />{{home.history.named}}</span><span class="btn">{{home.history.open}}</span></li>
+            </ul>
+            <ul class="plain-list">
+              <li>{{ai.undo.f1}}</li>
+              <li>{{ai.undo.f2}}</li>
+              <li>{{ai.undo.f3}}</li>
+            </ul>
+          </div>
+          <aside class="balloon agent" style="margin-top: 110px"><b>{{ai.undo.balloonH}}</b>{{ai.undo.balloon}}</aside>
+        </div>
+
+        <h2>{{ai.rules.h}}</h2>
+        <p class="text">{{ai.rules.p}}</p>
+        <ul class="plain-list">
+          <li>{{ai.rule1}}</li>
+          <li>{{ai.rule2}}</li>
+          <li>{{ai.rule3}}</li>
+          <li>{{ai.rule4}}</li>
+        </ul>
+        <p class="note-small">{{ai.rules.note}}</p>
+
+        <div class="row">
+          <div class="text">
+            <h2>{{ai.mine.h}}</h2>
+            <p>{{ai.mine.p}}</p>
+            <ul class="plain-list">
+              <li>{{ai.mine.1}}</li>
+              <li>{{ai.mine.2}}</li>
+              <li>{{ai.mine.3}}</li>
+              <li>{{ai.mine.4}}</li>
+            </ul>
+          </div>
+          <aside class="balloon" style="margin-top: 96px"><b>David</b>{{ai.mine.balloon}}</aside>
+        </div>
+
+        <div class="aside-box">
+          <h3>{{ai.choice.h}}</h3>
+          <p>{{ai.choice.p}}</p>
+        </div>
+      </article>

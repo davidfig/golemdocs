@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- A preview while the new site is designed: not indexed. -->
+    <meta name="robots" content="noindex" />
+    <title>{{title}}</title>
+    <meta name="description" content="{{description}}" />
+    <link rel="canonical" href="{{url}}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Golem Docs" />
+    <meta property="og:title" content="{{title}}" />
+    <meta property="og:description" content="{{description}}" />
+    <meta property="og:image" content="https://golemdocs.com/og.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script>
+      try {
+        var appearance = localStorage.getItem('golem.appearance');
+        if (appearance === 'dark' || (appearance !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
+      } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="{{base}}/site.css" />
+    <script src="{{base}}/site.js" defer></script>
+  </head>
+  <body data-page="{{page}}">
+    <header class="chrome">
+      <div class="chrome-in">
+        <a class="logo" href="{{base}}" title="Golem Docs"><img src="/favicon.svg" alt="Golem Docs" width="16" height="16" /></a>
+        <nav class="menus" aria-label="{{nav.label}}">
+          {{menu}}
+        </nav>
+        <span class="doc-title" aria-hidden="true">{{docTitle}}</span>
+        <a class="btn open-app" href="/">{{nav.open}}</a>
+      </div>
+    </header>
+
+    <main class="desk">
+{{content}}
+    </main>
+
+    <footer class="foot">
+      <div class="foot-in">
+        <span>{{footer.copy}}</span>
+        <span class="foot-links">
+          <a href="/home/privacy">{{footer.privacy}}</a>
+          <a href="/home/terms">{{footer.terms}}</a>
+          <a href="/">{{footer.app}}</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

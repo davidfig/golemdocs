@@ -1,6 +1,7 @@
 import type { Plugin } from 'vite';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { serve as serveNext } from './home/next/build.ts';
 
 const WELCOME = path.resolve(import.meta.dirname, 'src/layout/welcome/en.md');
 const HOME = path.resolve(import.meta.dirname, 'public/home/index.html');
@@ -203,6 +204,12 @@ export function welcomeContent(): Plugin {
           return void res.end();
         }
         try {
+          // The next marketing site (home/next), a preview served only here; it is read from disk on every request.
+          const preview = serveNext(url);
+          if (preview) {
+            res.setHeader('content-type', `${preview.type}; charset=utf-8`);
+            return void res.end(preview.body);
+          }
           if (url === '/home' || url === '/home/' || url === '/home/index.html') {
             res.setHeader('content-type', 'text/html');
             return void res.end(homePage());

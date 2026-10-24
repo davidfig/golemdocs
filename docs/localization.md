@@ -158,6 +158,7 @@ app catalogs: `client/home/template.html` holds the page with `{{key}}` slots, `
 the text for each language (`en.json` is the source), and `pnpm build:home` writes the pages into `client/public/home/`.
 Commit the generated files; the `home` test fails if they are stale or a language lacks a key.
 
+- The next site being designed (`client/home/next/`, served only in dev at `/home/next`) is English only for now: its text is `client/home/next/locales/en.json`, in the same `{{key}}` style, and it gets every language when it replaces `/home`. See [UI](architecture/ui.md#marketing-site).
 - English `/home` sends visitors to their language (the app's saved `wm.locale`, else the browser's); the
   language links in the footer set `wm.locale`, so the choice carries into the app.
 - Strings may hold their own `<a>`/`<em>` markup; keep the tags and `href`s as in English.

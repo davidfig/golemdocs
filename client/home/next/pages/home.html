@@ -1,0 +1,220 @@
+      <article class="page">
+        <p class="kicker">Golem Docs</p>
+        <h1>{{home.h1}}</h1>
+        <p class="lede">{{home.lede}}</p>
+        <div class="cta">
+          <a class="btn primary big" href="/">{{home.open}}</a>
+          <a class="btn big" href="{{base}}/download">{{home.download}}</a>
+        </div>
+        <p class="note-small">{{home.fine}}</p>
+
+        <figure class="point lead">
+          <div class="demo-tabs phone-only" role="tablist" aria-label="{{home.editor.tabs.label}}" id="edTabs">
+            <button role="tab" type="button" aria-selected="true" data-show="doc">{{home.editor.tab.doc}}</button>
+            <button role="tab" type="button" aria-selected="false" data-show="svg">{{home.editor.tab.svg}}</button>
+            <button role="tab" type="button" aria-selected="false" data-show="pdf">{{home.editor.tab.pdf}}</button>
+            <button role="tab" type="button" aria-selected="false" data-show="csv">{{home.editor.tab.csv}}</button>
+          </div>
+          <div class="plate">
+            <div class="editor" id="editor" role="group" aria-label="{{home.editor.label}}">
+              <div class="tb" data-for="doc" aria-hidden="true"><span class="tbi" data-icon="undo"></span><span class="tbi" data-icon="redo"></span><span class="sep"></span><span class="combo">{{home.editor.style}}<i></i></span><span class="combo">Cambria<i></i></span><span class="combo">14<i></i></span><span class="sep"></span><b>B</b><em>I</em><u>U</u><s>S</s><span class="tbi" data-icon="highlight"></span><span class="tbi"><span class="ink">A</span></span><span class="sep"></span><span class="tbi" data-icon="alignLeft"></span><span class="tbi" data-icon="alignCenter"></span><span class="tbi" data-icon="alignRight"></span><span class="sep"></span><span class="tbi" data-icon="bullets"></span><span class="tbi" data-icon="numbering"></span><span class="tbi" data-icon="checklist"></span><span class="sep"></span><span class="tbi" data-icon="link"></span><span class="tbi" data-icon="table"></span><span class="tbi" data-icon="image"></span><span class="tbi" data-icon="equation"></span><span class="tbi" data-icon="comment"></span></div>
+              <div class="tb" data-for="svg" aria-hidden="true" hidden><span class="tbi" data-icon="undo"></span><span class="tbi" data-icon="redo"></span><span class="sep"></span><span class="tbi on" data-icon="select"></span><span class="tbi" data-icon="pen"></span><span class="tbi" data-icon="rect"></span><span class="tbi" data-icon="ellipse"></span><span class="tbi" data-icon="line"></span><span class="tbi" data-icon="text"></span><span class="sep"></span><span class="tbi"><span class="chip" style="background:#7cb87a"></span></span><span class="tbi"><span class="chip ring" style="border-color:#3d6b3a"></span></span><span class="combo">2 px<i></i></span><span class="sep"></span><span class="tbi" data-icon="layers"></span><span class="tbi" data-icon="group"></span><span class="tbi" data-icon="alignShapes"></span><span class="sep"></span><span class="tbi" data-icon="union"></span><span class="tbi" data-icon="subtract"></span></div>
+              <div class="tb" data-for="pdf" aria-hidden="true" hidden><span class="tbi" data-icon="undo"></span><span class="tbi" data-icon="redo"></span><span class="sep"></span><span class="tbi" data-icon="prevPage"></span><span class="combo">1 / 2<i></i></span><span class="tbi" data-icon="nextPage"></span><span class="sep"></span><span class="combo">100%<i></i></span><span class="sep"></span><span class="tbi" data-icon="textEdit"></span><span class="tbi" data-icon="highlight"></span><span class="tbi" data-icon="note"></span><span class="tbi" data-icon="redact"></span><span class="tbi" data-icon="sign"></span><span class="tbi on" data-icon="formField"></span><span class="sep"></span><span class="tbi" data-icon="rotate"></span><span class="tbi" data-icon="deletePage"></span></div>
+              <div class="tb" data-for="csv" aria-hidden="true" hidden><span class="tbi" data-icon="undo"></span><span class="tbi" data-icon="redo"></span><span class="sep"></span><span class="tbi" data-icon="sortAsc"></span><span class="tbi" data-icon="filter"></span><span class="sep"></span><span class="tbi" data-icon="insertRow"></span><span class="tbi" data-icon="insertColumn"></span><span class="tbi" data-icon="deleteRow"></span><span class="sep"></span><span class="tbi" data-icon="sum"></span><span class="tbi" data-icon="percent"></span><span class="sep"></span><span class="tbi" data-icon="chart"></span><span class="combo">{{home.editor.csv.find}}<i></i></span></div>
+              <div class="ed-body">
+                <div class="ed-files">
+                  <div class="ed-files-bar" aria-hidden="true">{{home.editor.files}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M2.5 1v6L6 4z"/></svg></i>{{home.demo.f.diary}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M1 2.5h6L4 6z"/></svg></i>{{home.editor.garden}}</div>
+                  <div class="ed-row d1 current" data-file="doc" role="button" tabindex="0" aria-pressed="true">{{home.editor.title}}.docx</div>
+                  <div class="ed-row d1" data-file="svg" role="button" tabindex="0" aria-pressed="false">{{home.editor.beds}}</div>
+                  <div class="ed-row d1" data-file="pdf" role="button" tabindex="0" aria-pressed="false">{{home.editor.catalog}}</div>
+                  <div class="ed-row d1" data-file="csv" role="button" tabindex="0" aria-pressed="false">{{home.editor.seeds}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M2.5 1v6L6 4z"/></svg></i>{{home.demo.f.health}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M2.5 1v6L6 4z"/></svg></i>{{home.demo.f.recipes}}</div>
+                  <span class="callout files-hint" id="filesHint" aria-hidden="true">{{home.editor.hint}}</span>
+                </div>
+                <div class="ed-desk">
+                  <div class="ed-page" data-for="doc">
+                    <h4>{{home.editor.title}}</h4>
+                    <p>{{home.editor.p1}}</p>
+                    <p>{{home.editor.p2}}<span class="caret"><span class="callout">{{home.editor.callout}}</span></span></p>
+                  </div>
+                  <div class="ed-page ed-draw" data-for="svg" hidden>
+                    <svg viewBox="0 0 300 170" class="beds">
+                      <path d="M10 14H290" class="fence"/>
+                      <text x="12" y="10" class="small">{{home.editor.svg.fence}}</text>
+                      <rect x="16" y="28" width="120" height="40" rx="3" class="bed tomato"/>
+                      <text x="76" y="52" class="label">{{home.editor.svg.tomatoes}}</text>
+                      <rect x="152" y="28" width="132" height="40" rx="3" class="bed"/>
+                      <text x="218" y="52" class="label">{{home.editor.svg.beans}}</text>
+                      <rect x="16" y="88" width="80" height="62" rx="3" class="bed herb"/>
+                      <text x="56" y="123" class="label">{{home.editor.svg.herbs}}</text>
+                      <circle cx="140" cy="119" r="20" class="tree"/>
+                      <rect x="186" y="88" width="98" height="62" rx="3" class="bed picked"/>
+                      <text x="235" y="123" class="label">{{home.editor.svg.lettuce}}</text>
+                      <g class="handles"><rect x="182.5" y="84.5" width="7" height="7"/><rect x="231.5" y="84.5" width="7" height="7"/><rect x="280.5" y="84.5" width="7" height="7"/><rect x="182.5" y="115.5" width="7" height="7"/><rect x="280.5" y="115.5" width="7" height="7"/><rect x="182.5" y="146.5" width="7" height="7"/><rect x="231.5" y="146.5" width="7" height="7"/><rect x="280.5" y="146.5" width="7" height="7"/></g>
+                    </svg>
+                    <span class="callout" style="right: 8px; top: 8px">{{home.editor.svg.callout}}</span>
+                  </div>
+                  <div class="ed-page ed-pdf" data-for="pdf" hidden>
+                    <div class="pdf-top"><b>{{home.editor.pdf.company}}</b><span>{{home.editor.pdf.formNo}}</span></div>
+                    <p class="pdf-title">{{home.editor.pdf.title}}</p>
+                    <div class="pdf-row">
+                      <label>{{home.editor.pdf.name}}</label><span class="fld active">David Figatner<span class="caret"><span class="callout">{{home.editor.pdf.callout}}</span></span></span>
+                    </div>
+                    <div class="pdf-row">
+                      <label>{{home.editor.pdf.date}}</label><span class="fld short">03/01/2026</span>
+                      <span class="choice"><label>{{home.editor.pdf.ship}}</label><span class="radio on"></span>{{home.editor.pdf.mail}}<span class="radio"></span>{{home.editor.pdf.pickup}}</span>
+                    </div>
+                    <div class="pdf-items">
+                      <span class="check on"></span><span>{{home.editor.pdf.item1}}</span><span class="fld qty">2</span>
+                      <span class="check on"></span><span>{{home.editor.pdf.item2}}</span><span class="fld qty">3</span>
+                      <span class="check"></span><span>{{home.editor.pdf.item3}}</span><span class="fld qty"></span>
+                    </div>
+                    <div class="pdf-row sign">
+                      <label>{{home.editor.pdf.signature}}</label>
+                      <span class="sig-line"><svg viewBox="0 0 120 24"><path d="M4 18c6-12 10-14 12-8s3 8 8 0 6-6 8 2 4 6 10-4 8-2 10 4 6 4 12-2 10-2 16 1"/></svg></span>
+                    </div>
+                    <div class="pdf-foot">{{home.editor.pdf.page}}</div>
+                  </div>
+                  <div class="ed-page ed-sheet" data-for="csv" hidden>
+                    <table>
+                      <thead><tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th></tr></thead>
+                      <tbody>
+                        <tr class="head"><th>1</th><td>{{home.editor.csv.seed}}</td><td>{{home.editor.csv.variety}}</td><td>{{home.editor.csv.packets}}</td><td>{{home.editor.csv.sow}}</td></tr>
+                        <tr><th>2</th><td>{{home.editor.csv.r1a}}</td><td>San Marzano</td><td class="n">2</td><td>{{home.editor.csv.r1d}}</td></tr>
+                        <tr><th>3</th><td>{{home.editor.csv.r2a}}</td><td>Genovese</td><td class="n picked">3<span class="callout" style="left: calc(100% + 8px); top: 50%; transform: translateY(-50%)">{{home.editor.csv.callout}}</span></td><td>{{home.editor.csv.r2d}}</td></tr>
+                        <tr><th>4</th><td>{{home.editor.csv.r3a}}</td><td>Butterhead</td><td class="n">2</td><td>{{home.editor.csv.r3d}}</td></tr>
+                        <tr><th>5</th><td>{{home.editor.csv.r4a}}</td><td>French Dwarf</td><td class="n">1</td><td>{{home.editor.csv.r4d}}</td></tr>
+                        <tr><th>6</th><td>{{home.editor.csv.r5a}}</td><td>Common</td><td class="n">1</td><td>{{home.editor.csv.r5d}}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption><b>{{home.p.write.h}}</b> {{home.p.write.p}}</figcaption>
+        </figure>
+
+        <h2>{{home.demo.h}}</h2>
+        <div class="demo" id="demo" role="group" aria-label="{{home.demo.label}}">
+          <div class="ai-pane" id="aiPane" data-mode="chat">
+            <div class="pane-tabs" role="tablist" aria-label="{{home.demo.tabs.label}}">
+              <button role="tab" id="tabChat" aria-selected="true" type="button">{{home.demo.tab.chat}}</button>
+              <button role="tab" id="tabTerm" aria-selected="false" type="button">{{home.demo.tab.term}}</button>
+            </div>
+            <div class="chat" id="chat" aria-live="polite">
+              <div class="chat-ask" id="chatAsk"></div>
+              <ol class="chat-steps" id="chatSteps"></ol>
+            </div>
+            <div class="term" id="term" aria-live="polite" hidden>
+              <div id="termLines"></div>
+            </div>
+          </div>
+          <div class="app">
+            <div class="app-bar"><span>Golem Docs &middot; {{home.demo.index}}</span><span class="sync" id="sync"><span class="dot"></span><span id="syncText" data-idle="{{home.demo.synced}}" data-busy="{{home.demo.syncing}}">{{home.demo.synced}}</span></span></div>
+            <div class="app-body">
+              <div class="tree">
+                <div>{{home.demo.f.diary}}</div>
+                <div>{{home.demo.f.work}}</div>
+                <div>{{home.demo.f.health}}</div>
+                <div class="d1 sel">{{home.demo.index}}</div>
+                <div class="d1">{{home.demo.f.running}}</div>
+                <div class="d1 new" data-at="3">{{home.demo.note}}</div>
+                <div class="d2 new" data-at="3">{{home.demo.note}}.md</div>
+                <div class="d2 new" data-at="4">{{home.demo.pdf}}</div>
+                <div>{{home.demo.f.recipes}}</div>
+              </div>
+              <div class="mini-desk">
+                <div class="mini-page">
+                  <h4>{{home.demo.index}}</h4>
+                  <ul>
+                    <li><span class="wl">{{home.demo.f.running}}</span>: {{home.demo.line1}}</li>
+                    <li><span class="wl">{{home.demo.f.blood}}</span>: {{home.demo.line2}}</li>
+                    <li data-at="5"><ins class="tc"><span class="wl">{{home.demo.note}}</span>: {{home.demo.line3}}</ins></li>
+                    <li data-at="7"><span class="mine" id="mine"></span><span class="you-caret"><span class="you-tag">{{home.demo.youTag}}</span></span></li>
+                  </ul>
+                  <div class="stamp" data-at="6">{{home.demo.stamp}} &middot; <u>{{home.demo.versions}}</u></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span hidden id="demoAsk">{{home.demo.ask}}</span>
+        <span hidden id="demoYou">{{home.demo.you}}</span>
+        <ol hidden id="demoSteps">
+          <li data-term="&lt;span class=&quot;dim&quot;&gt;● Reading&lt;/span&gt; Health/Health Index.md">{{home.demo.s1}}</li>
+          <li data-at="3" data-term="&lt;span class=&quot;dim&quot;&gt;● Writing&lt;/span&gt; Health/Sleep and Memory/Sleep and Memory.md">{{home.demo.s2}}</li>
+          <li data-at="4" data-term="&lt;span class=&quot;dim&quot;&gt;● Moving&lt;/span&gt; Downloads/sleep-study.pdf → Health/Sleep and Memory/">{{home.demo.s3}}</li>
+          <li data-at="5" data-term="&lt;span class=&quot;dim&quot;&gt;● Editing&lt;/span&gt; Health/Health Index.md &lt;span class=&quot;ok&quot;&gt;+1 line&lt;/span&gt;">{{home.demo.s4}}</li>
+          <li data-at="6" data-last data-term="&lt;span class=&quot;ok&quot;&gt;Done.&lt;/span&gt; 3 files changed.">{{home.demo.s5}}</li>
+        </ol>
+        <div class="demo-foot">
+          <button class="btn" id="replay" type="button">{{home.demo.replay}}</button>
+          <span>{{home.demo.foot}} <a href="{{base}}/ai">{{home.demo.connect}}</a></span>
+        </div>
+        <p class="note-small">{{home.demo.fine}}</p>
+
+        <div class="points">
+          <figure class="point">
+            <div class="plate">
+              <ul class="files" aria-label="{{home.files.label}}">
+                <li><i class="ft docx">DOCX</i><span class="fn">{{home.files.docx}}</span><span class="when">{{home.files.mon}}</span></li>
+                <li class="touched"><i class="ft md">MD</i><span class="fn">{{home.demo.index}}.md</span><span class="when">10:42</span></li>
+                <li><i class="ft pdf">PDF</i><span class="fn">{{home.files.pdf}}</span><span class="when">{{home.files.sep30}}</span></li>
+                <li><i class="ft svg">SVG</i><span class="fn">{{home.files.svg}}</span><span class="when">{{home.files.sep12}}</span></li>
+                <li><i class="ft csv">CSV</i><span class="fn">{{home.files.csv}}</span><span class="when">{{home.files.sep9}}</span></li>
+              </ul>
+              <span class="callout agent" style="right: 12px; top: 52px">{{home.files.callout}}</span>
+            </div>
+            <figcaption><b>{{home.p.folder.h}}</b> {{home.p.folder.p}}</figcaption>
+          </figure>
+
+          <figure class="point">
+            <div class="plate">
+              <ul class="history compact" aria-label="{{home.history.label}}">
+                <li><time>10:42</time><span><span class="who">{{home.history.account}}</span><br />{{home.history.auto}}</span><span class="btn">{{home.history.open}}</span></li>
+                <li><time>09:15</time><span><span class="who">{{home.history.account}}</span><br />{{home.history.auto}}</span><span class="btn">{{home.history.open}}</span></li>
+                <li><time>{{home.files.mon}}</time><span><span class="who">{{home.history.account}}</span><br />{{home.history.named}}</span><span class="btn">{{home.history.open}}</span></li>
+              </ul>
+            </div>
+            <figcaption><b>{{home.p.undo.h}}</b> {{home.p.undo.p}}</figcaption>
+          </figure>
+
+          <figure class="point">
+            <div class="plate flush">
+              <video data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="{{home.clip.label}}"></video>
+              <span class="callout" style="left: 12px; bottom: 12px">{{home.clip.callout}}</span>
+            </div>
+            <figcaption><b>{{home.p.everything.h}}</b> {{home.p.everything.p}} <a href="{{base}}/formats">{{home.p.everything.link}}</a></figcaption>
+          </figure>
+
+          <figure class="point">
+            <div class="plate">
+              <ol class="bill" aria-label="{{home.bill.label}}">
+                <li><span>{{bill.edit}}</span><span class="leader"></span><b>{{bill.free}}</b></li>
+                <li><span>{{bill.noAccount}}</span><span class="leader"></span><b>{{bill.free}}</b></li>
+                <li class="total"><span>{{bill.sync}}</span><span class="leader"></span><b>{{bill.price}}</b></li>
+                <li><span>{{bill.share}}</span><span class="leader"></span><b>{{bill.incl}}</b></li>
+                <li><span>{{bill.storage}}</span><span class="leader"></span><b>{{bill.incl}}</b></li>
+              </ol>
+            </div>
+            <figcaption><b>{{home.p.free.h}}</b> {{home.p.free.p}} <a href="{{base}}/pricing">{{home.p.free.link}}</a></figcaption>
+          </figure>
+        </div>
+
+        <div class="byline">
+          <div>
+            <p>{{home.byline}}</p>
+            <p><a href="{{base}}/about">{{home.why}}</a></p>
+          </div>
+          <div>
+            <p class="latest-head">{{home.latest}}</p>
+            <ul class="latest">
+{{latest}}
+            </ul>
+          </div>
+        </div>
+      </article>

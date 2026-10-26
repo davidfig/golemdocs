@@ -316,9 +316,16 @@ export class RoomCore {
     if (this.timings.graceMs === 0) this.setHolder(this.nextHolder());
   }
 
-  /** A save of the document went in: whoever watches opens it again. */
+  /**
+   * A save of the document went in: whoever watches opens it again. A document edited together is saved this way only while nobody
+   * shares it (the room writes it then): whoever has it open alone hears of it, and puts the new version in unless it was their own
+   * save or they have edits of their own to send (an ai app's change in a vault folder on another computer, say).
+   */
   saved(updatedAt: number): void {
-    if (!this.watched) return;
+    if (!this.watched) {
+      if (this.meta.mode === 'solo') this.broadcast({ type: 'saved', updatedAt });
+      return;
+    }
     const holder = this.meta.holder?.client;
     this.broadcast({ type: 'saved', updatedAt }, undefined, (p) => p.state.client !== holder);
   }

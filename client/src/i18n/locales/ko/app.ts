@@ -71,6 +71,7 @@ export const app: Partial<Messages> = {
   // Account and cloud
   'app.adopted': '이 브라우저의 문서 {count}개를 계정에 추가했습니다',
   'app.conflictNotice': '“{before}”이(가) 다른 곳에서도 변경되어, 이 변경 사항을 “{name}”(으)로 저장했습니다',
+  'app.mergedNotice': '“{name}”이(가) 다른 곳에서도 다른 단락이 변경되어 두 변경 사항을 모두 유지했습니다. 이전 상태는 버전 기록에 있습니다.',
   'app.signInToShare': '이 문서를 공유하려면 로그인하십시오',
   'app.subscribeToShare': '구독하여 이 문서 공유',
   'app.shareNotIncluded': '이 계정에는 공유가 포함되어 있지 않습니다',

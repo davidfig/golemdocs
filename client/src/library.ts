@@ -1,19 +1,66 @@
 // Keeps a document saved in this browser and its copy in the cloud in step. Signed in, every
 // document is in the account: the browser copy is saved first (so nothing waits on the network)
-// and uploaded soon after. Nothing is ever merged, and nothing is overwritten either: an upload
-// of a copy that started from an older version than the cloud's becomes a separate
-// "(conflicted copy)" document instead.
+// and uploaded soon after. Nothing is ever overwritten: an upload of a copy that started from an
+// older version than the cloud's is merged with the cloud's when the two changed different
+// paragraphs (formats/merge.ts), and otherwise becomes a separate "(conflicted copy)" document.
 
-import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, saveChunked, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
+import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
-import { getChunks, getSaved, getSavedManifest, getThumbnail, listSaved, markSynced, saveFromCloud, type SavedInfo } from './storage/local.ts';
+import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
 
 export interface Uploaded {
   doc: CloudDocument;
   /** The cloud copy had changed elsewhere, so this was saved as a new "(conflicted copy)" document. */
   conflictCopy: boolean;
+  /** The cloud copy had changed elsewhere, and the two were merged: the cloud and this copy now have both sides' changes. */
+  merged?: boolean;
+}
+
+/** Whether a merge may replace the copy here, said by whoever has it open (see main.ts), and the replacing done. */
+export interface MergeHost {
+  /**
+   * `merged` (of `mine`, the copy as uploaded, and the cloud's) is ready, and `write` makes it the copy here (false if the copy changed
+   * meanwhile). Answers whether it is in: false keeps the two apart, as a conflicted copy.
+   */
+  replace(merge: { localId: string; mine: Uint8Array; merged: Uint8Array; write: () => Promise<boolean> }): Promise<boolean>;
+}
+
+/** Nobody has the copy open: it is replaced as it is. */
+const CLOSED: MergeHost = { replace: ({ write }) => write() };
+
+/** How many times an upload merges before it gives up and keeps a conflicted copy (the cloud copy keeps changing under it). */
+const MERGES = 2;
+
+/**
+ * Merges this copy (`bytes`, as uploaded) with the cloud's, from the version they last agreed on (kept beside it: see "Synced base" in
+ * storage/local.ts), and makes the merge this copy, based on the cloud's version, for the next upload to send. False, having changed
+ * nothing, when there is no such version, the two changed the same paragraphs, or `host` says no.
+ */
+async function mergeWithCloud(info: SavedInfo, bytes: Uint8Array, host: MergeHost): Promise<boolean> {
+  const cloudId = info.cloudId;
+  const base = cloudId ? await getSyncedBase(info.id) : null;
+  if (!cloudId || !base || base.cloudUpdatedAt !== info.cloudUpdatedAt) return false;
+  // Its version first, then its bytes: a save in between gives bytes newer than the version says, which the next upload is refused
+  // over again, never bytes older than it, which it would be accepted over.
+  const cloud = (await listDocuments()).find((d) => d.id === cloudId);
+  if (!cloud) return false;
+  const theirs = new Uint8Array(await downloadDocument(cloudId));
+  // Only ever needed after a conflict, so it is a chunk of its own (formats/merge.ts with the operations it uses).
+  const { mergeStored } = await import('./formats/merge.ts');
+  const merged = await mergeStored(new Uint8Array(base.bytes), bytes, theirs);
+  if (!merged) return false;
+  return host.replace({
+    localId: info.id,
+    mine: bytes,
+    merged,
+    write: async () => {
+      // What the account had stays in its history (as this copy's does here: rebaseSaved), so the merge can be undone on either side.
+      await saveCloudVersion(cloudId).catch(() => {});
+      return rebaseSaved(info.id, { seenUpdatedAt: info.updatedAt, bytes: merged, base: theirs, cloudUpdatedAt: cloud.updatedAt });
+    },
+  });
 }
 
 /** "Report.docx" → "Report (conflicted copy).docx"; a conflicted copy that conflicts again keeps that name rather than growing another. */
@@ -82,8 +129,8 @@ async function sendable(localId: string) {
   return { info, bytes, manifest, source, known, create };
 }
 
-/** Uploads the saved browser copy to the cloud (creating the cloud document the first time). */
-export async function uploadToCloud(localId: string, retry = true): Promise<Uploaded> {
+/** Uploads the saved browser copy to the cloud (creating the cloud document the first time). `host` decides about a merge (see MergeHost). */
+export async function uploadToCloud(localId: string, retry = true, host: MergeHost = CLOSED, merges = MERGES): Promise<Uploaded> {
   const { info, bytes, manifest, source, known, create } = await sendable(localId);
   let doc: CloudDocument;
   let conflictCopy = false;
@@ -96,7 +143,10 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
       doc = await create(info.name);
     } else if (error.status === 409 && retry && (await getSaved(localId))?.info.cloudUpdatedAt !== info.cloudUpdatedAt) {
       // Another tab uploaded this copy meanwhile, so the cloud moved on from here: go again from there.
-      return uploadToCloud(localId, false);
+      return uploadToCloud(localId, false, host, merges);
+    } else if (error.status === 409 && merges > 0 && bytes && (await mergeWithCloud(info, bytes, host).catch(() => false))) {
+      // Changed elsewhere too, in other paragraphs: this copy has both now, on top of the cloud's version. Sent as any other save.
+      return { ...(await uploadToCloud(localId, true, host, merges - 1)), merged: true };
     } else if (error.status === 409) {
       // Changed elsewhere too: keep both, unless they turn out to be the same. This copy carries on as the conflicted one.
       const current = (await sameAsCloud(info.cloudId, bytes, manifest, source)) ? (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId) : undefined;
@@ -110,7 +160,7 @@ export async function uploadToCloud(localId: string, retry = true): Promise<Uplo
       throw error;
     }
   }
-  await markSynced(localId, { cloudId: doc.id, syncedAt: info.updatedAt, cloudUpdatedAt: doc.updatedAt, name: conflictCopy ? doc.name : undefined, ...(manifest && { syncedHashes: manifest.chunks.map((c) => c.h) }) });
+  await markSynced(localId, { cloudId: doc.id, syncedAt: info.updatedAt, cloudUpdatedAt: doc.updatedAt, name: conflictCopy ? doc.name : undefined, ...(manifest && { syncedHashes: manifest.chunks.map((c) => c.h) }), ...(bytes && { base: bytes }) });
   // The thumbnail goes with the document, so other computers can show it without downloading the
   // document. Not worth failing the save over; the next save sends another.
   const thumbnail = await getThumbnail(localId).catch(() => null);
@@ -165,7 +215,7 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
     for (const [i, result] of results.entries()) {
       if ('error' in result) continue;
       const { id, info } = sending[i]!;
-      await markSynced(id, { cloudId: result.id, syncedAt: info.updatedAt, cloudUpdatedAt: result.updatedAt });
+      await markSynced(id, { cloudId: result.id, syncedAt: info.updatedAt, cloudUpdatedAt: result.updatedAt, base: sending[i]!.bytes });
       made.set(id, result);
     }
   };

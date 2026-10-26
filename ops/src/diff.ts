@@ -218,20 +218,28 @@ export function diffDocuments(doc: WordDocument, next: WordDocument, newId: () =
   return reproduces(doc, next, ops) ? { ops, changes: changes.filter((c) => c.to > c.from) } : null;
 }
 
-/** Whether `ops` applied to a copy of `doc` give `next`'s body (paragraph ids and list numbers aside). */
-function reproduces(doc: WordDocument, next: WordDocument, ops: Operation[]): boolean {
-  const copy = Object.assign(Object.create(Object.getPrototypeOf(doc)) as WordDocument, doc, {
+/** A copy of `doc` whose body and lists can be changed without touching it (everything else is shared). */
+export function copyDocument(doc: WordDocument): WordDocument {
+  return Object.assign(Object.create(Object.getPrototypeOf(doc)) as WordDocument, doc, {
     body: structuredClone(doc.body),
     numbering: structuredClone(doc.numbering),
   });
+}
+
+/** Whether two documents' bodies are the same, paragraph ids and list numbers aside. */
+export function sameBody(a: WordDocument, b: WordDocument): boolean {
+  return canonical(a.body, listSignatures(a).signature) === canonical(b.body, listSignatures(b).signature);
+}
+
+/** Whether `ops` applied to a copy of `doc` give `next`'s body (paragraph ids and list numbers aside). */
+function reproduces(doc: WordDocument, next: WordDocument, ops: Operation[]): boolean {
+  const copy = copyDocument(doc);
   try {
     new Engine(copy).apply(ops);
   } catch {
     return false;
   }
-  const mine = listSignatures(copy);
-  const theirs = listSignatures(next);
-  return canonical(copy.body, mine.signature) === canonical(next.body, theirs.signature);
+  return sameBody(copy, next);
 }
 
 type Segment = { kind: 'equal'; i: number; j: number } | { kind: 'change'; i0: number; i1: number; j0: number; j1: number };
@@ -312,7 +320,7 @@ function listSignatures(doc: WordDocument): { signature: (id: number) => string;
 }
 
 /** JSON with keys sorted, paragraph ids left out and (with `list`) list numbers replaced by what the list looks like. */
-function canonical(value: unknown, list?: (id: number) => string): string {
+export function canonical(value: unknown, list?: (id: number) => string): string {
   const out: string[] = [];
   const walk = (v: unknown, key: string): void => {
     if (v === null || typeof v !== 'object') {

@@ -11,3 +11,4 @@ export * from './textOps.ts';
 export * from './versionPolicy.ts';
 export * from './accountStorage.ts';
 export * from './diff.ts';
+export * from './merge.ts';

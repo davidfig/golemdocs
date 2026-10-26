@@ -128,6 +128,16 @@ test('joining says hello with who we are; alone, we open our own copy', async ()
   assert.equal(t.client.state.me, 'me');
 });
 
+test('alone in a room edited together, a save the room tells of reaches the page (which decides whether it was its own)', async () => {
+  const t = setup();
+  t.client.ready(await t.join());
+  t.socket.deliver({ type: 'saved', updatedAt: 42 });
+  assert.deepEqual(t.log.filter((l) => l.startsWith('saved')), ['saved@42']);
+  // Nothing is frozen or held back, as for a watched room: alone is as if there were no room.
+  assert.equal(t.client.catchingUp, false);
+  assert.equal(t.client.canEdit, true);
+});
+
 test('joining a room that is already shared opens its document and starts syncing from it', async () => {
   const t = setup();
   const start = await t.join(welcome({ mode: 'shared', epoch: 2, people: [person('me'), person('ann')] }));

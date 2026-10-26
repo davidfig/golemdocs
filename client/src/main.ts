@@ -15,7 +15,7 @@ import { showProgress } from './ui/progressToast.ts';
 import { rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
-import { keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } from './library.ts';
+import { conflictCopyName, keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud, type MergeHost } from './library.ts';
 import {
   adoptGuestDocuments,
   releaseToGuest,
@@ -589,7 +589,8 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       roomGone(opening);
     },
     roomSaved(updatedAt) {
-      void refreshWatched(opening, updatedAt);
+      if (opening.room?.watching || opening.room?.catchingUp) void refreshWatched(opening, updatedAt);
+      else void accountSaved(opening, updatedAt);
     },
     roomRelease() {
       void releaseRoom(opening);
@@ -689,6 +690,24 @@ async function refreshWatched(doc: OpenDocument, updatedAt?: number): Promise<vo
     watchedNext = null;
     if (next !== null) void refreshWatched(current, next || undefined);
   }
+}
+
+/**
+ * A document open here alone was saved to the account (its room says so: see RoomClient). When that wasn't this browser (an ai app
+ * working in a vault folder on another computer, say), the account's version is put in in place, as after a vault sync, so the next save here starts from it rather
+ * than making a "(conflicted copy)". Edits here that the account hasn't got are left alone: their upload keeps both, as before.
+ */
+async function accountSaved(doc: OpenDocument, updatedAt: number): Promise<void> {
+  if (current !== doc || !doc.localId || doc.shared || !account) return;
+  // This browser's own save is announced too, before its answer is back: let it finish, then see whose save it was.
+  await flushUploads().catch(() => {});
+  const info = (await getSaved(doc.localId).catch(() => null))?.info;
+  if (current !== doc || doc.unsavedSince !== 0 || doc.room?.mode === 'shared' || !info?.cloudId) return;
+  if ((info.cloudUpdatedAt ?? 0) >= updatedAt || info.updatedAt > (info.cloudSyncedAt ?? 0)) return;
+  await refreshLibrary();
+  const cloud = library.entries.find((e) => e.local?.id === doc.localId)?.cloud ?? { id: info.cloudId, name: info.name, updatedAt };
+  await openFromCloud(cloud, account.id).catch(() => {});
+  if (current === doc && doc.unsavedSince === 0 && !(await refreshFromStore(doc))) await openLocal(doc.localId);
 }
 
 /** Someone else holds the open document (one edited by one person at a time): says so, and is true. Also true, saying nothing, for a moment while its newest save is being opened. */
@@ -1119,6 +1138,8 @@ interface OpenDocument {
   detour?: boolean;
   /** Nothing is open (File › Close): an empty document the No Document screen covers, which nothing can change. */
   none?: boolean;
+  /** A merge with the account's copy is being put into it (see `mergeHost`): its saves wait for it, or they would save over the merge. */
+  merging?: Promise<void>;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
@@ -1441,7 +1462,7 @@ async function upload(id: string): Promise<void> {
   // Someone else holds the open document: this copy is never sent over theirs (what it had is kept as a copy instead).
   if (id === current.localId && (current.room?.watching || current.room?.catchingUp)) return keepWatchedEdits(current);
   const before = library.local.find((d) => d.id === id)?.name;
-  const { doc, conflictCopy } = await uploadToCloud(id);
+  const { doc, conflictCopy, merged } = await uploadToCloud(id, true, mergeHost);
   // A document made in this session gets its room once it is in the account (and one without a room, as it could not be reached, tries again).
   if (id === current.localId && !conflictCopy) joinRoomOf(current, doc.id);
   library.putCloud(doc);
@@ -1452,7 +1473,65 @@ async function upload(id: string): Promise<void> {
       chrome.update({ documentName: doc.name });
     }
     notify(t('app.conflictNotice', { before: before ?? t('app.thisDocument'), name: doc.name }));
-  }
+  } else if (merged) notify(t('app.mergedNotice', { name: doc.name }));
+}
+
+/**
+ * Says whether an upload's merge with the account's copy may go in (library.ts, MergeHost), and puts it in. A document not open here
+ * takes it as it is. The open one takes it only with nothing unsaved, and its saves wait meanwhile (`merging`), so what is on screen,
+ * which doesn't have the account's changes yet, can't be saved over the merge: the merge goes into the stored copy, then into the editor
+ * in place. Anything typed while that happens is merged in the same way (it is "mine", the merge "theirs"); if it can't be, it is kept
+ * as a "(conflicted copy)" document of its own and the merged version is opened, so nothing is ever lost.
+ */
+const mergeHost: MergeHost = {
+  async replace({ localId, mine, merged, write }) {
+    const doc = current;
+    if (doc.localId !== localId) return write();
+    if (doc.unsavedSince !== 0 || doc.merging || doc.shared) return false;
+    let done!: () => void;
+    doc.merging = new Promise((resolve) => (done = resolve));
+    try {
+      if (!(await write())) return false;
+      let before = mine;
+      let next = merged;
+      for (let attempt = 0; attempt < 3 && current === doc; attempt++) {
+        if (doc.unsavedSince === 0) {
+          const put = await refreshFromStore(doc);
+          // In, in place: anything typed from now on is on top of the merge.
+          if (put === true) return true;
+          // It can't be put in place (a text file in its own editor, say): opened again, nothing being unsaved.
+          if (put === false && doc.unsavedSince === 0) {
+            if (current === doc) await openLocal(localId);
+            return true;
+          }
+        }
+        // Typed meanwhile: what is on screen is `before` plus that typing, without the account's changes. Merge it in too.
+        const onScreen = await worker.save();
+        const { mergeStored } = await import('./formats/merge.ts');
+        const again = await mergeStored(before, onScreen, next);
+        if (!again) return keepTyping(doc, onScreen);
+        doc.unsavedSince = 0;
+        await saveSaved({ id: localId, name: doc.name, bytes: again });
+        before = onScreen;
+        next = again;
+      }
+      return current !== doc || keepTyping(doc, await worker.save());
+    } finally {
+      doc.merging = undefined;
+      done();
+    }
+  },
+};
+
+/** What was typed during a merge couldn't be merged: it becomes a "(conflicted copy)" of its own, and the merged document is opened. */
+async function keepTyping(doc: OpenDocument, onScreen: Uint8Array): Promise<boolean> {
+  const copy = await saveSaved({ name: conflictCopyName(doc.name), bytes: onScreen, owner: account?.id });
+  library.putLocal(copy);
+  if (account) uploads.add(copy.id);
+  doc.unsavedSince = 0;
+  if (current === doc && doc.localId) await openLocal(doc.localId);
+  notify(t('app.conflictNotice', { before: doc.name, name: copy.name }));
+  return true;
 }
 
 /** The account can't be reached: uploads wait, and are tried again every so often. */
@@ -1757,6 +1836,8 @@ let cleared = false;
 function saveInBrowser(): Promise<string | null> {
   clearTimeout(autosaveTimer);
   if (cleared || current.detour) return Promise.resolve(null);
+  // What is on screen doesn't have the merge yet: saved now, it would go over it.
+  if (current.merging) return current.merging.then(() => saveInBrowser());
   const doc = current;
   doc.unsavedSince = 0;
   const name = fileName();
@@ -4601,9 +4682,10 @@ async function vaultChanged(touched: string[]): Promise<void> {
 
 /**
  * Puts what is stored for the open document into it in place, as edits (see the worker's `refresh`): only what changed is laid out again,
- * the caret and the view stay on the text they were on, and the new text is highlighted for a moment. False when it has to be opened again.
+ * the caret and the view stay on the text they were on, and the new text is highlighted for a moment. False when it has to be opened again;
+ * 'typed' when it was edited here meanwhile (those edits win, and nothing was put in).
  */
-async function refreshFromStore(doc: OpenDocument): Promise<boolean> {
+async function refreshFromStore(doc: OpenDocument): Promise<boolean | 'typed'> {
   if (!doc.localId || !loaded || textView.active || annotating || isPicture() || isDrawing() || embeddedDrawing || grid) return false;
   const saved = await getSaved(doc.localId).catch(() => null);
   // Renamed too: opened again, so everything that shows its name has the new one.
@@ -4614,7 +4696,7 @@ async function refreshFromStore(doc: OpenDocument): Promise<boolean> {
 }
 
 /** Puts `source` (the open document's new content) into it in place, keeping the view on the text at its top; false if it can't be. */
-function refreshWith(source: DocumentSource): Promise<boolean> {
+function refreshWith(source: DocumentSource): Promise<boolean | 'typed'> {
   const top = pageAt(canvas.clientWidth / 2, 0);
   return worker.refresh(source, top && { page: top.page.id, x: top.x, y: top.y });
 }

@@ -71,6 +71,7 @@ export const app: Partial<Messages> = {
   // Account and cloud
   'app.adopted': '已将此浏览器中的 {count} 份文档加入你的账户',
   'app.conflictNotice': '“{before}”在其他地方也被修改过，因此这些更改已另存为“{name}”',
+  'app.mergedNotice': '“{name}”在其他地方的其他段落也被修改过，因此两处更改都已保留。之前的状态在版本历史中。',
   'app.signInToShare': '请登录以共享此文档',
   'app.subscribeToShare': '订阅以共享此文档',
   'app.shareNotIncluded': '此账户不包含共享功能',

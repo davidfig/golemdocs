@@ -1547,6 +1547,7 @@ class OpenDocument {
       serialize: () => this.roomDocument(),
       connect: (send, version) => this.replica!.connect(send, version),
       disconnect: () => this.replica?.disconnect(),
+      saved: (updatedAt) => post({ type: 'roomSaved', doc: this.doc, updatedAt }),
       receive: (message) => {
         const { change } = this.editor!.receive(message);
         if (change) {
@@ -1681,9 +1682,9 @@ class OpenDocument {
    * The document's file changed outside the app (see the `refresh` message): what changed is put in as edits, so only that is laid out
    * again, the caret stays on its text, the view stays on what it showed, and the new text is highlighted for a moment. False when it
    * can't be done that way (not a flowing document, or a change operations can't make): the page opens the document again instead.
-   * Edits made here meanwhile win: the file is left for the next sync to settle.
+   * Edits made here meanwhile win: the file is left for the next sync to settle, and the answer is 'typed'.
    */
-  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean> {
+  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean | 'typed'> {
     const { editor, session, document, replica } = this;
     if (!this.isSetUp || this.closed || !editor || !session || !document || !replica) return false;
     if (this.annotator || this.layers || this.vectorLayers || this.shared || this.readOnly || this.format === 'pdf' || isLayeredFormat(this.format)) return false;
@@ -1694,7 +1695,7 @@ class OpenDocument {
     if (loaded.lens === 'md') await showEmbeds(loaded.document, fonts);
     await session.ensureFor(loaded.document);
     if (this.closed || this.editor !== editor) return false;
-    if (this.typedAt !== typed || this.waiting) return true;
+    if (this.typedAt !== typed || this.waiting) return 'typed';
     const diff = diffDocuments(document, loaded.document, () => replica.newId());
     if (!diff) return false;
     this.extensions = loaded.extensions;
@@ -2915,7 +2916,7 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
           console.error(e);
           return false;
         })
-        .then((ok) => post({ type: 'refreshed', request: message.request, ok }));
+        .then((done) => post({ type: 'refreshed', request: message.request, ok: done !== false, ...(done === 'typed' && { typed: true }) }));
       break;
   }
 }

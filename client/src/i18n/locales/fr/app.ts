@@ -74,6 +74,7 @@ export const app: Partial<Messages> = {
   'app.adopted.one': 'Le document de ce navigateur a été ajouté à votre compte',
   'app.adopted': '{count} documents de ce navigateur ont été ajoutés à votre compte',
   'app.conflictNotice': '« {before} » a également été modifié ailleurs, ces modifications ont donc été enregistrées sous « {name} »',
+  'app.mergedNotice': '« {name} » a également été modifié ailleurs, dans d’autres paragraphes : les deux séries de modifications ont été conservées. L’historique des versions garde l’état précédent.',
   'app.signInToShare': 'Connectez-vous pour partager ce document',
   'app.subscribeToShare': 'Abonnez-vous pour partager ce document',
   'app.shareNotIncluded': 'Le partage n’est pas inclus dans ce compte',

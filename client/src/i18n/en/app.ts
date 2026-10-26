@@ -74,6 +74,7 @@ export const app = {
   'app.adopted.one': 'Added the document from this browser to your account',
   'app.adopted': 'Added {count} documents from this browser to your account',
   'app.conflictNotice': '“{before}” was also changed somewhere else, so these changes were saved as “{name}”',
+  'app.mergedNotice': '“{name}” was also changed somewhere else, in other paragraphs, so both sets of changes were kept. Version History has it as it was before.',
   'app.signInToShare': 'Sign in to share this document',
   'app.subscribeToShare': 'Subscribe to share this document',
   'app.shareNotIncluded': 'Sharing isn’t included with this account',

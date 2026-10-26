@@ -47,7 +47,7 @@ export class LayoutClient {
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
-  private readonly refreshRequests = new Map<number, (ok: boolean) => void>();
+  private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
 
   /** Finds the stored document an embed (`![[Note]]`) names, as its name and bytes (set by the page, which knows what is stored). */
   embeds: ((title: string) => Promise<{ name: string; bytes: ArrayBuffer } | null>) | null = null;
@@ -196,9 +196,10 @@ export class LayoutClient {
 
   /**
    * The open document's file changed outside the app: puts its new content in as edits, keeping the text at `view` (a point on a page,
-   * the top of the view) where it is. False when that can't be done: open the document again instead.
+   * the top of the view) where it is. False when that can't be done: open the document again instead. 'typed' when it was edited here
+   * meanwhile: those edits win and nothing was put in.
    */
-  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean> {
+  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean | 'typed'> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.refreshRequests.set(request, resolve);
@@ -244,7 +245,7 @@ export class LayoutClient {
       return;
     }
     if (message.type === 'refreshed') {
-      this.refreshRequests.get(message.request)?.(message.ok);
+      this.refreshRequests.get(message.request)?.(message.typed ? 'typed' : message.ok);
       this.refreshRequests.delete(message.request);
       return;
     }

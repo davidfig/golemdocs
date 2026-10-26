@@ -12,7 +12,8 @@ Documents live in the browser's IndexedDB first. Signed out they never leave the
                             |
                  library.ts uploadToCloud  --cloud.ts-->  /api/documents (PUT ?base=<cloudUpdatedAt>)
                             |                                  200 -> markSynced(cloudId, cloudUpdatedAt, ...)
-                            |                                  409 -> save as "(conflicted copy)" (new cloud doc)
+                            |                                  409 -> merge with the cloud's (different paragraphs) and send again,
+                            |                                         else save as "(conflicted copy)" (new cloud doc)
                             |                                  404 -> cloud copy deleted: start a new one
                             |                                  401 -> signedOut, wait; TypeError -> offline, retry
                             |                                  402 -> noSync(); 423 -> a room is the writer, skip
@@ -22,11 +23,21 @@ Documents live in the browser's IndexedDB first. Signed out they never leave the
         Documents screen, Files Sidebar, File > Open Recent all read this one copy
 ```
 
-Nothing is ever merged and nothing is overwritten: a copy that started from an older cloud version becomes a separate "(conflicted copy)" document (`conflictCopyName` in `client/src/library.ts`). Multi-person live editing is a different path (a room becomes the single writer; see [Collaboration](collaboration.md)).
+Nothing is ever overwritten. A copy that started from an older cloud version is merged with the cloud's when the two changed different things, and otherwise becomes a separate "(conflicted copy)" document (`conflictCopyName` in `client/src/library.ts`). Multi-person live editing is a different path (a room becomes the single writer; see [Collaboration](collaboration.md)).
+
+## Merging a conflict
+
+When an upload is refused (409) and the other tab's upload isn't the reason, `uploadToCloud` tries a three-way merge before keeping the two apart (`mergeWithCloud`):
+
+- **The starting version** is kept beside each document in the `bases` store: the bytes of the last version this copy and the cloud agreed on, written when a copy is downloaded (`saveFromCloud`) or uploaded (`markSynced` with `base`), and stamped with that version's `cloudUpdatedAt`. Only for documents under `CHUNK_MIN_FILE` (larger ones keep the conflicted copy). A merge needs the base's stamp to equal the copy's `cloudUpdatedAt`.
+- **The cloud's version** is read as its `updatedAt` from the list first, then its bytes: a save landing in between gives bytes newer than the stamp, which the next upload is refused over again (and merged again, at most `MERGES` times), never older ones it would be accepted over.
+- **The merge** (`formats/merge.ts`, loaded only when needed) works on the `.wdoc`'s entries: `document.docx` by `mergeDocuments` (`ops/src/merge.ts`), every other entry whole from whichever side changed it, and a conflict when both did. A bare `.docx` (uploaded as it is, or written by another app) is a `.wdoc` with only its document, and leaves the other entries as they were. `mergeDocuments` diffs the base against each side (`diffDocuments`), refuses when both touched the same paragraph, removed or anchored on one the other changed, inserted at the same place, added a list, or changed a comment; takes styles, settings, the section and headers and footers from the side that changed them, and File › Properties field by field (the save dates every writer stamps, `modified` and `lastModifiedBy`, from whichever saved last); applies both sides' operations in both orders and keeps the result only if the two agree. Pictures, drawings and PDFs are never merged.
+- **Writing it** (`rebaseSaved`): the copy here becomes the merge, based on the cloud's version, only if it hasn't been saved to since; what it replaces goes into this browser's history first, and the cloud's version into the account's history (`saveCloudVersion`), so either side can be got back. The upload then sends it like any save, and `markSynced` makes it the next base.
+- **The open document** (`mergeHost` in `main.ts`): merged only if nothing is unsaved, and its own saves wait (`OpenDocument.merging`) until the merge is in the editor (`refreshFromStore`, in place). Anything typed meanwhile is merged in too (typing as "mine", the merge as "theirs"); if that can't be done, the typing becomes a "(conflicted copy)" of its own and the merged document is opened, so nothing is lost. The person is told either way (`app.mergedNotice`, `app.conflictNotice`).
 
 ## IndexedDB layout (`client/src/storage/local.ts`)
 
-Database `word`, version 7. Object stores:
+Database `word`, version 8. Object stores:
 
 | Store | Key -> value |
 | --- | --- |
@@ -36,6 +47,7 @@ Database `word`, version 7. Object stores:
 | `history`, `historyData` | a document's earlier versions: id -> its versions' details (small), `<id>/<version>` -> a small version's bytes or a chunked one's manifest (a hold on its chunks through `chunkRefs`). See [Version history](../history.md) |
 | `trash` | document id -> `{ info, deletedAt }`: the catalogue record of a document the person deleted, moved out of `meta` so every list stops showing it; its bytes, chunks, history and thumbnail stay. Restored or deleted for good by the trash dialog, or after 30 days. See [Version history](../history.md) |
 | `thumbs` | id -> `{ blob, forUpdatedAt }`, the first-page thumbnail rendered by `thumbnail.ts` on every save (drawn after 3 s without edits, when the document is left, or when the dashboard opens) |
+| `bases` | id -> `{ cloudUpdatedAt, bytes }`: the last version this copy and its cloud copy agreed on, for merging a conflict (documents under 2 MiB only; see "Merging a conflict") |
 | `folders` | the guest (signed-out) folder hierarchy |
 | `search` | per-document full-text index cache (`search/searchLibrary.ts`) |
 
@@ -58,7 +70,8 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | `client/src/history.ts`, `client/src/trash.ts` | the one list of kept versions (this browser's and the account's) and the one list of deleted documents, with restore; `ui/versionHistoryDialog.ts` and `ui/trashDialog.ts` show them |
 | `client/src/storage/chunker.ts` | content-defined chunking (`cdc1`), `CHUNK_MIN_FILE`, `assemble` |
 | `client/src/storage/archive.ts`, `zipImport.ts`, `droppedFiles.ts`, `uniqueName.ts` | Download All as ZIP, ZIP/folder import into folders, name de-duplication |
-| `client/src/library.ts` | `uploadToCloud`, `uploadNewToCloud` (batches), `openFromCloud`, `prefetchFromCloud`, `conflictCopyName` |
+| `client/src/library.ts` | `uploadToCloud` (with `mergeWithCloud` and the `MergeHost` the page gives it), `uploadNewToCloud` (batches), `openFromCloud`, `prefetchFromCloud`, `conflictCopyName` |
+| `client/src/formats/merge.ts`, `ops/src/merge.ts` | `mergeStored` (a stored file's entries) and `mergeDocuments` (the document, by paragraphs): the three-way merge of a conflict |
 | `client/src/libraryStore.ts` | `LibraryStore`: the one observable copy of entries, folders, shared documents; `refresh`, `refreshSoon` (3 s debounce), `putLocal`, `putCloud`, `reset` |
 | `client/src/sync.ts` | `SyncState`, `classify`, `mergeLibrary`, `loadLibrary`, `loadLocalLibrary`, the `wm.catalogue` cache and its patch helpers |
 | `client/src/cloud.ts` | typed fetch client for `/api/documents`, `/api/folders`, shares; `CloudError`, 429 retry in `send`, delta (chunk) upload, session-local `deleted` set |
@@ -90,7 +103,8 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 - A save's thumbnail is not drawn with the save: it waits for 3 s without edits and an idle moment (`QuietRunner`, `client/src/quietRunner.ts`), because `readPage` stalls the GPU on the main thread. `saveIfEdited` flushes it first, so leaving a document still draws it; a document gone by then gets its thumbnail at the next open (`backfillThumbnail`). `chunkBytes`, the thumbnails and the pages panel's draws are timed as `golem:*` User Timing spans (`traced`), visible in a DevTools Performance recording.
 - Save locally first, always. No code path may make a local save wait for the network. A version kept by a save is stored after the save (a small one) or inside its transaction as counters only (a chunked one), so history can cost a version but never a save.
 - `getSaved` returns `null` for a chunked copy with a missing chunk: a damaged copy reads as no copy.
-- `uploadToCloud` re-reads `cloudUpdatedAt` on a 409 and retries once before making a conflicted copy, because another tab may have just uploaded.
+- `uploadToCloud` re-reads `cloudUpdatedAt` on a 409 and retries once before merging or making a conflicted copy, because another tab may have just uploaded.
+- A merge is only ever written over a copy that hasn't changed since it was read (`rebaseSaved`), and the open document's saves wait for it: an editor save of what is on screen (without the cloud's changes) over the merge would quietly send the cloud's changes away.
 - A conflicted copy keeps the browser's id linked to the *new* cloud document (`markSynced` with the new name).
 - A new setting must be classified (synced or per device) when added; see `AGENTS.md`.
 - Several tabs share one IndexedDB: `onversionchange` closes the connection so upgrades are not blocked.

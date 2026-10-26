@@ -433,7 +433,8 @@ export type FromWorker =
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
-  | { type: 'refreshed'; request: number; ok: boolean }
+  /** `typed`: not put in, because the document was edited here meanwhile (those edits win; `ok` is true, as nothing needs opening again). */
+  | { type: 'refreshed'; request: number; ok: boolean; typed?: boolean }
   /** The answer to a `spellText`: the marks of every line (a language whose dictionary is still loading has none yet, and `loading` says so), or the problem at `at`. */
   | { type: 'spellText'; request: number; marks: TextMark[][]; issue: SpellIssue | null; loading: boolean };
 

@@ -2,7 +2,7 @@
   "name": "@golemdocs/server",
   "private": true,
   "description": "GolemDocs API server: documents, collaboration and accounts (private workspace package, not on npm)",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "type": "module",
   "scripts": {
     "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p .no-assets && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",

@@ -1,15 +1,19 @@
 // Runs one sync of the vault: reads the folder and the account, asks `planVault` what to do, does it, and records
-// what it did in `.golemdocs/state.json` so the next sync can tell an edit from a file that was only touched.
+// what it did in this computer's memory of the vault (`VaultMemory`) so the next sync can tell an edit from a file that
+// was only touched. The folder itself keeps only whose it is (`.golemdocs/state.json`), because it may be shared with other
+// computers (iCloud Drive, Dropbox...) that link its files to documents of their own.
 //
 // Everything outside (the disk, the account, the converter, hashing) comes in through `VaultHost`, so the whole
 // sync runs in tests against in-memory stand-ins. One action failing is reported and the rest carry on; what failed
 // is still different from the manifest, so the next sync tries it again.
 
-import { cloudPaths, needsHash, planVault, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction } from './vaultPlan.ts';
+import { cloudPaths, needsHash, planVault, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
 
 /** Failures in a row after which a sync stops: a bad file is skipped, but every file failing is a problem to show now. */
 const GIVE_UP_AFTER = 5;
 
+/** In the folder: which account the vault belongs to, with no entries. Before the memory moved to `VaultMemory` it held the
+ * whole manifest, which a computer with no memory of its own still takes in once (see `adoptable`). */
 export const STATE_PATH = '.golemdocs/state.json';
 
 /** The `account` of a vault kept while nobody is signed in (its documents are the ones saved in this browser). */
@@ -46,8 +50,16 @@ export interface VaultCodec {
   kept(name: string): boolean;
 }
 
+/** Where this computer keeps its memory of the vault between syncs, as text (vaultMemory.ts). */
+export interface VaultMemory {
+  /** Null when there is none yet; throws when the memory can't be read, which stops the sync before it changes anything. */
+  load(): Promise<string | null>;
+  save(text: string): Promise<void>;
+}
+
 export interface VaultHost {
   disk: VaultDisk;
+  memory: VaultMemory;
   cloud: VaultCloud;
   codec: VaultCodec;
   /** Hex SHA-256. */
@@ -94,7 +106,7 @@ export interface SyncReport {
   /** The documents (by the other side's id) whose content, name or place the sync changed there or deleted: one open in an editor is out of date. */
   touched: string[];
   /** The plan was not run because it would delete most of the vault; confirm and sync again with `allowMassDelete`. */
-  blocked?: { reason: 'mass-delete'; count: number };
+  blocked?: VaultPlan['blocked'];
   /** Documents the account lists but has no file for (paths they would have): not copied. */
   missing: string[];
   /** The sync gave up after this many failures in a row (something is wrong for every file, so going on would only repeat it); the rest was not tried. */
@@ -106,32 +118,55 @@ export interface SyncReport {
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 const directoryOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')).split('/') : []);
 
-async function loadState(host: VaultHost): Promise<State | null> {
+function parseState(text: string | null): State | null {
   try {
-    const parsed = JSON.parse(new TextDecoder().decode(await host.disk.read(STATE_PATH))) as State;
-    return parsed?.version === 1 && Array.isArray(parsed.entries) ? parsed : null;
+    const parsed = text === null ? null : (JSON.parse(text) as State);
+    return parsed?.version === 1 && typeof parsed.account === 'string' && Array.isArray(parsed.entries) ? parsed : null;
   } catch {
-    return null; // none yet, or unreadable: a vault with no memory, which the plan treats as filled before it was linked
+    return null; // unreadable: a vault with no memory, which the plan treats as filled before it was linked
   }
 }
 
-const saveState = (host: VaultHost, state: State) => host.disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify(state)));
+async function readFolderState(host: VaultHost): Promise<State | null> {
+  try {
+    return parseState(new TextDecoder().decode(await host.disk.read(STATE_PATH)));
+  } catch {
+    return null; // none yet
+  }
+}
+
+/**
+ * Whether remembered entries are this side's. Signed out, the ids are documents saved in this browser: entries none of whose
+ * documents are here were written by another computer (a folder state from before `VaultMemory`, brought by iCloud or Dropbox)
+ * or outlived this browser's storage, and planning with them would delete every file as "deleted on the other side". They are
+ * dropped, so the files are taken in as new documents. An account's ids are the same on every computer, so its entries are kept.
+ */
+function adoptable(entries: ManifestEntry[], account: string, listed: ReadonlySet<string>): ManifestEntry[] {
+  if (account !== GUEST_ACCOUNT || entries.some((e) => listed.has(e.id))) return entries;
+  return [];
+}
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
   const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [], missing: [] };
   const { disk, cloud, codec } = host;
 
-  const saved = await loadState(host);
+  const remembered = parseState(await host.memory.load());
+  const folderState = await readFolderState(host);
   // A vault kept while signed out is taken over by the account that signs in: with no memory, the plan matches files to
   // documents by path and the file wins, so nothing is lost. A vault linked to an account is never given to another
-  // account, nor to a signed-out browser (that would copy its files into documents the account would then duplicate).
-  if (saved && saved.account !== host.account && (saved.account !== GUEST_ACCOUNT || host.account === GUEST_ACCOUNT)) return { ...report, wrongAccount: true };
-  const state: State = saved && saved.account === host.account ? saved : { version: 1, account: host.account, entries: [] };
+  // account, nor to a signed-out browser (that would copy its files into documents the account would then duplicate). The
+  // folder says whose it is to every computer that shares it; this computer's memory says it here.
+  const refuses = (owner: State | null) => !!owner && owner.account !== host.account && (owner.account !== GUEST_ACCOUNT || host.account === GUEST_ACCOUNT);
+  if (refuses(remembered) || refuses(folderState)) return { ...report, wrongAccount: true };
+  // This computer's memory, or (once, with none) the manifest an older version kept in the folder.
+  const saved = remembered ?? folderState;
+  const state: State = saved && saved.account === host.account ? { ...saved } : { version: 1, account: host.account, entries: [] };
 
   const tell = options.progress ?? (() => {});
   tell({ phase: 'account' });
   const listing = await cloud.list();
   report.accountDocs = listing.docs.length;
+  state.entries = adoptable(state.entries, host.account, new Set(listing.docs.map((d) => d.id)));
   tell({ phase: 'folder', accountDocs: report.accountDocs });
   const all = cloudPaths(listing.docs, listing.folders);
   const nameOf = new Map(listing.docs.map((d) => [d.id, d.name]));
@@ -280,6 +315,9 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   }
 
   state.entries = [...entries.values()];
-  await saveState(host, state);
+  await host.memory.save(JSON.stringify(state));
+  if (folderState?.account !== host.account || folderState.entries.length) {
+    await disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify({ version: 1, account: host.account, entries: [] } satisfies State)));
+  }
   return report;
 }

@@ -1,5 +1,20 @@
 # What’s New in Golem Docs
 
+## 0.28.0 - Unreleased
+
+### Added
+
+- The website’s ai and Pricing pages now explain how to use your documents on several computers for free: put your Golem Docs folder in iCloud Drive, Dropbox, OneDrive or Google Drive and choose it on each computer.
+
+### Changed
+
+- When a document was changed in two places before they could catch up (offline on a laptop, say, while an ai app edited it in your vault folder on another computer), the changes are now merged if they are in different paragraphs, instead of being kept as a conflicted copy. Changes to the same paragraph are still kept apart, and Version History has each side as it was.
+- A document you have open shows a change saved from your vault folder on another computer (by an ai app working there, say) as soon as it is saved, highlighted for a moment, and your next edit builds on it instead of being kept as a conflicted copy.
+
+### Fixed
+
+- A vault folder kept in iCloud Drive, Dropbox or a similar cloud drive and opened in Golem Docs on a second computer no longer has its files deleted. Each computer now keeps its own record of the folder. If a sync would delete most of the folder’s files, it now waits for you to confirm, as it already did when most files were missing.
+
 ## 0.27.0 - 2026-10-24
 
 ### Added

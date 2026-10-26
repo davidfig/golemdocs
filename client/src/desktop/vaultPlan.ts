@@ -67,11 +67,16 @@ export type VaultAction =
 
 export interface VaultPlan {
   actions: VaultAction[];
-  /** Set when the plan would delete so much that it is more likely a missing drive than a decision. No deletes are in `actions`. */
-  blocked?: { reason: 'mass-delete'; count: number };
+  /**
+   * Set when the plan would delete so much that it is more likely an accident than a decision. No deletes are in `actions`.
+   * `mass-delete`: most files are missing from the folder (a drive that is not mounted, an emptied folder); `count` documents
+   * would go to the trash. `mass-delete-here`: most documents are gone from the other side (storage that was cleared, a
+   * memory that is not this side's); `count` files would be deleted from the folder.
+   */
+  blocked?: { reason: 'mass-delete' | 'mass-delete-here'; count: number };
 }
 
-/** This many missing files, and at least half of all that are linked, is treated as an accident rather than a clean-up. */
+/** This many deletes on one side, and at least half of all that are linked, is treated as an accident rather than a clean-up. */
 export const MASS_DELETE_MIN = 10;
 
 const unchanged = (file: LocalFile, entry: ManifestEntry): boolean => file.size === entry.size && file.mtimeMs === entry.mtimeMs;
@@ -168,11 +173,12 @@ export function planVault(input: PlanInput): VaultPlan {
   for (const file of untracked) if (!taken.has(file.path)) actions.push({ kind: 'create', path: file.path });
 
   const missing = deletes.filter((a) => a.kind === 'deleteCloud').length;
-  if (!allowMassDelete && missing >= MASS_DELETE_MIN && missing * 2 >= manifest.length) {
-    // Probably a drive that is not mounted or a folder that was emptied by accident. Local still wins, but
-    // only once the person confirms (the driver asks, then plans again with `allowMassDelete`).
-    return { actions, blocked: { reason: 'mass-delete', count: missing } };
-  }
+  const here = deletes.length - missing;
+  const many = (count: number) => count >= MASS_DELETE_MIN && count * 2 >= manifest.length;
+  // Probably a drive that is not mounted, a folder emptied by accident or a memory that is not this side's. The deletes
+  // still happen, but only once the person confirms (the driver asks, then plans again with `allowMassDelete`).
+  if (!allowMassDelete && many(missing)) return { actions, blocked: { reason: 'mass-delete', count: missing } };
+  if (!allowMassDelete && many(here)) return { actions, blocked: { reason: 'mass-delete-here', count: here } };
   return { actions: [...actions, ...deletes] };
 }
 

@@ -9,6 +9,7 @@ import { GUEST_ACCOUNT, syncVault, type VaultCodec, type VaultDisk, type VaultHo
 (globalThis as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
 const local = await import('../src/storage/local.ts');
 const { guestCloud } = await import('../src/desktop/vaultGuest.ts');
+const { vaultMemory } = await import('../src/desktop/vaultMemory.ts');
 
 const text = (s: string) => new TextEncoder().encode(s);
 const read = (b: Uint8Array | ArrayBuffer) => new TextDecoder().decode(b);
@@ -34,11 +35,14 @@ const disk: VaultDisk = {
 };
 const put = (path: string, content: string) => void files.set(path, { bytes: text(content), mtimeMs: ++clock });
 const codec: VaultCodec = { toFile: async (b) => b, fromFile: async (b) => b, kept: () => true };
-const host = (): VaultHost => ({ disk, cloud: guestCloud(), codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account: GUEST_ACCOUNT });
+let root = '';
+let roots = 0;
+const host = (): VaultHost => ({ disk, memory: vaultMemory(root), cloud: guestCloud(), codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account: GUEST_ACCOUNT });
 const names = async () => (await local.listSaved()).map((d) => d.name).sort();
 
 beforeEach(async () => {
   files.clear();
+  root = `/vault-${++roots}`; // a folder this computer has no memory of
   for (const d of await local.listSaved()) await local.deleteSaved(d.id);
   await local.purgeTrashedSaved();
   for (const f of await local.listLocalFolders()) await local.removeLocalFolderRecord(f.id);
@@ -92,4 +96,24 @@ test('a document an account owns is not in the folder', async () => {
   await local.saveSaved({ name: 'mine.md', bytes: text('mine') });
   await syncVault(host());
   assert.deepEqual([...files.keys()].filter((p) => !p.startsWith('.')), ['mine.md']);
+});
+
+test('when this browser no longer has any of the documents the vault linked, the files are taken in again, not deleted', async () => {
+  for (const name of ['a.md', 'b.md']) await local.saveSaved({ name, bytes: text(name) });
+  await syncVault(host());
+  // The browser's storage was cleared: the vault's memory outlived the documents it names.
+  for (const d of await local.listSaved()) await local.deleteSaved(d.id);
+  const report = await syncVault(host());
+  assert.deepEqual(report.errors, []);
+  assert.equal(`${report.deletedHere},${report.created}`, '0,2');
+  assert.deepEqual([...files.keys()].filter((p) => !p.startsWith('.')).sort(), ['a.md', 'b.md']);
+  assert.deepEqual(await names(), ['a.md', 'b.md']);
+});
+
+test('the vault memory is kept in this browser, and the folder only says whose it is', async () => {
+  await local.saveSaved({ name: 'a.md', bytes: text('a') });
+  await syncVault(host());
+  const remembered = JSON.parse((await vaultMemory(root).load())!);
+  assert.equal(remembered.entries.length, 1);
+  assert.deepEqual(JSON.parse(read(files.get('.golemdocs/state.json')!.bytes)), { version: 1, account: GUEST_ACCOUNT, entries: [] });
 });

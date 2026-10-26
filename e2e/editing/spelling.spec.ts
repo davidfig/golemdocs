@@ -173,7 +173,7 @@ test.describe('grammar', () => {
     await expect.poll(() => app.text()).toMatch(/^We saw the dog\.$|^We saw the  ?dog\.$/);
   });
 
-  test('turning off Check grammar leaves only spelling problems', async ({ app }) => {
+  test('turning off Check grammar leaves only spelling problems', { tag: '@heavy' }, async ({ app }) => {
     await withText(app, 'We saw the the dog.');
     await openSpelling(app);
     await expect(spell(app).getByText('Grammar: Repeated word')).toBeVisible();
@@ -343,7 +343,7 @@ test.describe('squiggles and the right-click menu', () => {
     await app.press('Escape');
   });
 
-  test('with "Check spelling as you type" off there is no spelling menu', async ({ app }) => {
+  test('with "Check spelling as you type" off there is no spelling menu', { tag: '@heavy' }, async ({ app }) => {
     await withText(app, 'I recieve mail.');
     await openSpelling(app);
     await spell(app).getByRole('checkbox', { name: 'Check spelling as you type' }).uncheck();

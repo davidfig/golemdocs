@@ -123,6 +123,18 @@ test('deleting most of the vault at once is held back until confirmed', () => {
   assert.equal(confirmed.actions.filter((a) => a.kind === 'deleteCloud').length, ids.length);
 });
 
+test('deleting most of the files in the vault because their documents are gone is held back until confirmed', () => {
+  const ids = Array.from({ length: MASS_DELETE_MIN + 2 }, (_, i) => `d${i}`);
+  const manifest = ids.map((id) => entry(id));
+  const local = ids.map((id) => file(`${id}.md`));
+  const held = plan({ local, manifest });
+  assert.deepEqual(held.blocked, { reason: 'mass-delete-here', count: ids.length });
+  assert.equal(held.actions.some((a) => a.kind === 'deleteLocal'), false);
+  const confirmed = plan({ local, manifest, allowMassDelete: true });
+  assert.equal(confirmed.blocked, undefined);
+  assert.equal(confirmed.actions.filter((a) => a.kind === 'deleteLocal').length, ids.length);
+});
+
 test('a few deleted files in a large vault are not held back', () => {
   const ids = Array.from({ length: 100 }, (_, i) => `f${i}`);
   const manifest = ids.map((id) => entry(id));

@@ -6,6 +6,7 @@ import type { Folder } from '../folders.ts';
 import type { DesktopBridge } from './bridge.ts';
 import { safeName } from './vaultPlan.ts';
 import { guestCloud } from './vaultGuest.ts';
+import { vaultMemory } from './vaultMemory.ts';
 import { GUEST_ACCOUNT, type VaultCloud, type VaultCodec, type VaultHost } from './vaultSync.ts';
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -57,7 +58,7 @@ export function accountCloud(): VaultCloud {
   };
 }
 
-/** The vault's host for the signed-in account, or (null) for the documents saved in this browser. */
-export function realHost(disk: DesktopBridge, codec: VaultCodec, account: string | null): VaultHost {
-  return { disk, cloud: account ? accountCloud() : guestCloud(), codec, hash: sha256Hex, account: account ?? GUEST_ACCOUNT };
+/** The host of the vault at `root` for the signed-in account, or (null) for the documents saved in this browser. */
+export function realHost(root: string, disk: DesktopBridge, codec: VaultCodec, account: string | null): VaultHost {
+  return { disk, memory: vaultMemory(root), cloud: account ? accountCloud() : guestCloud(), codec, hash: sha256Hex, account: account ?? GUEST_ACCOUNT };
 }

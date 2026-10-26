@@ -42,13 +42,16 @@ Whatever is done to the folder is what the account becomes. That is safe because
 | Deleted in the account, file untouched | `deleteLocal` |
 | Deleted in the account, file edited here | the edit is kept as a new document |
 | Vault filled before it was linked | `upload` over the account copy (version kept) |
-| Many files missing at once (10 or more, and half of those linked) | held back (`blocked`) until the person confirms: it is far more likely a drive that is not mounted |
+| Many files missing at once (10 or more, and half of those linked) | held back (`blocked`, `mass-delete`) until the person confirms: it is far more likely a drive that is not mounted |
+| Many documents gone from the other side at once (the same numbers) | held back (`mass-delete-here`) before their files are deleted: more likely cleared storage or a memory that is not this side's |
 
-Files are followed by their cloud id in the manifest (`.golemdocs/state.json`), never by path. `cloudPaths` turns the account's folders and names into vault paths: it replaces characters a disk refuses, and keeps two same-named documents apart with " (2)" by creation order so a path is stable from one sync to the next.
+Files are followed by their cloud id in the manifest, never by path. `cloudPaths` turns the account's folders and names into vault paths: it replaces characters a disk refuses, and keeps two same-named documents apart with " (2)" by creation order so a path is stable from one sync to the next.
 
 ## The sync driver
 
-`syncVault` (`client/src/desktop/vaultSync.ts`) runs one sync against a `VaultHost` (disk, account, converter, hashing), so it is tested entirely in memory (`client/test/vaultSync.test.ts`). It lists the account, scans the folder, hashes only what `needsHash` names, runs `planVault`, executes the actions, and writes `.golemdocs/state.json` (the manifest, plus the account id: a vault never takes another account in). One action failing is reported and the rest carry on; whatever failed still differs from the manifest, so the next sync retries it.
+`syncVault` (`client/src/desktop/vaultSync.ts`) runs one sync against a `VaultHost` (disk, account, converter, hashing), so it is tested entirely in memory (`client/test/vaultSync.test.ts`). It lists the account, scans the folder, hashes only what `needsHash` names, runs `planVault`, executes the actions, and saves the manifest in this computer's memory of the vault.
+
+**The manifest is per computer, not in the folder.** A vault folder may itself be shared with other computers by iCloud Drive, Dropbox, OneDrive or the like, and each computer links the files to its own documents (signed out, they are its own browser's). A manifest kept in the folder would reach the others and name documents they never had, and their sync would read that as "deleted on the other side" and delete every file. So the manifest is a `VaultMemory` (`vaultMemory.ts`: its own IndexedDB database, `golemdocs-vault`, one record per folder path), and the folder's `.golemdocs/state.json` only says whose it is (`account`, no entries), so a folder linked to an account is refused signed out or by another account on every computer that shares it (`wrongAccount`). A memory that can't be read stops the sync before it changes anything. With no memory, the sync takes in once the manifest an older version kept in the folder; signed out, entries none of whose documents this browser has are dropped (`adoptable`), whether they came from another computer or outlived cleared storage, so the files are taken in as new documents instead of being deleted. Two signed-in computers of the same account can share a folder too: ids are the account's, and a change that reaches the second computer through the folder and through the account is uploaded once more, at worst an extra version. One action failing is reported and the rest carry on; whatever failed still differs from the manifest, so the next sync retries it.
 
 - **`vaultHost.ts`** is the real host: the native bridge, `cloud.ts` (a save without `base`, because the file wins; `saveCloudVersion` first when the account changed too; the trash for deletes) and folder creation by name.
 - **`vaultService.ts`** keeps it running while the app is open: a stat-only scan every 4 seconds (no file-watcher dependency), the account every minute and when the window is shown or the connection returns. A sync's own writes are not counted as changes. Syncs never overlap. It is started from `connect()` in `main.ts`, so it follows sign-in and sign-out.
@@ -143,6 +146,7 @@ pnpm desktop:dev
 | `client/src/desktop/bridge.ts` | typed `desktopBridge()` over `window.__TAURI__`; null in a browser |
 | `client/src/desktop/vaultPlan.ts` | `needsHash`, `planVault`, `cloudPaths`, `safeName` |
 | `client/src/desktop/vaultSync.ts` | `syncVault`: runs one sync against a `VaultHost`, keeps the manifest |
+| `client/src/desktop/vaultMemory.ts` | the manifest of each vault folder, kept per computer in IndexedDB |
 | `client/src/desktop/vaultHost.ts` | the real host (bridge, `cloud.ts`, folders) |
 | `client/src/desktop/vaultCodec.ts` | stored document bytes to and from the vault's file formats (runs in the worker) |
 | `client/src/desktop/convertWorker.ts`, `convertWorkerEntry.ts`, `convertClient.ts` | the worker that runs the codec, and the page's client for it |

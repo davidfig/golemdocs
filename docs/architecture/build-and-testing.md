@@ -91,6 +91,10 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-10-24 | `e2e/layout/breaks.spec.ts` › Print Layout and Flow views › the chosen view is remembered in this browser across a reload | Timed out at 32 s in pass one, passed on retry; alone, passed twice in about 5 s. Failed while a side run was also going |
 | 2026-10-24 | `e2e/layout/columns.spec.ts` › Columns dialog › opens from Format ▸ Columns and from the toolbar button, showing one column by default | As the breaks test, in the same minute |
 | 2026-10-24 | `e2e/editing/markdown-shortcuts.spec.ts` › headings, check boxes, marks and rules are made as they are typed | Took 1 min and failed in pass one, passed on retry; alone, passed in 8.6 s |
+| 2026-10-26 | `e2e/collab/room-picture.spec.ts` › taking over: the watcher holds the picture and can draw, and the one who held it watches and sees it | Failed at 36.7 s in pass one; alone (a side run, two workers) the whole spec passed, this test in 14 s |
+| 2026-10-26 | `e2e/editing/spelling.spec.ts` › grammar › turning off Check grammar leaves only spelling problems | Failed at 11.6 s in pass one (the repeated-word finding never showed), passed on retry; alone, passed four times in about 2-3 s |
+| 2026-10-26 | `e2e/editing/spelling.spec.ts` › squiggles and the right-click menu › with "Check spelling as you type" off there is no spelling menu | Hung for 9.4 min in pass one, passed on retry; alone, passed in 3 s |
+| 2026-10-26 | `e2e/collab/folders.spec.ts` › moving documents into a folder keeps them there as the dashboard refreshes, and after a reload | Already `@heavy`. Failed on its first attempt in the heavy pass twice running, as the first test on a fresh server beside a second worker: both drags landed nothing ("0 items"), passed on retry. Alone and cold, with no retries, passed twice in 6.5 s. If it turns up again, look at a drag that starts while the dashboard is still redrawing after New Folder |
 
 ## Performance traces (`golem:*`)
 

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { FontSet } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument, readAnnotations } from '../../pdf/src/index.ts';
 import { fromVaultFile, toVaultFile, vaultFormat } from '../src/desktop/vaultCodec.ts';
-import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost } from '../src/desktop/vaultSync.ts';
+import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost, type VaultMemory } from '../src/desktop/vaultSync.ts';
 import { readWdoc, writeWdoc, WDOC_VERSION } from '../src/formats/wdoc.ts';
 import { installFakeCanvas } from './fakeCanvas.ts';
 
@@ -122,10 +122,20 @@ const codec: VaultCodec = {
   kept: (name) => !/\.zip$/i.test(name),
 };
 
+/** One computer's memory of the vault. */
+function fakeMemory() {
+  let text: string | null = null;
+  const memory: VaultMemory = {
+    load: async () => text,
+    save: async (t) => void (text = t),
+  };
+  return memory;
+}
+
 function setup(account = 'u1') {
   const account_ = fakeCloud();
   const folder = fakeDisk();
-  const host: VaultHost = { disk: folder.disk, cloud: account_.cloud, codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account };
+  const host: VaultHost = { disk: folder.disk, memory: fakeMemory(), cloud: account_.cloud, codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account };
   const sync = (options?: { allowMassDelete?: boolean }) => syncVault(host, options);
   return { ...account_, folder, host, sync };
 }
@@ -361,13 +371,56 @@ test('an emptied vault is not copied to the account until confirmed', async () =
   assert.equal(s.docs.size, 0);
 });
 
-test('the sync state is kept in the hidden state file', async () => {
+test('the sync state is kept in this computer\'s memory, and the folder only says whose it is', async () => {
   const s = setup();
   s.add('one.md', 'x');
   await s.sync();
-  const state = JSON.parse(s.folder.get(STATE_PATH)!);
-  assert.equal(state.account, 'u1');
-  assert.equal(state.entries.length, 1);
+  assert.equal(JSON.parse((await s.host.memory.load())!).entries.length, 1);
+  assert.deepEqual(JSON.parse(s.folder.get(STATE_PATH)!), { version: 1, account: 'u1', entries: [] });
+});
+
+test('a sync state an older version kept in the folder is taken over once, so nothing is synced again', async () => {
+  const s = setup();
+  s.add('one.md', 'x');
+  s.add('two.md', 'y');
+  await s.sync();
+  // As an older version left it: the whole manifest in the folder, and no memory on this computer.
+  s.folder.put(STATE_PATH, (await s.host.memory.load())!);
+  s.calls.length = 0;
+  const report = await syncVault({ ...s.host, memory: fakeMemory() });
+  assert.equal(counts(report), quiet);
+  assert.deepEqual(s.calls, []);
+  assert.deepEqual(JSON.parse(s.folder.get(STATE_PATH)!).entries, [], 'and the folder keeps only the owner from then on');
+});
+
+test('two signed-out computers sharing a folder (iCloud Drive, Dropbox) each take its files in, and neither deletes them', async () => {
+  const a = setup(GUEST_ACCOUNT);
+  for (let i = 0; i < 3; i++) a.add(`n${i}.md`, `note ${i}`);
+  await a.sync();
+  // An older version's manifest in the folder names computer A's documents, which computer B has never had.
+  a.folder.put(STATE_PATH, (await a.host.memory.load())!);
+  const b = fakeCloud();
+  const onB: VaultHost = { ...a.host, cloud: b.cloud, memory: fakeMemory() };
+  const first = await syncVault(onB);
+  assert.deepEqual(first.errors, []);
+  assert.equal(`${first.deletedHere},${first.created}`, '0,3');
+  assert.deepEqual(a.folder.paths(), ['n0.md', 'n1.md', 'n2.md']);
+  // An edit on B reaches A through the folder, and A's next sync deletes nothing either.
+  const id = [...b.docs.values()].find((d) => d.name === 'n1.md')!.id;
+  b.edit(id, 'changed on B');
+  await syncVault(onB);
+  const back = await a.sync();
+  assert.equal(`${back.uploaded},${back.deletedHere},${back.trashed}`, '1,0,0');
+  assert.equal(read([...a.docs.values()].find((d) => d.name === 'n1.md')!.bytes), 'wdoc:changed on B');
+});
+
+test('a folder that belongs to an account is not used signed out on another computer either', async () => {
+  const s = setup('u1');
+  s.add('one.md', 'x');
+  await s.sync();
+  const report = await syncVault({ ...s.host, account: GUEST_ACCOUNT, cloud: fakeCloud().cloud, memory: fakeMemory() });
+  assert.equal(report.wrongAccount, true);
+  assert.deepEqual(s.folder.paths(), ['one.md']);
 });
 
 test('with the real converters, PDFs and pictures go out as the files they are and a changed one comes back in place of the document', async () => {

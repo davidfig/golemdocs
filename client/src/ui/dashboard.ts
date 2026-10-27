@@ -27,6 +27,7 @@ import { pickFolder } from './folderPicker.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { showPopupMenu } from './popupMenu.ts';
 import { narrow } from './popup.ts';
+import { isTouchDevice } from '../desktop/bridge.ts';
 import { newKindItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import './dashboard.css';
@@ -286,9 +287,12 @@ export class Dashboard {
     this.notice.textContent = this.library.problem ?? '';
     this.render();
     // Once the menu or key that opened it is done with the focus (it hands it back as it closes).
-    setTimeout(() => {
-      if (this.visible) this.search.focus({ preventScroll: true });
-    }, 0);
+    // Not on a phone or tablet, where focusing the search box pops up the on-screen keyboard.
+    if (!isTouchDevice()) {
+      setTimeout(() => {
+        if (this.visible) this.search.focus({ preventScroll: true });
+      }, 0);
+    }
     await this.host.settleThumbnail?.();
     await this.refresh();
   }

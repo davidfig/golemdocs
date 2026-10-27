@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.28.1 - Unreleased
+
+### Fixed
+
+- On a phone or tablet, opening the documents view no longer puts the cursor in the search box, so the keyboard stays closed until you tap it.
+
 ## 0.28.0 - 2026-10-26
 
 ### Added

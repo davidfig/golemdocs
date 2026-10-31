@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The cryptographic primitives the PDF standard security handler needs (§7.6): MD5, RC4,
 // SHA-256/384/512 and AES-128/256. Synchronous and hand-written: Web Crypto is async-only
 // and has no MD5 or RC4. None of this protects anything; PDF encryption is for reading

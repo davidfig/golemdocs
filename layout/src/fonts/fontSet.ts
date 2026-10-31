@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Resolves Word font names to the faces we ship, and loads their metrics. Loading is
 // injected (fetch in the browser, the file system on a server), so layout runs anywhere.
 

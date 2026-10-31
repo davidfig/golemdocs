@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // DEFLATE decoder (RFC 1950/1951), synchronous and tolerant: a truncated or corrupt stream
 // yields everything decoded before the damage, which is what viewers show for broken PDFs.
 //

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Object serialization (§7.3) into a growable byte buffer.
 
 import { PdfDict, PdfName, PdfRef, PdfStream, PdfString, type PdfObject } from './objects.ts';

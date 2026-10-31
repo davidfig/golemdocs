@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // OOXML units and conversions.
 
 /** Twentieths of a point: page geometry, indents, spacing, table widths. */

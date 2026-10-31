@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // When a document's history takes a checkpoint, and which old ones it lets go of. Pure rules, shared by the server (cloud history,
 // kept in R2) and the browser (local history, kept in IndexedDB) so the two behave the same.
 //

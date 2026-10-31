@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Sections: columns and page setup.
 import { type Command } from './types.ts';
 

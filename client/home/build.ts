@@ -20,7 +20,7 @@ export const SOURCE = 'en';
 export const ASSET_BASE = '/home';
 
 /** The pages, in menu order. */
-export const PAGES = ['home', 'ai', 'formats', 'pricing', 'journal', 'about', 'developers', 'download'] as const;
+export const PAGES = ['home', 'ai', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download'] as const;
 export type PageName = (typeof PAGES)[number];
 
 export const LANGS = Object.keys(LOCALES);
@@ -298,7 +298,7 @@ function frame(f: Frame): string {
   // Slots first (they bring in the page and its own slots), then the text.
   let html = readLayout();
   for (let pass = 0; pass < 3; pass++) html = html.replace(/\{\{(\w+)\}\}/g, (whole, key: string) => (key in slots ? slots[key] : whole));
-  html = html.replace(/\{\{([\w.]+)\}\}/g, (_, key: string) => {
+  html = html.replace(/\{\{([\w.-]+)\}\}/g, (_, key: string) => {
     const value = strings[key] ?? english[key];
     if (value === undefined) throw new Error(`home, ${lang}: no text for "${key}"`);
     return ATTR_KEYS.test(key) ? attr(value) : value;

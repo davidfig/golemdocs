@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Schema-driven reading and writing of property elements (w:rPr, w:pPr, w:tblPr, ...).
 //
 // Each schema lists the element's children in the order the OOXML schema requires. Word

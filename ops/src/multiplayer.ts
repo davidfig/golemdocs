@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The wire protocol between a document and the multiplayer server's room (one room per cloud
 // document), over a WebSocket, one JSON message per frame. The document part is ClientMessage /
 // ServerMessage from ./collab.ts; around it: who is here, carets, and who processes edits.

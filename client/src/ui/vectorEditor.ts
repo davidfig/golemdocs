@@ -39,7 +39,7 @@ import { parseColor, parseLength, colorText, urlReference } from '../vector/styl
 import { t } from '../i18n/index.ts';
 import { PENCIL_CURSOR, RESIZE_CURSORS, ROTATE_CURSOR, badgedCursor } from './cursors.ts';
 import { isFormField, modalOpen } from './dom.ts';
-import { accentColor } from './theme.ts';
+import { accentColor, uiFont } from './theme.ts';
 import { drawHandle, drawKnob } from './handles.ts';
 import { pathsByUid } from '../vector/nodes.ts';
 import type { VectorFrame, VectorLayer } from './vectorLayer.ts';
@@ -2070,7 +2070,7 @@ export class VectorEditor {
     const height = Math.round(((box.y1 - box.y0) / (g.from.y1 - g.from.y0)) * scene.height);
     const label = `${width} × ${height}`;
     ctx.save();
-    ctx.font = '12px system-ui, sans-serif';
+    ctx.font = `12px ${uiFont()}`;
     const textWidth = ctx.measureText(label).width;
     const lx = left + Math.abs(x1 - x0) / 2 - textWidth / 2 - 6;
     const ly = top + Math.abs(y1 - y0) + 8;

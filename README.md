@@ -10,6 +10,15 @@ pnpm workspace:
 | `server` | Cloudflare Worker: sign-in, cloud documents (D1 for the catalogue, R2 for the files), sharing, and multiplayer rooms (a Durable Object per document) |
 | `docx`, `layout`, `editor`, `ops`, `pdf` | Format, layout, editing and collaboration libraries used by the client |
 
+## License
+
+| Part | License |
+| --- | --- |
+| The app: `client`, `server`, `desktop`, and everything else not listed below | [AGPL-3.0](LICENSE) |
+| The libraries: `docx`, `layout`, `editor`, `ops`, `odt`, `pdf` | MIT (each package's `LICENSE`) |
+
+Fonts, spelling dictionaries and the PDF font metrics keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The Golem Docs name and logo aren't covered by these licenses: see [TRADEMARKS.md](TRADEMARKS.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Run it locally
 
 Requirements: Node 22.13 or newer, and pnpm (`corepack enable` gets you one).

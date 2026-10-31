@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A small, fast XML parser and serializer for OOXML parts.
 //
 // The tree is deliberately plain (name, attrs, children) so unknown content can be kept and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // OpenDocument plumbing shared by the reader and the writer: namespaces (and normalising
 // whatever prefixes a producer chose to the usual ones), lengths, style-name encoding, small
 // tree helpers and base64 for binary data kept in the JSON extension.

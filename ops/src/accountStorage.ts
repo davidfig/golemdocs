@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // How much one account may keep in the cloud: its documents, its trash and its history (see server/src/storage.ts for how history
 // fits into the space the rest leaves). The home page and the welcome documents state this figure, so change them too
 // (`client/home/locales/*.json`, `client/src/layout/welcome/*.md`).

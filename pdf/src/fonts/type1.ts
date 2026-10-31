@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Type 1 font programs (Adobe Type 1 Font Format; a PDF's /FontFile): the cleartext part's
 // encoding and font matrix, the eexec-encrypted private part's subroutines and charstrings, and
 // a charstring interpreter that turns a glyph into its outline. Hints are skipped: the outline is

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Fonts for writing: the standard 14 (not embedded, WinAnsi encoded) and embedded
 // TrueType/OpenType fonts (Type 0 with Identity-H, subset on save, with a ToUnicode map so
 // text stays searchable and copyable).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Comments in the body: where each comment's range starts and ends, and the markers that make
 // one. A comment's range is w:commentRangeStart … w:commentRangeEnd, followed by a run holding
 // w:commentReference (where Word shows its balloon anchor); each marker is one model position.

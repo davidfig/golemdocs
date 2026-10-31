@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Fonts as text extraction sees them (§9.5-9.10): how a shown string splits into character
 // codes, what Unicode text each code stands for, and each glyph's advance width.
 

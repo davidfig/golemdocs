@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Formatting marks (Word's ¶ button): the paragraph mark at the end of each paragraph, a dot for each
 // space, an arrow for each tab and a hook for each line break. They are drawn in the text's own
 // font at layout time, as glyphs on the page (the renderer doesn't know they are there), and

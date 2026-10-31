@@ -33,7 +33,7 @@ test('the site has a translation of every string for every app language', () => 
 test('every slot is filled by the English strings, and every string is used', () => {
   const english = readStrings(SOURCE);
   const sources = readLayout() + PAGES.map(readPage).join('') + Object.values(english).join('');
-  const used = new Set([...sources.matchAll(/\{\{([\w.]+)\}\}/g)].map((m) => m[1]));
+  const used = new Set([...sources.matchAll(/\{\{([\w.-]+)\}\}/g)].map((m) => m[1]));
   const derived = new Set(PAGES.flatMap((p) => [`${p}.title`, `${p}.description`, `nav.${p}`]).concat(['journal.now', 'journal.added', 'journal.changed', 'journal.fixed', 'journal.inEnglish']));
   for (const key of Object.keys(english)) assert.ok(used.has(key) || derived.has(key), `${key} is unused`);
 });

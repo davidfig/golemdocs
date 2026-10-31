@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Applies operations to a document.
 //
 // Application is deterministic: the same operations on the same document give the same

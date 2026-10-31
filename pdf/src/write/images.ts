@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Image XObjects (§8.9.5) from JPEG, PNG or raw pixels. JPEGs, and PNGs without
 // transparency or interlacing, are embedded without decoding (DCTDecode; FlateDecode with the
 // PNG predictor); other PNGs are decoded and split into color and alpha (SMask).

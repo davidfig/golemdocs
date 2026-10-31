@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The math tree: a typed view of an equation, shared by the OMML reader and writer, the LaTeX
 // parser and printer, and (later) math layout. It follows OMML's structures (fraction, script,
 // radical, n-ary operator, delimiters, matrix...) because that is what documents store.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Mapping between a paragraph's visible text (what layout lays out, list label excluded) and
 // its model offsets (what edits address). They differ where content is hidden (vanished runs,
 // tracked deletions, field instructions) or shown in place of the model (field results).

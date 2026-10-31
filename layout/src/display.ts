@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The output of layout: positioned pages, independent of any file format or renderer.
 // A WebGL renderer draws these; a PDF exporter could write them; a PDF importer could
 // produce them. Coordinates are in points, page-relative, y down.

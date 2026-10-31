@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Table layout: columns from the grid, merged cells, borders, shading, cell margins, row
 // heights and table style conditional formatting (header row, banding, first column, ...).
 

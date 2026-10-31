@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Document layout: sections, pagination, headers and footers, and incremental re-layout.
 //
 // Every page records the pagination state where its body starts (PageStart). After an edit,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A PDF file as an editable object graph (§7.5, §7.7). Objects load lazily from the source
 // bytes on first access and are cached; edits happen in place on the returned objects (or
 // through set/add/delete). Saving writes either a complete, renumbered file or an

@@ -248,6 +248,7 @@ ins.tc { text-decoration: underline; text-decoration-color: var(--agent); color:
 .ft { padding: 4px 0; border-radius: 2px; font: 700 9px/1 var(--ui); font-style: normal; letter-spacing: 0.04em; text-align: center; color: var(--page); }
 .ft.docx { background: var(--brand); } .ft.md { background: var(--muted); } .ft.pdf { background: var(--pdf); }
 .ft.svg { background: var(--hot-border); } .ft.csv { background: var(--agent); }
+.ft.mit { background: var(--brand); } .ft.agpl { background: var(--agent); }
 
 /* Version history. */
 .history { margin: 14px 0 0; padding: 0; list-style: none; background: var(--page); border: 1px solid var(--rule); border-radius: 4px; font: 14px/1.35 var(--ui); }
@@ -329,6 +330,14 @@ ins.tc { text-decoration: underline; text-decoration-color: var(--agent); color:
 /* Home: the closing strip and the journal's latest. */
 .byline { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 20px 30px; margin-top: 48px; padding-top: 26px; border-top: 1px solid var(--rule); }
 .byline p { margin: 0 0 8px; font-size: 1.1rem; }
+.points.split { margin-top: 0; align-items: center; }
+.split-text p { margin: 0 0 12px; font-size: 1.1rem; }
+.split-text p:last-child { margin-bottom: 0; }
+.points.split.wide { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.brain-plate { height: 270px; }
+.brain { height: 100%; }
+.brain .mini-page p { margin: 0 0 8px; }
+.brain .from { font: 11.5px/1.35 var(--ui); color: var(--muted); }
 .latest { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .latest a { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 10px; color: var(--ink); text-decoration: none; }
 .latest a:hover span { color: var(--brand); text-decoration: underline; }
@@ -443,6 +452,7 @@ pre.code { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--ch
 @media (max-width: 54rem) {
   .doc-title { display: none; }
   .row, .points, .byline, .shelves, .guides { grid-template-columns: minmax(0, 1fr); }
+  .points.split.wide { grid-template-columns: minmax(0, 1fr); }
   .balloon::before { display: none; }
   .balloon { justify-self: start; max-width: 26rem; margin-top: 0 !important; }
   .demo { grid-template-columns: minmax(0, 1fr); }
@@ -464,6 +474,7 @@ pre.code { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--ch
   .plate:not(.flush) > .callout { position: static; justify-self: start; margin-top: 8px; }
   .app-body { grid-template-columns: minmax(0, 1fr); }
   .tree { border-right: 0; border-bottom: 1px solid var(--chrome-line); }
+  .brain .tree { display: none; }
   .entry { grid-template-columns: minmax(0, 1fr); }
   .history li { grid-template-columns: 3.6rem minmax(0, 1fr); }
   .history .btn { grid-column: 2; justify-self: start; }

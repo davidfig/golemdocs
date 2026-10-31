@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 export * from './model/types.ts';
 export * from './model/units.ts';
 export { StyleResolver, mergeProperties, type FormattingLayer } from './model/resolve.ts';

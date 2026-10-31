@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Everything layout needs to know about one font face, without a GPU: glyph lookup, advance
 // widths, kerning and vertical metrics. Built from the same msdf-atlas-gen JSON the renderer
 // uses for its atlas, so glyph indices are shared between layout and rendering.

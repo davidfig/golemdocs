@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Tables, and pasting content (which may hold tables).
 import { type TableEdit, type CommandResult, NO_CHANGE, combine } from './types.ts';
 

@@ -13,7 +13,9 @@
 //    Further paragraphs inside an item are un-numbered ListParagraph paragraphs.
 //  - Links: Hyperlink inlines whose runs use the "Hyperlink" character style. Images cannot be
 //    embedded without bytes, so `![alt](url)` becomes a Hyperlink to `url` whose run (character
-//    style "ImagePlaceholder") reads "[Image: alt]"; export turns it back into an image.
+//    style "ImagePlaceholder") reads "[Image: alt]"; export turns it back into an image. A link's
+//    or image's title is the hyperlink's `w:tooltip`, and a destination written differently from
+//    how export would write it (`<url>`, escapes) is kept in `markdownDest`, so saving keeps it.
 //  - Tables: Table with style TableGrid; the first row is a header row (row.properties.header),
 //    column alignment is the paragraph justification of the cells.
 //  - Task-list items (`- [ ]` / `- [x]`) are bullet items whose label is ☐ / ☑ (drawn as a box) (a numbering per box state).
@@ -101,10 +103,16 @@ interface INode {
   s: string;
   /** Destination when the node is inside a link. */
   link?: string;
+  /** That link's title (`[text](url "title")`) and its destination as written. */
+  linkTitle?: string;
+  linkDest?: string;
   /** The link is an Obsidian embed (`![[Note]]`): kept as a link until the embedded note or picture is looked up (see embeds.ts). */
   embed?: boolean;
   /** Image destination. */
   url?: string;
+  /** Image title (`![alt](url "title")`) and destination as written. */
+  title?: string;
+  dest?: string;
   /** Emphasis deltas (difference array: the running sum along the node list is the depth). */
   b: number;
   i: number;
@@ -284,7 +292,7 @@ function decodeEntity(body: string): string | null {
   return Object.hasOwn(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : null;
 }
 
-/** Backslash escapes and entities in a link destination. */
+/** Backslash escapes and entities in a link destination or title. */
 function unescapeUrl(s: string): string {
   if (!s.includes('\\') && !s.includes('&')) return s;
   return s
@@ -300,10 +308,11 @@ function skipWs(text: string, p: number): number {
 }
 
 /** Parses `(dest "title")` starting at the "(" at `q`. Lengths are capped so scans stay linear. */
-function linkTail(text: string, q: number): { url: string; end: number } | null {
+function linkTail(text: string, q: number): { url: string; dest: string; title?: string; end: number } | null {
   const n = text.length;
   let p = skipWs(text, q + 1);
   let url = '';
+  const destStart = p;
   if (text[p] === '<') {
     const limit = Math.min(n, p + 2050);
     let e = p + 1;
@@ -345,6 +354,8 @@ function linkTail(text: string, q: number): { url: string; end: number } | null 
     p = e;
   }
   const afterDest = p;
+  const dest = text.slice(destStart, afterDest);
+  let title: string | undefined;
   p = skipWs(text, p);
   if (p > afterDest && (text[p] === '"' || text[p] === "'" || text[p] === '(')) {
     const close = text[p] === '(' ? ')' : text[p];
@@ -355,10 +366,11 @@ function linkTail(text: string, q: number): { url: string; end: number } | null 
       e++;
     }
     if (text[e] !== close) return null;
+    title = unescapeUrl(text.slice(p + 1, e));
     p = skipWs(text, e + 1);
   }
   if (text[p] !== ')') return null;
-  return { url: unescapeUrl(url), end: p + 1 };
+  return { url: unescapeUrl(url), dest, title, end: p + 1 };
 }
 
 function nodeText(n: INode): string {
@@ -676,11 +688,15 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
           break;
         }
         let url: string | undefined;
+        let title: string | undefined;
+        let dest: string | undefined;
         let end = p + 1;
         if (text[p + 1] === '(') {
           const tailInfo = linkTail(text, p + 1);
           if (tailInfo) {
             url = tailInfo.url;
+            title = tailInfo.title;
+            dest = tailInfo.dest;
             end = tailInfo.end;
           }
         }
@@ -727,10 +743,16 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
           nodes.length = opener.node;
           const image = mk('image', alt);
           image.url = url;
+          image.title = title;
+          image.dest = dest;
           nodes.push(image);
         } else {
           nodes[opener.node].s = '';
-          for (let i = opener.node + 1; i < nodes.length; i++) nodes[i].link = url;
+          for (let i = opener.node + 1; i < nodes.length; i++) {
+            nodes[i].link = url;
+            nodes[i].linkTitle = title;
+            nodes[i].linkDest = dest;
+          }
           barrier = brackets.length;
         }
         p = end;
@@ -809,20 +831,27 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
   let bold = 0;
   let italic = 0;
   let strike = 0;
-  const st: { link: Hyperlink | null; url: string | undefined; run: Run | null; key: string } = {
+  const st: { link: Hyperlink | null; url: string | undefined; title: string | undefined; dest: string | undefined; run: Run | null; key: string } = {
     link: null,
     url: undefined,
+    title: undefined,
+    dest: undefined,
     run: null,
     key: '',
   };
 
-  const setLink = (url: string | undefined): void => {
-    if (url === st.url) return;
+  // A link's title is kept as the hyperlink's tooltip (what Word shows over it, too), and its destination
+  // as written, so saving the file doesn't rewrite it.
+  const setLink = (url: string | undefined, title?: string, dest?: string): void => {
+    if (url === st.url && (url === undefined || (title === st.title && dest === st.dest))) return;
     st.run = null;
     st.url = url;
+    st.title = title;
+    st.dest = dest;
     if (url === undefined) st.link = null;
     else {
-      st.link = { kind: 'hyperlink', url, children: [], attrs: {} };
+      st.link = { kind: 'hyperlink', url, children: [], attrs: title === undefined ? {} : { 'w:tooltip': title } };
+      if (dest !== undefined && dest !== formatDest(url)) st.link.markdownDest = dest;
       out.push(st.link);
     }
   };
@@ -858,7 +887,7 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
       continue;
     }
     if (node.t === 'cstart' || node.t === 'cend') {
-      setLink(node.link);
+      setLink(node.link, node.linkTitle, node.linkDest);
       st.run = null;
       const target = st.link ? st.link.children : out;
       for (const id of node.c!) {
@@ -868,13 +897,13 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
       continue;
     }
     if (node.t === 'math') {
-      setLink(node.link);
+      setLink(node.link, node.linkTitle, node.linkDest);
       st.run = null;
       (st.link ? st.link.children : out).push(mathInline(parseLatex(node.s, node.url === 'display').equation));
       continue;
     }
     if (node.t === 'image' && node.link === undefined) {
-      setLink(node.url);
+      setLink(node.url, node.title, node.dest);
       const placeholder = newRun({ style: 'ImagePlaceholder' }, []);
       used.add('ImagePlaceholder');
       appendText(placeholder.content, node.s ? `[Image: ${node.s}]` : '[Image]');
@@ -901,7 +930,7 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
     }
     const text = node.t === 'image' ? (node.s ? `[Image: ${node.s}]` : '[Image]') : node.s;
     if (!text) continue;
-    setLink(node.link);
+    setLink(node.link, node.linkTitle, node.linkDest);
     appendText(runFor(node.t === 'code').content, text);
   }
   return out;
@@ -1509,6 +1538,9 @@ interface Seg {
   strike: boolean;
   code: boolean;
   link?: string;
+  /** The link's title, and its destination as the file wrote it (see Hyperlink.markdownDest). */
+  title?: string;
+  dest?: string;
   /** Already-formatted Markdown (images, autolinks): emitted verbatim. */
   raw?: boolean;
   /** A line break. */
@@ -1654,21 +1686,44 @@ function codeSpan(text: string, mode: Mode): string {
   return `${fence}${pad}${t}${pad}${fence}`;
 }
 
+/** Whether a destination's parentheses pair up, so it can be written without `<>` as it usually was. */
+function balancedParens(url: string): boolean {
+  let depth = 0;
+  for (const ch of url) {
+    if (ch === '(') depth++;
+    else if (ch === ')' && --depth < 0) return false;
+  }
+  return depth === 0;
+}
+
 function formatDest(url: string): string {
   if (url === '') return '<>';
-  if (/[\s<>()\u0000-\u001f]/.test(url)) return `<${url.replace(/[<>\\]/g, (m) => `\\${m}`)}>`;
+  if (/[\s<>\u0000-\u001f]/.test(url) || !balancedParens(url)) return `<${url.replace(/[<>\\]/g, (m) => `\\${m}`)}>`;
   return url.replace(/\\/g, '\\\\');
 }
 
+/** A destination as it was written, if it still reads as `url`, else as export writes `url`. */
+function writtenDest(url: string, dest: string | undefined): string {
+  if (dest === undefined) return formatDest(url);
+  const angle = dest.startsWith('<') && dest.endsWith('>');
+  return unescapeUrl(angle ? dest.slice(1, -1) : dest) === url ? dest : formatDest(url);
+}
+
+/** `(url "title")`'s inside: the destination, then the title if there is one. */
+const linkTarget = (url: string, title: string | undefined, dest?: string): string =>
+  title === undefined
+    ? writtenDest(url, dest)
+    : `${writtenDest(url, dest)} "${title.replace(/["\\]/g, (m) => `\\${m}`).replace(/&(?=#?[A-Za-z0-9]+;)/g, '\\&').replace(/[\r\n]+/g, ' ')}"`;
+
 const escapeAlt = (alt: string): string => alt.replace(/[\\[\]]/g, (m) => `\\${m}`).replace(/[\r\n]+/g, ' ');
 
-// Mark keys: "S" strike, "B" bold, "I" italic, "L<url>" link. "B_" and "I_" are bold/italic written with
+// Mark keys: "S" strike, "B" bold, "I" italic, "L<target>" link (its written `url "title"`). "B_" and "I_" are bold/italic written with
 // underscores, used where a "*" delimiter would run into the "*" closing the previous mark.
 const markOpen = (key: string): string =>
   key === 'S' ? '~~' : key === 'B' ? '**' : key === 'I' ? '*' : key === 'B_' ? '__' : key === 'I_' ? '_' : '[';
 const markClose = (key: string): string =>
-  key === 'S' ? '~~' : key === 'B' ? '**' : key === 'I' ? '*' : key === 'B_' ? '__' : key === 'I_' ? '_' : `](${formatDest(key.slice(1))})`;
-const baseKey = (key: string): string => (key.endsWith('_') ? key.slice(0, -1) : key);
+  key === 'S' ? '~~' : key === 'B' ? '**' : key === 'I' ? '*' : key === 'B_' ? '__' : key === 'I_' ? '_' : `](${key.slice(1)})`;
+const baseKey = (key: string): string => (key === 'B_' || key === 'I_' ? key[0] : key);
 
 /** Segments to a single Markdown string (breaks become "\<newline>", or <br> in table cells). */
 function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, string>, critic = false): string {
@@ -1695,6 +1750,8 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
       last.strike === seg.strike &&
       last.code === seg.code &&
       last.link === seg.link &&
+      last.title === seg.title &&
+      last.dest === seg.dest &&
       last.cm === seg.cm
     ) {
       last.text += text;
@@ -1705,7 +1762,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
   // A link to another stored document is written as an Obsidian link, unless it holds formatting a [[link]] can't.
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
-    if (!s.link || s.code || s.raw || s.bold || s.italic || s.strike || s.cm || segs[i - 1]?.link === s.link || segs[i + 1]?.link === s.link) continue;
+    if (!s.link || s.title !== undefined || s.dest !== undefined || s.code || s.raw || s.bold || s.italic || s.strike || s.cm || segs[i - 1]?.link === s.link || segs[i + 1]?.link === s.link) continue;
     const wiki = wikiLinkText(s.link, s.text);
     if (wiki) {
       s.text = wiki;
@@ -1716,7 +1773,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
   // A link to a tag, written as the `#tag` it reads as.
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
-    if (!s.link || s.code || s.raw || s.cm || !s.text.startsWith('#')) continue;
+    if (!s.link || s.title !== undefined || s.dest !== undefined || s.code || s.raw || s.cm || !s.text.startsWith('#')) continue;
     const name = parseTagAddress(s.link);
     if (name === null || normalizeTag(s.text.slice(1)) !== normalizeTag(name)) continue;
     // Only where it reads back as that tag: not after a letter (`C#x`), and not run on into more tag characters.
@@ -1731,7 +1788,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
   // A link whose text is its own address reads better as an autolink.
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
-    if (s.link && !s.code && s.text === s.link && /^[A-Za-z][A-Za-z0-9+.-]*:[^\s<>]+$/.test(s.link) && segs[i - 1]?.link !== s.link && segs[i + 1]?.link !== s.link) {
+    if (s.link && s.title === undefined && s.dest === undefined && !s.code && s.text === s.link && /^[A-Za-z][A-Za-z0-9+.-]*:[^\s<>]+$/.test(s.link) && segs[i - 1]?.link !== s.link && segs[i + 1]?.link !== s.link) {
       s.text = `<${s.link}>`;
       s.raw = true;
       s.link = undefined;
@@ -1813,7 +1870,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
       core = core.slice(a, z);
     }
     const needed: string[] = s.cm ? s.cm.split(',').map((id) => `C${id}`) : [];
-    if (s.link) needed.push(`L${s.link}`);
+    if (s.link) needed.push(`L${linkTarget(s.link, s.title, s.dest)}`);
     if (s.strike) needed.push('S');
     if (s.bold) needed.push('B');
     if (s.italic) needed.push('I');
@@ -2030,7 +2087,7 @@ class Exporter {
   private segments(inlines: readonly Inline[]): Seg[] {
     const segs: Seg[] = [];
     const plainFmt = { bold: false, italic: false, strike: false, code: false };
-    const walk = (list: readonly Inline[], link: string | undefined): void => {
+    const walk = (list: readonly Inline[], link: string | undefined, title: string | undefined, dest: string | undefined): void => {
       for (const inline of list) {
         switch (inline.kind) {
           case 'run': {
@@ -2042,7 +2099,7 @@ class Exporter {
             const fmt = this.marks(inline.properties);
             let acc = '';
             const flush = (): void => {
-              if (acc) segs.push({ text: acc, ...fmt, link, props: inline.properties });
+              if (acc) segs.push({ text: acc, ...fmt, link, title, dest, props: inline.properties });
               acc = '';
             };
             for (const item of inline.content) {
@@ -2088,11 +2145,12 @@ class Exporter {
             const embed = placeholderBody(inline);
             const image = embed !== null && !/[[\]\n]/.test(embed) ? `![[${embed}]]` : this.imagePlaceholder(inline);
             if (image !== null) segs.push({ text: image, ...plainFmt, raw: true });
-            else walk(inline.children, inline.url ?? (inline.anchor !== undefined ? `#${inline.anchor}` : link));
+            else if (inline.url === undefined && inline.anchor === undefined) walk(inline.children, link, title, dest);
+            else walk(inline.children, inline.url ?? `#${inline.anchor}`, inline.attrs['w:tooltip'], inline.url === undefined ? undefined : inline.markdownDest);
             break;
           }
           case 'wrapper':
-            walk(inline.children, link);
+            walk(inline.children, link, title, dest);
             break;
           case 'raw':
             if (this.threads.size && commentMarker(inline)) {
@@ -2107,7 +2165,7 @@ class Exporter {
         }
       }
     };
-    walk(inlines, undefined);
+    walk(inlines, undefined, undefined, undefined);
     return this.applyComments(segs);
   }
 
@@ -2121,7 +2179,7 @@ class Exporter {
     }
     const m = /^\[Image(?:: ([\s\S]*))?\]$/.exec(text);
     if (!m) return null;
-    return `![${escapeAlt(m[1] ?? '')}](${formatDest(h.url)})`;
+    return `![${escapeAlt(m[1] ?? '')}](${linkTarget(h.url, h.attrs['w:tooltip'], h.markdownDest)})`;
   }
 
   private text(p: Paragraph, mode: Mode): string {

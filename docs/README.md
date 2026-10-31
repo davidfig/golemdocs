@@ -40,7 +40,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | --- | --- |
 | [actions-status.md](actions-status.md) | Which menu and toolbar actions work, and what is still disabled |
 | [mcp-server.md](mcp-server.md) | A remote MCP server for ai apps without a vault folder: the design, and why it was built and then not shipped (a record, not a plan) |
-| [open-source-readiness.md](open-source-readiness.md) | An audit of what would have to be true to open source (a record, not a decision) |
+| [open-source-readiness.md](open-source-readiness.md) | The open-source audit and the licensing decision (AGPL app, MIT libraries, CLA) |
 | [../CHANGELOG.md](../CHANGELOG.md) | Released and unreleased user-visible changes; the `Unreleased` heading is the current work log |
 
 Known loose ends, as of 2026-10-05:

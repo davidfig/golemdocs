@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The edits that turn one document into another: a file changed on disk while it was open, put into
 // the open document as operations (so the layout redoes only what changed, the caret and undo history
 // move with the text, and nothing flashes) rather than by opening it again.

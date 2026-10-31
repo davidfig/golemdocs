@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A .docx file: reading, the in-memory model, and writing back.
 
 import type {

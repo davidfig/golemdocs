@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Building fields (PAGE, NUMPAGES...) as the runs a reader makes of them: begin, instruction, separate, the shown
 // result, end. The three field characters are one shape wherever they are made (reading ODF, importing a PDF).
 

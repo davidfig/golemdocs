@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 export * from './display.ts';
 export { FaceMetrics } from './fonts/faceMetrics.ts';
 export { isCjk, isHangul, langOfFontName, langOfTag, noLineEnd, noLineStart, type CjkLang } from './fonts/cjk.ts';

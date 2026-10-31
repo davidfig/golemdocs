@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LaTeX math to the math tree and back.
 //
 // This reads the math subset people write in documents (amsmath-style): fractions, scripts,

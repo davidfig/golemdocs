@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Tags: `#project` written in a document's text. A tag is an ordinary hyperlink whose address is `tag:`
 // and its name (`tag:project`), like a link to another document is `doc:` and a title, so it is a
 // link in every format and means the same wherever the document goes. In Markdown it is written

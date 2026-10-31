@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The standard security handler (§7.6.4): RC4 and AES, revisions 2 through 6, for reading
 // encrypted files. Documents are decrypted as objects load and written back unencrypted.
 

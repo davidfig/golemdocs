@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Presentation MathML to the math tree: what an HTML page's <math> holds, and what toMathML()
 // writes. It reads the common elements (tokens, rows, fractions, roots, scripts, under/over
 // scripts, fences, tables); anything else contributes its children.

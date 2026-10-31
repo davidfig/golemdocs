@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // WordDocument (+ OdtExtension) -> ODT: an ODF 1.3 package.
 //
 // Styles: Word paragraph and character styles become common styles (Word's built-in ids get

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A cautious three-way merge of two documents that were both changed from the same one: what the account has now ("theirs", saved
 // by another device, or an ai app in a vault folder) and what this browser has ("mine"), both made from the version they last agreed on ("base").
 //

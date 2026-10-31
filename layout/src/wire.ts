@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Laid-out pages as plain data: typed arrays and JSON-safe values only, so they can be
 // transferred from a worker without copying, sent over a socket by a server, or cached.
 // Model objects never cross: hit testing and caret placement happen where the model is.

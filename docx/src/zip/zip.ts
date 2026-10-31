@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Minimal ZIP container support for OOXML packages: stored and deflated entries, UTF-8 (or
 // code page 437) names, no encryption, no ZIP64 (Word never produces packages over 4GB).
 //

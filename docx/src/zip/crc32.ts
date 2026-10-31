@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // CRC-32 (IEEE 802.3, as used by ZIP), slicing-by-8: ~8 bytes per table round.
 
 const TABLES = (() => {

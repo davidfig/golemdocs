@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Compact Font Format programs (Adobe TN 5176, charstrings TN 5177): a PDF's /FontFile3 of
 // subtype Type1C or CIDFontType0C, or the 'CFF ' table of an OpenType font. Reads the glyph
 // names (charset), the built-in encoding, the CID-keyed font dictionaries, and turns a glyph's

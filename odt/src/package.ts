@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Opening an OpenDocument package: the ZIP (or a flat .fodt XML file), its parts parsed with
 // namespace prefixes normalised, and every other file loaded for pictures and embedded objects.
 

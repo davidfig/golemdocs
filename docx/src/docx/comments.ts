@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The comments part (word/comments.xml): reading it into Comment objects and writing them
 // back. Comments that haven't changed are written as they were read (all their formatting);
 // changed and new ones are written as plain paragraphs. Replies and the resolved mark live in

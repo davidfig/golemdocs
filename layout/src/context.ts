@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import type { FormattingLayer, ListCounter, RunProperties, StyleResolver, WordDocument } from '@golemdocs/docx';
 import { packColor, parseHexColor } from './display.ts';
 import { langOfFontName, langOfTag, type CjkLang } from './fonts/cjk.ts';

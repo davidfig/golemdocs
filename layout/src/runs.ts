@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Flattens a paragraph's inline content into text plus per-character styles: resolves run
 // formatting, evaluates fields, drops deleted and hidden text, maps symbol fonts and collects
 // inline and floating drawings.

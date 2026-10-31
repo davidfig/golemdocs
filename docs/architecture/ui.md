@@ -36,7 +36,8 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/popup.ts`, `dropdown.ts`, `dom.ts` | One-at-a-time popups and dialogs; the drop-down list; DOM helpers (`h`, `iconButton`, `segmented`) |
 | `client/src/ui/layerTree.ts` + `layersPanel.ts`, `pictureLayersPanel.ts` | Shared layers panel and its two adapters |
 | `client/src/ui/cursors.ts` | Cursor drawings for vector and picture tools |
-| `client/src/ui/theme.ts`, `ui.css` | Color schemes via `--wm-*` variables and `data-theme` |
+| `client/src/ui/theme.ts`, `ui.css` | Color schemes via `--wm-*` variables and `data-theme`; the UI font (`--wm-font`, `uiFont()` for canvas labels) |
+| `client/public/ui-fonts/` | The UI font, Atkinson Hyperlegible Next (OFL): Latin and Latin Extended woff2 files, upright and italic, declared by `@font-face` in `ui.css` and fetched only when used. Other scripts fall through `--wm-font` to the system font |
 | `client/src/ui/dashboard.ts` | Documents screen (thumbnails, folders, selection) |
 | `client/src/ui/pictureFrame.ts`, `pictureDetourBar.ts` | The frame and resize handles around the picture selected in the text; the Done / Cancel bar while a picture of the text is open in the image editor |
 | `client/src/ui/*Layer.ts`, `vectorEditor.ts`, `vectorSession.ts` | DOM layers over the canvas (forms, PDF text, pointers, vector editing) |

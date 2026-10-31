@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // styles.xml, numbering.xml, theme and settings.
 
 import type {

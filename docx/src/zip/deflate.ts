@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Raw DEFLATE via the platform's Compression Streams API (browsers and Node 18+).
 
 type ByteTransform = { readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array> };

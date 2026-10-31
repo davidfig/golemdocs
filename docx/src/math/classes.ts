@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // TeX's atom classes for characters in math: they decide the space around a character in
 // layout (see layout's math/layout.ts) and whether MathML draws it as an operator.
 

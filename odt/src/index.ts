@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // OpenDocument Text (.odt) import and export for the WordDocument model.
 //
 // readOdt turns an .odt (or flat .fodt) into the WordDocument core plus an OdtExtension holding

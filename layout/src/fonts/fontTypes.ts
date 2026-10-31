@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Shapes of the files written by scripts/fonts/generate.ts into client/public/fonts/.
 
 /** Font-wide vertical metrics, in font units (divide by unitsPerEm for ems). */

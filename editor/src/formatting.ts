@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Formatting the selection: text, paragraphs, case.
 import { type Position, type Command, type CommandResult, NO_CHANGE } from './types.ts';
 import { WORD } from './segment.ts';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Formatting properties: ODF style:*-properties elements <-> the model's RunProperties,
 // ParagraphProperties and table cell properties.
 //

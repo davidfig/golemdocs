@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Showing a character that a run's font doesn't encode (typed into a subset font, say). Tried in
 // order of how close the result comes to the text around it:
 //

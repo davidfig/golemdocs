@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Style names: LibreOffice's built-in style names <-> Word's built-in style ids, so a heading
 // stays a heading and body text stays body text across the two formats.
 

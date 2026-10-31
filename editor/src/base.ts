@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Editor state: the selection, document order and positions as operations address them.
 import { type Command, type CommandResult, type Position, type Selection } from './types.ts';
 import type { Selection as OpSelection } from '@golemdocs/ops';

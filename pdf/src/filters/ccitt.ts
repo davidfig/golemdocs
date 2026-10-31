@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // CCITTFaxDecode (§7.4.6): ITU-T T.4 (Group 3, one- and two-dimensional) and T.6 (Group 4) bilevel
 // images, as the rows of 1-bit samples the rest of the image code reads. Black is 0 unless
 // /BlackIs1 says otherwise. Damaged data ends the image early; the rest of it is white.

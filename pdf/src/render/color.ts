@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Color spaces (§8.6) and functions (§7.10) reduced to what a renderer needs: components in,
 // sRGB out. Everything is approximate in the way viewers without color management are:
 // CMYK by the naive formula, ICC profiles by their component count, Lab through D50 sRGB.

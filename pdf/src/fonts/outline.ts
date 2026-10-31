@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Glyph outlines as the font programs embedded in a PDF draw them: closed contours of lines and
 // quadratic or cubic Béziers, in whatever units the program uses until `transformOutline` maps
 // them to text space (ems, y up).

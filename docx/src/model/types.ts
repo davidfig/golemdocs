@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The document model. It mirrors WordprocessingML closely, so documents round-trip without
 // loss, while giving layout and editing code typed access to what they need.
 //
@@ -245,6 +246,8 @@ export interface Hyperlink {
   relationshipId?: string;
   /** Bookmark target inside the document. */
   anchor?: string;
+  /** The destination as a Markdown file wrote it (`<url>` or bare), when Markdown export would write it differently; reused there while it still reads as `url`. */
+  markdownDest?: string;
   children: Inline[];
   attrs: Attributes;
 }

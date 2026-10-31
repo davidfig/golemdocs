@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // TrueType/OpenType font files (the sfnt container): enough of the tables to embed a font in
 // a PDF, map characters to glyphs, measure them, and subset TrueType outlines.
 

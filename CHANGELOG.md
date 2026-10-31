@@ -2,8 +2,17 @@
 
 ## 0.30.0 - Unreleased
 
+### Added
+
+- Golem Docs is open source. A new Open source page on the website explains why, and how you can use the app, run your own copy, or build on the code. The home page now leads with the editor and shows how to keep a second brain in plain files, with links between notes.
+
+### Changed
+
+- Menus, toolbars, dialogs and the rest of the app now use Atkinson Hyperlegible Next, a font designed so letters that look alike (I, l and 1; O and 0) are easy to tell apart. It looks the same on every computer and phone. Russian, Japanese, Korean and Chinese still use your system’s font.
+
 ### Fixed
 
+- Saving a Markdown file no longer drops the titles of links and pictures (`![alt](picture.png "title")`) or rewrites their addresses: an address is saved the way it was written, with or without `<` `>`. Titles also become the link’s tooltip in Word.
 - A folder deleted or renamed in your vault folder (by another program, or from the command line) now disappears from your documents too, once nothing is left in it, instead of staying behind empty.
 
 ## 0.29.0 - 2026-10-31

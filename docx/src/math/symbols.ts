@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The LaTeX vocabulary the math parser and printer share: symbol names and the characters
 // they stand for. The first name listed for a character is the one the printer writes.
 

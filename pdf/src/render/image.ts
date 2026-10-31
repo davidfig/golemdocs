@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Image XObjects to bytes a browser can decode: DCT streams pass through as JPEG; raw pixel
 // data (any filter chain that ends in samples) is converted to RGB(A) and written as PNG.
 

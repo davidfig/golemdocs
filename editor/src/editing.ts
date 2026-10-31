@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Applying planned operations as edits; undo, redo, remote changes; inserting and deleting text.
 import { type Position, type ParagraphFormat, type CommandResult, NO_CHANGE } from './types.ts';
 import type { Selection as OpSelection } from '@golemdocs/ops';

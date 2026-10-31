@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Links from one document to another stored document, the way a wiki links pages: by title. A link
 // is an ordinary hyperlink whose address is `doc:` and the title (`doc:Project Plan`, with `#Section`
 // after it when it points into the page). Titles, not ids, so a link means the same in the wiki

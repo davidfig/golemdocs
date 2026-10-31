@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Paragraph layout: turns one paragraph into lines of positioned glyphs for a given width.
 // Pure and independent of pagination, so edits can re-lay out just the changed paragraph.
 

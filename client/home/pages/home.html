@@ -5,6 +5,7 @@
         <div class="cta">
           <a class="btn primary big" href="/">{{home.open}}</a>
           <a class="btn big" href="{{base}}/download">{{home.download}}</a>
+          <a class="btn big" href="https://github.com/davidfig/golemdocs">{{home.github}}</a>
         </div>
         <p class="note-small">{{home.fine}}</p>
 
@@ -97,6 +98,43 @@
           </div>
           <figcaption><b>{{home.p.write.h}}</b> {{home.p.write.p}}</figcaption>
         </figure>
+
+        <h2>{{home.brain.h}}</h2>
+        <div class="points split wide">
+          <figure class="point">
+            <div class="plate flush brain-plate">
+              <div class="app brain" role="group" aria-label="{{home.brain.label}}">
+                <div class="app-body">
+                  <div class="tree" aria-hidden="true">
+                    <div>{{home.demo.f.diary}}</div>
+                    <div>{{home.editor.garden}}</div>
+                    <div class="d1">{{home.editor.title}}.docx</div>
+                    <div class="d1">{{home.editor.catalog}}</div>
+                    <div class="d1 sel">{{home.brain.note}}</div>
+                    <div>{{home.demo.f.recipes}}</div>
+                  </div>
+                  <div class="mini-desk">
+                    <div class="mini-page">
+                      <h4>{{home.brain.note}}</h4>
+                      <p>{{home.brain.p}}</p>
+                      <ul>
+                        <li><span class="wl">{{home.brain.pesto}}</span>: {{home.brain.l1}}</li>
+                        <li><span class="wl">{{home.editor.catalog}}</span>: {{home.brain.l2}}</li>
+                      </ul>
+                      <p class="from">{{home.brain.from}}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <span class="callout" style="left: 12px; bottom: 12px">{{home.brain.callout}}</span>
+            </div>
+          </figure>
+          <div class="split-text">
+            <p>{{home.brain.p1}}</p>
+            <p>{{home.brain.p2}}</p>
+            <p><a href="/home/obsidian">{{home.brain.obsidian}}</a></p>
+          </div>
+        </div>
 
         <h2>{{home.demo.h}}</h2>
         <div class="demo" id="demo" role="group" aria-label="{{home.demo.label}}">
@@ -199,10 +237,33 @@
                 <li class="total"><span>{{bill.sync}}</span><span class="leader"></span><b>{{bill.price}}</b></li>
                 <li><span>{{bill.share}}</span><span class="leader"></span><b>{{bill.incl}}</b></li>
                 <li><span>{{bill.storage}}</span><span class="leader"></span><b>{{bill.incl}}</b></li>
+                <li><span>{{bill.source}}</span><span class="leader"></span><b>{{bill.free}}</b></li>
               </ol>
             </div>
             <figcaption><b>{{home.p.free.h}}</b> {{home.p.free.p}} <a href="{{base}}/pricing">{{home.p.free.link}}</a></figcaption>
           </figure>
+        </div>
+
+        <h2>{{home.open.h}}</h2>
+        <div class="points split">
+          <figure class="point">
+            <div class="plate">
+              <ul class="files" aria-label="{{home.open.label}}">
+                <li><i class="ft agpl">AGPL</i><span class="fn">client/</span><span class="when">{{home.open.client}}</span></li>
+                <li><i class="ft agpl">AGPL</i><span class="fn">server/</span><span class="when">{{home.open.server}}</span></li>
+                <li><i class="ft mit">MIT</i><span class="fn">docx/</span><span class="when">{{home.open.docx}}</span></li>
+                <li><i class="ft mit">MIT</i><span class="fn">pdf/</span><span class="when">{{home.open.pdf}}</span></li>
+                <li><i class="ft mit">MIT</i><span class="fn">layout/</span><span class="when">{{home.open.layout}}</span></li>
+                <li><i class="ft mit">MIT</i><span class="fn">ops/</span><span class="when">{{home.open.ops}}</span></li>
+              </ul>
+            </div>
+          </figure>
+          <div class="split-text">
+            <p>{{home.open.p1}}</p>
+            <p>{{home.open.p2}}</p>
+            <p><a href="https://github.com/davidfig/golemdocs">{{home.open.github}}</a></p>
+            <p><a href="{{base}}/open-source">{{home.whyOpen}}</a></p>
+          </div>
         </div>
 
         <div class="byline">

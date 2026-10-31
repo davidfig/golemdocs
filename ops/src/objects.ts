@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Editing together a document that is lists of objects with stable ids (a PDF's annotations, form fields and edits to its
 // pages) rather than text. A change is "this object is now this" or "this object is gone", for one object of a layer; the room
 // puts changes in one order, and every client applies them in that order, so two changes to one object end with the later one.

@@ -3,6 +3,7 @@
   "private": true,
   "description": "Operation engine for collaborative editing: ids, mapping and history (private workspace package, not on npm)",
   "version": "0.29.0",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

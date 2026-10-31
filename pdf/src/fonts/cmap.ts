@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // CMaps (§9.7.5, §9.10.3): the character-code to CID maps of composite fonts, and ToUnicode
 // maps. Parsed from the PostScript-like CMap syntax; of the predefined CMaps only Identity
 // and the Unicode-based (Uni*-UCS2/UTF16) ones are understood without an embedded CMap.

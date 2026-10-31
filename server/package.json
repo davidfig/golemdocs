@@ -3,6 +3,7 @@
   "private": true,
   "description": "GolemDocs API server: documents, collaboration and accounts (private workspace package, not on npm)",
   "version": "0.29.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "tsx ../scripts/wrangler-config.ts && mkdir -p .no-assets && wrangler dev --config wrangler.generated.jsonc --env dev --port 3001",

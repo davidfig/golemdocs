@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Comments: adding, replying, deleting and where they are shown.
 import { type Command, type Rect, type CommentGeometry } from './types.ts';
 

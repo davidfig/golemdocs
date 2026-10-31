@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Characters in math: which glyph a letter in a given style is drawn with (the Mathematical
 // Alphanumeric Symbols block holds italic, bold, script and the other alphabets as separate code
 // points), and which TeX atom class a character belongs to, which decides the space around it.

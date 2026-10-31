@@ -1,6 +1,14 @@
 # What’s New in Golem Docs
 
-## 0.28.1 - Unreleased
+## 0.29.0 - Unreleased
+
+### Added
+
+- Right-clicking in the documents view or the Files sidebar now offers the last three types of document you used (New Markdown, say) straight away, so you need not open the New document list. The full list is still there below them.
+
+### Changed
+
+- The toolbar’s New button, and New in the documents view, now show the icon of the type of document they make (the one you used last), and their tooltip names it.
 
 ### Fixed
 

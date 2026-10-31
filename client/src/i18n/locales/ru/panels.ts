@@ -77,6 +77,7 @@ export const panels: Catalog = {
   'panels.dashboard.sharedWithMe': 'Доступные мне',
   'panels.dashboard.newBlankLabel': 'Новый документ',
   'panels.dashboard.newBlank': 'Новый документ',
+  'panels.dashboard.newKind': 'Создать: {type}',
   'panels.dashboard.importLabel': 'Импортировать файл с этого компьютера',
   'panels.dashboard.importFolderLabel': 'Импортировать папку с этого компьютера',
   'panels.dashboard.import': 'Импорт файла',

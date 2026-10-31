@@ -28,7 +28,7 @@ import { ICONS, iconElement } from './icons.ts';
 import { showPopupMenu } from './popupMenu.ts';
 import { narrow } from './popup.ts';
 import { isTouchDevice } from '../desktop/bridge.ts';
-import { newKindItems } from './newKinds.ts';
+import { lastNewKind, newKindIconElement, newKindItems, newKindLabel, newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import './dashboard.css';
 
@@ -94,6 +94,8 @@ export class Dashboard {
   private readonly scroller: HTMLElement;
   private thumbnails!: Thumbnails;
   private readonly newFolderButton: HTMLButtonElement;
+  /** New: makes a document of the type used last, whose picture it shows. */
+  private readonly newButton: HTMLButtonElement;
   private readonly trashButton: HTMLButtonElement;
   /** Documents (`doc:<key>`) and folders (`folder:<id>`) ticked for a bulk Move or Delete. */
   private readonly selected = new Set<string>();
@@ -142,13 +144,11 @@ export class Dashboard {
       const folderId = this.folderId;
       showPopupMenu(
         [
-          {
-            label: t('panels.dashboard.newBlank'),
-            items: newKindItems((kind) => {
-              this.hide();
-              this.host.newDocument(folderId, kind);
-            }),
-          },
+          ...newMenuItems((kind) => {
+            this.hide();
+            this.host.newDocument(folderId, kind);
+          }),
+          'separator',
           { label: t('panels.dashboard.import'), run: () => this.host.importFile(folderId) },
           { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folderId) },
         ],
@@ -168,6 +168,8 @@ export class Dashboard {
       this.hide();
       this.host.newDocument(folderId);
     });
+    this.newButton = blank;
+    this.showNewKind();
     // Stays up behind the file picker: hiding it would show the last open document.
     const importButton = action('import', t('panels.dashboard.import'), t('panels.dashboard.importLabel'), () => this.host.importFile(this.folderId));
     const importFolderButton = action('import', t('panels.dashboard.importFolder'), t('panels.dashboard.importFolderLabel'), () => this.host.importFolder(this.folderId));
@@ -285,6 +287,7 @@ export class Dashboard {
     // What the library has shows at once; the listing brings it up to date.
     this.folderId = this.currentFolder();
     this.notice.textContent = this.library.problem ?? '';
+    this.showNewKind();
     this.render();
     // Once the menu or key that opened it is done with the focus (it hands it back as it closes).
     // Not on a phone or tablet, where focusing the search box pops up the on-screen keyboard.
@@ -295,6 +298,13 @@ export class Dashboard {
     }
     await this.host.settleThumbnail?.();
     await this.refresh();
+  }
+
+  /** Shows on New the picture of the type it makes (the one used last), and names the type in its tooltip. */
+  private showNewKind(): void {
+    const kind = lastNewKind();
+    this.newButton.replaceChildren(newKindIconElement(kind, true), h('span', { text: t('panels.dashboard.newBlank') }));
+    this.newButton.title = t('panels.dashboard.newKind', { type: newKindLabel(kind) });
   }
 
   /** The folder the open document is in (null: the top level, or it isn't saved yet), so Open starts where it is. */

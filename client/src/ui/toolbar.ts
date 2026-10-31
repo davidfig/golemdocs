@@ -2,14 +2,14 @@
 // split color buttons and the table-size grid. Pressing a control never takes focus from the
 // document, except the combo boxes, which hand it back when they commit or cancel.
 
-import type { Action, ChromeState } from './actions.ts';
+import type { Action, ChromeState, DocumentKind } from './actions.ts';
 import type { CommandRegistry } from './commands.ts';
 import { t } from '../i18n/index.ts';
 import { h, keepFocus, setAttr, toggleClass } from './dom.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { closePopup, narrow, openPopup, popupOpenFor } from './popup.ts';
 import { toolbarTitle } from './toolbarLayout.ts';
-import { newKindLabel, newKindOrder } from './newKinds.ts';
+import { lastNewKind, newKindIconElement, newKindLabel, newKindOrder } from './newKinds.ts';
 
 export interface Control {
   el: HTMLElement;
@@ -160,7 +160,17 @@ export function commandButton(registry: CommandRegistry, id: string): Control {
 /** File › New as a split button: the picture makes a document of the type used last; the arrow lists the types, last used first. */
 export function newButton(registry: CommandRegistry): Control {
   const command = registry.get('file.new');
-  const main = h('button', { class: 'wm-tbutton wm-split-main', title: tooltip(command.tooltip ?? command.plainLabel, command.shortcutText), attrs: { type: 'button', tabindex: '-1', 'aria-label': command.plainLabel } }, command.icon ? iconElement(command.icon) : null);
+  const main = h('button', { class: 'wm-tbutton wm-split-main', attrs: { type: 'button', tabindex: '-1', 'aria-label': command.plainLabel } });
+  // The picture is the type New makes (the one used last), so what it makes is no surprise.
+  let shown: DocumentKind | null = null;
+  const showKind = () => {
+    const kind = lastNewKind();
+    if (kind === shown) return;
+    shown = kind;
+    main.replaceChildren(newKindIconElement(kind, true));
+    main.title = tooltip(t('panels.dashboard.newKind', { type: newKindLabel(kind) }), command.shortcutText);
+  };
+  showKind();
   const arrow = h('button', { class: 'wm-tbutton wm-split-arrow', title: command.plainLabel, attrs: { type: 'button', tabindex: '-1', 'aria-label': t('menus.split.options', { label: command.plainLabel }), 'aria-haspopup': 'listbox' } });
   arrow.innerHTML = ICONS.dropdown;
   keepFocus(main);
@@ -170,7 +180,7 @@ export function newButton(registry: CommandRegistry): Control {
     if (popupOpenFor(el)) return closePopup();
     const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': command.plainLabel } });
     for (const kind of newKindOrder()) {
-      const row = h('div', { class: 'wm-option', text: newKindLabel(kind), attrs: { role: 'option' } });
+      const row = h('div', { class: 'wm-option wm-new-kind', attrs: { role: 'option' } }, newKindIconElement(kind), h('span', { text: newKindLabel(kind) }));
       row.addEventListener('pointerenter', () => {
         list.querySelector('.active')?.classList.remove('active');
         row.classList.add('active');
@@ -192,6 +202,7 @@ export function newButton(registry: CommandRegistry): Control {
     available: () => registry.isAvailable(command),
     refresh() {
       main.disabled = arrow.disabled = !registry.isEnabled(command);
+      showKind();
     },
   };
 }

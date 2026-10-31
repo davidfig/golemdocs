@@ -694,6 +694,24 @@ html.wm-titlebar .wm-format {
   filter: var(--wm-icon-halo);
 }
 
+/* A file type's picture (fileIcons.ts); on a button, drawn at the size of the icons beside it. */
+.wm-file-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.icon.wm-file-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* A row of the list of types New makes: the type's picture, then its name. */
+.wm-new-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /*
  * Dark: the icons are drawn in fixed colors (icons.ts, fileIcons.ts: an svg with an ink stroke), so their ink outlines, white paper
  * and pale grey are swapped here, wherever they are shown; the bright colors stay.

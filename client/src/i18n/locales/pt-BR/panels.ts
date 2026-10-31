@@ -65,6 +65,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedWithMe': 'Compartilhados comigo',
   'panels.dashboard.newBlankLabel': 'Novo documento',
   'panels.dashboard.newBlank': 'Novo documento',
+  'panels.dashboard.newKind': 'Novo: {type}',
   'panels.dashboard.importLabel': 'Importar um arquivo deste computador',
   'panels.dashboard.importFolderLabel': 'Importar uma pasta deste computador',
   'panels.dashboard.import': 'Importar arquivo',

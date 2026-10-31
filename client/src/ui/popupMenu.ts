@@ -4,7 +4,8 @@
 import { h } from './dom.ts';
 import { ICONS } from './icons.ts';
 
-export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean } | { label: string; items: readonly PopupItem[] };
+/** A row's `icon` is SVG markup, drawn in the gutter before its label. */
+export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean; icon?: string } | { label: string; items: readonly PopupItem[] };
 
 let open: { close: () => void } | null = null;
 
@@ -31,7 +32,13 @@ export function showPopupMenu(items: readonly PopupItem[], x: number, y: number,
       }
       const disabled = 'disabled' in item && item.disabled;
       const text = h('span', { class: 'label', text: item.label });
-      const el = h('div', { class: `wm-item${disabled ? ' disabled' : ''}`, attrs: { role: 'menuitem', tabindex: '-1', ...(disabled ? { 'aria-disabled': 'true' } : {}) } }, h('span', { class: 'wm-gutter' }), text);
+      const gutter = h('span', { class: 'wm-gutter' });
+      if ('icon' in item && item.icon) {
+        const icon = h('span', { class: 'icon' });
+        icon.innerHTML = item.icon;
+        gutter.append(icon);
+      }
+      const el = h('div', { class: `wm-item${disabled ? ' disabled' : ''}`, attrs: { role: 'menuitem', tabindex: '-1', ...(disabled ? { 'aria-disabled': 'true' } : {}) } }, gutter, text);
       const openChild = () => {
         closeChildren();
         if (!('items' in item)) return;

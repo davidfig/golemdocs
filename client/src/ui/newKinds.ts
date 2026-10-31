@@ -6,6 +6,8 @@ import { sourceFromFile } from '../formats/source.ts';
 import type { DocumentKind } from './actions.ts';
 import type { PopupItem } from './popupMenu.ts';
 import { CONVERT_ORDER, FORMATS } from './formats.ts';
+import { fileIconSvg, fileKind } from './fileIcons.ts';
+import { t } from '../i18n/index.ts';
 
 /** Every type a document can be converted to, so every one it can be made in; Word is the default of a browser that has never made another. */
 export const NEW_KINDS: readonly DocumentKind[] = CONVERT_ORDER;
@@ -53,5 +55,31 @@ export function blankSource(kind: DocumentKind, name: string): { source: Documen
 /** The label of a type in the lists of types: its name and extension. */
 export const newKindLabel = (kind: DocumentKind): string => `${FORMATS[kind].label} (${FORMATS[kind].extensions[0]})`;
 
+/** The picture of a type: the one its files show in the file lists. */
+export const newKindIcon = (kind: DocumentKind): string => fileIconSvg(fileKind(`new${FORMATS[kind].extensions[0]}`));
+
+/** The picture of a type as an icon, drawn like the toolbar's (and turned grey with them). `button`: at a toolbar button's size. */
+export function newKindIconElement(kind: DocumentKind, button = false): HTMLSpanElement {
+  const el = document.createElement('span');
+  el.className = button ? 'icon wm-file-icon' : 'icon';
+  el.innerHTML = newKindIcon(kind);
+  return el;
+}
+
+/** How many of the types used last a context menu offers straight away, before the list of all of them. */
+export const RECENT_NEW_KINDS = 3;
+
 /** Context menu rows, one per type, last used first. */
-export const newKindItems = (make: (kind: DocumentKind) => void): PopupItem[] => newKindOrder().map((kind) => ({ label: newKindLabel(kind), run: () => make(kind) }));
+export const newKindItems = (make: (kind: DocumentKind) => void): PopupItem[] => newKindOrder().map((kind) => ({ label: newKindLabel(kind), icon: newKindIcon(kind), run: () => make(kind) }));
+
+/** The types used last, up to `RECENT_NEW_KINDS`, last first; just the default (Word) before any has been used. */
+export function recentNewKinds(): DocumentKind[] {
+  const used = stored().slice(0, RECENT_NEW_KINDS);
+  return used.length ? used : [lastNewKind()];
+}
+
+/** A context menu's New rows: the types used last, each its own row, then every type in a submenu. */
+export function newMenuItems(make: (kind: DocumentKind) => void): PopupItem[] {
+  const recent = recentNewKinds().map((kind): PopupItem => ({ label: t('panels.dashboard.newKind', { type: newKindLabel(kind) }), icon: newKindIcon(kind), run: () => make(kind) }));
+  return [...recent, { label: t('panels.dashboard.newBlank'), items: newKindItems(make) }];
+}

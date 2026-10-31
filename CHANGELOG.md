@@ -2,6 +2,10 @@
 
 ## 0.30.1 - Unreleased
 
+### Changed
+
+- The website’s About page now says Golem Docs is open source, and that you can ask for a feature or send the code for it on GitHub.
+
 ### Fixed
 
 - Taking over a PDF or picture someone else was editing could leave you with the copy from before their last change, so the next save would lose it. You now always get what they had.

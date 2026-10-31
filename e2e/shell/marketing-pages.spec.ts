@@ -25,12 +25,13 @@ const LEGAL = [
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 const PAGES = [
-  { path: '/home', menu: 'Home', heading: 'Your second brain, for every kind of document.' },
+  { path: '/home', menu: 'Home', heading: 'One editor for every kind of document.' },
   { path: '/home/ai', menu: 'Your ai', heading: 'Ask your ai to help with your documents.' },
   { path: '/home/formats', menu: 'Formats', heading: 'If you can name it, you can probably open it.' },
   { path: '/home/pricing', menu: 'Pricing', heading: 'Free to use. Paying covers my server bills.' },
   { path: '/home/journal', menu: 'Journal', heading: 'What changed lately.' },
   { path: '/home/about', menu: 'About', heading: 'Why I built this.' },
+  { path: '/home/open-source', menu: 'Open source', heading: 'All of Golem Docs is open source.' },
   { path: '/home/developers', menu: 'Developers', heading: 'Plain files, and a sync you can reason about.' },
   { path: '/home/download', menu: 'Download', heading: 'Golem Docs on your computer.' },
 ] as const;
@@ -161,7 +162,7 @@ test('no page scrolls sideways on a phone', async ({ page }) => {
 test.describe('home page', () => {
   test('has description, canonical URL, alternates and social-card metadata', async ({ page }) => {
     await page.goto('/home');
-    await expect(page).toHaveTitle('Golem Docs: your second brain, for every kind of document');
+    await expect(page).toHaveTitle('Golem Docs: one editor for every kind of document');
     await expect(page.locator('meta[name=description]')).toHaveAttribute('content', /every kind of document|Word files, PDFs/);
     await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', 'https://golemdocs.com/home');
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', 'https://golemdocs.com/home');

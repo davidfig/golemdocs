@@ -71,7 +71,7 @@ test('the holder can move and delete pages while someone watches, and the watche
   await context.close();
 });
 
-test('taking over: the watcher holds the PDF and can mark it up, and the one who held it watches and sees it', async ({ browser }) => {
+test('taking over: the watcher holds the PDF and can mark it up, and the one who held it watches and sees it', { tag: '@heavy' }, async ({ browser }) => {
   const { context, a, b } = await pdfPair(browser);
   await selectBetween(a.page, 0, ...FIRST);
   await btn(a, 'Highlight').click();

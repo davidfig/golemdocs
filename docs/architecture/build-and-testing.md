@@ -95,6 +95,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-10-26 | `e2e/editing/spelling.spec.ts` › grammar › turning off Check grammar leaves only spelling problems | Failed at 11.6 s in pass one (the repeated-word finding never showed), passed on retry; alone, passed four times in about 2-3 s |
 | 2026-10-26 | `e2e/editing/spelling.spec.ts` › squiggles and the right-click menu › with "Check spelling as you type" off there is no spelling menu | Hung for 9.4 min in pass one, passed on retry; alone, passed in 3 s |
 | 2026-10-26 | `e2e/collab/folders.spec.ts` › moving documents into a folder keeps them there as the dashboard refreshes, and after a reload | Already `@heavy`. Failed on its first attempt in the heavy pass twice running, as the first test on a fresh server beside a second worker: both drags landed nothing ("0 items"), passed on retry. Alone and cold, with no retries, passed twice in 6.5 s. If it turns up again, look at a drag that starts while the dashboard is still redrawing after New Folder |
+| 2026-10-31 | `e2e/collab/room-pdf.spec.ts` › taking over: the watcher holds the PDF and can mark it up, and the one who held it watches and sees it | Failed at 36.9 s in pass one; alone (a side run on its own servers), passed in 13.2 s. The picture version of this test failed the same way on 2026-10-26: if a third take-over test turns up, look at the take-over handshake under load rather than tagging it |
 
 ## Performance traces (`golem:*`)
 

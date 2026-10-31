@@ -210,7 +210,7 @@ export class VaultService {
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
       this.set({ state, report, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
-      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed > 0) this.hooks.changed(report.touched);
+      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved > 0) this.hooks.changed(report.touched);
     } catch (error) {
       const offline = error instanceof TypeError || (error instanceof CloudError && error.status >= 500);
       this.set({ progress: undefined, state: offline ? 'offline' : error instanceof CloudError && error.status === 401 ? 'signedOut' : 'error', message: error instanceof Error ? error.message : String(error) });

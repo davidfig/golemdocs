@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   cloudPaths,
+  foldersOf,
   MASS_DELETE_MIN,
   needsHash,
   planVault,
   safeName,
+  vanishedFolders,
   type CloudFile,
   type LocalFile,
   type ManifestEntry,
@@ -181,4 +183,29 @@ test('safeName makes a name every disk accepts', () => {
   assert.equal(safeName('CON'), '_CON');
   assert.equal(safeName('trailing. '), 'trailing');
   assert.equal(safeName(''), '_');
+});
+
+test('foldersOf names every folder a file is in', () => {
+  assert.deepEqual([...foldersOf(['a/b/c.md', 'a/d.md', 'top.md'])].sort(), ['a', 'a/b']);
+});
+
+test('vanishedFolders removes folders gone from the vault that hold nothing in the account, deepest first', () => {
+  const folders = [
+    { id: 'p', name: 'Posts', parentId: null },
+    { id: 'e', name: 'Essay', parentId: 'p' },
+    { id: 'x', name: 'Paper: 2013', parentId: 'e' }, // on disk as "Paper_ 2013"
+    { id: 'y', name: 'Still full', parentId: 'e' },
+    { id: 'z', name: 'Never synced', parentId: null },
+  ];
+  const docs = [
+    { id: 'd1', name: 'Essay.md', folderId: 'e', createdAt: 0, updatedAt: 0 },
+    { id: 'd2', name: 'x.zip', folderId: 'y', createdAt: 0, updatedAt: 0 },
+  ];
+  const before = ['Posts', 'Posts/Essay', 'Posts/Essay/Paper_ 2013', 'Posts/Essay/Still full'];
+  assert.deepEqual(vanishedFolders(before, new Set(['Posts', 'Posts/Essay']), docs, folders), [{ id: 'x', path: 'Posts/Essay/Paper_ 2013' }]);
+  // The whole tree gone: Essay keeps a document, so it and Posts stay.
+  assert.deepEqual(vanishedFolders(before, new Set(), docs, folders), [{ id: 'x', path: 'Posts/Essay/Paper_ 2013' }]);
+  // Emptied in the account too: deepest first, and a folder never in the vault stays.
+  assert.deepEqual(vanishedFolders(before, new Set(), [], folders).map((f) => f.id), ['x', 'y', 'e', 'p']);
+  assert.deepEqual(vanishedFolders([], new Set(), [], folders), []);
 });

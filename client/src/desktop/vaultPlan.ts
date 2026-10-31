@@ -63,7 +63,9 @@ export type VaultAction =
   /** Deleted in the vault: move the cloud document to the account's trash. */
   | { kind: 'deleteCloud'; id: string; path: string }
   /** Gone from both: drop the link. */
-  | { kind: 'forget'; id: string };
+  | { kind: 'forget'; id: string }
+  /** The folder was removed from the vault and holds nothing in the account: remove it there too (see `vanishedFolders`). */
+  | { kind: 'removeFolder'; id: string; path: string };
 
 export interface VaultPlan {
   actions: VaultAction[];
@@ -207,14 +209,10 @@ export function safeName(name: string): string {
   return clean.length > 200 ? clean.slice(0, 200) : clean;
 }
 
-/**
- * Where each document lives in the vault: its folders' names, then its own. Two that would share a path (the
- * account allows it; most disks, case-insensitive ones included, do not) keep the older one's name and the
- * other gets " (2)", " (3)"... before its extension, so a document keeps the same path from one sync to the next.
- */
-export function cloudPaths(docs: readonly CloudDoc[], folders: readonly CloudFolder[]): CloudFile[] {
+/** Turns a folder id into the names of the folders it is in and its own, as the vault spells them (outermost first). */
+function folderNames(folders: readonly CloudFolder[]): (id: string | null | undefined) => string[] {
   const folderById = new Map(folders.map((f) => [f.id, f]));
-  const folderPath = (id: string | null | undefined): string[] => {
+  return (id) => {
     const names: string[] = [];
     const seen = new Set<string>();
     for (let at = id ? folderById.get(id) : undefined; at && !seen.has(at.id); at = at.parentId ? folderById.get(at.parentId) : undefined) {
@@ -223,6 +221,21 @@ export function cloudPaths(docs: readonly CloudDoc[], folders: readonly CloudFol
     }
     return names;
   };
+}
+
+/** Each of the account's folders by its path in the vault. */
+export function folderPaths(folders: readonly CloudFolder[]): Map<string, string> {
+  const names = folderNames(folders);
+  return new Map(folders.map((f) => [f.id, names(f.id).join('/')]));
+}
+
+/**
+ * Where each document lives in the vault: its folders' names, then its own. Two that would share a path (the
+ * account allows it; most disks, case-insensitive ones included, do not) keep the older one's name and the
+ * other gets " (2)", " (3)"... before its extension, so a document keeps the same path from one sync to the next.
+ */
+export function cloudPaths(docs: readonly CloudDoc[], folders: readonly CloudFolder[]): CloudFile[] {
+  const folderPath = folderNames(folders);
 
   const used = new Set<string>();
   const out: CloudFile[] = [];
@@ -237,4 +250,46 @@ export function cloudPaths(docs: readonly CloudDoc[], folders: readonly CloudFol
     out.push({ id: doc.id, path: candidate, updatedAt: doc.updatedAt });
   }
   return out;
+}
+
+// ---- Folders removed from the vault ----
+
+/** Every folder that holds one of these files, at any depth: `a/b/c.md` is in `a` and `a/b`. */
+export function foldersOf(paths: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const path of paths) for (let at = path.lastIndexOf('/'); at > 0; at = path.lastIndexOf('/', at - 1)) out.add(path.slice(0, at));
+  return out;
+}
+
+/**
+ * The account's folders to remove because they were removed from the vault (deleted, or renamed: the files went to a
+ * folder of the new name). A folder goes when it held files in the vault at the last sync (`before`), holds none now
+ * (`now`), and, once this sync's moves are done, holds no document and no folder that stays: so nothing in the account is
+ * lost with it, a document the vault does not keep included. Returned with their vault paths, the deepest first.
+ *
+ * The scan sees files, not folders, so a folder left on disk with nothing in it is taken for removed too. A folder made in
+ * the account, or emptied there, is never in `before`: the vault only writes folders that hold a file.
+ */
+export function vanishedFolders(before: Iterable<string>, now: ReadonlySet<string>, docs: readonly CloudDoc[], folders: readonly CloudFolder[]): { id: string; path: string }[] {
+  const gone = new Set([...before].filter((path) => !now.has(path)));
+  if (!gone.size) return [];
+  const pathOf = folderPaths(folders);
+  const holdsDocs = new Set(docs.map((d) => d.folderId).filter((id): id is string => !!id));
+  const children = new Map<string, CloudFolder[]>();
+  for (const f of folders) if (f.parentId) children.set(f.parentId, [...(children.get(f.parentId) ?? []), f]);
+
+  const removable = new Map<string, boolean>();
+  const canRemove = (folder: CloudFolder): boolean => {
+    let answer = removable.get(folder.id);
+    if (answer === undefined) {
+      removable.set(folder.id, false); // a loop of parents keeps its folders
+      answer = gone.has(pathOf.get(folder.id)!) && !holdsDocs.has(folder.id) && (children.get(folder.id) ?? []).every(canRemove);
+      removable.set(folder.id, answer);
+    }
+    return answer;
+  };
+  return folders
+    .filter(canRemove)
+    .map((f) => ({ id: f.id, path: pathOf.get(f.id)! }))
+    .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
 }

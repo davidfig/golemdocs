@@ -1,7 +1,7 @@
 // The real `VaultHost`: the folder through the native bridge, the account through cloud.ts, the converter that
 // is handed in (convertClient.ts: another thread). Kept apart from vaultSync.ts so that file runs in tests with nothing but memory.
 
-import { createDocument, deleteDocuments, downloadDocument, listDocuments, listFolders, moveDocuments, putFolders, renameCloudDocument, saveCloudVersion, saveDocument, throwIfFailed } from '../cloud.ts';
+import { createDocument, deleteDocuments, downloadDocument, listDocuments, listFolders, moveDocuments, putFolders, removeFolders, renameCloudDocument, saveCloudVersion, saveDocument, throwIfFailed } from '../cloud.ts';
 import type { Folder } from '../folders.ts';
 import type { DesktopBridge } from './bridge.ts';
 import { safeName } from './vaultPlan.ts';
@@ -54,6 +54,10 @@ export function accountCloud(): VaultCloud {
     keepVersion: async (id) => void (await saveCloudVersion(id)),
     async trash(id) {
       throwIfFailed(await deleteDocuments([id]));
+    },
+    async removeFolder(id) {
+      throwIfFailed(await removeFolders([id]));
+      folders = folders.filter((f) => f.id !== id);
     },
   };
 }

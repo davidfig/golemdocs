@@ -341,6 +341,11 @@ export function putFolders(folders: readonly { id: string; name?: string; parent
   return chunked(wanted, (chunk) => batch<Folder>('PUT', '/api/folders', { folders: chunk }));
 }
 
+/** Removes folders only, in one request: what was in each moves up to where it was. */
+export function removeFolders(ids: readonly string[]): Promise<BatchResult<string>> {
+  return chunked(ids, (chunk) => batch<string>('DELETE', '/api/folders', { ids: chunk }));
+}
+
 /** The reason the first failure of a batch gives, as an error; nothing when all went through. */
 export function throwIfFailed(result: BatchResult<unknown>): void {
   if (result.failed.length) throw new CloudError(0, result.failed[0]!.error);

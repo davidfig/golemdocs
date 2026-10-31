@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.30.0 - Unreleased
+
+### Fixed
+
+- A folder deleted or renamed in your vault folder (by another program, or from the command line) now disappears from your documents too, once nothing is left in it, instead of staying behind empty.
+
 ## 0.29.0 - 2026-10-31
 
 ### Added

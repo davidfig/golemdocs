@@ -42,10 +42,11 @@ Whatever is done to the folder is what the account becomes. That is safe because
 | Deleted in the account, file untouched | `deleteLocal` |
 | Deleted in the account, file edited here | the edit is kept as a new document |
 | Vault filled before it was linked | `upload` over the account copy (version kept) |
+| Folder removed or renamed here (it held files at the last sync, holds none now) | `removeFolder`, after the moves, once it holds nothing in the account (`vanishedFolders`) |
 | Many files missing at once (10 or more, and half of those linked) | held back (`blocked`, `mass-delete`) until the person confirms: it is far more likely a drive that is not mounted |
 | Many documents gone from the other side at once (the same numbers) | held back (`mass-delete-here`) before their files are deleted: more likely cleared storage or a memory that is not this side's |
 
-Files are followed by their cloud id in the manifest, never by path. `cloudPaths` turns the account's folders and names into vault paths: it replaces characters a disk refuses, and keeps two same-named documents apart with " (2)" by creation order so a path is stable from one sync to the next.
+Files are followed by their cloud id in the manifest, never by path. Folders are not followed at all: the scan sees only files, a folder is made in the account when a file needs it, and the memory keeps the paths of the folders that held files after each sync (`folders`). One of those with no file left in it is removed from the account once it holds no document (one the vault does not keep included) and no folder that stays, so nothing goes with it; until then it is looked at again on every sync. A folder made in the account never held a file in the vault, and one emptied in the account is not remembered once that sync is done, so both stay, and a memory from before folders were remembered removes none. A folder left empty on disk looks removed too. `cloudPaths` turns the account's folders and names into vault paths: it replaces characters a disk refuses, and keeps two same-named documents apart with " (2)" by creation order so a path is stable from one sync to the next.
 
 ## The sync driver
 

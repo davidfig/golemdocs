@@ -10,6 +10,8 @@
 - **Free, with no account.** It runs in your browser and on Mac, Windows and Linux. $3 a month adds sync across devices, sharing and live editing together, and pays for the server.
 - **Open source, all of it:** the editor, the server, and the libraries that read and write each format.
 
+Made by [David Figatner](https://yopeyopey.com/about/) with [Claude](https://claude.ai/). Much of the code was written by Claude, with David steering: work that would have taken one person years.
+
 ## How it's built
 
 Text is drawn with WebGL (MSDF glyph atlases), so zooming stays sharp and large documents stay fast. Documents are saved in the browser with no account; signed in, they are saved to the account instead (the browser keeps a cache for speed and offline work). The desktop app keeps every document as a file in a folder on disk, in step with the account.

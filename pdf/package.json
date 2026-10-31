@@ -2,7 +2,7 @@
   "name": "@golemdocs/pdf",
   "private": true,
   "description": "PDF reader, editor and writer (private workspace package, not on npm)",
-  "version": "0.30.0",
+  "version": "0.30.1",
   "license": "MIT",
   "type": "module",
   "exports": {

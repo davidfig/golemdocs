@@ -53,7 +53,7 @@ test('the holder can change the picture itself while someone watches, and the wa
   await context.close();
 });
 
-test('taking over: the watcher holds the picture and can draw, and the one who held it watches and sees it', { tag: '@heavy' }, async ({ browser }) => {
+test('taking over: the watcher holds the picture and can draw, and the one who held it watches and sees it', async ({ browser }) => {
   const { context, a, b } = await picturePair(browser);
   await a.toolbarButton(/^Line$/).click();
   await drag(a, [40, 40], [240, 40]);

@@ -10,7 +10,7 @@
 import type { User } from './auth.ts';
 import type { CloudDocument } from './cloud.ts';
 import type { Folder } from './folders.ts';
-import type { SavedInfo } from './storage/local.ts';
+import { listSaved, type SavedInfo } from './storage/local.ts';
 import { loadLibrary, loadLocalLibrary, localCopies, mergeLibrary, type LibraryEntry } from './sync.ts';
 
 export interface LibraryHost {
@@ -107,6 +107,14 @@ export class LibraryStore {
   async reloadLocal(): Promise<void> {
     const local = await localCopies(this.host.account());
     if (local) this.set({ entries: mergeLibrary(local, this.cloudKnown ? this.cloud : null) });
+  }
+
+  /**
+   * The account's id for a copy in this browser. Asked before the library is first read (a document opened from the account a moment
+   * ago, say), it is read off the stored copy, rather than taken for one the account doesn't have.
+   */
+  async cloudIdOf(localId: string): Promise<string | undefined> {
+    return this.local.find((l) => l.id === localId)?.cloudId ?? (await listSaved().catch(() => [])).find((l) => l.id === localId)?.cloudId;
   }
 
   /** A copy just saved (or opened from the account), shown without reading them all again. */

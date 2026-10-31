@@ -670,8 +670,10 @@ async function refreshWatched(doc: OpenDocument, updatedAt?: number): Promise<vo
   watchedOpening = true;
   try {
     const shared = doc.shared ? sharedDocs.get(doc.shared.id) : undefined;
-    const cloudId = library.local.find((d) => d.id === doc.localId)?.cloudId;
+    // Not from the library's list alone: a save heard just after the document opened (someone taking it over) would be dropped.
+    const cloudId = !shared && doc.localId ? await library.cloudIdOf(doc.localId) : undefined;
     if (current !== doc) return;
+    if (!doc.shared && !cloudId) throw new Error('not in the account yet'); // tried again in a moment
     wantedDocKey = viewDocKey; // back where it was
     if (shared) open({ kind: 'docx-url', name: shared.name, url: documentUrl(shared.id) }, { shared, keepRoom: true, version: updatedAt });
     else if (cloudId) {

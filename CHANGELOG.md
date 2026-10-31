@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.30.1 - Unreleased
+
+### Fixed
+
+- Taking over a PDF or picture someone else was editing could leave you with the copy from before their last change, so the next save would lose it. You now always get what they had.
+
 ## 0.30.0 - 2026-10-31
 
 ### Added

@@ -203,5 +203,7 @@ test('editing a 500,000-line file touches only the lines around the edit', async
   assert.equal(doc.index.count, 500_001);
   assert.equal(lineText(doc.index, 399_999).text.startsWith('x'), true);
   assert.equal(lineText(doc.index, 400_000).text.startsWith('kkk'), true);
-  assert.ok(elapsed < 250, `201 edits took ${elapsed.toFixed(0)} ms`);
+  // Coverage instrumentation makes hot loops about 20 times slower; rescanning every line would still be far beyond this.
+  const slowdown = process.execArgv.some((a) => a.includes('coverage')) || process.env.NODE_V8_COVERAGE ? 30 : 1;
+  assert.ok(elapsed < 250 * slowdown, `201 edits took ${elapsed.toFixed(0)} ms`);
 });

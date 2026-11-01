@@ -170,6 +170,20 @@ new History(redata).apply(0, {
 });
 new History(redata).apply(0, { kind: 'chart', index: 3, change: { data: { series: [{ name: 'Only', values: 'D2:D7' }], categories: '' } } });
 books.set('charts-data.xlsx', redata);
+// Sparklines made here: of each kind on a sheet with none; and added to Excel's, one row's cleared.
+const sparkMade = new Workbook();
+sparkMade.sheets.push(new Worksheet('Data', 1));
+const sparkMadeHistory = new History(sparkMade);
+sparkMadeHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['1', '3', '-2'], ['4', '1', '5'], ['2', '-2', '3']] });
+sparkMadeHistory.apply(0, { kind: 'insertSparklines', sparkline: 'line', range: { r0: 0, c0: 0, r1: 2, c1: 2 } });
+sparkMadeHistory.apply(0, { kind: 'insertSparklines', sparkline: 'column', range: { r0: 0, c0: 0, r1: 2, c1: 3 } });
+sparkMadeHistory.apply(0, { kind: 'insertSparklines', sparkline: 'stacked', range: { r0: 0, c0: 0, r1: 2, c1: 4 } });
+books.set('sparklines-made.xlsx', sparkMade);
+const sparkMore = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/sparklines-excel.xlsx')));
+const sparkMoreHistory = new History(sparkMore);
+sparkMoreHistory.apply(0, { kind: 'insertSparklines', sparkline: 'line', range: { r0: 1, c0: 1, r1: 3, c1: 9 } });
+sparkMoreHistory.apply(0, { kind: 'clearSparklines', range: { r0: 3, c0: 7, r1: 3, c1: 9 } });
+books.set('sparklines-more.xlsx', sparkMore);
 // Sparklines moved by inserted rows and a renamed sheet, written back into the sheet's extLst (ours, and Excel's).
 for (const name of ['sparklines', 'sparklines-excel']) {
   const sparked = await readWorkbook(readFileSync(path.join(ROOT, `client/test/fixtures/sheets/${name}.xlsx`)));

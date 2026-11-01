@@ -93,12 +93,55 @@ export function readSparklines(root: XmlElement): SparklineGroup[] {
   return out;
 }
 
-/** Writes the model's sparklines into the sheet's `<extLst>` (each group's other parts as they were read). */
+const X14 = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+const XM = 'http://schemas.microsoft.com/office/excel/2006/main';
+
+/** A new group (Insert › Sparklines) in Excel's default look: dark blue, red for negatives and markers. */
+export function newSparklineGroup(kind: SparklineGroup['kind'], sparklines: Sparkline[]): SparklineGroup {
+  const rgb = (name: string, value: string) => el(`x14:color${name}`, { rgb: value });
+  const element = el('x14:sparklineGroup', { ...(kind !== 'line' && { type: kind }), displayEmptyCellsAs: 'gap', ...(kind === 'stacked' && { negative: 1 }) }, [
+    rgb('Series', 'FF376092'),
+    rgb('Negative', 'FFD00000'),
+    rgb('Axis', 'FF000000'),
+    rgb('Markers', 'FFD00000'),
+    rgb('First', 'FFD00000'),
+    rgb('Last', 'FFD00000'),
+    rgb('High', 'FFD00000'),
+    rgb('Low', 'FFD00000'),
+  ]);
+  return {
+    kind,
+    lineWeight: 0.75,
+    markers: false,
+    high: false,
+    low: false,
+    first: false,
+    last: false,
+    negative: kind === 'stacked',
+    axis: false,
+    minAxis: 'individual',
+    maxAxis: 'individual',
+    manualMin: null,
+    manualMax: null,
+    colors: { series: { rgb: 0x376092 }, negative: { rgb: 0xd00000 }, axis: { rgb: 0 }, markers: { rgb: 0xd00000 }, first: { rgb: 0xd00000 }, last: { rgb: 0xd00000 }, high: { rgb: 0xd00000 }, low: { rgb: 0xd00000 } },
+    sparklines,
+    element,
+  };
+}
+
+/** Writes the model's sparklines into the sheet's `<extLst>` (each group's other parts as they were read), making the
+ * extension for a sheet's first ones. */
 export function writeSparklines(root: XmlElement, groups: SparklineGroup[]): void {
-  const ext = [...elements(root)].find((e) => local(e) === 'extLst');
-  const holder = ext && [...elements(ext)].find((e) => e.attrs.uri === SPARKLINE_EXT);
-  const container = holder && [...elements(holder)].find((e) => local(e) === 'sparklineGroups');
-  if (!container) return;
+  let ext = [...elements(root)].find((e) => local(e) === 'extLst');
+  let holder = ext && [...elements(ext)].find((e) => e.attrs.uri === SPARKLINE_EXT);
+  let container = holder && [...elements(holder)].find((e) => local(e) === 'sparklineGroups');
+  if (!container) {
+    if (!groups.some((g) => g.sparklines.length)) return;
+    // The extLst is the last thing in a worksheet.
+    if (!ext) root.children.push((ext = el('extLst')));
+    ext.children.push((holder = el('ext', { uri: SPARKLINE_EXT, 'xmlns:x14': X14 }, [(container = el('x14:sparklineGroups', { 'xmlns:xm': XM }))])));
+  }
+  if (!ext || !holder) return;
   const kept = groups.filter((g) => g.sparklines.length);
   if (!kept.length) {
     // No sparklines left: the extension goes (and the extLst, when it held nothing else).

@@ -423,7 +423,12 @@ sparkline, per group or fixed, as the group says. It comes with the charts (`cha
 not pickable. Checked by `sparklines.xlsx` (`fixtures.ts`) and Excel's save of it, and in Excel after rows are inserted and
 the sheet renamed (`sparklines-moved`, `sparklines-excel-moved`).
 
-**Next in M6**: inserting sparklines; pivot tables; what-if tools (Goal
+Insert › Sparklines makes one per row of the selection, in the column after it (`insertSparklines`, a new group in
+Excel's default look, `newSparklineGroup`; cells that had one lose it), and Clear Sparklines takes away those in the
+selection (`clearSparklines`); a sheet's first sparklines get the `<extLst>` extension made (`writeSparklines`). Excel
+opens sparklines made here and added to its own (`sparklines-made`, `sparklines-more`).
+
+**Next in M6**: pivot tables; what-if tools (Goal
 Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)

@@ -273,6 +273,18 @@ test('sparklines are drawn in their cells and follow their data', async ({ app, 
   await page.keyboard.type('20');
   await page.keyboard.press('Enter');
   await expect.poll(drawn).not.toBe(before);
+  // Insert › Sparklines › Clear Sparklines on the first row's three, then a column sparkline of its values in H2.
+  const withThree = await drawn();
+  await clickCell(page, 1, 7);
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  await app.menu('Insert', 'Sparklines', 'Clear Sparklines');
+  await expect.poll(drawn).toBeLessThan(withThree);
+  const cleared = await drawn();
+  await clickCell(page, 1, 1);
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+ArrowRight');
+  await app.menu('Insert', 'Sparklines', 'Column');
+  await expect.poll(drawn).toBeGreaterThan(cleared);
 });
 
 test('Insert › Chart makes a chart beside the data; it is picked, changed from its menu, dragged and deleted', async ({ app, page }) => {

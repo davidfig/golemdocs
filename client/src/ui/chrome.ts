@@ -859,6 +859,7 @@ export class Chrome {
           cmd('insert.textBox'),
           cmd('insert.table'),
           sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
+          sub(t('sheet.sparklines'), [cmd('sheet.sparklineLine'), cmd('sheet.sparklineColumn'), cmd('sheet.sparklineWinLoss'), sep, cmd('sheet.clearSparklines')]),
           cmd('insert.horizontalRule'),
           cmd('insert.codeBlock'),
           sep,

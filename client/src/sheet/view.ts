@@ -1691,6 +1691,14 @@ export class SheetEditorView {
       case 'newNote':
         void this.editNote();
         return;
+      case 'sparklineLine':
+      case 'sparklineColumn':
+      case 'sparklineWinLoss':
+        void this.edit({ kind: 'insertSparklines', sparkline: op === 'sparklineLine' ? 'line' : op === 'sparklineColumn' ? 'column' : 'stacked', range: sel });
+        return;
+      case 'clearSparklines':
+        void this.edit({ kind: 'clearSparklines', range: sel });
+        return;
       case 'chartColumn':
       case 'chartBar':
       case 'chartLine':

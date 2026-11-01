@@ -237,6 +237,10 @@ export type EditOp =
   | { kind: 'note'; row: number; col: number; text: string | null; author: string }
   /** Sheet › Protect Sheet (`on`, with a password or '') or Unprotect Sheet (its password, if it has one). */
   | { kind: 'protect'; on: boolean; password: string }
+  /** Insert › Sparklines: one per row of a block of cells, in the column after it. */
+  | { kind: 'insertSparklines'; sparkline: 'line' | 'column' | 'stacked'; range: CellRange }
+  /** Clear Sparklines: the sparklines in a block's cells taken away. */
+  | { kind: 'clearSparklines'; range: CellRange }
   /** Insert › Chart: a chart of a block of cells (one cell: the block around it), beside it. */
   | { kind: 'insertChart'; chart: NewChartKind; range: CellRange }
   /** A chart (by its place in the sheet's list) changed: another kind, title, legend or place, or taken away. */

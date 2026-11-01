@@ -3,6 +3,8 @@
 // so undo and redo each put one back. Formulas typed here are kept as text until the engine (M3) calculates them; references
 // in other formulas are moved by the engine too when rows and columns move.
 
+import { newSparklineGroup } from './sparklines.ts';
+import { rangeName } from './refs.ts';
 import { changeKind, newChart, withData } from './charts/make.ts';
 import { Column, Kind, MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
 import type { ColumnState, FormulaRun, Grid } from './model/column.ts';
@@ -53,6 +55,7 @@ interface SheetSnapshot {
     notes: Worksheet['notes'];
     protection: Worksheet['protection'];
     charts: Worksheet['charts'];
+    sparklines: Worksheet['sparklines'];
   };
   /** The whole column list (structure moved: columns inserted or deleted). */
   columnList?: (Column | undefined)[];
@@ -226,7 +229,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -243,6 +246,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
       notes: sheet.notes,
       protection: sheet.protection,
       charts: sheet.charts,
+      sparklines: sheet.sparklines,
     };
   }
   out.sheet = snap;
@@ -301,6 +305,7 @@ function restore(book: Workbook, snap: BookSnapshot): void {
     sheet.notes = s.meta.notes;
     sheet.protection = s.meta.protection;
     sheet.charts = s.meta.charts;
+    sheet.sparklines = s.meta.sparklines;
   }
 }
 
@@ -410,6 +415,23 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'insertSparklines': {
+      const r = op.range;
+      if (r.c1 + 1 >= MAX_COLUMNS || r.r1 - r.r0 > 10000) return { ranges: [] };
+      const sheetName = quoteSheet(sheet.name);
+      // Cells that will hold one lose any they had (a cell has one sparkline).
+      const at = r.c1 + 1;
+      const sparklines = Array.from({ length: r.r1 - r.r0 + 1 }, (_, i) => ({ row: r.r0 + i, col: at, ref: `${sheetName}!${rangeName({ r0: r.r0 + i, c0: r.c0, r1: r.r0 + i, c1: r.c1 })}` }));
+      const taken = new Set(sparklines.map((s) => `${s.row}:${s.col}`));
+      sheet.sparklines = [...sheet.sparklines.map((g) => ({ ...g, sparklines: g.sparklines.filter((s) => !taken.has(`${s.row}:${s.col}`)) })).filter((g) => g.sparklines.length), newSparklineGroup(op.sparkline, sparklines)];
+      return { ranges: [{ r0: r.r0, c0: at, r1: r.r1, c1: at }] };
+    }
+    case 'clearSparklines': {
+      const r = op.range;
+      const inside = (s: { row: number; col: number }) => s.row >= r.r0 && s.row <= r.r1 && s.col >= r.c0 && s.col <= r.c1;
+      sheet.sparklines = sheet.sparklines.map((g) => ({ ...g, sparklines: g.sparklines.filter((s) => !inside(s)) })).filter((g) => g.sparklines.length);
+      return { ranges: [r] };
+    }
     case 'insertChart': {
       const r = op.range;
       const block = r.r0 === r.r1 && r.c0 === r.c1 ? currentRegion(sheet.grid, r.r0, r.c0) : r;

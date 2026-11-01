@@ -247,6 +247,29 @@ for (const name of ['sparklines.xlsx', 'sparklines-excel.xlsx']) {
   });
 }
 
+test('Insert › Sparklines puts one per row after the block; a sheet with none gets the extension; Clear takes them away', async () => {
+  const book = new Workbook();
+  const sheet = new Worksheet('Data', 1);
+  book.sheets.push(sheet);
+  const history = new History(book);
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['1', '3', '2'], ['4', '1', '5']] });
+  history.apply(0, { kind: 'insertSparklines', sparkline: 'column', range: { r0: 0, c0: 0, r1: 1, c1: 2 } });
+  assert.deepEqual(sheet.sparklines[0].sparklines, [
+    { row: 0, col: 3, ref: 'Data!A1:C1' },
+    { row: 1, col: 3, ref: 'Data!A2:C2' },
+  ]);
+  let back = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+  assert.deepEqual(back.sparklines.map((g) => [g.kind, g.sparklines.length]), [['column', 2]]);
+  // Line sparklines in the same cells take their place.
+  history.apply(0, { kind: 'insertSparklines', sparkline: 'line', range: { r0: 0, c0: 0, r1: 1, c1: 2 } });
+  assert.deepEqual(sheet.sparklines.map((g) => [g.kind, g.sparklines.length]), [['line', 2]]);
+  history.apply(0, { kind: 'clearSparklines', range: { r0: 0, c0: 3, r1: 0, c1: 3 } });
+  back = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+  assert.deepEqual(back.sparklines.map((g) => g.sparklines.map((s) => s.row)), [[1]]);
+  history.undo();
+  assert.equal(sheet.sparklines[0].sparklines.length, 2);
+});
+
 test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {
   assert.deepEqual(niceScale(0, 21, 5), { min: 0, max: 25, step: 5 });
   assert.deepEqual(niceScale(0, 0.87, 5), { min: 0, max: 1, step: 0.2 });

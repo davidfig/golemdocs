@@ -402,7 +402,17 @@ sheet a drawing part and `<drawing>` when it had none (`Worksheet.drawingRId`). 
 kind, several at once, and Excel's charts changed, deleted and added to (`charts-made`, `charts-edited`, and `charts-in-place`, a styled chart changed, in `check.ts`).
 Overlapping charts are drawn one after another, each whole.
 
-**Next in M6**: resizing a chart by its handles, and editing its series; sparklines; pivot tables; what-if tools (Goal
+A picked chart's corner handles resize it (`chartResize`: a dashed outline shows where it will be, and on release its
+corners move there; a chart anchored by a corner and a size has its `<xdr:ext>` written). Select Data (the chart's menu,
+`chartDataDialog.ts`; the scene carries the chart's data as the dialog shows it) gives the chart's series (a name typed or
+`=` a reference to its cell, the values' reference) and its categories; the `chart` edit's `data` (`withData`, `chartRef`:
+a reference typed without a sheet is the chart's sheet's; one that is not a range of cells is refused) keeps the existing
+series' looks by place. In the part, `syncChart` makes the series match (`setSeries`): extra ones go, a new one is a copy
+of the last without its colour (the next one Excel gives), and each names its name (`c:v` for a typed one), categories
+and values; a reference that changes drops its cached values. Excel opens Excel's charts changed this way and names the
+series from their cells (`charts-data` in `check.ts`).
+
+**Next in M6**: sparklines; pivot tables; what-if tools (Goal
 Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)

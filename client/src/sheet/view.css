@@ -256,6 +256,26 @@
   -webkit-text-security: disc;
 }
 
+/* Select Data (chartDataDialog.ts): a row per series, its name and values side by side, a button to take it away. */
+.wm-dialog.wm-sheet-data {
+  width: min(520px, calc(100vw - 8px));
+}
+
+.wm-sheet-data-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.wm-sheet-data-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 24px;
+  gap: 6px;
+  align-items: center;
+}
+
 /* The card for typing a note takes the pointer, unlike the one that only shows it. */
 .wm-comment.wm-sheet-note.wm-sheet-note-edit {
   pointer-events: auto;

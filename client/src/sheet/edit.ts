@@ -3,7 +3,7 @@
 // so undo and redo each put one back. Formulas typed here are kept as text until the engine (M3) calculates them; references
 // in other formulas are moved by the engine too when rows and columns move.
 
-import { changeKind, newChart } from './charts/make.ts';
+import { changeKind, newChart, withData } from './charts/make.ts';
 import { Column, Kind, MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
 import type { ColumnState, FormulaRun, Grid } from './model/column.ts';
 import { Sizes } from './model/sizes.ts';
@@ -427,6 +427,11 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       const chart = { ...next.chart };
       if (change.title !== undefined) chart.title = change.title;
       if (change.legend !== undefined) chart.legend = change.legend;
+      if (change.data) {
+        const groups = withData(chart, change.data, sheet.name);
+        if (!groups) return { ranges: [], message: 'badChartData' };
+        chart.groups = groups;
+      }
       next = { ...next, chart, anchor: change.anchor ?? next.anchor };
       sheet.charts = sheet.charts.map((x, i) => (i === op.index ? next : x));
       return { ranges: [] };

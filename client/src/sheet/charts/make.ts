@@ -83,6 +83,53 @@ export function newChart(book: Workbook, sheet: Worksheet, block: CellRange, kin
   return { anchor: { from: { row: r0, col, dx: 0, dy: 0 }, to: { row: r0 + 15, col: col + 8, dx: 0, dy: 0 } }, chart, part: '', rId: '', drawingPart: '', generate: true };
 }
 
+/** A reference as typed (`=Sales!$B$2:$B$7`, `B2:B7`): with its sheet, or null when it is not a range of cells. */
+export function chartRef(text: string, sheet: string): string | null {
+  const t = text.trim().replace(/^=/, '');
+  if (!t) return null;
+  const bang = t.lastIndexOf('!');
+  const where = bang < 0 ? quoteSheet(sheet) : t.slice(0, bang);
+  const cells = bang < 0 ? t : t.slice(bang + 1);
+  if (!/^\$?[A-Za-z]{1,3}\$?\d+(:\$?[A-Za-z]{1,3}\$?\d+)?$/.test(cells)) return null;
+  if (bang >= 0 && !/^('([^']|'')+'|[A-Za-z_][\w.]*)$/.test(where)) return null;
+  return `${where}!${cells.toUpperCase()}`;
+}
+
+/** A chart's series as Select Data gave them (the chart's existing series keep their looks by place), or null when a
+ * reference is not a range of cells. */
+export function withData(chart: Chart, data: { series: { name: string; values: string }[]; categories: string }, sheet: string): ChartGroup[] | null {
+  const all = chart.groups.flatMap((g) => g.series);
+  const catRef = data.categories.trim() ? chartRef(data.categories, sheet) : null;
+  if (data.categories.trim() && !catRef) return null;
+  const scatter = chart.groups[0].kind === 'scatter';
+  const series: ChartSeries[] = [];
+  for (const [i, s] of data.series.entries()) {
+    const valRef = chartRef(s.values, sheet);
+    if (!valRef) return null;
+    const named = s.name.trim().startsWith('=');
+    const nameRef = named ? chartRef(s.name, sheet) : null;
+    if (named && !nameRef) return null;
+    const old = all[i];
+    series.push({
+      name: named ? (old?.name ?? `Series${i + 1}`) : s.name.trim() || `Series${i + 1}`,
+      nameRef,
+      catRef: scatter ? null : catRef,
+      cats: [],
+      valRef,
+      vals: [],
+      xRef: scatter ? catRef : null,
+      xs: [],
+      color: old?.color ?? null,
+      pointColors: old?.pointColors ?? {},
+      line: old?.line ?? chart.groups[0].kind !== 'scatter',
+      markers: old?.markers ?? chart.groups[0].kind === 'scatter',
+    });
+  }
+  if (!series.length) return null;
+  // Every series goes into the first group (a combination chart becomes one kind).
+  return [{ ...chart.groups[0], series }];
+}
+
 /** A chart turned into another kind: its series kept, its grouping and colours as the new kind has them. */
 export function changeKind(c: SheetChart, kind: NewChartKind): SheetChart {
   const g = groupKind(kind);

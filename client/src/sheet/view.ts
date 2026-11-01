@@ -27,6 +27,7 @@ import { FilterCard } from './filterCard.ts';
 import { NoteCard, NoteEditor } from './noteCard.ts';
 import { askSheetPassword } from './protectDialog.ts';
 import { ChartTitleCard } from './chartTitleCard.ts';
+import { askChartData } from './chartDataDialog.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -623,9 +624,20 @@ export class SheetEditorView {
       { label: t('sheet.chart.type'), items: kinds },
       { label: t('sheet.chart.legend'), items: legends },
       { label: t('sheet.chart.editTitle'), run: () => void this.editChartTitle(index) },
+      { label: t('sheet.chart.data'), run: () => void this.editChartData(index) },
       'separator',
       { label: t('sheet.chart.delete'), run: change({ remove: true }) },
     ];
+  }
+
+  /** Select Data: the chart's series and categories in a dialog. */
+  private async editChartData(index: number): Promise<void> {
+    const scene = this.chartScenes()[index];
+    if (!scene || this.readOnly) return;
+    const data = await askChartData(scene.data);
+    this.afterCard();
+    if (!data || JSON.stringify(data) === JSON.stringify(scene.data)) return;
+    void this.edit({ kind: 'chart', index, change: { data } });
   }
 
   /** The title card, beside the chart's top. */
@@ -1941,6 +1953,8 @@ function messageFor(code: string): string {
       return t('sheet.sheetProtected');
     case 'noChartData':
       return t('sheet.noChartData');
+    case 'badChartData':
+      return t('sheet.chart.badData');
     case 'wrongPassword':
       return t('sheet.wrongPassword');
   }

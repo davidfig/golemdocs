@@ -494,5 +494,11 @@ export function chartScene(book: Workbook, engine: Engine, sheetIndex: number, s
     }),
   );
   const laid = layoutChart(c.chart, series, box.width, box.height, accents);
-  return { id, ...box, ...laid, title: c.chart.title };
+  const all = c.chart.groups.flatMap((g) => g.series);
+  const first = all[0];
+  const data = {
+    series: all.map((s) => ({ name: s.nameRef ? `=${s.nameRef}` : s.name, values: s.valRef ? `=${s.valRef}` : '' })),
+    categories: first?.catRef ? `=${first.catRef}` : first?.xRef ? `=${first.xRef}` : '',
+  };
+  return { id, ...box, ...laid, title: c.chart.title, data };
 }

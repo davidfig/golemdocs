@@ -3,7 +3,7 @@
 // else in the parts kept as it was. A chart made here (`generate`) has its part written whole from the model (`chartXml`). A new chart gets a chart part and an anchor, and the sheet a
 // drawing part if it had none; a chart taken away takes its anchor, part and relationship with it.
 
-import { el, elements, serializeXml } from '@golemdocs/docx';
+import { el, elements, serializeXml, textContent } from '@golemdocs/docx';
 import type { OpcPackage, XmlElement } from '@golemdocs/docx';
 import type { Worksheet } from '../model/worksheet.ts';
 import { EMU_PER_POINT, kid, kids, local } from './model.ts';
@@ -204,8 +204,12 @@ export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Wor
         const s = c.chart.groups[gi]?.series[si];
         if (!s) return;
         const setRef = (holder: XmlElement | undefined, to: string | null) => {
-          const f = kid(kid(holder, 'numRef') ?? kid(holder, 'strRef') ?? kid(holder, 'multiLvlStrRef'), 'f');
-          if (f && to !== null) f.children = [to];
+          const ref = kid(holder, 'numRef') ?? kid(holder, 'strRef') ?? kid(holder, 'multiLvlStrRef');
+          const f = kid(ref, 'f');
+          if (!f || to === null || textContent(f) === to) return;
+          f.children = [to];
+          // The cached values were the old cells': Excel reads the new ones.
+          ref!.children = ref!.children.filter((k) => typeof k === 'string' || !/Cache$/.test(local(k)));
         };
         setRef(kid(ser, 'tx'), s.nameRef);
         setRef(kid(ser, 'cat') ?? kid(ser, 'xVal'), s.catRef ?? s.xRef);

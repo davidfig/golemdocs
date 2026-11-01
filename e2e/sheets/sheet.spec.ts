@@ -248,6 +248,18 @@ test('a workbook’s charts are drawn over its cells, and follow their data', as
   await page.keyboard.type('90');
   await page.keyboard.press('Enter');
   await expect.poll(async () => (await charts())[0]).toContain('100');
+  // Select Data, from the chart's menu: the West series taken away.
+  const first = ((await state(page)) as unknown as { chartBoxes: number[][] }).chartBoxes[0];
+  const middle = await page.evaluate(([x, y]) => (window as unknown as { sheetEditor: { screenOf(x: number, y: number): { x: number; y: number } } }).sheetEditor.screenOf(x, y), [first[0] + first[2] / 2, first[1] + first[3] / 2] as const);
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.click(box.x + middle.x, box.y + middle.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Select Data' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Select Data' });
+  await expect(dialog.getByRole('textbox', { name: 'Values' }).first()).toHaveValue('=Sales!$B$2:$B$7');
+  await dialog.getByRole('button', { name: 'Remove Series' }).nth(2).click();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect.poll(async () => (await charts())[0]).not.toContain('West');
+  expect((await charts())[0]).toContain('South');
 });
 
 test('Insert › Chart makes a chart beside the data; it is picked, changed from its menu, dragged and deleted', async ({ app, page }) => {

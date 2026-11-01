@@ -105,6 +105,8 @@ export interface ChartScene {
   texts: ChartText[];
   /** The chart's title, as its model has it. */
   title: string | null;
+  /** Its series and categories as Select Data shows them. */
+  data: ChartData;
 }
 
 export interface CellTile {
@@ -178,6 +180,14 @@ export interface ChartChange {
   legend?: 'r' | 'l' | 't' | 'b' | null;
   anchor?: ChartAnchor;
   remove?: true;
+  /** Select Data: the series in order (a name typed, or `=` and a reference to it; values a reference), and the categories. */
+  data?: ChartData;
+}
+
+/** A chart's data as Select Data shows and changes it. */
+export interface ChartData {
+  series: { name: string; values: string }[];
+  categories: string;
 }
 
 export interface CellContent {

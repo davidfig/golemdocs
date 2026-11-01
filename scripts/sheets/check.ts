@@ -161,6 +161,15 @@ restyledHistory.apply(0, { kind: 'chart', index: 0, change: { kind: 'line', titl
 restyledHistory.apply(0, { kind: 'chart', index: 3, change: { kind: 'column', legend: null } });
 restyledHistory.apply(0, { kind: 'chart', index: 2, change: { kind: 'scatter' } });
 books.set('charts-in-place.xlsx', restyled);
+// Select Data on Excel's charts: series renamed, one typed, one added, one taken away; categories changed.
+const redata = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/charts-excel.xlsx')));
+new History(redata).apply(0, {
+  kind: 'chart',
+  index: 0,
+  change: { data: { series: [{ name: '=Sales!$D$1', values: '=Sales!$D$2:$D$7' }, { name: 'Typed name', values: 'B2:B7' }, { name: '=Sales!$C$1', values: 'C3:C7' }], categories: 'A3:A7' } },
+});
+new History(redata).apply(0, { kind: 'chart', index: 3, change: { data: { series: [{ name: 'Only', values: 'D2:D7' }], categories: '' } } });
+books.set('charts-data.xlsx', redata);
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);

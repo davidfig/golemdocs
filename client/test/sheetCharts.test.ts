@@ -179,6 +179,41 @@ test('a chart read from a file is changed in place: its title, legend and kind, 
   assert.match(serializeXml(root), /<c:catAx>.*<c:valAx>/s);
 });
 
+test('Select Data: series named, added and taken away, categories changed, in the model and in Excel’s part', async () => {
+  const { book, sheet } = await open('charts-excel.xlsx');
+  const history = new History(book);
+  const data = {
+    series: [
+      { name: '=Sales!$D$1', values: '=Sales!$D$2:$D$7' },
+      { name: 'Typed name', values: 'B2:B7' },
+    ],
+    categories: '=Sales!$A$2:$A$7',
+  };
+  history.apply(0, { kind: 'chart', index: 0, change: { data } });
+  assert.deepEqual(sheet.charts[0].chart.groups[0].series.map((s) => [s.name, s.nameRef, s.valRef, s.catRef]), [
+    ['North', 'Sales!$D$1', 'Sales!$D$2:$D$7', 'Sales!$A$2:$A$7'],
+    ['Typed name', null, 'Sales!B2:B7', 'Sales!$A$2:$A$7'],
+  ]);
+  assert.equal(history.apply(0, { kind: 'chart', index: 0, change: { data: { ...data, categories: 'not cells' } } }).message, 'badChartData');
+  // A third series, added: it gets a part of the series list in the file.
+  history.apply(0, { kind: 'chart', index: 0, change: { data: { ...data, series: [...data.series, { name: '=Sales!$C$1', values: '=Sales!$C$2:$C$7' }] } } });
+  const written = await readWorkbook(await writeWorkbook(book));
+  const back = (written.sheets[0] as Worksheet).charts[0].chart.groups[0].series;
+  assert.deepEqual(back.map((s) => [s.nameRef, s.valRef]), [
+    ['Sales!$D$1', 'Sales!$D$2:$D$7'],
+    [null, 'Sales!B2:B7'],
+    ['Sales!$C$1', 'Sales!$C$2:$C$7'],
+  ]);
+  // The legend names them from their cells (a reference's name is read from the cell, not a cache).
+  const engine = new Engine(written);
+  engine.recalculateAll();
+  const legend = chartScene(written, engine, 0, written.sheets[0] as Worksheet, (written.sheets[0] as Worksheet).charts[0], 'x').texts.map((t) => t.text);
+  assert.ok(['West', 'Typed name', 'South'].every((n) => legend.includes(n)));
+  const xml = await written.source!.pkg.text('xl/charts/chart1.xml');
+  assert.equal(xml.match(/<c:ser>/g)?.length, 3);
+  assert.match(xml, /<c:tx><c:v>Typed name<\/c:v><\/c:tx>/);
+});
+
 test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {
   assert.deepEqual(niceScale(0, 21, 5), { min: 0, max: 25, step: 5 });
   assert.deepEqual(niceScale(0, 0.87, 5), { min: 0, max: 1, step: 0.2 });

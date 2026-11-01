@@ -3,7 +3,7 @@
 // formatting. Run on every save, it compares the part as the reader sees it with the model, so it only changes what an
 // edit here changed, and it is right again after an undo whatever was saved in between.
 
-import { el, elements, parseXml } from '@golemdocs/docx';
+import { el, elements, parseXml, serializeXml, textContent } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import { kid, kids, local, readChart } from './model.ts';
 import type { Chart, ChartGroup } from './model.ts';
@@ -168,6 +168,62 @@ function setKind(plot: XmlElement, model: ChartGroup, was: ChartGroup['kind']): 
   plot.children.splice(Math.min(at, plot.children.length), 0, group);
 }
 
+/** A data source element (`c:tx`, `c:cat`, `c:val`...) made to name `ref`: kept when it already does; its cached values
+ * dropped when its reference changes (they were the old cells'). */
+function sourceFor(old: XmlElement | undefined, name: string, kind: 'str' | 'num', ref: string): XmlElement {
+  const holder = kid(old, 'numRef') ?? kid(old, 'strRef') ?? kid(old, 'multiLvlStrRef');
+  const f = kid(holder, 'f');
+  if (old && f && textContent(f) === ref) return old;
+  return fragment(`<c:${name}><c:${kind}Ref><c:f>${escape(ref)}</c:f></c:${kind}Ref></c:${name}>`)[0];
+}
+
+const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** The plot's series made the model's: as many, each naming its name, categories and values. True when anything changed. */
+function setSeries(plot: XmlElement, model: ChartGroup): boolean {
+  const group = [...elements(plot)].find((g) => kids(g, 'ser').length || Object.values(GROUP_NAME).includes(local(g)));
+  if (!group) return false;
+  const before = serializeXml(group);
+  let sers = kids(group, 'ser');
+  for (const extra of sers.slice(model.series.length)) remove(group, extra);
+  sers = sers.slice(0, model.series.length);
+  // New series: like the last, but with their own place and colour (the next one Excel gives, with no colour of their own).
+  const last = sers[sers.length - 1];
+  let next = Math.max(-1, ...sers.map((s) => +(kid(s, 'idx')?.attrs.val ?? 0))) + 1;
+  while (sers.length < model.series.length) {
+    const made = last ? structuredClone(last) : fragment('<c:ser><c:idx val="0"/><c:order val="0"/></c:ser>')[0];
+    made.children = made.children.filter((k) => typeof k === 'string' || !['spPr', 'dPt', 'extLst'].includes(local(k)));
+    for (const name of ['idx', 'order']) {
+      const k = kid(made, name);
+      if (k) k.attrs.val = String(next);
+    }
+    next++;
+    const at = group.children.indexOf(sers[sers.length - 1] ?? group.children.find((k) => typeof k !== 'string' && ['dLbls', 'gapWidth', 'overlap', 'marker', 'axId', 'firstSliceAng', 'holeSize'].includes(local(k)))!);
+    group.children.splice(at < 0 ? group.children.length : at + (sers.length ? 1 : 0), 0, made);
+    sers.push(made);
+  }
+  const scatter = local(group) === 'scatterChart';
+  const order = SERIES[(Object.entries(GROUP_NAME).find(([, n]) => n === local(group))?.[0] as ChartGroup['kind']) ?? 'bar'];
+  sers.forEach((ser, i) => {
+    const s = model.series[i];
+    const put = (name: string, element: XmlElement | null) => {
+      const old = kid(ser, name);
+      if (element === old) return;
+      ser.children = ser.children.filter((k) => k !== old);
+      if (element) ser.children.push(element);
+    };
+    const tx = kid(ser, 'tx');
+    put('tx', s.nameRef ? sourceFor(tx, 'tx', 'str', s.nameRef) : kid(tx, 'v') && textContent(kid(tx, 'v')!) === s.name ? (tx ?? null) : fragment(`<c:tx><c:v>${escape(s.name)}</c:v></c:tx>`)[0]);
+    const catRef = scatter ? s.xRef : s.catRef;
+    put(scatter ? 'xVal' : 'cat', catRef ? sourceFor(kid(ser, scatter ? 'xVal' : 'cat'), scatter ? 'xVal' : 'cat', scatter ? 'num' : 'str', catRef) : null);
+    if (s.valRef) put(scatter ? 'yVal' : 'val', sourceFor(kid(ser, scatter ? 'yVal' : 'val'), scatter ? 'yVal' : 'val', 'num', s.valRef));
+    // In the schema's order (what the kind does not list, such as extLst, last).
+    const rank = (k: XmlElement) => (order.includes(local(k)) ? order.indexOf(local(k)) : order.length);
+    ser.children = ser.children.filter((k): k is XmlElement => typeof k !== 'string').sort((a, b) => rank(a) - rank(b));
+  });
+  return serializeXml(group) !== before;
+}
+
 /** Brings a chart part (its chartSpace) in line with the model; true when it changed anything. */
 export function syncChart(root: XmlElement, model: Chart, theme: number[]): boolean {
   const now = readChart(root, theme);
@@ -189,5 +245,6 @@ export function syncChart(root: XmlElement, model: Chart, theme: number[]): bool
     setLegend(chart, model.legend);
     changed = true;
   }
+  if (setSeries(plot, g)) changed = true;
   return changed;
 }

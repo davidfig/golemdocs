@@ -7,6 +7,7 @@ import type { AutoFilter } from '../filter.ts';
 import type { Table } from '../tables.ts';
 import type { Validation } from '../validation.ts';
 import type { Note, NoteParts } from '../notes.ts';
+import type { SheetProtection } from '../protection.ts';
 import { Grid, MAX_COLUMNS, MAX_ROWS } from './column.ts';
 import { Sizes } from './sizes.ts';
 
@@ -56,6 +57,8 @@ export class Worksheet {
   /** Notes (Excel's comments), and the parts they are kept in. */
   notes: Note[] = [];
   noteParts: NoteParts | null = null;
+  /** Protect Sheet: `<sheetProtection>`'s attributes (protection.ts), or null. */
+  protection: SheetProtection | null = null;
   /** For the next write only: the sheet's `<legacyDrawing>` (the notes' VML drawing) made (its relationship) or taken
    * away (null), when the writer added or removed the notes' parts. */
   legacyDrawing: string | null | undefined = undefined;

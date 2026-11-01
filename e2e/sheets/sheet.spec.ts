@@ -275,6 +275,44 @@ test('Sheet › New Note types a note into a card beside the cell; Delete Note t
   expect(comments?.bytes.toString('utf8')).toContain('Looked up');
 });
 
+test('Protect Sheet with a password keeps locked cells from being typed into until Unprotect Sheet', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await app.menu('Sheet', 'Protection', 'Unlock Cells');
+  await app.menu('Sheet', 'Protection', 'Protect Sheet');
+  const dialog = page.getByRole('dialog', { name: 'Protect Sheet' });
+  await dialog.getByRole('textbox', { name: 'Password', exact: true }).fill('pw');
+  await dialog.getByRole('textbox', { name: 'Password again' }).fill('pw');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  const protection = async () => (await state(page)) as unknown as { protection: { password: boolean } | null; locked: boolean };
+  await expect.poll(async () => (await protection()).protection).toEqual({ password: true });
+  // A locked cell says no; the unlocked one takes what is typed.
+  await clickCell(page, 1, 4);
+  await expect.poll(async () => (await protection()).locked).toBe(true);
+  await page.keyboard.type('7');
+  await expect(page.getByText('This sheet is protected.').first()).toBeVisible();
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('8');
+  await page.keyboard.press('Enter');
+  await clickCell(page, 1, 5);
+  await expect.poll(async () => (await state(page)).content.input).toBe('8');
+  // Unprotecting asks for the password; a wrong one is turned away.
+  await app.menu('Sheet', 'Protection', 'Unprotect Sheet');
+  const unprotect = page.getByRole('dialog', { name: 'Unprotect Sheet' });
+  await unprotect.getByRole('textbox', { name: 'Password' }).fill('nope');
+  await unprotect.getByRole('button', { name: 'OK' }).click();
+  await expect(page.getByText('That password isn’t right.').first()).toBeVisible();
+  await app.menu('Sheet', 'Protection', 'Unprotect Sheet');
+  await unprotect.getByRole('textbox', { name: 'Password' }).fill('pw');
+  await unprotect.getByRole('button', { name: 'OK' }).click();
+  await clickCell(page, 1, 4);
+  await page.keyboard.type('7');
+  await page.keyboard.press('Enter');
+  await clickCell(page, 1, 4);
+  await expect.poll(async () => (await state(page)).content.input).toBe('7');
+});
+
 test('copying and pasting cells in a workbook moves their formulas; Paste Values pastes only values', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 1, 5);

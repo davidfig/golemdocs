@@ -25,6 +25,7 @@ import type { Hit } from './geometry.ts';
 import { FILL_HANDLE, SheetRenderer, choicesButton, filterButton } from './renderer.ts';
 import { FilterCard } from './filterCard.ts';
 import { NoteCard, NoteEditor } from './noteCard.ts';
+import { askSheetPassword } from './protectDialog.ts';
 import { parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
 import type { BookInfo, CellContent, Changed, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
@@ -114,6 +115,8 @@ export class SheetEditorView {
   private ranges: CellRange[] = [single(0, 0)];
   /** The cell's contents, for the formula bar (and editing). */
   private content: CellContent = { input: '', display: '', isFormula: false };
+  /** The cell `content` is of (sheet:row:col): it comes a moment after the active cell changes. */
+  private contentOf = '';
   /** The cell being edited, how editing began (typing over it, or F2 / a double click to change it), and its text. */
   private editing: { row: number; col: number; mode: 'enter' | 'edit' } | null = null;
   private copied: CellRange | null = null;
@@ -447,7 +450,10 @@ export class SheetEditorView {
     const reply = await this.ask<Extract<FromWorker, { t: 'cell' }>>({ t: 'cell', id: this.id(), sheet: this.sheetIndex, row: at.row, col: at.col }).catch(() => null);
     if (!reply || at.row !== this.active.row || at.col !== this.active.col) return;
     this.content = reply.content;
+    this.contentOf = `${this.sheetIndex}:${at.row}:${at.col}`;
     if (!this.editing) this.formulaInput.value = reply.content.input;
+    // A locked cell of a protected sheet can't be typed into from the formula bar either.
+    this.formulaInput.readOnly = !!reply.content.locked;
     const sel = this.selection;
     this.nameBox.value = sel.r0 === sel.r1 && sel.c0 === sel.c1 ? `${columnName(at.col)}${at.row + 1}` : rangeName(sel);
   }
@@ -456,6 +462,8 @@ export class SheetEditorView {
 
   private startEdit(mode: 'enter' | 'edit', text: string | null): void {
     if (this.readOnly || !this.book) return;
+    // A locked cell of a protected sheet is not typed into (the worker refuses the edit too, if the content was late).
+    if (this.content.locked && this.contentOf === `${this.sheetIndex}:${this.active.row}:${this.active.col}`) return this.deps.notify(t('sheet.sheetProtected'));
     this.editing = { ...this.active, mode };
     const value = text ?? this.content.input;
     this.cellEditor.value = value;
@@ -521,6 +529,8 @@ export class SheetEditorView {
     try {
       const reply = await this.ask<Extract<FromWorker, { t: 'changed' }>>({ t: 'edit', id: this.id(), sheet: this.sheetIndex, op });
       this.applyChanged(reply.changed);
+      // An edit that changed no cells (frozen panes, protection) still changed the workbook: it is saved.
+      if (!reply.changed.ranges.length && !reply.changed.message && op.kind !== 'activeSheet') this.onEdit?.();
       return reply.changed;
     } catch (err) {
       this.deps.notify((err as Error).message);
@@ -1093,6 +1103,29 @@ export class SheetEditorView {
     }
   }
 
+  /**
+   * Back to the sheet after a card or dialog over it. Closing a modal dialog hands the focus back to what had it before,
+   * which can be the formula bar, whose focus starts an edit: an edit nothing was typed into is dropped. And Chrome can
+   * give the focus back without the caret (keys then type nothing), so the focus is taken away and given again.
+   */
+  private afterCard(): void {
+    if (this.editing && this.formulaInput.value === this.content.input) this.commitEdit(false);
+    (document.activeElement as HTMLElement | null)?.blur();
+    this.focus();
+  }
+
+  /** Sheet › Protect Sheet or Unprotect Sheet: the password asked for (protecting, or a sheet that has one). */
+  private async protectSheet(on: boolean): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const sheet = this.sheetIndex;
+    const isOn = !!this.info.protection;
+    if (on === isOn) return this.deps.notify(t(on ? 'sheet.alreadyProtected' : 'sheet.notProtected'));
+    const password = on || this.info.protection?.password ? await askSheetPassword(on ? 'protect' : 'unprotect') : '';
+    this.afterCard();
+    if (password === null || sheet !== this.sheetIndex) return;
+    void this.edit({ kind: 'protect', on, password });
+  }
+
   /** Sheet › New Note: a card beside the active cell to type its note in (the note it has, to change). */
   private async editNote(): Promise<void> {
     if (this.readOnly || !this.info) return;
@@ -1107,7 +1140,7 @@ export class SheetEditorView {
     this.noteEditor ??= new NoteEditor();
     const author = reply?.note?.author ?? this.deps.author();
     const text = await this.noteEditor.edit(author, reply?.note?.text ?? '', at.x, at.y);
-    this.focus();
+    this.afterCard();
     if (text === undefined || sheet !== this.sheetIndex || (!reply?.note && !text.trim()) || text === reply?.note?.text) return;
     void this.edit({ kind: 'note', row, col, text, author });
   }
@@ -1424,6 +1457,14 @@ export class SheetEditorView {
       case 'ungroupColumns':
         void this.edit({ kind: 'group', axis: 'col', from: sel.c0, to: sel.c1, by: op === 'groupColumns' ? 1 : -1 });
         return;
+      case 'protectSheet':
+      case 'unprotectSheet':
+        void this.protectSheet(op === 'protectSheet');
+        return;
+      case 'lockCells':
+      case 'unlockCells':
+        void this.edit({ kind: 'format', ranges: this.ranges, change: { locked: op === 'lockCells' } });
+        return;
       case 'newNote':
         void this.editNote();
         return;
@@ -1613,7 +1654,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, outline: this.info?.outline ?? null, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */
@@ -1665,6 +1706,10 @@ function messageFor(code: string): string {
       return t('sheet.invalidValue');
     case 'tableOverlap':
       return t('sheet.tableOverlap');
+    case 'sheetProtected':
+      return t('sheet.sheetProtected');
+    case 'wrongPassword':
+      return t('sheet.wrongPassword');
   }
   return code;
 }

@@ -14,6 +14,7 @@
 - Tables in workbooks show in their styles, and formulas can use structured references such as Sales[Amount] and [@Price].
 - Cells with a drop-down list of choices in a workbook show an arrow to pick from (or Alt+Down), and a value a cell's rules don't allow is turned away with the rule's message.
 - Notes in workbooks show as a red mark in the cell's corner, and rest the pointer on the cell to read them; they stay with their cells as rows and columns are inserted and deleted.
+- Sheet › Protection protects a workbook sheet, with a password if you like: its locked cells can't be changed until Unprotect Sheet, and Lock Cells and Unlock Cells choose which cells stay open. Sheets protected in Excel stay protected, and their passwords work in both.
 - Sheet › New Note adds a note to a workbook cell (or changes the one it has) in a card beside the cell, and Sheet › Delete Note takes it away.
 - Cells copied within a workbook paste with their formulas and formatting, and Sheet › Paste Special pastes only values, formulas or formatting, or rows and columns swapped.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales and data bars, recalculated as the values change.

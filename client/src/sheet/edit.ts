@@ -20,6 +20,7 @@ import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
 import { newTable } from './tables.ts';
 import { newNote, withText } from './notes.ts';
+import { passwordOpens, protect, refuses } from './protection.ts';
 import { displayText, editText } from './format/display.ts';
 import type { Edges, StyleChange } from './format/styleChange.ts';
 import { parseInput } from './input.ts';
@@ -49,6 +50,7 @@ interface SheetSnapshot {
     tables: Worksheet['tables'];
     validations: Worksheet['validations'];
     notes: Worksheet['notes'];
+    protection: Worksheet['protection'];
   };
   /** The whole column list (structure moved: columns inserted or deleted). */
   columnList?: (Column | undefined)[];
@@ -222,7 +224,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -237,6 +239,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
       tables: sheet.tables,
       validations: sheet.validations,
       notes: sheet.notes,
+      protection: sheet.protection,
     };
   }
   out.sheet = snap;
@@ -289,12 +292,14 @@ function restore(book: Workbook, snap: BookSnapshot): void {
     sheet.tables = s.meta.tables;
     sheet.validations = s.meta.validations;
     sheet.notes = s.meta.notes;
+    sheet.protection = s.meta.protection;
   }
 }
 
 /** Applies an edit (no undo: History.apply records it). */
 export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
   const sheet = book.sheets[index];
+  if (sheet && isWorksheet(sheet) && refuses(book, sheet, op)) return { ranges: [], message: 'sheetProtected' };
   switch (op.kind) {
     case 'addSheet':
       return addSheet(book, op.at, op.name);
@@ -388,6 +393,11 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'protect':
+      if (op.on) sheet.protection = protect(op.password);
+      else if (sheet.protection && !passwordOpens(sheet.protection, op.password)) return { ranges: [], message: 'wrongPassword' };
+      else sheet.protection = null;
+      return { ranges: [] };
     case 'note':
       return noteEdit(sheet, op);
     case 'group':

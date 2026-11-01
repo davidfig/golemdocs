@@ -422,6 +422,25 @@ comments.
 (the `pasteCells` edit: values, formulas moved as copied, looks), even onto another sheet; Sheet › Paste Special pastes
 only values, formulas or formats, or transposed. Text from elsewhere is pasted as typed (the `paste` edit).
 
+**Protection** (`protection.ts`): `<sheetProtection>`'s attributes are the model's `Worksheet.protection` (read and written
+as they are; kept in the image). On a protected sheet `applyEdit` refuses (`refuses`, message `sheetProtected`) what
+touches a locked cell (every style is locked unless its `<protection locked="0">` says not; empty cells take their row's
+or column's style; `lockedRange` checks the rows past the data through those) and what the attributes don't allow
+(formatting cells, rows or columns, inserting and deleting, sort, the AutoFilter, notes as objects; tables, merges and
+groups never). Workbook edits (sheets added, renamed, moved) are not the sheet's to refuse. The page refuses typing into a
+locked cell at once (`CellContent.locked`, trusted only for the cell it is of) and makes the formula bar read-only there;
+a hidden cell's formula shows as its value. Sheet › Protection › Protect Sheet and Unprotect Sheet (`protect` edit,
+`protectDialog.ts`) take a password, kept as Excel keeps it: SHA-512 over the salt and the UTF-16LE password, then over
+the hash and the round number 100,000 times (`spunHash`, a hand-written `sha512`; Web Crypto's digest is async and too slow
+for 100,000 rounds). Older files' 16-bit `password` hash is checked too (`legacyHash`). Checked in Excel: it unprotects a
+sheet we protected with our password, and a password Excel set opens here. The password fields are text fields drawn as
+dots (`-webkit-text-security`), so the browser doesn't offer to save a sheet's password as a sign-in. Lock Cells and Unlock
+Cells are a `format` edit (`StyleChange.locked`).
+
+After a modal dialog over the sheet closes, `afterCard` drops an edit the formula bar started only because the focus came
+back to it, and takes the focus away and gives it back: Chrome can return the focus to the sheet's text box without its
+caret, and keys then type nothing.
+
 **Outline groups**: each row's and column's level and collapsed flag (`rowOutline`, `colOutline`, read from and written
 to `<row outlineLevel collapsed>` and `<col>`, with `sheetFormatPr`'s `outlineLevelRow`/`outlineLevelCol`, which Excel
 uses to show its gutter) go to the page in `SheetInfo.outline`. `Geometry` makes room for a gutter left of the row
@@ -435,7 +454,7 @@ A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera`
 the last document's pages arrive) leaves a workbook alone.
 
 **Next in M5**:
-protection; a table's filter buttons and calculated columns; icon sets; a formatting
+a table's filter buttons and calculated columns; icon sets; a formatting
 toolbar row for the Sheet menu's number formats and borders.
 
 ### M4: every function (2026-10-31)

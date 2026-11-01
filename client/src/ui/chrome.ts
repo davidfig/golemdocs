@@ -936,6 +936,7 @@ export class Chrome {
           cmd('sheet.insertTable'),
           cmd('sheet.newNote'),
           cmd('sheet.deleteNote'),
+          sub(t('sheet.protection'), [cmd('sheet.protectSheet'), cmd('sheet.unprotectSheet'), cmd('sheet.lockCells'), cmd('sheet.unlockCells')]),
           sub(t('sheet.group'), [cmd('sheet.groupRows'), cmd('sheet.ungroupRows'), cmd('sheet.groupColumns'), cmd('sheet.ungroupColumns')]),
           sep,
           cmd('sheet.merge'),

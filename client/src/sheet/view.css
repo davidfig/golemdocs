@@ -250,6 +250,12 @@
   display: none;
 }
 
+/* A sheet's protection password (protectDialog.ts): a text field shown as dots, so the browser doesn't offer to save it
+   as a sign-in password. */
+.wm-input.wm-sheet-password {
+  -webkit-text-security: disc;
+}
+
 /* The card for typing a note takes the pointer, unlike the one that only shows it. */
 .wm-comment.wm-sheet-note.wm-sheet-note-edit {
   pointer-events: auto;

@@ -32,6 +32,8 @@ export interface StyleChange {
   /** More or fewer decimal places in the number format. */
   decimals?: 1 | -1;
   border?: BorderChange;
+  /** Lock or unlock the cells (on a protected sheet, locked cells cannot be changed). */
+  locked?: boolean;
   /** Back to the workbook's default style. */
   clear?: true;
 }
@@ -183,6 +185,14 @@ export function restyle(styles: StyleTable, style: number, change: StyleChange, 
   if (change.numFmt !== undefined) format.numFmt = styles.formatId(change.numFmt);
   if (change.decimals) format.numFmt = styles.formatId(changeDecimals(styles.formatCode(base.numFmt), change.decimals, value));
   if (change.border) format.border = styles.internBorder(changeBorder(styles.borders[base.border] ?? {}, change.border, edges));
+  if (change.locked !== undefined) {
+    // Locked is the default: an unlocked cell says so, a locked one says nothing unless it hides its formula.
+    const protection = { ...base.protection, locked: change.locked ? undefined : false };
+    if (protection.locked === undefined) delete protection.locked;
+    if (protection.hidden === undefined) delete protection.hidden;
+    if (Object.keys(protection).length) format.protection = protection;
+    else delete format.protection;
+  }
   for (const key of Object.keys(format) as (keyof CellFormat)[]) if (format[key] === undefined) delete format[key];
   return styles.internFormat(format);
 }

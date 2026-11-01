@@ -4,6 +4,7 @@
 //
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
+import { hasPassword, hiddenFormula, isProtected, lockedCell } from './protection.ts';
 import { fingerprint } from '../image/container.ts';
 import { Kind, MAX_COLUMNS, MAX_ROWS } from './model/column.ts';
 import { isWorksheet } from './model/workbook.ts';
@@ -73,6 +74,7 @@ export function info(b: Workbook): BookInfo {
         merges: sheet.merges,
         loaded: b.source?.parts[i]?.loaded ?? true,
         outline: sheet.rowOutline.size || sheet.colOutline.size ? { rows: [...sheet.rowOutline].slice(0, 200000).map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]), cols: [...sheet.colOutline].map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]) } : undefined,
+        protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
         filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
       };
@@ -199,12 +201,15 @@ function cellContent(sheet: Worksheet, row: number, col: number): CellContent {
   const display = displayText(book!, kind, value, style, 255).text;
   const shown = kind === Kind.Empty ? (sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0) : style;
   const cellLook = look(book!.styles, book!.theme, shown);
+  const locked = isProtected(sheet.protection) && lockedCell(book!, sheet, row, col) && { locked: true };
   if (run) {
+    // A hidden cell's formula is not shown while its sheet is protected: only its value.
+    if (hiddenFormula(book!, sheet, row, col)) return { input: display, display, isFormula: false, look: cellLook, ...locked };
     const text = row === run.originRow && col === run.originCol ? run.text : shiftFormula(run.text, row - run.originRow, col - run.originCol);
-    return { input: '=' + fromFileFormula(text), display, isFormula: true, look: cellLook, ...(validationAt(sheet.validations, row, col)?.type === 'list' && { list: true }) };
+    return { input: '=' + fromFileFormula(text), display, isFormula: true, look: cellLook, ...(validationAt(sheet.validations, row, col)?.type === 'list' && { list: true }), ...locked };
   }
   const rule = validationAt(sheet.validations, row, col);
-  return { input: editText(book!, kind, value, style), display, isFormula: false, look: cellLook, ...(rule?.type === 'list' && rule.dropDown && { list: true }) };
+  return { input: editText(book!, kind, value, style), display, isFormula: false, look: cellLook, ...(rule?.type === 'list' && rule.dropDown && { list: true }), ...locked };
 }
 
 /** Where Ctrl+arrow goes from a cell: the edge of the block of filled cells it is in, or the next filled cell, or the sheet's edge. */

@@ -112,6 +112,8 @@ export interface SheetInfo {
   outline?: { rows: [number, number, boolean][]; cols: [number, number, boolean][] };
   /** Cells with notes (row, column), so resting the pointer on one shows it. */
   notes?: [number, number][];
+  /** Protect Sheet is on; `password`: unprotecting asks for one. */
+  protection?: { password: boolean };
   /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
   filter?: { range: CellRange; filtered: number[] };
 }
@@ -133,6 +135,8 @@ export interface CellContent {
   look?: CellLook;
   /** A list validation offers choices from a drop-down arrow beside it. */
   list?: boolean;
+  /** On a protected sheet: the cell is locked (it cannot be typed into). */
+  locked?: boolean;
 }
 
 /** Edits, as the page asks for them. Ranges are 0-based and inclusive. */
@@ -165,6 +169,8 @@ export type EditOp =
   | { kind: 'outlineLevel'; axis: 'row' | 'col'; level: number }
   /** Sheet › New Note or Delete Note: a cell's note given this text (made, if it had none), or taken away (null). */
   | { kind: 'note'; row: number; col: number; text: string | null; author: string }
+  /** Sheet › Protect Sheet (`on`, with a password or '') or Unprotect Sheet (its password, if it has one). */
+  | { kind: 'protect'; on: boolean; password: string }
   /** AutoFill: `target` (which holds `source` at one end) filled from `source`. */
   | { kind: 'fill'; source: CellRange; target: CellRange }
   /** A change to how the cells of ranges look (each range's own outside edges for borders). */

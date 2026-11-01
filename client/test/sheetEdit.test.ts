@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { Engine } from '../src/sheet/formula/engine.ts';
 import { BLANK } from '../src/sheet/formula/values.ts';
 import { allows, listChoices, validationAt } from '../src/sheet/validation.ts';
+import { legacyHash, passwordOpens, protect, sha512 } from '../src/sheet/protection.ts';
 
 function book(): { book: Workbook; sheet: Worksheet; history: History } {
   const b = new Workbook();
@@ -356,6 +357,48 @@ test('notes are made, changed and deleted; a sheet’s first note brings its par
   assert.doesNotMatch(await back.source!.pkg.text('xl/worksheets/sheet1.xml'), /legacyDrawing/);
   history.undo();
   assert.deepEqual(sheet.notes.map((n) => n.text), ['Checked once']);
+});
+
+test('SHA-512 as the standard has it, and Excel’s password hashes', async () => {
+  const { createHash } = await import('node:crypto');
+  for (const length of [0, 3, 111, 112, 127, 128, 129, 300]) {
+    const data = Uint8Array.from({ length }, (_, i) => (i * 31 + 7) & 0xff);
+    assert.equal(Buffer.from(sha512(data)).toString('hex'), createHash('sha512').update(data).digest('hex'), `${length} bytes`);
+  }
+  assert.equal(legacyHash('secret'), 'DAA7');
+  const p = protect('open sesame', new Uint8Array(16).fill(1));
+  assert.ok(passwordOpens(p, 'open sesame'));
+  assert.ok(!passwordOpens(p, 'open sesame!'));
+  assert.ok(passwordOpens({ sheet: '1', password: 'DAA7' }, 'secret'));
+  assert.ok(passwordOpens(protect(''), ''));
+});
+
+test('a protected sheet refuses changes to locked cells and what its protection does not allow', async () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['1', '2'], ['3', '=A1*2']] });
+  // B1 is unlocked; then the sheet is protected with a password.
+  history.apply(0, { kind: 'format', ranges: [{ r0: 0, c0: 1, r1: 0, c1: 1 }], change: { locked: false } });
+  history.apply(0, { kind: 'protect', on: true, password: 'pw' });
+  assert.equal(history.apply(0, { kind: 'input', range: { r0: 0, c0: 0, r1: 0, c1: 0 }, text: '9' }).message, 'sheetProtected');
+  assert.equal(value(sheet, 0, 0), 1);
+  assert.equal(history.apply(0, { kind: 'input', range: { r0: 0, c0: 1, r1: 0, c1: 1 }, text: '9' }).message, undefined, 'an unlocked cell takes typing');
+  assert.equal(value(sheet, 0, 1), 9);
+  assert.equal(history.apply(0, { kind: 'input', range: { r0: 5, c0: 5, r1: 5, c1: 5 }, text: '9' }).message, 'sheetProtected', 'empty cells are locked too');
+  assert.equal(history.apply(0, { kind: 'insertRows', at: 0, count: 1 }).message, 'sheetProtected');
+  assert.equal(history.apply(0, { kind: 'format', ranges: [{ r0: 0, c0: 1, r1: 0, c1: 1 }], change: { bold: true } }).message, 'sheetProtected');
+  assert.equal(history.apply(0, { kind: 'addSheet', at: 1, name: 'Two' }).message, undefined, 'the workbook’s sheets are not the sheet’s to refuse');
+  // Saved and read back, it is still protected, with its password.
+  const back = await readWorkbook(await writeWorkbook(b));
+  const read = back.sheets[0] as Worksheet;
+  assert.equal(read.protection?.sheet, '1');
+  assert.equal(read.protection?.algorithmName, 'SHA-512');
+  assert.equal(new History(back).apply(0, { kind: 'input', range: { r0: 0, c0: 0, r1: 0, c1: 0 }, text: '9' }).message, 'sheetProtected');
+  // Unprotecting needs the password.
+  assert.equal(history.apply(0, { kind: 'protect', on: false, password: 'nope' }).message, 'wrongPassword');
+  assert.ok(sheet.protection);
+  history.apply(0, { kind: 'protect', on: false, password: 'pw' });
+  assert.equal(sheet.protection, null);
+  assert.equal(history.apply(0, { kind: 'input', range: { r0: 0, c0: 0, r1: 0, c1: 0 }, text: '9' }).message, undefined);
 });
 
 test('pasting cells copied here carries formulas (moved as copied) and looks; Paste Special takes only some', () => {

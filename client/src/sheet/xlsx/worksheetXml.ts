@@ -10,6 +10,7 @@ import type { Worksheet } from '../model/worksheet.ts';
 import { cellName, parseCell, parseRange, rangeName } from '../refs.ts';
 import { conditionalElement, readConditional } from '../conditional.ts';
 import { autoFilterElement, readAutoFilter } from '../filter.ts';
+import { protectionElement, readProtection } from '../protection.ts';
 import { readValidations, validationsElement } from '../validation.ts';
 
 const decoder = new TextDecoder();
@@ -76,6 +77,7 @@ export function readAround(sheet: Worksheet, root: XmlElement): void {
   sheet.conditional = readConditional(root);
   sheet.autoFilter = readAutoFilter(root);
   sheet.validations = readValidations(root);
+  sheet.protection = readProtection(root);
   for (const merge of elements(child(root, 'mergeCells') ?? el('x'))) {
     const range = merge.attrs.ref && parseRange(merge.attrs.ref);
     if (range) sheet.merges.push(range);
@@ -125,6 +127,7 @@ export function writeAround(sheet: Worksheet, root: XmlElement): { head: string;
   set('cols', colsXml(sheet));
   set('autoFilter', sheet.autoFilter ? autoFilterElement(sheet.autoFilter) : null);
   set('tableParts', sheet.tables.length && sheet.tables.every((t) => t.rId) ? el('tableParts', { count: sheet.tables.length }, sheet.tables.map((t) => el('tablePart', { 'r:id': t.rId }))) : null);
+  set('sheetProtection', protectionElement(sheet.protection));
   set('dataValidations', validationsElement(sheet.validations));
   if (sheet.legacyDrawing !== undefined) set('legacyDrawing', sheet.legacyDrawing ? el('legacyDrawing', { 'r:id': sheet.legacyDrawing }) : null);
   if ((sheet.legacyDrawing || sheet.tables.length) && !root.attrs['xmlns:r']) root.attrs['xmlns:r'] = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';

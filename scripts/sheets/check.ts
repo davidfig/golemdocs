@@ -176,6 +176,12 @@ const pivotedHistory = new History(pivoted);
 pivotedHistory.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
 pivotedHistory.apply(1, { kind: 'refreshPivots' });
 books.set('pivots-refreshed.xlsx', pivoted);
+// Pivots of every further shape (two fields across, values under a field, a filter, values down) refreshed here.
+const shaped = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/pivots2-excel.xlsx')));
+const shapedHistory = new History(shaped);
+shapedHistory.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
+for (let i = 1; i <= 4; i++) shapedHistory.apply(i, { kind: 'refreshPivots' });
+books.set('pivots2-refreshed.xlsx', shaped);
 // Sparklines made here: of each kind on a sheet with none; and added to Excel's, one row's cleared.
 const sparkMade = new Workbook();
 sparkMade.sheets.push(new Worksheet('Data', 1));

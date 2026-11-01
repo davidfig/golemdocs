@@ -436,15 +436,21 @@ values) and captions, and the cache's source range and fields. `pivotLayout` lay
 `gridValue`) in Excel's compact layout: a two-row header when something is across, the row fields' items down the first
 column (an outer item's row holds its subtotal), a column field's items or the values across, grand totals last; a cell
 where no records meet stays empty; new items go after the old ones in the cache's order (the order they first come in
-the source), as Excel adds them. `pivotSupported` limits it to what it lays out (row fields, then one column field with
-one value or the values across; no page fields). Sheet › PivotTable › Refresh is the `refreshPivots` edit
+the source), as Excel adds them. It is one walk over each axis's tree of fields (the values, -2, a level like any other): several
+fields across (each outer item's label over its first column, an "… Total" column after its group, "Grand Total" in
+the first level's row), the values across under a field (their names under each item, a "Total …" column per value
+field), the values down (an item's row without values, the value names under it, a "Total …" row per value field), and
+filters above the body (a blank row between: each field's name and the item it shows, its records the only ones counted).
+`pivotSupported` limits it to the values last on their axis, after at most one field there. Sheet › PivotTable › Refresh is the `refreshPivots` edit
 (`refreshPivot`: the old cells cleared and the new written; a pivot that would grow over other cells is refused), undone
 with the sheet's cells and pivots. Writing a refreshed pivot (`writePivots`) brings its parts in line: the table's
 location and its fields' items, its laid-out rows and columns dropped (Excel lays them out again); the cache's values for
 those fields with the flags their kinds need, marked to refresh on opening, its stale records dropped.
 
 `pivots.xlsx` (`fixtures.ts`) holds two pivots written to be refreshed on opening; `pivots-excel.xlsx` is Excel's refresh
-of it (through `refresh all`: opening by AppleScript does not refresh), whose cells are the tests' expected layout. A
+of it (through `refresh all`: opening by AppleScript does not refresh), whose cells are the tests' expected layout;
+`pivots2.xlsx` and `pivots2-excel.xlsx` do the same for the further shapes (a pivot with the values down needs
+`dataOnRows`). A
 pivot refreshed here after its source changed, then refreshed by Excel, comes out cell for cell the same.
 
 **Next in M6**: Insert › PivotTable and a field list; pivot styles drawn; pivot tables; what-if tools (Goal

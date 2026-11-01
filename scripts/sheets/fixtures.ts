@@ -166,7 +166,73 @@ export async function pivotsWorkbook(): Promise<Uint8Array> {
   return pkg.write();
 }
 
+interface PivotShape {
+  name: string;
+  /** Where its body starts (its filters go above). */
+  at: string;
+  rows: number[];
+  cols: number[];
+  data: { fld: number; fn?: string; name: string }[];
+  pages?: { fld: number; item?: number }[];
+}
+
+/**
+ * pivots2.xlsx: the same sales, and a pivot of each further shape on a sheet of its own, written to be refreshed on
+ * opening (pivots2-excel.xlsx is Excel's refresh of it): two fields across; a field and two values across; a filter set to
+ * one item; the values down.
+ */
+export async function pivotShapesWorkbook(only?: string[]): Promise<Uint8Array> {
+  const all: PivotShape[] = [
+    { name: 'ByRegionProduct', at: 'A3', rows: [2], cols: [0, 1], data: [{ fld: 3, name: 'Sum of Amount' }] },
+    { name: 'MonthValues', at: 'A3', rows: [2], cols: [1, -2], data: [{ fld: 3, name: 'Sum of Amount' }, { fld: 3, fn: 'count', name: 'Count of Amount' }] },
+    { name: 'EastOnly', at: 'A3', rows: [1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], pages: [{ fld: 0, item: 0 }] },
+    { name: 'ValuesDown', at: 'A3', rows: [0, -2], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }, { fld: 3, fn: 'max', name: 'Max of Amount' }] },
+  ];
+  const shapes = only ? all.filter((s) => only.includes(s.name)) : all;
+  const book = new Workbook();
+  book.sheets.push(new Worksheet('Sales', 1), ...shapes.map((s, i) => new Worksheet(s.name, i + 2)));
+  new History(book).apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: PIVOT_SALES });
+  const pkg = await OpcPackage.read(await writeWorkbook(book));
+  const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
+  const distinct = (col: number) => [...new Set(PIVOT_SALES.slice(1).map((r) => r[col]))];
+  const strings = (col: number) => `<sharedItems count="${distinct(col).length}">${distinct(col).map((v) => `<s v="${v}"/>`).join('')}</sharedItems>`;
+  const amounts = PIVOT_SALES.slice(1).map((r) => +r[3]);
+  const cacheXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><pivotCacheDefinition xmlns="${MAIN}" xmlns:r="${REL}" refreshOnLoad="1" saveData="0" createdVersion="6" refreshedVersion="6" minRefreshableVersion="3" recordCount="0"><cacheSource type="worksheet"><worksheetSource ref="A1:D13" sheet="Sales"/></cacheSource><cacheFields count="4"><cacheField name="Region" numFmtId="0">${strings(0)}</cacheField><cacheField name="Product" numFmtId="0">${strings(1)}</cacheField><cacheField name="Month" numFmtId="0">${strings(2)}</cacheField><cacheField name="Amount" numFmtId="0"><sharedItems containsSemiMixedTypes="0" containsString="0" containsNumber="1" containsInteger="1" minValue="${Math.min(...amounts)}" maxValue="${Math.max(...amounts)}"/></cacheField></cacheFields></pivotCacheDefinition>`;
+  const workbookRels = await pkg.relationships('xl/workbook.xml');
+  const cachePart = 'xl/pivotCache/pivotCacheDefinition1.xml';
+  pkg.set(cachePart, cacheXml, `${TYPE}.pivotCacheDefinition+xml`);
+  const cacheRel = workbookRels.add(`${REL}/pivotCacheDefinition`, cachePart);
+  const workbookXml = await pkg.text('xl/workbook.xml');
+  const pivotCaches = `<pivotCaches><pivotCache cacheId="1" r:id="${cacheRel}"/></pivotCaches>`;
+  pkg.set('xl/workbook.xml', workbookXml.includes('<calcPr') ? workbookXml.replace(/(<calcPr[^>]*\/>)/, `$1${pivotCaches}`) : workbookXml.replace('</workbook>', `${pivotCaches}</workbook>`), `${TYPE}.sheet.main+xml`);
+  const items = (col: number) => `<items count="${distinct(col).length + 1}">${distinct(col).map((_, i) => `<item x="${i}"/>`).join('')}<item t="default"/></items>`;
+  for (const [i, s] of shapes.entries()) {
+    const axisOf = (f: number) => (s.rows.includes(f) ? 'axisRow' : s.cols.includes(f) ? 'axisCol' : s.pages?.some((p) => p.fld === f) ? 'axisPage' : null);
+    const fields = [0, 1, 2, 3].map((f) => {
+      const axis = axisOf(f);
+      const data = s.data.some((d) => d.fld === f) ? ' dataField="1"' : '';
+      return axis ? `<pivotField axis="${axis}"${data} showAll="0">${items(f)}</pivotField>` : `<pivotField${data} showAll="0"/>`;
+    });
+    const list = (name: string, xs: number[]) => (xs.length ? `<${name} count="${xs.length}">${xs.map((x) => `<field x="${x}"/>`).join('')}</${name}>` : '');
+    const pages = s.pages?.length ? `<pageFields count="${s.pages.length}">${s.pages.map((p) => `<pageField fld="${p.fld}"${p.item === undefined ? '' : ` item="${p.item}"`} hier="-1"/>`).join('')}</pageFields>` : '';
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><pivotTableDefinition xmlns="${MAIN}" name="${s.name}" cacheId="1" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values"${s.rows.includes(-2) ? ' dataOnRows="1"' : ''} updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" multipleFieldFilters="0">` +
+      `<location ref="${s.at}:${s.at}" firstHeaderRow="1" firstDataRow="1" firstDataCol="1"${s.pages?.length ? ` rowPageCount="${s.pages.length}" colPageCount="1"` : ''}/>` +
+      `<pivotFields count="4">${fields.join('')}</pivotFields>${list('rowFields', s.rows)}${list('colFields', s.cols)}${pages}` +
+      `<dataFields count="${s.data.length}">${s.data.map((d) => `<dataField name="${d.name}" fld="${d.fld}"${d.fn ? ` subtotal="${d.fn}"` : ''} baseField="0" baseItem="0"/>`).join('')}</dataFields>` +
+      '<pivotTableStyleInfo name="PivotStyleLight16" showRowHeaders="1" showColHeaders="1" showRowStripes="0" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>';
+    const part = `xl/pivotTables/pivotTable${i + 1}.xml`;
+    pkg.set(part, xml, `${TYPE}.pivotTable+xml`);
+    (await pkg.relationships(`xl/worksheets/sheet${i + 2}.xml`)).add(`${REL}/pivotTable`, part);
+    (await pkg.relationships(part)).add(`${REL}/pivotCacheDefinition`, cachePart);
+  }
+  return pkg.write();
+}
+
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
+  writeFileSync(path.join(FIXTURES, 'pivots2.xlsx'), await pivotShapesWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots.xlsx'), await pivotsWorkbook());
   writeFileSync(path.join(FIXTURES, 'sparklines.xlsx'), await sparklinesWorkbook());
   writeFileSync(path.join(FIXTURES, 'validation.xlsx'), await validationWorkbook());

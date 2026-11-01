@@ -34,10 +34,10 @@ function cellsAt(book: Workbook, sheet: Worksheet, r0: number, c0: number, rows:
   );
 }
 
-/** A layout as text, as the cells would show it (numbers in General). */
-function layoutText(layout: PivotLayout): string[][] {
-  const grid = Array.from({ length: layout.rows }, () => Array<string>(layout.cols).fill(''));
-  for (const c of layout.cells) grid[c.row][c.col] = typeof c.value === 'number' ? String(Math.round(c.value * 1e8) / 1e8) : c.value;
+/** A layout as text, as the cells would show it (numbers in General), its filter rows (above its body) first. */
+function layoutText(layout: PivotLayout, above = 0): string[][] {
+  const grid = Array.from({ length: layout.rows + above }, () => Array<string>(layout.cols).fill(''));
+  for (const c of layout.cells) grid[c.row + above][c.col] = typeof c.value === 'number' ? String(Math.round(c.value * 1e8) / 1e8) : c.value;
   return grid;
 }
 
@@ -54,15 +54,26 @@ test('pivot tables are read with their fields, data and cache', async () => {
   assert.ok(sheet.pivots.every(pivotSupported));
 });
 
-test('a pivot is laid out from its source exactly as Excel lays it out', async () => {
-  const { book, engine, sheet } = await open('pivots-excel.xlsx');
-  for (const p of sheet.pivots) {
-    const layout = pivotLayout(p, pivotSource(book, p, (s, r, c) => engine.value(s, r, c))!);
-    const excel = cellsAt(book, sheet, p.location.r0, p.location.c0, layout.rows, layout.cols).map((row) => row.map((t) => (/^-?[\d.]+$/.test(t) ? String(Math.round(+t * 1e8) / 1e8) : t)));
-    assert.deepEqual(layoutText(layout), excel, p.name);
-    assert.deepEqual([p.location.r1 - p.location.r0 + 1, p.location.c1 - p.location.c0 + 1], [layout.rows, layout.cols], `${p.name}'s size`);
-  }
-});
+for (const name of ['pivots-excel.xlsx', 'pivots2-excel.xlsx']) {
+  test(`every pivot is laid out from its source exactly as Excel lays it out (${name})`, async () => {
+    const book = await readWorkbook(readFileSync(new URL(`./fixtures/sheets/${name}`, import.meta.url)));
+    const engine = new Engine(book);
+    engine.recalculateAll();
+    let count = 0;
+    for (const sheet of book.sheets as Worksheet[]) {
+      for (const p of sheet.pivots ?? []) {
+        count++;
+        assert.ok(pivotSupported(p), p.name);
+        const layout = pivotLayout(p, pivotSource(book, p, (s, r, c) => engine.value(s, r, c))!);
+        const above = p.pageFields.length ? p.pageFields.length + 1 : 0;
+        const excel = cellsAt(book, sheet, p.location.r0 - above, p.location.c0, layout.rows + above, layout.cols).map((row) => row.map((t) => (/^-?[\d.]+$/.test(t) ? String(Math.round(+t * 1e8) / 1e8) : t)));
+        assert.deepEqual(layoutText(layout, above), excel, p.name);
+        assert.deepEqual([p.location.r1 - p.location.r0 + 1, p.location.c1 - p.location.c0 + 1], [layout.rows, layout.cols], `${p.name}'s size`);
+      }
+    }
+    assert.equal(count, name === 'pivots-excel.xlsx' ? 2 : 4);
+  });
+}
 
 test('Refresh lays the sheet’s pivots out again from their changed source, writes them, and undo takes it back', async () => {
   const { book, sheet } = await open('pivots-excel.xlsx');

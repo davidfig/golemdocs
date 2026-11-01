@@ -55,7 +55,8 @@ export interface PivotTable {
   rowFields: number[];
   /** Fields across; -2 stands for the values (when there are several). */
   colFields: number[];
-  pageFields: number[];
+  /** Filters: a field, and the item it shows (its place in the field's items), or null for all of them. */
+  pageFields: { field: number; item: number | null }[];
   dataFields: DataField[];
   fields: PivotField[];
   /** Captions Excel shows (`dataCaption`, the row and column headers' own names when set). */
@@ -117,7 +118,7 @@ export function readPivotTable(root: XmlElement, part: string, cache: PivotCache
     location,
     rowFields: fieldList('rowFields'),
     colFields: fieldList('colFields'),
-    pageFields: kids(kid(root, 'pageFields'), 'pageField').map((f) => +(f.attrs.fld ?? 0)),
+    pageFields: kids(kid(root, 'pageFields'), 'pageField').map((f) => ({ field: +(f.attrs.fld ?? 0), item: f.attrs.item === undefined ? null : +f.attrs.item })),
     dataFields: kids(kid(root, 'dataFields'), 'dataField').map((d) => ({
       name: d.attrs.name ?? '',
       field: +(d.attrs.fld ?? 0),
@@ -167,6 +168,8 @@ export interface PivotCell {
   role: 'header' | 'label' | 'subtotal' | 'grand' | 'value';
   /** Indent level of a row label (compact layout). */
   indent?: number;
+  /** A value's value field. */
+  data?: number;
 }
 
 export interface PivotLayout {
@@ -267,29 +270,31 @@ export function refreshPivot(book: Workbook, sheet: Worksheet, index: number): {
   const old = p.location;
   const at = { r0: old.r0, c0: old.c0, r1: old.r0 + layout.rows - 1, c1: old.c0 + layout.cols - 1 };
   const grid = sheet.grid;
-  const inOld = (r: number, c: number) => r >= old.r0 && r <= old.r1 && c >= old.c0 && c <= old.c1;
-  for (let r = at.r0; r <= at.r1; r++) {
+  // Its filters sit above its body, a blank row between: those rows are its own too.
+  const above = p.pageFields.length ? p.pageFields.length + 1 : 0;
+  const inOld = (r: number, c: number) => r >= old.r0 - above && r <= old.r1 && c >= old.c0 && c <= Math.max(old.c1, old.c0 + 1);
+  for (let r = at.r0 - above; r <= at.r1; r++) {
     for (let c = at.c0; c <= at.c1; c++) {
       if (inOld(r, c)) continue;
       const kind = grid.columns[c]?.kind(r) ?? Kind.Empty;
       if (kind !== Kind.Empty && kind !== Kind.Blank) return { range: null, message: 'pivotOverlap' };
     }
   }
-  for (let c = old.c0; c <= old.c1; c++) {
+  for (let c = old.c0; c <= Math.max(old.c1, old.c0 + 1); c++) {
     const column = grid.columns[c];
     if (!column) continue;
-    for (let r = old.r0; r <= old.r1; r++) {
+    for (let r = Math.max(0, old.r0 - above); r <= old.r1; r++) {
       if (column.formulaAt(r)) column.setFormula(r, null);
       grid.set(r, c, Kind.Empty, 0, 0);
     }
   }
   // Values in the data field's own number format, when it has one.
   const formats = p.dataFields.map((d) => (d.numFmtId ? restyle(book.styles, 0, { numFmt: book.styles.formatCode(d.numFmtId) }, { top: false, bottom: false, left: false, right: false }, null) : 0));
-  const colField = p.colFields.find((f) => f !== -2);
   for (const cell of layout.cells) {
     const r = at.r0 + cell.row;
     const c = at.c0 + cell.col;
-    if (typeof cell.value === 'number') grid.set(r, c, Kind.Number, cell.value, formats[colField === undefined ? Math.max(0, cell.col - 1) % Math.max(1, p.dataFields.length) : 0] ?? 0);
+    if (r < 0) continue;
+    if (typeof cell.value === 'number') grid.set(r, c, Kind.Number, cell.value, formats[cell.data ?? 0] ?? 0);
     else grid.set(r, c, Kind.String, book.strings.add(cell.value), 0);
   }
   const fields = p.fields.map((f, i) => ({ ...f, items: layout.items[i] ?? f.items }));
@@ -299,19 +304,34 @@ export function refreshPivot(book: Workbook, sheet: Worksheet, index: number): {
   return { range: { r0: Math.min(old.r0, at.r0), c0: Math.min(old.c0, at.c0), r1: Math.max(old.r1, at.r1), c1: Math.max(old.c1, at.c1) } };
 }
 
-/** Whether a pivot's shape is one this layout knows (more is kept as read, not refreshed here). */
+
+/** Whether a pivot's shape is one this layout knows (more is kept as read, not refreshed here): the values (-2) last on
+ * their axis, after at most one field there. */
 export function pivotSupported(p: PivotTable): boolean {
-  const realCols = p.colFields.filter((f) => f !== -2);
-  return p.rowFields.length > 0 && p.dataFields.length > 0 && realCols.length <= 1 && (realCols.length === 0 || p.dataFields.length === 1) && !p.pageFields.length;
+  const ok = (fields: number[]) => {
+    const at = fields.indexOf(-2);
+    return at < 0 || (at === fields.length - 1 && at <= 1);
+  };
+  return p.rowFields.length > 0 && p.dataFields.length > 0 && ok(p.rowFields) && ok(p.colFields);
+}
+
+/** A node of an axis's tree: an item of a field (`field`, `item`: a shared value's index) or a value field (`data`). */
+interface AxisNode {
+  field: number;
+  data: number | null;
+  label: string | number;
+  children: AxisNode[];
+  /** The records under it. */
+  records: number[];
 }
 
 /** Lays a pivot out from its source records (see the top of the file). */
 export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
   const fieldCount = p.cache.fields.length;
-  // Each field's items: the existing order, then values new to the cache, sorted.
+  // Each field's items: the existing order, then values new to the cache, in the cache's order.
   const shared = p.cache.fields.map((f) => [...f.shared]);
   const items = p.fields.map((f) => [...f.items]);
-  const axisFields = [...p.rowFields, ...p.colFields.filter((f) => f !== -2)];
+  const axisFields = [...new Set([...p.rowFields, ...p.colFields, ...p.pageFields.map((f) => f.field)].filter((f) => f >= 0))];
   const recordIndex: number[][] = source.records.map(() => Array(fieldCount).fill(-1));
   for (const f of axisFields) {
     const known = new Map(shared[f].map((v, i) => [key(v), i]));
@@ -333,59 +353,115 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     const missing = [...new Set(recordIndex.map((r) => r[f]))].filter((i) => !listed.has(i)).sort((a, b) => a - b);
     items[f] = [...(items[f] ?? []), ...missing];
   }
-  // Only items with data show.
-  const used = axisFields.map((f) => new Set(recordIndex.map((r) => r[f])));
-  const shown = (f: number) => items[f].filter((i) => used[axisFields.indexOf(f)].has(i));
   const label = (f: number, i: number) => {
     const v = shared[f][i];
     return v === null ? '(blank)' : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : v;
   };
-  const colField = p.colFields.find((f) => f !== -2);
-  const colItems = colField === undefined ? [] : shown(colField);
-  const dataCols = colField === undefined ? p.dataFields.map((_, d) => ({ item: null as number | null, data: d })) : [...colItems.map((item) => ({ item, data: 0 })), ...(p.grandCols ? [{ item: null, data: 0 }] : [])];
-  const valueOf = (match: (rec: number[]) => boolean, col: { item: number | null; data: number }) => {
-    const d = p.dataFields[col.data];
-    const values: Scalar[] = [];
-    source.records.forEach((rec, r) => {
-      if (!match(recordIndex[r])) return;
-      if (colField !== undefined && col.item !== null && recordIndex[r][colField] !== col.item) return;
-      values.push(rec[d.field] ?? BLANK);
+  // Filters: only the records of the items they show.
+  let all = source.records.map((_, r) => r);
+  for (const page of p.pageFields) {
+    if (page.item === null) continue;
+    const shown = items[page.field]?.[page.item];
+    all = all.filter((r) => recordIndex[r][page.field] === shown);
+  }
+  /** The tree of an axis's fields over some records: items with records under them, in the field's order. */
+  const tree = (levels: number[], depth: number, under: number[]): AxisNode[] => {
+    if (depth >= levels.length) return [];
+    const f = levels[depth];
+    if (f === -2) return p.dataFields.map((d, data) => ({ field: -2, data, label: d.name, children: tree(levels, depth + 1, under), records: under }));
+    return (items[f] ?? []).flatMap((i) => {
+      const here = under.filter((r) => recordIndex[r][f] === i);
+      return here.length ? [{ field: f, data: null, label: label(f, i), children: tree(levels, depth + 1, here), records: here }] : [];
     });
-    // No records where the row and column meet: the cell stays empty, as Excel leaves it.
-    return values.length ? aggregate(d.fn, values) : null;
   };
-  const push = (row: number, col: number, value: number | null, role: PivotCell['role']) => {
-    if (value !== null) cells.push({ row, col, value, role });
+  /** A value cell: the records under both its row's and its column's items, in a value field. */
+  const valueOf = (rows: number[], cols: number[], data: number) => {
+    const set = new Set(cols);
+    const values = rows.filter((r) => set.has(r)).map((r) => source.records[r][p.dataFields[data].field] ?? BLANK);
+    // No records where the row and column meet: the cell stays empty, as Excel leaves it.
+    return values.length ? aggregate(p.dataFields[data].fn, values) : null;
   };
   const cells: PivotCell[] = [];
-  // Headers: two rows when something is across (a column field, or several values), else one.
-  const twoRows = colField !== undefined || p.dataFields.length > 1;
-  const headerRow = twoRows ? 1 : 0;
-  if (twoRows) {
-    if (colField !== undefined) cells.push({ row: 0, col: 0, value: p.dataFields[0].name, role: 'header' });
-    cells.push({ row: 0, col: 1, value: colField !== undefined ? p.colHeader : p.dataCaption, role: 'header' });
-  }
-  cells.push({ row: headerRow, col: 0, value: p.rowHeader, role: 'header' });
-  dataCols.forEach((c, j) => cells.push({ row: headerRow, col: 1 + j, value: colField === undefined ? p.dataFields[c.data].name : c.item === null ? 'Grand Total' : label(colField, c.item), role: 'header' }));
-  // Rows: the row fields' items, outer first, an outer item's subtotal on its own row.
-  let row = headerRow + 1;
-  const walk = (depth: number, match: (rec: number[]) => boolean) => {
-    const f = p.rowFields[depth];
-    for (const i of shown(f)) {
-      const here = (rec: number[]) => match(rec) && rec[f] === i;
-      if (!source.records.some((_, r) => here(recordIndex[r]))) continue;
-      const last = depth === p.rowFields.length - 1;
-      cells.push({ row, col: 0, value: label(f, i), role: last ? 'label' : 'subtotal', indent: depth });
-      if (last || p.fields[f]?.subtotal !== false) dataCols.forEach((c, j) => push(row, 1 + j, valueOf(here, c), last ? 'value' : 'subtotal'));
-      row++;
-      if (!last) walk(depth + 1, here);
+  const put = (row: number, col: number, value: string | number | null, role: PivotCell['role'], indent?: number, data?: number) => {
+    if (value !== null) cells.push({ row, col, value, role, ...(indent !== undefined && { indent }), ...(data !== undefined && { data }) });
+  };
+  // Columns: the column fields' tree, a subtotal after an outer item's group (not over the values), grand totals last.
+  const colLevels = p.colFields;
+  const header = colLevels.length ? 1 + colLevels.length : 1;
+  const columns: { records: number[]; data: number | null }[] = [];
+  const walkCols = (nodes: AxisNode[], depth: number) => {
+    for (const n of nodes) {
+      put(1 + depth, 1 + columns.length, n.label, 'header');
+      if (!n.children.length) {
+        columns.push({ records: n.records, data: n.data });
+        continue;
+      }
+      walkCols(n.children, depth + 1);
+      if (colLevels[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false) {
+        put(1 + depth, 1 + columns.length, `${n.label} Total`, 'header');
+        columns.push({ records: n.records, data: n.data });
+      }
     }
   };
-  walk(0, () => true);
-  if (p.grandRows) {
-    cells.push({ row, col: 0, value: 'Grand Total', role: 'grand' });
-    dataCols.forEach((c, j) => push(row, 1 + j, valueOf(() => true, c), 'grand'));
-    row++;
+  if (colLevels.length) {
+    walkCols(tree(colLevels, 0, all), 0);
+    const real = colLevels.some((f) => f >= 0);
+    if (real && p.grandCols) {
+      if (colLevels.includes(-2)) {
+        p.dataFields.forEach((d, data) => {
+          put(1, 1 + columns.length, `Total ${d.name}`, 'header');
+          columns.push({ records: all, data });
+        });
+      } else {
+        put(1, 1 + columns.length, 'Grand Total', 'header');
+        columns.push({ records: all, data: null });
+      }
+    }
+    // The caption row: the value's name (when there is one), and what is across.
+    if (p.dataFields.length === 1) put(0, 0, p.dataFields[0].name, 'header');
+    put(0, 1, real ? p.colHeader : p.dataCaption, 'header');
+  } else {
+    columns.push({ records: all, data: null });
+    // One value, and not down the rows: its name heads the column.
+    if (!p.rowFields.includes(-2)) put(0, 1, p.dataFields[0].name, 'header');
   }
-  return { cells, rows: row, cols: 1 + dataCols.length, shared, items, firstHeaderRow: twoRows ? 1 : 0, firstDataRow: headerRow + 1, firstDataCol: 1 };
+  put(header - 1, 0, p.rowHeader, 'header');
+  // Rows: the row fields' tree, an outer item's row holding its subtotal (but not when the values are under it).
+  let row = header;
+  const rowValues = (under: number[], data: number | null, role: PivotCell['role']) =>
+    columns.forEach((c, j) => {
+      const d = data ?? c.data ?? 0;
+      put(row, 1 + j, valueOf(under, c.records, d), role, undefined, d);
+    });
+  const walkRows = (nodes: AxisNode[], depth: number) => {
+    for (const n of nodes) {
+      const leaf = !n.children.length;
+      put(row, 0, n.label, leaf ? 'label' : 'subtotal', depth);
+      if (leaf) rowValues(n.records, n.data, 'value');
+      else if (p.rowFields[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false) rowValues(n.records, n.data, 'subtotal');
+      row++;
+      if (!leaf) walkRows(n.children, depth + 1);
+    }
+  };
+  walkRows(tree(p.rowFields, 0, all), 0);
+  if (p.grandRows) {
+    if (p.rowFields.includes(-2)) {
+      p.dataFields.forEach((d, data) => {
+        put(row, 0, `Total ${d.name}`, 'grand');
+        rowValues(all, data, 'grand');
+        row++;
+      });
+    } else {
+      put(row, 0, 'Grand Total', 'grand');
+      rowValues(all, null, 'grand');
+      row++;
+    }
+  }
+  // Filters above the body, a blank row between: each field's name, and the item it shows.
+  p.pageFields.forEach((page, k) => {
+    const r = -(p.pageFields.length + 1) + k;
+    put(r, 0, p.cache.fields[page.field]?.name ?? '', 'header');
+    put(r, 1, page.item === null ? '(All)' : label(page.field, items[page.field]?.[page.item] ?? 0), 'label');
+  });
+  return { cells, rows: row, cols: 1 + columns.length, shared, items, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: 1 };
 }

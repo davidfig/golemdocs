@@ -7,6 +7,7 @@
 import type { Table } from './tables.ts';
 import type { Note, NoteParts } from './notes.ts';
 import type { SheetProtection } from './protection.ts';
+import type { SheetChart } from './charts/model.ts';
 import { readConditional } from './conditional.ts';
 import { readAutoFilter } from './filter.ts';
 import { readValidations } from './validation.ts';
@@ -50,6 +51,7 @@ interface SheetJson {
   notes?: Note[];
   noteParts?: NoteParts | null;
   protection?: SheetProtection | null;
+  charts?: SheetChart[];
   pane: Pane | null;
   view: Worksheet['view'];
   rowDefault: number;
@@ -136,6 +138,7 @@ export function workbookImage(book: Workbook, source: Fingerprint): Uint8Array {
       notes: sheet.notes,
       noteParts: sheet.noteParts,
       protection: sheet.protection,
+      charts: sheet.charts,
       pane: sheet.pane,
       view: sheet.view,
       rowDefault: rows.defaultSize,
@@ -249,6 +252,7 @@ async function fromImage(image: Image, xlsx: Uint8Array): Promise<Workbook> {
     sheet.notes = j.notes ?? [];
     sheet.noteParts = j.noteParts ?? null;
     sheet.protection = j.protection ?? null;
+    sheet.charts = j.charts ?? [];
     sheet.pane = j.pane;
     sheet.view = j.view;
     if (j.hasXml) {

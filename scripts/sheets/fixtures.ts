@@ -11,6 +11,7 @@ import { History } from '../../client/src/sheet/edit.ts';
 import { Workbook } from '../../client/src/sheet/model/workbook.ts';
 import { Worksheet } from '../../client/src/sheet/model/worksheet.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
+import { OpcPackage } from '../../docx/src/index.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 export const FIXTURES = path.join(ROOT, 'client/test/fixtures/sheets');
@@ -28,7 +29,63 @@ export async function validationWorkbook(): Promise<Uint8Array> {
   return writeWorkbook(book);
 }
 
+const CHART_NS = 'xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+/** A chart part: a chart of `kind` over the Sales sheet's months (A2:A7) and regions (columns B to D). */
+function chartXml(plot: string, title: string, legend = true): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace ${CHART_NS}><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${title}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>${plot}</c:plotArea>${legend ? '<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>' : ''}<c:plotVisOnly val="1"/></c:chart></c:chartSpace>`;
+}
+
+const ser = (i: number, col: string, extra = '', cat = true) =>
+  `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:strRef><c:f>Sales!$${col}$1</c:f></c:strRef></c:tx>${extra}${cat ? `<c:cat><c:strRef><c:f>Sales!$A$2:$A$7</c:f></c:strRef></c:cat>` : `<c:xVal><c:numRef><c:f>Sales!$B$2:$B$7</c:f></c:numRef></c:xVal>`}<c:${cat ? 'val' : 'yVal'}><c:numRef><c:f>Sales!$${col}$2:$${col}$7</c:f></c:numRef></c:${cat ? 'val' : 'yVal'}></c:ser>`;
+const axes = '<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>';
+const ids = '<c:axId val="1"/><c:axId val="2"/>';
+const three = (extra = '') => ser(0, 'B', extra) + ser(1, 'C', extra) + ser(2, 'D', extra);
+
+/** charts.xlsx: six months of sales by region (Sales!A1:D7), and a chart of each kind the editor draws. */
+export async function chartsWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  const sheet = new Worksheet('Sales', 1);
+  book.sheets.push(sheet);
+  new History(book).apply(0, {
+    kind: 'paste',
+    at: { row: 0, col: 0 },
+    rows: [['Month', 'North', 'South', 'West'], ['Jan', '12', '8', '5'], ['Feb', '15', '9', '7'], ['Mar', '11', '12', '6'], ['Apr', '18', '10', '9'], ['May', '21', '14', '8'], ['Jun', '19', '16', '11']],
+  });
+  const pkg = await OpcPackage.read(await writeWorkbook(book));
+  const charts = [
+    chartXml(`<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>${three()}<c:gapWidth val="150"/>${ids}</c:barChart>${axes}`, 'Sales by month'),
+    chartXml(`<c:barChart><c:barDir val="bar"/><c:grouping val="stacked"/><c:varyColors val="0"/>${three()}<c:gapWidth val="100"/><c:overlap val="100"/>${ids}</c:barChart>${axes}`, 'Stacked'),
+    chartXml(`<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${three('<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>')}<c:marker val="1"/>${ids}</c:lineChart>${axes}`, 'Trend'),
+    chartXml(`<c:pieChart><c:varyColors val="1"/>${ser(0, 'B')}<c:firstSliceAng val="0"/></c:pieChart>`, 'North'),
+    chartXml(`<c:doughnutChart><c:varyColors val="1"/>${ser(0, 'C')}<c:firstSliceAng val="0"/><c:holeSize val="50"/></c:doughnutChart>`, 'South'),
+    chartXml(`<c:areaChart><c:grouping val="stacked"/><c:varyColors val="0"/>${three()}${ids}</c:areaChart>${axes}`, 'Area'),
+    chartXml(`<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${ser(0, 'C', '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>', false)}${ids}</c:scatterChart><c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>`, 'North against South', false),
+  ];
+  const drawingRels = await pkg.relationships('xl/drawings/drawing1.xml');
+  const anchors = charts.map((xml, i) => {
+    const part = `xl/charts/chart${i + 1}.xml`;
+    pkg.set(part, xml, 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml');
+    const rId = drawingRels.add('http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart', part);
+    // Two charts a row, each 7 columns by 15 rows, from F2.
+    const col = 5 + (i % 2) * 8;
+    const row = 1 + Math.floor(i / 2) * 16;
+    return `<xdr:twoCellAnchor><xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${col + 7}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${row + 15}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="Chart ${i + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${rId}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
+  });
+  pkg.set(
+    'xl/drawings/drawing1.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors.join('')}</xdr:wsDr>`,
+    'application/vnd.openxmlformats-officedocument.drawing+xml',
+  );
+  const sheetRels = await pkg.relationships('xl/worksheets/sheet1.xml');
+  const drawingId = sheetRels.add('http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', 'xl/drawings/drawing1.xml');
+  const sheetXml = await pkg.text('xl/worksheets/sheet1.xml');
+  pkg.set('xl/worksheets/sheet1.xml', sheetXml.replace('</worksheet>', `<drawing r:id="${drawingId}"/></worksheet>`), 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml');
+  return pkg.write();
+}
+
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
   writeFileSync(path.join(FIXTURES, 'validation.xlsx'), await validationWorkbook());
+  writeFileSync(path.join(FIXTURES, 'charts.xlsx'), await chartsWorkbook());
   console.log('written');
 }

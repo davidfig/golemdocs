@@ -3,6 +3,7 @@
 // inflates (sheetScanner.ts). `readWorkbook` reads the active sheet and, unless told otherwise, the rest; `loadSheet` reads
 // one later, so a big workbook can show its first sheet before the others are in.
 
+import { readCharts } from '../charts/model.ts';
 import type { XmlElement } from '@golemdocs/docx';
 import { readTable } from '../tables.ts';
 import { readNotes } from '../notes.ts';
@@ -137,6 +138,7 @@ export async function loadSheet(book: Workbook, index: number, onRows?: (sheet: 
   const { notes, parts } = await readNotes(source.pkg, part, root);
   sheet.notes = notes;
   sheet.noteParts = parts;
+  sheet.charts = await readCharts(source.pkg, part, root, book.theme.colors);
 }
 
 /** The tables a sheet's `<tableParts>` point to. */

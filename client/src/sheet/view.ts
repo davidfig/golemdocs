@@ -28,7 +28,7 @@ import { NoteCard, NoteEditor } from './noteCard.ts';
 import { askSheetPassword } from './protectDialog.ts';
 import { parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
-import type { BookInfo, CellContent, Changed, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
+import type { BookInfo, CellContent, Changed, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
 import './view.css';
 
 export interface SheetEditorDeps {
@@ -115,6 +115,10 @@ export class SheetEditorView {
   private ranges: CellRange[] = [single(0, 0)];
   /** The cell's contents, for the formula bar (and editing). */
   private content: CellContent = { input: '', display: '', isFormula: false };
+  /** Bumped whenever the workbook's info changes (an edit, a load): the charts are laid out again. */
+  private bookVersion = 0;
+  /** The charts last laid out: for which sheet and version of the workbook. */
+  private charts: { key: string; sheet: number; scenes: ChartScene[] } = { key: '', sheet: -1, scenes: [] };
   /** The cell `content` is of (sheet:row:col): it comes a moment after the active cell changes. */
   private contentOf = '';
   /** The cell being edited, how editing began (typing over it, or F2 / a double click to change it), and its text. */
@@ -217,6 +221,7 @@ export class SheetEditorView {
     switch (m.t) {
       case 'opened':
         this.book = m.info;
+        this.bookVersion++;
         this.fromImage = m.fromImage;
         this.sheetIndex = m.info.activeSheet;
         this.useSheet(true);
@@ -236,6 +241,7 @@ export class SheetEditorView {
         break;
       case 'loaded':
         this.book = m.info;
+        this.bookVersion++;
         this.progress = null;
         this.showStatus();
         this.useSheet(false);
@@ -364,7 +370,11 @@ export class SheetEditorView {
     // The canvas less the bars over its top and bottom: the renderer draws between them.
     const top = FORMULA_BAR + (this.findBar.hidden ? 0 : this.findBar.offsetHeight);
     this.offsetTop = top;
+    // The charts are laid out again whenever the workbook changed (their data may have), or another sheet shows.
+    const chartsKey = `${this.sheetIndex}:${this.bookVersion}`;
+    if (info.charts && this.charts.key !== chartsKey) void this.loadCharts(chartsKey);
     const pending = this.renderer.draw({
+      charts: this.charts.sheet === this.sheetIndex && info.charts ? this.charts.scenes : [],
       camera,
       top,
       bottom: TABS_BAR,
@@ -540,10 +550,21 @@ export class SheetEditorView {
     }
   }
 
+  /** Asks the worker for the sheet's charts, laid out now; they show from the next frame. */
+  private async loadCharts(key: string): Promise<void> {
+    const sheet = this.sheetIndex;
+    this.charts.key = key;
+    const reply = await this.ask<Extract<FromWorker, { t: 'charts' }>>({ t: 'charts', id: this.id(), sheet }).catch(() => null);
+    if (!reply || this.charts.key !== key) return;
+    this.charts = { key, sheet, scenes: reply.scenes };
+    this.deps.render();
+  }
+
   private applyChanged(changed: Changed): void {
     if (changed.message) this.deps.notify(messageFor(changed.message));
     if (changed.info) {
       this.book = changed.info;
+      this.bookVersion++;
       this.sheetIndex = Math.min(this.sheetIndex, changed.info.sheets.length - 1);
       this.geometry = this.info ? new SheetGeometry(this.info) : null;
       this.showTabs();
@@ -588,6 +609,7 @@ export class SheetEditorView {
   private afterHistory(changed: Changed): void {
     if (changed.info) {
       this.book = changed.info;
+      this.bookVersion++;
       this.sheetIndex = Math.min(this.sheetIndex, this.book.sheets.length - 1);
       this.geometry = this.info ? new SheetGeometry(this.info) : null;
       this.showTabs();
@@ -1666,7 +1688,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */

@@ -348,6 +348,37 @@ The recommendations below were taken as decided when work went ahead unassisted 
 
 ## Progress
 
+### M6: analysis and pictures (under way, 2026-11-01)
+
+**Charts, read and drawn** (`sheet/charts/`). `readCharts` (`model.ts`) follows the sheet's `<drawing>` to its drawing part
+and each anchor holding a chart (`twoCellAnchor`, `oneCellAnchor`, `absoluteAnchor`) to its chart part, and reads the
+chartSpace into a `Chart`: groups by kind (bar and column, line, area, pie, doughnut, scatter; their 3-D forms as flat),
+direction, grouping (clustered, stacked, percentage), gap and hole sizes, the first slice's angle; each series' name,
+categories (or x values) and values as references with the file's cached points, its colour and its points' colours,
+line and markers; the title (or, for a one-series pie, the series' name, as Excel shows it), the legend's place, and the
+axes (fixed bounds, own number format, gridlines, deleted). The parts are written back unchanged; the model goes in the
+memory image.
+
+`chartScene` (`scene.ts`, in the worker) reads each series from its cells now through the engine (`formulaReference`, the
+cached points when a reference can't be read), and `layoutChart` lays the chart out in its box (`chartBox`: its anchor
+through the sheet's row and column sizes) as triangles (a colour per vertex) and text runs, in points: the chart area,
+title, legend (series, or a pie's categories), value axis on a round scale (`niceScale`, starting at zero unless the
+values are far from it), category labels thinned out where they would overlap, gridlines, then bars (clustered or
+stacked, up or across), lines with round joins and markers (gaps break them), stacked areas, scatter points, pie and
+doughnut sectors. Colours not given are the theme's accents in turn (`defaultColor`). Text is placed by an anchor and an
+alignment, since only the page has the fonts: the layout leaves room by an estimate.
+
+The page asks for a sheet's scenes (`charts` request) whenever its workbook info changes (an edit, a load) or another
+sheet shows (`SheetEditorView.loadCharts`), and the renderer draws them in each pane over the cells, under the selection
+(`drawCharts`): a `TriangleBatch` per chart (`webgl/shapes/triangleBatch.ts`, new: triangles in points, placed by
+uniforms like rectangles) and its text through the cell fonts, kept until the scene or the fonts change. Checked by
+`charts.xlsx` (written by `scripts/sheets/fixtures.ts`, a chart of each kind) and Excel's own save of it
+(`charts-excel.xlsx`), which read the same.
+
+**Next in M6**: charts follow inserted and deleted rows and columns (their anchors and references); inserting a chart
+(Insert › Chart over a selection) and editing one (kind, title, legend, series); sparklines; pivot tables; what-if tools
+(Goal Seek, data tables, scenarios, Solver); print and PDF.
+
 ### M5: data and formatting (done, 2026-11-01)
 
 **Done.** Formatting: the app's own commands (Bold, Italic, Underline, Strikethrough, fonts and sizes, Grow and Shrink, text

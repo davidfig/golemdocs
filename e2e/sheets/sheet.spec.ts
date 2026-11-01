@@ -237,6 +237,19 @@ test('a table made with Insert Table has filter buttons of its own, and a formul
   await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBe(24);
 });
 
+test('a workbook’s charts are drawn over its cells, and follow their data', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'charts.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/charts.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'charts.xlsx');
+  const charts = async () => ((await state(page)) as unknown as { charts: string[][] }).charts;
+  await expect.poll(async () => (await charts()).map((c) => c[0])).toEqual(['Sales by month', 'Stacked', 'Trend', 'North', 'South', 'Area', 'North against South']);
+  // A value far past the others stretches the first chart's axis.
+  await clickCell(page, 1, 1);
+  await page.keyboard.type('90');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await charts())[0]).toContain('100');
+});
+
 test('a list validation offers its choices from an arrow, and a value a rule refuses is not entered', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'validation.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/validation.xlsx')), mimeType: 'application/octet-stream' });

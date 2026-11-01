@@ -21,7 +21,8 @@ import type { CellFonts } from './fonts.ts';
 import { HEADER_HEIGHT, OUTLINE_STEP, SheetGeometry } from './geometry.ts';
 import type { Region } from './geometry.ts';
 import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE, tileId } from './protocol.ts';
-import type { CellTile, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
+import type { CellTile, ChartScene, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
+import { TriangleBatch, TriangleBatchRenderer } from '../webgl/shapes/triangleBatch.ts';
 
 /** Rows of this many CSS pixels or more show their cells; below FADE_LOW only the overview. */
 const FADE_HIGH = 9;
@@ -152,7 +153,17 @@ export interface SheetFrame {
   filters: { range: CellRange; filtered: number[] }[];
   /** A cell whose list validation offers choices: its arrow, beside it. */
   choices: { row: number; col: number } | null;
+  /** The sheet's charts, laid out (drawn over the cells). */
+  charts: ChartScene[];
   darkPages: boolean;
+}
+
+/** A chart's GPU batches, kept while its scene is the same. */
+interface BuiltChart {
+  scene: ChartScene;
+  fontsVersion: number;
+  triangles: TriangleBatch;
+  text: TextBatch[];
 }
 
 interface BuiltCells {
@@ -225,7 +236,9 @@ class OverviewRenderer {
 export class SheetRenderer {
   private readonly text: TextRenderer;
   private readonly rects: RectBatchRenderer;
+  private readonly triangles: TriangleBatchRenderer;
   private readonly overview: OverviewRenderer;
+  private charts = new Map<string, BuiltChart>();
   private cellTiles = new Map<string, { tile: CellTile; built: BuiltCells | null }>();
   private overviewTiles = new Map<string, { tile: OverviewTile; built: BuiltOverview | null }>();
   private styles = new Map<number, DrawStyle>();
@@ -245,6 +258,7 @@ export class SheetRenderer {
   ) {
     this.text = new TextRenderer(gl);
     this.rects = new RectBatchRenderer(gl);
+    this.triangles = new TriangleBatchRenderer(gl);
     this.overview = new OverviewRenderer(gl);
   }
 
@@ -343,6 +357,68 @@ export class SheetRenderer {
     this.freeGarbage();
     this.text.dispose();
     this.overview.dispose();
+  }
+
+  /** Draws the charts that reach into a pane's part of the sheet, building their batches when they are new. */
+  private drawCharts(view: Camera, scenes: ChartScene[], left: number, top: number, right: number, bottom: number, dark: boolean): void {
+    const live = new Set(scenes.map((s) => s.id));
+    for (const [id, built] of this.charts) {
+      if (live.has(id)) continue;
+      this.freeChart(built);
+      this.charts.delete(id);
+    }
+    const triangles: TriangleBatch[] = [];
+    const text: TextBatch[] = [];
+    for (const scene of scenes) {
+      if (scene.x > right || scene.y > bottom || scene.x + scene.width < left || scene.y + scene.height < top) continue;
+      let built = this.charts.get(scene.id);
+      if (built && (built.scene !== scene || built.fontsVersion !== this.fonts.version)) {
+        this.freeChart(built);
+        built = undefined;
+      }
+      if (!built) this.charts.set(scene.id, (built = this.buildChart(scene)));
+      triangles.push(built.triangles);
+      text.push(...built.text);
+    }
+    // Charts keep their own colours in Dark Pages, as pictures do.
+    this.triangles.darkPages = false;
+    this.text.darkPages = false;
+    this.triangles.render(view, triangles);
+    this.text.render(view, sortByFace(text));
+    this.text.darkPages = dark;
+  }
+
+  private buildChart(scene: ChartScene): BuiltChart {
+    const colors = new Uint32Array(scene.colors.length);
+    for (let i = 0; i < colors.length; i++) colors[i] = packColor(scene.colors[i]);
+    const triangles = TriangleBatch.from(scene.points, colors, scene.x, scene.y);
+    const lists = new Map<GpuFace, GlyphList>();
+    for (const run of scene.texts) {
+      const font = this.fonts.font('Calibri', run.bold, false);
+      const metrics = font && this.fonts.metrics(font);
+      if (!font || !metrics) continue;
+      let width = 0;
+      for (const ch of run.text) width += (this.fonts.glyph(font, ch.codePointAt(0)!)?.advance ?? 0.5) * run.size;
+      let x = run.align === 'left' ? run.x : run.align === 'right' ? run.x - width : run.x - width / 2;
+      const baseline = run.y + ((metrics.ascent - metrics.descent) * run.size) / 2;
+      const color = packColor(run.color);
+      for (const ch of run.text) {
+        const glyph = this.fonts.glyph(font, ch.codePointAt(0)!);
+        if (glyph?.visible) {
+          let list = lists.get(glyph.face);
+          if (!list) lists.set(glyph.face, (list = new GlyphList(glyph.font, glyph.metrics)));
+          list.push(x, baseline, run.size, glyph.glyph, color);
+        }
+        x += (glyph?.advance ?? 0.5) * run.size;
+      }
+    }
+    const text = [...lists].map(([face, list]) => new TextBatch(face, { skew: 0, embolden: 0 }, list.buffer, list.count, scene.x, scene.y));
+    return { scene, fontsVersion: this.fonts.version, triangles, text };
+  }
+
+  private freeChart(built: BuiltChart): void {
+    built.triangles.dispose(this.gl);
+    for (const batch of built.text) batch.dispose(this.gl);
   }
 
   private freeCells(built: BuiltCells): void {
@@ -470,6 +546,9 @@ export class SheetRenderer {
         this.drawRects(view, blanks);
         this.overview.render(view, quads, overviewAlpha);
       }
+
+      // Charts, over the cells, in their places.
+      if (frame.charts.length) this.drawCharts(view, frame.charts, docLeft, docTop, docRight, docBottom, frame.darkPages);
 
       // The AutoFilter's buttons, the selection, the cell being edited's frame, and a copied range.
       const over = new RectList();

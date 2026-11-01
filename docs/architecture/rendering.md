@@ -96,7 +96,7 @@ Hit-testing splits across the thread boundary. The main thread owns only geometr
 ## Key data types
 
 - `EncodedPage`, `EncodedText`, `FaceDescriptor` (`layout/src/wire.ts`): the worker-to-GPU contract. Glyph instance: x, y (float32 points, page-relative), size, glyph index (uint16), packed RGBA8 colour.
-- `GpuPage`, `GpuFace`, `TextBatch`, `RectBatch`: GPU-side holders. `Camera`: `x, y, zoom, width, height, dpr`.
+- `GpuPage`, `GpuFace`, `TextBatch`, `RectBatch`: GPU-side holders. `TriangleBatch` (`webgl/shapes/triangleBatch.ts`) is the same for triangles (x, y and a colour per vertex), drawn by a spreadsheet's charts (slanted lines, slices, areas). `Camera`: `x, y, zoom, width, height, dpr`.
 - `ResolvedFont` / `ManifestFamily` / `ManifestFace` and `page` groups: font resolution.
 
 ## Invariants and gotchas

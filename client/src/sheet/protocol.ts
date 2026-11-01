@@ -77,6 +77,32 @@ export interface CellIcon {
   level: number;
 }
 
+/** A chart's text: a run placed by its anchor (`align` says which end of it, or its middle; `y` is its middle). */
+export interface ChartText {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  /** RGB. */
+  color: number;
+  align: 'left' | 'center' | 'right';
+  bold: boolean;
+}
+
+/** A chart laid out for drawing (sheet/charts/scene.ts): its box on the sheet, and triangles and text in points from its top left. */
+export interface ChartScene {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Triangles: x, y of each vertex. */
+  points: Float32Array;
+  /** Each vertex's colour (RGB). */
+  colors: Uint32Array;
+  texts: ChartText[];
+}
+
 export interface CellTile {
   sheet: number;
   key: TileKey;
@@ -123,6 +149,8 @@ export interface SheetInfo {
   outline?: { rows: [number, number, boolean][]; cols: [number, number, boolean][] };
   /** Cells with notes (row, column), so resting the pointer on one shows it. */
   notes?: [number, number][];
+  /** How many charts the sheet has (the page asks for them, `charts`). */
+  charts?: number;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
   protection?: { password: boolean };
   /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
@@ -238,6 +266,8 @@ export type ToWorker =
   | { t: 'choices'; id: number; sheet: number; row: number; col: number }
   /** A cell's note. */
   | { t: 'note'; id: number; sheet: number; row: number; col: number }
+  /** The sheet's charts, laid out with its data as it is now. */
+  | { t: 'charts'; id: number; sheet: number }
   | { t: 'find'; id: number; sheet: number; text: string; from: { row: number; col: number }; backwards: boolean; matchCase: boolean; wholeCell: boolean; formulas: boolean; allSheets: boolean }
   | { t: 'save'; id: number }
   | { t: 'end'; sheet: number; from: { row: number; col: number }; dRow: number; dCol: number; id: number };
@@ -253,6 +283,7 @@ export type FromWorker =
   | { t: 'columnTexts'; id: number; texts: [string, number][] }
   | { t: 'choices'; id: number; items: string[] }
   | { t: 'note'; id: number; note: { author: string; text: string } | null }
+  | { t: 'charts'; id: number; scenes: ChartScene[] }
   | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }

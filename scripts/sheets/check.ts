@@ -126,6 +126,14 @@ filteredHistory.apply(0, { kind: 'input', range: { r0: 1, c0: 2, r1: 1, c1: 2 },
 filteredHistory.apply(0, { kind: 'filter', col: 1, values: ['2'], blanks: false, table: 'Table1' });
 filteredHistory.apply(0, { kind: 'insertRows', at: 2, count: 1 });
 books.set('table-filtered.xlsx', filtered);
+// Charts moved by inserted rows and a renamed sheet: their anchors and references rewritten in our parts and in Excel's.
+for (const name of ['charts', 'charts-excel']) {
+  const charted = await readWorkbook(readFileSync(path.join(ROOT, `client/test/fixtures/sheets/${name}.xlsx`)));
+  const chartedHistory = new History(charted);
+  chartedHistory.apply(0, { kind: 'insertRows', at: 0, count: 2 });
+  chartedHistory.apply(0, { kind: 'renameSheet', sheet: 0, name: 'Totals' });
+  books.set(`${name}-moved.xlsx`, charted);
+}
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);

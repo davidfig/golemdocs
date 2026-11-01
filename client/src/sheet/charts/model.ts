@@ -2,7 +2,7 @@
 // corners are anchored to) and each chart's part (DrawingML's chartSpace: the kind of chart, its series and their
 // references, title, legend and axes). The parts themselves are left as they are and written back unchanged.
 
-import { elements, textContent } from '@golemdocs/docx';
+import { elements, serializeXml, textContent } from '@golemdocs/docx';
 import type { OpcPackage, XmlElement } from '@golemdocs/docx';
 
 /** A corner of a chart: a cell, and an offset into it (points). */
@@ -79,6 +79,22 @@ export interface SheetChart {
   chart: Chart;
   /** The chart's part (for telling charts apart). */
   part: string;
+  /** The drawing part the chart is anchored in, and which of its anchors it is. */
+  drawingPart: string;
+  anchorIndex: number;
+}
+
+/** A chart with its references rewritten (a sheet renamed, rows inserted...), or the same chart when none changed. */
+export function rewriteChart(c: SheetChart, fn: (text: string) => string): SheetChart {
+  let changed = false;
+  const f = (ref: string | null) => {
+    if (ref === null) return null;
+    const out = fn(ref);
+    if (out !== ref) changed = true;
+    return out;
+  };
+  const groups = c.chart.groups.map((g) => ({ ...g, series: g.series.map((s) => ({ ...s, nameRef: f(s.nameRef), catRef: f(s.catRef), valRef: f(s.valRef), xRef: f(s.xRef) })) }));
+  return changed ? { ...c, chart: { ...c.chart, groups } } : c;
 }
 
 const EMU_PER_POINT = 12700;
@@ -220,6 +236,52 @@ export function readChart(root: XmlElement, theme: number[]): Chart | null {
   }
 }
 
+/** Writes the charts' anchors and series' references into their drawing and chart parts (everything else as it was). */
+export async function writeCharts(pkg: OpcPackage, charts: SheetChart[]): Promise<void> {
+  const drawings = new Map<string, XmlElement>();
+  for (const c of charts) {
+    if (pkg.has(c.drawingPart)) {
+      let drawing = drawings.get(c.drawingPart);
+      if (!drawing) drawings.set(c.drawingPart, (drawing = await pkg.xml(c.drawingPart)));
+      const anchor = [...elements(drawing)].filter((a) => ['twoCellAnchor', 'oneCellAnchor', 'absoluteAnchor'].includes(local(a)))[c.anchorIndex];
+      const put = (e: XmlElement | undefined, p: AnchorPoint | undefined) => {
+        if (!e || !p) return;
+        const set = (name: string, value: number) => {
+          const k = kid(e, name);
+          if (k) k.children = [String(Math.round(value))];
+        };
+        set('col', p.col);
+        set('row', p.row);
+        set('colOff', p.dx * EMU_PER_POINT);
+        set('rowOff', p.dy * EMU_PER_POINT);
+      };
+      put(kid(anchor, 'from'), c.anchor.from);
+      put(kid(anchor, 'to'), c.anchor.to);
+    }
+    if (pkg.has(c.part)) {
+      // Each series' references, by its place in the chart (the groups' series in order, as read).
+      const xml = await pkg.xml(c.part);
+      const plot = kid(kid(xml, 'chart'), 'plotArea');
+      const groups = [...elements(plot ?? xml)].filter((g) => kids(g, 'ser').length);
+      groups.forEach((g, gi) =>
+        kids(g, 'ser').forEach((ser, si) => {
+          const s = c.chart.groups[gi]?.series[si];
+          if (!s) return;
+          const setRef = (holder: XmlElement | undefined, ref: string | null) => {
+            const f = kid(kid(holder, 'numRef') ?? kid(holder, 'strRef') ?? kid(holder, 'multiLvlStrRef'), 'f');
+            if (f && ref !== null) f.children = [ref];
+          };
+          setRef(kid(ser, 'tx'), s.nameRef);
+          setRef(kid(ser, 'cat') ?? kid(ser, 'xVal'), s.catRef ?? s.xRef);
+          setRef(kid(ser, 'val') ?? kid(ser, 'yVal'), s.valRef);
+        }),
+      );
+      pkg.set(c.part, serializeXml(xml), 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml');
+    }
+  }
+  for (const [part, xml] of drawings) pkg.set(part, serializeXml(xml), 'application/vnd.openxmlformats-officedocument.drawing+xml');
+}
+
 /** A corner (`<xdr:from>`, `<xdr:to>`). */
 function point(e: XmlElement | undefined): AnchorPoint | null {
   if (!e) return null;
@@ -239,9 +301,11 @@ export async function readCharts(pkg: OpcPackage, sheetPart: string, root: XmlEl
   const drawing = await pkg.xml(drawingPart);
   const drawingRels = await pkg.relationships(drawingPart);
   const out: SheetChart[] = [];
+  let anchorIndex = -1;
   for (const a of elements(drawing)) {
     const kind = local(a);
     if (kind !== 'twoCellAnchor' && kind !== 'oneCellAnchor' && kind !== 'absoluteAnchor') continue;
+    anchorIndex++;
     const frame = kid(a, 'graphicFrame');
     const data = kid(kid(frame, 'graphic'), 'graphicData');
     const chartId = kid(data, 'chart')?.attrs['r:id'];
@@ -256,7 +320,8 @@ export async function readCharts(pkg: OpcPackage, sheetPart: string, root: XmlEl
     let from = point(kid(a, 'from'));
     if (!from && kind === 'absoluteAnchor') from = { row: 0, col: 0, dx: +(kid(a, 'pos')?.attrs.x ?? 0) / EMU_PER_POINT, dy: +(kid(a, 'pos')?.attrs.y ?? 0) / EMU_PER_POINT };
     if (!from) continue;
-    out.push({ anchor: { from, to: point(kid(a, 'to')) ?? undefined, size }, chart, part });
+    const anchor: ChartAnchor = { from, to: point(kid(a, 'to')) ?? undefined, size };
+    out.push({ anchor, chart, part, drawingPart, anchorIndex });
   }
   return out;
 }

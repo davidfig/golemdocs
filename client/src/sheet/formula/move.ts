@@ -5,6 +5,9 @@
 // A formula run is one text for many cells, and a relative reference reaches a different row from each cell; an insert can
 // move the cells some of them read and not others. So a run is cut where that changes, and each piece gets its own text.
 
+import { rewriteChart } from '../charts/model.ts';
+import type { AnchorPoint } from '../charts/model.ts';
+import type { Worksheet } from '../model/worksheet.ts';
 import { MAX_COLUMNS, MAX_ROWS, columnIndex, columnName } from '../model/column.ts';
 import type { Column, FormulaRun } from '../model/column.ts';
 import { isWorksheet } from '../model/workbook.ts';
@@ -270,6 +273,34 @@ export function moveValidations(book: Workbook, move: Move): void {
 }
 
 /** The moved sheet's notes follow their cells (a note whose cell was deleted goes, as in Excel). */
+/** A sheet's charts with their references rewritten (the sheet is written again when one changed). */
+function rewriteCharts(sheet: Worksheet, fn: (text: string) => string): void {
+  if (!sheet.charts.length) return;
+  const charts = sheet.charts.map((c) => rewriteChart(c, fn));
+  if (charts.every((c, i) => c === sheet.charts[i])) return;
+  sheet.charts = charts;
+  sheet.dirty.layout = true;
+}
+
+/** Charts after a move: every chart's references to the moved sheet, and the anchors of the charts on it (a corner past
+ * the move moves with it; one in deleted rows or columns goes to where they were). */
+export function moveCharts(book: Workbook, move: Move): void {
+  const target = book.sheets[move.sheet].name;
+  for (const sheet of book.sheets) if (isWorksheet(sheet)) rewriteCharts(sheet, (text) => moveText(text, sheet.name, target, move.axis, move.at, move.n));
+  const sheet = book.sheets[move.sheet];
+  if (!isWorksheet(sheet) || !sheet.charts.length) return;
+  const shift = (p: AnchorPoint): AnchorPoint => {
+    const index = move.axis === 'row' ? p.row : p.col;
+    let moved = index;
+    if (index >= move.at) moved = move.n > 0 ? index + move.n : Math.max(move.at, index + move.n);
+    // A corner inside deleted rows or columns lands at their start, at its edge.
+    const inside = move.n < 0 && index >= move.at && index < move.at - move.n;
+    return move.axis === 'row' ? { ...p, row: moved, dy: inside ? 0 : p.dy } : { ...p, col: moved, dx: inside ? 0 : p.dx };
+  };
+  sheet.charts = sheet.charts.map((c) => ({ ...c, anchor: { ...c.anchor, from: shift(c.anchor.from), to: c.anchor.to && shift(c.anchor.to) } }));
+  sheet.dirty.layout = true;
+}
+
 export function moveNotes(book: Workbook, move: Move): void {
   const sheet = book.sheets[move.sheet];
   if (!isWorksheet(sheet) || !sheet.notes.length) return;
@@ -320,6 +351,7 @@ export function deleteSheetText(text: string, name: string): string {
 export function rewriteAll(book: Workbook, fn: (text: string) => string): void {
   for (const sheet of book.sheets) {
     if (!isWorksheet(sheet)) continue;
+    rewriteCharts(sheet, fn);
     for (const column of sheet.grid.columns) {
       if (!column?.formulas.length) continue;
       let changed = false;

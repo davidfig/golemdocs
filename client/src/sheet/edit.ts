@@ -12,7 +12,7 @@ import { Worksheet, cellKey, keyCol, keyRow } from './model/worksheet.ts';
 import type { CellRange, Pane } from './model/worksheet.ts';
 import { expandStructured, fromFileFormula, toFileFormula } from './formula/fileNames.ts';
 import { shiftFormula } from './formula/shift.ts';
-import { deleteSheetText, moveConditional, moveFilter, moveFormulas, moveNotes, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
+import { deleteSheetText, moveCharts, moveConditional, moveFilter, moveFormulas, moveNotes, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
 import type { Move } from './formula/move.ts';
 import { restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
@@ -60,7 +60,7 @@ interface BookSnapshot {
   sheets?: { list: AnySheet[]; titles: string[]; parts: NonNullable<Workbook['source']>['parts']; names: DefinedName[]; active: number; removed: string[] };
   sheet?: SheetSnapshot;
   /** Every column's formulas and the defined names, for an edit that moves references throughout the workbook. */
-  formulas?: { columns: [Column, FormulaRun[]][]; names: DefinedName[] };
+  formulas?: { columns: [Column, FormulaRun[]][]; names: DefinedName[]; charts: [Worksheet, Worksheet['charts']][] };
 }
 
 interface Step {
@@ -204,7 +204,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (movesReferences(op)) {
     const columns: [Column, FormulaRun[]][] = [];
     for (const sheet of book.sheets) if (isWorksheet(sheet)) for (const column of sheet.grid.columns) if (column?.formulas.length) columns.push([column, column.formulas.map((f) => ({ ...f }))]);
-    out.formulas = { columns, names: book.names.map((n) => ({ ...n })) };
+    out.formulas = { columns, names: book.names.map((n) => ({ ...n })), charts: book.sheets.filter(isWorksheet).map((s): [Worksheet, Worksheet['charts']] => [s, s.charts]) };
   }
   if (op.kind === 'addSheet' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
     out.sheets = { list: book.sheets.slice(), titles: book.sheets.map((s) => s.name), parts: book.source ? book.source.parts.map((p) => ({ ...p })) : [], names: book.names.map((n) => ({ ...n })), active: book.activeSheet, removed: (book.source?.removed ?? []).slice() };
@@ -252,6 +252,7 @@ function restore(book: Workbook, snap: BookSnapshot): void {
   if (snap.formulas) {
     for (const [column, runs] of snap.formulas.columns) column.formulas = runs.map((f) => ({ ...f }));
     book.names = snap.formulas.names.map((n) => ({ ...n }));
+    for (const [sheet, charts] of snap.formulas.charts) sheet.charts = charts;
   }
   if (snap.sheets) {
     book.sheets = snap.sheets.list.slice();
@@ -817,6 +818,7 @@ function moveReferences(book: Workbook, change: Move, moveCells: () => void): vo
   moveTables(book, change);
   moveValidations(book, change);
   moveNotes(book, change);
+  moveCharts(book, change);
 }
 
 /** Puts a value typed or pasted into a cell, giving a General cell the format the typing implied. */

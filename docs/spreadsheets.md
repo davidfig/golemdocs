@@ -375,7 +375,14 @@ uniforms like rectangles) and its text through the cell fonts, kept until the sc
 `charts.xlsx` (written by `scripts/sheets/fixtures.ts`, a chart of each kind) and Excel's own save of it
 (`charts-excel.xlsx`), which read the same.
 
-**Next in M6**: charts follow inserted and deleted rows and columns (their anchors and references); inserting a chart
+Charts follow edits: `moveCharts` (with the other moves in `moveReferences`) rewrites every chart's references to the moved
+sheet and shifts the anchors of the charts on it (a corner in deleted rows or columns lands at their start); a renamed or
+deleted sheet rewrites them through `rewriteAll` (`rewriteChart`). Undo restores them with the formulas (the book-wide
+snapshot keeps every sheet's charts). When a sheet's layout is written, `writeCharts` writes each chart's anchor into its
+drawing part and each series' references into its chart part by position (everything else in the parts as it was); Excel
+opens charts moved this way, ours and its own (`charts-moved`, `charts-excel-moved` in `check.ts`), and keeps them.
+
+**Next in M6**: inserting a chart
 (Insert › Chart over a selection) and editing one (kind, title, legend, series); sparklines; pivot tables; what-if tools
 (Goal Seek, data tables, scenarios, Solver); print and PDF.
 

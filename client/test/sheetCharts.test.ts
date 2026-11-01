@@ -65,6 +65,28 @@ test('charts are written back as they were', async () => {
   assert.equal((back.sheets[0] as Worksheet).charts.length, 7);
 });
 
+test('charts follow inserted rows and a renamed sheet, in the model and in the file, and undo puts them back', async () => {
+  const { book, sheet } = await open('charts.xlsx');
+  const history = new History(book);
+  history.apply(0, { kind: 'insertRows', at: 0, count: 2 });
+  assert.equal(sheet.charts[0].chart.groups[0].series[0].valRef, 'Sales!$B$4:$B$9');
+  assert.deepEqual([sheet.charts[0].anchor.from.row, sheet.charts[0].anchor.to?.row], [3, 18]);
+  history.apply(0, { kind: 'renameSheet', sheet: 0, name: 'Totals' });
+  assert.equal(sheet.charts[0].chart.groups[0].series[0].valRef, 'Totals!$B$4:$B$9');
+  const back = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+  assert.equal(back.charts[0].chart.groups[0].series[0].valRef, 'Totals!$B$4:$B$9');
+  assert.equal(back.charts[0].chart.groups[0].series[0].catRef, 'Totals!$A$4:$A$9');
+  assert.deepEqual([back.charts[0].anchor.from.row, back.charts[0].anchor.to?.row], [3, 18]);
+  history.undo();
+  history.undo();
+  assert.equal(sheet.charts[0].chart.groups[0].series[0].valRef, 'Sales!$B$2:$B$7');
+  assert.equal(sheet.charts[0].anchor.from.row, 1);
+  sheet.dirty.layout = true;
+  const again = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+  assert.equal(again.charts[0].chart.groups[0].series[0].valRef, 'Sales!$B$2:$B$7', 'written back again after the undo');
+  assert.equal(again.charts[0].anchor.from.row, 1);
+});
+
 test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {
   assert.deepEqual(niceScale(0, 21, 5), { min: 0, max: 25, step: 5 });
   assert.deepEqual(niceScale(0, 0.87, 5), { min: 0, max: 1, step: 0.2 });

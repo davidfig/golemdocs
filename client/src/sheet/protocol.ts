@@ -157,6 +157,8 @@ export interface SheetInfo {
   notes?: [number, number][];
   /** How many charts the sheet has (the page asks for them, `charts`). */
   charts?: number;
+  /** The sheet has sparklines (they come with the charts). */
+  sparklines?: boolean;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
   protection?: { password: boolean };
   /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
@@ -310,7 +312,7 @@ export type FromWorker =
   | { t: 'columnTexts'; id: number; texts: [string, number][] }
   | { t: 'choices'; id: number; items: string[] }
   | { t: 'note'; id: number; note: { author: string; text: string } | null }
-  | { t: 'charts'; id: number; scenes: ChartScene[] }
+  | { t: 'charts'; id: number; scenes: ChartScene[]; sparklines: ChartScene | null }
   | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }

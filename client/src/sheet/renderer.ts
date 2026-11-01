@@ -155,6 +155,8 @@ export interface SheetFrame {
   choices: { row: number; col: number } | null;
   /** The sheet's charts, laid out (drawn over the cells). */
   charts: ChartScene[];
+  /** The sheet's sparklines, all in one scene (drawn in their cells, under the charts). */
+  sparklines: ChartScene | null;
   /** The chart picked (framed, with handles at its corners), by its place in `charts`. */
   chart: number | null;
   /** A chart being resized: where it will be (sheet points), drawn dashed. */
@@ -549,7 +551,7 @@ export class SheetRenderer {
       }
 
       // Charts, over the cells, in their places.
-      if (frame.charts.length) this.drawCharts(view, frame.charts, docLeft, docTop, docRight, docBottom, frame.darkPages);
+      if (frame.charts.length || frame.sparklines) this.drawCharts(view, frame.sparklines ? [frame.sparklines, ...frame.charts] : frame.charts, docLeft, docTop, docRight, docBottom, frame.darkPages);
 
       // The AutoFilter's buttons, the selection, the cell being edited's frame, and a copied range.
       const over = new RectList();

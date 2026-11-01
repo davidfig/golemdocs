@@ -11,6 +11,7 @@ import { Workbook } from '../src/sheet/model/workbook.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../src/sheet/xlsx/write.ts';
 import { chartScene, niceScale } from '../src/sheet/charts/scene.ts';
+import { sparklineScene } from '../src/sheet/charts/sparklineScene.ts';
 import { readChart } from '../src/sheet/charts/model.ts';
 import { changeKind } from '../src/sheet/charts/make.ts';
 import { syncChart } from '../src/sheet/charts/sync.ts';
@@ -213,6 +214,38 @@ test('Select Data: series named, added and taken away, categories changed, in th
   assert.equal(xml.match(/<c:ser>/g)?.length, 3);
   assert.match(xml, /<c:tx><c:v>Typed name<\/c:v><\/c:tx>/);
 });
+
+for (const name of ['sparklines.xlsx', 'sparklines-excel.xlsx']) {
+  test(`sparklines are read, drawn in their cells, follow inserted rows, and are written back (${name})`, async () => {
+    const { book, engine, sheet } = await open(name);
+    // Excel writes the groups in the other order: by kind here.
+    const order = ['line', 'column', 'stacked'];
+    sheet.sparklines.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+    assert.deepEqual(sheet.sparklines.map((g) => [g.kind, g.markers, g.sparklines.map((s) => `${s.row},${s.col} ${s.ref}`)]), [
+      ['line', true, ['1,7 Data!B2:G2', '2,7 Data!B3:G3', '3,7 Data!B4:G4']],
+      ['column', false, ['1,8 Data!B2:G2', '2,8 Data!B3:G3', '3,8 Data!B4:G4']],
+      ['stacked', false, ['1,9 Data!B2:G2', '2,9 Data!B3:G3', '3,9 Data!B4:G4']],
+    ]);
+    const scene = sparklineScene(book, engine, 0, sheet)!;
+    assert.ok(scene.points.length > 0);
+    // Every vertex is inside a sparkline's cell (columns H to J, rows 2 to 4).
+    const left = sheet.colSizes.position(7);
+    const right = sheet.colSizes.position(10);
+    const top = sheet.rowSizes.position(1);
+    const bottom = sheet.rowSizes.position(4);
+    for (let i = 0; i < scene.points.length; i += 2) {
+      assert.ok(scene.points[i] >= left - 3 && scene.points[i] <= right + 3 && scene.points[i + 1] >= top - 3 && scene.points[i + 1] <= bottom + 3);
+    }
+    const history = new History(book);
+    history.apply(0, { kind: 'insertRows', at: 2, count: 1 });
+    assert.deepEqual(sheet.sparklines[0].sparklines.map((s) => `${s.row} ${s.ref}`), ['1 Data!B2:G2', '3 Data!B4:G4', '4 Data!B5:G5']);
+    const back = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+    const stacked = back.sparklines.find((g) => g.kind === 'stacked')!;
+    assert.deepEqual(stacked.sparklines.map((s) => `${s.row} ${s.ref}`), ['1 Data!B2:G2', '3 Data!B4:G4', '4 Data!B5:G5']);
+    history.undo();
+    assert.equal(sheet.sparklines[0].sparklines[2].row, 3);
+  });
+}
 
 test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {
   assert.deepEqual(niceScale(0, 21, 5), { min: 0, max: 25, step: 5 });

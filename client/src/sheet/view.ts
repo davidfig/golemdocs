@@ -128,7 +128,7 @@ export class SheetEditorView {
   /** Bumped whenever the workbook's info changes (an edit, a load): the charts are laid out again. */
   private bookVersion = 0;
   /** The charts last laid out: for which sheet and version of the workbook. */
-  private charts: { key: string; sheet: number; scenes: ChartScene[] } = { key: '', sheet: -1, scenes: [] };
+  private charts: { key: string; sheet: number; scenes: ChartScene[]; sparklines: ChartScene | null } = { key: '', sheet: -1, scenes: [], sparklines: null };
   /** The cell `content` is of (sheet:row:col): it comes a moment after the active cell changes. */
   private contentOf = '';
   /** The cell being edited, how editing began (typing over it, or F2 / a double click to change it), and its text. */
@@ -382,9 +382,10 @@ export class SheetEditorView {
     this.offsetTop = top;
     // The charts are laid out again whenever the workbook changed (their data may have), or another sheet shows.
     const chartsKey = `${this.sheetIndex}:${this.bookVersion}`;
-    if (info.charts && this.charts.key !== chartsKey) void this.loadCharts(chartsKey);
+    if ((info.charts || info.sparklines) && this.charts.key !== chartsKey) void this.loadCharts(chartsKey);
     const pending = this.renderer.draw({
       charts: this.chartScenes(),
+      sparklines: this.charts.sheet === this.sheetIndex && info.sparklines ? this.charts.sparklines : null,
       chart: this.chart,
       chartGhost: this.chartResize?.box ?? null,
       camera,
@@ -662,7 +663,7 @@ export class SheetEditorView {
     this.charts.key = key;
     const reply = await this.ask<Extract<FromWorker, { t: 'charts' }>>({ t: 'charts', id: this.id(), sheet }).catch(() => null);
     if (!reply || this.charts.key !== key) return;
-    this.charts = { key, sheet, scenes: reply.scenes };
+    this.charts = { key, sheet, scenes: reply.scenes, sparklines: reply.sparklines };
     this.deps.render();
   }
 
@@ -1890,7 +1891,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, chartBoxes: this.charts.scenes.map((s) => [Math.round(s.x), Math.round(s.y), Math.round(s.width), Math.round(s.height)]), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, sparklines: Math.round(this.charts.sparklines?.points.reduce((a, b) => a + b, 0) ?? 0), chartBoxes: this.charts.scenes.map((s) => [Math.round(s.x), Math.round(s.y), Math.round(s.width), Math.round(s.height)]), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */

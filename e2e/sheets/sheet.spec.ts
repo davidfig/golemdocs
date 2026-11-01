@@ -262,6 +262,19 @@ test('a workbook’s charts are drawn over its cells, and follow their data', as
   expect((await charts())[0]).toContain('South');
 });
 
+test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'sparklines.xlsx');
+  const drawn = async () => ((await state(page)) as unknown as { sparklines: number }).sparklines;
+  await expect.poll(drawn).toBeGreaterThan(0);
+  const before = await drawn();
+  await clickCell(page, 1, 3);
+  await page.keyboard.type('20');
+  await page.keyboard.press('Enter');
+  await expect.poll(drawn).not.toBe(before);
+});
+
 test('Insert › Chart makes a chart beside the data; it is picked, changed from its menu, dragged and deleted', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'charts.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/charts.xlsx')), mimeType: 'application/octet-stream' });

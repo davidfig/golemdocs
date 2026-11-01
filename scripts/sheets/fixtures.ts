@@ -84,7 +84,28 @@ export async function chartsWorkbook(): Promise<Uint8Array> {
   return pkg.write();
 }
 
+/** sparklines.xlsx: three rows of six values (Data!B2:G4, some below zero), each with a line (H), a column (I) and a
+ * win/loss (J) sparkline. */
+export async function sparklinesWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  book.sheets.push(new Worksheet('Data', 1));
+  new History(book).apply(0, {
+    kind: 'paste',
+    at: { row: 0, col: 0 },
+    rows: [['Item', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Line', 'Column', 'Win/loss'], ['pens', '3', '5', '2', '8', '6', '9'], ['ink', '-2', '4', '-1', '3', '5', '-3'], ['caps', '7', '7', '6', '4', '3', '1']],
+  });
+  const pkg = await OpcPackage.read(await writeWorkbook(book));
+  const colors = '<x14:colorSeries rgb="FF376092"/><x14:colorNegative rgb="FFD00000"/><x14:colorAxis rgb="FF000000"/><x14:colorMarkers rgb="FFD00000"/><x14:colorFirst rgb="FFD00000"/><x14:colorLast rgb="FFD00000"/><x14:colorHigh rgb="FF00B050"/><x14:colorLow rgb="FFFF0000"/>';
+  const group = (attrs: string, col: string) =>
+    `<x14:sparklineGroup ${attrs} displayEmptyCellsAs="gap">${colors}<x14:sparklines>${[2, 3, 4].map((r) => `<x14:sparkline><xm:f>Data!B${r}:G${r}</xm:f><xm:sqref>${col}${r}</xm:sqref></x14:sparkline>`).join('')}</x14:sparklines></x14:sparklineGroup>`;
+  const ext = `<extLst><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:sparklineGroups xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">${group('markers="1" high="1" low="1"', 'H')}${group('type="column" negative="1" high="1"', 'I')}${group('type="stacked" negative="1"', 'J')}</x14:sparklineGroups></ext></extLst>`;
+  const sheetXml = await pkg.text('xl/worksheets/sheet1.xml');
+  pkg.set('xl/worksheets/sheet1.xml', sheetXml.replace('</worksheet>', `${ext}</worksheet>`), 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml');
+  return pkg.write();
+}
+
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
+  writeFileSync(path.join(FIXTURES, 'sparklines.xlsx'), await sparklinesWorkbook());
   writeFileSync(path.join(FIXTURES, 'validation.xlsx'), await validationWorkbook());
   writeFileSync(path.join(FIXTURES, 'charts.xlsx'), await chartsWorkbook());
   console.log('written');

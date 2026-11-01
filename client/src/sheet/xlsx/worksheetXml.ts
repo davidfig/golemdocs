@@ -11,6 +11,7 @@ import { cellName, parseCell, parseRange, rangeName } from '../refs.ts';
 import { conditionalElement, readConditional } from '../conditional.ts';
 import { autoFilterElement, readAutoFilter } from '../filter.ts';
 import { protectionElement, readProtection } from '../protection.ts';
+import { readSparklines, writeSparklines } from '../sparklines.ts';
 import { readValidations, validationsElement } from '../validation.ts';
 
 const decoder = new TextDecoder();
@@ -78,6 +79,7 @@ export function readAround(sheet: Worksheet, root: XmlElement): void {
   sheet.autoFilter = readAutoFilter(root);
   sheet.validations = readValidations(root);
   sheet.protection = readProtection(root);
+  sheet.sparklines = readSparklines(root);
   for (const merge of elements(child(root, 'mergeCells') ?? el('x'))) {
     const range = merge.attrs.ref && parseRange(merge.attrs.ref);
     if (range) sheet.merges.push(range);
@@ -128,6 +130,7 @@ export function writeAround(sheet: Worksheet, root: XmlElement): { head: string;
   set('autoFilter', sheet.autoFilter ? autoFilterElement(sheet.autoFilter) : null);
   set('tableParts', sheet.tables.length && sheet.tables.every((t) => t.rId) ? el('tableParts', { count: sheet.tables.length }, sheet.tables.map((t) => el('tablePart', { 'r:id': t.rId }))) : null);
   set('sheetProtection', protectionElement(sheet.protection));
+  writeSparklines(root, sheet.sparklines);
   set('dataValidations', validationsElement(sheet.validations));
   if (sheet.drawingRId) set('drawing', el('drawing', { 'r:id': sheet.drawingRId }));
   if (sheet.legacyDrawing !== undefined) set('legacyDrawing', sheet.legacyDrawing ? el('legacyDrawing', { 'r:id': sheet.legacyDrawing }) : null);

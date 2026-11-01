@@ -282,6 +282,31 @@ function rewriteCharts(sheet: Worksheet, fn: (text: string) => string): void {
   sheet.dirty.layout = true;
 }
 
+/** Sparklines after a move: every one's values reference, and the cells of those on the moved sheet (one in a deleted
+ * row or column goes with it). */
+export function moveSparklines(book: Workbook, move: Move): void {
+  const target = book.sheets[move.sheet].name;
+  const limit = move.axis === 'row' ? MAX_ROWS : MAX_COLUMNS;
+  for (const [index, sheet] of book.sheets.entries()) {
+    if (!isWorksheet(sheet) || !sheet.sparklines.length) continue;
+    sheet.sparklines = sheet.sparklines.map((g) => ({
+      ...g,
+      sparklines: g.sparklines.flatMap((s) => {
+        let { row, col } = s;
+        if (index === move.sheet) {
+          const at = move.axis === 'row' ? row : col;
+          const moved = at < move.at ? at : move.n > 0 ? at + move.n : at >= move.at - move.n ? at + move.n : -1;
+          if (moved < 0 || moved >= limit) return [];
+          if (move.axis === 'row') row = moved;
+          else col = moved;
+        }
+        return [{ row, col, ref: moveText(s.ref, sheet.name, target, move.axis, move.at, move.n) }];
+      }),
+    }));
+    sheet.dirty.layout = true;
+  }
+}
+
 /** Charts after a move: every chart's references to the moved sheet, and the anchors of the charts on it (a corner past
  * the move moves with it; one in deleted rows or columns goes to where they were). */
 export function moveCharts(book: Workbook, move: Move): void {
@@ -352,6 +377,10 @@ export function rewriteAll(book: Workbook, fn: (text: string) => string): void {
   for (const sheet of book.sheets) {
     if (!isWorksheet(sheet)) continue;
     rewriteCharts(sheet, fn);
+    if (sheet.sparklines.length) {
+      sheet.sparklines = sheet.sparklines.map((g) => ({ ...g, sparklines: g.sparklines.map((s) => ({ ...s, ref: fn(s.ref) })) }));
+      sheet.dirty.layout = true;
+    }
     for (const column of sheet.grid.columns) {
       if (!column?.formulas.length) continue;
       let changed = false;

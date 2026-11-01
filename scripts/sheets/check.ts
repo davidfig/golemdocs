@@ -170,6 +170,14 @@ new History(redata).apply(0, {
 });
 new History(redata).apply(0, { kind: 'chart', index: 3, change: { data: { series: [{ name: 'Only', values: 'D2:D7' }], categories: '' } } });
 books.set('charts-data.xlsx', redata);
+// Sparklines moved by inserted rows and a renamed sheet, written back into the sheet's extLst (ours, and Excel's).
+for (const name of ['sparklines', 'sparklines-excel']) {
+  const sparked = await readWorkbook(readFileSync(path.join(ROOT, `client/test/fixtures/sheets/${name}.xlsx`)));
+  const sparkedHistory = new History(sparked);
+  sparkedHistory.apply(0, { kind: 'insertRows', at: 2, count: 1 });
+  sparkedHistory.apply(0, { kind: 'renameSheet', sheet: 0, name: 'Sales data' });
+  books.set(`${name}-moved.xlsx`, sparked);
+}
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);

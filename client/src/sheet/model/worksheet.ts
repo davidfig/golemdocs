@@ -9,6 +9,7 @@ import type { Validation } from '../validation.ts';
 import type { Note, NoteParts } from '../notes.ts';
 import type { SheetProtection } from '../protection.ts';
 import type { SheetChart } from '../charts/model.ts';
+import type { SparklineGroup } from '../sparklines.ts';
 import { Grid, MAX_COLUMNS, MAX_ROWS } from './column.ts';
 import { Sizes } from './sizes.ts';
 
@@ -58,6 +59,8 @@ export class Worksheet {
   /** Notes (Excel's comments), and the parts they are kept in. */
   notes: Note[] = [];
   noteParts: NoteParts | null = null;
+  /** Sparklines, by group (sparklines.ts), read from the sheet's `<extLst>` and written back from here. */
+  sparklines: SparklineGroup[] = [];
   /** Charts on the sheet (charts/model.ts), read from its drawing; their parts are written back as they were. */
   charts: SheetChart[] = [];
   /** Protect Sheet: `<sheetProtection>`'s attributes (protection.ts), or null. */

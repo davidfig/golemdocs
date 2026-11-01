@@ -412,7 +412,18 @@ of the last without its colour (the next one Excel gives), and each names its na
 and values; a reference that changes drops its cached values. Excel opens Excel's charts changed this way and names the
 series from their cells (`charts-data` in `check.ts`).
 
-**Next in M6**: sparklines; pivot tables; what-if tools (Goal
+**Sparklines** (`sparklines.ts`, `charts/sparklineScene.ts`): read from the sheet's `<extLst>` (Excel 2010's
+`x14:sparklineGroups`: each group's kind, line, column or win/loss, colours and options, and its sparklines, a cell and
+a values reference) into `Worksheet.sparklines`, and written back from the model (each group's other parts as read; the
+extension goes when none is left), so they follow inserted and deleted rows and columns (`moveSparklines`) and renamed
+sheets (`rewriteAll`), and undo restores them with the charts. `sparklineScene` draws all of a sheet's sparklines into one
+scene in sheet points (one batch however many there are), each inside its cell from its values now: lines with markers
+and the high, low, first, last and negative points in their colours, columns standing on zero, win/loss bars; scales per
+sparkline, per group or fixed, as the group says. It comes with the charts (`charts` request) and is drawn under them,
+not pickable. Checked by `sparklines.xlsx` (`fixtures.ts`) and Excel's save of it, and in Excel after rows are inserted and
+the sheet renamed (`sparklines-moved`, `sparklines-excel-moved`).
+
+**Next in M6**: inserting sparklines; pivot tables; what-if tools (Goal
 Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)

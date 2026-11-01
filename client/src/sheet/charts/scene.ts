@@ -60,7 +60,7 @@ function cells(engine: Engine, book: Workbook, sheetIndex: number, ref: string |
 }
 
 /** A reference's numbers (null for empty cells and text), or the cached ones. */
-function numbersOf(engine: Engine, book: Workbook, sheetIndex: number, ref: string | null, cached: (number | null)[]): (number | null)[] {
+export function numbersOf(engine: Engine, book: Workbook, sheetIndex: number, ref: string | null, cached: (number | null)[]): (number | null)[] {
   const found = cells(engine, book, sheetIndex, ref);
   if (!found) return cached;
   const index = book.sheets.indexOf(found.sheet);
@@ -97,7 +97,7 @@ export function defaultColor(accents: number[], i: number): number {
 }
 
 /** Draws into flat lists of triangles (x, y per vertex, a colour per vertex) and text runs. */
-class Painter {
+export class Painter {
   points: number[] = [];
   colors: number[] = [];
   texts: ChartText[] = [];

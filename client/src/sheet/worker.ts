@@ -5,6 +5,7 @@
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
 import { chartScene } from './charts/scene.ts';
+import { sparklineScene } from './charts/sparklineScene.ts';
 import { tableFilter } from './tables.ts';
 import { hasPassword, hiddenFormula, isProtected, lockedCell } from './protection.ts';
 import { fingerprint } from '../image/container.ts';
@@ -77,6 +78,7 @@ export function info(b: Workbook): BookInfo {
         loaded: b.source?.parts[i]?.loaded ?? true,
         outline: sheet.rowOutline.size || sheet.colOutline.size ? { rows: [...sheet.rowOutline].slice(0, 200000).map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]), cols: [...sheet.colOutline].map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]) } : undefined,
         charts: sheet.charts.length || undefined,
+        sparklines: sheet.sparklines.some((g) => g.sparklines.length) || undefined,
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
         filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
@@ -312,8 +314,10 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       case 'charts': {
         await settled();
         const sheet = book.sheets[m.sheet];
-        const scenes = sheet && isWorksheet(sheet) && engine ? sheet.charts.map((c, i) => chartScene(book!, engine!, m.sheet, sheet, c, `${m.sheet}:${i}`)) : [];
-        return post({ t: 'charts', id: m.id, scenes }, scenes.flatMap((s) => [s.points.buffer, s.colors.buffer]));
+        const ok = sheet && isWorksheet(sheet) && engine;
+        const scenes = ok ? sheet.charts.map((c, i) => chartScene(book!, engine!, m.sheet, sheet, c, `${m.sheet}:${i}`)) : [];
+        const sparklines = ok ? sparklineScene(book!, engine!, m.sheet, sheet) : null;
+        return post({ t: 'charts', id: m.id, scenes, sparklines }, [...scenes, ...(sparklines ? [sparklines] : [])].flatMap((s) => [s.points.buffer, s.colors.buffer]));
       }
       case 'note': {
         const sheet = book.sheets[m.sheet];

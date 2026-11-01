@@ -4,6 +4,7 @@
 // whole range (top 10, above average, duplicates, scales, bars) work out what they need from it once, until cells change.
 // Icon sets are read and kept, not drawn yet.
 
+import type { CellIcon, IconShape } from './protocol.ts';
 import { child, el, elements, textContent } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import type { Engine } from './formula/engine.ts';
@@ -37,6 +38,8 @@ export interface CfRule {
   stdDev?: number;
   scale?: { cfvo: Cfvo[]; colors: Color[] };
   bar?: { cfvo: Cfvo[]; color: Color; showValue: boolean };
+  /** An icon set: its name (3TrafficLights1...), thresholds (each passed at or above, unless `gte` is false), reversed. */
+  icons?: { set: string; cfvo: Cfvo[]; gte: boolean[]; reverse: boolean; showValue: boolean };
 }
 
 export interface ConditionalFormat {
@@ -72,6 +75,11 @@ export function readConditional(root: XmlElement): ConditionalFormat[] {
       if (scale) rule.scale = { cfvo: cfvos(scale), colors: [...elements(scale)].filter((c) => c.name === 'color').map((c) => readColor(c) ?? { rgb: 0 }) };
       const bar = child(e, 'dataBar');
       if (bar) rule.bar = { cfvo: cfvos(bar), color: readColor(child(bar, 'color')) ?? { rgb: 0x638ec6 }, showValue: bar.attrs.showValue !== '0' };
+      const icons = child(e, 'iconSet');
+      if (icons) {
+        const list = [...elements(icons)].filter((c) => c.name === 'cfvo');
+        rule.icons = { set: icons.attrs.iconSet ?? '3TrafficLights1', cfvo: cfvos(icons), gte: list.map((c) => c.attrs.gte !== '0'), reverse: icons.attrs.reverse === '1', showValue: icons.attrs.showValue !== '0' };
+      }
       rules.push(rule);
     }
     if (ranges.length && rules.length) out.push({ ranges, rules, element: cf });
@@ -100,6 +108,11 @@ function ruleElement(rule: CfRule): XmlElement {
   const children: XmlElement[] = rule.formulas.map((f) => el('formula', {}, [f]));
   if (rule.scale) children.push(el('colorScale', {}, [...rule.scale.cfvo.map(cfvo), ...rule.scale.colors.map((c) => colorXml('color', c))]));
   if (rule.bar) children.push(el('dataBar', { showValue: rule.bar.showValue ? undefined : 0 }, [...rule.bar.cfvo.map(cfvo), colorXml('color', rule.bar.color)]));
+  if (rule.icons) {
+    const icons = rule.icons;
+    const attrs = { iconSet: icons.set === '3TrafficLights1' ? undefined : icons.set, showValue: icons.showValue ? undefined : 0, reverse: icons.reverse ? 1 : undefined };
+    children.push(el('iconSet', attrs, icons.cfvo.map((v, i) => el('cfvo', { type: v.type, val: v.val, gte: icons.gte[i] === false ? 0 : undefined }))));
+  }
   return el(
     'cfRule',
     {
@@ -127,7 +140,50 @@ export interface CellOverlay {
   fill?: number;
   /** A data bar over part of the cell's width (fractions), in RGB. */
   bar?: { from: number; to: number; color: number };
+  icon?: CellIcon;
   hideValue?: boolean;
+}
+
+const RED = 0xe0453a;
+const AMBER = 0xf2b632;
+const GREEN = 0x3c9a4b;
+const GRAY = 0x8c8c8c;
+const BLACK = 0x3a3a3a;
+const PINK = 0xf09c95;
+const BLUE = 0x4472c4;
+const SILVER = 0xd0d0d0;
+
+/** Excel's icon sets, lowest icon first: each a shape and colour, and for the ones that fill up, how full. */
+const ICON_SETS: Record<string, [IconShape, number, number?][]> = {
+  '3Arrows': [['down', RED], ['right', AMBER], ['up', GREEN]],
+  '3ArrowsGray': [['down', GRAY], ['right', GRAY], ['up', GRAY]],
+  '3Flags': [['flag', RED], ['flag', AMBER], ['flag', GREEN]],
+  '3TrafficLights1': [['circle', RED], ['circle', AMBER], ['circle', GREEN]],
+  '3TrafficLights2': [['circle', RED], ['circle', AMBER], ['circle', GREEN]],
+  '3Signs': [['triangleDown', RED], ['triangleUp', AMBER], ['circle', GREEN]],
+  '3Symbols': [['circle', RED], ['circle', AMBER], ['circle', GREEN]],
+  '3Symbols2': [['circle', RED], ['circle', AMBER], ['circle', GREEN]],
+  '3Stars': [['star', SILVER], ['star', AMBER, 0.5], ['star', AMBER]],
+  '3Triangles': [['triangleDown', RED], ['dash', AMBER], ['triangleUp', GREEN]],
+  '4Arrows': [['down', RED], ['downRight', AMBER], ['upRight', AMBER], ['up', GREEN]],
+  '4ArrowsGray': [['down', GRAY], ['downRight', GRAY], ['upRight', GRAY], ['up', GRAY]],
+  '4RedToBlack': [['circle', BLACK], ['circle', GRAY], ['circle', PINK], ['circle', RED]],
+  '4Rating': [['bars', BLUE, 0.25], ['bars', BLUE, 0.5], ['bars', BLUE, 0.75], ['bars', BLUE, 1]],
+  '4TrafficLights': [['circle', BLACK], ['circle', RED], ['circle', AMBER], ['circle', GREEN]],
+  '5Arrows': [['down', RED], ['downRight', AMBER], ['right', AMBER], ['upRight', AMBER], ['up', GREEN]],
+  '5ArrowsGray': [['down', GRAY], ['downRight', GRAY], ['right', GRAY], ['upRight', GRAY], ['up', GRAY]],
+  '5Rating': [['bars', BLUE, 0], ['bars', BLUE, 0.25], ['bars', BLUE, 0.5], ['bars', BLUE, 0.75], ['bars', BLUE, 1]],
+  '5Quarters': [['quarters', BLACK, 0], ['quarters', BLACK, 0.25], ['quarters', BLACK, 0.5], ['quarters', BLACK, 0.75], ['quarters', BLACK, 1]],
+  '5Boxes': [['boxes', BLUE, 0], ['boxes', BLUE, 0.25], ['boxes', BLUE, 0.5], ['boxes', BLUE, 0.75], ['boxes', BLUE, 1]],
+};
+
+/** The icon a value gets: past the highest threshold it reaches (the first threshold is the bottom of the first icon). */
+export function iconFor(set: string, value: number, limits: number[], gte: boolean[], reverse: boolean): CellIcon {
+  const icons = ICON_SETS[set] ?? ICON_SETS['3TrafficLights1'];
+  let index = 0;
+  for (let i = 1; i < limits.length && i < icons.length; i++) if (gte[i] === false ? value > limits[i] : value >= limits[i]) index = i;
+  const [shape, color, level] = icons[reverse ? icons.length - 1 - index : index];
+  return { shape, color, level: level ?? 1 };
 }
 
 const inRange = (r: CellRange, row: number, col: number) => row >= r.r0 && row <= r.r1 && col >= r.c0 && col <= r.c1;
@@ -172,7 +228,7 @@ export class ConditionalPainter {
       const hit = this.apply(rule, format, row, col, value, out);
       if (hit && rule.stopIfTrue) break;
     }
-    return out.dxfs.length || out.fill !== undefined || out.bar ? out : null;
+    return out.dxfs.length || out.fill !== undefined || out.bar || out.icon ? out : null;
   }
 
   private apply(rule: CfRule, format: ConditionalFormat, row: number, col: number, value: Scalar, out: CellOverlay): boolean {
@@ -189,6 +245,12 @@ export class ConditionalPainter {
       // Excel's bars run from a tenth of the cell to nine tenths of it.
       out.bar = { from: 0, to: 0.1 + 0.8 * t, color: this.rgb(rule.bar.color) };
       if (!rule.bar.showValue) out.hideValue = true;
+      return true;
+    }
+    if (rule.icons) {
+      if (typeof value !== 'number' || out.icon) return false;
+      out.icon = iconFor(rule.icons.set, value, this.thresholds(rule, rule.icons.cfvo, format), rule.icons.gte, rule.icons.reverse);
+      if (!rule.icons.showValue) out.hideValue = true;
       return true;
     }
     if (rule.dxf === undefined) return false;

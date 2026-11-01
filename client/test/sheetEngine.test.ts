@@ -378,6 +378,28 @@ test('conditional formats: rules over cells, formulas, ranks, scales and bars', 
   assert.equal(style.fill, 0xff0000);
 });
 
+test('icon sets: an icon by the thresholds the value reaches, reversed, in tiles', () => {
+  const s = sheet();
+  s.type('A1:A5', '=ROW()*10');
+  const ws = s.book.sheets[0] as Worksheet;
+  ws.conditional = readConditional(
+    parseXml(`<worksheet>
+      <conditionalFormatting sqref="A1:A5"><cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting>
+      <conditionalFormatting sqref="B1:B5"><cfRule type="iconSet" priority="2"><iconSet iconSet="3TrafficLights1" reverse="1" showValue="0"><cfvo type="num" val="0"/><cfvo type="num" val="20" gte="0"/><cfvo type="num" val="40"/></iconSet></cfRule></conditionalFormatting>
+    </worksheet>`),
+  );
+  s.type('B1:B5', '=A1');
+  const painter = new ConditionalPainter(s.engine, 0, ws, (c) => ('rgb' in c ? c.rgb & 0xffffff : 0));
+  // 10..50: 33% is 23.2, 67% is 36.8.
+  assert.deepEqual([0, 1, 2, 3, 4].map((r) => painter.overlay(r, 0)?.icon?.shape), ['down', 'down', 'right', 'up', 'up']);
+  // 20 is not above 20 (gte="0"); reversed, the lowest values get the last icon (green).
+  assert.deepEqual([0, 1, 2, 3].map((r) => painter.overlay(r, 1)?.icon?.color), [0x3c9a4b, 0x3c9a4b, 0xf2b632, 0xe0453a]);
+  assert.equal(painter.overlay(0, 1)?.hideValue, true);
+  const tile = cellTile(s.book, 0, ws, { level: 0, tx: 0, ty: 0 }, new TileCache(s.book), painter);
+  assert.equal(tile.cells.find((c) => c.row === 4 && c.col === 0)?.icon?.shape, 'up');
+  assert.equal(tile.cells.find((c) => c.row === 0 && c.col === 1)?.text, '', 'showValue="0" hides the value');
+});
+
 test('conditional formats follow inserted rows, are written back, and undo puts them back', async () => {
   const s = sheet();
   s.type('A1:A5', '1');

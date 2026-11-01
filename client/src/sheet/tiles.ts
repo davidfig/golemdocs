@@ -224,6 +224,7 @@ function applyConditional(book: Workbook, sheet: Worksheet, cells: CellPaint[], 
           if (numFmt && column?.kind(row) === Kind.Number) paint.text = numberFormat(numFmt).format(column.value(row), book.date1904).text;
           if (o.hideValue) paint.text = '';
           if (o.bar) paint.bar = o.bar;
+          if (o.icon) paint.icon = o.icon;
           if (o.dxfs.length || o.fill !== undefined) paint.style = cache.overlay(paint.style, o);
         }
       }

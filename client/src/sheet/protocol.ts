@@ -64,6 +64,17 @@ export interface CellPaint {
   note?: boolean;
   /** A conditional format's data bar: from and to as fractions of the cell's width, and its colour. */
   bar?: { from: number; to: number; color: number };
+  /** A conditional format's icon, at the cell's left: its shape, colour, and how full it is (ratings, quarters, boxes). */
+  icon?: CellIcon;
+}
+
+export type IconShape = 'up' | 'upRight' | 'right' | 'downRight' | 'down' | 'circle' | 'flag' | 'star' | 'triangleUp' | 'dash' | 'triangleDown' | 'bars' | 'quarters' | 'boxes';
+
+export interface CellIcon {
+  shape: IconShape;
+  color: number;
+  /** 0 to 1, for the shapes that fill up. */
+  level: number;
 }
 
 export interface CellTile {

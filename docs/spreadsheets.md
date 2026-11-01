@@ -366,7 +366,10 @@ evaluated in the worker as tiles are built (`ConditionalPainter`: `cellIs`, form
 formula for, top/bottom, above/below average, duplicate and unique, blanks and errors, colour scales, data bars); a cell's
 differential formats laid over its style make a style of its own (`TileCache.overlay`, indexes from `OVERLAY_STYLES`).
 Their ranges and formulas move with inserted and deleted rows and columns, and they are written from the model. Icon sets
-are kept but not drawn yet.
+(`CfRule.icons`): a value gets the icon past the highest threshold it reaches (`gte="0"`: past it, not at it; `reverse`
+flips the order; `iconFor`, with Excel's sets in `ICON_SETS`), carried in `CellPaint.icon` and drawn at the cell's left by
+`drawIcon` in rows of spans, as the renderer draws its other small shapes (arrows, circles, flags, triangles; ratings,
+quarters and boxes filled to their level).
 
 **AutoFill** (`fill.ts`, the `fill` edit): the handle at a single selection's corner (`FILL_HANDLE`, drawn by the renderer)
 is dragged down, up, right or left; along each line numbers carry on their least-squares trend (one number is copied, one
@@ -461,7 +464,7 @@ A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera`
 the last document's pages arrive) leaves a workbook alone.
 
 **Next in M5**:
-icon sets; a table's calculatedColumnFormula; a formatting
+a table's calculatedColumnFormula; a formatting
 toolbar row for the Sheet menu's number formats and borders.
 
 ### M4: every function (2026-10-31)

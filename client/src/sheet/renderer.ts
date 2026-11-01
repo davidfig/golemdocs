@@ -4,6 +4,7 @@
 // small to read, the selection; then the row and column headers. Tiles are asked of the worker as they come into view
 // and kept in small caches, each with its own float64 origin so float32 stays exact a million rows down.
 
+import type { CellIcon } from './protocol.ts';
 import { GlyphList, RectList, packColor } from '@golemdocs/layout';
 import { CSS_PX_PER_POINT, Camera } from '../view/camera.ts';
 import { DARK_PAGES_GLSL, createProgram, uniforms } from '../webgl/program.ts';
@@ -46,6 +47,85 @@ const COLOR = {
   selectionLine: 0x1a73e8,
   frozenLine: 0x9a9a9a,
 };
+
+/** Rectangles a conditional format's icon is drawn with: rows of spans across a square of `size` (spans as fractions of it). */
+export function drawIcon(list: RectList, icon: CellIcon, x: number, y: number, size: number): void {
+  const color = packColor(icon.color);
+  const empty = packColor(0xd9d9d9);
+  if (icon.shape === 'bars' || icon.shape === 'boxes') {
+    // Four bars rising left to right, or four squares, the first `level` quarters coloured.
+    for (let k = 0; k < 4; k++) {
+      const on = k < Math.round(icon.level * 4) ? color : empty;
+      if (icon.shape === 'bars') list.push(x + size * (k * 0.25 + 0.03), y + size * (1 - (k + 1) / 4), size * 0.19, (size * (k + 1)) / 4, on);
+      else list.push(x + size * ((k % 2) * 0.5 + 0.04), y + size * (Math.floor(k / 2) * 0.5 + 0.04), size * 0.42, size * 0.42, on);
+    }
+    return;
+  }
+  const rows = Math.max(6, Math.round(size));
+  const step = size / rows;
+  for (let i = 0; i < rows; i++) {
+    const t = (i + 0.5) / rows;
+    for (const [a, b, fill] of iconSpans(icon, t)) list.push(x + a * size, y + i * step, (b - a) * size, step + 0.05, fill === false ? empty : color);
+  }
+}
+
+/** The spans of a row of an icon (t from 0 at the top to 1 at the bottom): [from, to, coloured?]. */
+function iconSpans(icon: CellIcon, t: number): [number, number, boolean?][] {
+  const circle = (r: number): [number, number] | null => {
+    const d = r * r - (t - 0.5) ** 2;
+    return d > 0 ? [0.5 - Math.sqrt(d), 0.5 + Math.sqrt(d)] : null;
+  };
+  switch (icon.shape) {
+    case 'circle': {
+      const c = circle(0.48);
+      return c ? [c] : [];
+    }
+    case 'quarters': {
+      // A circle filled from the left by `level`, the rest pale.
+      const c = circle(0.48);
+      if (!c) return [];
+      const cut = c[0] + (c[1] - c[0]) * icon.level;
+      return [[c[0], cut], [cut, c[1], false]];
+    }
+    case 'star': {
+      // A diamond, filled to `level` from the left.
+      const half = 0.5 - Math.abs(t - 0.5);
+      const [a, b] = [0.5 - half, 0.5 + half];
+      const cut = a + (b - a) * icon.level;
+      return icon.level >= 1 ? [[a, b]] : [[a, cut], [cut, b, false]];
+    }
+    case 'triangleUp':
+      return t > 0.15 && t < 0.85 ? [[0.5 - (t - 0.15) * 0.7, 0.5 + (t - 0.15) * 0.7]] : [];
+    case 'triangleDown':
+      return t > 0.15 && t < 0.85 ? [[0.5 - (0.85 - t) * 0.7, 0.5 + (0.85 - t) * 0.7]] : [];
+    case 'dash':
+      return t > 0.4 && t < 0.6 ? [[0.15, 0.85]] : [];
+    case 'flag':
+      return t < 0.55 ? [[0.12, 0.22], [0.22, 0.9]] : [[0.12, 0.22]];
+    case 'up':
+    case 'down': {
+      // A head over the top half and a shaft under it (mirrored for down).
+      const u = icon.shape === 'up' ? t : 1 - t;
+      return u < 0.5 ? [[0.5 - u, 0.5 + u]] : [[0.36, 0.64]];
+    }
+    case 'right': {
+      const d = Math.abs(t - 0.5);
+      const head: [number, number] = [0.5, 0.5 + (0.5 - d)];
+      return d < 0.14 ? [[0.02, 0.5], head] : [head];
+    }
+    case 'upRight':
+    case 'downRight': {
+      // A diagonal stroke with a head at its far end, drawn row by row.
+      const u = icon.shape === 'upRight' ? t : 1 - t;
+      const along = 1 - u;
+      const spans: [number, number][] = [[Math.max(0, along - 0.14), Math.min(1, along + 0.14)]];
+      if (u < 0.45) spans.push([0.55, 0.98]);
+      return spans;
+    }
+    default:
+      return [];
+  }
+}
 
 /** The fill handle's size, in CSS pixels. */
 export const FILL_HANDLE = 6;
@@ -506,6 +586,10 @@ export class SheetRenderer {
         for (let i = 0; i < 4; i++) fills.push(x + w - size + (size * i) / 4, y + (size * i) / 4, size - (size * i) / 4, size / 4, packColor(COLOR.note));
       }
       if (cell.bar) fills.push(x + w * cell.bar.from + 1, y + 1.5, Math.max(0, w * (cell.bar.to - cell.bar.from) - 2), h - 3, packColor(cell.bar.color));
+      if (cell.icon) {
+        const size = Math.min(12, h - 3, w - 2);
+        if (size > 2) drawIcon(fills, cell.icon, x + 2, y + (h - size) / 2, size);
+      }
       const [left, right, top, bottom] = style.borders;
       if (left) borders.push(x - left[0] / 2, y, left[0], h, packColor(left[1]));
       if (right) borders.push(x + w - right[0] / 2, y, right[0], h, packColor(right[1]));

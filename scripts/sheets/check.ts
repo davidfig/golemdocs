@@ -13,6 +13,7 @@ import { Worksheet } from '../../client/src/sheet/model/worksheet.ts';
 import { readWorkbook } from '../../client/src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
 import { History } from '../../client/src/sheet/edit.ts';
+import { OpcPackage } from '../../docx/src/index.ts';
 import { Engine } from '../../client/src/sheet/formula/engine.ts';
 import { parseRange } from '../../client/src/sheet/refs.ts';
 import { recalculateInExcel } from './excel.ts';
@@ -147,6 +148,19 @@ rechartHistory.apply(0, { kind: 'chart', index: 0, change: { kind: 'line', title
 rechartHistory.apply(0, { kind: 'chart', index: 1, change: { remove: true } });
 rechartHistory.apply(0, { kind: 'insertChart', chart: 'pie', range: { r0: 0, c0: 0, r1: 6, c1: 1 } });
 books.set('charts-edited.xlsx', rechart);
+// Charts changed in place: a styled one (a title's font, series fills, data labels, axis text) made a line with a new
+// title; a pie made columns (axes made for it); columns made a scatter chart.
+const styledPkg = await OpcPackage.read(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/charts-excel.xlsx')));
+const styledXml = (await styledPkg.text('xl/charts/chart1.xml'))
+  .replace(/<c:title>.*?<\/c:title>/s, '<c:title><c:tx><c:rich><a:bodyPr rot="0"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1600" b="1"/></a:pPr><a:r><a:rPr lang="en-US" sz="1600" b="1"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill></a:rPr><a:t>Styled</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>')
+  .replace(/<c:invertIfNegative val="1"\/>/g, '<c:spPr><a:solidFill><a:srgbClr val="7030A0"/></a:solidFill><a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr><c:invertIfNegative val="0"/><c:dLbls><c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>');
+styledPkg.set('xl/charts/chart1.xml', styledXml, 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml');
+const restyled = await readWorkbook(await styledPkg.write());
+const restyledHistory = new History(restyled);
+restyledHistory.apply(0, { kind: 'chart', index: 0, change: { kind: 'line', title: 'Styled, now a line' } });
+restyledHistory.apply(0, { kind: 'chart', index: 3, change: { kind: 'column', legend: null } });
+restyledHistory.apply(0, { kind: 'chart', index: 2, change: { kind: 'scatter' } });
+books.set('charts-in-place.xlsx', restyled);
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);

@@ -388,12 +388,18 @@ names, a first column of text the categories (a scatter chart's x values), place
 picks it (framed, with handles; the renderer's `chart`), dragging moves it (its corners go where it is dropped, its size
 kept), Delete takes it away, and its menu changes its kind (`changeKind`), legend and title (`ChartTitleCard`, an
 in-document card) or deletes it: all the `chart` edit, undone with the sheet's other objects (the snapshot's `charts`), and
-refused on a protected sheet unless objects are allowed. A chart made or changed here is written whole from the model
-(`chartXml` in `write.ts`, `generate`); otherwise only its anchor and references are. `writeCharts` identifies charts by
+refused on a protected sheet unless objects are allowed. A chart made here is written whole from the model (`chartXml` in
+`write.ts`, `generate`). A chart read from the file is changed in place (`syncChart`, `sync.ts`): on every save its part
+is read as the reader sees it and compared with the model, and only what differs is changed in the XML, so Excel's own
+formatting stays (and it is right again after an undo, whatever was saved in between). A new title keeps the old
+title's run formatting; a title or legend is added or taken away as needed; a new kind renames the plot's group and gives
+it the kind's own settings, each series keeping what the new kind allows in its order (a data label's position, a
+point's look across pies and other kinds, and bar-only parts go), its colour carried between a fill and a line as Excel
+carries it, and the axes kept unless the kind needs others (none for pies, two value axes for scatter). `writeCharts` identifies charts by
 the drawing's relationship to them (`rId`): one taken away loses its anchor, part and relationship; a new one gets a part
 and an anchor (declaring its namespaces itself, as a drawing Excel wrote declares `r:` only where it uses it), and the
 sheet a drawing part and `<drawing>` when it had none (`Worksheet.drawingRId`). Excel opens charts made here of every
-kind, several at once, and Excel's charts changed, deleted and added to (`charts-made`, `charts-edited` in `check.ts`).
+kind, several at once, and Excel's charts changed, deleted and added to (`charts-made`, `charts-edited`, and `charts-in-place`, a styled chart changed, in `check.ts`).
 Overlapping charts are drawn one after another, each whole.
 
 **Next in M6**: resizing a chart by its handles, and editing its series; sparklines; pivot tables; what-if tools (Goal

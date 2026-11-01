@@ -11,6 +11,11 @@ import { Workbook } from '../src/sheet/model/workbook.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../src/sheet/xlsx/write.ts';
 import { chartScene, niceScale } from '../src/sheet/charts/scene.ts';
+import { readChart } from '../src/sheet/charts/model.ts';
+import { changeKind } from '../src/sheet/charts/make.ts';
+import { syncChart } from '../src/sheet/charts/sync.ts';
+import { OFFICE_THEME } from '../src/sheet/model/theme.ts';
+import { parseXml, serializeXml } from '@golemdocs/docx';
 
 const open = async (name: string) => {
   const book = await readWorkbook(readFileSync(new URL(`./fixtures/sheets/${name}`, import.meta.url)));
@@ -121,6 +126,57 @@ test('Insert Chart makes a chart of a block; it is written with a drawing of its
   for (const chart of ['bar', 'area', 'scatter'] as const) history.apply(0, { kind: 'insertChart', chart, range: { r0: 0, c0: 0, r1: 0, c1: 0 } });
   const many = await readWorkbook(await writeWorkbook(book));
   assert.deepEqual((many.sheets[0] as Worksheet).charts.map((c) => c.chart.groups[0].kind), ['line', 'pie', 'bar', 'area', 'scatter']);
+});
+
+/** A chart part with the formatting Excel writes: a title's font, series fills and lines, data labels, an axis's text. */
+const STYLED = `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart>
+<c:title><c:tx><c:rich><a:bodyPr rot="0"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1600" b="1"/></a:pPr><a:r><a:rPr lang="en-US" sz="1600" b="1"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill></a:rPr><a:t>Old</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>
+<c:plotArea><c:layout/><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+<c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:strRef><c:f>Sales!$B$1</c:f></c:strRef></c:tx><c:spPr><a:solidFill><a:srgbClr val="7030A0"/></a:solidFill><a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr><c:invertIfNegative val="0"/><c:dLbls><c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls><c:cat><c:strRef><c:f>Sales!$A$2:$A$7</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>Sales!$B$2:$B$7</c:f></c:numRef></c:val><c:shape val="box"/></c:ser>
+<c:gapWidth val="80"/><c:axId val="11"/><c:axId val="12"/></c:barChart>
+<c:catAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900" i="1"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr><c:crossAx val="12"/></c:catAx>
+<c:valAx><c:axId val="12"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="11"/></c:valAx></c:plotArea>
+<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart></c:chartSpace>`;
+
+test('a chart read from a file is changed in place: its title, legend and kind, its formatting kept', () => {
+  const theme = OFFICE_THEME.colors;
+  const xml = () => parseXml(STYLED);
+  const model = readChart(xml(), theme)!;
+  // Nothing changed: nothing is touched.
+  assert.equal(syncChart(xml(), model, theme), false);
+  // A new title keeps the old title's font and colour.
+  let root = xml();
+  assert.equal(syncChart(root, { ...model, title: 'New title' }, theme), true);
+  let text = serializeXml(root);
+  assert.match(text, /<a:rPr lang="en-US" sz="1600" b="1"><a:solidFill><a:srgbClr val="C00000"\/><\/a:solidFill><\/a:rPr><a:t>New title<\/a:t>/);
+  assert.equal(readChart(root, theme)!.title, 'New title');
+  // No title, then the legend at the bottom, then no legend.
+  root = xml();
+  syncChart(root, { ...model, title: null, legend: 'b' }, theme);
+  assert.deepEqual([readChart(root, theme)!.title, readChart(root, theme)!.legend], [null, 'b']);
+  assert.match(serializeXml(root), /<c:autoTitleDeleted val="1"\/>/);
+  syncChart(root, { ...model, title: null, legend: null }, theme);
+  assert.equal(readChart(root, theme)!.legend, null);
+  // Columns made a line: the series keeps its colours and labels (not their bar-only position), the axes their text.
+  root = xml();
+  const line = changeKind({ anchor: { from: { row: 0, col: 0, dx: 0, dy: 0 } }, chart: model, part: 'x', rId: 'r', drawingPart: 'd' }, 'line').chart;
+  syncChart(root, line, theme);
+  text = serializeXml(root);
+  assert.equal(readChart(root, theme)!.groups[0].kind, 'line');
+  assert.match(text, /<c:lineChart>.*<c:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="7030A0"\/><\/a:solidFill><\/a:ln><\/c:spPr>/s, 'the bars’ colour is the line’s');
+  assert.match(text, /<c:dLbls><c:showLegendKey val="0"\/>/, 'the labels stay, without their position');
+  assert.doesNotMatch(text, /invertIfNegative|<c:shape |gapWidth|barDir/);
+  assert.match(text, /<c:defRPr sz="900" i="1"\/>|<a:defRPr sz="900" i="1"\/>/, 'the category axis keeps its text');
+  assert.match(text, /<c:axId val="11"\/><c:axId val="12"\/><\/c:lineChart>/);
+  // Made a pie: no axes; then columns again: axes made anew.
+  const pie = changeKind({ anchor: { from: { row: 0, col: 0, dx: 0, dy: 0 } }, chart: model, part: 'x', rId: 'r', drawingPart: 'd' }, 'pie').chart;
+  root = xml();
+  syncChart(root, pie, theme);
+  assert.equal(readChart(root, theme)!.groups[0].kind, 'pie');
+  assert.doesNotMatch(serializeXml(root), /catAx|valAx|axId/);
+  syncChart(root, model, theme);
+  assert.equal(readChart(root, theme)!.groups[0].kind, 'bar');
+  assert.match(serializeXml(root), /<c:catAx>.*<c:valAx>/s);
 });
 
 test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {

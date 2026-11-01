@@ -1,13 +1,14 @@
 // Writing a sheet's charts (docs/spreadsheets.md, M6). Each chart's anchor goes into its drawing part, and each series'
-// references into its chart part, everything else in the parts kept as it was. A chart made or changed here (`generate`)
-// has its part written whole from the model (`chartXml`). A new chart gets a chart part and an anchor, and the sheet a
+// references into its chart part, and a title, legend or kind changed here is changed in the XML (`syncChart`), everything
+// else in the parts kept as it was. A chart made here (`generate`) has its part written whole from the model (`chartXml`). A new chart gets a chart part and an anchor, and the sheet a
 // drawing part if it had none; a chart taken away takes its anchor, part and relationship with it.
 
 import { el, elements, serializeXml } from '@golemdocs/docx';
 import type { OpcPackage, XmlElement } from '@golemdocs/docx';
 import type { Worksheet } from '../model/worksheet.ts';
 import { EMU_PER_POINT, kid, kids, local } from './model.ts';
-import type { AnchorPoint, Chart, ChartGroup, ChartSeries, SheetChart } from './model.ts';
+import { syncChart } from './sync.ts';
+import type { AnchorPoint, Chart, ChartAxis, ChartGroup, ChartKind, ChartSeries, SheetChart } from './model.ts';
 
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const CHART_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
@@ -65,15 +66,13 @@ function groupXml(g: ChartGroup): string {
   }
 }
 
-function axisXml(chart: Chart): string {
-  const kind = chart.groups[0].kind;
+/** A chart's axes: a category and a value axis (two value axes for scatter, none for pies). */
+export function axisXml(kind: ChartKind, direction: 'col' | 'bar', v: ChartAxis, c: ChartAxis): string {
   if (kind === 'pie' || kind === 'doughnut') return '';
-  const across = kind === 'bar' && chart.groups[0].direction === 'bar';
-  const scaling = (a: Chart['valueAxis']) => `<c:scaling><c:orientation val="minMax"/>${a.max !== null ? `<c:max val="${a.max}"/>` : ''}${a.min !== null ? `<c:min val="${a.min}"/>` : ''}</c:scaling>`;
-  const v = chart.valueAxis;
-  const c = chart.categoryAxis;
-  const fmt = (a: Chart['valueAxis']) => `<c:numFmt formatCode="${escape(a.numFmt ?? 'General')}" sourceLinked="${a.numFmt ? 0 : 1}"/>`;
-  const common = (a: Chart['valueAxis'], cross: number, pos: string) =>
+  const across = kind === 'bar' && direction === 'bar';
+  const scaling = (a: ChartAxis) => `<c:scaling><c:orientation val="minMax"/>${a.max !== null ? `<c:max val="${a.max}"/>` : ''}${a.min !== null ? `<c:min val="${a.min}"/>` : ''}</c:scaling>`;
+  const fmt = (a: ChartAxis) => `<c:numFmt formatCode="${escape(a.numFmt ?? 'General')}" sourceLinked="${a.numFmt ? 0 : 1}"/>`;
+  const common = (a: ChartAxis, cross: number, pos: string) =>
     `${scaling(a)}<c:delete val="${a.deleted ? 1 : 0}"/><c:axPos val="${pos}"/>${a.gridlines ? '<c:majorGridlines/>' : ''}${fmt(a)}<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="autoZero"/>`;
   const category =
     kind === 'scatter'
@@ -92,7 +91,7 @@ export function chartXml(chart: Chart): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}">` +
-    `<c:roundedCorners val="0"/><c:chart>${title}<c:plotArea><c:layout/>${chart.groups.map(groupXml).join('')}${axisXml(chart)}</c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
+    `<c:roundedCorners val="0"/><c:chart>${title}<c:plotArea><c:layout/>${chart.groups.map(groupXml).join('')}${axisXml(chart.groups[0].kind, chart.groups[0].direction, chart.valueAxis, chart.categoryAxis)}</c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
     '<c:spPr><a:solidFill><a:schemeClr val="bg1"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr></c:chartSpace>'
   );
 }
@@ -126,7 +125,7 @@ function anchorElement(c: SheetChart, id: number): XmlElement {
 const chartIdOf = (a: XmlElement): string | undefined => kid(kid(kid(kid(a, 'graphicFrame'), 'graphic'), 'graphicData'), 'chart')?.attrs['r:id'];
 
 /** Writes a sheet's charts into its parts (see the top of the file). Sets the sheet's `<drawing>` for a new drawing part. */
-export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Worksheet): Promise<void> {
+export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Worksheet, theme: number[]): Promise<void> {
   const sheetRels = await pkg.relationships(sheetPart);
   let drawingPart = sheet.charts.find((c) => c.drawingPart)?.drawingPart ?? '';
   if (!drawingPart) {
@@ -204,6 +203,8 @@ export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Wor
         setRef(kid(ser, 'val') ?? kid(ser, 'yVal'), s.valRef);
       }),
     );
+    // A title, legend or kind changed here: changed in the XML, the rest of it kept.
+    syncChart(xml, c.chart, theme);
     pkg.set(c.part, serializeXml(xml), CHART_TYPE);
   }
   pkg.set(drawingPart, serializeXml(drawing), DRAWING_TYPE);

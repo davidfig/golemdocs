@@ -97,5 +97,5 @@ export function changeKind(c: SheetChart, kind: NewChartKind): SheetChart {
     varyColors: single,
   };
   if (single || g.kind === 'scatter' || g.kind === 'line') group.grouping = g.kind === 'line' && old.grouping !== 'clustered' ? old.grouping : 'standard';
-  return { ...c, chart: { ...c.chart, groups: [group], legend: c.chart.legend ?? (single ? 'b' : null) }, generate: true };
+  return { ...c, chart: { ...c.chart, groups: [group], legend: c.chart.legend ?? (single ? 'b' : null) } };
 }

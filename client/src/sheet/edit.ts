@@ -427,7 +427,7 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       const chart = { ...next.chart };
       if (change.title !== undefined) chart.title = change.title;
       if (change.legend !== undefined) chart.legend = change.legend;
-      next = { ...next, chart, anchor: change.anchor ?? next.anchor, generate: next.generate || change.title !== undefined || change.legend !== undefined };
+      next = { ...next, chart, anchor: change.anchor ?? next.anchor };
       sheet.charts = sheet.charts.map((x, i) => (i === op.index ? next : x));
       return { ranges: [] };
     }

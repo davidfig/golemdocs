@@ -4,7 +4,7 @@
 // in other formulas are moved by the engine too when rows and columns move.
 
 import { newSparklineGroup } from './sparklines.ts';
-import { refreshPivot } from './pivot.ts';
+import { applyChoice, gridValue, newPivot, refreshPivot } from './pivot.ts';
 import { rangeName } from './refs.ts';
 import { changeKind, newChart, withData } from './charts/make.ts';
 import { Column, Kind, MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
@@ -190,6 +190,7 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
     }
     case 'createTable':
     case 'refreshPivots':
+    case 'pivotFields':
       return 'cells';
     case 'insertRows':
     case 'deleteRows':
@@ -214,7 +215,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
     for (const sheet of book.sheets) if (isWorksheet(sheet)) for (const column of sheet.grid.columns) if (column?.formulas.length) columns.push([column, column.formulas.map((f) => ({ ...f }))]);
     out.formulas = { columns, names: book.names.map((n) => ({ ...n })), charts: book.sheets.filter(isWorksheet).map((s): [Worksheet, Worksheet['charts'], Worksheet['sparklines']] => [s, s.charts, s.sparklines]) };
   }
-  if (op.kind === 'addSheet' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
+  if (op.kind === 'addSheet' || op.kind === 'insertPivot' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
     out.sheets = { list: book.sheets.slice(), titles: book.sheets.map((s) => s.name), parts: book.source ? book.source.parts.map((p) => ({ ...p })) : [], names: book.names.map((n) => ({ ...n })), active: book.activeSheet, removed: (book.source?.removed ?? []).slice() };
     return out;
   }
@@ -232,7 +233,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'refreshPivots' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -420,6 +421,46 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'insertPivot': {
+      const r = op.range;
+      const block = r.r0 === r.r1 && r.c0 === r.c1 ? currentRegion(sheet.grid, r.r0, r.c0) : r;
+      if (block.r1 <= block.r0) return { ranges: [], message: 'pivotNoData' };
+      const names = Array.from({ length: block.c1 - block.c0 + 1 }, (_, i) => {
+        const v = gridValue(book, index, block.r0, block.c0 + i);
+        return typeof v === 'string' || typeof v === 'number' ? String(v) : `Column${i + 1}`;
+      });
+      // A new sheet before this one, the pivot at A3 (a row for each filter above it, and a blank row).
+      const at = book.sheets.indexOf(sheet);
+      const added = addSheet(book, at, nextSheetName(book));
+      if (added.message) return added;
+      const target = book.sheets[at] as Worksheet;
+      const top = Math.max(2, op.choice.filters.length + 1);
+      const taken = new Set(book.sheets.flatMap((s) => (isWorksheet(s) ? s.pivots.map((p) => p.name.toLowerCase()) : [])));
+      let n = 1;
+      while (taken.has(`pivottable${n}`)) n++;
+      const made = applyChoice(newPivot(sheet.name, block, names, `PivotTable${n}`, { r0: top, c0: 0, r1: top, c1: 0 }), op.choice);
+      target.pivots = [made];
+      const done = refreshPivot(book, target, 0);
+      if (done.message) {
+        // Not laid out: the sheet goes again.
+        book.sheets.splice(at, 1);
+        book.source?.parts.splice(at, 1);
+        return { ranges: [], message: done.message };
+      }
+      return { ranges: [everything()] };
+    }
+    case 'pivotFields': {
+      const before = sheet.pivots;
+      const p = before[op.index];
+      if (!p) return { ranges: [] };
+      sheet.pivots = before.map((x, i) => (i === op.index ? applyChoice(x, op.choice) : x));
+      const done = refreshPivot(book, sheet, op.index);
+      if (done.message) {
+        sheet.pivots = before;
+        return { ranges: [], message: done.message };
+      }
+      return { ranges: done.range ? [done.range] : [] };
+    }
     case 'refreshPivots': {
       const ranges: CellRange[] = [];
       let message: string | undefined;

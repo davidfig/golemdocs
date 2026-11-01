@@ -14,6 +14,7 @@ import { readWorkbook } from '../../client/src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
 import { History } from '../../client/src/sheet/edit.ts';
 import { OpcPackage } from '../../docx/src/index.ts';
+import { PIVOT_SALES } from './fixtures.ts';
 import { Engine } from '../../client/src/sheet/formula/engine.ts';
 import { parseRange } from '../../client/src/sheet/refs.ts';
 import { recalculateInExcel } from './excel.ts';
@@ -182,6 +183,16 @@ const shapedHistory = new History(shaped);
 shapedHistory.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
 for (let i = 1; i <= 4; i++) shapedHistory.apply(i, { kind: 'refreshPivots' });
 books.set('pivots2-refreshed.xlsx', shaped);
+// A pivot made here (a filter, a field across), and Excel's pivot changed by the field list.
+const pivotMade = new Workbook();
+pivotMade.sheets.push(new Worksheet('Sales', 1));
+const pivotMadeHistory = new History(pivotMade);
+pivotMadeHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: PIVOT_SALES });
+pivotMadeHistory.apply(0, { kind: 'insertPivot', range: { r0: 0, c0: 0, r1: 0, c1: 0 }, choice: { rows: [0], cols: [1], values: [{ field: 3, fn: 'sum' }], filters: [{ field: 2, item: 'Mar' }] } });
+books.set('pivot-made.xlsx', pivotMade);
+const pivotChanged = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/pivots-excel.xlsx')));
+new History(pivotChanged).apply(1, { kind: 'pivotFields', index: 0, choice: { rows: [1, 0], cols: [], values: [{ field: 3, fn: 'sum' }, { field: 3, fn: 'max' }], filters: [] } });
+books.set('pivot-changed.xlsx', pivotChanged);
 // Sparklines made here: of each kind on a sheet with none; and added to Excel's, one row's cleared.
 const sparkMade = new Workbook();
 sparkMade.sheets.push(new Worksheet('Data', 1));

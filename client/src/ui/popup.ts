@@ -58,8 +58,10 @@ export function openPopup(owner: HTMLElement, panel: HTMLElement, onClose?: () =
   const sheet = narrow().matches;
   const backdrop = sheet ? h('div', { class: 'wm-sheet-backdrop' }) : undefined;
   if (sheet) panel.classList.add('wm-sheet');
-  if (backdrop) (layer ?? document.body).append(backdrop);
-  (layer ?? document.body).append(panel);
+  // A modal dialog makes everything outside it inert: a popup opened from inside one goes in it.
+  const host = owner.closest<HTMLDialogElement>('dialog[open]') ?? layer ?? document.body;
+  if (backdrop) host.append(backdrop);
+  host.append(panel);
   stack.push({ panel, owner, backdrop, onClose });
   owner.classList.add('open');
   owner.setAttribute('aria-expanded', 'true');

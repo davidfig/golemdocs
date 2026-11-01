@@ -282,6 +282,37 @@ test('Sheet › PivotTable › Refresh lays a pivot table out again from its cha
   await expect.poll(async () => (await state(page)).content.input).toBe('Glue');
 });
 
+test('Insert › PivotTable makes a pivot on a new sheet from the field list; its menu changes its fields', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'pivots.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/pivots-excel.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'pivots.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await clickCell(page, 0, 0);
+  await app.menu('Insert', 'PivotTable');
+  const dialog = page.getByRole('dialog', { name: 'PivotTable Fields' });
+  const area = (field: number, to: string) => async () => {
+    await dialog.getByRole('button', { name: 'Area' }).nth(field).click();
+    await page.getByRole('option', { name: to, exact: true }).click();
+  };
+  await area(0, 'Rows')();
+  await area(3, 'Values')();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Sheet3');
+  await clickCell(page, 3, 0);
+  await expect.poll(async () => (await state(page)).content.input).toBe('East');
+  await clickCell(page, 6, 1);
+  await expect.poll(async () => (await state(page)).content.input).toBe('1055');
+  // Its menu: products across.
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const at = await page.evaluate(() => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor.pointOf(3, 0));
+  await page.mouse.click(box.x + at.x, box.y + at.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'PivotTable Fields' }).click();
+  await area(1, 'Columns')();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await clickCell(page, 3, 1);
+  await expect.poll(async () => (await state(page)).content.input).toBe('Pens');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

@@ -104,6 +104,7 @@ export function refuses(book: Workbook, sheet: Worksheet, op: EditOp): boolean {
     case 'chart':
     case 'insertSparklines':
     case 'clearSparklines':
+    case 'pivotFields':
       return !allows(p, 'objects');
     case 'format':
       return !allows(p, 'formatCells');

@@ -4,6 +4,10 @@
 //
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
+import { pivotChoice } from './pivot.ts';
+import { parseRange } from './refs.ts';
+import type { CellRange } from './model/worksheet.ts';
+import { currentRegion } from './edit.ts';
 import { chartScene } from './charts/scene.ts';
 import { sparklineScene } from './charts/sparklineScene.ts';
 import { tableFilter } from './tables.ts';
@@ -79,6 +83,7 @@ export function info(b: Workbook): BookInfo {
         outline: sheet.rowOutline.size || sheet.colOutline.size ? { rows: [...sheet.rowOutline].slice(0, 200000).map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]), cols: [...sheet.colOutline].map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]) } : undefined,
         charts: sheet.charts.length || undefined,
         sparklines: sheet.sparklines.some((g) => g.sparklines.length) || undefined,
+        pivots: sheet.pivots.length ? sheet.pivots.map((p) => ({ name: p.name, range: { ...p.location, r0: Math.max(0, p.location.r0 - (p.pageFields.length ? p.pageFields.length + 1 : 0)) } })) : undefined,
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
         filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
@@ -310,6 +315,37 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
+      }
+      case 'pivotFields': {
+        await settled();
+        const sheet = book.sheets[m.sheet];
+        const pivot = m.index !== undefined && sheet && isWorksheet(sheet) ? sheet.pivots[m.index] : undefined;
+        let range: CellRange | null = null;
+        let sourceSheet = m.sheet;
+        if (pivot) {
+          sourceSheet = book.sheets.findIndex((s) => s.name.toLowerCase() === pivot.cache.sheet.toLowerCase());
+          range = parseRange(pivot.cache.ref);
+        } else if (m.range && sheet && isWorksheet(sheet)) {
+          const r = m.range;
+          range = r.r0 === r.r1 && r.c0 === r.c1 ? currentRegion(sheet.grid, r.r0, r.c0) : r;
+        }
+        if (!range || sourceSheet < 0) return post({ t: 'pivotFields', id: m.id, names: [], values: [], choice: null });
+        const width = Math.min(range.c1 - range.c0 + 1, 200);
+        const text = (r: number, c: number) => {
+          const v = engine ? engine.value(sourceSheet, r, c) : null;
+          return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : '';
+        };
+        const names = Array.from({ length: width }, (_, i) => text(range!.r0, range!.c0 + i) || `Column${i + 1}`);
+        // Each field's values, for a filter's choices (the first thousand different ones).
+        const values = names.map((_, i) => {
+          const seen = new Set<string>();
+          for (let r = range!.r0 + 1; r <= Math.min(range!.r1, range!.r0 + 100000) && seen.size < 1000; r++) {
+            const v = text(r, range!.c0 + i);
+            if (v) seen.add(v);
+          }
+          return [...seen];
+        });
+        return post({ t: 'pivotFields', id: m.id, names, values, choice: pivot ? pivotChoice(pivot) : null });
       }
       case 'charts': {
         await settled();

@@ -276,6 +276,32 @@
   align-items: center;
 }
 
+/* The pivot field list (pivotFieldsDialog.ts): a row per field, its name, where it goes, and how. */
+.wm-dialog.wm-sheet-pivot {
+  width: min(520px, calc(100vw - 8px));
+}
+
+.wm-sheet-pivot-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.wm-sheet-pivot-row {
+  display: grid;
+  grid-template-columns: 1fr 130px 150px;
+  gap: 6px;
+  align-items: center;
+}
+
+.wm-sheet-pivot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The card for typing a note takes the pointer, unlike the one that only shows it. */
 .wm-comment.wm-sheet-note.wm-sheet-note-edit {
   pointer-events: auto;

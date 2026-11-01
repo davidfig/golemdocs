@@ -15,16 +15,29 @@ import type { Worksheet } from './model/worksheet.ts';
 import { Kind } from './model/column.ts';
 import { restyle } from './format/styleChange.ts';
 import type { CellRange } from './model/worksheet.ts';
-import { parseRange } from './refs.ts';
+import { parseRange, rangeName } from './refs.ts';
 
 /** A cache's field: its name, and the values its items index (`sharedItems`, in their order). */
 export interface CacheField {
   name: string;
   shared: (string | number | boolean | null)[];
+  /** What kinds of values the source holds for it (from the last refresh here): written for fields with no items. */
+  summary?: FieldSummary;
+}
+
+export interface FieldSummary {
+  strings: boolean;
+  numbers: boolean;
+  integers: boolean;
+  blank: boolean;
+  min: number | null;
+  max: number | null;
 }
 
 export interface PivotCache {
   part: string;
+  /** Its id in the workbook's `<pivotCaches>`, for a cache made here. */
+  id?: number;
   /** The source: a sheet's range. */
   sheet: string;
   ref: string;
@@ -176,6 +189,8 @@ export interface PivotLayout {
   cells: PivotCell[];
   rows: number;
   cols: number;
+  /** Each field's kinds of values in the source, for writing. */
+  summaries: FieldSummary[];
   /** The fields' items in order after the refresh (shared values, possibly with new ones appended in the order they
    * first come in the source), for writing. */
   shared: CacheField['shared'][];
@@ -298,7 +313,7 @@ export function refreshPivot(book: Workbook, sheet: Worksheet, index: number): {
     else grid.set(r, c, Kind.String, book.strings.add(cell.value), 0);
   }
   const fields = p.fields.map((f, i) => ({ ...f, items: layout.items[i] ?? f.items }));
-  const cache = { ...p.cache, fields: p.cache.fields.map((f, i) => ({ ...f, shared: layout.shared[i] })) };
+  const cache = { ...p.cache, fields: p.cache.fields.map((f, i) => ({ ...f, shared: layout.shared[i], summary: layout.summaries[i] })) };
   // Other pivots of the same cache share its values.
   sheet.pivots = sheet.pivots.map((x, i) => (i === index ? { ...p, location: at, fields, cache, refreshed: true } : x.cache.part === cache.part ? { ...x, cache } : x));
   return { range: { r0: Math.min(old.r0, at.r0), c0: Math.min(old.c0, at.c0), r1: Math.max(old.r1, at.r1), c1: Math.max(old.c1, at.c1) } };
@@ -463,5 +478,100 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     put(r, 0, p.cache.fields[page.field]?.name ?? '', 'header');
     put(r, 1, page.item === null ? '(All)' : label(page.field, items[page.field]?.[page.item] ?? 0), 'label');
   });
-  return { cells, rows: row, cols: 1 + columns.length, shared, items, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: 1 };
+  const summaries = p.cache.fields.map((_, f): FieldSummary => {
+    const values = source.records.map((rec) => rec[f]);
+    const numbers = values.filter((v): v is number => typeof v === 'number');
+    return {
+      strings: values.some((v) => typeof v === 'string' || typeof v === 'boolean'),
+      numbers: numbers.length > 0,
+      integers: numbers.every(Number.isInteger),
+      blank: values.some((v) => v === BLANK || v === undefined),
+      min: numbers.length ? Math.min(...numbers) : null,
+      max: numbers.length ? Math.max(...numbers) : null,
+    };
+  });
+  return { cells, rows: row, cols: 1 + columns.length, shared, items, summaries, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: 1 };
+}
+
+// --- The field list ----------------------------------------------------------------------------------------------------
+
+/** What the field list chooses: the source's fields (by place) down, across, as values (with their functions) and as
+ * filters (with the item each shows, as its text, or null for all). */
+export interface PivotChoice {
+  rows: number[];
+  cols: number[];
+  values: { field: number; fn: PivotFunction }[];
+  filters: { field: number; item: string | null }[];
+}
+
+const FN_NAMES: Record<PivotFunction, string> = { sum: 'Sum', count: 'Count', average: 'Average', max: 'Max', min: 'Min', product: 'Product', countNums: 'Count', stdDev: 'StdDev', stdDevp: 'StdDevp', var: 'Var', varp: 'Varp' };
+
+/** A pivot's fields as the field list shows them. */
+export function pivotChoice(p: PivotTable): PivotChoice {
+  return {
+    rows: p.rowFields.filter((f) => f >= 0),
+    cols: p.colFields.filter((f) => f >= 0),
+    values: p.dataFields.map((d) => ({ field: d.field, fn: d.fn })),
+    filters: p.pageFields.map((f) => {
+      const shared = f.item === null ? undefined : p.fields[f.field]?.items[f.item];
+      const v = shared === undefined ? null : p.cache.fields[f.field]?.shared[shared];
+      return { field: f.field, item: v === null || v === undefined ? null : String(v) };
+    }),
+  };
+}
+
+/** A pivot given the field list's choice: its fields' places and its values; the values across when there are several. */
+export function applyChoice(p: PivotTable, choice: PivotChoice): PivotTable {
+  const names = p.cache.fields.map((f) => f.name);
+  const several = choice.values.length > 1;
+  const used = new Set([...choice.rows, ...choice.cols, ...choice.filters.map((f) => f.field)]);
+  const fields = p.cache.fields.map(
+    (_, i): PivotField => ({
+      axis: choice.rows.includes(i) ? 'row' : choice.cols.includes(i) ? 'col' : choice.filters.some((f) => f.field === i) ? 'page' : null,
+      items: used.has(i) ? [...(p.fields[i]?.items ?? [])] : [],
+      subtotal: p.fields[i]?.subtotal ?? true,
+    }),
+  );
+  // A filter's item: its place in the field's items (its value added to the cache when the cache does not have it yet).
+  const cache = { ...p.cache, fields: p.cache.fields.map((f) => ({ ...f, shared: [...f.shared] })) };
+  const pageFields = choice.filters.map(({ field, item }) => {
+    if (item === null) return { field, item: null };
+    const shared = cache.fields[field].shared;
+    let at = shared.findIndex((v) => v !== null && String(v).toLowerCase() === item.toLowerCase());
+    if (at < 0) at = shared.push(item) - 1;
+    let place = fields[field].items.indexOf(at);
+    if (place < 0) place = fields[field].items.push(at) - 1;
+    return { field, item: place };
+  });
+  return {
+    ...p,
+    rowFields: choice.rows,
+    colFields: several ? [...choice.cols, -2] : choice.cols,
+    pageFields,
+    dataFields: choice.values.map((v) => ({ name: `${FN_NAMES[v.fn]} of ${names[v.field] ?? ''}`, field: v.field, fn: v.fn, numFmtId: null })),
+    fields,
+    cache,
+    refreshed: true,
+  };
+}
+
+/** A new pivot (Insert › PivotTable) of a block of cells, its first row the fields' names; laid out by a refresh. */
+export function newPivot(sourceSheet: string, block: CellRange, names: string[], name: string, at: CellRange): PivotTable {
+  return {
+    name,
+    location: at,
+    rowFields: [],
+    colFields: [],
+    pageFields: [],
+    dataFields: [],
+    fields: names.map(() => ({ axis: null, items: [], subtotal: true })),
+    dataCaption: 'Values',
+    rowHeader: 'Row Labels',
+    colHeader: 'Column Labels',
+    grandRows: true,
+    grandCols: true,
+    part: '',
+    cache: { part: '', sheet: sourceSheet, ref: rangeName(block), fields: names.map((n) => ({ name: n, shared: [] })) },
+    refreshed: true,
+  };
 }

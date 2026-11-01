@@ -13,6 +13,9 @@ import { readWorkbook } from '../src/sheet/xlsx/read.ts';
 import { pivotLayout, pivotSource, pivotSupported } from '../src/sheet/pivot.ts';
 import type { PivotLayout } from '../src/sheet/pivot.ts';
 import { History } from '../src/sheet/edit.ts';
+import { Workbook as Book } from '../src/sheet/model/workbook.ts';
+import { Worksheet as Sheet } from '../src/sheet/model/worksheet.ts';
+import { PIVOT_SALES } from '../../scripts/sheets/fixtures.ts';
 import { writeWorkbook } from '../src/sheet/xlsx/write.ts';
 import { rangeName } from '../src/sheet/refs.ts';
 
@@ -97,6 +100,42 @@ test('Refresh lays the sheet’s pivots out again from their changed source, wri
   history.undo();
   assert.equal(sheet.pivots[0].location.r1, 7);
   assert.equal(cellsAt(book, sheet, 7, 0, 1, 1)[0][0], 'Grand Total');
+});
+
+test('Insert › PivotTable makes a pivot of a block on a new sheet; the field list changes a pivot; both are written', async () => {
+  const book = new Book();
+  book.sheets.push(new Sheet('Sales', 1));
+  const history = new History(book);
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: PIVOT_SALES });
+  history.apply(0, { kind: 'insertPivot', range: { r0: 0, c0: 0, r1: 0, c1: 0 }, choice: { rows: [0], cols: [], values: [{ field: 3, fn: 'sum' }], filters: [] } });
+  assert.deepEqual(book.sheets.map((s) => s.name), ['Sheet2', 'Sales']);
+  const sheet = book.sheets[0] as Sheet;
+  assert.deepEqual(cellsAt(book, sheet, 2, 0, 5, 2), [
+    ['Row Labels', 'Sum of Amount'],
+    ['East', '345'],
+    ['West', '285'],
+    ['North', '425'],
+    ['Grand Total', '1055'],
+  ]);
+  // The field list: products down, the sum and the average across, only the East's sales.
+  history.apply(0, { kind: 'pivotFields', index: 0, choice: { rows: [1], cols: [], values: [{ field: 3, fn: 'sum' }, { field: 3, fn: 'average' }], filters: [{ field: 0, item: 'East' }] } });
+  assert.deepEqual(cellsAt(book, sheet, 0, 0, 8, 3), [
+    ['Region', 'East', ''],
+    ['', '', ''],
+    ['', 'Values', ''],
+    ['Row Labels', 'Sum of Amount', 'Average of Amount'],
+    ['Pens', '270', '135'],
+    ['Ink', '45', '45'],
+    ['Paper', '30', '30'],
+    ['Grand Total', '345', '86.25'],
+  ]);
+  const written = await readWorkbook(await writeWorkbook(book));
+  const back = (written.sheets[0] as Worksheet).pivots[0];
+  assert.deepEqual([back.name, back.rowFields, back.colFields, back.dataFields.map((d) => d.name), back.pageFields], ['PivotTable1', [1], [-2], ['Sum of Amount', 'Average of Amount'], [{ field: 0, item: 0 }]]);
+  assert.match(await written.source!.pkg.text('xl/workbook.xml'), /<pivotCaches><pivotCache cacheId="1" r:id="rId\d+"\/><\/pivotCaches>/);
+  history.undo();
+  history.undo();
+  assert.deepEqual(book.sheets.map((s) => s.name), ['Sales']);
 });
 
 test('new values in the source become new items, after the old ones, in the order they come', async () => {

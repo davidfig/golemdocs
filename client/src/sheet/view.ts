@@ -28,6 +28,7 @@ import { NoteCard, NoteEditor } from './noteCard.ts';
 import { askSheetPassword } from './protectDialog.ts';
 import { ChartTitleCard } from './chartTitleCard.ts';
 import { askChartData } from './chartDataDialog.ts';
+import { askPivotFields } from './pivotFieldsDialog.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -629,6 +630,39 @@ export class SheetEditorView {
       'separator',
       { label: t('sheet.chart.delete'), run: change({ remove: true }) },
     ];
+  }
+
+  /** The pivot a cell is in (its filters above it count), by its place in the sheet's list. */
+  private pivotAt(row: number, col: number): number | null {
+    const at = this.info?.pivots?.findIndex((p) => row >= p.range.r0 && row <= p.range.r1 && col >= p.range.c0 && col <= p.range.c1) ?? -1;
+    return at < 0 ? null : at;
+  }
+
+  /** Insert › PivotTable: the field list for the selection's block; the pivot goes on a new sheet. */
+  private async insertPivot(range: CellRange): Promise<void> {
+    if (this.readOnly) return;
+    const facts = await this.ask<Extract<FromWorker, { t: 'pivotFields' }>>({ t: 'pivotFields', id: this.id(), sheet: this.sheetIndex, range }).catch(() => null);
+    if (!facts?.names.length) return this.deps.notify(t('sheet.pivot.noData'));
+    const choice = await askPivotFields(facts.names, facts.values, null);
+    this.afterCard();
+    if (!choice) return;
+    const changed = await this.edit({ kind: 'insertPivot', range, choice });
+    if (changed?.info && !changed.message) {
+      this.sheetIndex = changed.info.activeSheet;
+      this.useSheet(true);
+      this.showTabs();
+    }
+  }
+
+  /** The field list for a pivot of this sheet. */
+  private async editPivotFields(index: number): Promise<void> {
+    if (this.readOnly) return;
+    const facts = await this.ask<Extract<FromWorker, { t: 'pivotFields' }>>({ t: 'pivotFields', id: this.id(), sheet: this.sheetIndex, index }).catch(() => null);
+    if (!facts?.names.length) return;
+    const choice = await askPivotFields(facts.names, facts.values, facts.choice);
+    this.afterCard();
+    if (!choice || JSON.stringify(choice) === JSON.stringify(facts.choice)) return;
+    void this.edit({ kind: 'pivotFields', index, choice });
   }
 
   /** Select Data: the chart's series and categories in a dialog. */
@@ -1458,6 +1492,17 @@ export class SheetEditorView {
     const chart = hit.kind === 'cell' && !this.readOnly ? this.chartAt(x, y) : null;
     this.pickChart(chart);
     if (chart !== null) return this.menu(clientX, clientY, this.chartItems(chart));
+    // In a pivot: its own commands first.
+    const pivot = hit.kind === 'cell' && !this.readOnly ? this.pivotAt(hit.row, hit.col) : null;
+    if (pivot !== null) {
+      this.select(hit.row, hit.col);
+      return this.menu(clientX, clientY, [
+        { label: t('sheet.op.pivotFields'), run: () => void this.editPivotFields(pivot) },
+        { label: t('sheet.op.refreshPivots'), run: () => void this.edit({ kind: 'refreshPivots' }) },
+        'separator',
+        ...this.cellItems(hit.kind),
+      ]);
+    }
     const sel = this.selection;
     const inside = hit.row >= sel.r0 && hit.row <= sel.r1 && hit.col >= sel.c0 && hit.col <= sel.c1;
     if (!inside && hit.kind === 'cell') this.select(hit.row, hit.col);
@@ -1694,6 +1739,15 @@ export class SheetEditorView {
       case 'refreshPivots':
         void this.edit({ kind: 'refreshPivots' });
         return;
+      case 'insertPivot':
+        void this.insertPivot(this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col });
+        return;
+      case 'pivotFields': {
+        const index = this.pivotAt(this.active.row, this.active.col);
+        if (index === null) return this.deps.notify(t('sheet.pivot.notIn'));
+        void this.editPivotFields(index);
+        return;
+      }
       case 'sparklineLine':
       case 'sparklineColumn':
       case 'sparklineWinLoss':
@@ -1971,6 +2025,8 @@ function messageFor(code: string): string {
       return t('sheet.pivot.overlap');
     case 'pivotUnsupported':
       return t('sheet.pivot.unsupported');
+    case 'pivotNoData':
+      return t('sheet.pivot.noData');
     case 'badChartData':
       return t('sheet.chart.badData');
     case 'wrongPassword':

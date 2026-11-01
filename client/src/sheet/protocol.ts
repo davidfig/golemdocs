@@ -3,6 +3,7 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
+import type { PivotChoice } from './pivot.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { ChartAnchor } from './charts/model.ts';
 import type { CellLook, StyleChange } from './format/styleChange.ts';
@@ -157,6 +158,8 @@ export interface SheetInfo {
   notes?: [number, number][];
   /** How many charts the sheet has (the page asks for them, `charts`). */
   charts?: number;
+  /** The sheet's pivot tables: each one's place (its filters above it included). */
+  pivots?: { name: string; range: CellRange }[];
   /** The sheet has sparklines (they come with the charts). */
   sparklines?: boolean;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
@@ -237,6 +240,10 @@ export type EditOp =
   | { kind: 'note'; row: number; col: number; text: string | null; author: string }
   /** Sheet › Protect Sheet (`on`, with a password or '') or Unprotect Sheet (its password, if it has one). */
   | { kind: 'protect'; on: boolean; password: string }
+  /** Insert › PivotTable: a pivot of a block of cells (one cell: the block around it) on a new sheet before this one. */
+  | { kind: 'insertPivot'; range: CellRange; choice: PivotChoice }
+  /** The field list: a pivot's fields placed again, and the pivot laid out. */
+  | { kind: 'pivotFields'; index: number; choice: PivotChoice }
   /** Refresh: the sheet's pivot tables laid out again from their sources. */
   | { kind: 'refreshPivots' }
   /** Insert › Sparklines: one per row of a block of cells, in the column after it. */
@@ -301,6 +308,8 @@ export type ToWorker =
   | { t: 'choices'; id: number; sheet: number; row: number; col: number }
   /** A cell's note. */
   | { t: 'note'; id: number; sheet: number; row: number; col: number }
+  /** The field list's facts: a source's fields and their values, and (for an existing pivot) its fields' places. */
+  | { t: 'pivotFields'; id: number; sheet: number; index?: number; range?: CellRange }
   /** The sheet's charts, laid out with its data as it is now. */
   | { t: 'charts'; id: number; sheet: number }
   | { t: 'find'; id: number; sheet: number; text: string; from: { row: number; col: number }; backwards: boolean; matchCase: boolean; wholeCell: boolean; formulas: boolean; allSheets: boolean }
@@ -319,6 +328,7 @@ export type FromWorker =
   | { t: 'choices'; id: number; items: string[] }
   | { t: 'note'; id: number; note: { author: string; text: string } | null }
   | { t: 'charts'; id: number; scenes: ChartScene[]; sparklines: ChartScene | null }
+  | { t: 'pivotFields'; id: number; names: string[]; values: string[][]; choice: PivotChoice | null }
   | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }

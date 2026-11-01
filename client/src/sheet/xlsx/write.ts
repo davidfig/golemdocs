@@ -84,7 +84,7 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
     }
     if (sheet.noteParts && sheet.dirty.layout) await writeNotes(pkg, sheet.notes, sheet.noteParts);
     if (sheet.dirty.layout) await writeCharts(pkg, entry.part, sheet, book.theme.colors);
-    if (sheet.pivots.some((p) => p.refreshed)) await writePivots(pkg, sheet.pivots);
+    if (sheet.pivots.some((p) => p.refreshed)) await writePivots(pkg, book, entry.part, sheet);
     const pieces = sheetPieces(book, sheet, sharedCount);
     const deflated = await deflatePieces(options.pause ? withPauses(pieces, options.pause) : pieces);
     pkg.setDeflated(entry.part, deflated, `${TYPE}.worksheet+xml`);

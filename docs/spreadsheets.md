@@ -453,7 +453,24 @@ of it (through `refresh all`: opening by AppleScript does not refresh), whose ce
 `dataOnRows`). A
 pivot refreshed here after its source changed, then refreshed by Excel, comes out cell for cell the same.
 
-**Next in M6**: Insert › PivotTable and a field list; pivot styles drawn; pivot tables; what-if tools (Goal
+**Making and changing pivots.** Insert › PivotTable (the `insertPivot` edit) puts a pivot of the selection's block on a
+new sheet before the current one, at A3 (lower when it has several filters), as Excel does; the field list
+(`pivotFieldsDialog.ts`, also on a pivot's own menu and Sheet › PivotTable › PivotTable Fields; the `pivotFields` edit)
+places each field: not shown, a filter (with the item it shows), rows, columns, or values (with how they are summed up;
+named "Sum of Amount" and so on, the values across when there are several). The worker gives it the source's fields
+and their values (`pivotFields` request); the sheet's info gives each pivot's place, so a right-click in one offers its
+commands. `applyChoice` and `newPivot` (`pivot.ts`) make the model; the writer (`pivotWrite.ts`) makes a new pivot's parts
+whole (a cache part under a new id in the workbook's `<pivotCaches>`, a table part, their relationships) and brings an
+existing one's in line from the model (each field's place, keeping its other settings; the row, column, filter and value
+fields; `dataOnRows`); a cache field without items says what kinds of values it holds (`FieldSummary`, learnt in the
+layout). A pivot made here and one changed by the field list, refreshed by Excel, come out cell for cell the same.
+
+The field list's choices are `choiceButton` (`ui/dropdown.ts`): the drop-down list's button and list with a callback, which
+the toolbar's `dropdown` is now built on; a popup opened from inside a modal dialog goes into it (`openPopup`), since a
+modal dialog makes the rest of the page inert.
+
+**Next in M6**: pivot styles drawn; Excel's outline and tabular layouts, subtotals at the bottom, item sorting and
+hidden items; pivot tables; what-if tools (Goal
 Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)

@@ -934,6 +934,7 @@ export class Chrome {
           cmd('sheet.sortDescending'),
           cmd('sheet.filter'),
           cmd('sheet.insertTable'),
+          sub(t('sheet.group'), [cmd('sheet.groupRows'), cmd('sheet.ungroupRows'), cmd('sheet.groupColumns'), cmd('sheet.ungroupColumns')]),
           sep,
           cmd('sheet.merge'),
           cmd('sheet.mergeCenter'),

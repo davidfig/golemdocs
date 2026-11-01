@@ -72,6 +72,7 @@ export function info(b: Workbook): BookInfo {
         active: sheet.view.active,
         merges: sheet.merges,
         loaded: b.source?.parts[i]?.loaded ?? true,
+        outline: sheet.rowOutline.size || sheet.colOutline.size ? { rows: [...sheet.rowOutline].slice(0, 200000).map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]), cols: [...sheet.colOutline].map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
         filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
       };

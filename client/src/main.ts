@@ -1014,6 +1014,8 @@ let keepCamera = false;
 
 function placeCamera(): void {
   cameraPlaced = true;
+  // A workbook places its own camera when it opens (openSheet): pages left from the last document, or a resize, must not move it.
+  if (sheetView.active) return;
   if (keepCamera) {
     keepCamera = false;
     viewRestored = true;
@@ -2857,6 +2859,10 @@ async function openSheet(name: string, bytes: Uint8Array, options: { localId?: s
   const { opening } = beginOpen({ kind: 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared });
   worker.close();
   sheetImageFor = opening;
+  // A workbook opens at its first cell, at 100%: not where the last document was.
+  camera.zoom = Math.min(Math.max(1, camera.minZoom), camera.maxZoom);
+  camera.x = 0;
+  camera.y = 0;
   sheetView.open(name, bytes, image);
   sheetView.readOnly = options.shared?.role === 'viewer';
   loaded = true;

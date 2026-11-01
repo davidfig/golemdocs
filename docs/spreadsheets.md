@@ -414,9 +414,21 @@ written rewrites the comments part and the VML drawing Excel shows them with (ea
 (the `pasteCells` edit: values, formulas moved as copied, looks), even onto another sheet; Sheet › Paste Special pastes
 only values, formulas or formats, or transposed. Text from elsewhere is pasted as typed (the `paste` edit).
 
+**Outline groups**: each row's and column's level and collapsed flag (`rowOutline`, `colOutline`, read from and written
+to `<row outlineLevel collapsed>` and `<col>`, with `sheetFormatPr`'s `outlineLevelRow`/`outlineLevelCol`, which Excel
+uses to show its gutter) go to the page in `SheetInfo.outline`. `Geometry` makes room for a gutter left of the row
+headers and above the column headers (`gutterLeft`, `gutterTop`, `OUTLINE_STEP` a level), the renderer draws each group's
+bar and its +/- box at the summary row or column after it, and the level buttons where the gutters meet; `hit` reports
+them as `outline`. Sheet › Group groups or ungroups the selected rows or columns (the `group` edit, seven levels deep), the
+box collapses or expands a group (`collapse`: rows hidden, deeper collapsed groups staying shut), and a level button
+shows everything down to its level (`outlineLevel`); all three are `outlineEdit` in `edit.ts`.
+
+A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera` (Word's centering, run on a resize or as
+the last document's pages arrive) leaves a workbook alone.
+
 **Next in M5**:
-comments, outline groups, protection; Paste Special; a formatting toolbar row for the Sheet menu's number formats and
-borders.
+adding, editing and deleting notes; protection; a table's filter buttons and calculated columns; icon sets; a formatting
+toolbar row for the Sheet menu's number formats and borders.
 
 ### M4: every function (2026-10-31)
 

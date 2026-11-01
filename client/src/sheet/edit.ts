@@ -218,10 +218,10 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   const structural = which === 'all';
   if (which === 'cells') snap.extent = [grid.rows, grid.cols];
   if (structural) snap.columnList = grid.columns.slice();
-  if (structural || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
+  if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -387,6 +387,11 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'group':
+    case 'collapse':
+    case 'outlineLevel':
+      outlineEdit(sheet, op);
+      return { ranges: [everything()] };
     case 'pasteCells': {
       const t = pasteTarget(op.source, op.at, op.transpose);
       if ((t.r1 - t.r0 + 1) * (t.c1 - t.c0 + 1) > MAX_FILL) return { ranges: [], message: 'too many cells' };
@@ -552,6 +557,52 @@ function sortRows(book: Workbook, sheet: Worksheet, op: Extract<EditOp, { kind: 
     column.formulas = kept.sort((a, b) => a.first - b.first);
   }
   return { ranges: [r], select: r };
+}
+
+/** Outline groups: levels changed, a group collapsed or expanded (its rows hidden or shown), or a level shown. */
+function outlineEdit(sheet: Worksheet, op: Extract<EditOp, { kind: 'group' | 'collapse' | 'outlineLevel' }>): void {
+  const rows = op.axis === 'row';
+  const map = new Map(rows ? sheet.rowOutline : sheet.colOutline);
+  const sizes = rows ? sheet.rowSizes : sheet.colSizes;
+  const level = (i: number) => map.get(i)?.level ?? 0;
+  const set = (i: number, value: { level: number; collapsed: boolean }) => (value.level || value.collapsed ? map.set(i, value) : map.delete(i));
+  if (op.kind === 'group') {
+    // Excel's outlines go seven deep.
+    for (let i = op.from; i <= op.to; i++) set(i, { level: Math.max(0, Math.min(7, level(i) + op.by)), collapsed: map.get(i)?.collapsed ?? false });
+    if (op.by < 0) for (let i = op.from; i <= op.to; i++) if (level(i) === 0) sizes.setHidden(i, false);
+  } else if (op.kind === 'collapse') {
+    let first = op.summary - 1;
+    while (first > 0 && level(first - 1) >= op.level) first--;
+    for (let i = first; i < op.summary; i++) {
+      // Expanding shows the group's own rows; deeper groups that are collapsed stay so.
+      if (op.collapse) sizes.setHidden(i, true);
+      else if (level(i) === op.level || !hiddenByDeeper(map, i, op.level)) sizes.setHidden(i, false);
+    }
+    set(op.summary, { level: level(op.summary), collapsed: op.collapse });
+  } else {
+    // Level n shows what is above level n: deeper rows are hidden, and each summary whose group is hidden is collapsed.
+    const all = [...map.keys()];
+    for (const i of all) sizes.setHidden(i, level(i) >= op.level);
+    const summaries = new Set(all.map((i) => i + 1).filter((s) => level(s) < level(s - 1)));
+    for (const s of summaries) set(s, { level: level(s), collapsed: level(s) + 1 >= op.level });
+  }
+  // A collapsed mark belongs to a summary, after a deeper group: one left by an ungroup goes.
+  for (const [i, o] of [...map]) if (o.collapsed && level(i - 1) <= o.level) set(i, { level: o.level, collapsed: false });
+  if (rows) sheet.rowOutline = map;
+  else sheet.colOutline = map;
+}
+
+/** Whether an index sits in a deeper group that is collapsed (it stays hidden when an outer group opens). */
+function hiddenByDeeper(map: Map<number, { level: number; collapsed: boolean }>, i: number, outer: number): boolean {
+  const own = map.get(i)?.level ?? 0;
+  if (own <= outer) return false;
+  // The summary after i's run at each deeper level.
+  for (let l = outer + 1; l <= own; l++) {
+    let s = i + 1;
+    while ((map.get(s)?.level ?? 0) >= l) s++;
+    if (map.get(s)?.collapsed) return true;
+  }
+  return false;
 }
 
 /** Sheet › Insert Table: a new table over a range; its header names are the first row's text (empty ones become Column1...). */

@@ -108,6 +108,8 @@ export interface SheetInfo {
   merges: CellRange[];
   /** Read so far (a big sheet comes in as it is read). */
   loaded: boolean;
+  /** Outline groups: (index, level, collapsed here) for rows and columns that have a level or a collapsed group's summary. */
+  outline?: { rows: [number, number, boolean][]; cols: [number, number, boolean][] };
   /** Cells with notes (row, column), so resting the pointer on one shows it. */
   notes?: [number, number][];
   /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
@@ -155,6 +157,12 @@ export type EditOp =
   | { kind: 'pasteCells'; from: number; source: CellRange; at: { row: number; col: number }; what: PasteWhat; transpose: boolean }
   /** Sheet › Insert Table: a table over a range (one cell: the block around it), its first row the header. */
   | { kind: 'createTable'; range: CellRange }
+  /** Group (by 1) or ungroup (by -1) rows or columns from..to (Sheet › Group): their outline level goes up or down. */
+  | { kind: 'group'; axis: 'row' | 'col'; from: number; to: number; by: 1 | -1 }
+  /** Collapse or expand the group (at `level`) whose summary row or column is `summary`. */
+  | { kind: 'collapse'; axis: 'row' | 'col'; summary: number; level: number; collapse: boolean }
+  /** An outline's level button: show levels up to `level`, hiding deeper ones. */
+  | { kind: 'outlineLevel'; axis: 'row' | 'col'; level: number }
   /** AutoFill: `target` (which holds `source` at one end) filled from `source`. */
   | { kind: 'fill'; source: CellRange; target: CellRange }
   /** A change to how the cells of ranges look (each range's own outside edges for borders). */

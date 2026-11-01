@@ -372,3 +372,28 @@ test('Insert Table makes a table of the block around a cell, saved as a table pa
   assert.equal((again.sheets[0] as Worksheet).tables.length, 0);
   assert.ok(!again.source!.pkg.has('xl/tables/table1.xml'));
 });
+
+test('outline groups: grouped, collapsed, expanded, shown by level, and saved', async () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['a'], ['b'], ['c'], ['d'], ['e'], ['total']] });
+  history.apply(0, { kind: 'group', axis: 'row', from: 1, to: 4, by: 1 });
+  history.apply(0, { kind: 'group', axis: 'row', from: 2, to: 3, by: 1 });
+  const hidden = () => [0, 1, 2, 3, 4, 5].filter((r) => sheet.rowSizes.hidden(r));
+  history.apply(0, { kind: 'collapse', axis: 'row', summary: 4, level: 2, collapse: true });
+  assert.deepEqual(hidden(), [2, 3], 'the inner group');
+  history.apply(0, { kind: 'collapse', axis: 'row', summary: 5, level: 1, collapse: true });
+  assert.deepEqual(hidden(), [1, 2, 3, 4]);
+  history.apply(0, { kind: 'collapse', axis: 'row', summary: 5, level: 1, collapse: false });
+  assert.deepEqual(hidden(), [2, 3], 'opening the outer group leaves the inner one closed');
+  history.apply(0, { kind: 'outlineLevel', axis: 'row', level: 1 });
+  assert.deepEqual(hidden(), [1, 2, 3, 4]);
+  assert.equal(sheet.rowOutline.get(5)?.collapsed, true);
+  history.apply(0, { kind: 'outlineLevel', axis: 'row', level: 3 });
+  assert.deepEqual(hidden(), []);
+  const back = await readWorkbook(await writeWorkbook(b));
+  const read = (back.sheets[0] as Worksheet).rowOutline;
+  assert.deepEqual([1, 2, 3, 4].map((r) => read.get(r)?.level), [1, 2, 2, 1]);
+  history.apply(0, { kind: 'group', axis: 'row', from: 1, to: 4, by: -1 });
+  history.apply(0, { kind: 'group', axis: 'row', from: 1, to: 4, by: -1 });
+  assert.deepEqual([...sheet.rowOutline.values()].filter((o) => o.level), []);
+});

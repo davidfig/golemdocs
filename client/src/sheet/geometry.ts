@@ -12,6 +12,8 @@ import type { SheetInfo } from './protocol.ts';
 export const HEADER_HEIGHT = 20;
 export const MIN_HEADER_WIDTH = 28;
 const HEADER_CHAR = 7.5;
+/** Each outline level's share of the gutter beside the headers, in CSS pixels. */
+export const OUTLINE_STEP = 14;
 
 export interface Region {
   /** Where on the canvas, in CSS pixels. */
@@ -28,13 +30,33 @@ export interface Region {
 }
 
 export interface Hit {
-  /** On a cell, a column header, a row header, the corner, or past the sheet. */
-  kind: 'cell' | 'columnHeader' | 'rowHeader' | 'corner' | 'none';
+  /** On a cell, a column header, a row header, the corner, an outline gutter, or past the sheet. */
+  kind: 'cell' | 'columnHeader' | 'rowHeader' | 'corner' | 'outline' | 'none';
   row: number;
   col: number;
   /** Near the edge between two headers: resizing the row or column before it. */
   edge?: { row?: number; col?: number };
+  /** In an outline gutter: which one, and the level (1 for the outermost) of the button or bar under the point. */
+  outline?: { axis: 'row' | 'col'; level: number; button: boolean };
 }
+
+/** Outline levels by row or column index (0 where there are none), and where groups are collapsed. */
+export interface Outline {
+  levels: Map<number, number>;
+  collapsed: Set<number>;
+  /** The deepest level (0: no groups, no gutter). */
+  depth: number;
+}
+
+const outlineOf = (entries: [number, number, boolean][] | undefined): Outline => {
+  const levels = new Map<number, number>();
+  const collapsed = new Set<number>();
+  for (const [i, level, closed] of entries ?? []) {
+    if (level) levels.set(i, level);
+    if (closed) collapsed.add(i);
+  }
+  return { levels, collapsed, depth: Math.max(0, ...levels.values()) };
+};
 
 export class SheetGeometry {
   rows: Sizes;
@@ -42,8 +64,12 @@ export class SheetGeometry {
   frozenRows = 0;
   frozenCols = 0;
   merges: CellRange[] = [];
+  rowOutline: Outline;
+  colOutline: Outline;
 
   constructor(info: SheetInfo) {
+    this.rowOutline = outlineOf(info.outline?.rows);
+    this.colOutline = outlineOf(info.outline?.cols);
     this.rows = Sizes.from(MAX_ROWS, info.rowSizes);
     this.cols = Sizes.from(MAX_COLUMNS, info.colSizes);
     this.frozenRows = info.pane?.rows ?? 0;
@@ -51,9 +77,23 @@ export class SheetGeometry {
     this.merges = info.merges;
   }
 
-  /** The row header's width: wide enough for the last row number in view. */
+  /** The gutters for outline buttons left of the row headers and above the column headers (CSS pixels). */
+  get gutterLeft(): number {
+    return this.rowOutline.depth ? (this.rowOutline.depth + 1) * OUTLINE_STEP : 0;
+  }
+
+  get gutterTop(): number {
+    return this.colOutline.depth ? (this.colOutline.depth + 1) * OUTLINE_STEP : 0;
+  }
+
+  /** Where the cells start below the column headers (and their gutter). */
+  get headerHeight(): number {
+    return HEADER_HEIGHT + this.gutterTop;
+  }
+
+  /** The row header's width: wide enough for the last row number in view, and the gutter left of it. */
   headerWidth(lastRow: number): number {
-    return Math.max(MIN_HEADER_WIDTH, Math.ceil(String(lastRow + 1).length * HEADER_CHAR + 10));
+    return this.gutterLeft + Math.max(MIN_HEADER_WIDTH, Math.ceil(String(lastRow + 1).length * HEADER_CHAR + 10));
   }
 
   x(col: number): number {
@@ -88,7 +128,7 @@ export class SheetGeometry {
    */
   regions(width: number, height: number, scale: number, x: number, y: number, headerWidth: number): Region[] {
     const left = headerWidth;
-    const top = HEADER_HEIGHT;
+    const top = this.headerHeight;
     const fw = this.frozenWidth * scale;
     const fh = this.frozenHeight * scale;
     const regions: Region[] = [];
@@ -107,7 +147,17 @@ export class SheetGeometry {
   /** What is under a point of the canvas (CSS pixels). */
   hit(px: number, py: number, regions: Region[], scale: number, headerWidth: number): Hit {
     const EDGE = 4;
-    const inHeaderRow = py < HEADER_HEIGHT;
+    // The outline gutters: a level button where they meet the other headers, or a group's bar or box.
+    const gl = this.gutterLeft;
+    const gt = this.gutterTop;
+    if (px < gl || py < gt) {
+      const axis = px < gl ? 'row' : 'col';
+      const level = Math.floor((axis === 'row' ? px : py) / OUTLINE_STEP) + 1;
+      const button = axis === 'row' ? py < this.headerHeight : px < headerWidth;
+      const inner = this.hit(axis === 'row' ? gl : px, axis === 'row' ? py : gt, regions, scale, headerWidth);
+      return { kind: 'outline', row: inner.row, col: inner.col, outline: { axis, level, button } };
+    }
+    const inHeaderRow = py < this.headerHeight;
     const inHeaderCol = px < headerWidth;
     if (inHeaderRow && inHeaderCol) return { kind: 'corner', row: 0, col: 0 };
     if (inHeaderRow || inHeaderCol) {

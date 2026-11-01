@@ -180,6 +180,29 @@ test('Sheet › Filter puts buttons on the header row, and its card hides the ro
   await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBe(0);
 });
 
+test('Sheet › Group groups rows; the outline’s box collapses them and its level buttons show them again', async ({ app, page }) => {
+  await open(app, page);
+  const outline = async () => (await state(page)) as unknown as { hiddenRows: number; outline: { rows: [number, number, boolean][] } | null };
+  await clickCell(page, 1, 0);
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  await app.menu('Sheet', 'Group', 'Group Rows');
+  await expect.poll(async () => (await outline()).outline?.rows.map(([row, level]) => [row, level])).toEqual([[1, 1], [2, 1], [3, 1]]);
+  // The group's box is in the gutter left of the row headers, at the row after the group.
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const rowY = (r: number) => page.evaluate((row) => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { y: number } } }).sheetEditor.pointOf(row, 0).y, r);
+  const headers = (await rowY(0)) - 20;
+  await page.mouse.click(box.x + 6, box.y + (await rowY(4)));
+  await expect.poll(async () => (await outline()).hiddenRows).toBe(3);
+  // The level buttons, beside the column headers: 2 shows every row again; 1 hides the group's.
+  await page.mouse.click(box.x + 20, box.y + headers);
+  await expect.poll(async () => (await outline()).hiddenRows).toBe(0);
+  await page.mouse.click(box.x + 6, box.y + headers);
+  await expect.poll(async () => (await outline()).hiddenRows).toBe(3);
+  await app.menu('Sheet', 'Group', 'Ungroup Rows');
+  await expect.poll(async () => (await outline()).outline).toBe(null);
+});
+
 test('a list validation offers its choices from an arrow, and a value a rule refuses is not entered', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'validation.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/validation.xlsx')), mimeType: 'application/octet-stream' });

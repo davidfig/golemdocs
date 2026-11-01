@@ -346,7 +346,7 @@ export class SheetEditorView {
     // Less the frozen part (the camera scrolls the rest) and the header and bars, which cover the canvas's edges.
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
     const extraX = (this.renderer.headerWidth || 40) / scale;
-    const extraY = (HEADER_HEIGHT + FORMULA_BAR + TABS_BAR) / scale;
+    const extraY = ((this.geometry?.headerHeight ?? HEADER_HEIGHT) + FORMULA_BAR + TABS_BAR) / scale;
     return { x: 0, y: 0, width: g.x(cols) - g.frozenWidth + extraX, height: g.y(rows) - g.frozenHeight + extraY };
   }
 
@@ -423,7 +423,7 @@ export class SheetEditorView {
     const { camera } = this.deps;
     const scale = camera.zoom * CSS_PX_PER_POINT;
     const viewWidth = camera.width / camera.dpr - (this.renderer.headerWidth || 40) - g.frozenWidth * scale;
-    const viewHeight = camera.height / camera.dpr - HEADER_HEIGHT - this.offsetTop - TABS_BAR - g.frozenHeight * scale;
+    const viewHeight = camera.height / camera.dpr - g.headerHeight - this.offsetTop - TABS_BAR - g.frozenHeight * scale;
     if (cell.col >= g.frozenCols) {
       const x0 = g.x(cell.col) - g.frozenWidth;
       const x1 = g.x(cell.col + 1) - g.frozenWidth;
@@ -883,6 +883,9 @@ export class SheetEditorView {
     this.focus();
     const g = this.geometry;
     switch (hit.kind) {
+      case 'outline':
+        this.outlinePress(hit);
+        return;
       case 'corner':
         this.selectAll();
         return;
@@ -948,7 +951,7 @@ export class SheetEditorView {
       this.deps.render();
       return;
     }
-    const hit = this.hit(Math.max(this.renderer.headerWidth + 1, x), Math.max(HEADER_HEIGHT + this.offsetTop + 1, y));
+    const hit = this.hit(Math.max(this.renderer.headerWidth + 1, x), Math.max(g.headerHeight + this.offsetTop + 1, y));
     if (!hit) return;
     if (d.kind === 'fill' && hit.kind === 'cell') {
       // Down, up, right or left of the selection, whichever the pointer is further out along.
@@ -1068,6 +1071,23 @@ export class SheetEditorView {
       sort: (descending) => void this.edit({ kind: 'sort', range: filter.range, keys: [{ col, descending }], header: true }),
       apply: (choice) => void this.edit({ kind: 'filter', col, values: choice.values, blanks: choice.blanks }),
     });
+  }
+
+  /** A press in an outline gutter: a level button shows that level; a group's box collapses or expands it. */
+  private outlinePress(hit: Hit): void {
+    const g = this.geometry;
+    const o = hit.outline;
+    if (!g || !o || this.readOnly) return;
+    const groups = o.axis === 'row' ? g.rowOutline : g.colOutline;
+    if (o.button) {
+      if (o.level <= groups.depth + 1) void this.edit({ kind: 'outlineLevel', axis: o.axis, level: o.level });
+      return;
+    }
+    // The box is at a group's summary: the index right after a run at this level.
+    const i = o.axis === 'row' ? hit.row : hit.col;
+    if ((groups.levels.get(i - 1) ?? 0) >= o.level && (groups.levels.get(i) ?? 0) < o.level) {
+      void this.edit({ kind: 'collapse', axis: o.axis, summary: i, level: o.level, collapse: !groups.collapsed.has(i) });
+    }
   }
 
   /** The pointer rests on a cell: its note, if it has one, shows after a moment; leaving the cell hides it. */
@@ -1368,6 +1388,14 @@ export class SheetEditorView {
         void this.edit({ kind: 'sort', range, keys: [{ col: this.active.col, descending: op === 'sortDescending' }], header: null });
         return;
       }
+      case 'groupRows':
+      case 'ungroupRows':
+        void this.edit({ kind: 'group', axis: 'row', from: sel.r0, to: Math.min(sel.r1, sel.r0 + 200000), by: op === 'groupRows' ? 1 : -1 });
+        return;
+      case 'groupColumns':
+      case 'ungroupColumns':
+        void this.edit({ kind: 'group', axis: 'col', from: sel.c0, to: sel.c1, by: op === 'groupColumns' ? 1 : -1 });
+        return;
       case 'insertTable':
         void this.edit({ kind: 'createTable', range: this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col } });
         return;
@@ -1551,7 +1579,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, outline: this.info?.outline ?? null, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */

@@ -16,6 +16,7 @@
 - Notes in workbooks show as a red mark in the cell's corner, and rest the pointer on the cell to read them; they stay with their cells as rows and columns are inserted and deleted.
 - Cells copied within a workbook paste with their formulas and formatting, and Sheet › Paste Special pastes only values, formulas or formatting, or rows and columns swapped.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales and data bars, recalculated as the values change.
+- Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
 
 ## 0.30.1 - 2026-10-31
 

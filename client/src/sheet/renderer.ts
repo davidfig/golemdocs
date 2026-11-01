@@ -17,7 +17,7 @@ import type { CellRange } from './model/worksheet.ts';
 import { PAD, placeText } from './cellText.ts';
 import type { Measure } from './cellText.ts';
 import type { CellFonts } from './fonts.ts';
-import { HEADER_HEIGHT, SheetGeometry } from './geometry.ts';
+import { HEADER_HEIGHT, OUTLINE_STEP, SheetGeometry } from './geometry.ts';
 import type { Region } from './geometry.ts';
 import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE, tileId } from './protocol.ts';
 import type { CellTile, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
@@ -597,6 +597,55 @@ export class SheetRenderer {
     }
   }
 
+  /**
+   * The outline gutters: for each group in view a bar along it in its level's lane, ending at its summary row (or column,
+   * just after it) in a box, + when collapsed and - when open.
+   */
+  private outlines(rects: RectList, regions: Region[], g: SheetGeometry, scale: number, label: (text: string, cx: number, cy: number, color: number) => void): void {
+    const line = packColor(COLOR.headerText);
+    for (const axis of ['row', 'col'] as const) {
+      const groups = axis === 'row' ? g.rowOutline : g.colOutline;
+      if (!groups.depth) continue;
+      const sizes = axis === 'row' ? g.rows : g.cols;
+      const done = new Set<number>();
+      for (const region of regions) {
+        const key = axis === 'row' ? region.y : region.x;
+        if (done.has(key)) continue;
+        done.add(key);
+        const origin = axis === 'row' ? region.originY : region.originX;
+        const start = axis === 'row' ? region.y : region.x;
+        const length = axis === 'row' ? region.height : region.width;
+        const pos = (i: number) => start + (sizes.position(i) - origin) * scale;
+        const i0 = sizes.indexAt(origin);
+        const i1 = Math.min(sizes.count - 1, sizes.indexAt(origin + length / scale) + 1);
+        // A summary is the index after a run of a deeper level; walk the view's indexes (and one past) for them.
+        for (let i = Math.max(1, i0); i <= i1 + 1; i++) {
+          const before = groups.levels.get(i - 1) ?? 0;
+          const here = groups.levels.get(i) ?? 0;
+          for (let level = here + 1; level <= before; level++) {
+            const run = groupBefore(groups.levels, i, level);
+            if (!run) continue;
+            const lane = (level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
+            const a = Math.max(start, pos(run[0]));
+            const b = Math.min(start + length, pos(i));
+            const closed = groups.collapsed.has(i);
+            if (!closed && b > a) {
+              if (axis === 'row') rects.push(lane - 0.5, a, 1, b - a, line);
+              else rects.push(a, lane - 0.5, b - a, 1, line);
+            }
+            // The box at the summary.
+            const centre = pos(i) + (sizes.size(i) * scale) / 2;
+            if (centre < start || centre > start + length) continue;
+            const half = 5;
+            const box = axis === 'row' ? { x0: lane - half, y0: centre - half, x1: lane + half, y1: centre + half } : { x0: centre - half, y0: lane - half, x1: centre + half, y1: lane + half };
+            outline(rects, box, 1, line);
+            label(closed ? '+' : '-', (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, line);
+          }
+        }
+      }
+    }
+  }
+
   /** The AutoFilter's buttons: a framed square with a down arrow at the right of each cell of its first row. */
   private filterButtons(list: RectList, filter: { range: CellRange; filtered: number[] }, g: SheetGeometry, cssPx: number): void {
     const row = filter.range.r0;
@@ -673,7 +722,11 @@ export class SheetRenderer {
       if (r.r1 - r.r0 < 5000) for (let row = r.r0; row <= r.r1; row++) selectedRows.add(row);
     }
     const left = this.headerWidth;
-    rects.push(0, 0, cssWidth, HEADER_HEIGHT, packColor(COLOR.header));
+    // Outline gutters above the column headers and left of the row headers; the headers after them.
+    const gutL = g.gutterLeft;
+    const gutT = g.gutterTop;
+    const top = g.headerHeight;
+    rects.push(0, 0, cssWidth, top, packColor(COLOR.header));
     rects.push(0, 0, left, cssHeight, packColor(COLOR.header));
     const headerText = packColor(COLOR.headerText);
     const selectedText = packColor(COLOR.headerSelectedText);
@@ -694,9 +747,9 @@ export class SheetRenderer {
           const x0 = Math.max(region.x, x);
           const x1 = Math.min(region.x + region.width, x + w);
           if (x1 <= x0) continue;
-          if (selectedCols.has(c)) rects.push(x0, 0, x1 - x0, HEADER_HEIGHT, packColor(COLOR.headerSelected));
-          rects.push(x + w - 0.5, 0, 1, HEADER_HEIGHT, line);
-          if (showLabels || c % Math.ceil(30 / Math.max(w, 0.1)) === 0) label(columnName(c), x + w / 2, HEADER_HEIGHT / 2, selectedCols.has(c) ? selectedText : headerText);
+          if (selectedCols.has(c)) rects.push(x0, gutT, x1 - x0, HEADER_HEIGHT, packColor(COLOR.headerSelected));
+          rects.push(x + w - 0.5, gutT, 1, HEADER_HEIGHT, line);
+          if (showLabels || c % Math.ceil(30 / Math.max(w, 0.1)) === 0) label(columnName(c), x + w / 2, gutT + HEADER_HEIGHT / 2, selectedCols.has(c) ? selectedText : headerText);
         }
       }
       if (!rowsDone.has(region.y)) {
@@ -709,27 +762,35 @@ export class SheetRenderer {
         for (let r = r0; r <= r1; r++) {
           const h = g.rows.size(r) * scale;
           const y = region.y + (g.y(r) - region.originY) * scale;
-          if (selectedRows.has(r) && h > 0) rects.push(0, Math.max(region.y, y), left, Math.min(h, region.y + region.height - y), packColor(COLOR.headerSelected));
+          if (selectedRows.has(r) && h > 0) rects.push(gutL, Math.max(region.y, y), left - gutL, Math.min(h, region.y + region.height - y), packColor(COLOR.headerSelected));
           if (every === 1) {
             if (h <= 0) continue;
-            rects.push(0, y + h - 0.5, left, 1, line);
-            label(String(r + 1), left / 2, y + h / 2, selectedRows.has(r) ? selectedText : headerText);
+            rects.push(gutL, y + h - 0.5, left - gutL, 1, line);
+            label(String(r + 1), (gutL + left) / 2, y + h / 2, selectedRows.has(r) ? selectedText : headerText);
           } else if ((r + 1) % every === 0) {
-            label(String(r + 1), left / 2, y, headerText);
+            label(String(r + 1), (gutL + left) / 2, y, headerText);
             r += every - 2;
           }
         }
       }
     }
     rects.push(left - 1, 0, 1, cssHeight, line);
-    rects.push(0, HEADER_HEIGHT - 1, cssWidth, 1, line);
+    rects.push(0, top - 1, cssWidth, 1, line);
     // Frozen panes: a line where they end.
-    if (g.frozenRows) rects.push(left, HEADER_HEIGHT + g.frozenHeight * scale - 0.5, cssWidth - left, 1, packColor(COLOR.frozenLine));
-    if (g.frozenCols) rects.push(left + g.frozenWidth * scale - 0.5, HEADER_HEIGHT, 1, cssHeight - HEADER_HEIGHT, packColor(COLOR.frozenLine));
-    // The corner box (selects everything).
-    rects.push(0, 0, left, HEADER_HEIGHT, packColor(COLOR.header));
-    rects.push(left - 1, 0, 1, HEADER_HEIGHT, line);
-    rects.push(0, HEADER_HEIGHT - 1, left, 1, line);
+    if (g.frozenRows) rects.push(left, top + g.frozenHeight * scale - 0.5, cssWidth - left, 1, packColor(COLOR.frozenLine));
+    if (g.frozenCols) rects.push(left + g.frozenWidth * scale - 0.5, top, 1, cssHeight - top, packColor(COLOR.frozenLine));
+    // The groups in the gutters.
+    this.outlines(rects, regions, g, scale, label);
+    // The corner box (selects everything), and the level buttons where the gutters meet it.
+    rects.push(0, 0, left, top, packColor(COLOR.header));
+    rects.push(left - 1, 0, 1, top, line);
+    rects.push(0, top - 1, left, 1, line);
+    const levelButton = (x: number, y: number, n: number) => {
+      outline(rects, { x0: x + 2, y0: y + 2, x1: x + OUTLINE_STEP - 2, y1: y + OUTLINE_STEP - 2 }, 1, line);
+      label(String(n), x + OUTLINE_STEP / 2, y + OUTLINE_STEP / 2, headerText);
+    };
+    for (let n = 1; gutL && n <= g.rowOutline.depth + 1; n++) levelButton((n - 1) * OUTLINE_STEP, top - OUTLINE_STEP - 3, n);
+    for (let n = 1; gutT && n <= g.colOutline.depth + 1; n++) levelButton(left - OUTLINE_STEP - 3, (n - 1) * OUTLINE_STEP, n);
     gl.disable(gl.SCISSOR_TEST);
     const batch = new RectBatch(rects.buffer, rects.count, 0, 0);
     this.frameGarbage.rects.push(batch);
@@ -740,6 +801,14 @@ export class SheetRenderer {
     this.frameGarbage.text.push(...text);
     this.text.render(screen, text);
   }
+}
+
+/** A group's run of indexes ending before `summary` at `level` or deeper (what its +/- box shows and hides). */
+export function groupBefore(levels: Map<number, number>, summary: number, level: number): [number, number] | null {
+  let first = summary - 1;
+  if ((levels.get(first) ?? 0) < level) return null;
+  while (first > 0 && (levels.get(first - 1) ?? 0) >= level) first--;
+  return [first, summary - 1];
 }
 
 /** The overview level whose texels are about a device pixel for rows of `rowDevicePx`. */

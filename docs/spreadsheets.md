@@ -348,7 +348,7 @@ The recommendations below were taken as decided when work went ahead unassisted 
 
 ## Progress
 
-### M5: data and formatting (under way, 2026-10-31)
+### M5: data and formatting (done, 2026-11-01)
 
 **Done.** Formatting: the app's own commands (Bold, Italic, Underline, Strikethrough, fonts and sizes, Grow and Shrink, text
 and fill colours, alignment, Clear Formatting) work on cells when a workbook is open: `formatAllows` lets them, the chrome
@@ -463,9 +463,12 @@ shows everything down to its level (`outlineLevel`); all three are `outlineEdit`
 A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera` (Word's centering, run on a resize or as
 the last document's pages arrive) leaves a workbook alone.
 
-**Next in M5**:
-a formatting
-toolbar row for the Sheet menu's number formats and borders.
+**The Sheet toolbar** (`DEFAULT_LAYOUT` in `toolbarLayout.ts`): currency, percent, more and fewer decimals, borders, merge
+and center, wrap, vertical alignment, sort and filter, as buttons of the Sheet menu's own commands (their icons in
+`icons.ts`, `sheet*`). Sheet commands are available only for a workbook (`formatAllows`), so the toolbar is empty, and
+hidden, for every other document, as the Picture toolbar is for anything but a picture.
+
+M5 is done.
 
 ### M4: every function (2026-10-31)
 

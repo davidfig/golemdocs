@@ -6,7 +6,7 @@
 
 - Excel workbooks (.xlsx) open in a new spreadsheet editor: type into cells, insert and delete rows and columns, resize them, freeze panes, merge cells, add and rename sheets, copy and paste with other apps, find, and undo. Large workbooks of a million rows open, scroll and zoom smoothly, out to a view of the whole sheet at under 1%, and open again in a moment from this browser. Files save back as .xlsx that Excel opens as they were.
 - Formulas in workbooks calculate as you type, as Excel calculates them: hundreds of Excel's functions, dynamic arrays that spill into the cells below, and references that follow rows and columns as they are inserted and deleted.
-- Workbook cells can be formatted: bold, italic, underline, fonts and sizes, text and fill colours and alignment from the Format menu and the toolbar, and number formats, decimal places, borders and wrapped text from the Sheet menu.
+- Workbook cells can be formatted: bold, italic, underline, fonts and sizes, text and fill colours and alignment from the Format menu and the toolbar, and number formats, decimal places, borders and wrapped text from the Sheet menu. A Sheet toolbar shows while a workbook is open, with buttons for currency, percent, decimal places, borders, merging, wrapping, alignment, sorting and filtering.
 - Workbooks can be sorted (Sheet › Sort A to Z, Sort Z to A), Edit › Replace replaces text in cells, and double-clicking the edge of a column header fits the column to its contents.
 - Drag the corner of a workbook selection to fill cells: numbers, dates, months, days and numbered text carry on as a series, and formulas are copied with their references moved.
 - Sheet › Filter adds filter buttons to a workbook's header row: pick the values to show, or sort by the column.

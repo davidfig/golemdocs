@@ -552,7 +552,24 @@ export class Chrome {
     r.add(a('image.layers', t('vector.layers'), { kind: 'image', op: 'layers' }, { icon: 'layersStack', scope: 'picture', shortcut: PICTURE_KEYS.layers, checked: (s) => s.draw.layers }));
 
     // Spreadsheets: the Sheet menu (the editor's own keys and context menus do the rest; see sheet/view.ts).
-    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }));
+    const SHEET_ICONS: Partial<Record<(typeof SHEET_OPS)[number], string>> = {
+      numberCurrency: 'sheetCurrency',
+      numberPercent: 'sheetPercent',
+      increaseDecimals: 'sheetMoreDecimals',
+      decreaseDecimals: 'sheetFewerDecimals',
+      borderBottom: 'borders',
+      borderAll: 'sheetBorderAll',
+      borderNone: 'sheetBorderNone',
+      mergeCenter: 'sheetMergeCenter',
+      wrapText: 'sheetWrap',
+      alignTop: 'sheetAlignTop',
+      alignMiddle: 'sheetAlignMiddle',
+      alignBottom: 'sheetAlignBottom',
+      sortAscending: 'sheetSortAscending',
+      sortDescending: 'sheetSortDescending',
+      filter: 'sheetFilter',
+    };
+    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
     for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text'], ['canvas', 'canvasTool']] as const) {

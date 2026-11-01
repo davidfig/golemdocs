@@ -108,6 +108,11 @@ test('cells are formatted with the app’s formatting commands and the Sheet men
   await expect.poll(async () => (await state(page)).content.display).toBe('25.0%');
   await page.keyboard.press(`${MOD}+z`);
   await expect.poll(async () => (await state(page)).content.display).toBe('25.00%');
+  // The Sheet toolbar does the same: more decimals, then currency.
+  await page.getByRole('button', { name: 'Increase Decimal' }).click();
+  await expect.poll(async () => (await state(page)).content.display).toBe('25.000%');
+  await page.getByRole('button', { name: 'Currency' }).click();
+  await expect.poll(async () => (await state(page)).content.display).toBe('$0.25');
 });
 
 test('double-clicking a column header’s edge fits the column to its text', async ({ app, page }) => {

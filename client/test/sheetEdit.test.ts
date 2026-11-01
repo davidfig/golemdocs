@@ -329,3 +329,46 @@ test('notes are read from Excel’s comments, follow their cells, and are writte
   history.apply(0, { kind: 'deleteRows', at: 1, count: 1 });
   assert.deepEqual(sheet.notes.map((n) => [n.row, n.col]), [[3, 0]], 'a note goes with its deleted row');
 });
+
+test('pasting cells copied here carries formulas (moved as copied) and looks; Paste Special takes only some', () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['1', '=A1*2'], ['3', '=A2*2']] });
+  history.apply(0, { kind: 'format', ranges: [{ r0: 0, c0: 0, r1: 1, c1: 1 }], change: { bold: true } });
+  // B1 shows 2 once calculated; pretend it was, as the engine would.
+  sheet.grid.set(0, 1, Kind.Number, 2, sheet.grid.columns[1]!.style(0));
+  const source = { r0: 0, c0: 0, r1: 1, c1: 1 };
+  history.apply(0, { kind: 'pasteCells', from: 0, source, at: { row: 5, col: 2 }, what: 'all', transpose: false });
+  assert.equal(sheet.grid.columns[3]!.formulaAt(5)!.text, 'C6*2', 'the formula reads the cell beside its new place');
+  assert.equal(look(b.styles, b.theme, sheet.grid.columns[2]!.style(5)).bold, true);
+  history.apply(0, { kind: 'pasteCells', from: 0, source, at: { row: 10, col: 0 }, what: 'values', transpose: false });
+  assert.equal(sheet.grid.columns[1]!.formulaAt(10), undefined, 'values only: no formula');
+  assert.equal(value(sheet, 10, 1), 2);
+  assert.equal(look(b.styles, b.theme, sheet.grid.columns[1]!.style(10)).bold, false, 'and the target keeps its own look');
+  history.apply(0, { kind: 'pasteCells', from: 0, source, at: { row: 20, col: 0 }, what: 'formats', transpose: false });
+  assert.equal(kind(sheet, 20, 0), Kind.Blank, 'formats only: no value');
+  assert.equal(look(b.styles, b.theme, sheet.grid.columns[0]!.style(20)).bold, true);
+  history.apply(0, { kind: 'pasteCells', from: 0, source: { r0: 0, c0: 0, r1: 1, c1: 0 }, at: { row: 30, col: 0 }, what: 'all', transpose: true });
+  assert.deepEqual([value(sheet, 30, 0), value(sheet, 30, 1)], [1, 3], 'a column pasted as a row');
+});
+
+test('Insert Table makes a table of the block around a cell, saved as a table part of its own', async () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Item', '', 'Item'], ['pen', '2', 'a'], ['ink', '5', 'b']] });
+  history.apply(0, { kind: 'createTable', range: { r0: 1, c0: 1, r1: 1, c1: 1 } });
+  const table = sheet.tables[0];
+  assert.equal(table.displayName, 'Table1');
+  assert.deepEqual(table.columns, ['Item', 'Column2', 'Item2'], 'an empty header is named, a repeated one made unique');
+  assert.equal(b.strings.get(sheet.grid.columns[1]!.value(0)), 'Column2', 'and the name is written in its cell');
+  assert.deepEqual(history.apply(0, { kind: 'createTable', range: { r0: 0, c0: 0, r1: 0, c1: 0 } }).message, 'tableOverlap');
+  const back = await readWorkbook(await writeWorkbook(b));
+  const read = (back.sheets[0] as Worksheet).tables;
+  assert.equal(read.length, 1);
+  assert.deepEqual([read[0].displayName, read[0].columns, read[0].style], ['Table1', ['Item', 'Column2', 'Item2'], 'TableStyleMedium2']);
+  // Undone, the table is gone, and so is its part when the workbook is written again.
+  history.undo();
+  assert.equal(sheet.tables.length, 0);
+  sheet.dirty.layout = true;
+  const again = await readWorkbook(await writeWorkbook(b));
+  assert.equal((again.sheets[0] as Worksheet).tables.length, 0);
+  assert.ok(!again.source!.pkg.has('xl/tables/table1.xml'));
+});

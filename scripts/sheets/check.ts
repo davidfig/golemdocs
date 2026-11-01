@@ -101,6 +101,10 @@ books.set('notes-moved.xlsx', notesMoved);
 const notesDeleted = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/notes.xlsx')));
 new History(notesDeleted).apply(0, { kind: 'deleteRows', at: 1, count: 1 });
 books.set('notes-deleted.xlsx', notesDeleted);
+// A table made here (Sheet › Insert Table): a new table part, its relationship and <tableParts>.
+const made = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/notes.xlsx')));
+new History(made).apply(0, { kind: 'createTable', range: { r0: 0, c0: 0, r1: 2, c1: 1 } });
+books.set('table-made.xlsx', made);
 const compareFormulaValues = new Set(['typed.xlsx']);
 
 const generated = path.join(ROOT, '.cache/sheets/sheet-100000x20.xlsx');

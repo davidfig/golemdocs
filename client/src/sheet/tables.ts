@@ -3,7 +3,7 @@
 // references (`Sales[Amount]`, `Sales[[#This Row],[Price]]`, `[@Price]` inside the table), resolved here into ranges.
 // The built-in styles are drawn as Excel draws them in kind: a header in the style's colour, banded rows tinted from it.
 
-import { child, elements } from '@golemdocs/docx';
+import { child, el, elements } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import type { CellRange } from './model/worksheet.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -23,9 +23,24 @@ export interface Table {
   columnStripes: boolean;
   firstColumn: boolean;
   lastColumn: boolean;
-  /** The table part it was read from, and its XML, written back with the range as it now is. */
+  /** The table part it was read from ('' for a table made here, until it is first written), its relationship from the
+   * sheet, and its XML, written back with the range as it now is. */
   part: string;
+  rId?: string;
   xml: XmlElement;
+}
+
+const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+/** A table made here (Sheet › Insert Table), with a header row and banded rows in Excel's default style. */
+export function newTable(id: number, name: string, range: CellRange, columns: string[]): Table {
+  const ref = rangeName(range);
+  const xml = el('table', { xmlns: MAIN, id, name, displayName: name, ref, totalsRowShown: 0 }, [
+    el('autoFilter', { ref }),
+    el('tableColumns', { count: columns.length }, columns.map((c, i) => el('tableColumn', { id: i + 1, name: c }))),
+    el('tableStyleInfo', { name: 'TableStyleMedium2', showFirstColumn: 0, showLastColumn: 0, showRowStripes: 1, showColumnStripes: 0 }),
+  ]);
+  return { name, displayName: name, range, columns, header: true, totals: false, style: 'TableStyleMedium2', rowStripes: true, columnStripes: false, firstColumn: false, lastColumn: false, part: '', xml };
 }
 
 export function readTable(root: XmlElement, part: string): Table | null {

@@ -10,9 +10,11 @@
 - Workbooks can be sorted (Sheet › Sort A to Z, Sort Z to A), Edit › Replace replaces text in cells, and double-clicking the edge of a column header fits the column to its contents.
 - Drag the corner of a workbook selection to fill cells: numbers, dates, months, days and numbered text carry on as a series, and formulas are copied with their references moved.
 - Sheet › Filter adds filter buttons to a workbook's header row: pick the values to show, or sort by the column.
+- Sheet › Insert Table turns a block of cells into a table.
 - Tables in workbooks show in their styles, and formulas can use structured references such as Sales[Amount] and [@Price].
 - Cells with a drop-down list of choices in a workbook show an arrow to pick from (or Alt+Down), and a value a cell's rules don't allow is turned away with the rule's message.
 - Notes in workbooks show as a red mark in the cell's corner, and rest the pointer on the cell to read them; they stay with their cells as rows and columns are inserted and deleted.
+- Cells copied within a workbook paste with their formulas and formatting, and Sheet › Paste Special pastes only values, formulas or formatting, or rows and columns swapped.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales and data bars, recalculated as the values change.
 
 ## 0.30.1 - 2026-10-31

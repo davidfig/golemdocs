@@ -12,12 +12,14 @@ import { Worksheet, cellKey, keyCol, keyRow } from './model/worksheet.ts';
 import type { CellRange, Pane } from './model/worksheet.ts';
 import { expandStructured, fromFileFormula, toFileFormula } from './formula/fileNames.ts';
 import { shiftFormula } from './formula/shift.ts';
-import { editText } from './format/display.ts';
 import { deleteSheetText, moveConditional, moveFilter, moveFormulas, moveNotes, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
 import type { Move } from './formula/move.ts';
 import { restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
+import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
+import { newTable } from './tables.ts';
+import { displayText, editText } from './format/display.ts';
 import type { Edges, StyleChange } from './format/styleChange.ts';
 import { parseInput } from './input.ts';
 import type { Changed, EditOp } from './protocol.ts';
@@ -172,6 +174,12 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
       return 'cells';
     case 'fill':
       return range(op.target.c0, op.target.c1);
+    case 'pasteCells': {
+      const t = pasteTarget(op.source, op.at, op.transpose);
+      return range(t.c0, t.c1);
+    }
+    case 'createTable':
+      return 'cells';
     case 'insertRows':
     case 'deleteRows':
     case 'insertColumns':
@@ -213,7 +221,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -377,6 +385,15 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       applyFilter(book, sheet, sheet.autoFilter);
       return { ranges: [everything()] };
     }
+    case 'createTable':
+      return createTable(book, sheet, op.range);
+    case 'pasteCells': {
+      const t = pasteTarget(op.source, op.at, op.transpose);
+      if ((t.r1 - t.r0 + 1) * (t.c1 - t.c0 + 1) > MAX_FILL) return { ranges: [], message: 'too many cells' };
+      const filled = pasteCells(book, op.from, op.source, sheet, op.at, op.what, op.transpose);
+      grid.measure();
+      return filled ? { ranges: [filled], select: filled } : { ranges: [] };
+    }
     case 'fill': {
       const t = op.target;
       if ((t.r1 - t.r0 + 1) * (t.c1 - t.c0 + 1) > MAX_FILL) return { ranges: [], message: 'too many cells' };
@@ -534,6 +551,35 @@ function sortRows(book: Workbook, sheet: Worksheet, op: Extract<EditOp, { kind: 
     });
     column.formulas = kept.sort((a, b) => a.first - b.first);
   }
+  return { ranges: [r], select: r };
+}
+
+/** Sheet › Insert Table: a new table over a range; its header names are the first row's text (empty ones become Column1...). */
+function createTable(book: Workbook, sheet: Worksheet, range: CellRange): Changed {
+  const r = range.r0 === range.r1 && range.c0 === range.c1 ? currentRegion(sheet.grid, range.r0, range.c0) : range;
+  if (sheet.tables.some((t) => t.range.r0 <= r.r1 && t.range.r1 >= r.r0 && t.range.c0 <= r.c1 && t.range.c1 >= r.c0)) return { ranges: [], message: 'tableOverlap' };
+  if (sheet.autoFilter && sheet.autoFilter.range.r0 <= r.r1 && sheet.autoFilter.range.r1 >= r.r0 && sheet.autoFilter.range.c0 <= r.c1 && sheet.autoFilter.range.c1 >= r.c0) return { ranges: [], message: 'tableOverlap' };
+  const all = book.sheets.flatMap((s) => (isWorksheet(s) ? s.tables : []));
+  const taken = new Set([...all.map((t) => t.displayName.toLowerCase()), ...book.names.map((n) => n.name.toLowerCase())]);
+  let n = 1;
+  while (taken.has(`table${n}`)) n++;
+  const id = Math.max(0, ...all.map((t) => +(t.xml.attrs.id ?? 0))) + 1;
+  // Header names: as shown, unique; an empty header cell gets Column1, Column2... written in it.
+  const names: string[] = [];
+  for (let c = r.c0; c <= r.c1; c++) {
+    const column = sheet.grid.columns[c];
+    const kind = column?.kind(r.r0) ?? Kind.Empty;
+    let name = kind === Kind.Empty || kind === Kind.Blank ? '' : displayText(book, kind, column!.value(r.r0), column!.style(r.r0)).text.trim();
+    if (!name) {
+      name = `Column${c - r.c0 + 1}`;
+      sheet.grid.set(r.r0, c, Kind.String, book.strings.add(name), column?.style(r.r0) ?? 0);
+    }
+    let unique = name;
+    for (let k = 2; names.some((x) => x.toLowerCase() === unique.toLowerCase()); k++) unique = `${name}${k}`;
+    if (unique !== name) sheet.grid.set(r.r0, c, Kind.String, book.strings.add(unique), column?.style(r.r0) ?? 0);
+    names.push(unique);
+  }
+  sheet.tables = [...sheet.tables, newTable(id, `Table${n}`, r, names)];
   return { ranges: [r], select: r };
 }
 

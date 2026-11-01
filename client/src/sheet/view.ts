@@ -19,6 +19,7 @@ import type { CellRange } from './model/worksheet.ts';
 import { PAD as CELL_PAD } from './cellText.ts';
 import { CellFonts } from './fonts.ts';
 import type { BorderChange, StyleChange } from './format/styleChange.ts';
+import type { PasteWhat } from './pasteCells.ts';
 import { HEADER_HEIGHT, SheetGeometry } from './geometry.ts';
 import type { Hit } from './geometry.ts';
 import { FILL_HANDLE, SheetRenderer, choicesButton, filterButton } from './renderer.ts';
@@ -114,6 +115,8 @@ export class SheetEditorView {
   /** The cell being edited, how editing began (typing over it, or F2 / a double click to change it), and its text. */
   private editing: { row: number; col: number; mode: 'enter' | 'edit' } | null = null;
   private copied: CellRange | null = null;
+  /** The sheet the copied range is on, and the text it put on the clipboard (to know a paste is of it). */
+  private copiedFrom: { sheet: number; text: string } | null = null;
   private dragState: { kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill'; index?: number; start?: number; size?: number } | null = null;
   /** While the fill handle is dragged: the range it would fill. */
   private filling: CellRange | null = null;
@@ -1188,6 +1191,7 @@ export class SheetEditorView {
       const reply = await this.ask<Extract<FromWorker, { t: 'copy' }>>({ t: 'copy', id: this.id(), sheet: this.sheetIndex, range });
       await writeClipboard(reply.text, reply.html);
       this.copied = range;
+      this.copiedFrom = { sheet: this.sheetIndex, text: reply.text };
       this.deps.render();
       if (cut) await this.edit({ kind: 'clear', ranges: [range], what: 'all' });
     } catch (e) {
@@ -1216,6 +1220,8 @@ export class SheetEditorView {
 
   private async pasteClip(text: string, html: string): Promise<void> {
     if (this.readOnly) return;
+    // Cells copied here (the clipboard still holds their text): pasted with their formulas and looks.
+    if (this.copied && this.copiedFrom && text === this.copiedFrom.text) return this.pasteSpecial('all', false);
     let rows: string[][] = [];
     if (html.includes('<table')) {
       const table = new DOMParser().parseFromString(html, 'text/html').querySelector('table');
@@ -1225,6 +1231,17 @@ export class SheetEditorView {
     if (!rows.length) return;
     await this.edit({ kind: 'paste', at: { ...this.active }, rows });
     this.copied = null;
+  }
+
+  /** Pastes the cells copied in this workbook, or only some of what they hold. */
+  private async pasteSpecial(what: PasteWhat, transpose: boolean): Promise<void> {
+    if (this.readOnly) return;
+    if (!this.copied || !this.copiedFrom) {
+      // Nothing copied here: values from the clipboard, as typed.
+      if (what === 'values' || what === 'all') await this.paste();
+      return;
+    }
+    await this.edit({ kind: 'pasteCells', from: this.copiedFrom.sheet, source: this.copied, at: { ...this.active }, what, transpose });
   }
 
   // --- Sheets ---
@@ -1251,7 +1268,6 @@ export class SheetEditorView {
     if (!this.book || index === this.sheetIndex || !this.book.sheets[index]) return;
     this.commitEdit(true);
     this.sheetIndex = index;
-    this.copied = null;
     void this.edit({ kind: 'activeSheet', sheet: index });
     this.useSheet(true);
     this.showTabs();
@@ -1339,6 +1355,12 @@ export class SheetEditorView {
     if (op in NUMBER_FORMATS) return this.format({ numFmt: NUMBER_FORMATS[op as keyof typeof NUMBER_FORMATS] });
     if (op in BORDER_OPS) return this.format({ border: BORDER_OPS[op as keyof typeof BORDER_OPS] });
     switch (op) {
+      case 'pasteValues':
+      case 'pasteFormulas':
+      case 'pasteFormats':
+      case 'pasteTranspose':
+        void this.pasteSpecial(op === 'pasteValues' ? 'values' : op === 'pasteFormulas' ? 'formulas' : op === 'pasteFormats' ? 'formats' : 'all', op === 'pasteTranspose');
+        return;
       case 'sortAscending':
       case 'sortDescending': {
         // One cell: the block around it; a selection: just it.
@@ -1346,6 +1368,9 @@ export class SheetEditorView {
         void this.edit({ kind: 'sort', range, keys: [{ col: this.active.col, descending: op === 'sortDescending' }], header: null });
         return;
       }
+      case 'insertTable':
+        void this.edit({ kind: 'createTable', range: this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col } });
+        return;
       case 'filter':
         void this.edit({ kind: 'autoFilter', range: this.info?.filter ? null : this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col } });
         return;
@@ -1576,6 +1601,8 @@ function messageFor(code: string): string {
       return t('sheet.tooManyToCopy');
     case 'invalidValue':
       return t('sheet.invalidValue');
+    case 'tableOverlap':
+      return t('sheet.tableOverlap');
   }
   return code;
 }

@@ -219,6 +219,24 @@ test('resting the pointer on a cell with a note shows the note', async ({ app, p
   await expect(page.getByRole('note')).toBeHidden();
 });
 
+test('copying and pasting cells in a workbook moves their formulas; Paste Values pastes only values', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('4');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('=F2*10');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).active).toEqual({ row: 1, col: 6 });
+  await page.keyboard.press(`${MOD}+c`);
+  await clickCell(page, 4, 6);
+  await page.keyboard.press(`${MOD}+v`);
+  await expect.poll(async () => (await state(page)).content).toMatchObject({ input: '=F5*10', isFormula: true });
+  await clickCell(page, 6, 6);
+  await app.menu('Sheet', 'Paste Special', 'Paste Values');
+  await expect.poll(async () => (await state(page)).content).toMatchObject({ input: '40', isFormula: false });
+});
+
 test('rows inserted from the Sheet menu move the cells below', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 2, 0);

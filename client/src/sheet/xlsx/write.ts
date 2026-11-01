@@ -59,7 +59,18 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
     }
     if (!entry.loaded || (!sheet.dirty.cells && !sheet.dirty.layout)) continue;
     cellsChanged ||= sheet.dirty.cells;
-    for (const table of sheet.tables) if (pkg.has(table.part)) pkg.set(table.part, serializeXml(tableXml(table)), `${TYPE}.table+xml`);
+    const sheetRels = await pkg.relationships(entry.part);
+    for (const rel of sheetRels.list.filter((r) => r.type === `${REL}/table`)) {
+      if (sheet.tables.some((t) => t.rId === rel.id)) continue;
+      pkg.delete(sheetRels.partName(rel));
+      sheetRels.remove(rel.id);
+    }
+    sheet.tables = sheet.tables.map((table) => {
+      if (table.part && table.rId) return table;
+      const part = pkg.uniqueName('xl/tables/table', 'xml');
+      return { ...table, part, rId: sheetRels.add(`${REL}/table`, part) };
+    });
+    for (const table of sheet.tables) pkg.set(table.part, serializeXml(tableXml(table)), `${TYPE}.table+xml`);
     if (sheet.noteParts && sheet.dirty.layout) await writeNotes(pkg, sheet.notes, sheet.noteParts);
     const pieces = sheetPieces(book, sheet, sharedCount);
     const deflated = await deflatePieces(options.pause ? withPauses(pieces, options.pause) : pieces);

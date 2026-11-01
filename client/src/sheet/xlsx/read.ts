@@ -151,7 +151,7 @@ async function readTables(pkg: OpcPackage, part: string, root: XmlElement): Prom
     const name = rels.partName(rel);
     if (!pkg.has(name)) continue;
     const table = readTable(await pkg.xml(name), name);
-    if (table) tables.push(table);
+    if (table) tables.push({ ...table, rId: rel.id });
   }
   return tables;
 }

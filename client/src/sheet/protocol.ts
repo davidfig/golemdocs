@@ -4,6 +4,7 @@
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
 import type { CellLook, StyleChange } from './format/styleChange.ts';
+import type { PasteWhat } from './pasteCells.ts';
 import type { CellRange, Pane, SheetState } from './model/worksheet.ts';
 
 /** Level 0: 64 rows by 16 columns of cells. */
@@ -150,6 +151,10 @@ export type EditOp =
   | { kind: 'autoFilter'; range: CellRange | null }
   /** The values a column of the AutoFilter shows (null: all of them). */
   | { kind: 'filter'; col: number; values: string[] | null; blanks: boolean }
+  /** Cells copied in this workbook pasted at a cell: all of them, or only values, formulas or looks; maybe transposed. */
+  | { kind: 'pasteCells'; from: number; source: CellRange; at: { row: number; col: number }; what: PasteWhat; transpose: boolean }
+  /** Sheet › Insert Table: a table over a range (one cell: the block around it), its first row the header. */
+  | { kind: 'createTable'; range: CellRange }
   /** AutoFill: `target` (which holds `source` at one end) filled from `source`. */
   | { kind: 'fill'; source: CellRange; target: CellRange }
   /** A change to how the cells of ranges look (each range's own outside edges for borders). */

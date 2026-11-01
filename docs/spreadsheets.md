@@ -390,7 +390,9 @@ the engine (`Host.structured`, `resolveStructured`); a formula typed in a table 
 it, `T[[#This Row],[Price]]` (`expandStructured`). The built-in styles (Light, Medium, Dark) are drawn in their shape: the
 header in the style's theme colour, banded rows tinted from it, the totals row bold (`tablePaint`, `TileCache.tableStyle`;
 a cell's own fill and colour win). Checked by the oracle's `tables` group (a table on the Data sheet) and in Excel, which
-keeps a table grown by an inserted row. Not yet: Insert › Table, a table's filter buttons, its calculated columns filling
+keeps a table grown by an inserted row. Sheet › Insert Table makes one (`createTable`, `newTable`: the first row its
+header, empty header cells named Column1...); the writer gives a new table its part and relationship, removes those of
+tables gone, and writes `<tableParts>` from the model; Excel opens it. Not yet: a table's filter buttons, its calculated columns filling
 themselves.
 
 **Data validation** (`validation.ts`): rules read from and written to `<dataValidations>` (a rule made here gets its own
@@ -406,7 +408,11 @@ and opened in Excel by `check.ts`.
 cells (`CellPaint.note`, a red corner), and resting the pointer on one shows it in a card in the documents' comment look
 (`.wm-comment`). They follow inserted and deleted rows and columns (a note goes with its deleted cell), and a sheet
 written rewrites the comments part and the VML drawing Excel shows them with (each shape's row, column and anchor;
-`writeNotes`). Not yet: adding, editing or deleting a note, threaded comments.
+`writeNotes`); Excel opens notes moved and deleted this way and keeps them. Not yet: adding, editing or deleting a note, threaded comments.
+
+**Paste** (`pasteCells.ts`): a range copied here and pasted while the clipboard still holds its text is pasted as cells
+(the `pasteCells` edit: values, formulas moved as copied, looks), even onto another sheet; Sheet › Paste Special pastes
+only values, formulas or formats, or transposed. Text from elsewhere is pasted as typed (the `paste` edit).
 
 **Next in M5**:
 comments, outline groups, protection; Paste Special; a formatting toolbar row for the Sheet menu's number formats and

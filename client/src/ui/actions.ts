@@ -98,6 +98,7 @@ export const SHEET_OPS = [
   'sparklineColumn',
   'sparklineWinLoss',
   'clearSparklines',
+  'refreshPivots',
   'protectSheet',
   'unprotectSheet',
   'lockCells',

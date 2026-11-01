@@ -6,6 +6,7 @@
 // Strings: cells whose string came from the file's shared strings keep their index, so sharedStrings.xml never changes;
 // strings typed since are written inline. Formulas: a run of cells is written as one shared formula.
 
+import { writePivots } from '../pivotWrite.ts';
 import { writeCharts } from '../charts/write.ts';
 import { OpcPackage, child, deflatePieces, el, elements, serializeXml } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
@@ -83,6 +84,7 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
     }
     if (sheet.noteParts && sheet.dirty.layout) await writeNotes(pkg, sheet.notes, sheet.noteParts);
     if (sheet.dirty.layout) await writeCharts(pkg, entry.part, sheet, book.theme.colors);
+    if (sheet.pivots.some((p) => p.refreshed)) await writePivots(pkg, sheet.pivots);
     const pieces = sheetPieces(book, sheet, sharedCount);
     const deflated = await deflatePieces(options.pause ? withPauses(pieces, options.pause) : pieces);
     pkg.setDeflated(entry.part, deflated, `${TYPE}.worksheet+xml`);

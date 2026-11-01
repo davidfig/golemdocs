@@ -1691,6 +1691,9 @@ export class SheetEditorView {
       case 'newNote':
         void this.editNote();
         return;
+      case 'refreshPivots':
+        void this.edit({ kind: 'refreshPivots' });
+        return;
       case 'sparklineLine':
       case 'sparklineColumn':
       case 'sparklineWinLoss':
@@ -1962,6 +1965,12 @@ function messageFor(code: string): string {
       return t('sheet.sheetProtected');
     case 'noChartData':
       return t('sheet.noChartData');
+    case 'noPivots':
+      return t('sheet.pivot.none');
+    case 'pivotOverlap':
+      return t('sheet.pivot.overlap');
+    case 'pivotUnsupported':
+      return t('sheet.pivot.unsupported');
     case 'badChartData':
       return t('sheet.chart.badData');
     case 'wrongPassword':

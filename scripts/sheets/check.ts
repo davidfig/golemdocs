@@ -170,6 +170,12 @@ new History(redata).apply(0, {
 });
 new History(redata).apply(0, { kind: 'chart', index: 3, change: { data: { series: [{ name: 'Only', values: 'D2:D7' }], categories: '' } } });
 books.set('charts-data.xlsx', redata);
+// Pivot tables refreshed here after their source changed (a new region, a new product): the parts brought in line.
+const pivoted = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/pivots-excel.xlsx')));
+const pivotedHistory = new History(pivoted);
+pivotedHistory.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
+pivotedHistory.apply(1, { kind: 'refreshPivots' });
+books.set('pivots-refreshed.xlsx', pivoted);
 // Sparklines made here: of each kind on a sheet with none; and added to Excel's, one row's cleared.
 const sparkMade = new Workbook();
 sparkMade.sheets.push(new Worksheet('Data', 1));

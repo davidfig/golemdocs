@@ -262,6 +262,26 @@ test('a workbook’s charts are drawn over its cells, and follow their data', as
   expect((await charts())[0]).toContain('South');
 });
 
+test('Sheet › PivotTable › Refresh lays a pivot table out again from its changed source', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'pivots.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/pivots-excel.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'pivots.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  // A sale of glue in the South, in place of the first one.
+  await clickCell(page, 1, 0);
+  await page.keyboard.type('South');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Glue');
+  await page.keyboard.press('Enter');
+  await page.getByRole('tab', { name: 'Pivot' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Pivot');
+  await app.menu('Sheet', 'PivotTable', 'Refresh');
+  await clickCell(page, 7, 0);
+  await expect.poll(async () => (await state(page)).content.input).toBe('South');
+  await clickCell(page, 3, 4);
+  await expect.poll(async () => (await state(page)).content.input).toBe('Glue');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

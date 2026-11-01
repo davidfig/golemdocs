@@ -9,6 +9,7 @@ import type { Note, NoteParts } from './notes.ts';
 import type { SheetProtection } from './protection.ts';
 import type { SheetChart } from './charts/model.ts';
 import type { SparklineGroup } from './sparklines.ts';
+import type { PivotTable } from './pivot.ts';
 import { readConditional } from './conditional.ts';
 import { readAutoFilter } from './filter.ts';
 import { readValidations } from './validation.ts';
@@ -54,6 +55,7 @@ interface SheetJson {
   protection?: SheetProtection | null;
   charts?: SheetChart[];
   sparklines?: SparklineGroup[];
+  pivots?: PivotTable[];
   pane: Pane | null;
   view: Worksheet['view'];
   rowDefault: number;
@@ -142,6 +144,7 @@ export function workbookImage(book: Workbook, source: Fingerprint): Uint8Array {
       protection: sheet.protection,
       charts: sheet.charts,
       sparklines: sheet.sparklines,
+      pivots: sheet.pivots,
       pane: sheet.pane,
       view: sheet.view,
       rowDefault: rows.defaultSize,
@@ -256,6 +259,7 @@ async function fromImage(image: Image, xlsx: Uint8Array): Promise<Workbook> {
     sheet.noteParts = j.noteParts ?? null;
     sheet.protection = j.protection ?? null;
     sheet.sparklines = j.sparklines ?? [];
+    sheet.pivots = j.pivots ?? [];
     // Charts from images made before charts kept their relationship are left out (they would be written as new ones).
     sheet.charts = (j.charts ?? []).filter((c) => c.rId !== undefined);
     sheet.pane = j.pane;

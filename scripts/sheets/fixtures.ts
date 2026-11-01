@@ -104,7 +104,70 @@ export async function sparklinesWorkbook(): Promise<Uint8Array> {
   return pkg.write();
 }
 
+/** The data pivots.xlsx summarises: twelve sales (Sales!A1:D13). */
+export const PIVOT_SALES = [
+  ['Region', 'Product', 'Month', 'Amount'],
+  ['East', 'Pens', 'Jan', '120'],
+  ['West', 'Ink', 'Jan', '80'],
+  ['East', 'Ink', 'Feb', '45'],
+  ['North', 'Pens', 'Feb', '200'],
+  ['West', 'Pens', 'Mar', '60'],
+  ['East', 'Paper', 'Mar', '30'],
+  ['North', 'Ink', 'Mar', '75'],
+  ['West', 'Paper', 'Apr', '90'],
+  ['East', 'Pens', 'Apr', '150'],
+  ['North', 'Paper', 'Apr', '40'],
+  ['West', 'Ink', 'May', '55'],
+  ['North', 'Pens', 'May', '110'],
+];
+
+/**
+ * pivots.xlsx: Sales!A1:D13 and two pivot tables of it on the Pivot sheet, written with no records and refreshed when
+ * they are opened (`refreshOnLoad`), so Excel lays them out itself: at A3, regions down and products across, the sum of
+ * Amount; at H3, regions then products down, the sum and the average of Amount across. Excel's save of it (with
+ * Excel's layout in the cells) is pivots-excel.xlsx.
+ */
+export async function pivotsWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  book.sheets.push(new Worksheet('Sales', 1), new Worksheet('Pivot', 2));
+  new History(book).apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: PIVOT_SALES });
+  const pkg = await OpcPackage.read(await writeWorkbook(book));
+  const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
+  const distinct = (col: number) => [...new Set(PIVOT_SALES.slice(1).map((r) => r[col]))];
+  const strings = (col: number) => `<sharedItems count="${distinct(col).length}">${distinct(col).map((v) => `<s v="${v}"/>`).join('')}</sharedItems>`;
+  const amounts = PIVOT_SALES.slice(1).map((r) => +r[3]);
+  const cacheXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><pivotCacheDefinition xmlns="${MAIN}" xmlns:r="${REL}" refreshOnLoad="1" saveData="0" createdVersion="6" refreshedVersion="6" minRefreshableVersion="3" recordCount="0"><cacheSource type="worksheet"><worksheetSource ref="A1:D13" sheet="Sales"/></cacheSource><cacheFields count="4"><cacheField name="Region" numFmtId="0">${strings(0)}</cacheField><cacheField name="Product" numFmtId="0">${strings(1)}</cacheField><cacheField name="Month" numFmtId="0">${strings(2)}</cacheField><cacheField name="Amount" numFmtId="0"><sharedItems containsSemiMixedTypes="0" containsString="0" containsNumber="1" containsInteger="1" minValue="${Math.min(...amounts)}" maxValue="${Math.max(...amounts)}"/></cacheField></cacheFields></pivotCacheDefinition>`;
+  const workbookRels = await pkg.relationships('xl/workbook.xml');
+  const cachePart = 'xl/pivotCache/pivotCacheDefinition1.xml';
+  pkg.set(cachePart, cacheXml, `${TYPE}.pivotCacheDefinition+xml`);
+  const cacheRel = workbookRels.add(`${REL}/pivotCacheDefinition`, cachePart);
+  const workbookXml = await pkg.text('xl/workbook.xml');
+  const pivotCaches = `<pivotCaches><pivotCache cacheId="1" r:id="${cacheRel}"/></pivotCaches>`;
+  pkg.set('xl/workbook.xml', workbookXml.includes('<calcPr') ? workbookXml.replace(/(<calcPr[^>]*\/>)/, `$1${pivotCaches}`) : workbookXml.replace('</workbook>', `${pivotCaches}</workbook>`), `${TYPE}.sheet.main+xml`);
+  const items = (col: number) => `<items count="${distinct(col).length + 1}">${distinct(col).map((_, i) => `<item x="${i}"/>`).join('')}<item t="default"/></items>`;
+  const style = '<pivotTableStyleInfo name="PivotStyleLight16" showRowHeaders="1" showColHeaders="1" showRowStripes="0" showColStripes="0" showLastColumn="1"/>';
+  const head = (name: string, ref: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><pivotTableDefinition xmlns="${MAIN}" name="${name}" cacheId="1" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values" updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" multipleFieldFilters="0"><location ref="${ref}" firstHeaderRow="1" firstDataRow="2" firstDataCol="1"/>`;
+  const pivots = [
+    head('ByProduct', 'A3:E8') +
+      `<pivotFields count="4"><pivotField axis="axisRow" showAll="0">${items(0)}</pivotField><pivotField axis="axisCol" showAll="0">${items(1)}</pivotField><pivotField showAll="0"/><pivotField dataField="1" showAll="0"/></pivotFields><rowFields count="1"><field x="0"/></rowFields><colFields count="1"><field x="1"/></colFields><dataFields count="1"><dataField name="Sum of Amount" fld="3" baseField="0" baseItem="0"/></dataFields>${style}</pivotTableDefinition>`,
+    head('ByRegion', 'H3:J20') +
+      `<pivotFields count="4"><pivotField axis="axisRow" showAll="0">${items(0)}</pivotField><pivotField axis="axisRow" showAll="0">${items(1)}</pivotField><pivotField showAll="0"/><pivotField dataField="1" showAll="0"/></pivotFields><rowFields count="2"><field x="0"/><field x="1"/></rowFields><colFields count="1"><field x="-2"/></colFields><dataFields count="2"><dataField name="Sum of Amount" fld="3" baseField="0" baseItem="0"/><dataField name="Average of Amount" fld="3" subtotal="average" baseField="0" baseItem="0"/></dataFields>${style}</pivotTableDefinition>`,
+  ];
+  const sheetRels = await pkg.relationships('xl/worksheets/sheet2.xml');
+  pivots.forEach((xml, i) => {
+    const part = `xl/pivotTables/pivotTable${i + 1}.xml`;
+    pkg.set(part, xml, `${TYPE}.pivotTable+xml`);
+    sheetRels.add(`${REL}/pivotTable`, part);
+  });
+  for (const i of [1, 2]) (await pkg.relationships(`xl/pivotTables/pivotTable${i}.xml`)).add(`${REL}/pivotCacheDefinition`, cachePart);
+  return pkg.write();
+}
+
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
+  writeFileSync(path.join(FIXTURES, 'pivots.xlsx'), await pivotsWorkbook());
   writeFileSync(path.join(FIXTURES, 'sparklines.xlsx'), await sparklinesWorkbook());
   writeFileSync(path.join(FIXTURES, 'validation.xlsx'), await validationWorkbook());
   writeFileSync(path.join(FIXTURES, 'charts.xlsx'), await chartsWorkbook());

@@ -428,7 +428,26 @@ Excel's default look, `newSparklineGroup`; cells that had one lose it), and Clea
 selection (`clearSparklines`); a sheet's first sparklines get the `<extLst>` extension made (`writeSparklines`). Excel
 opens sparklines made here and added to its own (`sparklines-made`, `sparklines-more`).
 
-**Next in M6**: pivot tables; what-if tools (Goal
+**Pivot tables** (`pivot.ts`, `pivotWrite.ts`). Excel saves a pivot's cells with its sheet, so a pivot shows as read.
+`readPivotTables` follows the sheet's pivot table parts to their caches (`readPivotTable`, `readCache`): row, column and
+page fields, data fields with their functions and formats, each field's items (indexes into its cache field's shared
+values) and captions, and the cache's source range and fields. `pivotLayout` lays a pivot out from its source records
+(`pivotSource`, read through a value reader: the engine's, or the grid's, which holds the engine's results,
+`gridValue`) in Excel's compact layout: a two-row header when something is across, the row fields' items down the first
+column (an outer item's row holds its subtotal), a column field's items or the values across, grand totals last; a cell
+where no records meet stays empty; new items go after the old ones in the cache's order (the order they first come in
+the source), as Excel adds them. `pivotSupported` limits it to what it lays out (row fields, then one column field with
+one value or the values across; no page fields). Sheet › PivotTable › Refresh is the `refreshPivots` edit
+(`refreshPivot`: the old cells cleared and the new written; a pivot that would grow over other cells is refused), undone
+with the sheet's cells and pivots. Writing a refreshed pivot (`writePivots`) brings its parts in line: the table's
+location and its fields' items, its laid-out rows and columns dropped (Excel lays them out again); the cache's values for
+those fields with the flags their kinds need, marked to refresh on opening, its stale records dropped.
+
+`pivots.xlsx` (`fixtures.ts`) holds two pivots written to be refreshed on opening; `pivots-excel.xlsx` is Excel's refresh
+of it (through `refresh all`: opening by AppleScript does not refresh), whose cells are the tests' expected layout. A
+pivot refreshed here after its source changed, then refreshed by Excel, comes out cell for cell the same.
+
+**Next in M6**: Insert › PivotTable and a field list; pivot styles drawn; pivot tables; what-if tools (Goal
 Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)

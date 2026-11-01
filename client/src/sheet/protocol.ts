@@ -237,6 +237,8 @@ export type EditOp =
   | { kind: 'note'; row: number; col: number; text: string | null; author: string }
   /** Sheet › Protect Sheet (`on`, with a password or '') or Unprotect Sheet (its password, if it has one). */
   | { kind: 'protect'; on: boolean; password: string }
+  /** Refresh: the sheet's pivot tables laid out again from their sources. */
+  | { kind: 'refreshPivots' }
   /** Insert › Sparklines: one per row of a block of cells, in the column after it. */
   | { kind: 'insertSparklines'; sparkline: 'line' | 'column' | 'stacked'; range: CellRange }
   /** Clear Sparklines: the sparklines in a block's cells taken away. */

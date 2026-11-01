@@ -4,6 +4,7 @@
 // in other formulas are moved by the engine too when rows and columns move.
 
 import { newSparklineGroup } from './sparklines.ts';
+import { refreshPivot } from './pivot.ts';
 import { rangeName } from './refs.ts';
 import { changeKind, newChart, withData } from './charts/make.ts';
 import { Column, Kind, MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
@@ -56,6 +57,7 @@ interface SheetSnapshot {
     protection: Worksheet['protection'];
     charts: Worksheet['charts'];
     sparklines: Worksheet['sparklines'];
+    pivots: Worksheet['pivots'];
   };
   /** The whole column list (structure moved: columns inserted or deleted). */
   columnList?: (Column | undefined)[];
@@ -187,6 +189,7 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
       return range(t.c0, t.c1);
     }
     case 'createTable':
+    case 'refreshPivots':
       return 'cells';
     case 'insertRows':
     case 'deleteRows':
@@ -229,7 +232,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'refreshPivots' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -247,6 +250,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
       protection: sheet.protection,
       charts: sheet.charts,
       sparklines: sheet.sparklines,
+      pivots: sheet.pivots,
     };
   }
   out.sheet = snap;
@@ -306,6 +310,7 @@ function restore(book: Workbook, snap: BookSnapshot): void {
     sheet.protection = s.meta.protection;
     sheet.charts = s.meta.charts;
     sheet.sparklines = s.meta.sparklines;
+    sheet.pivots = s.meta.pivots;
   }
 }
 
@@ -415,6 +420,17 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'refreshPivots': {
+      const ranges: CellRange[] = [];
+      let message: string | undefined;
+      for (let i = 0; i < sheet.pivots.length; i++) {
+        const done = refreshPivot(book, sheet, i);
+        if (done.range) ranges.push(done.range);
+        message ??= done.message;
+      }
+      if (!sheet.pivots.length) message = 'noPivots';
+      return { ranges, ...(message && { message }) };
+    }
     case 'insertSparklines': {
       const r = op.range;
       if (r.c1 + 1 >= MAX_COLUMNS || r.r1 - r.r0 > 10000) return { ranges: [] };

@@ -374,7 +374,7 @@ export class SheetEditorView {
       extent: { rows: info.rows, cols: info.cols },
       selection: this.ranges,
       filling: this.filling,
-      filter: this.info?.filter ?? null,
+      filters: this.filters(),
       choices: this.content.list && !this.editing ? { ...this.active } : null,
       active: this.active,
       editing: this.editing,
@@ -927,7 +927,7 @@ export class SheetEditorView {
       case 'cell':
         if (!shift && this.filterButtonAt(hit.row, hit.col, x, y)) {
           this.select(hit.row, hit.col);
-          void this.openFilter(hit.col, x, y);
+          void this.openFilter(hit.row, hit.col, x, y);
           return;
         }
         if (!shift && !this.readOnly && this.onFillHandle(x, y)) {
@@ -1047,11 +1047,22 @@ export class SheetEditorView {
     for (let i = 0; i < cols.length; i++) void this.edit({ kind: 'columnWidth', cols: [cols[i]], size: sizes[i] });
   }
 
-  /** Whether a point (CSS pixels on the canvas) is on the AutoFilter's button in a cell. */
+  /** The sheet's AutoFilter and its tables': `table` names a table's. */
+  private filters(): { range: CellRange; filtered: number[]; table?: string }[] {
+    const info = this.info;
+    return info ? [...(info.filter ? [info.filter] : []), ...(info.tableFilters ?? [])] : [];
+  }
+
+  /** The filter whose header row a cell is on. */
+  private filterOf(row: number, col: number): { range: CellRange; filtered: number[]; table?: string } | undefined {
+    return this.filters().find((f) => row === f.range.r0 && col >= f.range.c0 && col <= f.range.c1);
+  }
+
+  /** Whether a point (CSS pixels on the canvas) is on a filter's button in a cell. */
   private filterButtonAt(row: number, col: number, x: number, y: number): boolean {
-    const filter = this.info?.filter;
+    const filter = this.filterOf(row, col);
     const g = this.geometry;
-    if (!filter || !g || row !== filter.range.r0 || col < filter.range.c0 || col > filter.range.c1) return false;
+    if (!filter || !g) return false;
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
     const box = filterButton(g, row, col, 1 / scale);
     const center = this.pointOf(row, col);
@@ -1066,11 +1077,12 @@ export class SheetEditorView {
     return x >= x0 && x <= x1 && y >= y0 && y <= y1;
   }
 
-  /** Opens the AutoFilter's card for a column, under its button. */
-  private async openFilter(col: number, x: number, y: number): Promise<void> {
-    const filter = this.info?.filter;
+  /** Opens a filter's card for a column, under its button. */
+  private async openFilter(row: number, col: number, x: number, y: number): Promise<void> {
+    const filter = this.filterOf(row, col);
     if (!filter) return;
-    const reply = await this.ask<Extract<FromWorker, { t: 'filterValues' }>>({ t: 'filterValues', id: this.id(), sheet: this.sheetIndex, col }).catch(() => null);
+    const table = filter.table;
+    const reply = await this.ask<Extract<FromWorker, { t: 'filterValues' }>>({ t: 'filterValues', id: this.id(), sheet: this.sheetIndex, col, table }).catch(() => null);
     if (!reply) return;
     const canvas = this.el.getBoundingClientRect();
     this.filterCard ??= new FilterCard();
@@ -1082,7 +1094,7 @@ export class SheetEditorView {
       clientX: canvas.left + x,
       clientY: canvas.top + y + 8,
       sort: (descending) => void this.edit({ kind: 'sort', range: filter.range, keys: [{ col, descending }], header: true }),
-      apply: (choice) => void this.edit({ kind: 'filter', col, values: choice.values, blanks: choice.blanks }),
+      apply: (choice) => void this.edit({ kind: 'filter', col, values: choice.values, blanks: choice.blanks, table }),
     });
   }
 
@@ -1654,7 +1666,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */

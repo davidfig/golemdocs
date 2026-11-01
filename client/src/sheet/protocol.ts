@@ -116,6 +116,8 @@ export interface SheetInfo {
   protection?: { password: boolean };
   /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
   filter?: { range: CellRange; filtered: number[] };
+  /** Tables' own AutoFilters, by table name. */
+  tableFilters?: { table: string; range: CellRange; filtered: number[] }[];
 }
 
 export interface BookInfo {
@@ -156,7 +158,7 @@ export type EditOp =
   /** Sheet › Filter: an AutoFilter over a range (one cell: the block around it), or none (null). */
   | { kind: 'autoFilter'; range: CellRange | null }
   /** The values a column of the AutoFilter shows (null: all of them). */
-  | { kind: 'filter'; col: number; values: string[] | null; blanks: boolean }
+  | { kind: 'filter'; col: number; values: string[] | null; blanks: boolean; table?: string }
   /** Cells copied in this workbook pasted at a cell: all of them, or only values, formulas or looks; maybe transposed. */
   | { kind: 'pasteCells'; from: number; source: CellRange; at: { row: number; col: number }; what: PasteWhat; transpose: boolean }
   /** Sheet › Insert Table: a table over a range (one cell: the block around it), its first row the header. */
@@ -220,7 +222,7 @@ export type ToWorker =
   /** The longest texts shown in a column (with their styles), to fit its width to them. */
   | { t: 'columnTexts'; id: number; sheet: number; col: number }
   /** The values a column of the AutoFilter could show, and those it shows. */
-  | { t: 'filterValues'; id: number; sheet: number; col: number }
+  | { t: 'filterValues'; id: number; sheet: number; col: number; table?: string }
   /** The choices a cell's list validation offers. */
   | { t: 'choices'; id: number; sheet: number; row: number; col: number }
   /** A cell's note. */

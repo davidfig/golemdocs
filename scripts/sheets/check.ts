@@ -116,6 +116,15 @@ unnoted.sheets.push(new Worksheet('Sheet1', 1));
 const unnotedHistory = new History(unnoted);
 unnotedHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['a', 'b']] });
 unnotedHistory.apply(0, { kind: 'note', row: 0, col: 1, text: 'The first note', author: 'Golem' });
+// A table made here, filtered by its own button, with a calculated column.
+const filtered = new Workbook();
+filtered.sheets.push(new Worksheet('Sheet1', 1));
+const filteredHistory = new History(filtered);
+filteredHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Item', 'Price', 'Double'], ['pen', '2'], ['ink', '5'], ['cap', '2']] });
+filteredHistory.apply(0, { kind: 'createTable', range: { r0: 0, c0: 0, r1: 0, c1: 0 } });
+filteredHistory.apply(0, { kind: 'input', range: { r0: 1, c0: 2, r1: 1, c1: 2 }, text: '=[@Price]*2' });
+filteredHistory.apply(0, { kind: 'filter', col: 1, values: ['2'], blanks: false, table: 'Table1' });
+books.set('table-filtered.xlsx', filtered);
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);

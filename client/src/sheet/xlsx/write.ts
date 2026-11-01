@@ -313,6 +313,9 @@ function cellXml(
 
 const valueXml = (text: string) => `<v${/^\s|\s$/.test(text) ? ' xml:space="preserve"' : ''}>${escapeText(text)}</v>`;
 
+/** Whether a formula has brackets outside its strings: a structured reference (or an external workbook's). */
+const hasBrackets = (text: string): boolean => text.replace(/"(?:[^"]|"")*"/g, '').includes('[');
+
 /** A cell's `<f>`: on its own, or as the first or a following cell of a shared formula. */
 function formulaXml(run: FormulaRun, row: number, col: number, sharedIndex: Map<FormulaRun, number>, nextShared: () => number): string {
   const extra = run.attrs ?? '';
@@ -322,7 +325,8 @@ function formulaXml(run: FormulaRun, row: number, col: number, sharedIndex: Map<
   if (index !== undefined) return `<f t="shared" si="${index}"/>`;
   const text = escapeText(row === run.originRow && col === run.originCol ? run.text : shiftFormula(run.text, row - run.originRow, col - run.originCol));
   if (run.kind === 'array') return `<f t="array" ref="${escapeAttr(run.ref ?? `${columnName(col)}${row + 1}`)}"${extra}>${text}</f>`;
-  if (run.first === run.last) return `<f${extra}>${text}</f>`;
+  // Excel refuses a shared formula with a structured reference (a table's calculated column): each cell gets its own.
+  if (run.first === run.last || hasBrackets(run.text)) return `<f${extra}>${text}</f>`;
   sharedIndex.set(run, (index = nextShared()));
   return `<f t="shared" ref="${rangeName({ r0: run.first, c0: col, r1: run.last, c1: col })}" si="${index}"${extra}>${text}</f>`;
 }

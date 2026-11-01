@@ -203,6 +203,35 @@ test('Sheet › Group groups rows; the outline’s box collapses them and its le
   await expect.poll(async () => (await outline()).outline).toBe(null);
 });
 
+test('a table made with Insert Table has filter buttons of its own, and a formula typed in a new column fills it', async ({ app, page }) => {
+  await open(app, page);
+  // C1:C27 is empty beside the A:B block: a header there makes it part of the table.
+  await clickCell(page, 0, 2);
+  await page.keyboard.type('Twice');
+  await page.keyboard.press('Enter');
+  await clickCell(page, 0, 0);
+  await app.menu('Sheet', 'Insert Table');
+  await expect.poll(async () => ((await state(page)) as unknown as { tableFilters: { table: string }[] | null }).tableFilters?.map((f) => f.table)).toEqual(['Table1']);
+  await clickCell(page, 3, 2);
+  await page.keyboard.type('=LEN(A4)');
+  await page.keyboard.press('Enter');
+  await clickCell(page, 20, 2);
+  await expect.poll(async () => (await state(page)).content.input).toBe('=LEN(A21)');
+  // The button on the table's first header cell; tick one value only.
+  const at = await page.evaluate(() => {
+    const s = (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number }; pointOf(r: number, c: number): { y: number } } }).sheetEditor;
+    return { x: s.columnEdge(1).x - 8, y: s.pointOf(0, 1).y };
+  });
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  const card = page.getByRole('dialog', { name: 'Filter' });
+  await expect(card).toBeVisible();
+  await card.getByRole('checkbox', { name: '(Select All)' }).uncheck();
+  await card.getByRole('checkbox', { name: 'five', exact: true }).check();
+  await card.getByRole('button', { name: 'OK' }).click();
+  await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBe(24);
+});
+
 test('a list validation offers its choices from an arrow, and a value a rule refuses is not entered', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'validation.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/validation.xlsx')), mimeType: 'application/octet-stream' });

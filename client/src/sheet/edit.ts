@@ -18,7 +18,7 @@ import { restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
 import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
-import { newTable } from './tables.ts';
+import { dataRows, newTable, tableFilter } from './tables.ts';
 import { newNote, withText } from './notes.ts';
 import { passwordOpens, protect, refuses } from './protection.ts';
 import { displayText, editText } from './format/display.ts';
@@ -318,9 +318,12 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
   const grid = sheet.grid;
   switch (op.kind) {
     case 'input': {
-      const { r0, c0, r1, c1 } = op.range;
+      let parsed = parseInput(op.text, book.date1904);
+      // A table's calculated column: a formula typed into a column of a table whose other data cells are empty fills them all.
+      const calculated = parsed.kind === 'formula' ? calculatedColumn(sheet, op.range) : null;
+      if (calculated && parsed.kind === 'formula') parsed = { ...parsed, text: shiftFormula(parsed.text, calculated.r0 - op.range.r0, 0) };
+      const { r0, c0, r1, c1 } = calculated ?? op.range;
       if ((r1 - r0 + 1) * (c1 - c0 + 1) > MAX_FILL) return { ranges: [], message: 'too many cells' };
-      const parsed = parseInput(op.text, book.date1904);
       for (let c = c0; c <= c1; c++) {
         const column = grid.column(c);
         if (parsed.kind === 'formula') {
@@ -332,7 +335,7 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
         }
         for (let r = r0; r <= r1; r++) setValue(book, grid, r, c, parsed);
       }
-      return { ranges: [op.range] };
+      return { ranges: [{ r0, c0, r1, c1 }] };
     }
     case 'paste': {
       const { row, col } = op.at;
@@ -382,13 +385,16 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     case 'autoFilter':
       return setAutoFilter(book, index, sheet, op.range);
     case 'filter': {
-      const filter = sheet.autoFilter;
+      const table = op.table ? sheet.tables.find((t) => t.displayName === op.table) : undefined;
+      const filter = op.table ? table && tableFilter(table) : sheet.autoFilter;
       if (!filter) return { ranges: [] };
       const offset = op.col - filter.range.c0;
       const columns = filter.columns.filter((c) => c.col !== offset);
       if (op.values !== null) columns.push({ col: offset, values: op.values, blanks: op.blanks });
-      sheet.autoFilter = { range: filter.range, columns: columns.sort((a, b) => a.col - b.col) };
-      applyFilter(book, sheet, sheet.autoFilter);
+      columns.sort((a, b) => a.col - b.col);
+      if (table) sheet.tables = sheet.tables.map((t) => (t === table ? { ...t, filterColumns: columns } : t));
+      else sheet.autoFilter = { range: filter.range, columns };
+      applyFilter(book, sheet, { range: filter.range, columns });
       return { ranges: [everything()] };
     }
     case 'createTable':
@@ -570,6 +576,25 @@ function sortRows(book: Workbook, sheet: Worksheet, op: Extract<EditOp, { kind: 
     column.formulas = kept.sort((a, b) => a.first - b.first);
   }
   return { ranges: [r], select: r };
+}
+
+/**
+ * A table's calculated column: the data rows of a formula typed into one cell of a table column that holds nothing else
+ * (Excel then fills the column with it), or null.
+ */
+function calculatedColumn(sheet: Worksheet, at: CellRange): CellRange | null {
+  if (at.r0 !== at.r1 || at.c0 !== at.c1) return null;
+  const table = sheet.tables.find((t) => at.r0 >= t.range.r0 && at.r0 <= t.range.r1 && at.c0 >= t.range.c0 && at.c0 <= t.range.c1);
+  if (!table) return null;
+  const [d0, d1] = dataRows(table);
+  if (at.r0 < d0 || at.r0 > d1 || d1 <= d0) return null;
+  const column = sheet.grid.columns[at.c0];
+  for (let r = d0; r <= d1; r++) {
+    if (r === at.r0 || !column) continue;
+    const kind = column.kind(r);
+    if ((kind !== Kind.Empty && kind !== Kind.Blank) || column.formulaAt(r)) return null;
+  }
+  return { r0: d0, c0: at.c0, r1: d1, c1: at.c0 };
 }
 
 /** A cell's note made, given new text, or taken away. */

@@ -244,7 +244,8 @@ async function fromImage(image: Image, xlsx: Uint8Array): Promise<Workbook> {
     sheet.cellAttrs = new Map(j.cellAttrs);
     sheet.rowAttrs = new Map(j.rowAttrs);
     sheet.merges = j.merges;
-    sheet.tables = j.tables ?? [];
+    // Images from before tables kept their filter's columns: read from the table's XML.
+    sheet.tables = (j.tables ?? []).map((t) => (t.filterColumns === undefined ? { ...t, filterColumns: readAutoFilter(t.xml)?.columns ?? null } : t));
     sheet.notes = j.notes ?? [];
     sheet.noteParts = j.noteParts ?? null;
     sheet.protection = j.protection ?? null;

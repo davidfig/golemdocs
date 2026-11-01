@@ -444,6 +444,29 @@ test('Insert Table makes a table of the block around a cell, saved as a table pa
   assert.ok(!again.source!.pkg.has('xl/tables/table1.xml'));
 });
 
+test('a table filters by its own buttons, and a formula typed in an empty column fills the column', async () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Item', 'Price', 'Double'], ['pen', '2'], ['ink', '5'], ['cap', '2']] });
+  history.apply(0, { kind: 'createTable', range: { r0: 0, c0: 0, r1: 0, c1: 0 } });
+  // The formula in C3 fills C2:C4 (rebased to the first data row), structured or not.
+  history.apply(0, { kind: 'input', range: { r0: 2, c0: 2, r1: 2, c1: 2 }, text: '=B3*2' });
+  const engine = new Engine(b);
+  engine.recalculateAll();
+  assert.deepEqual([1, 2, 3].map((r) => value(sheet, r, 2)), [4, 10, 4]);
+  history.apply(0, { kind: 'input', range: { r0: 1, c0: 3, r1: 1, c1: 3 }, text: 'x' });
+  history.apply(0, { kind: 'input', range: { r0: 2, c0: 2, r1: 2, c1: 2 }, text: '=1' });
+  assert.equal(sheet.grid.columns[2]!.formulaAt(1)?.text, 'B2*2', 'a column that holds formulas already is not filled again');
+  // The table's filter: show only the price 2 rows.
+  history.apply(0, { kind: 'filter', col: 1, values: ['2'], blanks: false, table: 'Table1' });
+  assert.deepEqual([1, 2, 3].map((r) => sheet.rowSizes.hidden(r)), [false, true, false]);
+  const back = await readWorkbook(await writeWorkbook(b));
+  const table = (back.sheets[0] as Worksheet).tables[0];
+  assert.deepEqual(table.filterColumns?.map((c) => [c.col, c.values]), [[1, ['2']]]);
+  history.undo();
+  assert.deepEqual([1, 2, 3].map((r) => sheet.rowSizes.hidden(r)), [false, false, false]);
+  assert.deepEqual(sheet.tables[0].filterColumns, []);
+});
+
 test('outline groups: grouped, collapsed, expanded, shown by level, and saved', async () => {
   const { book: b, sheet, history } = book();
   history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['a'], ['b'], ['c'], ['d'], ['e'], ['total']] });

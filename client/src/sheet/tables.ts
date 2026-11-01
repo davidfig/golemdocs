@@ -7,6 +7,8 @@ import { child, el, elements } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import type { CellRange } from './model/worksheet.ts';
 import { parseRange, rangeName } from './refs.ts';
+import { autoFilterElement, readAutoFilter } from './filter.ts';
+import type { AutoFilter, FilterColumn } from './filter.ts';
 
 export interface Table {
   name: string;
@@ -28,6 +30,13 @@ export interface Table {
   part: string;
   rId?: string;
   xml: XmlElement;
+  /** Its own AutoFilter's columns (buttons on its header row), or null when it has none. */
+  filterColumns: FilterColumn[] | null;
+}
+
+/** A table's AutoFilter: its header and data rows (not a totals row), and the columns it filters. */
+export function tableFilter(t: Table): AutoFilter | null {
+  return t.filterColumns && t.header ? { range: { ...t.range, r1: t.range.r1 - (t.totals ? 1 : 0) }, columns: t.filterColumns } : null;
 }
 
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -40,7 +49,7 @@ export function newTable(id: number, name: string, range: CellRange, columns: st
     el('tableColumns', { count: columns.length }, columns.map((c, i) => el('tableColumn', { id: i + 1, name: c }))),
     el('tableStyleInfo', { name: 'TableStyleMedium2', showFirstColumn: 0, showLastColumn: 0, showRowStripes: 1, showColumnStripes: 0 }),
   ]);
-  return { name, displayName: name, range, columns, header: true, totals: false, style: 'TableStyleMedium2', rowStripes: true, columnStripes: false, firstColumn: false, lastColumn: false, part: '', xml };
+  return { name, displayName: name, range, columns, header: true, totals: false, style: 'TableStyleMedium2', rowStripes: true, columnStripes: false, firstColumn: false, lastColumn: false, part: '', xml, filterColumns: [] };
 }
 
 export function readTable(root: XmlElement, part: string): Table | null {
@@ -63,6 +72,7 @@ export function readTable(root: XmlElement, part: string): Table | null {
     lastColumn: on(info?.attrs.showLastColumn),
     part,
     xml: root,
+    filterColumns: readAutoFilter(root)?.columns ?? null,
   };
 }
 
@@ -70,8 +80,12 @@ export function readTable(root: XmlElement, part: string): Table | null {
 export function tableXml(table: Table): XmlElement {
   const root = table.xml;
   root.attrs.ref = rangeName(table.range);
-  const filter = child(root, 'autoFilter');
-  if (filter) filter.attrs.ref = rangeName({ ...table.range, r1: table.range.r1 - (table.totals ? 1 : 0) });
+  // The AutoFilter comes first in a table's XML.
+  const filter = tableFilter(table);
+  const at = root.children.findIndex((c) => typeof c !== 'string' && c.name === 'autoFilter');
+  if (filter && at >= 0) root.children[at] = autoFilterElement(filter);
+  else if (filter) root.children.unshift(autoFilterElement(filter));
+  else if (at >= 0) root.children.splice(at, 1);
   return root;
 }
 

@@ -4,6 +4,7 @@
 //
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
+import { tableFilter } from './tables.ts';
 import { hasPassword, hiddenFormula, isProtected, lockedCell } from './protection.ts';
 import { fingerprint } from '../image/container.ts';
 import { Kind, MAX_COLUMNS, MAX_ROWS } from './model/column.ts';
@@ -77,6 +78,12 @@ export function info(b: Workbook): BookInfo {
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
         filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
+        tableFilters: sheet.tables.some((t) => tableFilter(t))
+          ? sheet.tables.flatMap((t) => {
+              const f = tableFilter(t);
+              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col) }] : [];
+            })
+          : undefined,
       };
     }),
     activeSheet: b.activeSheet,
@@ -293,7 +300,8 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       }
       case 'filterValues': {
         const sheet = book.sheets[m.sheet];
-        const filter = sheet && isWorksheet(sheet) ? sheet.autoFilter : null;
+        const table = m.table && sheet && isWorksheet(sheet) ? sheet.tables.find((t) => t.displayName === m.table) : undefined;
+        const filter = sheet && isWorksheet(sheet) ? (m.table ? table && tableFilter(table) : sheet.autoFilter) : null;
         if (!sheet || !isWorksheet(sheet) || !filter) return post({ t: 'filterValues', id: m.id, values: [], blanks: false, shown: null, shownBlanks: true });
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);

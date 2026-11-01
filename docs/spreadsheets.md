@@ -392,8 +392,15 @@ header in the style's theme colour, banded rows tinted from it, the totals row b
 a cell's own fill and colour win). Checked by the oracle's `tables` group (a table on the Data sheet) and in Excel, which
 keeps a table grown by an inserted row. Sheet › Insert Table makes one (`createTable`, `newTable`: the first row its
 header, empty header cells named Column1...); the writer gives a new table its part and relationship, removes those of
-tables gone, and writes `<tableParts>` from the model; Excel opens it. Not yet: a table's filter buttons, its calculated columns filling
-themselves.
+tables gone, and writes `<tableParts>` from the model; Excel opens it.
+
+A table's own AutoFilter is its `filterColumns` (read from the table's `<autoFilter>`, written back by `tableXml`;
+`tableFilter` gives it as an `AutoFilter` over the header and data rows). The page gets each in `SheetInfo.tableFilters`;
+the renderer draws every filter's buttons the same way, and the card, the `filterValues` request and the `filter` edit
+name the table (`table`), so a table and the sheet's AutoFilter work alike. A formula typed into one cell of a table
+column whose other data cells are empty fills the column (`calculatedColumn` in the `input` edit, rebased to the first
+data row), as Excel's calculated columns do; Excel refuses a shared formula with a structured reference, so the writer
+writes such a run cell by cell (`hasBrackets`). Not yet: `calculatedColumnFormula`, so rows added later are not filled.
 
 **Data validation** (`validation.ts`): rules read from and written to `<dataValidations>` (a rule made here gets its own
 element; its ranges and formulas follow inserted and deleted rows and columns). A list rule puts an arrow just right of
@@ -454,7 +461,7 @@ A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera`
 the last document's pages arrive) leaves a workbook alone.
 
 **Next in M5**:
-a table's filter buttons and calculated columns; icon sets; a formatting
+icon sets; a table's calculatedColumnFormula; a formatting
 toolbar row for the Sheet menu's number formats and borders.
 
 ### M4: every function (2026-10-31)

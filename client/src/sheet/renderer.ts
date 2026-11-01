@@ -68,8 +68,8 @@ export interface SheetFrame {
   copied: CellRange | null;
   /** The range the fill handle is being dragged over. */
   filling: CellRange | null;
-  /** The AutoFilter: buttons on its first row (blue on columns it filters). */
-  filter: { range: CellRange; filtered: number[] } | null;
+  /** AutoFilters (the sheet's, tables'): buttons on their first rows (blue on columns they filter). */
+  filters: { range: CellRange; filtered: number[] }[];
   /** A cell whose list validation offers choices: its arrow, beside it. */
   choices: { row: number; col: number } | null;
   darkPages: boolean;
@@ -393,7 +393,7 @@ export class SheetRenderer {
 
       // The AutoFilter's buttons, the selection, the cell being edited's frame, and a copied range.
       const over = new RectList();
-      if (frame.filter) this.filterButtons(over, frame.filter, g, 1 / scale);
+      for (const filter of frame.filters) this.filterButtons(over, filter, g, 1 / scale);
       if (frame.choices) {
         const box = choicesButton(g, frame.choices.row, frame.choices.col, 1 / scale);
         if (box) this.dropButton(over, box, 1 / scale, false);

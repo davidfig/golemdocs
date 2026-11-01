@@ -181,6 +181,15 @@ export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Wor
     };
     put(kid(anchor, 'from'), c.anchor.from);
     put(kid(anchor, 'to'), c.anchor.to);
+    // A chart anchored by a corner and a size: its size, from its corners as they now are.
+    const ext = anchor && !kid(anchor, 'to') ? kid(anchor, 'ext') : undefined;
+    if (ext && c.anchor.to) {
+      const at = (p: AnchorPoint) => ({ x: sheet.colSizes.position(p.col) + p.dx, y: sheet.rowSizes.position(p.row) + p.dy });
+      const a = at(c.anchor.from);
+      const b = at(c.anchor.to);
+      ext.attrs.cx = String(Math.round(Math.max(1, b.x - a.x) * EMU_PER_POINT));
+      ext.attrs.cy = String(Math.round(Math.max(1, b.y - a.y) * EMU_PER_POINT));
+    }
     if (c.generate) {
       pkg.set(c.part, chartXml(c.chart), CHART_TYPE);
       continue;

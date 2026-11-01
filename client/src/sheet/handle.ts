@@ -172,6 +172,10 @@ export class SheetEditor {
     return this.view?.pointOf(row, col) ?? null;
   }
 
+  screenOf(x: number, y: number): { x: number; y: number } | null {
+    return this.view?.screenOf(x, y) ?? null;
+  }
+
   set readOnly(value: boolean) {
     if (this.view) this.view.readOnly = value;
   }

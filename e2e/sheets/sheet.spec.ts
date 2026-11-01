@@ -276,6 +276,17 @@ test('Insert › Chart makes a chart beside the data; it is picked, changed from
   await page.mouse.move(box.x + middle.x + 40, box.y + middle.y + 120, { steps: 6 });
   await page.mouse.up();
   await expect.poll(async () => (await look()).chart).toBe(7);
+  // Its bottom right handle, dragged out, makes it bigger.
+  const boxes = async () => ((await state(page)) as unknown as { chartBoxes: number[][] }).chartBoxes;
+  await expect.poll(async () => (await boxes())[7][1]).toBeGreaterThan(30);
+  const [x0, y0, w0, h0] = (await boxes())[7];
+  const toScreen = await page.evaluate(([x, y]) => (window as unknown as { sheetEditor: { screenOf(x: number, y: number): { x: number; y: number } } }).sheetEditor.screenOf(x, y), [x0 + w0, y0 + h0] as const);
+  await page.mouse.move(box.x + toScreen.x, box.y + toScreen.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + toScreen.x + 80, box.y + toScreen.y + 60, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await boxes())[7][2]).toBeGreaterThan(w0 + 40);
+  expect((await boxes())[7][3]).toBeGreaterThan(h0 + 30);
   await page.keyboard.press('Delete');
   await expect.poll(async () => (await look()).charts.length).toBe(7);
 });

@@ -121,6 +121,8 @@ export class SheetEditorView {
   /** The chart picked (by its place in the sheet's list), and one being dragged (its offset so far, in points). */
   private chart: number | null = null;
   private chartDrag: { index: number; x: number; y: number; dx: number; dy: number } | null = null;
+  /** A chart being resized by a corner (0 top left, 1 top right, 2 bottom left, 3 bottom right): its box as it will be. */
+  private chartResize: { index: number; corner: number; box: { x0: number; y0: number; x1: number; y1: number } } | null = null;
   private chartTitleCard: ChartTitleCard | null = null;
   /** Bumped whenever the workbook's info changes (an edit, a load): the charts are laid out again. */
   private bookVersion = 0;
@@ -133,7 +135,7 @@ export class SheetEditorView {
   private copied: CellRange | null = null;
   /** The sheet the copied range is on, and the text it put on the clipboard (to know a paste is of it). */
   private copiedFrom: { sheet: number; text: string } | null = null;
-  private dragState: { kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill' | 'chart'; index?: number; start?: number; size?: number } | null = null;
+  private dragState: { kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill' | 'chart' | 'chartResize'; index?: number; start?: number; size?: number } | null = null;
   /** While the fill handle is dragged: the range it would fill. */
   private filling: CellRange | null = null;
   private filterCard: FilterCard | null = null;
@@ -383,6 +385,7 @@ export class SheetEditorView {
     const pending = this.renderer.draw({
       charts: this.chartScenes(),
       chart: this.chart,
+      chartGhost: this.chartResize?.box ?? null,
       camera,
       top,
       bottom: TABS_BAR,
@@ -583,6 +586,17 @@ export class SheetEditorView {
       if (p.x >= s.x && p.x <= s.x + s.width && p.y >= s.y && p.y <= s.y + s.height) return i;
     }
     return null;
+  }
+
+  /** The picked chart's handle under a canvas point (0 to 3, as `chartResize`), or null. */
+  private chartHandleAt(x: number, y: number): number | null {
+    const scene = this.chart === null ? undefined : this.chartScenes()[this.chart];
+    const p = this.sheetPoint(x, y);
+    if (!scene || !p) return null;
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const corners = [[scene.x, scene.y], [scene.x + scene.width, scene.y], [scene.x, scene.y + scene.height], [scene.x + scene.width, scene.y + scene.height]];
+    const near = corners.findIndex(([cx, cy]) => Math.abs(p.x - cx) * scale <= 6 && Math.abs(p.y - cy) * scale <= 6);
+    return near < 0 ? null : near;
   }
 
   /** A sheet point as a chart's corner: the cell it is in, and how far into it. */
@@ -1009,6 +1023,14 @@ export class SheetEditorView {
     if (this.editing) this.commitEdit(true);
     this.focus();
     const g = this.geometry;
+    // A picked chart's corner handle: dragging it resizes the chart.
+    const handle = hit.kind === 'cell' && !this.readOnly ? this.chartHandleAt(x, y) : null;
+    if (handle !== null && this.chart !== null) {
+      const s = this.chartScenes()[this.chart];
+      this.chartResize = { index: this.chart, corner: handle, box: { x0: s.x, y0: s.y, x1: s.x + s.width, y1: s.y + s.height } };
+      this.dragState = { kind: 'chartResize' };
+      return;
+    }
     // A chart lies over the cells: a press on one picks it, and dragging moves it.
     const chart = hit.kind === 'cell' ? this.chartAt(x, y) : null;
     this.pickChart(chart);
@@ -1078,6 +1100,22 @@ export class SheetEditorView {
     const g = this.geometry;
     if (!d || !g) return;
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    if (d.kind === 'chartResize') {
+      const r = this.chartResize;
+      const p = this.sheetPoint(x, y);
+      if (!r || !p) return;
+      // The corner follows the pointer; the chart keeps at least a little size.
+      const MIN = 24;
+      const s = this.chartScenes()[r.index];
+      const box = { x0: s.x, y0: s.y, x1: s.x + s.width, y1: s.y + s.height };
+      if (r.corner === 0 || r.corner === 2) box.x0 = Math.min(p.x, box.x1 - MIN);
+      else box.x1 = Math.max(p.x, box.x0 + MIN);
+      if (r.corner < 2) box.y0 = Math.min(p.y, box.y1 - MIN);
+      else box.y1 = Math.max(p.y, box.y0 + MIN);
+      r.box = box;
+      this.deps.render();
+      return;
+    }
     if (d.kind === 'chart') {
       const c = this.chartDrag;
       if (!c) return;
@@ -1121,6 +1159,16 @@ export class SheetEditorView {
   release(): void {
     const d = this.dragState;
     this.dragState = null;
+    if (d?.kind === 'chartResize') {
+      const r = this.chartResize;
+      this.chartResize = null;
+      if (r) {
+        const anchor = { from: this.anchorPoint(r.box.x0, r.box.y0), to: this.anchorPoint(r.box.x1, r.box.y1) };
+        void this.edit({ kind: 'chart', index: r.index, change: { anchor } });
+      }
+      this.deps.render();
+      return;
+    }
     if (d?.kind === 'chart') {
       const c = this.chartDrag;
       const scene = c && this.charts.scenes[c.index];
@@ -1382,6 +1430,10 @@ export class SheetEditorView {
     if (hit?.edge?.col !== undefined) return 'col-resize';
     if (hit?.edge?.row !== undefined) return 'row-resize';
     if (hit?.kind === 'cell' && this.onFillHandle(x, y)) return 'crosshair';
+    // Over a picked chart's corner, the way it resizes; over a chart, a move.
+    const handle = hit?.kind === 'cell' && !this.readOnly ? this.chartHandleAt(x, y) : null;
+    if (handle !== null) return handle === 0 || handle === 3 ? 'nwse-resize' : 'nesw-resize';
+    if (hit?.kind === 'cell' && this.chartAt(x, y) !== null) return this.readOnly ? 'default' : 'move';
     if (hit?.kind === 'cell') return 'cell';
     return 'default';
   }
@@ -1826,7 +1878,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, chartBoxes: this.charts.scenes.map((s) => [Math.round(s.x), Math.round(s.y), Math.round(s.width), Math.round(s.height)]), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */
@@ -1837,6 +1889,13 @@ export class SheetEditorView {
     const region = this.renderer.regions.find((r) => (col < g.frozenCols) === !r.scrollX && (row < g.frozenRows) === !r.scrollY);
     if (!region) return null;
     return { x: region.x + ((g.x(col) + g.x(col + 1)) / 2 - region.originX) * scale, y: this.offsetTop + region.y + ((g.y(row) + g.y(row + 1)) / 2 - region.originY) * scale };
+  }
+
+  /** Where a sheet point (points, in the scrolling pane) is on the canvas, in CSS pixels, for tests. */
+  screenOf(x: number, y: number): { x: number; y: number } | null {
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const region = this.renderer.regions.find((r) => r.scrollX && r.scrollY);
+    return region ? { x: region.x + (x - region.originX) * scale, y: this.offsetTop + region.y + (y - region.originY) * scale } : null;
   }
 
   /** The point on the column header at a column's right edge, and the column's width in points, for tests. */

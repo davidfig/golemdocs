@@ -157,6 +157,8 @@ export interface SheetFrame {
   charts: ChartScene[];
   /** The chart picked (framed, with handles at its corners), by its place in `charts`. */
   chart: number | null;
+  /** A chart being resized: where it will be (sheet points), drawn dashed. */
+  chartGhost: { x0: number; y0: number; x1: number; y1: number } | null;
   darkPages: boolean;
 }
 
@@ -557,6 +559,7 @@ export class SheetRenderer {
         if (box) this.dropButton(over, box, 1 / scale, false);
       }
       this.selection(over, frame, g, 1 / (scale * dpr));
+      if (frame.chartGhost) this.dashed(over, frame.chartGhost, 1.5 / scale, packColor(COLOR.selectionLine));
       const picked = frame.chart === null ? undefined : frame.charts[frame.chart];
       if (picked) {
         const px = 1 / scale;

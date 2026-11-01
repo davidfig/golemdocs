@@ -5277,6 +5277,7 @@ Object.assign(window, {
   sheetEditor: {
     state: () => sheetView.debugState(),
     pointOf: (row: number, col: number) => sheetView.pointOf(row, col),
+    screenOf: (x: number, y: number) => sheetView.screenOf(x, y),
     columnEdge: (col: number) => sheetView.columnEdge(col),
   },
 });

@@ -3,6 +3,7 @@
 // so undo and redo each put one back. Formulas typed here are kept as text until the engine (M3) calculates them; references
 // in other formulas are moved by the engine too when rows and columns move.
 
+import { changeKind, newChart } from './charts/make.ts';
 import { Column, Kind, MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
 import type { ColumnState, FormulaRun, Grid } from './model/column.ts';
 import { Sizes } from './model/sizes.ts';
@@ -51,6 +52,7 @@ interface SheetSnapshot {
     validations: Worksheet['validations'];
     notes: Worksheet['notes'];
     protection: Worksheet['protection'];
+    charts: Worksheet['charts'];
   };
   /** The whole column list (structure moved: columns inserted or deleted). */
   columnList?: (Column | undefined)[];
@@ -224,7 +226,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -240,6 +242,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
       validations: sheet.validations,
       notes: sheet.notes,
       protection: sheet.protection,
+      charts: sheet.charts,
     };
   }
   out.sheet = snap;
@@ -294,6 +297,7 @@ function restore(book: Workbook, snap: BookSnapshot): void {
     sheet.validations = s.meta.validations;
     sheet.notes = s.meta.notes;
     sheet.protection = s.meta.protection;
+    sheet.charts = s.meta.charts;
   }
 }
 
@@ -403,6 +407,30 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'insertChart': {
+      const r = op.range;
+      const block = r.r0 === r.r1 && r.c0 === r.c1 ? currentRegion(sheet.grid, r.r0, r.c0) : r;
+      const made = newChart(book, sheet, block, op.chart);
+      if (!made) return { ranges: [], message: 'noChartData' };
+      sheet.charts = [...sheet.charts, made];
+      return { ranges: [] };
+    }
+    case 'chart': {
+      const c = sheet.charts[op.index];
+      if (!c) return { ranges: [] };
+      const { change } = op;
+      if (change.remove) {
+        sheet.charts = sheet.charts.filter((_, i) => i !== op.index);
+        return { ranges: [] };
+      }
+      let next = change.kind ? changeKind(c, change.kind) : c;
+      const chart = { ...next.chart };
+      if (change.title !== undefined) chart.title = change.title;
+      if (change.legend !== undefined) chart.legend = change.legend;
+      next = { ...next, chart, anchor: change.anchor ?? next.anchor, generate: next.generate || change.title !== undefined || change.legend !== undefined };
+      sheet.charts = sheet.charts.map((x, i) => (i === op.index ? next : x));
+      return { ranges: [] };
+    }
     case 'protect':
       if (op.on) sheet.protection = protect(op.password);
       else if (sheet.protection && !passwordOpens(sheet.protection, op.password)) return { ranges: [], message: 'wrongPassword' };

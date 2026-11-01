@@ -3,6 +3,8 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
+import type { NewChartKind } from './charts/make.ts';
+import type { ChartAnchor } from './charts/model.ts';
 import type { CellLook, StyleChange } from './format/styleChange.ts';
 import type { PasteWhat } from './pasteCells.ts';
 import type { CellRange, Pane, SheetState } from './model/worksheet.ts';
@@ -101,6 +103,8 @@ export interface ChartScene {
   /** Each vertex's colour (RGB). */
   colors: Uint32Array;
   texts: ChartText[];
+  /** The chart's title, as its model has it. */
+  title: string | null;
 }
 
 export interface CellTile {
@@ -167,6 +171,15 @@ export interface BookInfo {
 }
 
 /** What a cell holds, for the formula bar and the cell editor. */
+/** A change to a chart: what is given changes (`title` or `legend` null takes it off). */
+export interface ChartChange {
+  kind?: NewChartKind;
+  title?: string | null;
+  legend?: 'r' | 'l' | 't' | 'b' | null;
+  anchor?: ChartAnchor;
+  remove?: true;
+}
+
 export interface CellContent {
   /** As typed: the formula with its `=`, or the value. */
   input: string;
@@ -212,6 +225,10 @@ export type EditOp =
   | { kind: 'note'; row: number; col: number; text: string | null; author: string }
   /** Sheet › Protect Sheet (`on`, with a password or '') or Unprotect Sheet (its password, if it has one). */
   | { kind: 'protect'; on: boolean; password: string }
+  /** Insert › Chart: a chart of a block of cells (one cell: the block around it), beside it. */
+  | { kind: 'insertChart'; chart: NewChartKind; range: CellRange }
+  /** A chart (by its place in the sheet's list) changed: another kind, title, legend or place, or taken away. */
+  | { kind: 'chart'; index: number; change: ChartChange }
   /** AutoFill: `target` (which holds `source` at one end) filled from `source`. */
   | { kind: 'fill'; source: CellRange; target: CellRange }
   /** A change to how the cells of ranges look (each range's own outside edges for borders). */

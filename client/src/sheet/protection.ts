@@ -100,6 +100,8 @@ export function refuses(book: Workbook, sheet: Worksheet, op: EditOp): boolean {
     case 'filter':
       return !allows(p, 'autoFilter');
     case 'note':
+    case 'insertChart':
+    case 'chart':
       return !allows(p, 'objects');
     case 'format':
       return !allows(p, 'formatCells');

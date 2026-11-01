@@ -6,7 +6,7 @@
 // Strings: cells whose string came from the file's shared strings keep their index, so sharedStrings.xml never changes;
 // strings typed since are written inline. Formulas: a run of cells is written as one shared formula.
 
-import { writeCharts } from '../charts/model.ts';
+import { writeCharts } from '../charts/write.ts';
 import { OpcPackage, child, deflatePieces, el, elements, serializeXml } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import { ERRORS, Kind, columnName } from '../model/column.ts';
@@ -82,7 +82,7 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
       sheet.noteParts = null;
     }
     if (sheet.noteParts && sheet.dirty.layout) await writeNotes(pkg, sheet.notes, sheet.noteParts);
-    if (sheet.charts.length && sheet.dirty.layout) await writeCharts(pkg, sheet.charts);
+    if (sheet.dirty.layout) await writeCharts(pkg, entry.part, sheet);
     const pieces = sheetPieces(book, sheet, sharedCount);
     const deflated = await deflatePieces(options.pause ? withPauses(pieces, options.pause) : pieces);
     pkg.setDeflated(entry.part, deflated, `${TYPE}.worksheet+xml`);
@@ -211,6 +211,7 @@ function* sheetPieces(book: Workbook, sheet: Worksheet, sharedCount: number): Ge
   const { head, tail } = writeAround(sheet, root);
   sheet.xml = { prefix: encoder.encode(head), suffix: encoder.encode(tail) };
   sheet.legacyDrawing = undefined;
+  sheet.drawingRId = undefined;
   yield encoder.encode(head);
 
   const grid = sheet.grid;

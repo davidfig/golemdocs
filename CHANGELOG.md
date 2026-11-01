@@ -17,7 +17,7 @@
 - Sheet › Protection protects a workbook sheet, with a password if you like: its locked cells can't be changed until Unprotect Sheet, and Lock Cells and Unlock Cells choose which cells stay open. Sheets protected in Excel stay protected, and their passwords work in both.
 - Sheet › New Note adds a note to a workbook cell (or changes the one it has) in a card beside the cell, and Sheet › Delete Note takes it away.
 - Cells copied within a workbook paste with their formulas and formatting, and Sheet › Paste Special pastes only values, formulas or formatting, or rows and columns swapped.
-- Charts in workbooks show over their cells: column and bar, line, area, pie, doughnut and scatter charts, with their titles, legends and axes. They change as their data does, and move with their cells when rows and columns are inserted or deleted.
+- Charts in workbooks show over their cells: column and bar, line, area, pie, doughnut and scatter charts, with their titles, legends and axes. They change as their data does, and move with their cells when rows and columns are inserted or deleted. Insert › Chart makes a chart of the selected cells; click a chart to pick it, drag it to move it, press Delete to remove it, or right-click it to change its type, legend or title.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales, data bars and icon sets, recalculated as the values change.
 - Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
 

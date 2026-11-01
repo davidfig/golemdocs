@@ -250,6 +250,36 @@ test('a workbook’s charts are drawn over its cells, and follow their data', as
   await expect.poll(async () => (await charts())[0]).toContain('100');
 });
 
+test('Insert › Chart makes a chart beside the data; it is picked, changed from its menu, dragged and deleted', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'charts.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/charts.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'charts.xlsx');
+  const look = async () => (await state(page)) as unknown as { charts: string[][]; chart: number | null };
+  await expect.poll(async () => (await look()).charts.length).toBe(7);
+  await clickCell(page, 0, 0);
+  await app.menu('Insert', 'Chart', 'Line');
+  await expect.poll(async () => (await look()).charts.length).toBe(8);
+  await expect.poll(async () => (await look()).chart).toBe(7);
+  // Its menu turns it into a pie (the first series' months).
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const middle = await page.evaluate(() => {
+    const s = (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor;
+    return s.pointOf(8, 8);
+  });
+  await page.mouse.click(box.x + middle.x, box.y + middle.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Chart Type' }).click();
+  await page.getByRole('menuitem', { name: 'Pie' }).click();
+  await expect.poll(async () => (await look()).charts[7]).toContain('Jan');
+  // Dragged down, then deleted.
+  await page.mouse.move(box.x + middle.x, box.y + middle.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + middle.x + 40, box.y + middle.y + 120, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await look()).chart).toBe(7);
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await look()).charts.length).toBe(7);
+});
+
 test('a list validation offers its choices from an arrow, and a value a rule refuses is not entered', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'validation.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/validation.xlsx')), mimeType: 'application/octet-stream' });

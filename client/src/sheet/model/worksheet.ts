@@ -65,6 +65,8 @@ export class Worksheet {
   /** For the next write only: the sheet's `<legacyDrawing>` (the notes' VML drawing) made (its relationship) or taken
    * away (null), when the writer added or removed the notes' parts. */
   legacyDrawing: string | null | undefined = undefined;
+  /** For the next write only: the sheet's `<drawing>`, when the writer made a drawing part for its first chart. */
+  drawingRId: string | undefined = undefined;
   /** Data validation rules (what may be typed into cells). */
   validations: Validation[] = [];
   /** Its tables (Format as Table), read from its table parts. */

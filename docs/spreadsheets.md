@@ -382,9 +382,22 @@ snapshot keeps every sheet's charts). When a sheet's layout is written, `writeCh
 drawing part and each series' references into its chart part by position (everything else in the parts as it was); Excel
 opens charts moved this way, ours and its own (`charts-moved`, `charts-excel-moved` in `check.ts`), and keeps them.
 
-**Next in M6**: inserting a chart
-(Insert › Chart over a selection) and editing one (kind, title, legend, series); sparklines; pivot tables; what-if tools
-(Goal Seek, data tables, scenarios, Solver); print and PDF.
+**Inserting and editing charts.** Insert › Chart (seven kinds) is the `insertChart` edit: `newChart` (`make.ts`) makes a
+chart of the selection (one cell: the block around it), as Excel does: series down the columns, a first row of text their
+names, a first column of text the categories (a scatter chart's x values), placed beside the block. A press on a chart
+picks it (framed, with handles; the renderer's `chart`), dragging moves it (its corners go where it is dropped, its size
+kept), Delete takes it away, and its menu changes its kind (`changeKind`), legend and title (`ChartTitleCard`, an
+in-document card) or deletes it: all the `chart` edit, undone with the sheet's other objects (the snapshot's `charts`), and
+refused on a protected sheet unless objects are allowed. A chart made or changed here is written whole from the model
+(`chartXml` in `write.ts`, `generate`); otherwise only its anchor and references are. `writeCharts` identifies charts by
+the drawing's relationship to them (`rId`): one taken away loses its anchor, part and relationship; a new one gets a part
+and an anchor (declaring its namespaces itself, as a drawing Excel wrote declares `r:` only where it uses it), and the
+sheet a drawing part and `<drawing>` when it had none (`Worksheet.drawingRId`). Excel opens charts made here of every
+kind, several at once, and Excel's charts changed, deleted and added to (`charts-made`, `charts-edited` in `check.ts`).
+Overlapping charts are drawn one after another, each whole.
+
+**Next in M6**: resizing a chart by its handles, and editing its series; sparklines; pivot tables; what-if tools (Goal
+Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

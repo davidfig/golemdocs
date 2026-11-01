@@ -494,5 +494,5 @@ export function chartScene(book: Workbook, engine: Engine, sheetIndex: number, s
     }),
   );
   const laid = layoutChart(c.chart, series, box.width, box.height, accents);
-  return { id, ...box, ...laid };
+  return { id, ...box, ...laid, title: c.chart.title };
 }

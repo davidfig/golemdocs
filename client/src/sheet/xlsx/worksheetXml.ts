@@ -129,8 +129,9 @@ export function writeAround(sheet: Worksheet, root: XmlElement): { head: string;
   set('tableParts', sheet.tables.length && sheet.tables.every((t) => t.rId) ? el('tableParts', { count: sheet.tables.length }, sheet.tables.map((t) => el('tablePart', { 'r:id': t.rId }))) : null);
   set('sheetProtection', protectionElement(sheet.protection));
   set('dataValidations', validationsElement(sheet.validations));
+  if (sheet.drawingRId) set('drawing', el('drawing', { 'r:id': sheet.drawingRId }));
   if (sheet.legacyDrawing !== undefined) set('legacyDrawing', sheet.legacyDrawing ? el('legacyDrawing', { 'r:id': sheet.legacyDrawing }) : null);
-  if ((sheet.legacyDrawing || sheet.tables.length) && !root.attrs['xmlns:r']) root.attrs['xmlns:r'] = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  if ((sheet.legacyDrawing || sheet.drawingRId || sheet.tables.length) && !root.attrs['xmlns:r']) root.attrs['xmlns:r'] = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   // Conditional formats, from the model (their ranges and formulas move with inserted and deleted rows and columns).
   const cfAt = root.children.findIndex((c) => typeof c !== 'string' && c.name === 'conditionalFormatting');
   root.children = root.children.filter((c) => typeof c === 'string' || c.name !== 'conditionalFormatting');

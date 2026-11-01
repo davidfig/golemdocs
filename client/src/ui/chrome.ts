@@ -858,6 +858,7 @@ export class Chrome {
           cmd('insert.drawing'),
           cmd('insert.textBox'),
           cmd('insert.table'),
+          sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
           cmd('insert.horizontalRule'),
           cmd('insert.codeBlock'),
           sep,

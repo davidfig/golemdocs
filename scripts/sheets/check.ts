@@ -134,6 +134,19 @@ for (const name of ['charts', 'charts-excel']) {
   chartedHistory.apply(0, { kind: 'renameSheet', sheet: 0, name: 'Totals' });
   books.set(`${name}-moved.xlsx`, charted);
 }
+// Charts made here: every kind on a sheet with no drawing; on Excel's chart sheet, one changed, one taken away, one added.
+const plotted = new Workbook();
+plotted.sheets.push(new Worksheet('Data', 1));
+const plottedHistory = new History(plotted);
+plottedHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Fruit', 'Kg', 'Price'], ['fig', '3', '2.5'], ['pear', '5', '1.2'], ['plum', '4', '3']] });
+for (const chart of ['column', 'bar', 'line', 'area', 'pie', 'doughnut', 'scatter'] as const) plottedHistory.apply(0, { kind: 'insertChart', chart, range: { r0: 0, c0: 0, r1: 0, c1: 0 } });
+books.set('charts-made.xlsx', plotted);
+const rechart = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/charts-excel.xlsx')));
+const rechartHistory = new History(rechart);
+rechartHistory.apply(0, { kind: 'chart', index: 0, change: { kind: 'line', title: 'Changed here', legend: 't' } });
+rechartHistory.apply(0, { kind: 'chart', index: 1, change: { remove: true } });
+rechartHistory.apply(0, { kind: 'insertChart', chart: 'pie', range: { r0: 0, c0: 0, r1: 6, c1: 1 } });
+books.set('charts-edited.xlsx', rechart);
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);

@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { History } from '../src/sheet/edit.ts';
 import { Engine } from '../src/sheet/formula/engine.ts';
-import type { Worksheet } from '../src/sheet/model/worksheet.ts';
+import { Worksheet } from '../src/sheet/model/worksheet.ts';
+import { Workbook } from '../src/sheet/model/workbook.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../src/sheet/xlsx/write.ts';
 import { chartScene, niceScale } from '../src/sheet/charts/scene.ts';
@@ -85,6 +86,41 @@ test('charts follow inserted rows and a renamed sheet, in the model and in the f
   const again = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
   assert.equal(again.charts[0].chart.groups[0].series[0].valRef, 'Sales!$B$2:$B$7', 'written back again after the undo');
   assert.equal(again.charts[0].anchor.from.row, 1);
+});
+
+test('Insert Chart makes a chart of a block; it is written with a drawing of its own, changed, and taken away', async () => {
+  const book = new Workbook();
+  const sheet = new Worksheet('Data', 1);
+  book.sheets.push(sheet);
+  const history = new History(book);
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Fruit', 'Kg', 'Price'], ['fig', '3', '2.5'], ['pear', '5', '1.2']] });
+  history.apply(0, { kind: 'insertChart', chart: 'column', range: { r0: 1, c0: 1, r1: 1, c1: 1 } });
+  const made = sheet.charts[0];
+  assert.deepEqual(made.chart.groups[0].series.map((s) => [s.name, s.nameRef, s.catRef, s.valRef]), [
+    ['Kg', 'Data!$B$1', 'Data!$A$2:$A$3', 'Data!$B$2:$B$3'],
+    ['Price', 'Data!$C$1', 'Data!$A$2:$A$3', 'Data!$C$2:$C$3'],
+  ]);
+  assert.deepEqual([made.anchor.from.col, made.anchor.from.row], [4, 0], 'beside the block');
+  assert.equal(history.apply(0, { kind: 'insertChart', chart: 'pie', range: { r0: 9, c0: 9, r1: 9, c1: 9 } }).message, 'noChartData');
+  let back = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+  assert.deepEqual(back.charts.map((c) => [c.chart.groups[0].kind, c.chart.groups[0].series.length, c.chart.title, c.chart.legend]), [['bar', 2, 'Chart Title', 'b']]);
+  // Another kind, a title, no legend: written from the model.
+  history.apply(0, { kind: 'chart', index: 0, change: { kind: 'line', title: 'Fruit', legend: null } });
+  back = (await readWorkbook(await writeWorkbook(book))).sheets[0] as Worksheet;
+  assert.deepEqual(back.charts.map((c) => [c.chart.groups[0].kind, c.chart.title, c.chart.legend]), [['line', 'Fruit', null]]);
+  // A second chart on the same drawing, then the first taken away: its part goes, the second stays.
+  history.apply(0, { kind: 'insertChart', chart: 'pie', range: { r0: 0, c0: 0, r1: 2, c1: 1 } });
+  history.apply(0, { kind: 'chart', index: 0, change: { remove: true } });
+  const written = await readWorkbook(await writeWorkbook(book));
+  back = written.sheets[0] as Worksheet;
+  assert.deepEqual(back.charts.map((c) => [c.chart.groups[0].kind, c.chart.title]), [['pie', 'Kg']]);
+  assert.equal(written.source!.pkg.partNames.filter((n) => n.startsWith('xl/charts/')).length, 1, 'the removed chart’s part is gone');
+  history.undo();
+  assert.equal(sheet.charts.length, 2, 'undo brings it back');
+  // Several charts made at once each get a part of their own.
+  for (const chart of ['bar', 'area', 'scatter'] as const) history.apply(0, { kind: 'insertChart', chart, range: { r0: 0, c0: 0, r1: 0, c1: 0 } });
+  const many = await readWorkbook(await writeWorkbook(book));
+  assert.deepEqual((many.sheets[0] as Worksheet).charts.map((c) => c.chart.groups[0].kind), ['line', 'pie', 'bar', 'area', 'scatter']);
 });
 
 test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {

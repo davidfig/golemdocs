@@ -26,9 +26,12 @@ import { FILL_HANDLE, SheetRenderer, choicesButton, filterButton } from './rende
 import { FilterCard } from './filterCard.ts';
 import { NoteCard, NoteEditor } from './noteCard.ts';
 import { askSheetPassword } from './protectDialog.ts';
+import { ChartTitleCard } from './chartTitleCard.ts';
+import type { NewChartKind } from './charts/make.ts';
+import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
-import type { BookInfo, CellContent, Changed, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
+import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
 import './view.css';
 
 export interface SheetEditorDeps {
@@ -115,6 +118,10 @@ export class SheetEditorView {
   private ranges: CellRange[] = [single(0, 0)];
   /** The cell's contents, for the formula bar (and editing). */
   private content: CellContent = { input: '', display: '', isFormula: false };
+  /** The chart picked (by its place in the sheet's list), and one being dragged (its offset so far, in points). */
+  private chart: number | null = null;
+  private chartDrag: { index: number; x: number; y: number; dx: number; dy: number } | null = null;
+  private chartTitleCard: ChartTitleCard | null = null;
   /** Bumped whenever the workbook's info changes (an edit, a load): the charts are laid out again. */
   private bookVersion = 0;
   /** The charts last laid out: for which sheet and version of the workbook. */
@@ -126,7 +133,7 @@ export class SheetEditorView {
   private copied: CellRange | null = null;
   /** The sheet the copied range is on, and the text it put on the clipboard (to know a paste is of it). */
   private copiedFrom: { sheet: number; text: string } | null = null;
-  private dragState: { kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill'; index?: number; start?: number; size?: number } | null = null;
+  private dragState: { kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill' | 'chart'; index?: number; start?: number; size?: number } | null = null;
   /** While the fill handle is dragged: the range it would fill. */
   private filling: CellRange | null = null;
   private filterCard: FilterCard | null = null;
@@ -374,7 +381,8 @@ export class SheetEditorView {
     const chartsKey = `${this.sheetIndex}:${this.bookVersion}`;
     if (info.charts && this.charts.key !== chartsKey) void this.loadCharts(chartsKey);
     const pending = this.renderer.draw({
-      charts: this.charts.sheet === this.sheetIndex && info.charts ? this.charts.scenes : [],
+      charts: this.chartScenes(),
+      chart: this.chart,
       camera,
       top,
       bottom: TABS_BAR,
@@ -550,6 +558,78 @@ export class SheetEditorView {
     }
   }
 
+  /** The sheet's charts as drawn: the one being dragged where the pointer has it. */
+  private chartScenes(): ChartScene[] {
+    const scenes = this.charts.sheet === this.sheetIndex && this.info?.charts ? this.charts.scenes : [];
+    const d = this.chartDrag;
+    return d ? scenes.map((s, i) => (i === d.index ? { ...s, x: s.x + d.dx, y: s.y + d.dy } : s)) : scenes;
+  }
+
+  /** The sheet point under a canvas point (CSS pixels), through the pane it is in. */
+  private sheetPoint(x: number, y: number): { x: number; y: number } | null {
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const py = y - this.offsetTop;
+    const region = this.renderer.regions.find((r) => x >= r.x && x < r.x + r.width && py >= r.y && py < r.y + r.height);
+    return region ? { x: region.originX + (x - region.x) / scale, y: region.originY + (py - region.y) / scale } : null;
+  }
+
+  /** The chart under a canvas point (the one drawn last, on top), by its place in the list. */
+  private chartAt(x: number, y: number): number | null {
+    const p = this.sheetPoint(x, y);
+    if (!p) return null;
+    const scenes = this.chartScenes();
+    for (let i = scenes.length - 1; i >= 0; i--) {
+      const s = scenes[i];
+      if (p.x >= s.x && p.x <= s.x + s.width && p.y >= s.y && p.y <= s.y + s.height) return i;
+    }
+    return null;
+  }
+
+  /** A sheet point as a chart's corner: the cell it is in, and how far into it. */
+  private anchorPoint(x: number, y: number): AnchorPoint {
+    const g = this.geometry!;
+    const col = g.cols.indexAt(Math.max(0, x));
+    const row = g.rows.indexAt(Math.max(0, y));
+    return { col, row, dx: Math.max(0, x) - g.x(col), dy: Math.max(0, y) - g.y(row) };
+  }
+
+  /** Picks a chart (null: none), and draws it framed. */
+  private pickChart(index: number | null): void {
+    if (this.chart === index) return;
+    this.chart = index;
+    this.deps.render();
+  }
+
+  /** The picked chart's menu: its kind, legend, title, or taking it away. */
+  private chartItems(index: number): PopupItem[] {
+    const change = (c: ChartChange) => () => void this.edit({ kind: 'chart', index, change: c });
+    const kinds = (['column', 'bar', 'line', 'area', 'pie', 'doughnut', 'scatter'] as const).map((k): PopupItem => ({ label: t(`sheet.op.chart${k[0].toUpperCase()}${k.slice(1)}` as MessageKey), run: change({ kind: k }) }));
+    const legends = ([['r', 'Right'], ['b', 'Bottom'], ['t', 'Top'], ['l', 'Left'], [null, 'None']] as const).map(([pos, name]): PopupItem => ({ label: t(`sheet.chart.legend${name}` as MessageKey), run: change({ legend: pos }) }));
+    return [
+      { label: t('sheet.chart.type'), items: kinds },
+      { label: t('sheet.chart.legend'), items: legends },
+      { label: t('sheet.chart.editTitle'), run: () => void this.editChartTitle(index) },
+      'separator',
+      { label: t('sheet.chart.delete'), run: change({ remove: true }) },
+    ];
+  }
+
+  /** The title card, beside the chart's top. */
+  private async editChartTitle(index: number): Promise<void> {
+    const scene = this.chartScenes()[index];
+    if (!scene || this.readOnly) return;
+    const canvas = this.el.getBoundingClientRect();
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const region = this.renderer.regions.find((r) => r.scrollX && r.scrollY) ?? this.renderer.regions[0];
+    const x = region ? canvas.left + region.x + (scene.x - region.originX) * scale : canvas.left;
+    const y = region ? canvas.top + this.offsetTop + region.y + (scene.y - region.originY) * scale : canvas.top;
+    this.chartTitleCard ??= new ChartTitleCard();
+    const title = await this.chartTitleCard.edit(scene.title ?? '', x, y);
+    this.afterCard();
+    if (title === undefined || title === (scene.title ?? '')) return;
+    void this.edit({ kind: 'chart', index, change: { title: title.trim() ? title : null } });
+  }
+
   /** Asks the worker for the sheet's charts, laid out now; they show from the next frame. */
   private async loadCharts(key: string): Promise<void> {
     const sheet = this.sheetIndex;
@@ -687,6 +767,18 @@ export class SheetEditorView {
 
   private key(e: KeyboardEvent): void {
     if (this.deps.viewKey(e)) return;
+    // A picked chart: Delete takes it away, Escape lets it go; any other key is the cells'.
+    if (this.chart !== null) {
+      const index = this.chart;
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !this.readOnly) {
+        e.preventDefault();
+        this.pickChart(null);
+        void this.edit({ kind: 'chart', index, change: { remove: true } });
+        return;
+      }
+      this.pickChart(null);
+      if (e.key === 'Escape') return void e.preventDefault();
+    }
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
     const g = this.geometry;
     if (!g) return;
@@ -917,6 +1009,14 @@ export class SheetEditorView {
     if (this.editing) this.commitEdit(true);
     this.focus();
     const g = this.geometry;
+    // A chart lies over the cells: a press on one picks it, and dragging moves it.
+    const chart = hit.kind === 'cell' ? this.chartAt(x, y) : null;
+    this.pickChart(chart);
+    if (chart !== null) {
+      if (!this.readOnly) this.chartDrag = { index: chart, x, y, dx: 0, dy: 0 };
+      this.dragState = { kind: 'chart' };
+      return;
+    }
     switch (hit.kind) {
       case 'outline':
         this.outlinePress(hit);
@@ -978,6 +1078,14 @@ export class SheetEditorView {
     const g = this.geometry;
     if (!d || !g) return;
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    if (d.kind === 'chart') {
+      const c = this.chartDrag;
+      if (!c) return;
+      c.dx = (x - c.x) / scale;
+      c.dy = (y - c.y) / scale;
+      this.deps.render();
+      return;
+    }
     if (d.kind === 'resizeColumn' || d.kind === 'resizeRow') {
       const delta = ((d.kind === 'resizeColumn' ? x : y) - d.start!) / scale;
       this.resizeTo = Math.max(0, d.size! + delta);
@@ -1013,6 +1121,18 @@ export class SheetEditorView {
   release(): void {
     const d = this.dragState;
     this.dragState = null;
+    if (d?.kind === 'chart') {
+      const c = this.chartDrag;
+      const scene = c && this.charts.scenes[c.index];
+      this.chartDrag = null;
+      // Moved by more than a nudge: the chart's corners go where it was dropped, keeping its size.
+      if (c && scene && Math.hypot(c.dx, c.dy) > 2) {
+        const anchor = { from: this.anchorPoint(scene.x + c.dx, scene.y + c.dy), to: this.anchorPoint(scene.x + c.dx + scene.width, scene.y + c.dy + scene.height) };
+        void this.edit({ kind: 'chart', index: c.index, change: { anchor } });
+      }
+      this.deps.render();
+      return;
+    }
     if (d?.kind === 'fill') {
       const target = this.filling;
       const source = this.selection;
@@ -1270,6 +1390,9 @@ export class SheetEditorView {
   contextMenu(clientX: number, clientY: number, x: number, y: number): void {
     const hit = this.hit(x, y);
     if (!hit) return;
+    const chart = hit.kind === 'cell' && !this.readOnly ? this.chartAt(x, y) : null;
+    this.pickChart(chart);
+    if (chart !== null) return this.menu(clientX, clientY, this.chartItems(chart));
     const sel = this.selection;
     const inside = hit.row >= sel.r0 && hit.row <= sel.r1 && hit.col >= sel.c0 && hit.col <= sel.c1;
     if (!inside && hit.kind === 'cell') this.select(hit.row, hit.col);
@@ -1382,6 +1505,7 @@ export class SheetEditorView {
   switchSheet(index: number): void {
     if (!this.book || index === this.sheetIndex || !this.book.sheets[index]) return;
     this.commitEdit(true);
+    this.chart = null;
     this.sheetIndex = index;
     void this.edit({ kind: 'activeSheet', sheet: index });
     this.useSheet(true);
@@ -1502,6 +1626,20 @@ export class SheetEditorView {
       case 'newNote':
         void this.editNote();
         return;
+      case 'chartColumn':
+      case 'chartBar':
+      case 'chartLine':
+      case 'chartArea':
+      case 'chartPie':
+      case 'chartDoughnut':
+      case 'chartScatter': {
+        const chart = op.slice(5).toLowerCase() as NewChartKind;
+        void this.edit({ kind: 'insertChart', chart, range: this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col } }).then((changed) => {
+          // The new chart is picked, as Excel picks it.
+          if (changed && !changed.message && this.info?.charts) this.pickChart(this.info.charts - 1);
+        });
+        return;
+      }
       case 'deleteNote':
         void this.edit({ kind: 'note', row: this.active.row, col: this.active.col, text: null, author: '' });
         return;
@@ -1688,7 +1826,7 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */
@@ -1742,6 +1880,8 @@ function messageFor(code: string): string {
       return t('sheet.tableOverlap');
     case 'sheetProtected':
       return t('sheet.sheetProtected');
+    case 'noChartData':
+      return t('sheet.noChartData');
     case 'wrongPassword':
       return t('sheet.wrongPassword');
   }

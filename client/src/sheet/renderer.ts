@@ -155,6 +155,8 @@ export interface SheetFrame {
   choices: { row: number; col: number } | null;
   /** The sheet's charts, laid out (drawn over the cells). */
   charts: ChartScene[];
+  /** The chart picked (framed, with handles at its corners), by its place in `charts`. */
+  chart: number | null;
   darkPages: boolean;
 }
 
@@ -367,8 +369,9 @@ export class SheetRenderer {
       this.freeChart(built);
       this.charts.delete(id);
     }
-    const triangles: TriangleBatch[] = [];
-    const text: TextBatch[] = [];
+    // Charts may overlap: each is drawn whole (its shapes, then its text) before the next, over it.
+    this.triangles.darkPages = false;
+    this.text.darkPages = false;
     for (const scene of scenes) {
       if (scene.x > right || scene.y > bottom || scene.x + scene.width < left || scene.y + scene.height < top) continue;
       let built = this.charts.get(scene.id);
@@ -377,14 +380,10 @@ export class SheetRenderer {
         built = undefined;
       }
       if (!built) this.charts.set(scene.id, (built = this.buildChart(scene)));
-      triangles.push(built.triangles);
-      text.push(...built.text);
+      // Charts keep their own colours in Dark Pages, as pictures do.
+      this.triangles.render(view, [built.triangles]);
+      this.text.render(view, sortByFace(built.text));
     }
-    // Charts keep their own colours in Dark Pages, as pictures do.
-    this.triangles.darkPages = false;
-    this.text.darkPages = false;
-    this.triangles.render(view, triangles);
-    this.text.render(view, sortByFace(text));
     this.text.darkPages = dark;
   }
 
@@ -558,6 +557,16 @@ export class SheetRenderer {
         if (box) this.dropButton(over, box, 1 / scale, false);
       }
       this.selection(over, frame, g, 1 / (scale * dpr));
+      const picked = frame.chart === null ? undefined : frame.charts[frame.chart];
+      if (picked) {
+        const px = 1 / scale;
+        const box = { x0: picked.x, y0: picked.y, x1: picked.x + picked.width, y1: picked.y + picked.height };
+        outline(over, box, 1.5 * px, packColor(COLOR.selectionLine));
+        for (const [hx, hy] of [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]]) {
+          over.push(hx - 4 * px, hy - 4 * px, 8 * px, 8 * px, packColor(COLOR.selectionLine));
+          over.push(hx - 3 * px, hy - 3 * px, 6 * px, 6 * px, packColor(0xffffff));
+        }
+      }
       if (frame.copied) this.dashed(over, rangeBox(g, frame.copied), 1.5 / scale, packColor(COLOR.selectionLine));
       if (frame.filling) this.dashed(over, rangeBox(g, frame.filling), 1 / scale, packColor(COLOR.selectionLine));
       this.drawRects(view, over);

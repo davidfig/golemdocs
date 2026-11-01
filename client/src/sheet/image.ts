@@ -252,7 +252,8 @@ async function fromImage(image: Image, xlsx: Uint8Array): Promise<Workbook> {
     sheet.notes = j.notes ?? [];
     sheet.noteParts = j.noteParts ?? null;
     sheet.protection = j.protection ?? null;
-    sheet.charts = j.charts ?? [];
+    // Charts from images made before charts kept their relationship are left out (they would be written as new ones).
+    sheet.charts = (j.charts ?? []).filter((c) => c.rId !== undefined);
     sheet.pane = j.pane;
     sheet.view = j.view;
     if (j.hasXml) {

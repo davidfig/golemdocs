@@ -330,6 +330,34 @@ test('notes are read from Excel’s comments, follow their cells, and are writte
   assert.deepEqual(sheet.notes.map((n) => [n.row, n.col]), [[3, 0]], 'a note goes with its deleted row');
 });
 
+test('notes are made, changed and deleted; a sheet’s first note brings its parts, and its last takes them away', async () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['a', 'b']] });
+  history.apply(0, { kind: 'note', row: 0, col: 1, text: 'Checked\ntwice', author: 'Ada' });
+  let back = await readWorkbook(await writeWorkbook(b));
+  let read = (back.sheets[0] as Worksheet).notes;
+  assert.deepEqual(read.map((n) => [n.row, n.col, n.author, n.text]), [[0, 1, 'Ada', 'Checked\ntwice']]);
+  const pkg = back.source!.pkg;
+  assert.match(await pkg.text('xl/worksheets/sheet1.xml'), /<legacyDrawing r:id="rId\d+"\/>/, 'the sheet names its drawing');
+  assert.match(await pkg.text('xl/drawings/vmlDrawing1.vml'), /ObjectType="Note"[\s\S]*<x:Row>0<\/x:Row><x:Column>1<\/x:Column>/, 'and the note has a shape');
+  // A second note by someone else, and the first one changed.
+  history.apply(0, { kind: 'note', row: 0, col: 0, text: 'Mine', author: 'Grace' });
+  history.apply(0, { kind: 'note', row: 0, col: 1, text: 'Checked once', author: 'Grace' });
+  back = await readWorkbook(await writeWorkbook(b));
+  read = (back.sheets[0] as Worksheet).notes;
+  assert.deepEqual(read.map((n) => [n.row, n.col, n.author, n.text]).sort(), [[0, 0, 'Grace', 'Mine'], [0, 1, 'Ada', 'Checked once']]);
+  assert.equal((await back.source!.pkg.text('xl/drawings/vmlDrawing1.vml')).match(/ObjectType="Note"/g)?.length, 2);
+  // Both deleted: the comments part, the drawing and the sheet's mention of it go.
+  history.apply(0, { kind: 'note', row: 0, col: 0, text: null, author: '' });
+  history.apply(0, { kind: 'note', row: 0, col: 1, text: null, author: '' });
+  back = await readWorkbook(await writeWorkbook(b));
+  assert.equal((back.sheets[0] as Worksheet).notes.length, 0);
+  assert.ok(!back.source!.pkg.has('xl/comments1.xml') && !back.source!.pkg.has('xl/drawings/vmlDrawing1.vml'));
+  assert.doesNotMatch(await back.source!.pkg.text('xl/worksheets/sheet1.xml'), /legacyDrawing/);
+  history.undo();
+  assert.deepEqual(sheet.notes.map((n) => n.text), ['Checked once']);
+});
+
 test('pasting cells copied here carries formulas (moved as copied) and looks; Paste Special takes only some', () => {
   const { book: b, sheet, history } = book();
   history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['1', '=A1*2'], ['3', '=A2*2']] });

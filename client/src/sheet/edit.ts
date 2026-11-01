@@ -19,6 +19,7 @@ import { fillRange } from './fill.ts';
 import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
 import { newTable } from './tables.ts';
+import { newNote, withText } from './notes.ts';
 import { displayText, editText } from './format/display.ts';
 import type { Edges, StyleChange } from './format/styleChange.ts';
 import { parseInput } from './input.ts';
@@ -221,7 +222,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -387,6 +388,8 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'createTable':
       return createTable(book, sheet, op.range);
+    case 'note':
+      return noteEdit(sheet, op);
     case 'group':
     case 'collapse':
     case 'outlineLevel':
@@ -557,6 +560,22 @@ function sortRows(book: Workbook, sheet: Worksheet, op: Extract<EditOp, { kind: 
     column.formulas = kept.sort((a, b) => a.first - b.first);
   }
   return { ranges: [r], select: r };
+}
+
+/** A cell's note made, given new text, or taken away. */
+function noteEdit(sheet: Worksheet, op: Extract<EditOp, { kind: 'note' }>): Changed {
+  const at = sheet.notes.findIndex((n) => n.row === op.row && n.col === op.col);
+  const cell = { r0: op.row, c0: op.col, r1: op.row, c1: op.col };
+  if (op.text === null) {
+    if (at < 0) return { ranges: [] };
+    sheet.notes = sheet.notes.filter((_, i) => i !== at);
+  } else if (at < 0) {
+    sheet.notes = [...sheet.notes, newNote(op.row, op.col, op.author, op.text)];
+  } else {
+    const text = op.text;
+    sheet.notes = sheet.notes.map((n, i) => (i === at ? withText(n, text) : n));
+  }
+  return { ranges: [cell] };
 }
 
 /** Outline groups: levels changed, a group collapsed or expanded (its rows hidden or shown), or a level shown. */

@@ -250,6 +250,11 @@
   display: none;
 }
 
+/* The card for typing a note takes the pointer, unlike the one that only shows it. */
+.wm-comment.wm-sheet-note.wm-sheet-note-edit {
+  pointer-events: auto;
+}
+
 .wm-sheet-note-text {
   white-space: pre-wrap;
 }

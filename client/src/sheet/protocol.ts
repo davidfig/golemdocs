@@ -163,6 +163,8 @@ export type EditOp =
   | { kind: 'collapse'; axis: 'row' | 'col'; summary: number; level: number; collapse: boolean }
   /** An outline's level button: show levels up to `level`, hiding deeper ones. */
   | { kind: 'outlineLevel'; axis: 'row' | 'col'; level: number }
+  /** Sheet › New Note or Delete Note: a cell's note given this text (made, if it had none), or taken away (null). */
+  | { kind: 'note'; row: number; col: number; text: string | null; author: string }
   /** AutoFill: `target` (which holds `source` at one end) filled from `source`. */
   | { kind: 'fill'; source: CellRange; target: CellRange }
   /** A change to how the cells of ranges look (each range's own outside edges for borders). */

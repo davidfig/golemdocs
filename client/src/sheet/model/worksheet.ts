@@ -56,6 +56,9 @@ export class Worksheet {
   /** Notes (Excel's comments), and the parts they are kept in. */
   notes: Note[] = [];
   noteParts: NoteParts | null = null;
+  /** For the next write only: the sheet's `<legacyDrawing>` (the notes' VML drawing) made (its relationship) or taken
+   * away (null), when the writer added or removed the notes' parts. */
+  legacyDrawing: string | null | undefined = undefined;
   /** Data validation rules (what may be typed into cells). */
   validations: Validation[] = [];
   /** Its tables (Format as Table), read from its table parts. */

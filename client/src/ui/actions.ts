@@ -86,6 +86,8 @@ export const SHEET_OPS = [
   'sortDescending',
   'filter',
   'insertTable',
+  'newNote',
+  'deleteNote',
   'groupRows',
   'ungroupRows',
   'groupColumns',

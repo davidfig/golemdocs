@@ -24,7 +24,7 @@ import { HEADER_HEIGHT, SheetGeometry } from './geometry.ts';
 import type { Hit } from './geometry.ts';
 import { FILL_HANDLE, SheetRenderer, choicesButton, filterButton } from './renderer.ts';
 import { FilterCard } from './filterCard.ts';
-import { NoteCard } from './noteCard.ts';
+import { NoteCard, NoteEditor } from './noteCard.ts';
 import { parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
 import type { BookInfo, CellContent, Changed, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
@@ -43,6 +43,8 @@ export interface SheetEditorDeps {
   notify(message: string): void;
   /** The app's commands for a key it would run (Ctrl+S, Ctrl+F...); true if it ran one. */
   appKey(e: KeyboardEvent): boolean;
+  /** The name a new note is signed with (the person signed in, or the guest's name). */
+  author(): string;
 }
 
 /** Bars over the canvas, in CSS pixels: the formula bar at the top, the sheet tabs at the bottom. */
@@ -122,6 +124,7 @@ export class SheetEditorView {
   private filling: CellRange | null = null;
   private filterCard: FilterCard | null = null;
   private noteCard: NoteCard | null = null;
+  private noteEditor: NoteEditor | null = null;
   private noteHover = '';
   private noteTimer = 0;
   private resizeTo: number | null = null;
@@ -1090,6 +1093,35 @@ export class SheetEditorView {
     }
   }
 
+  /** Sheet › New Note: a card beside the active cell to type its note in (the note it has, to change). */
+  private async editNote(): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const { row, col } = this.active;
+    const sheet = this.sheetIndex;
+    this.hoverNote(null);
+    const reply = this.info.notes?.some(([r, c]) => r === row && c === col)
+      ? await this.ask<Extract<FromWorker, { t: 'note' }>>({ t: 'note', id: this.id(), sheet, row, col }).catch(() => null)
+      : null;
+    const at = this.noteCorner(row, col);
+    if (!at) return;
+    this.noteEditor ??= new NoteEditor();
+    const author = reply?.note?.author ?? this.deps.author();
+    const text = await this.noteEditor.edit(author, reply?.note?.text ?? '', at.x, at.y);
+    this.focus();
+    if (text === undefined || sheet !== this.sheetIndex || (!reply?.note && !text.trim()) || text === reply?.note?.text) return;
+    void this.edit({ kind: 'note', row, col, text, author });
+  }
+
+  /** A cell's top right corner, in window pixels (where a note's card goes). */
+  private noteCorner(row: number, col: number): { x: number; y: number } | null {
+    const g = this.geometry;
+    const center = this.pointOf(row, col);
+    if (!g || !center) return null;
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const canvas = this.el.getBoundingClientRect();
+    return { x: canvas.left + center.x + ((g.x(col + 1) - g.x(col)) / 2) * scale, y: canvas.top + center.y - ((g.y(row + 1) - g.y(row)) / 2) * scale };
+  }
+
   /** The pointer rests on a cell: its note, if it has one, shows after a moment; leaving the cell hides it. */
   private hoverNote(cell: { row: number; col: number } | null): void {
     const key = cell ? `${this.sheetIndex}:${cell.row}:${cell.col}` : '';
@@ -1100,14 +1132,10 @@ export class SheetEditorView {
     if (!cell || !this.info?.notes?.some(([r, c]) => r === cell.row && c === cell.col)) return;
     this.noteTimer = window.setTimeout(async () => {
       const reply = await this.ask<Extract<FromWorker, { t: 'note' }>>({ t: 'note', id: this.id(), sheet: this.sheetIndex, row: cell.row, col: cell.col }).catch(() => null);
-      if (!reply?.note || this.noteHover !== key) return;
-      const g = this.geometry;
-      const center = this.pointOf(cell.row, cell.col);
-      if (!g || !center) return;
-      const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
-      const canvas = this.el.getBoundingClientRect();
+      const at = this.noteCorner(cell.row, cell.col);
+      if (!reply?.note || this.noteHover !== key || !at || this.noteEditor?.shown) return;
       this.noteCard ??= new NoteCard();
-      this.noteCard.show(reply.note.author, reply.note.text, canvas.left + center.x + ((g.x(cell.col + 1) - g.x(cell.col)) / 2) * scale, canvas.top + center.y - ((g.y(cell.row + 1) - g.y(cell.row)) / 2) * scale);
+      this.noteCard.show(reply.note.author, reply.note.text, at.x, at.y);
     }, 300);
   }
 
@@ -1395,6 +1423,12 @@ export class SheetEditorView {
       case 'groupColumns':
       case 'ungroupColumns':
         void this.edit({ kind: 'group', axis: 'col', from: sel.c0, to: sel.c1, by: op === 'groupColumns' ? 1 : -1 });
+        return;
+      case 'newNote':
+        void this.editNote();
+        return;
+      case 'deleteNote':
+        void this.edit({ kind: 'note', row: this.active.row, col: this.active.col, text: null, author: '' });
         return;
       case 'insertTable':
         void this.edit({ kind: 'createTable', range: this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col } });

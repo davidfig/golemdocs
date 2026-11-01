@@ -17,7 +17,7 @@ import { shiftFormula } from '../formula/shift.ts';
 import { parseAround, writeAround } from './worksheetXml.ts';
 import { rangeName } from '../refs.ts';
 import { tableXml } from '../tables.ts';
-import { writeNotes } from '../notes.ts';
+import { newNoteParts, removeNoteParts, writeNotes } from '../notes.ts';
 
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -71,6 +71,15 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
       return { ...table, part, rId: sheetRels.add(`${REL}/table`, part) };
     });
     for (const table of sheet.tables) pkg.set(table.part, serializeXml(tableXml(table)), `${TYPE}.table+xml`);
+    if (sheet.dirty.layout && sheet.notes.length && !sheet.noteParts) {
+      // The sheet's first note: its parts are made, and every note gets a shape in the new drawing.
+      sheet.noteParts = newNoteParts(pkg, sheetRels);
+      sheet.notes = sheet.notes.map((n) => ({ ...n, drawn: null }));
+      sheet.legacyDrawing = sheet.noteParts.vmlRId;
+    } else if (sheet.dirty.layout && !sheet.notes.length && sheet.noteParts) {
+      if (await removeNoteParts(pkg, sheetRels, sheet.noteParts)) sheet.legacyDrawing = null;
+      sheet.noteParts = null;
+    }
     if (sheet.noteParts && sheet.dirty.layout) await writeNotes(pkg, sheet.notes, sheet.noteParts);
     const pieces = sheetPieces(book, sheet, sharedCount);
     const deflated = await deflatePieces(options.pause ? withPauses(pieces, options.pause) : pieces);
@@ -199,6 +208,7 @@ function* sheetPieces(book: Workbook, sheet: Worksheet, sharedCount: number): Ge
   const root = parseAround(sheet.xml?.prefix ?? encoder.encode(`<worksheet xmlns="${MAIN}" xmlns:r="${REL}"><sheetData>`), sheet.xml?.suffix ?? encoder.encode('</sheetData></worksheet>'));
   const { head, tail } = writeAround(sheet, root);
   sheet.xml = { prefix: encoder.encode(head), suffix: encoder.encode(tail) };
+  sheet.legacyDrawing = undefined;
   yield encoder.encode(head);
 
   const grid = sheet.grid;

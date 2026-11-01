@@ -242,6 +242,39 @@ test('resting the pointer on a cell with a note shows the note', async ({ app, p
   await expect(page.getByRole('note')).toBeHidden();
 });
 
+test('Sheet › New Note types a note into a card beside the cell; Delete Note takes it away', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 2, 1);
+  await app.menu('Sheet', 'New Note');
+  const card = page.getByRole('dialog', { name: 'New Note' });
+  await expect(card.getByRole('textbox', { name: 'Note' })).toBeFocused();
+  await page.keyboard.type('Looked up');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('in Data');
+  await page.keyboard.press('Enter');
+  await expect(card).toBeHidden();
+  // The pointer resting on the cell shows it; New Note again opens it with its text, to change.
+  const at = await page.evaluate(() => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor.pointOf(2, 1));
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await expect(page.getByRole('note')).toContainText('Looked up\nin Data');
+  await page.mouse.move(box.x + at.x, box.y + at.y + 80);
+  await clickCell(page, 2, 1);
+  await app.menu('Sheet', 'New Note');
+  await expect(card.getByRole('textbox', { name: 'Note' })).toHaveValue('Looked up\nin Data');
+  await page.keyboard.press('Escape');
+  await expect(card).toBeHidden();
+  await app.menu('Sheet', 'Delete Note');
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('note')).toBeHidden();
+  // The note goes in the file too.
+  await page.keyboard.press(`${MOD}+z`);
+  const file = await app.download(() => app.menu('File', 'Download'));
+  const comments = readZip(file.bytes).find((p) => p.name.startsWith('xl/comments'));
+  expect(comments?.bytes.toString('utf8')).toContain('Looked up');
+});
+
 test('copying and pasting cells in a workbook moves their formulas; Paste Values pastes only values', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 1, 5);

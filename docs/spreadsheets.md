@@ -408,7 +408,15 @@ and opened in Excel by `check.ts`.
 cells (`CellPaint.note`, a red corner), and resting the pointer on one shows it in a card in the documents' comment look
 (`.wm-comment`). They follow inserted and deleted rows and columns (a note goes with its deleted cell), and a sheet
 written rewrites the comments part and the VML drawing Excel shows them with (each shape's row, column and anchor;
-`writeNotes`); Excel opens notes moved and deleted this way and keeps them. Not yet: adding, editing or deleting a note, threaded comments.
+`writeNotes`); Excel opens notes moved and deleted this way and keeps them. Sheet › New Note opens `NoteEditor` beside the
+active cell (the comments panel's text box and buttons in the same card; Enter or a press elsewhere keeps the text, Escape
+drops it; `CommandRegistry.execute` leaves it the focus) and Delete Note takes the note away, both the `note` edit
+(`newNote`, `withText`). A new note is signed with the comment author's name and added to `<authors>`, and gets a hidden
+shape in the drawing (`noteShape`, numbered from the drawing's `idmap` block). A sheet's first note brings its parts
+(`newNoteParts`: a comments part, a VML drawing, their relationships, and `<legacyDrawing>` through the one-shot
+`Worksheet.legacyDrawing`); deleting its last takes them away again (`removeNoteParts`, keeping a drawing that also holds
+other shapes). Excel opens both kinds (`notes-made`, `notes-new` in `check.ts`) and keeps the notes. Not yet: threaded
+comments.
 
 **Paste** (`pasteCells.ts`): a range copied here and pasted while the clipboard still holds its text is pasted as cells
 (the `pasteCells` edit: values, formulas moved as copied, looks), even onto another sheet; Sheet › Paste Special pastes
@@ -427,7 +435,7 @@ A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera`
 the last document's pages arrive) leaves a workbook alone.
 
 **Next in M5**:
-adding, editing and deleting notes; protection; a table's filter buttons and calculated columns; icon sets; a formatting
+protection; a table's filter buttons and calculated columns; icon sets; a formatting
 toolbar row for the Sheet menu's number formats and borders.
 
 ### M4: every function (2026-10-31)

@@ -5236,6 +5236,7 @@ const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport
   viewKey: (e) => viewKey(e),
   notify: (message) => reportError(message),
   appKey: () => false,
+  author: () => commentAuthor(),
 });
 /** The spreadsheet editor as the chrome sees it (see documentEngine.ts). */
 const sheetEngine: DocumentEngine = {

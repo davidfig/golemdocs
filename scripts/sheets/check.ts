@@ -105,6 +105,19 @@ books.set('notes-deleted.xlsx', notesDeleted);
 const made = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/notes.xlsx')));
 new History(made).apply(0, { kind: 'createTable', range: { r0: 0, c0: 0, r1: 2, c1: 1 } });
 books.set('table-made.xlsx', made);
+// Notes made here: on a workbook with notes (a new author, a new shape in its drawing), one changed, and on a sheet
+// with none (a new comments part, drawing and <legacyDrawing>).
+const noted = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/notes.xlsx')));
+const notedHistory = new History(noted);
+notedHistory.apply(0, { kind: 'note', row: 0, col: 0, text: 'Made here\nover two lines', author: 'Golem' });
+notedHistory.apply(0, { kind: 'note', row: 1, col: 1, text: 'Price after tax', author: 'Golem' });
+const unnoted = new Workbook();
+unnoted.sheets.push(new Worksheet('Sheet1', 1));
+const unnotedHistory = new History(unnoted);
+unnotedHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['a', 'b']] });
+unnotedHistory.apply(0, { kind: 'note', row: 0, col: 1, text: 'The first note', author: 'Golem' });
+books.set('notes-made.xlsx', noted);
+books.set('notes-new.xlsx', unnoted);
 const compareFormulaValues = new Set(['typed.xlsx']);
 
 const generated = path.join(ROOT, '.cache/sheets/sheet-100000x20.xlsx');

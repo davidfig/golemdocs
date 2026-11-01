@@ -403,7 +403,7 @@ the renderer draws every filter's buttons the same way, and the card, the `filte
 name the table (`table`), so a table and the sheet's AutoFilter work alike. A formula typed into one cell of a table
 column whose other data cells are empty fills the column (`calculatedColumn` in the `input` edit, rebased to the first
 data row), as Excel's calculated columns do; Excel refuses a shared formula with a structured reference, so the writer
-writes such a run cell by cell (`hasBrackets`). Not yet: `calculatedColumnFormula`, so rows added later are not filled.
+writes such a run cell by cell (`hasBrackets`). The column's formula is kept in its `<calculatedColumnFormula>` (`withCalculated`, on a copy of the table's XML so undo has the old one), and rows inserted into the table's data get it (`fillCalculated`).
 
 **Data validation** (`validation.ts`): rules read from and written to `<dataValidations>` (a rule made here gets its own
 element; its ranges and formulas follow inserted and deleted rows and columns). A list rule puts an arrow just right of
@@ -464,7 +464,7 @@ A workbook opens at A1 at 100%: `openSheet` places the camera, and `placeCamera`
 the last document's pages arrive) leaves a workbook alone.
 
 **Next in M5**:
-a table's calculatedColumnFormula; a formatting
+a formatting
 toolbar row for the Sheet menu's number formats and borders.
 
 ### M4: every function (2026-10-31)

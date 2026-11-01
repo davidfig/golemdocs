@@ -3,7 +3,7 @@
 // references (`Sales[Amount]`, `Sales[[#This Row],[Price]]`, `[@Price]` inside the table), resolved here into ranges.
 // The built-in styles are drawn as Excel draws them in kind: a header in the style's colour, banded rows tinted from it.
 
-import { child, el, elements } from '@golemdocs/docx';
+import { child, el, elements, textContent } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import type { CellRange } from './model/worksheet.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -32,6 +32,22 @@ export interface Table {
   xml: XmlElement;
   /** Its own AutoFilter's columns (buttons on its header row), or null when it has none. */
   filterColumns: FilterColumn[] | null;
+}
+
+/** A column's `<calculatedColumnFormula>` (file form, for the first data row), or null. */
+export function calculatedFormula(t: Table, index: number): string | null {
+  const column = [...elements(child(t.xml, 'tableColumns') ?? t.xml)].filter((c) => c.name === 'tableColumn')[index];
+  const f = column && child(column, 'calculatedColumnFormula');
+  return f ? textContent(f) : null;
+}
+
+/** The table with a column's calculated formula set (its XML copied: the old table stays as it was, for undo). */
+export function withCalculated(t: Table, index: number, formula: string): Table {
+  const xml = structuredClone(t.xml);
+  const column = [...elements(child(xml, 'tableColumns') ?? xml)].filter((c) => c.name === 'tableColumn')[index];
+  if (!column) return t;
+  column.children = [...column.children.filter((c) => typeof c === 'string' || c.name !== 'calculatedColumnFormula'), el('calculatedColumnFormula', {}, [formula])];
+  return { ...t, xml };
 }
 
 /** A table's AutoFilter: its header and data rows (not a totals row), and the columns it filters. */

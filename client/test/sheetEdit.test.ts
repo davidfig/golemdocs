@@ -16,6 +16,8 @@ import { Engine } from '../src/sheet/formula/engine.ts';
 import { BLANK } from '../src/sheet/formula/values.ts';
 import { allows, listChoices, validationAt } from '../src/sheet/validation.ts';
 import { legacyHash, passwordOpens, protect, sha512 } from '../src/sheet/protection.ts';
+import { calculatedFormula } from '../src/sheet/tables.ts';
+import { shiftFormula } from '../src/sheet/formula/shift.ts';
 
 function book(): { book: Workbook; sheet: Worksheet; history: History } {
   const b = new Workbook();
@@ -25,6 +27,11 @@ function book(): { book: Workbook; sheet: Worksheet; history: History } {
 }
 
 const value = (sheet: Worksheet, row: number, col: number) => sheet.grid.columns[col]?.value(row);
+/** A cell's formula as its own cell has it (shifted from its run's origin). */
+const formulaText = (sheet: Worksheet, row: number, col: number) => {
+  const run = sheet.grid.columns[col]?.formulaAt(row);
+  return run && shiftFormula(run.text, row - run.originRow, col - run.originCol);
+};
 const kind = (sheet: Worksheet, row: number, col: number) => sheet.grid.columns[col]?.kind(row) ?? Kind.Empty;
 
 test('typing is read as Excel reads it', () => {
@@ -456,6 +463,11 @@ test('a table filters by its own buttons, and a formula typed in an empty column
   history.apply(0, { kind: 'input', range: { r0: 1, c0: 3, r1: 1, c1: 3 }, text: 'x' });
   history.apply(0, { kind: 'input', range: { r0: 2, c0: 2, r1: 2, c1: 2 }, text: '=1' });
   assert.equal(sheet.grid.columns[2]!.formulaAt(1)?.text, 'B2*2', 'a column that holds formulas already is not filled again');
+  // A row inserted into the table gets the calculated column's formula; the table keeps it for Excel.
+  assert.equal(sheet.tables[0].xml.children.length > 0 && calculatedFormula(sheet.tables[0], 2), 'B2*2');
+  history.apply(0, { kind: 'insertRows', at: 2, count: 1 });
+  assert.equal(sheet.grid.columns[2]!.formulaAt(2) && formulaText(sheet, 2, 2), 'B3*2');
+  history.undo();
   // The table's filter: show only the price 2 rows.
   history.apply(0, { kind: 'filter', col: 1, values: ['2'], blanks: false, table: 'Table1' });
   assert.deepEqual([1, 2, 3].map((r) => sheet.rowSizes.hidden(r)), [false, true, false]);

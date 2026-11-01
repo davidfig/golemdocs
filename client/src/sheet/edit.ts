@@ -18,7 +18,7 @@ import { restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
 import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
-import { dataRows, newTable, tableFilter } from './tables.ts';
+import { calculatedFormula, dataRows, newTable, tableFilter, withCalculated } from './tables.ts';
 import { newNote, withText } from './notes.ts';
 import { passwordOpens, protect, refuses } from './protection.ts';
 import { displayText, editText } from './format/display.ts';
@@ -224,7 +224,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -329,7 +329,10 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
         if (parsed.kind === 'formula') {
           // One formula typed into a range is one run per column, relative to the range's first cell.
           const table = sheet.tables.find((t) => r0 >= t.range.r0 && r0 <= t.range.r1 && c >= t.range.c0 && c <= t.range.c1);
-          column.setFormulas(r0, r1, { text: toFileFormula(expandStructured(parsed.text, table?.displayName ?? null)), originRow: r0, originCol: c0, kind: r1 > r0 || c1 > c0 ? 'shared' : 'normal', shared: -1, dynamic: true });
+          const text = toFileFormula(expandStructured(parsed.text, table?.displayName ?? null));
+          column.setFormulas(r0, r1, { text, originRow: r0, originCol: c0, kind: r1 > r0 || c1 > c0 ? 'shared' : 'normal', shared: -1, dynamic: true });
+          // The table keeps a calculated column's formula, for rows inserted into it later (and for Excel).
+          if (calculated && table) sheet.tables = sheet.tables.map((t) => (t === table ? withCalculated(t, c - t.range.c0, text) : t));
           for (let r = r0; r <= r1; r++) grid.set(r, c, Kind.Blank, 0, column.style(r));
           continue;
         }
@@ -426,6 +429,7 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'insertRows':
       moveReferences(book, { sheet: index, axis: 'row', at: op.at, n: op.count }, () => insertRows(sheet, op.at, op.count));
+      fillCalculated(sheet, op.at, op.count);
       return { ranges: [{ r0: op.at, c0: 0, r1: MAX_ROWS - 1, c1: MAX_COLUMNS - 1 }], info: undefined };
     case 'deleteRows':
       moveReferences(book, { sheet: index, axis: 'row', at: op.at, n: -op.count }, () => deleteRows(sheet, op.at, op.count));
@@ -576,6 +580,22 @@ function sortRows(book: Workbook, sheet: Worksheet, op: Extract<EditOp, { kind: 
     column.formulas = kept.sort((a, b) => a.first - b.first);
   }
   return { ranges: [r], select: r };
+}
+
+/** Rows inserted into tables' data get their calculated columns' formulas (rebased from the first data row). */
+function fillCalculated(sheet: Worksheet, at: number, count: number): void {
+  for (const table of sheet.tables) {
+    const [d0, d1] = dataRows(table);
+    if (at <= d0 || at + count - 1 > d1) continue;
+    for (let i = 0; i < table.columns.length; i++) {
+      const formula = calculatedFormula(table, i);
+      if (!formula) continue;
+      const c = table.range.c0 + i;
+      const column = sheet.grid.column(c);
+      column.setFormulas(at, at + count - 1, { text: shiftFormula(formula, at - d0, 0), originRow: at, originCol: c, kind: count > 1 ? 'shared' : 'normal', shared: -1, dynamic: true });
+      for (let r = at; r < at + count; r++) sheet.grid.set(r, c, Kind.Blank, 0, column.style(r));
+    }
+  }
 }
 
 /**

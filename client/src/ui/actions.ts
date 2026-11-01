@@ -48,6 +48,68 @@ export type VectorOp = 'select' | 'rect' | 'ellipse' | 'shape' | `shape:${ShapeI
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | 'background' | 'canvasSize' | 'selectAll' | 'deselect' | 'duplicate' | 'group' | 'ungroup' | 'newLayer' | 'front' | 'forward' | 'backward' | 'back' | 'delete' | 'layers' | 'sizeUp' | 'sizeDown' | `shape:${ShapeId}` | DrawToolName;
 
+/** What the spreadsheet editor's commands do (the Sheet menu and toolbar, and the cells' context menu). */
+/** A spreadsheet command (see SHEET_OPS). */
+export type SheetOp = (typeof SHEET_OPS)[number];
+
+/** Every spreadsheet command, in the Sheet menu's order. */
+export const SHEET_OPS = [
+  'insertRowsAbove',
+  'insertRowsBelow',
+  'insertColumnsLeft',
+  'insertColumnsRight',
+  'deleteRows',
+  'deleteColumns',
+  'clearContents',
+  'clearFormats',
+  'clearAll',
+  'hideRows',
+  'unhideRows',
+  'hideColumns',
+  'unhideColumns',
+  'freezePanes',
+  'freezeTopRow',
+  'freezeFirstColumn',
+  'unfreezePanes',
+  'merge',
+  'unmerge',
+  'addSheet',
+  'deleteSheet',
+  'renameSheet',
+  'nextSheet',
+  'previousSheet',
+  'sortAscending',
+  'sortDescending',
+  'filter',
+  'numberGeneral',
+  'numberNumber',
+  'numberCurrency',
+  'numberAccounting',
+  'numberPercent',
+  'numberScientific',
+  'numberFraction',
+  'numberDate',
+  'numberLongDate',
+  'numberTime',
+  'numberText',
+  'increaseDecimals',
+  'decreaseDecimals',
+  'wrapText',
+  'alignTop',
+  'alignMiddle',
+  'alignBottom',
+  'mergeCenter',
+  'borderAll',
+  'borderOutside',
+  'borderThickOutside',
+  'borderTop',
+  'borderBottom',
+  'borderLeft',
+  'borderRight',
+  'borderDoubleBottom',
+  'borderNone',
+] as const;
+
 export type DialogName =
   | 'font'
   | 'paragraph'
@@ -183,6 +245,8 @@ export type Action =
   | ({ kind: 'drawStyle' } & Partial<DrawStyle>)
   // Drawing (vector)
   | { kind: 'vector'; op: VectorOp }
+  // Spreadsheet
+  | { kind: 'sheet'; op: SheetOp }
   /** How the selected shapes (and the next ones) look; null is none. */
   | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }
   /** Edits the stops of the selected shape's gradient: pick one, add one at a position (0 to 1), take one away, move one, or turn the gradient around. */
@@ -193,7 +257,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the

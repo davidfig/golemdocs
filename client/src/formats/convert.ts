@@ -15,9 +15,9 @@ import { jpeg as jpegHandler, png as pngHandler, webp as webpHandler } from './h
 import mdHandler from './handlers/md.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'pdf' | 'md' | 'txt';
+export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'pdf' | 'md' | 'txt' | 'xlsx';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt', 'xlsx'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -77,6 +77,7 @@ const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   svg: async () => (await import('./handlers/svg.ts')).svg,
   svgz: async () => (await import('./handlers/svg.ts')).svgz,
   txt: async () => txtHandler,
+  xlsx: async () => (await import('./handlers/xlsx.ts')).default,
 };
 
 /** Reads a file into the model, with the format's own extension. */

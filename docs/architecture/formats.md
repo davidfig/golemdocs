@@ -73,6 +73,7 @@ The app's native save format (`wdoc.ts`, `WDOC_VERSION = 1`): a ZIP whose first 
 - **Obsidian-style links**: `[[Note]]`, `[[Note#Section]]`, `[[Note|label]]` and `![[embed]]` read to hyperlinks with a `doc:` address (`wikiLinks.ts`: titles, not ids, so links survive moves and other browsers; address helpers live in `@golemdocs/docx` `search/links.ts`, where the server-side index reads them too). Embeds stay placeholder links until `resolveEmbeds` (`embeds.ts`) looks the target up. Links that name folder paths follow renames and moves through `client/src/linkRename.ts` and `docLinks.ts` (`rewriteDocumentLinks`).
 - **Plain text** (`handlers/txt.ts`, `plainText.ts`, `textFiles.ts`): encoding, BOM and line ending are kept in `extensions.txt` and restored on write. Files of 8 MB or more open in the large-text editor instead (see [text-files.md](../text-files.md)).
 - **CSV/TSV** keep delimiter, line endings and encoding in `extensions.csv`.
+- **Workbooks** (`.xlsx`, `.xlsm`, `.xltx`, `.xltm`) are not documents: they open in the spreadsheet editor (`client/src/sheet/`, see [spreadsheets.md](../spreadsheets.md)) and are stored as the `.xlsx` itself. Their `FormatHandler` (`handlers/xlsx.ts`, its own chunk) is for what only a document does: Convert To and Print take the active sheet as a table (as shown, up to 20,000 rows), and a document's first table becomes a one-sheet workbook. Search indexes a workbook's rows (`formats/docBytes.ts`).
 
 ## Conversion fidelity
 

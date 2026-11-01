@@ -116,13 +116,13 @@ export const stripMnemonic = (label: string) => label.replace(/&(.)/g, '$1');
 /** A modal dialog is open (a native one, or an overlay marked aria-modal): the keys are its, not the document's or a drawing's. */
 export const modalOpen = (): boolean => !!document.querySelector('dialog:modal, [aria-modal="true"]');
 
-/** A text field of the chrome itself (the font box, a comment box), not the document's hidden textarea (#input) or the large-text editor's. */
+/** A text field of the chrome itself (the font box, a comment box), not the document's hidden textarea (#input), the large-text editor's or the spreadsheet editor's. */
 export function isFormField(target: EventTarget | null): boolean {
   // The box a PDF's text is edited in is one too: it has its own caret, selection and undo.
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLSelectElement ||
-    (target instanceof HTMLTextAreaElement && target.id !== 'input' && !('largeInput' in target.dataset)) ||
+    (target instanceof HTMLTextAreaElement && target.id !== 'input' && !('largeInput' in target.dataset) && !('sheetInput' in target.dataset)) ||
     (target instanceof HTMLElement && target.isContentEditable)
   );
 }

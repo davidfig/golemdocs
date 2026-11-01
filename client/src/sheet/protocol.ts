@@ -1,0 +1,229 @@
+// What the spreadsheet view (page) and the sheet worker say to each other (docs/spreadsheets.md, "Drawing", "The editor").
+// The worker holds the workbook; the page holds the camera, the geometry it needs to place things (row heights and column
+// widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
+// (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
+
+import type { CellLook, StyleChange } from './format/styleChange.ts';
+import type { CellRange, Pane, SheetState } from './model/worksheet.ts';
+
+/** Level 0: 64 rows by 16 columns of cells. */
+export const CELL_TILE_ROWS = 64;
+export const CELL_TILE_COLS = 16;
+/** Overview tiles are 256 by 256 texels; at level k a texel is 2^(k-1) by 2^(k-1) cells. */
+export const OVERVIEW_TILE = 256;
+
+export interface TileKey {
+  level: number;
+  /** Tile column and row: cells [tx * width, ...) at the level's size. */
+  tx: number;
+  ty: number;
+}
+
+export const tileId = (sheet: number, key: TileKey): string => `${sheet}:${key.level}:${key.tx}:${key.ty}`;
+
+/** How a cell looks, worked out from its style (and later its table and conditional formats): colours are RGB. */
+export interface DrawStyle {
+  font: string;
+  size: number;
+  bold: boolean;
+  italic: boolean;
+  underline: 0 | 1 | 2;
+  strike: boolean;
+  color: number;
+  /** Null: no fill (the sheet's own white). */
+  fill: number | null;
+  /** Fill pattern other than solid shows as its foreground at partial strength. */
+  horizontal: 'general' | 'left' | 'center' | 'right' | 'fill' | 'justify' | 'centerContinuous' | 'distributed';
+  vertical: 'top' | 'center' | 'bottom' | 'justify' | 'distributed';
+  wrap: boolean;
+  shrink: boolean;
+  indent: number;
+  rotation: number;
+  /** Left, right, top, bottom: [width in points, colour], or null. */
+  borders: ([number, number] | null)[];
+}
+
+/** One cell of a level-0 tile. */
+export interface CellPaint {
+  /** Row and column within the sheet. */
+  row: number;
+  col: number;
+  text: string;
+  style: number;
+  /** A colour the number format gives ([Red]), overriding the style's. */
+  color?: number;
+  /** A number (right-aligned under General), a boolean or error (centred), or text (left). */
+  type: 'number' | 'text' | 'logical';
+  /** Empty cells next to it its text may spill into, left and right (text that is not wrapped, in an unmerged cell). */
+  spillLeft: number;
+  spillRight: number;
+  /** `*x` in the format: the character repeated to fill the cell. */
+  fill?: { char: string; at: number };
+  /** The cell has a note: a red mark in its top right corner. */
+  note?: boolean;
+  /** A conditional format's data bar: from and to as fractions of the cell's width, and its colour. */
+  bar?: { from: number; to: number; color: number };
+}
+
+export interface CellTile {
+  sheet: number;
+  key: TileKey;
+  /** Cells with something to show (a value, a fill or a border). */
+  cells: CellPaint[];
+  /** Merged ranges touching the tile. */
+  merges: CellRange[];
+  /** How each style the cells use looks. */
+  styles: [number, DrawStyle][];
+  version: number;
+}
+
+export interface OverviewTile {
+  sheet: number;
+  key: TileKey;
+  /** RGBA, OVERVIEW_TILE by OVERVIEW_TILE (texels past the sheet's end are transparent). */
+  rgba: Uint8Array;
+  version: number;
+}
+
+export interface SizesState {
+  defaultSize: number;
+  own: Float32Array | null;
+  hidden: Uint8Array | null;
+}
+
+export interface SheetInfo {
+  name: string;
+  state: SheetState;
+  /** False for a chart sheet or other sheet that is not a grid (shown as a placeholder). */
+  grid: boolean;
+  rows: number;
+  cols: number;
+  rowSizes: SizesState;
+  colSizes: SizesState;
+  pane: Pane | null;
+  gridlines: boolean;
+  zoom: number;
+  active: { row: number; col: number };
+  merges: CellRange[];
+  /** Read so far (a big sheet comes in as it is read). */
+  loaded: boolean;
+  /** Cells with notes (row, column), so resting the pointer on one shows it. */
+  notes?: [number, number][];
+  /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
+  filter?: { range: CellRange; filtered: number[] };
+}
+
+export interface BookInfo {
+  sheets: SheetInfo[];
+  activeSheet: number;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+/** What a cell holds, for the formula bar and the cell editor. */
+export interface CellContent {
+  /** As typed: the formula with its `=`, or the value. */
+  input: string;
+  display: string;
+  isFormula: boolean;
+  /** How it looks (font, fill, alignment, number format), for the toolbar. */
+  look?: CellLook;
+  /** A list validation offers choices from a drop-down arrow beside it. */
+  list?: boolean;
+}
+
+/** Edits, as the page asks for them. Ranges are 0-based and inclusive. */
+export type EditOp =
+  /** Typed into a cell (or a range: the same input in each). */
+  | { kind: 'input'; range: CellRange; text: string }
+  /** Values of a block from the clipboard, row by row. */
+  | { kind: 'paste'; at: { row: number; col: number }; rows: string[][] }
+  | { kind: 'clear'; ranges: CellRange[]; what: 'contents' | 'formats' | 'all' }
+  /** Text replaced in the cells' contents (as typed: values and formulas), in the given cells or the whole sheet. */
+  | { kind: 'replace'; text: string; with: string; matchCase: boolean; wholeCell: boolean; cells?: { row: number; col: number }[] }
+  /**
+   * Rows of a range sorted by some of its columns (a range of one cell: the block of filled cells around it). `header`:
+   * the first row stays where it is (null: guessed, as Excel does).
+   */
+  | { kind: 'sort'; range: CellRange; keys: { col: number; descending: boolean }[]; header: boolean | null }
+  /** Sheet › Filter: an AutoFilter over a range (one cell: the block around it), or none (null). */
+  | { kind: 'autoFilter'; range: CellRange | null }
+  /** The values a column of the AutoFilter shows (null: all of them). */
+  | { kind: 'filter'; col: number; values: string[] | null; blanks: boolean }
+  /** AutoFill: `target` (which holds `source` at one end) filled from `source`. */
+  | { kind: 'fill'; source: CellRange; target: CellRange }
+  /** A change to how the cells of ranges look (each range's own outside edges for borders). */
+  | { kind: 'format'; ranges: CellRange[]; change: StyleChange }
+  | { kind: 'insertRows'; at: number; count: number }
+  | { kind: 'deleteRows'; at: number; count: number }
+  | { kind: 'insertColumns'; at: number; count: number }
+  | { kind: 'deleteColumns'; at: number; count: number }
+  | { kind: 'rowHeight'; rows: number[]; size: number | null }
+  | { kind: 'columnWidth'; cols: number[]; size: number | null }
+  | { kind: 'hideRows'; rows: number[]; hidden: boolean }
+  | { kind: 'hideColumns'; cols: number[]; hidden: boolean }
+  | { kind: 'freeze'; pane: Pane | null }
+  | { kind: 'merge'; range: CellRange }
+  | { kind: 'unmerge'; range: CellRange }
+  | { kind: 'addSheet'; at: number; name: string }
+  | { kind: 'deleteSheet'; sheet: number }
+  | { kind: 'renameSheet'; sheet: number; name: string }
+  | { kind: 'moveSheet'; from: number; to: number }
+  | { kind: 'activeSheet'; sheet: number };
+
+/** What an edit changed, for the page to draw again. */
+export interface Changed {
+  /** Cells whose look may have changed (whole rows or columns when structure moved). */
+  ranges: CellRange[];
+  /** The geometry and sheet list moved: take the new info. */
+  info?: BookInfo;
+  /** Other sheets whose cells changed (formulas there read what the edit changed). */
+  elsewhere?: number[];
+  /** Where the selection goes after the edit (a paste selects what it filled). */
+  select?: CellRange;
+  /** A message for the person (a paste too big, a name taken). */
+  message?: string;
+  /** How many cells a Replace changed. */
+  count?: number;
+}
+
+export type ToWorker =
+  | { t: 'open'; name: string; bytes: ArrayBuffer; image: ArrayBuffer | null }
+  | { t: 'tiles'; id: number; sheet: number; keys: TileKey[] }
+  | { t: 'cell'; id: number; sheet: number; row: number; col: number }
+  | { t: 'styles'; id: number; ids: number[] }
+  | { t: 'edit'; id: number; sheet: number; op: EditOp }
+  | { t: 'undo'; id: number }
+  | { t: 'redo'; id: number }
+  | { t: 'copy'; id: number; sheet: number; range: CellRange }
+  /** The longest texts shown in a column (with their styles), to fit its width to them. */
+  | { t: 'columnTexts'; id: number; sheet: number; col: number }
+  /** The values a column of the AutoFilter could show, and those it shows. */
+  | { t: 'filterValues'; id: number; sheet: number; col: number }
+  /** The choices a cell's list validation offers. */
+  | { t: 'choices'; id: number; sheet: number; row: number; col: number }
+  /** A cell's note. */
+  | { t: 'note'; id: number; sheet: number; row: number; col: number }
+  | { t: 'find'; id: number; sheet: number; text: string; from: { row: number; col: number }; backwards: boolean; matchCase: boolean; wholeCell: boolean; formulas: boolean; allSheets: boolean }
+  | { t: 'save'; id: number }
+  | { t: 'end'; sheet: number; from: { row: number; col: number }; dRow: number; dCol: number; id: number };
+
+export type FromWorker =
+  | { t: 'opened'; info: BookInfo; fromImage: boolean; ms: number }
+  | { t: 'progress'; sheet: number; rows: number }
+  | { t: 'loaded'; info: BookInfo }
+  | { t: 'image'; bytes: ArrayBuffer; sha256: string }
+  | { t: 'failed'; message: string }
+  | { t: 'tiles'; id: number; cells: CellTile[]; overview: OverviewTile[] }
+  | { t: 'cell'; id: number; content: CellContent }
+  | { t: 'columnTexts'; id: number; texts: [string, number][] }
+  | { t: 'choices'; id: number; items: string[] }
+  | { t: 'note'; id: number; note: { author: string; text: string } | null }
+  | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
+  | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
+  | { t: 'changed'; id: number; changed: Changed }
+  | { t: 'copy'; id: number; text: string; html: string }
+  | { t: 'found'; id: number; at: { sheet: number; row: number; col: number } | null }
+  | { t: 'saved'; id: number; xlsx: ArrayBuffer; image: ArrayBuffer; sha256: string }
+  | { t: 'end'; id: number; at: { row: number; col: number } }
+  | { t: 'error'; id: number; message: string };

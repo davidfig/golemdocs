@@ -27,6 +27,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [chunked-storage.md](chunked-storage.md) | Content-defined chunking and delta uploads for files of 2 MiB or more |
 | [text-files.md](text-files.md) | The large text and log editor (50 MB files): design, status and measurements |
 | [pdf-editing.md](pdf-editing.md) | Fill In and Edit PDF modes |
+| [spreadsheets.md](spreadsheets.md) | Plan for `.xlsx`: column-major model, memory-image cache, formula engine, hashed tile pyramid zoomable to under 1% |
 | [localization.md](localization.md) | Strings, languages, spelling dictionaries, adding a language |
 | [../server/AUTH.md](../server/AUTH.md) | Sign-in provider setup |
 

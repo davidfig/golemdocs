@@ -53,6 +53,9 @@ const HISTORY_DATA = 'historyData';
 const TRASH = 'trash';
 // The last version a document and its cloud copy agreed on (see "Synced base" below), by document id: what a merge starts from.
 const BASES = 'bases';
+// Memory images (see docs/spreadsheets.md, "The memory image"): a document's in-memory form, kept by document id next to its file
+// so the next open maps it instead of reading the file. Per device, never uploaded; used only while it matches the file.
+const IMAGES = 'images';
 
 /** What is stored of a document kept as chunks. */
 export interface StoredManifest {
@@ -70,7 +73,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 8);
+      const request = indexedDB.open(DB_NAME, 9);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -91,6 +94,7 @@ function openDb(): Promise<IDBDatabase> {
         }
         if (from < 7) request.result.createObjectStore(TRASH);
         if (from < 8) request.result.createObjectStore(BASES);
+        if (from < 9) request.result.createObjectStore(IMAGES);
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -459,7 +463,7 @@ export async function deleteOwnedBy(owner: string): Promise<void> {
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH, BASES], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH, BASES, IMAGES], 'readwrite');
   tx.objectStore(TRASH).delete(id);
   tx.objectStore(BASES).delete(id);
   await forgetHistory(tx, id);
@@ -467,6 +471,7 @@ export async function deleteSaved(id: string): Promise<void> {
   tx.objectStore(META).delete(id);
   tx.objectStore(BYTES).delete(id);
   tx.objectStore(THUMBS).delete(id);
+  tx.objectStore(IMAGES).delete(id);
   tx.objectStore(SEARCH).delete(id);
   await finished(tx);
 }
@@ -478,7 +483,7 @@ export async function deleteSaved(id: string): Promise<void> {
  */
 export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES, IMAGES], 'readwrite');
   const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
   const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
   if (unchanged) {
@@ -487,6 +492,7 @@ export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> 
     tx.objectStore(META).delete(seen.id);
     tx.objectStore(BYTES).delete(seen.id);
     tx.objectStore(THUMBS).delete(seen.id);
+    tx.objectStore(IMAGES).delete(seen.id);
     tx.objectStore(SEARCH).delete(seen.id);
     tx.objectStore(BASES).delete(seen.id);
   }
@@ -501,6 +507,21 @@ export async function saveThumbnail(id: string, blob: Blob, forUpdatedAt: number
   // A document deleted while its thumbnail was being made must not leave an orphan behind.
   if ((await done(tx.objectStore(META).get(id))) !== undefined) tx.objectStore(THUMBS).put({ blob, forUpdatedAt } satisfies Thumbnail, id);
   await finished(tx);
+}
+
+/** Keeps a document's memory image (it is only ever used while it matches the document's file; see image/container.ts). */
+export async function saveImage(id: string, image: Uint8Array): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(IMAGES, 'readwrite');
+  tx.objectStore(IMAGES).put(new Blob([image as Uint8Array<ArrayBuffer>]), id);
+  await finished(tx);
+}
+
+/** A document's memory image, or null. */
+export async function getImage(id: string): Promise<Uint8Array | null> {
+  const db = await openDb();
+  const blob = (await done(db.transaction(IMAGES).objectStore(IMAGES).get(id))) as Blob | undefined;
+  return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
 }
 
 export async function getThumbnail(id: string): Promise<Thumbnail | null> {

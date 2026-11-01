@@ -7,6 +7,7 @@ import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
 import { history } from './history.ts';
 import { textEditor } from './textEditor.ts';
+import { sheet } from './sheet.ts';
 import { link } from './link.ts';
 import { math } from './math.ts';
 import { menus } from './menus.ts';
@@ -22,4 +23,4 @@ import { vector } from './vector.ts';
 import { pageSetup } from './pageSetup.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

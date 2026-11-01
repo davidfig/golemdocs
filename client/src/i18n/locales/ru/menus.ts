@@ -39,6 +39,7 @@ export const menus: Catalog = {
   'menus.format.csv': 'CSV (с разделителями-запятыми)',
   'menus.format.tsv': 'TSV (с разделителями-табуляциями)',
   'menus.format.txt': 'Обычный текст',
+  'menus.format.xlsx': 'Книга Excel',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Сообщение электронной почты',
   'menus.format.png': 'Изображение PNG',

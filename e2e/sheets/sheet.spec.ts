@@ -1,0 +1,262 @@
+// The spreadsheet editor (docs/spreadsheets.md): a workbook opens in it, cells are typed into, rows are inserted, sheets are added,
+// and the workbook downloads as .xlsx with the changes; opening it again from this browser maps its memory image. The cells are
+// drawn on the canvas, so the specs read the editor through `window.sheetEditor` (see main.ts) and click where it says cells are.
+
+import type { Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { MOD, expect, test } from '../files/fixtures';
+import { dropFile, readZip, waitForOpen } from '../files/helpers';
+
+interface SheetState {
+  fromImage: boolean;
+  loaded: boolean;
+  sheet: number;
+  active: { row: number; col: number };
+  editing: unknown;
+  content: { input: string; display: string; isFormula: boolean; look?: { bold: boolean } };
+  info: { name: string; rows: number; cols: number } | null;
+  sheets: string[];
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+const state = (page: Page): Promise<SheetState> => page.evaluate(() => (window as unknown as { sheetEditor: { state(): SheetState } }).sheetEditor.state());
+
+const workbook = () => ({ name: 'lookup.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/oracle/lookup.xlsx')), mimeType: 'application/octet-stream' });
+
+async function open(app: Parameters<typeof waitForOpen>[0], page: Page): Promise<void> {
+  await app.goto('?doc=welcome');
+  await dropFile(page, workbook());
+  await waitForOpen(app, 'lookup.xlsx');
+  await expect.poll(async () => (await state(page)).loaded, { timeout: 20_000 }).toBe(true);
+}
+
+/** Clicks the middle of a cell. */
+async function clickCell(page: Page, row: number, col: number): Promise<void> {
+  const at = await page.evaluate(([r, c]) => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } | null } }).sheetEditor.pointOf(r, c), [row, col] as const);
+  if (!at) throw new Error('no such cell on screen');
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+}
+
+test('a workbook opens in the spreadsheet editor, with its sheets', async ({ app, page }) => {
+  await open(app, page);
+  const s = await state(page);
+  expect(s.sheets).toEqual(['Cases', 'Data']);
+  expect(s.info?.name).toBe('Cases');
+  await expect(page.getByRole('tab', { name: 'Data' })).toBeVisible();
+  await expect(page.getByRole('menubar').getByRole('menuitem', { name: 'Sheet' })).toBeVisible();
+  // The formula bar shows the active cell's contents.
+  await expect(page.getByRole('textbox', { name: 'Formula bar' })).toHaveValue('formula');
+});
+
+test('typing into a cell keeps the value, Enter moves down, and undo takes it back', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 4);
+  await expect.poll(async () => (await state(page)).active).toEqual({ row: 1, col: 4 });
+  await page.keyboard.type('12.5%');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await state(page)).active).toEqual({ row: 2, col: 4 });
+  // Back up with the arrow key (a second click this soon at the same spot would be a double click, which edits the cell).
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).content).toMatchObject({ input: '12.5%', display: '12.50%', isFormula: false });
+  await page.keyboard.press(`${MOD}+z`);
+  await expect.poll(async () => (await state(page)).content.input).toBe('');
+});
+
+test('a formula cell shows its formula in the formula bar', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 1);
+  await expect.poll(async () => (await state(page)).content).toMatchObject({ input: '=VLOOKUP("apple",Data!C1:D5,2,FALSE)', display: '10', isFormula: true });
+});
+
+test('a formula typed calculates, spills, and recalculates when what it reads changes', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('4');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('=F2*10');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).content).toMatchObject({ input: '=F2*10', display: '40', isFormula: true });
+  // A dynamic array fills the cells below it.
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.type('=SEQUENCE(3)');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await state(page)).content.display).toBe('2');
+  // Changing F2 changes F3.
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.type('7');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await state(page)).content).toMatchObject({ input: '=F2*10', display: '70', isFormula: true });
+});
+
+test('cells are formatted with the app’s formatting commands and the Sheet menu', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('0.25');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press(`${MOD}+b`);
+  await expect.poll(async () => (await state(page)).content.look?.bold).toBe(true);
+  await app.menu('Sheet', 'Number Format', 'Percentage');
+  await expect.poll(async () => (await state(page)).content.display).toBe('25.00%');
+  await app.menu('Sheet', 'Decrease Decimal');
+  await expect.poll(async () => (await state(page)).content.display).toBe('25.0%');
+  await page.keyboard.press(`${MOD}+z`);
+  await expect.poll(async () => (await state(page)).content.display).toBe('25.00%');
+});
+
+test('double-clicking a column header’s edge fits the column to its text', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('a much longer piece of text than fits');
+  await page.keyboard.press('Enter');
+  const edge = () => page.evaluate(() => (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number; y: number; width: number } } }).sheetEditor.columnEdge(5));
+  const before = await edge();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.dblclick(box.x + before.x, box.y + before.y);
+  await expect.poll(async () => (await edge()).width).toBeGreaterThan(before.width * 2);
+});
+
+test('Sort and Replace from the menus', async ({ app, page }) => {
+  await open(app, page);
+  // Column C of the Data sheet holds fruit names; sort them, then replace one.
+  await page.getByRole('tab', { name: 'Data' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Data');
+  await clickCell(page, 0, 2);
+  await app.menu('Sheet', 'Sort Z to A');
+  await expect.poll(async () => (await state(page)).content.input).toBe('date');
+  await app.menu('Edit', 'Replace');
+  await page.getByRole('textbox', { name: 'Find in workbook' }).fill('date');
+  await page.getByRole('textbox', { name: 'Replace with' }).fill('fig');
+  await page.getByRole('button', { name: 'Replace all' }).click();
+  await expect.poll(async () => (await state(page)).content.input).toBe('fig');
+});
+
+test('dragging the fill handle carries a series on', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('1');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('2');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Shift+ArrowUp');
+  const point = (r: number, c: number) => page.evaluate(([row, col]) => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor.pointOf(row, col), [r, c] as const);
+  const box = (await page.locator('#canvas').boundingBox())!;
+  // The handle is at the corner of F3, halfway to the middle of G4.
+  const [f3, g4, f6] = [await point(2, 5), await point(3, 6), await point(5, 5)];
+  await page.mouse.move(box.x + (f3.x + g4.x) / 2, box.y + (f3.y + g4.y) / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + f6.x, box.y + f6.y, { steps: 5 });
+  await page.mouse.up();
+  await clickCell(page, 5, 5);
+  await expect.poll(async () => (await state(page)).content.input).toBe('5');
+});
+
+test('Sheet › Filter puts buttons on the header row, and its card hides the rows not ticked', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 0, 0);
+  await app.menu('Sheet', 'Filter');
+  await expect.poll(async () => ((await state(page)) as unknown as { filter: { range: { r0: number } } | null }).filter?.range.r0).toBe(0);
+  // The button sits at the right of the header cell: click a little left of the cell's right edge.
+  const at = await page.evaluate(() => {
+    const s = (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number }; pointOf(r: number, c: number): { y: number } } }).sheetEditor;
+    return { x: s.columnEdge(0).x - 8, y: s.pointOf(0, 0).y };
+  });
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  const card = page.getByRole('dialog', { name: 'Filter' });
+  await expect(card).toBeVisible();
+  await card.getByRole('checkbox', { name: '(Select All)' }).uncheck();
+  await card.getByRole('checkbox', { name: '=VLOOKUP("apple",Data!C1:D5,2,FALSE)', exact: true }).check();
+  await card.getByRole('button', { name: 'OK' }).click();
+  await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBeGreaterThan(10);
+  await page.keyboard.press(`${MOD}+z`);
+  await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBe(0);
+});
+
+test('a list validation offers its choices from an arrow, and a value a rule refuses is not entered', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'validation.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/validation.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'validation.xlsx');
+  await expect.poll(async () => (await state(page)).loaded, { timeout: 20_000 }).toBe(true);
+  await clickCell(page, 1, 1);
+  await expect.poll(async () => (await state(page)).content.input).toBe('Open');
+  // The arrow sits just right of the cell, at its bottom.
+  const at = await page.evaluate(() => {
+    const s = (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number }; pointOf(r: number, c: number): { y: number } } }).sheetEditor;
+    return { x: s.columnEdge(1).x + 8, y: s.pointOf(1, 1).y + 3 };
+  });
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  await page.getByRole('menuitem', { name: 'Blocked' }).click();
+  await expect.poll(async () => (await state(page)).content.input).toBe('Blocked');
+  // A score must be a whole number from 1 to 10: 11 is refused with the rule's message, and the cell keeps its value.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.type('11');
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('A score is a whole number from 1 to 10.')).toBeVisible();
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).content.input).toBe('3');
+});
+
+test('resting the pointer on a cell with a note shows the note', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'notes.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/notes.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'notes.xlsx');
+  await expect.poll(async () => (await state(page)).loaded, { timeout: 20_000 }).toBe(true);
+  const at = await page.evaluate(() => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor.pointOf(1, 1));
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await expect(page.getByRole('note')).toContainText('Price before tax');
+  // Leaving the cell hides it.
+  await page.mouse.move(box.x + at.x, box.y + at.y + 60);
+  await expect(page.getByRole('note')).toBeHidden();
+});
+
+test('rows inserted from the Sheet menu move the cells below', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 2, 0);
+  await app.menu('Sheet', 'Insert Rows Above');
+  await clickCell(page, 3, 0);
+  // The case that was in row 3 (its text in column A) is in row 4 now.
+  await expect.poll(async () => (await state(page)).content.input).toBe('=VLOOKUP("APPLE",Data!C1:D5,2,FALSE)');
+});
+
+test('a new sheet comes from the + button, and tabs switch sheets', async ({ app, page }) => {
+  await open(app, page);
+  await page.getByRole('button', { name: 'New Sheet' }).click();
+  await expect.poll(async () => (await state(page)).sheets).toEqual(['Cases', 'Sheet3', 'Data']);
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Sheet3');
+  await page.getByRole('tab', { name: 'Data' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Data');
+});
+
+test('the workbook downloads as .xlsx with what was typed', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 1, 5);
+  await page.keyboard.type('typed here');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await state(page)).canUndo).toBe(true);
+  const file = await app.download(() => app.menu('File', 'Download'));
+  expect(file.name).toBe('lookup.xlsx');
+  const parts = readZip(file.bytes);
+  const sheet = parts.find((p) => p.name === 'xl/worksheets/sheet1.xml');
+  expect(sheet?.bytes.toString('utf8')).toContain('typed here');
+  expect(parts.some((p) => p.name === 'xl/worksheets/sheet2.xml')).toBe(true);
+});
+
+test('opening it again from this browser maps its memory image', async ({ app, page }) => {
+  await open(app, page);
+  // The image of the file just read is kept with the saved copy; reopening the page opens that copy.
+  await page.waitForTimeout(1500);
+  await page.reload();
+  await app.ready();
+  await expect.poll(async () => (await state(page))?.info?.name, { timeout: 20_000 }).toBe('Cases');
+  expect((await state(page)).fromImage).toBe(true);
+});

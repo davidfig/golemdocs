@@ -65,6 +65,8 @@ export type DocumentSource =
   | { kind: 'org'; name: string; bytes: ArrayBuffer }
   /** Comma-, semicolon- or pipe-delimited text, opened as a table. */
   | { kind: 'csv'; name: string; bytes: ArrayBuffer }
+  /** A workbook: opened by the spreadsheet editor (client/src/sheet), never sent to the layout worker. */
+  | { kind: 'xlsx'; name: string; bytes: ArrayBuffer }
   /** Tab-delimited text, opened as a table. */
   | { kind: 'tsv'; name: string; bytes: ArrayBuffer }
   /** An e-book. */

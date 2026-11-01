@@ -5,6 +5,7 @@
 
 import {
   DEFAULT_STATE,
+  SHEET_OPS,
   type Action,
   type Alignment,
   type CaseChange,
@@ -550,6 +551,9 @@ export class Chrome {
     }
     r.add(a('image.layers', t('vector.layers'), { kind: 'image', op: 'layers' }, { icon: 'layersStack', scope: 'picture', shortcut: PICTURE_KEYS.layers, checked: (s) => s.draw.layers }));
 
+    // Spreadsheets: the Sheet menu (the editor's own keys and context menus do the rest; see sheet/view.ts).
+    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }));
+
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
     for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text'], ['canvas', 'canvasTool']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, scope: 'vector', shortcut: VECTOR_TOOL_KEYS[tool], checked: (s) => s.vector.tool === tool }));
@@ -897,6 +901,79 @@ export class Chrome {
           sep,
           cmd('table.selectTable'),
           cmd('table.properties'),
+        ],
+      },
+      {
+        label: t('sheet.menu'),
+        items: [
+          cmd('sheet.insertRowsAbove'),
+          cmd('sheet.insertRowsBelow'),
+          cmd('sheet.insertColumnsLeft'),
+          cmd('sheet.insertColumnsRight'),
+          sep,
+          cmd('sheet.deleteRows'),
+          cmd('sheet.deleteColumns'),
+          sep,
+          cmd('sheet.clearContents'),
+          cmd('sheet.clearFormats'),
+          cmd('sheet.clearAll'),
+          sep,
+          cmd('sheet.hideRows'),
+          cmd('sheet.unhideRows'),
+          cmd('sheet.hideColumns'),
+          cmd('sheet.unhideColumns'),
+          sep,
+          cmd('sheet.freezePanes'),
+          cmd('sheet.freezeTopRow'),
+          cmd('sheet.freezeFirstColumn'),
+          cmd('sheet.unfreezePanes'),
+          sep,
+          cmd('sheet.sortAscending'),
+          cmd('sheet.sortDescending'),
+          cmd('sheet.filter'),
+          sep,
+          cmd('sheet.merge'),
+          cmd('sheet.mergeCenter'),
+          cmd('sheet.unmerge'),
+          sep,
+          sub(t('sheet.numberFormat'), [
+            cmd('sheet.numberGeneral'),
+            cmd('sheet.numberNumber'),
+            cmd('sheet.numberCurrency'),
+            cmd('sheet.numberAccounting'),
+            cmd('sheet.numberPercent'),
+            cmd('sheet.numberScientific'),
+            cmd('sheet.numberFraction'),
+            cmd('sheet.numberDate'),
+            cmd('sheet.numberLongDate'),
+            cmd('sheet.numberTime'),
+            cmd('sheet.numberText'),
+          ]),
+          cmd('sheet.increaseDecimals'),
+          cmd('sheet.decreaseDecimals'),
+          sub(t('sheet.borders'), [
+            cmd('sheet.borderAll'),
+            cmd('sheet.borderOutside'),
+            cmd('sheet.borderThickOutside'),
+            sep,
+            cmd('sheet.borderTop'),
+            cmd('sheet.borderBottom'),
+            cmd('sheet.borderLeft'),
+            cmd('sheet.borderRight'),
+            cmd('sheet.borderDoubleBottom'),
+            sep,
+            cmd('sheet.borderNone'),
+          ]),
+          cmd('sheet.wrapText'),
+          cmd('sheet.alignTop'),
+          cmd('sheet.alignMiddle'),
+          cmd('sheet.alignBottom'),
+          sep,
+          cmd('sheet.addSheet'),
+          cmd('sheet.renameSheet'),
+          cmd('sheet.deleteSheet'),
+          cmd('sheet.nextSheet'),
+          cmd('sheet.previousSheet'),
         ],
       },
       {

@@ -39,6 +39,7 @@ export const menus: Partial<Messages> = {
   'menus.format.csv': 'CSV (delimitato da virgole)',
   'menus.format.tsv': 'TSV (delimitato da tabulazioni)',
   'menus.format.txt': 'Testo normale',
+  'menus.format.xlsx': 'Cartella di lavoro di Excel',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Messaggio e-mail',
   'menus.format.png': 'Immagine PNG',

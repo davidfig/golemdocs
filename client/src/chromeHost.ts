@@ -17,7 +17,7 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, worksWithoutDocument, type ImageOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -92,6 +92,8 @@ export interface AppHooks {
   convert(to: DocumentKind): Promise<void>;
   /** A picture tool (rotate, flip, crop, resize, adjust) on the open picture. */
   imageAction(op: ImageOp): Promise<void>;
+  /** The spreadsheet editor's commands (Sheet menu, context menus). */
+  sheetAction(op: SheetOp): void;
   /** A vector editor tool or command (select, draw a shape, group, order...). */
   vectorAction(op: VectorOp): void;
   /** The look of the selected shapes and of the next ones. */
@@ -168,6 +170,7 @@ export interface AppHooks {
 
 /** Actions the app implements today, whatever the document. */
 const SUPPORTED = new Set<ActionKind>([
+  'sheet',
   'new',
   'open',
   'close',
@@ -439,6 +442,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.isPicture() ? app.stepPicture(action.kind) : app.send({ kind: action.kind });
         case 'image':
           return app.imageAction(action.op);
+        case 'sheet':
+          return app.sheetAction(action.op);
         case 'drawStyle':
           {
           const { kind: _kind, ...change } = action;
@@ -486,9 +491,11 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           else if (action.break === 'page' || action.break === 'column') app.send({ kind: 'insertLineBreak', type: action.break });
           return;
         case 'setHighlight':
+          if (app.engine()?.format?.(action)) return;
           if (!app.annotating()) return app.send({ kind: 'format', action });
           return app.send({ kind: 'annotate', annotation: 'highlight', color: action.color });
         case 'toggleMark':
+          if (app.engine()?.format?.(action)) return;
           if (!app.annotating()) return app.send({ kind: 'format', action });
           if (action.mark === 'underline') return app.send({ kind: 'annotate', annotation: 'underline' });
           if (action.mark === 'strikethrough') return app.send({ kind: 'annotate', annotation: 'strikeout' });
@@ -507,6 +514,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'setParagraph':
         case 'toggleList':
         case 'indent':
+          if (app.engine()?.format?.(action)) return;
           return app.send({ kind: 'format', action });
         case 'table':
           // Splitting cells needs to know into how many.

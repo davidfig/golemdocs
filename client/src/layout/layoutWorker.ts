@@ -235,6 +235,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     case 'tsv':
     case 'mhtml':
     case 'html':
+    case 'xlsx':
     case 'txt': {
       const { document, extensions } = await importDocument(source.kind, new Uint8Array(source.bytes));
       return flowing(source.name, document, source.kind, extensions);

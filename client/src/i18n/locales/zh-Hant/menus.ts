@@ -39,6 +39,7 @@ export const menus: Partial<Messages> = {
   'menus.format.csv': 'CSV (以逗號分隔)',
   'menus.format.tsv': 'TSV (以定位點分隔)',
   'menus.format.txt': '純文字',
+  'menus.format.xlsx': 'Excel 活頁簿',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '電子郵件',
   'menus.format.png': 'PNG 影像',

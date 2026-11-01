@@ -23,7 +23,7 @@ import {
   deleteOwnedBy,
   deleteSaved,
   getSaved,
-  getThumbnail,
+  getThumbnail, getImage, saveImage,
   listLocalFolders,
   listSaved,
   markSynced,
@@ -124,6 +124,7 @@ import { askDropChoice } from './ui/dropChoice.ts';
 import { askDuplicate } from './ui/duplicateDialog.ts';
 import type { DocumentEngine } from './documentEngine.ts';
 import { TextEditor } from './textEditor/handle.ts';
+import { SheetEditor } from './sheet/handle.ts';
 import { showAdjustDialog, showBackgroundDialog, showPictureCanvasDialog, showResizeDialog } from './ui/pictureDialogs.ts';
 import { PictureLayersPanel } from './ui/pictureLayersPanel.ts';
 import { samplePicture } from './formats/imageSample.ts';
@@ -365,7 +366,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
   }
   if (source.kind === 'image') return kindFromName(source.name, 'png');
   if (source.kind === 'svg') return kindFromName(source.name, 'svg');
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' || source.kind === 'xlsx' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -413,6 +414,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   cropLayer.cancel();
   leaveTextRoom();
   textView.close();
+  sheetView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
   if (!options.pictureEdit) {
@@ -493,6 +495,11 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   // Plain text is edited in the text editor, not as a document (`asDocument`: for the things only a document does, such as printing).
   if (source.kind === 'txt' && !options.asDocument) {
     void openLarge(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
+  // A workbook is edited in the spreadsheet editor (`asDocument`: its active sheet as a table, for printing and converting).
+  if (source.kind === 'xlsx' && !options.asDocument) {
+    void openSheet(source.name, new Uint8Array(source.bytes), options);
     return;
   }
   openRequests++;
@@ -1214,7 +1221,8 @@ async function uploadShared(): Promise<void> {
   try {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (await worker.save());
+    const sheetSave = sheetView.save();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).xlsx : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -1615,7 +1623,7 @@ function renameDocument(input: string): string | null {
 }
 
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
-const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
+const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
@@ -1802,6 +1810,7 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
  * copy). Never fails the save: without a thumbnail the dashboard just shows a blank page.
  */
 async function makeThumbnail(info: SavedInfo): Promise<void> {
+  if (sheetView.active) return;
   const page = pages[0];
   const text = textView.active;
   if (!text && (!page || !gl)) return;
@@ -1845,7 +1854,8 @@ function saveInBrowser(): Promise<string | null> {
   const name = fileName();
   // Asked for now, while the worker (or the large-text editor) still has this document.
   const large = textView.active;
-  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : worker.save();
+  const sheetSave = sheetView.save();
+  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.xlsx) : worker.save();
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -1857,6 +1867,8 @@ function saveInBrowser(): Promise<string | null> {
       const linksAfter = was && was.name !== name ? keepLinks({ kind: 'rename', key: was.key, name }) : null;
       const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
       linksAfter?.();
+      // The workbook's memory image goes with the file it was made from.
+      if (sheetSave) void sheetSave.then((saved) => saveImage(info.id, saved.image)).catch(() => undefined);
       doc.localId = info.id;
       rememberIgnored(doc);
       if (doc === current) {
@@ -2370,7 +2382,8 @@ async function download(): Promise<void> {
     // Named now: another document may be open by the time the bytes come back.
     const name = large ? textView.fileName : fileName();
     const type = large ? 'text/plain' : FORMATS[current.kind].mime;
-    const bytes = large ?? (await worker.convert(current.kind as Format));
+    const sheetSave = sheetView.save();
+    const bytes = large ?? (sheetSave ? (await sheetSave).xlsx : await worker.convert(current.kind as Format));
     if (await saveFile(name, bytes, type)) setStatus(t('app.downloaded', { name }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
@@ -2823,6 +2836,38 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
   if (cloudId) void accountKnown.then(() => joinTextRoom(opening, cloudId));
 }
 
+// --- Workbooks -------------------------------------------------------------------------------------
+// A workbook opens in the spreadsheet editor (docs/spreadsheets.md): its cells live in the editor's own worker and are drawn on the
+// canvas by it. The memory image kept with a saved workbook (storage/local.ts) opens it without reading the file again.
+
+/** The document a memory image that arrives belongs to (the workbook read last; null for one never saved here). */
+let sheetImageFor: OpenDocument | null = null;
+
+async function openSheet(name: string, bytes: Uint8Array, options: { localId?: string; cloudId?: string; shared?: CloudDocument; store?: boolean } = {}): Promise<void> {
+  const latest = openTicket();
+  let image: Uint8Array | null = null;
+  try {
+    await sheetView.load();
+    if (options.localId) image = await getImage(options.localId).catch(() => null);
+  } catch (e) {
+    return reportError(t('app.openFailed', { message: (e as Error).message }));
+  }
+  if (!latest()) return;
+  openRequests++;
+  const { opening } = beginOpen({ kind: 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared });
+  worker.close();
+  sheetImageFor = opening;
+  sheetView.open(name, bytes, image);
+  sheetView.readOnly = options.shared?.role === 'viewer';
+  loaded = true;
+  documentReady();
+  loadingScreen.hide();
+  setStatus(t('app.ready', { name }));
+  focusInput();
+  // A workbook that came from somewhere is kept in this browser at once, as a document is.
+  if (!options.localId && !options.shared) documentEdited();
+}
+
 /** The most of a big file that opens as an ordinary document: past this the document model costs too much (see docs/text-files.md). */
 const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
 
@@ -2831,6 +2876,16 @@ const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
  * of the file (it is the same file: the editor shows it again when it is opened next). True when there is a document to go on with.
  */
 async function openAsDocument(): Promise<boolean> {
+  if (sheetView.active) {
+    const saved = await sheetView.save();
+    if (!saved) return false;
+    const before = current;
+    await saveNow();
+    const ready = nextDocumentReady();
+    open({ kind: 'xlsx', name: before.name, bytes: saved.xlsx.slice().buffer }, { asDocument: true, localId: before.localId ?? undefined });
+    await ready;
+    return true;
+  }
   if (!textView.active) return true;
   const bytes = textView.snapshot();
   if (!bytes || bytes.length > MAX_SELECTION_BYTES) {
@@ -3409,6 +3464,7 @@ function focusByTap(): void {
 function focusInput(): void {
   if (!focusAllowed || current.none) return;
   if (textView.active) return textEngine.focus();
+  if (sheetView.active) return sheetEngine.focus();
   input.focus({ preventScroll: true });
 }
 
@@ -3538,6 +3594,11 @@ function render(): void {
     camera.clampToStart(area, canvas.clientWidth, canvas.clientHeight);
     const frame = textView.draw(pagesDark(), caretOn && document.hasFocus());
     lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
+  } else if (sheetView.active) {
+    // A workbook: drawn by the spreadsheet editor, from the top-left of its cells.
+    camera.clampToStart(sheetView.bounds(), canvas.clientWidth, canvas.clientHeight);
+    sheetView.draw(pagesDark());
+    lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else {
     if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
     if (renderer.flat) camera.x = bounds.x;
@@ -3556,16 +3617,16 @@ function render(): void {
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
     kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
-    hasSelection: textView.active ? textEngine.hasSelection : selection.text.length > 0,
+    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : selection.text.length > 0,
     zoom: camera.zoom,
-    pagesPanel: pagesOpen() && !textView.active && !reflowing(),
+    pagesPanel: pagesOpen() && !textView.active && !sheetView.active && !reflowing(),
     filesPanel: filesOpen,
     footer: footerOn,
     toolbars: toolbarsOn,
     rulerVisible: rulerOn,
-    format: selectionFormat,
-    canUndo: textView.active ? textEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: textView.active ? textEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    format: sheetView.active ? sheetView.formatState() : selectionFormat,
+    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
     draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
@@ -3696,6 +3757,10 @@ function press(e: Press): void {
   document.dispatchEvent(new Event('wm-caret'));
   if (textView.active) {
     textView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e));
+    return;
+  }
+  if (sheetView.active) {
+    sheetView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e), e.metaKey || e.ctrlKey);
     return;
   }
   const hit = pageAt(e.offsetX, e.offsetY);
@@ -4056,6 +4121,17 @@ canvas.addEventListener('pointermove', (e) => {
   overPicture = !!over && onSelectedPicture(over.page.id, over.x, over.y) && !pressed?.grab;
   if (overPicture !== overBefore) updateCursor();
   linkKeyChanged(e);
+  if (sheetView.active) {
+    // A workbook: a drag selects or resizes (or pans, with the middle button); the pointer shows what a press would do.
+    if (pan) {
+      userMoved = true;
+      camera.panBy(pan.x - e.clientX, pan.y - e.clientY);
+      pan = { x: e.clientX, y: e.clientY };
+      requestRender();
+    } else if (e.buttons) sheetView.drag(e.offsetX, e.offsetY);
+    else canvas.style.cursor = sheetView.cursorAt(e.offsetX, e.offsetY);
+    return;
+  }
   if (textView.active) {
     // A big text file: a drag selects (or pans, with the middle button), and there are no links to hover.
     if (pan) {
@@ -4096,6 +4172,7 @@ const endPointer = () => {
   pan = null;
   selecting = false;
   textView.release();
+  sheetView.release();
 };
 canvas.addEventListener('pointerup', (e) => {
   if (e.pointerType === 'touch') return touchUp(e);
@@ -4397,7 +4474,7 @@ const chromeHost = createChromeHost({
   canvas,
   camera,
   pages: () => pages,
-  bounds: () => (textView.active ? textEngine.bounds() : bounds),
+  bounds: () => (textView.active ? textEngine.bounds() : sheetView.active ? sheetEngine.bounds() : bounds),
   open: (source) => {
     setUrl(new URLSearchParams(), true);
     open(source, { store: true });
@@ -4411,7 +4488,7 @@ const chromeHost = createChromeHost({
   importPicked: (files) => importDropped(pickedFolder(files)),
   print,
   showSearchAll: () => searchPanel.show(),
-  showFind: (tab) => (textView.active ? textEngine.find(tab) : findDialog.show(tab)),
+  showFind: (tab) => (textView.active ? textEngine.find(tab) : sheetView.active ? sheetEngine.find(tab) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
   showWordCount: () => wordCountDialog.open(),
   showOptions: () => showOptions(focusInput),
@@ -4494,7 +4571,8 @@ const chromeHost = createChromeHost({
   convert: convertTo,
   documentReady: nextDocumentReady,
   imageAction: pictureAction,
-  engine: () => (textView.active ? textEngine : null),
+  sheetAction: (op) => sheetView.sheetOp(op),
+  engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : null),
   openSelection,
   openLarge,
   drawStyle: (change) => setDrawStyle(change),
@@ -4898,6 +4976,11 @@ window.addEventListener('keydown', spellHoverStop, true);
 canvas.addEventListener('contextmenu', (e) => {
   // The menu takes the pointer: a press that was under way is over, and the editor keeps the keyboard.
   endPointer();
+  if (sheetView.active) {
+    e.preventDefault();
+    sheetView.contextMenu(e.clientX, e.clientY, e.offsetX, e.offsetY);
+    return;
+  }
   if (textView.active) {
     // A plain text file: the same menu, from the text editor's own marks.
     if (!spellDialog.checkingLive) return;
@@ -5136,6 +5219,60 @@ Object.assign(window, {
   },
 });
 textView.onState = () => requestRender();
+
+const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport')!, {
+  camera,
+  gl: gl!,
+  atlases,
+  fontBase: FONT_BASE,
+  locale: getLocale,
+  render: () => requestRender(),
+  viewKey: (e) => viewKey(e),
+  notify: (message) => reportError(message),
+  appKey: () => false,
+});
+/** The spreadsheet editor as the chrome sees it (see documentEngine.ts). */
+const sheetEngine: DocumentEngine = {
+  get canUndo() {
+    return sheetView.canUndo;
+  },
+  get canRedo() {
+    return sheetView.canRedo;
+  },
+  get hasSelection() {
+    return sheetView.hasSelection;
+  },
+  snapshot: () => null,
+  bounds: () => sheetView.bounds(),
+  undo: () => sheetView.undo(),
+  redo: () => sheetView.redo(),
+  selectAll: () => sheetView.selectAll(),
+  insert: (text) => sheetView.insert(text),
+  copy: () => sheetView.copy(),
+  cut: () => sheetView.cut(),
+  paste: () => sheetView.paste(),
+  find: (tab) => sheetView.find(tab === 'replace'),
+  focus: () => sheetView.focus(),
+  format: (action) => sheetView.formatAction(action),
+};
+sheetView.onEdit = () => {
+  documentEdited();
+  requestRender();
+};
+sheetView.onState = () => requestRender();
+sheetView.onImage = (image) => {
+  // The image of the file just read is kept with the saved copy it came from, so the next open maps it.
+  const doc = sheetImageFor;
+  if (doc && doc === current && doc.localId) void saveImage(doc.localId, image).catch(() => undefined);
+};
+// What the spreadsheet editor shows, for the end-to-end tests (it is drawn by the GPU, so the page has no cells to read).
+Object.assign(window, {
+  sheetEditor: {
+    state: () => sheetView.debugState(),
+    pointOf: (row: number, col: number) => sheetView.pointOf(row, col),
+    columnEdge: (col: number) => sheetView.columnEdge(col),
+  },
+});
 // The vector editor (see ui/vectorSession.ts): a chunk of its own, fetched when the first drawing is opened.
 let vector: VectorSession | null = null;
 let vectorLoading: Promise<VectorSession> | null = null;
@@ -5512,6 +5649,10 @@ function updateFooter(): void {
   if (!visible) return;
   if (textView.active) {
     footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: textView.footerInfo() });
+    return;
+  }
+  if (sheetView.active) {
+    footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: null });
     return;
   }
   let picture = null;

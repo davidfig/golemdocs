@@ -51,6 +51,7 @@ sources.ts (FAMILIES, ATLAS)  -->  generate.ts + msdf-atlas-gen  -->  public/fon
 - `arrangePages(pages, columns, gap)` (`client/src/document/arrange.ts`) places pages row-major; with one column it is the usual vertical scroll. Page Grid uses `columnsToFill` to match the viewport's aspect ratio. `PageRenderer` culling depends on pages staying sorted by y.
 - **Flow view** (`reflowing()` in `main.ts`): the app tells the worker a width (`reflow` message, debounced 150 ms in `syncReflow`); layout then produces one wide column with slim margins and no headers. `renderer.flat = true` draws sheets edge to edge. Flow is off for PDFs, pictures, drawings and the grid.
 - A **plain text file** that is large is not a document at all: `client/src/textEditor/` (`glRenderer.ts`, `view.ts`) draws it in chunks on the same camera, reusing `TextRenderer`, `TextBatch` and `AtlasLibrary`. See [text-files](../text-files.md).
+- A **workbook** is not a document either: `client/src/sheet/renderer.ts` draws it on the same camera in panes (headers and frozen panes, `geometry.ts`), from tiles its worker builds: cells of 64 rows by 16 columns (text laid out on the page with `CellFonts`, `fonts.ts`) and, below about 9 pixels a row, an overview of 256 by 256 texels a tile at as many levels as the zoom needs (down to 0.1%). See [spreadsheets](../spreadsheets.md).
 
 ## Thumbnails
 

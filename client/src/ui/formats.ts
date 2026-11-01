@@ -47,6 +47,8 @@ export interface FormatProfile {
   vectorTools: boolean;
   /** A file too big to be a document, shown in the large-text editor: search, filter, replace and typing, and nothing that formats, prints or converts. */
   textEditor: boolean;
+  /** A workbook, shown in the spreadsheet editor (see ../sheet): its own cells, editing, undo and clipboard. */
+  sheetEditor: boolean;
 }
 
 const WORD_STYLES = [
@@ -93,6 +95,7 @@ const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   imageTools: false,
   vectorTools: false,
   textEditor: false,
+  sheetEditor: false,
 };
 
 const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
@@ -123,6 +126,7 @@ const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   imageTools: false,
   vectorTools: false,
   textEditor: false,
+  sheetEditor: false,
 };
 
 /** What an HTML page can express; EPUB and MHTML hold the same content in a container. */
@@ -157,6 +161,9 @@ const MARKUP: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
 
 /** A text file too big to be a document: edited in the large-text editor (see ../textEditor). */
 const LARGE_TEXT: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, textEditor: true };
+
+/** A workbook: edited in the spreadsheet editor (see ../sheet). */
+const SHEET: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, sheetEditor: true };
 
 /** A vector drawing: looked at for now; the vector editor's tools come with it (see vector/). */
 const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, vectorTools: true };
@@ -279,6 +286,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   fb2: { ...MARKUP, kind: 'fb2', label: 'FictionBook', extensions: ['.fb2'], mime: 'application/x-fictionbook+xml', marks: ['bold', 'italic', 'strikethrough', 'code', 'superscript', 'subscript'], lists: false, codeBlocks: false },
   // An outline: headings and nested lists of plain text.
   opml: { ...NOTHING, kind: 'opml', label: 'OPML', extensions: ['.opml'], mime: 'text/x-opml', styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'], lists: true, indent: true },
+  xlsx: { ...SHEET, kind: 'xlsx', get label() { return t('menus.format.xlsx'); }, extensions: ['.xlsx', '.xlsm', '.xltx', '.xltm'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.txt'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg', '.heic', '.heif'], mime: 'image/jpeg' },
@@ -385,6 +393,38 @@ export function worksWithoutDocument(action: Action): boolean {
 
 /** Whether a document of this format can express the action at all. */
 export function formatAllows(profile: FormatProfile, action: Action): boolean {
+  // The spreadsheet editor: its own editing, undo, clipboard, find and sheet commands (printing and converting open the active sheet as a document first).
+  if (profile.sheetEditor) {
+    switch (action.kind) {
+      case 'print':
+      case 'printPreview':
+      case 'convert':
+      case 'share':
+      case 'close':
+      case 'undo':
+      case 'redo':
+      case 'cut':
+      case 'copy':
+      case 'paste':
+      case 'selectAll':
+      case 'insertText':
+      case 'sheet':
+      case 'setFont':
+      case 'setFontSize':
+      case 'growFont':
+      case 'shrinkFont':
+      case 'setColor':
+      case 'setHighlight':
+      case 'clearFormatting':
+        return true;
+      case 'toggleMark':
+        return action.mark === 'bold' || action.mark === 'italic' || action.mark === 'underline' || action.mark === 'strikethrough';
+      case 'setAlignment':
+        return true;
+      case 'dialog':
+        return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll';
+    }
+  }
   // The text editor edits text and nothing else: no formatting or document properties (printing and converting open the file as a document first).
   if (profile.textEditor) {
     switch (action.kind) {
@@ -451,6 +491,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'vectorStyle':
     case 'vectorGradient':
       return profile.vectorTools;
+    case 'sheet':
+      return profile.sheetEditor;
     // A PDF has no text selection to copy or select yet.
     case 'copy':
     case 'selectAll':

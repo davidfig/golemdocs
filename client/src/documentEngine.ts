@@ -3,6 +3,7 @@
 // (null for a document), so the menus and commands ask it, instead of each knowing about one editor.
 
 import type { Rect } from './textEditor/scene.ts';
+import type { Action } from './ui/actions.ts';
 
 export interface DocumentEngine {
   readonly canUndo: boolean;
@@ -24,4 +25,6 @@ export interface DocumentEngine {
   find(tab: 'find' | 'replace' | 'goTo'): void;
   /** The keyboard goes to the editor. */
   focus(): void;
+  /** A formatting command (bold, font, colour, alignment) for an editor that formats in its own way; false if it has no such formatting. */
+  format?(action: Action): boolean;
 }

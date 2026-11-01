@@ -80,7 +80,7 @@ export class LinkPopover {
       ),
       h('div', { class: 'wm-dialog-buttons spread' }, h('span', { class: 'wm-link-actions' }, this.unlink, this.open), h('span', { class: 'wm-link-actions' }, this.ok, this.cancel)),
     );
-    this.root = h('div', { class: 'wm-dialog wm-link wm-link-over', attrs: { role: 'dialog', 'aria-label': t('link.title') } }, dialogTitleBar(t('link.title'), () => this.hide()), this.form);
+    this.root = h('div', { class: 'wm-dialog wm-link wm-over', attrs: { role: 'dialog', 'aria-label': t('link.title') } }, dialogTitleBar(t('link.title'), () => this.hide()), this.form);
     this.root.hidden = true;
     this.root.addEventListener('pointerenter', () => window.clearTimeout(this.hideTimer));
     this.root.addEventListener('pointerleave', () => this.leave());

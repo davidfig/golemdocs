@@ -2072,17 +2072,20 @@ html.wm-titlebar .wm-format {
   width: 420px;
 }
 
-/* Drawn over the document, not modal (see linkPopover.ts). */
-.wm-dialog.wm-link-over {
+/* A card drawn over the document, not modal (the link form, linkPopover.ts; a sheet's filter, sheet/filterCard.ts). */
+.wm-dialog.wm-over {
   position: fixed;
   z-index: 50;
   margin: 0;
   min-width: 0;
-  width: min(420px, calc(100vw - 8px));
 }
 
-.wm-dialog.wm-link-over[hidden] {
+.wm-dialog.wm-over[hidden] {
   display: none;
+}
+
+.wm-dialog.wm-link.wm-over {
+  width: min(420px, calc(100vw - 8px));
 }
 
 .wm-link-body {

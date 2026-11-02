@@ -97,7 +97,7 @@ const SLICE_MS = 12;
 /** Longest selection text kept for the clipboard. */
 const CLIPBOARD_LIMIT = 4_000_000;
 /** A selection longer than this is copied as plain text only (writing its HTML after every change would be slow). */
-const SELECTION_HTML_LIMIT = 200_000;
+const SELECTION_HTML_LIMIT = 1_000_000;
 
 const fontsReady = loadAppFonts();
 
@@ -709,7 +709,7 @@ class OpenDocument {
       try {
         const { documentToHtml } = await import('../formats/html.ts');
         const scratch = Object.assign(Object.create(Object.getPrototypeOf(document)), document, { body }) as WordDocument;
-        if (!this.closed && this.editor === editor) post({ type: 'selectionHtml', doc: this.doc, text, html: documentToHtml(scratch) });
+        if (!this.closed && this.editor === editor) post({ type: 'selectionHtml', doc: this.doc, text, html: documentToHtml(scratch, undefined, { inlineIndents: true }) });
       } catch {
         // The copy carries plain text only.
       }

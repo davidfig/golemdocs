@@ -2742,9 +2742,20 @@ class Writer {
     const map: HtmlAttributes = { ...attrs };
     const cls = this.styleClass(p);
     if (cls) map.class = map.class ? `${cls} ${map.class}` : cls;
-    const decls = [...extraDecls, ...this.paraDecls(p.properties, indent, align)];
+    const decls = [...extraDecls, ...this.paraDecls(indent && this.options.inlineIndents ? this.withStyleIndent(p.properties) : p.properties, indent, align)];
     if (decls.length) map.style = map.style ? `${formatDecls(decls)}; ${map.style}` : formatDecls(decls);
     return attrString(map);
+  }
+
+  /** A paragraph's direct formatting with its style's indents under its own. */
+  private withStyleIndent(pp: ParagraphProperties): ParagraphProperties {
+    const style = this.resolver.paragraph({ style: pp.style }).indent;
+    if (!style) return pp;
+    const indent = { ...style, ...pp.indent };
+    // A first-line indent and a hanging one are one setting: the paragraph's own wins over its style's.
+    if (pp.indent?.firstLine !== undefined) delete indent.hanging;
+    else if (pp.indent?.hanging !== undefined) delete indent.firstLine;
+    return { ...pp, indent };
   }
 
   // --- Blocks ---
@@ -3084,6 +3095,8 @@ export interface HtmlWriteOptions {
   images?: Map<string, ImageData>;
   /** The address to write for a picture; by default the picture is embedded as a data: URI. */
   imageSrc?: (part: string, image: ImageData) => string;
+  /** Writes each paragraph's indents on the paragraph itself, its style's included: for the clipboard, since apps that paste HTML ignore its style sheet. */
+  inlineIndents?: boolean;
 }
 
 /**

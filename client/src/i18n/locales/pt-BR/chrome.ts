@@ -151,6 +151,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': '&Depurar…',
   'chrome.view.fullScreen': '&Tela Inteira',
   'chrome.fullScreen.hint': 'Pressione Esc para sair da tela inteira',
+  'chrome.fullScreen.exit': 'Sair da tela inteira',
   'chrome.view.darkMode': 'Modo &Escuro',
   'chrome.view.darkPages': 'Pági&nas Escuras',
   'chrome.view.matchSystem': '&Seguir o Sistema',

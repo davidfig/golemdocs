@@ -5,6 +5,17 @@
 ### Added
 
 - Emoji show in color everywhere: documents of every format, text files, and PDF, picture and SVG downloads. Families, flags, keycaps and skin tones each show as one emoji, and the caret, selection and Backspace treat each as one character. The emoji images load only when a document uses one.
+- On a phone or tablet, a long press selects the word under your finger, and a double tap does too; keep your finger down and drag to select more. Dragging near the top or bottom of the screen scrolls the document as you select.
+- On a phone or tablet, a selection has a handle at each end: drag one to change where the selection starts or ends.
+
+### Changed
+
+- On a phone or tablet, tapping inside a word puts the cursor at the end of the word, so you don't have to aim between two letters, and a double tap no longer needs to land on exactly the same spot.
+
+### Fixed
+
+- View › Full Screen works on phones, where the browser has no full screen of its own: the menus and toolbars go away, and a button in the corner brings them back. It is also in the phone's menu.
+- Copying and pasting into another app keeps paragraph indents that come from a paragraph’s style, and copying a long document (Edit › Select All) keeps its formatting.
 
 ## 0.30.1 - 2026-10-31
 

@@ -151,6 +151,7 @@ export const chrome: Partial<Messages> = {
   'chrome.admin.debug': '偵錯(&D)…',
   'chrome.view.fullScreen': '全螢幕(&U)',
   'chrome.fullScreen.hint': '按 Esc 鍵離開全螢幕',
+  'chrome.fullScreen.exit': '離開全螢幕',
   'chrome.view.darkMode': '深色模式(&D)',
   'chrome.view.darkPages': '深色頁面(&P)',
   'chrome.view.matchSystem': '配合系統(&M)',

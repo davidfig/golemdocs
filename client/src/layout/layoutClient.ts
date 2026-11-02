@@ -4,7 +4,7 @@ import type { FaceDescriptor } from '@golemdocs/layout';
 import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
-import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, SpellIssue, TextMark, ToWorker, WireCommand } from './protocol.ts';
+import { layoutWorkerName, type DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, SpellIssue, TextMark, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
@@ -40,7 +40,7 @@ export interface DocumentListener {
 
 /** The page's side of the layout worker. One document is open at a time. */
 export class LayoutClient {
-  private readonly worker = new Worker(new URL('./layoutWorkerEntry.ts', import.meta.url), { type: 'module', name: 'layout' });
+  private readonly worker: Worker;
   private doc = 0;
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
@@ -55,7 +55,10 @@ export class LayoutClient {
   constructor(
     /** New faces, before any page that uses them. Called for every document, stale or not. */
     private readonly onFaces: (faces: FaceDescriptor[]) => void,
+    /** `fontBase`: where the worker loads fonts from, when not the site's own (the embeddable viewer). */
+    options: { fontBase?: string } = {},
   ) {
+    this.worker = new Worker(new URL('./layoutWorkerEntry.ts', import.meta.url), { type: 'module', name: layoutWorkerName(options.fontBase) });
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
     this.worker.onerror = (event) => this.listener?.error(event.message || t('app.workerFailed'));
   }
@@ -86,6 +89,20 @@ export class LayoutClient {
     this.listener = listener;
     const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
     this.send({ type: 'open', doc: this.doc, source, room, ...(keepRoom && { keepRoom }), ...(version !== undefined && { version }) }, transfer);
+  }
+
+  /** Opens a document read-only from the start (the embeddable viewer): it can be selected, searched and copied, never edited. */
+  openReadOnly(source: DocumentSource, listener: DocumentListener): void {
+    this.doc++;
+    this.listener = listener;
+    const transfer: Transferable[] = 'bytes' in source ? [source.bytes] : [];
+    this.send({ type: 'open', doc: this.doc, source, readOnly: true }, transfer);
+  }
+
+  /** Stops the worker for good (the embeddable viewer was taken down). */
+  terminate(): void {
+    this.close();
+    this.worker.terminate();
   }
 
   /** Tells the room where this user's mouse is (null: it left the document). */

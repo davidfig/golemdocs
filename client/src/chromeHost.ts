@@ -82,6 +82,7 @@ export interface AppHooks {
   showParagraphDialog(): void;
   /** Show the Spelling and Grammar dialog and look for the first problem. */
   showSpelling(): void;
+  showThesaurus(): void;
   /** Show the Find, Replace or Go To dialog on that tab. */
   showFind(tab: FindTab): void;
   /** Search every document by its words and #tags (Edit ▸ Search All Documents). */
@@ -332,7 +333,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'versionHistory' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates' || action.name === 'pasteSpecial' || action.name === 'searchAll';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'thesaurus' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'versionHistory' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates' || action.name === 'pasteSpecial' || action.name === 'searchAll';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode !== 'flow' || !(app.annotating() || app.isPicture());
@@ -377,6 +378,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.showMathDialog();
         case 'dialog':
           if (action.name === 'spelling') return app.showSpelling();
+          if (action.name === 'thesaurus') return app.showThesaurus();
           if (action.name === 'columns') return app.showColumnsDialog();
           if (action.name === 'paragraph') return app.showParagraphDialog();
           if (action.name === 'wordCount') return app.showWordCount();

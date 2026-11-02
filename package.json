@@ -13,6 +13,7 @@
     "typecheck": "tsc && pnpm --recursive typecheck",
     "build:home": "pnpm --filter @golemdocs/client build:home",
     "fonts": "tsx scripts/fonts/generate.ts",
+    "thesaurus": "tsx scripts/thesaurus.ts",
     "test": "pnpm --no-bail --filter @golemdocs/docx --filter @golemdocs/layout --filter @golemdocs/ops --filter @golemdocs/editor --filter @golemdocs/server --filter @golemdocs/client --filter @golemdocs/pdf --filter @golemdocs/odt test",
     "test:coverage": "tsx scripts/coverage.ts",
     "e2e": "tsx scripts/e2e.ts",

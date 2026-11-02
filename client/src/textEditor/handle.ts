@@ -106,6 +106,10 @@ export class TextEditor {
     this.view?.selectAll();
   }
 
+  selectWord(): void {
+    this.view?.selectWord();
+  }
+
   cut(): Promise<void> {
     return this.view?.cut() ?? Promise.resolve();
   }

@@ -67,6 +67,8 @@ export type Command =
   /** Shows the selected picture as another image part (it was edited); its width stays, its height follows `aspect` (height over width) unless that is 0. */
   | { kind: 'replacePicture'; image: string; aspect: number }
   | { kind: 'selectAll' }
+  /** Selects the word the caret is in (or just after); nothing happens if text is selected or the caret is not at a word. */
+  | { kind: 'selectWord' }
   /** Comments the selection (or, with none, the word at the caret). */
   | { kind: 'addComment'; text: string; author: string; date?: string }
   /** Changes a comment's text. */

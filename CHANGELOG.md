@@ -1,5 +1,12 @@
 # What’s New in Golem Docs
 
+## 0.27.0 - Unreleased
+
+### Added
+
+- Tools › Thesaurus (Shift+F7): look up words of the same meaning as the selected word, or the word at the caret, and replace it with one. Double-click a word in the list to look that one up in turn; Previous goes back. The thesaurus is in English.
+- Right-click a word for its synonyms: pick one to put it in place of the word, or choose Thesaurus… to see them all.
+
 ## 0.26.0 - 2026-10-24
 
 ### Changed

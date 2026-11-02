@@ -4,7 +4,11 @@
 import { h } from './dom.ts';
 import { ICONS } from './icons.ts';
 
-export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean } | { label: string; items: readonly PopupItem[] };
+/**
+ * A row of the menu. A submenu's `items` can be a promise (rows still being looked up): its row is there at once,
+ * and its menu says `pending` until they arrive, then shows them in place.
+ */
+export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean } | { label: string; items: readonly PopupItem[] | Promise<readonly PopupItem[]>; pending?: string };
 
 let open: { close: () => void } | null = null;
 
@@ -32,10 +36,24 @@ export function showPopupMenu(items: readonly PopupItem[], x: number, y: number,
       const disabled = 'disabled' in item && item.disabled;
       const text = h('span', { class: 'label', text: item.label });
       const el = h('div', { class: `wm-item${disabled ? ' disabled' : ''}`, attrs: { role: 'menuitem', tabindex: '-1', ...(disabled ? { 'aria-disabled': 'true' } : {}) } }, h('span', { class: 'wm-gutter' }), text);
+      // A submenu still coming: a row that says so until it arrives, then its rows (in place, if it is open by then).
+      let rowsOf: readonly PopupItem[] | null = null;
+      if ('items' in item) {
+        if (Array.isArray(item.items)) rowsOf = item.items;
+        else
+          void (item.items as Promise<readonly PopupItem[]>).then(
+            (arrived) => {
+              rowsOf = arrived;
+              if (menus[depth] === menu && menus[depth + 1]?.dataset.pending === 'true' && open?.close === close) openChild();
+            },
+            () => undefined,
+          );
+      }
       const openChild = () => {
         closeChildren();
         if (!('items' in item)) return;
-        const child = build(item.items, depth + 1);
+        const child = build(rowsOf ?? [{ label: item.pending ?? '', run: () => undefined, disabled: true }], depth + 1);
+        if (!rowsOf) child.dataset.pending = 'true';
         const box = el.getBoundingClientRect();
         document.body.append(child);
         menus.push(child);

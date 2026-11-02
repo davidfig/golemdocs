@@ -42,7 +42,7 @@ test.describe('Spelling and Grammar dialog', () => {
     await withText(app, 'I recieve teh mail.');
     await openSpelling(app);
     await expect.poll(() => app.selectedText()).toBe('recieve');
-    await spell(app).getByRole('listbox', { name: 'Suggestions' }).selectOption('receive');
+    await spell(app).getByRole('listbox', { name: 'Suggestions' }).getByRole('option', { name: 'receive', exact: true }).click();
     await btn(app, 'Change').click();
     await expect.poll(() => app.selectedText()).toBe('teh');
     await expect.poll(() => app.text()).toBe('I receive teh mail.');

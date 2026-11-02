@@ -73,6 +73,7 @@ export const chrome = {
   'chrome.format.tabs': '&Tabs…',
   'chrome.format.styles': 'St&yles…',
   'chrome.tools.spelling': '&Spelling and Grammar…',
+  'chrome.tools.thesaurus': 'T&hesaurus…',
   'chrome.tools.wordCount': '&Word Count…',
   'chrome.tools.trackChanges': '&Track Changes',
   'chrome.tools.autoFormat': '&Autoformat as You Type',

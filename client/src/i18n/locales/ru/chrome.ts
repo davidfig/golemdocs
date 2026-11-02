@@ -75,6 +75,7 @@ export const chrome: Catalog = {
   'chrome.format.tabs': '&Табуляция…',
   'chrome.format.styles': '&Стили…',
   'chrome.tools.spelling': '&Правописание…',
+  'chrome.tools.thesaurus': '&Тезаурус…',
   'chrome.tools.wordCount': '&Статистика…',
   'chrome.tools.trackChanges': '&Исправления',
   'chrome.tools.autoFormat': '&Автоформатирование при вводе',

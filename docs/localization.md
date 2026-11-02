@@ -101,6 +101,12 @@ checked). To add one:
    paragraphs get spelling but no grammar until it has rules of its own; the layout worker turns
    grammar off for them.
 
+The thesaurus (Tools ▸ Thesaurus, Synonyms in the right-click menu) is English only:
+`client/public/dictionaries/th_en_US.txt`, packed from the LibreOffice dictionaries' MyThes file by
+`pnpm thesaurus <th_en_US_v2.dat> en_US` (`scripts/thesaurus.ts`). Most other LibreOffice languages
+have a MyThes file too; adding one means packing it the same way and choosing the file by the
+language of the word looked up in `client/src/spelling/thesaurus.ts`.
+
 A language with no usable dictionary (Chinese, Japanese, Korean) is simply not checked: it gets no
 squiggles. Which language a paragraph is in comes from the language it declares (Word's `w:lang`),
 else its own words, else the document's, else the app's language.

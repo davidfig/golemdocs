@@ -430,7 +430,7 @@ test('a change that is too big, or a transaction with too many of them, is refus
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-// --- Watched rooms: PDFs and pictures are held by one session, and watched by the others ----------------------------------
+// --- Watched rooms: PDFs, pictures and workbooks are held by one session, and watched by the others ----------------------------------
 
 const holderOf = (p: { inbox: MultiplayerServerMessage[] }) => {
   const last = [...p.inbox].reverse().find((m) => m.type === 'holder' || m.type === 'welcome') as any;
@@ -438,7 +438,7 @@ const holderOf = (p: { inbox: MultiplayerServerMessage[] }) => {
 };
 
 test('a watched room never goes shared: the first session holds the document, the next watches, and the holder saves for them', async () => {
-  for (const kind of ['objects', 'layers'] as const) {
+  for (const kind of ['objects', 'layers', 'cells'] as const) {
     const t = await setup();
     const a = await t.join('a', 'editor', kind);
     assert.equal(holderOf(a), 'a');

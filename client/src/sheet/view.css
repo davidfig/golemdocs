@@ -389,3 +389,11 @@
 .wm-sheet-note-text {
   white-space: pre-wrap;
 }
+
+/* The bar saying who holds a watched document (ui/watchBanner.css) sits under the formula bar and the column headers while
+   a sheet is open, over the sheet's layer. */
+:has(> .wm-sheet:not([hidden])) > .wm-watch,
+:has(> .wm-sheet:not([hidden])) > .wm-detour {
+  top: 58px;
+  z-index: 5;
+}

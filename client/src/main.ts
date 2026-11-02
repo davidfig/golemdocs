@@ -79,6 +79,7 @@ import { arrangePages, columnsToFill, nearestPage, type Bounds } from './documen
 import { LayoutClient } from './layout/layoutClient.ts';
 import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
 import type { TextRoom } from './textEditor/view.ts';
+import type { SheetRoom } from './sheet/sheetSync.ts';
 import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type WireCommand, type WordStats } from './layout/protocol.ts';
 import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from './webgl/text/gpuFace.ts';
@@ -413,6 +414,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   viewRestored = false;
   cropLayer.cancel();
   leaveTextRoom();
+  if (!options.keepRoom) leaveSheetRoom();
   textView.close();
   sheetView.close();
   drawLayer.cancel();
@@ -654,7 +656,8 @@ async function releaseRoom(doc: OpenDocument): Promise<void> {
   try {
     await saveAndSend();
   } finally {
-    if (current === doc) worker.roomReleased();
+    if (current === doc && sheetRoomHandle) sheetRoomHandle.client.released();
+    else if (current === doc) worker.roomReleased();
   }
 }
 
@@ -750,7 +753,8 @@ async function keepWatchedEdits(doc: OpenDocument): Promise<void> {
 /** Asks to hold the open document someone else is editing (it is theirs to save first). */
 function takeOverEditing(): boolean {
   if (!current.room?.watching) return false;
-  worker.takeOver();
+  if (sheetRoomHandle) sheetRoomHandle.client.takeOver();
+  else worker.takeOver();
   setStatus(t('room.takingOver'));
   return true;
 }
@@ -817,6 +821,77 @@ function roomStateChanged(state: RoomState): void {
 }
 
 let textRoomHandle: TextRoom | null = null;
+let sheetRoomHandle: SheetRoom | null = null;
+/** The open workbook the room is for: a watcher opens it again after each save (a new open document, the same room). */
+let sheetRoomDoc: OpenDocument | null = null;
+
+function leaveSheetRoom(): void {
+  sheetRoomHandle?.client.leave();
+  sheetRoomHandle = null;
+  sheetRoomDoc = null;
+}
+
+/** A workbook in the account has a room of its own, watched (see sheet/sheetSync.ts): one session edits it, the others look. */
+async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> {
+  const room = networkRoom(cloudId);
+  if (!room || doc.roomRequested || current !== doc || !sheetView.active) return;
+  doc.roomRequested = true;
+  // The room client is loaded with the first workbook that has a room.
+  const { sheetRoom } = await import('./sheet/sheetSync.ts');
+  if (current !== doc || !sheetView.active) {
+    doc.roomRequested = false;
+    return;
+  }
+  sheetRoomDoc = doc;
+  /** The room's workbook, if it is the one open. */
+  const open = (): OpenDocument | null => (sheetRoomDoc && current === sheetRoomDoc ? sheetRoomDoc : null);
+  const handle = sheetRoom({
+    docId: cloudId,
+    client: crypto.randomUUID(),
+    name: room.user,
+    color: room.color,
+    serialize: async () => (await sheetView.save())?.xlsx ?? new Uint8Array(0),
+    changed: (state) => {
+      const d = open();
+      if (!d) return;
+      // Watching (someone else holds it), or only allowed to look: read-only.
+      sheetView.readOnly = state.role === 'viewer' || state.watching || state.catchingUp || d.shared?.role === 'viewer';
+      roomStateChanged(state);
+    },
+    upload: async (bytes) => {
+      await saveDocument(cloudId, bytes);
+    },
+    lost: () => {
+      const d = open();
+      if (sheetRoomHandle === handle) leaveSheetRoom();
+      if (d) roomGone(d);
+    },
+    saved: (updatedAt) => {
+      const d = open();
+      if (!d) return;
+      if (d.room?.watching || d.room?.catchingUp) void refreshWatched(d, updatedAt);
+      else void accountSaved(d, updatedAt);
+    },
+    release: () => {
+      const d = open();
+      if (d) void releaseRoom(d);
+    },
+    flush: () => {
+      if (open()) void saveAndSend();
+    },
+  });
+  sheetRoomHandle = handle;
+  try {
+    const start = await handle.client.join();
+    if (!open() || sheetRoomHandle !== handle) return handle.client.leave();
+    handle.client.ready(start);
+  } catch {
+    // No room to be had: the workbook is edited alone, and saved as usual.
+    handle.client.leave();
+    if (sheetRoomHandle === handle) sheetRoomHandle = null;
+    doc.roomRequested = false;
+  }
+}
 
 function leaveTextRoom(): void {
   textRoomHandle?.client.leave();
@@ -1463,6 +1538,7 @@ function flushUploads(): Promise<void> {
 function joinRoomOf(doc: OpenDocument, cloudId: string): void {
   if (current !== doc || doc.roomRequested) return;
   if (textView.active) return void joinTextRoom(doc, cloudId);
+  if (sheetView.active) return void joinSheetRoom(doc, cloudId);
   const room = networkRoom(cloudId);
   if (!room) return;
   doc.roomRequested = true;
@@ -2847,7 +2923,7 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
 /** The document a memory image that arrives belongs to (the workbook read last; null for one never saved here). */
 let sheetImageFor: OpenDocument | null = null;
 
-async function openSheet(name: string, bytes: Uint8Array, options: { localId?: string; cloudId?: string; shared?: CloudDocument; store?: boolean } = {}): Promise<void> {
+async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions = {}): Promise<void> {
   const latest = openTicket();
   let image: Uint8Array | null = null;
   try {
@@ -2858,7 +2934,9 @@ async function openSheet(name: string, bytes: Uint8Array, options: { localId?: s
   }
   if (!latest()) return;
   openRequests++;
-  const { opening } = beginOpen({ kind: 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared });
+  // Opened again in place of itself (watching, it was saved): it keeps its room.
+  const keptRoom = options.keepRoom && sheetRoomHandle ? current.room : null;
+  const { opening } = beginOpen({ kind: 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared, keepRoom: keptRoom !== null });
   worker.close();
   sheetImageFor = opening;
   // A workbook opens at its first cell, at 100%: not where the last document was.
@@ -2867,6 +2945,16 @@ async function openSheet(name: string, bytes: Uint8Array, options: { localId?: s
   camera.y = 0;
   sheetView.open(name, bytes, image);
   sheetView.readOnly = options.shared?.role === 'viewer';
+  if (keptRoom) {
+    opening.room = keptRoom;
+    opening.roomRequested = true;
+    sheetRoomDoc = opening;
+    sheetRoomHandle?.client.refreshed(options.version);
+  } else {
+    // In the account: its room, once who is signed in is known.
+    const cloudId = options.cloudId ?? options.shared?.id;
+    if (cloudId) void accountKnown.then(() => joinSheetRoom(opening, cloudId));
+  }
   loaded = true;
   documentReady();
   loadingScreen.hide();

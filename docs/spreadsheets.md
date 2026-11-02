@@ -348,7 +348,7 @@ The recommendations below were taken as decided when work went ahead unassisted 
 
 ## Progress
 
-### M6: analysis and pictures (under way, 2026-11-01)
+### M6: analysis and pictures (done, 2026-11-02)
 
 **Charts, read and drawn** (`sheet/charts/`). `readCharts` (`model.ts`) follows the sheet's `<drawing>` to its drawing part
 and each anchor holding a chart (`twoCellAnchor`, `oneCellAnchor`, `absoluteAnchor`) to its chart part, and reads the
@@ -571,6 +571,19 @@ left of its column (only the one there is room for at the top row or first colum
 (`pageBreak`). Edits that change names keep the names for undo (`BookSnapshot.names`).
 
 M6 is done.
+
+### M7: together and around (under way, 2026-11-02)
+
+**Rooms.** A workbook in the account joins a room of the kind `cells`, watched (`ROOM_POLICY`): whoever opens it first
+holds it and edits and saves it as if alone; everyone else (another person, or another device of the same account) sees
+it read-only with the watch banner, and opens it again each time it is saved; a watcher may take it over. The room client
+runs on the page beside the editor (`sheet/sheetSync.ts`, loaded with the first workbook that has a room; `joinSheetRoom`
+in `main.ts`), as a text file's does; the room's workbook is followed across those reopenings (`sheetRoomDoc`). The server
+never applies changes to a `cells` room (`applyLog`). Edited together, cell by cell, is for later. The watch banner sits
+under the formula bar and column headers while a sheet is open.
+
+**Search.** A workbook's search index is the page's (its active sheet's rows as shown, `segmentsFromBytes`): the server
+answers 422 for one without logging a failure, as for a PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

@@ -9,6 +9,7 @@
 import {
   INDEX_VERSION,
   WordDocument,
+  ZipArchive,
   ZipError,
   buildIndex,
   encodeIndex,
@@ -21,6 +22,16 @@ import { HttpError } from "./http.ts";
 import { readDocument } from "./fileStore.ts";
 import { storedDocx } from "./stored.ts";
 import { indexKey } from "./keys.ts";
+
+/** Whether stored bytes are a workbook (a ZIP with xl/workbook.xml). */
+function isWorkbook(bytes: Uint8Array): boolean {
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return false;
+  try {
+    return ZipArchive.read(bytes).entries.has("xl/workbook.xml");
+  } catch {
+    return false;
+  }
+}
 
 /** Documents bigger than this aren't indexed. */
 const MAX_BYTES = 6_000_000;
@@ -57,6 +68,8 @@ export async function documentIndex(
   if (!bytes) throw new HttpError(404, "document file is missing");
   if (bytes === "too-large")
     throw new HttpError(413, "document too large to index");
+  // A workbook's index is made by the page, from its active sheet as shown (number formats and all), as a PDF's is.
+  if (isWorkbook(bytes)) throw new HttpError(422, "the document could not be read");
   let encoded: Uint8Array;
   try {
     // A plain text file is kept as it is: its lines are its paragraphs.

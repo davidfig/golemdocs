@@ -46,6 +46,7 @@ The first person into an empty room says what its changes are (`RoomKind`, store
 | `doc` | `Operation`s on text | `Engine` in `snapshot.ts` (`applyAll`) |
 | `text` | `TextOp` byte replacements (`ops/src/textOps.ts`, up to 16 MiB) | `applyTextOps` |
 | `objects` / `layers` / `nodes` | `put`/`del` of keyed objects (`ops/src/objects.ts`): PDF markup, picture shapes, drawing nodes | `applyObjects` rewrites one `.wdoc` extension entry |
+| `cells` | none: a workbook's room is watched (`ROOM_POLICY`), one session edits and saves the `.xlsx` | `applyLog` returns the file as it is |
 
 Presence (`presence` carets as `Selection` with paragraph ids, `pointer` mouse positions) is relayed and never logged. Carets are mapped through incoming changes in the worker (`Replica.mapSelection`).
 
@@ -65,7 +66,7 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 
 - **Server:** `server/src/roomGate.ts` is the *only* module that talks to the room Durable Object. Routes call `joinRoom`, `roomAllowsSave`, `endRooms`, `kickFromRoom`, `rejoinRoom`; none of them builds a room request, knows room paths, or checks whether `env.ROOMS` exists (a server without rooms answers as if nobody were editing). `roomHeaders` is the single place the trusted `x-user`, `x-role`, `x-owner`, `x-doc`, `x-picture` headers are set, replacing whatever the client sent.
 - **Client:** `client/src/collab/cloudRoom.ts` (`cloudRoomTransport`) is the single WebSocket + document-fetch transport, used by the layout worker (`joinNetwork`) and the text editor (`textEditor/textSync.ts`). The old SharedWorker "dev rooms" (`devServer.ts`, Share > Get Link, `?room=` links) are gone. Local development gets rooms from the simulated Durable Object in `wrangler dev --local`.
-- **Client hosts:** `RoomClient` knows nothing about documents; it needs a `RoomHost`. The layout worker builds three hosts that share one `presenceHost()`: `roomHost()` (text documents, via `Replica`), `layersRoomHost()` (pictures and drawings, via `ObjectSync`), `pdfRoomHost()` (PDF markup). The text editor has its own host in `textSync.ts`.
+- **Client hosts:** `RoomClient` knows nothing about documents; it needs a `RoomHost`. The layout worker builds three hosts that share one `presenceHost()`: `roomHost()` (text documents, via `Replica`), `layersRoomHost()` (pictures and drawings, via `ObjectSync`), `pdfRoomHost()` (PDF markup). The text editor has its own host in `textSync.ts`, and the spreadsheet editor one in `sheet/sheetSync.ts` (a watched room's: `serialize` is the workbook's `.xlsx`, and its `saved`, `release` and `flush` go to the page's `refreshWatched`, `releaseRoom` and `saveAndSend`, as the layout worker's `watchRoomHost` does; a watcher's workbook is read-only, and is opened again in place after each save, keeping its room).
 - `CollabServer` (`ops/src/collab.ts`) remains only as the in-memory reference server for tests (`ops/test`, `editor/test/fuzz.test.ts`, some `client/test` specs).
 
 ## Key files

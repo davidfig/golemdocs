@@ -3,8 +3,21 @@
 
 type ByteTransform = { readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array> };
 
+/**
+ * The bytes as a stream, made directly rather than as a Blob's: WebKit reads a Blob's stream through a `blob:` address, which a worker
+ * with an opaque origin (the embeddable viewer's, in a sandboxed frame) is not allowed to load.
+ */
+function bytesStream(data: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(data);
+      controller.close();
+    },
+  });
+}
+
 function stream(data: Uint8Array, transform: ByteTransform): ReadableStream<Uint8Array> {
-  return new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(transform);
+  return bytesStream(data).pipeThrough(transform);
 }
 
 /**

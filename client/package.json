@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:viewer": "tsc && vite build --config vite.viewer.config.ts",
     "preview": "vite preview",
     "build:home": "node --experimental-transform-types --disable-warning=ExperimentalWarning home/build.ts",
     "typecheck": "tsc",

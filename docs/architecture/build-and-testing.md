@@ -41,6 +41,7 @@ Rules (AGENTS.md "Bundle size and lazy loading"): split into its own chunk only 
 - **Fonts and dictionaries:** never in a JS bundle. `client/public/fonts/` (manifest, MSDF atlases `.webp`, metrics `.json`, `.ttf`) and `client/public/dictionaries/` are fetched on demand; `FontSet.ensure`/`ensurePages` (`layout/src/fonts/fontSet.ts`) loads a face or an extra page only when a document uses a character on it.
 - **Locales:** each language catalog (`i18n/locales.ts`) is its own lazy chunk.
 - **Check your work:** read the chunk list after a build. The `layoutWorker-*.js` and main `index-*.js` should not grow because of a new format, and a new chunk under ~20 kB should be merged back.
+- **The embeddable viewer** is a build of its own: `pnpm --filter @golemdocs/client build:viewer` (`client/vite.viewer.config.ts`, which reuses `vite.config.ts`) writes a self-contained `client/dist-viewer/` (relative paths, its font set in `fonts/`, none of `public/`) for another app to bundle. It is not deployed with the site, and the app's build doesn't change for it. See [Embeddable viewer](viewer.md).
 - Vite plugin `welcomeContent()` (`client/seo.ts`) inlines welcome text and writes the marketing pages into `dist/home/` at build ([UI](ui.md)). In dev the Vite server proxies `/api` (websockets included) to the Worker on :3001, and serves the docx corpus at `/__corpus/`.
 
 ## Scripts
@@ -72,7 +73,7 @@ Run `pnpm test` (all packages, `--no-bail`) or one package: `pnpm --filter @gole
 
 ## End-to-end tests
 
-Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `editing`, `files`, `layout`, `pdf`, `shell`, plus `smoke.spec.ts`). It starts its own servers: a simulated-local `wrangler dev` on :3101 with a throwaway `--persist-to` state folder (`e2e/ports.ts`, `E2E_STATE`), signed in as `DEV_USER=e2e@example.com`, and Vite on :5273. Never the `pnpm dev` ports.
+Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `editing`, `files`, `layout`, `pdf`, `shell`, `viewer`, plus `smoke.spec.ts`). `e2e/viewer/sandbox.spec.ts` builds the viewer itself and serves it from a server of its own; its WebKit half runs only where Playwright's WebKit is installed (`pnpm exec playwright install webkit`) and is skipped otherwise. It starts its own servers: a simulated-local `wrangler dev` on :3101 with a throwaway `--persist-to` state folder (`e2e/ports.ts`, `E2E_STATE`), signed in as `DEV_USER=e2e@example.com`, and Vite on :5273. Never the `pnpm dev` ports.
 
 - `e2e/fixtures.ts` exports `test` (extends Playwright's with an `app: App` fixture and defaults for sidebar, status bar and autocorrect) and `App`: `goto`, `blank()` (File › New with the caret in it), `ready()` (waits for `window.loaded`), `menu()`, `editor` (`#input`), `canvas` (`#canvas`), `focus()`. Each test gets a fresh browser profile.
 - The editor is a canvas, so assert through `app.text()` and `window` hooks (`selectionState`, `loaded`, `pages`, `status`), the DOM of menus and dialogs, or downloaded files.

@@ -189,7 +189,7 @@ onScrollPastEndChange(() => {
   camera.scrollPastEnd = scrollPastEndOn();
   requestRender();
 });
-const renderer = new PageRenderer(gl);
+const renderer = new PageRenderer(gl, deskColor);
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 // The default font nearly every document uses: fetch its atlases now, not after the first layout.
 atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);

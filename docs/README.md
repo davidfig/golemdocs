@@ -18,6 +18,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Collaboration](architecture/collaboration.md) | Rooms, the central log, handoff and settle, one gateway and one transport |
 | [UI](architecture/ui.md) | App shell, actions and commands, shared components, spelling, the home site |
 | [Build and testing](architecture/build-and-testing.md) | Workspace, lazy chunks, unit and e2e tests, CI, deploy, release |
+| [Embeddable viewer](architecture/viewer.md) | The read-only viewer other apps frame (satchel.email): its API and messages, build, font set, running it sandboxed |
 
 ## Feature and subsystem docs
 

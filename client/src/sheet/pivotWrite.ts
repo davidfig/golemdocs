@@ -75,8 +75,8 @@ function syncTable(root: XmlElement, p: PivotTable): void {
   location.attrs.ref = rangeName(p.location);
   const twoRows = p.colFields.length > 0;
   location.attrs.firstHeaderRow = '1';
-  location.attrs.firstDataRow = String(twoRows ? 1 + p.colFields.length : 1);
-  location.attrs.firstDataCol = '1';
+  location.attrs.firstDataRow = String(p.look?.headerRows ?? (twoRows ? 1 + p.colFields.length : 1));
+  location.attrs.firstDataCol = String(p.look?.labelCols ?? 1);
   if (p.pageFields.length) {
     location.attrs.rowPageCount = String(p.pageFields.length);
     location.attrs.colPageCount = '1';
@@ -94,9 +94,24 @@ function syncTable(root: XmlElement, p: PivotTable): void {
     else delete field.attrs.axis;
     if (dataFieldSet.has(i)) field.attrs.dataField = '1';
     else delete field.attrs.dataField;
+    // Its layout, subtotals and sort (each written only when not Excel's default).
+    const flag = (name: string, value: string | undefined) => (value === undefined ? delete field.attrs[name] : (field.attrs[name] = value));
+    flag('compact', f.compact === false ? '0' : undefined);
+    flag('outline', f.outline === false ? '0' : undefined);
+    flag('subtotalTop', f.subtotalTop === false ? '0' : undefined);
+    flag('defaultSubtotal', f.subtotal ? undefined : '0');
+    flag('sortType', f.sort);
     const at = field.children.findIndex((c) => typeof c !== 'string' && local(c) === 'items');
     if (f.axis) {
-      const items = f.items.map((x) => e('item', { x }));
+      // Each item keeps what else it said (collapsed, its own caption...); hidden as the model says.
+      const before = new Map(kids(kid(field, 'items'), 'item').filter((i) => i.attrs.x !== undefined && !i.attrs.t).map((i) => [+i.attrs.x!, i.attrs]));
+      const hidden = new Set(f.hidden ?? []);
+      const items = f.items.map((x) => {
+        const attrs: Record<string, string | number> = { ...before.get(x), x };
+        if (hidden.has(x)) attrs.h = 1;
+        else delete attrs.h;
+        return e('item', attrs);
+      });
       if (f.subtotal) items.push(e('item', { t: 'default' }));
       const list = e('items', { count: items.length }, items);
       if (at >= 0) field.children[at] = list;
@@ -123,6 +138,15 @@ function syncTable(root: XmlElement, p: PivotTable): void {
   setChild(root, 'dataFields', data.length ? e('dataFields', { count: data.length }, data) : null, TABLE_ORDER);
   if (p.rowFields.includes(-2)) root.attrs.dataOnRows = '1';
   else delete root.attrs.dataOnRows;
+  const total = (name: string, on: boolean) => (on ? delete root.attrs[name] : (root.attrs[name] = '0'));
+  total('rowGrandTotals', p.grandRows);
+  total('colGrandTotals', p.grandCols);
+  // The table's own compact flags follow its row fields' (they are what Excel gives fields added later).
+  const compact = p.rowFields.every((f) => f < 0 || p.fields[f]?.compact !== false);
+  for (const name of ['compact', 'compactData']) {
+    if (compact) delete root.attrs[name];
+    else root.attrs[name] = '0';
+  }
 }
 
 /** A cache brought in line with the model: its fields' values, refreshed when opened, its records dropped. */

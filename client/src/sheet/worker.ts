@@ -4,7 +4,7 @@
 //
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
-import { pivotChoice } from './pivot.ts';
+import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { currentRegion } from './edit.ts';
@@ -84,6 +84,12 @@ export function info(b: Workbook): BookInfo {
         charts: sheet.charts.length || undefined,
         sparklines: sheet.sparklines.some((g) => g.sparklines.length) || undefined,
         pivots: sheet.pivots.length ? sheet.pivots.map((p) => ({ name: p.name, range: { ...p.location, r0: Math.max(0, p.location.r0 - (p.pageFields.length ? p.pageFields.length + 1 : 0)) } })) : undefined,
+        pivotButtons: sheet.pivots.length
+          ? sheet.pivots.flatMap((p, pivot) => {
+              const look = pivotLookOf(b, p);
+              return look ? pivotButtons(p, look).map((x) => ({ ...x, pivot, fields: x.fields.map((field) => ({ field, name: p.cache.fields[field]?.name ?? '' })) })) : [];
+            })
+          : undefined,
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
         filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
@@ -309,6 +315,11 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       }
       case 'filterValues': {
         const sheet = book.sheets[m.sheet];
+        if (m.pivot) {
+          const p = sheet && isWorksheet(sheet) ? sheet.pivots[m.pivot.index] : undefined;
+          const items = p ? pivotFieldItems(p, m.pivot.field) : { values: [], shown: null };
+          return post({ t: 'filterValues', id: m.id, values: items.values, blanks: false, shown: items.shown, shownBlanks: true });
+        }
         const table = m.table && sheet && isWorksheet(sheet) ? sheet.tables.find((t) => t.displayName === m.table) : undefined;
         const filter = sheet && isWorksheet(sheet) ? (m.table ? table && tableFilter(table) : sheet.autoFilter) : null;
         if (!sheet || !isWorksheet(sheet) || !filter) return post({ t: 'filterValues', id: m.id, values: [], blanks: false, shown: null, shownBlanks: true });

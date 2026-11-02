@@ -10,7 +10,7 @@ import { Kind } from '../src/sheet/model/column.ts';
 import type { Worksheet } from '../src/sheet/model/worksheet.ts';
 import type { Workbook } from '../src/sheet/model/workbook.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
-import { pivotLayout, pivotLookOf, pivotPaint, pivotSource, pivotSupported } from '../src/sheet/pivot.ts';
+import { pivotButtons, pivotChoice, pivotFieldItems, pivotLayout, pivotLookOf, pivotPaint, pivotSource, pivotSupported } from '../src/sheet/pivot.ts';
 import type { PivotLayout } from '../src/sheet/pivot.ts';
 import { History } from '../src/sheet/edit.ts';
 import { Workbook as Book } from '../src/sheet/model/workbook.ts';
@@ -57,7 +57,7 @@ test('pivot tables are read with their fields, data and cache', async () => {
   assert.ok(sheet.pivots.every(pivotSupported));
 });
 
-for (const name of ['pivots-excel.xlsx', 'pivots2-excel.xlsx']) {
+for (const name of ['pivots-excel.xlsx', 'pivots2-excel.xlsx', 'pivots3-excel.xlsx']) {
   test(`every pivot is laid out from its source exactly as Excel lays it out (${name})`, async () => {
     const book = await readWorkbook(readFileSync(new URL(`./fixtures/sheets/${name}`, import.meta.url)));
     const engine = new Engine(book);
@@ -76,7 +76,7 @@ for (const name of ['pivots-excel.xlsx', 'pivots2-excel.xlsx']) {
         assert.deepEqual(layout.look, p.look, `${p.name}'s look`);
       }
     }
-    assert.equal(count, name === 'pivots-excel.xlsx' ? 2 : 4);
+    assert.equal(count, { 'pivots-excel.xlsx': 2, 'pivots2-excel.xlsx': 4, 'pivots3-excel.xlsx': 8 }[name]);
   });
 }
 
@@ -177,4 +177,62 @@ test('a pivot style shades the header and grand total, bolds outer items, and in
   const back = (written.sheets[1] as Worksheet).pivots[1];
   assert.equal(back.look, undefined);
   assert.deepEqual(pivotLookOf(written, back), look);
+});
+
+test('a sorted field puts new items in their places; hidden items stay hidden and are written so', async () => {
+  const book = await readWorkbook(readFileSync(new URL('./fixtures/sheets/pivots3-excel.xlsx', import.meta.url)));
+  const history = new History(book);
+  history.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
+  const index = (name: string) => book.sheets.findIndex((s) => s.name === name);
+  history.apply(index('Sorted'), { kind: 'refreshPivots' });
+  history.apply(index('Hidden'), { kind: 'refreshPivots' });
+  const sorted = book.sheets[index('Sorted')] as Worksheet;
+  // Products down, descending; regions across, ascending.
+  assert.deepEqual(cellsAt(book, sorted, 3, 0, 6, 1).map((r) => r[0]), ['Row Labels', 'Pens', 'Paper', 'Ink', 'Glue', 'Grand Total']);
+  assert.deepEqual(cellsAt(book, sorted, 3, 1, 1, 4)[0], ['East', 'North', 'South', 'West']);
+  // West and Ink hidden: the new South shows, its Glue too.
+  const hidden = book.sheets[index('Hidden')] as Worksheet;
+  assert.deepEqual(cellsAt(book, hidden, 2, 0, 11, 1).map((r) => r[0]), ['Row Labels', 'East', 'Pens', 'Paper', 'North', 'Pens', 'Paper', 'South', 'Glue', 'Grand Total', '']);
+  const written = await readWorkbook(await writeWorkbook(book));
+  const back = (written.sheets[index('Hidden')] as Worksheet).pivots[0];
+  assert.deepEqual([back.fields[0].hidden, back.fields[1].hidden], [[1], [1]]);
+  assert.equal((written.sheets[index('Sorted')] as Worksheet).pivots[0].fields[1].sort, 'descending');
+});
+
+test('the field list sets a pivot’s layout, subtotals and grand totals; its buttons sort and filter a field', async () => {
+  const { book, sheet } = await open('pivots-excel.xlsx');
+  const history = new History(book);
+  const choice = { ...pivotChoice(sheet.pivots[1]), layout: 'tabular' as const, subtotals: 'bottom' as const, grand: 'cols' as const };
+  history.apply(1, { kind: 'pivotFields', index: 1, choice });
+  const p = sheet.pivots[1];
+  assert.deepEqual(pivotChoice(p).layout, 'tabular');
+  assert.deepEqual(pivotChoice(p).grand, 'cols');
+  const at = (rows: number) => cellsAt(book, sheet, p.location.r0, p.location.c0, rows, 3);
+  assert.deepEqual(at(3), [
+    ['', '', 'Values'],
+    ['Row Labels', 'Product', 'Sum of Amount'],
+    ['East', 'Pens', '270'],
+  ]);
+  // Its buttons: the two label columns' heads, and the values' (the column labels have no field).
+  const look = pivotLookOf(book, p)!;
+  assert.deepEqual(pivotButtons(p, look).map((b) => [b.row - p.location.r0, b.col - p.location.c0, b.fields]), [[1, 0, [0]], [1, 1, [1]]]);
+  // Products sorted Z to A, and Ink hidden: no grand total row (only the column).
+  history.apply(1, { kind: 'pivotField', index: 1, field: 1, sort: 'descending' });
+  history.apply(1, { kind: 'pivotField', index: 1, field: 1, shown: ['Pens', 'Paper'] });
+  assert.deepEqual(pivotFieldItems(sheet.pivots[1], 1), { values: ['Pens', 'Paper', 'Ink'], shown: ['Pens', 'Paper'] });
+  assert.deepEqual(cellsAt(book, sheet, p.location.r0 + 2, p.location.c0, 4, 3), [
+    ['East', 'Pens', '270'],
+    ['', 'Paper', '30'],
+    ['East Total', '', '300'],
+    ['West', 'Pens', '60'],
+  ]);
+  assert.equal(sheet.pivots[1].grandRows, false);
+  // A filter showing one item shows it as its item; showing all, none hidden.
+  history.apply(1, { kind: 'pivotField', index: 1, field: 1, shown: null });
+  assert.equal(sheet.pivots[1].fields[1].hidden, undefined);
+  history.undo();
+  history.undo();
+  history.undo();
+  history.undo();
+  assert.deepEqual(pivotChoice(sheet.pivots[1]).layout, 'compact');
 });

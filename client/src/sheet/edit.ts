@@ -4,7 +4,7 @@
 // in other formulas are moved by the engine too when rows and columns move.
 
 import { newSparklineGroup } from './sparklines.ts';
-import { applyChoice, gridValue, newPivot, refreshPivot } from './pivot.ts';
+import { applyChoice, gridValue, newPivot, refreshPivot, setPivotField } from './pivot.ts';
 import { rangeName } from './refs.ts';
 import { changeKind, newChart, withData } from './charts/make.ts';
 import { Column, Kind, MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
@@ -191,6 +191,7 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
     case 'createTable':
     case 'refreshPivots':
     case 'pivotFields':
+    case 'pivotField':
       return 'cells';
     case 'insertRows':
     case 'deleteRows':
@@ -233,7 +234,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -449,11 +450,13 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       }
       return { ranges: [everything()] };
     }
-    case 'pivotFields': {
+    case 'pivotFields':
+    case 'pivotField': {
       const before = sheet.pivots;
       const p = before[op.index];
       if (!p) return { ranges: [] };
-      sheet.pivots = before.map((x, i) => (i === op.index ? applyChoice(x, op.choice) : x));
+      const next = op.kind === 'pivotFields' ? applyChoice(p, op.choice) : setPivotField(p, op.field, op);
+      sheet.pivots = before.map((x, i) => (i === op.index ? next : x));
       const done = refreshPivot(book, sheet, op.index);
       if (done.message) {
         sheet.pivots = before;

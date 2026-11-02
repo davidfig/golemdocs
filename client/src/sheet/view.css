@@ -302,6 +302,29 @@
   white-space: nowrap;
 }
 
+/* Under the fields, the pivot's layout, subtotals and grand totals: a choice each across both of the fields' columns. */
+.wm-sheet-pivot-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--wm-border);
+}
+
+.wm-sheet-pivot-options .wm-sheet-pivot-row {
+  grid-template-columns: 1fr 286px;
+}
+
+.wm-sheet-pivot-options .wm-dropdown {
+  width: 100%;
+}
+
+/* A pivot button's card for several fields: the field's choice above the sort buttons. */
+.wm-sheet-filter-field .wm-dropdown {
+  width: 100%;
+}
+
 /* The card for typing a note takes the pointer, unlike the one that only shows it. */
 .wm-comment.wm-sheet-note.wm-sheet-note-edit {
   pointer-events: auto;

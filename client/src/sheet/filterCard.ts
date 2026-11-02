@@ -4,6 +4,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
+import { choiceButton } from '../ui/dropdown.ts';
 import { dialogTitleBar } from '../ui/popup.ts';
 
 export interface FilterChoice {
@@ -22,6 +23,8 @@ export interface FilterCardRequest {
   /** Where to put the card (window point under the button). */
   clientX: number;
   clientY: number;
+  /** A pivot button for several fields: which one the card is for, and choosing another (Excel's Select Field). */
+  fields?: { names: string[]; current: number; choose(index: number): void };
   sort(descending: boolean): void;
   apply(choice: FilterChoice): void;
 }
@@ -29,6 +32,7 @@ export interface FilterCardRequest {
 export class FilterCard {
   private readonly root: HTMLDivElement;
   private readonly list = h('div', { class: 'wm-sheet-filter-list', attrs: { role: 'group' } });
+  private readonly field = h('div', { class: 'wm-sheet-filter-field' });
   private request: FilterCardRequest | null = null;
   private boxes: { value: string | null; box: HTMLInputElement; label: HTMLElement }[] = [];
   private all!: HTMLInputElement;
@@ -42,7 +46,7 @@ export class FilterCard {
       'div',
       { class: 'wm-dialog wm-over wm-sheet-filter', attrs: { role: 'dialog', 'aria-label': t('sheet.op.filter') } },
       dialogTitleBar(t('sheet.op.filter'), () => this.hide()),
-      h('div', { class: 'wm-dialog-body wm-sheet-filter-body' }, h('div', { class: 'wm-sheet-filter-sort' }, ascending, descending), this.list),
+      h('div', { class: 'wm-dialog-body wm-sheet-filter-body' }, this.field, h('div', { class: 'wm-sheet-filter-sort' }, ascending, descending), this.list),
       h('div', { class: 'wm-dialog-buttons' }, ok, cancel),
     );
     this.root.hidden = true;
@@ -60,7 +64,8 @@ export class FilterCard {
         this.ok();
       }
     });
-    document.addEventListener('pointerdown', (e) => !this.root.hidden && !this.root.contains(e.target as Node) && this.hide(), true);
+    // A press in a list it opened (the field's choice) is not a press elsewhere.
+    document.addEventListener('pointerdown', (e) => !this.root.hidden && !this.root.contains(e.target as Node) && !(e.target as Element).closest?.('.wm-popup') && this.hide(), true);
     document.body.append(this.root);
   }
 
@@ -70,6 +75,16 @@ export class FilterCard {
 
   show(request: FilterCardRequest): void {
     this.request = request;
+    const fields = request.fields;
+    this.field.hidden = !fields;
+    if (fields) {
+      const names = fields.names.map((_, i) => String(i));
+      const pick = choiceButton({ label: t('sheet.pivot.field'), groups: () => [{ values: names }], name: (v) => fields.names[+v] ?? '' }, (v) => {
+        if (+v !== fields.current) fields.choose(+v);
+      });
+      pick.set(String(fields.current));
+      this.field.replaceChildren(pick.el);
+    }
     const shown = request.shown && new Set(request.shown.map((v) => v.toLowerCase()));
     const row = (label: string, checked: boolean) => {
       const box = h('input', { attrs: { type: 'checkbox' } });

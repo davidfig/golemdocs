@@ -160,6 +160,8 @@ export interface SheetInfo {
   charts?: number;
   /** The sheet's pivot tables: each one's place (its filters above it included). */
   pivots?: { name: string; range: CellRange }[];
+  /** The pivots' field buttons: a cell, its pivot and the fields it sorts and filters (its card chooses among several). */
+  pivotButtons?: { row: number; col: number; pivot: number; fields: { field: number; name: string }[]; filtered: boolean }[];
   /** The sheet has sparklines (they come with the charts). */
   sparklines?: boolean;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
@@ -244,6 +246,8 @@ export type EditOp =
   | { kind: 'insertPivot'; range: CellRange; choice: PivotChoice }
   /** The field list: a pivot's fields placed again, and the pivot laid out. */
   | { kind: 'pivotFields'; index: number; choice: PivotChoice }
+  /** A pivot field's button: its items sorted, or only some of them shown (null: all), and the pivot laid out. */
+  | { kind: 'pivotField'; index: number; field: number; sort?: 'ascending' | 'descending'; shown?: string[] | null }
   /** Refresh: the sheet's pivot tables laid out again from their sources. */
   | { kind: 'refreshPivots' }
   /** Insert › Sparklines: one per row of a block of cells, in the column after it. */
@@ -303,7 +307,7 @@ export type ToWorker =
   /** The longest texts shown in a column (with their styles), to fit its width to them. */
   | { t: 'columnTexts'; id: number; sheet: number; col: number }
   /** The values a column of the AutoFilter could show, and those it shows. */
-  | { t: 'filterValues'; id: number; sheet: number; col: number; table?: string }
+  | { t: 'filterValues'; id: number; sheet: number; col: number; table?: string; pivot?: { index: number; field: number } }
   /** The choices a cell's list validation offers. */
   | { t: 'choices'; id: number; sheet: number; row: number; col: number }
   /** A cell's note. */

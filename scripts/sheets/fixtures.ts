@@ -174,15 +174,33 @@ interface PivotShape {
   cols: number[];
   data: { fld: number; fn?: string; name: string }[];
   pages?: { fld: number; item?: number }[];
+  /** More attributes for the table (in place of `outline="1" outlineData="1"`) and for some of its fields. */
+  table?: string;
+  field?: Record<number, string>;
+  /** Items hidden in some fields (their places). */
+  hidden?: Record<number, number[]>;
 }
+
+/** pivots3.xlsx: the same sales, and a pivot of each further layout and option (pivots3-excel.xlsx is Excel's refresh of
+ * it): the outline and tabular layouts, subtotals at the bottom, sorted items and hidden items. */
+export const PIVOT_OPTIONS: PivotShape[] = [
+  { name: 'Outline', at: 'A3', rows: [0, 1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], table: 'compact="0" compactData="0" outline="1" outlineData="1"', field: { 0: 'compact="0"', 1: 'compact="0"' } },
+  { name: 'Tabular', at: 'A3', rows: [0, 1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], table: 'compact="0" compactData="0"', field: { 0: 'compact="0" outline="0"', 1: 'compact="0" outline="0"' } },
+  { name: 'TabularAcross', at: 'A3', rows: [0, 1], cols: [2], data: [{ fld: 3, name: 'Sum of Amount' }], table: 'compact="0" compactData="0"', field: { 0: 'compact="0" outline="0"', 1: 'compact="0" outline="0"', 2: 'compact="0" outline="0"' } },
+  { name: 'Bottom', at: 'A3', rows: [0, 1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], field: { 0: 'subtotalTop="0"' } },
+  { name: 'OutlineBottom', at: 'A3', rows: [0, 1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], table: 'compact="0" compactData="0" outline="1" outlineData="1"', field: { 0: 'compact="0" subtotalTop="0"', 1: 'compact="0"' } },
+  { name: 'Sorted', at: 'A3', rows: [1], cols: [0], data: [{ fld: 3, name: 'Sum of Amount' }], field: { 1: 'sortType="descending"', 0: 'sortType="ascending"' } },
+  { name: 'Hidden', at: 'A3', rows: [0, 1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], hidden: { 0: [1], 1: [1] } },
+  { name: 'NoRowGrand', at: 'A3', rows: [0], cols: [1], data: [{ fld: 3, name: 'Sum of Amount' }], table: 'outline="1" outlineData="1" rowGrandTotals="0"' },
+];
 
 /**
  * pivots2.xlsx: the same sales, and a pivot of each further shape on a sheet of its own, written to be refreshed on
  * opening (pivots2-excel.xlsx is Excel's refresh of it): two fields across; a field and two values across; a filter set to
  * one item; the values down.
  */
-export async function pivotShapesWorkbook(only?: string[]): Promise<Uint8Array> {
-  const all: PivotShape[] = [
+export async function pivotShapesWorkbook(only?: string[], given?: PivotShape[]): Promise<Uint8Array> {
+  const all: PivotShape[] = given ?? [
     { name: 'ByRegionProduct', at: 'A3', rows: [2], cols: [0, 1], data: [{ fld: 3, name: 'Sum of Amount' }] },
     { name: 'MonthValues', at: 'A3', rows: [2], cols: [1, -2], data: [{ fld: 3, name: 'Sum of Amount' }, { fld: 3, fn: 'count', name: 'Count of Amount' }] },
     { name: 'EastOnly', at: 'A3', rows: [1], cols: [], data: [{ fld: 3, name: 'Sum of Amount' }], pages: [{ fld: 0, item: 0 }] },
@@ -207,18 +225,19 @@ export async function pivotShapesWorkbook(only?: string[]): Promise<Uint8Array> 
   const workbookXml = await pkg.text('xl/workbook.xml');
   const pivotCaches = `<pivotCaches><pivotCache cacheId="1" r:id="${cacheRel}"/></pivotCaches>`;
   pkg.set('xl/workbook.xml', workbookXml.includes('<calcPr') ? workbookXml.replace(/(<calcPr[^>]*\/>)/, `$1${pivotCaches}`) : workbookXml.replace('</workbook>', `${pivotCaches}</workbook>`), `${TYPE}.sheet.main+xml`);
-  const items = (col: number) => `<items count="${distinct(col).length + 1}">${distinct(col).map((_, i) => `<item x="${i}"/>`).join('')}<item t="default"/></items>`;
   for (const [i, s] of shapes.entries()) {
+    const items = (col: number) => `<items count="${distinct(col).length + 1}">${distinct(col).map((_, x) => `<item x="${x}"${s.hidden?.[col]?.includes(x) ? ' h="1"' : ''}/>`).join('')}<item t="default"/></items>`;
     const axisOf = (f: number) => (s.rows.includes(f) ? 'axisRow' : s.cols.includes(f) ? 'axisCol' : s.pages?.some((p) => p.fld === f) ? 'axisPage' : null);
     const fields = [0, 1, 2, 3].map((f) => {
       const axis = axisOf(f);
       const data = s.data.some((d) => d.fld === f) ? ' dataField="1"' : '';
-      return axis ? `<pivotField axis="${axis}"${data} showAll="0">${items(f)}</pivotField>` : `<pivotField${data} showAll="0"/>`;
+      const more = s.field?.[f] ? ` ${s.field[f]}` : '';
+      return axis ? `<pivotField axis="${axis}"${data} showAll="0"${more}>${items(f)}</pivotField>` : `<pivotField${data} showAll="0"${more}/>`;
     });
     const list = (name: string, xs: number[]) => (xs.length ? `<${name} count="${xs.length}">${xs.map((x) => `<field x="${x}"/>`).join('')}</${name}>` : '');
     const pages = s.pages?.length ? `<pageFields count="${s.pages.length}">${s.pages.map((p) => `<pageField fld="${p.fld}"${p.item === undefined ? '' : ` item="${p.item}"`} hier="-1"/>`).join('')}</pageFields>` : '';
     const xml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><pivotTableDefinition xmlns="${MAIN}" name="${s.name}" cacheId="1" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values"${s.rows.includes(-2) ? ' dataOnRows="1"' : ''} updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" multipleFieldFilters="0">` +
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><pivotTableDefinition xmlns="${MAIN}" name="${s.name}" cacheId="1" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values"${s.rows.includes(-2) ? ' dataOnRows="1"' : ''} updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" ${s.table ?? 'outline="1" outlineData="1"'} multipleFieldFilters="0">` +
       `<location ref="${s.at}:${s.at}" firstHeaderRow="1" firstDataRow="1" firstDataCol="1"${s.pages?.length ? ` rowPageCount="${s.pages.length}" colPageCount="1"` : ''}/>` +
       `<pivotFields count="4">${fields.join('')}</pivotFields>${list('rowFields', s.rows)}${list('colFields', s.cols)}${pages}` +
       `<dataFields count="${s.data.length}">${s.data.map((d) => `<dataField name="${d.name}" fld="${d.fld}"${d.fn ? ` subtotal="${d.fn}"` : ''} baseField="0" baseItem="0"/>`).join('')}</dataFields>` +
@@ -233,6 +252,7 @@ export async function pivotShapesWorkbook(only?: string[]): Promise<Uint8Array> 
 
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
   writeFileSync(path.join(FIXTURES, 'pivots2.xlsx'), await pivotShapesWorkbook());
+  writeFileSync(path.join(FIXTURES, 'pivots3.xlsx'), await pivotShapesWorkbook(undefined, PIVOT_OPTIONS));
   writeFileSync(path.join(FIXTURES, 'pivots.xlsx'), await pivotsWorkbook());
   writeFileSync(path.join(FIXTURES, 'sparklines.xlsx'), await sparklinesWorkbook());
   writeFileSync(path.join(FIXTURES, 'validation.xlsx'), await validationWorkbook());

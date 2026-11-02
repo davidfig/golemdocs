@@ -36,6 +36,14 @@ import { parseTabbed } from './clipboard.ts';
 import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
 import './view.css';
 
+/** A row of filter buttons: the AutoFilter's, a table's (`table`), or a pivot field's button (one cell, `pivot`). */
+interface SheetFilter {
+  range: CellRange;
+  filtered: number[];
+  table?: string;
+  pivot?: { index: number; fields: { field: number; name: string }[] };
+}
+
 export interface SheetEditorDeps {
   camera: Camera;
   gl: WebGL2RenderingContext;
@@ -1284,14 +1292,16 @@ export class SheetEditorView {
     for (let i = 0; i < cols.length; i++) void this.edit({ kind: 'columnWidth', cols: [cols[i]], size: sizes[i] });
   }
 
-  /** The sheet's AutoFilter and its tables': `table` names a table's. */
-  private filters(): { range: CellRange; filtered: number[]; table?: string }[] {
+  /** The sheet's AutoFilter, its tables' (`table` names a table's) and its pivots' field buttons (a cell each). */
+  private filters(): SheetFilter[] {
     const info = this.info;
-    return info ? [...(info.filter ? [info.filter] : []), ...(info.tableFilters ?? [])] : [];
+    if (!info) return [];
+    const pivots = (info.pivotButtons ?? []).map((b): SheetFilter => ({ range: { r0: b.row, c0: b.col, r1: b.row, c1: b.col }, filtered: b.filtered ? [b.col] : [], pivot: { index: b.pivot, fields: b.fields } }));
+    return [...(info.filter ? [info.filter] : []), ...(info.tableFilters ?? []), ...pivots];
   }
 
   /** The filter whose header row a cell is on. */
-  private filterOf(row: number, col: number): { range: CellRange; filtered: number[]; table?: string } | undefined {
+  private filterOf(row: number, col: number): SheetFilter | undefined {
     return this.filters().find((f) => row === f.range.r0 && col >= f.range.c0 && col <= f.range.c1);
   }
 
@@ -1318,6 +1328,7 @@ export class SheetEditorView {
   private async openFilter(row: number, col: number, x: number, y: number): Promise<void> {
     const filter = this.filterOf(row, col);
     if (!filter) return;
+    if (filter.pivot) return this.openPivotFilter(filter.pivot, x, y);
     const table = filter.table;
     const reply = await this.ask<Extract<FromWorker, { t: 'filterValues' }>>({ t: 'filterValues', id: this.id(), sheet: this.sheetIndex, col, table }).catch(() => null);
     if (!reply) return;
@@ -1332,6 +1343,27 @@ export class SheetEditorView {
       clientY: canvas.top + y + 8,
       sort: (descending) => void this.edit({ kind: 'sort', range: filter.range, keys: [{ col, descending }], header: true }),
       apply: (choice) => void this.edit({ kind: 'filter', col, values: choice.values, blanks: choice.blanks, table }),
+    });
+  }
+
+  /** Opens a pivot field button's card: sort its field, tick the items it shows; with several fields, choose one first. */
+  private async openPivotFilter(pivot: NonNullable<SheetFilter['pivot']>, x: number, y: number, which = 0): Promise<void> {
+    const field = pivot.fields[which]?.field;
+    if (field === undefined) return;
+    const reply = await this.ask<Extract<FromWorker, { t: 'filterValues' }>>({ t: 'filterValues', id: this.id(), sheet: this.sheetIndex, col: 0, pivot: { index: pivot.index, field } }).catch(() => null);
+    if (!reply) return;
+    const canvas = this.el.getBoundingClientRect();
+    this.filterCard ??= new FilterCard();
+    this.filterCard.show({
+      values: reply.values,
+      blanks: false,
+      shown: reply.shown,
+      shownBlanks: true,
+      clientX: canvas.left + x,
+      clientY: canvas.top + y + 8,
+      fields: pivot.fields.length > 1 ? { names: pivot.fields.map((f) => f.name), current: which, choose: (i) => void this.openPivotFilter(pivot, x, y, i) } : undefined,
+      sort: (descending) => void this.edit({ kind: 'pivotField', index: pivot.index, field, sort: descending ? 'descending' : 'ascending' }),
+      apply: (choice) => void this.edit({ kind: 'pivotField', index: pivot.index, field, shown: choice.values }),
     });
   }
 

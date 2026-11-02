@@ -479,8 +479,24 @@ has items under it, subtotals, grand totals) comes from the rowItems and colItem
 refresh here; a pivot saved here (without them) is laid out once from its source for it (`pivotLookOf`). The layout's
 shape is checked against Excel's rowItems and colItems for every fixture pivot.
 
-**Next in M6**: Excel's outline and tabular layouts, subtotals at the bottom, item sorting and hidden items; what-if tools
-(Goal Seek, data tables, scenarios, Solver); print and PDF.
+**Layouts, sorting and hidden items.** Each row field has Excel's layout flags (`compact`, `outline`, `subtotalTop` on
+`PivotField`): a field after a compact one shares its column, indented one more, and any other starts a column of its own
+headed by its name (`rowLabelColumns`); an outline field's item has a row of its own, holding its subtotal at the top or
+followed by a subtotal row ("East Total") at the bottom; a tabular field's first inner item is on its row and its subtotal
+after them. A sorted field (`sortType`) keeps its items in order of their values (numbers, text ignoring case, logical
+values, blanks last), new ones in their places; a hidden item (`h`) leaves its records out of everything, totals too, and
+a filter with several items shown is one with hidden items, "(Multiple Items)". `pivots3.xlsx` holds a pivot of each
+(outline, tabular with and without a field across, subtotals at the bottom in both, sorted, hidden, no grand total row);
+Excel's refresh of it (`pivots3-excel.xlsx`) is laid out the same here, cell for cell and row for row.
+
+The field list sets the layout, subtotals and grand totals for all of a pivot's fields at once, as Excel's Report Layout,
+Subtotals and Grand Totals do (`PivotChoice.layout`, `subtotals`, `grand`; `pivotOptions` reads them back). The pivot's
+buttons (`pivotButtons`: each label column's head, the column labels' head, each filter's item) open the AutoFilter's card
+(`FilterCard`, with a choice of field when a column holds several, as Excel's Select Field) to sort a field or tick the
+items it shows: the `pivotField` edit (`setPivotField`). The writer keeps each field's flags, its items' own attributes and
+`h`, and the grand totals. Excel refreshing a pivot changed in all these ways comes out cell for cell the same.
+
+**Next in M6**: what-if tools (Goal Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

@@ -13,6 +13,7 @@ import { Worksheet } from '../../client/src/sheet/model/worksheet.ts';
 import { readWorkbook } from '../../client/src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
 import { History } from '../../client/src/sheet/edit.ts';
+import { pivotChoice } from '../../client/src/sheet/pivot.ts';
 import { OpcPackage } from '../../docx/src/index.ts';
 import { PIVOT_SALES } from './fixtures.ts';
 import { Engine } from '../../client/src/sheet/formula/engine.ts';
@@ -183,6 +184,22 @@ const shapedHistory = new History(shaped);
 shapedHistory.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
 for (let i = 1; i <= 4; i++) shapedHistory.apply(i, { kind: 'refreshPivots' });
 books.set('pivots2-refreshed.xlsx', shaped);
+// Pivots in the outline and tabular layouts, with subtotals at the bottom, sorted items and hidden items, refreshed here.
+const options = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/pivots3-excel.xlsx')));
+const optionsHistory = new History(options);
+optionsHistory.apply(0, { kind: 'paste', at: { row: 1, col: 0 }, rows: [['South', 'Glue', 'Jan', '500']] });
+for (let i = 1; i < options.sheets.length; i++) optionsHistory.apply(i, { kind: 'refreshPivots' });
+books.set('pivots3-refreshed.xlsx', options);
+// Excel's pivot set by the field list to the tabular layout, subtotals at the bottom and only the grand total column, its
+// products sorted Z to A by its button, and Ink hidden; and its other pivot set to the outline layout, subtotals off.
+const optioned = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/pivots-excel.xlsx')));
+const optionedHistory = new History(optioned);
+const optionedSheet = optioned.sheets[1] as Worksheet;
+optionedHistory.apply(1, { kind: 'pivotFields', index: 1, choice: { ...pivotChoice(optionedSheet.pivots[1]), layout: 'tabular', subtotals: 'bottom', grand: 'cols' } });
+optionedHistory.apply(1, { kind: 'pivotField', index: 1, field: 1, sort: 'descending' });
+optionedHistory.apply(1, { kind: 'pivotField', index: 1, field: 1, shown: ['Pens', 'Paper'] });
+optionedHistory.apply(1, { kind: 'pivotFields', index: 0, choice: { ...pivotChoice(optionedSheet.pivots[0]), layout: 'outline', subtotals: 'none', grand: 'rows' } });
+books.set('pivot-options.xlsx', optioned);
 // A pivot made here (a filter, a field across), and Excel's pivot changed by the field list.
 const pivotMade = new Workbook();
 pivotMade.sheets.push(new Worksheet('Sales', 1));

@@ -313,6 +313,47 @@ test('Insert › PivotTable makes a pivot on a new sheet from the field list; it
   await expect.poll(async () => (await state(page)).content.input).toBe('Pens');
 });
 
+test('a pivot’s Row Labels button sorts and filters a field; the field list sets its layout', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'pivots.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/pivots-excel.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'pivots.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await page.getByRole('tab', { name: 'Pivot' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Pivot');
+  // ByRegion's Row Labels (H4): regions and products share the column, so its card chooses the field first.
+  const at = await page.evaluate(() => {
+    const s = (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number }; pointOf(r: number, c: number): { y: number } } }).sheetEditor;
+    return { x: s.columnEdge(7).x - 8, y: s.pointOf(3, 7).y };
+  });
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  const card = page.getByRole('dialog', { name: 'Filter' });
+  await expect(card.getByRole('checkbox', { name: 'North', exact: true })).toBeVisible();
+  await card.getByRole('button', { name: 'Field' }).click();
+  await page.getByRole('option', { name: 'Product', exact: true }).click();
+  await expect(card.getByRole('checkbox', { name: 'Ink', exact: true })).toBeVisible();
+  await card.getByRole('checkbox', { name: 'Ink', exact: true }).uncheck();
+  await card.getByRole('button', { name: 'OK' }).click();
+  // East, Pens, then Paper where Ink was.
+  await clickCell(page, 6, 7);
+  await expect.poll(async () => (await state(page)).content.input).toBe('Paper');
+  // Sorted Z to A: Paper, then Pens, under East.
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  await card.getByRole('button', { name: 'Field' }).click();
+  await page.getByRole('option', { name: 'Product', exact: true }).click();
+  await card.getByRole('button', { name: 'Sort Z to A' }).click();
+  await clickCell(page, 5, 7);
+  await expect.poll(async () => (await state(page)).content.input).toBe('Pens');
+  // The field list: the outline layout puts products in a column of their own, headed by their name.
+  await app.menu('Sheet', 'PivotTable', 'PivotTable Fields');
+  const dialog = page.getByRole('dialog', { name: 'PivotTable Fields' });
+  await dialog.getByRole('button', { name: 'Report Layout' }).click();
+  await page.getByRole('option', { name: 'Outline Form', exact: true }).click();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await clickCell(page, 3, 8);
+  await expect.poll(async () => (await state(page)).content.input).toBe('Product');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

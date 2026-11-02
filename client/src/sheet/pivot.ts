@@ -61,6 +61,17 @@ export interface PivotField {
   items: number[];
   /** Subtotals shown for it (an outer row field's row holds them). */
   subtotal: boolean;
+  /** Its layout down the rows (all default to true, Excel's compact layout): `compact` shares the column of the field
+   * before it, indented; `outline` puts its items on rows of their own, with their subtotals at the top when
+   * `subtotalTop` (else in a row of their own after them); not `outline` is the tabular layout (an item's first inner item
+   * on its row, its subtotal after them). */
+  compact?: boolean;
+  outline?: boolean;
+  subtotalTop?: boolean;
+  /** Its items sorted by their values (`sortType`), else in their own order. */
+  sort?: 'ascending' | 'descending';
+  /** Items not shown (`h`), as indexes into the cache field's shared values: their records are left out of everything. */
+  hidden?: number[];
 }
 
 export interface PivotTable {
@@ -150,15 +161,21 @@ export function readPivotTable(root: XmlElement, part: string, cache: PivotCache
   const location = loc?.attrs.ref ? parseRange(loc.attrs.ref) : null;
   if (!location) return null;
   const axes: Record<string, PivotField['axis']> = { axisRow: 'row', axisCol: 'col', axisPage: 'page' };
-  const fields = kids(kid(root, 'pivotFields'), 'pivotField').map(
-    (f): PivotField => ({
+  const fields = kids(kid(root, 'pivotFields'), 'pivotField').map((f): PivotField => {
+    const items = kids(kid(f, 'items'), 'item').filter((i) => i.attrs.x !== undefined && !i.attrs.t);
+    const hidden = items.filter((i) => on(i.attrs.h)).map((i) => +i.attrs.x!);
+    const sort = f.attrs.sortType;
+    return {
       axis: axes[f.attrs.axis ?? ''] ?? null,
-      items: kids(kid(f, 'items'), 'item')
-        .filter((i) => i.attrs.x !== undefined && !i.attrs.t)
-        .map((i) => +i.attrs.x!),
+      items: items.map((i) => +i.attrs.x!),
       subtotal: !off(f.attrs.defaultSubtotal),
-    }),
-  );
+      ...(off(f.attrs.compact) && { compact: false }),
+      ...(off(f.attrs.outline) && { outline: false }),
+      ...(off(f.attrs.subtotalTop) && { subtotalTop: false }),
+      ...((sort === 'ascending' || sort === 'descending') && { sort }),
+      ...(hidden.length && { hidden }),
+    };
+  });
   const fieldList = (name: string) => kids(kid(root, name), 'field').map((f) => +(f.attrs.x ?? 0));
   const a = root.attrs;
   const info = kid(root, 'pivotTableStyleInfo')?.attrs;
@@ -428,17 +445,24 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     const listed = new Set(items[f] ?? []);
     const missing = [...new Set(recordIndex.map((r) => r[f]))].filter((i) => !listed.has(i)).sort((a, b) => a - b);
     items[f] = [...(items[f] ?? []), ...missing];
+    // A sorted field's items in order of their values (Excel saves them so; new ones go in their places).
+    const sort = p.fields[f]?.sort;
+    if (sort) items[f].sort((a, b) => compareItems(shared[f][a], shared[f][b], sort === 'descending'));
   }
   const label = (f: number, i: number) => {
     const v = shared[f][i];
     return v === null ? '(blank)' : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : v;
   };
-  // Filters: only the records of the items they show.
+  // Filters: only the records of the items they show; and none of a hidden item's, on any axis.
   let all = source.records.map((_, r) => r);
   for (const page of p.pageFields) {
     if (page.item === null) continue;
     const shown = items[page.field]?.[page.item];
     all = all.filter((r) => recordIndex[r][page.field] === shown);
+  }
+  for (const f of axisFields) {
+    const hidden = new Set(p.fields[f]?.hidden ?? []);
+    if (hidden.size) all = all.filter((r) => !hidden.has(recordIndex[r][f]));
   }
   /** The tree of an axis's fields over some records: items with records under them, in the field's order. */
   const tree = (levels: number[], depth: number, under: number[]): AxisNode[] => {
@@ -461,20 +485,23 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
   const put = (row: number, col: number, value: string | number | null, role: PivotCell['role'], indent?: number, data?: number) => {
     if (value !== null) cells.push({ row, col, value, role, ...(indent !== undefined && { indent }), ...(data !== undefined && { data }) });
   };
+  // The row labels' columns (one for the compact layout); the values after them.
+  const labels = rowLabelColumns(p);
+  const dc = labels.count;
   // Columns: the column fields' tree, a subtotal after an outer item's group (not over the values), grand totals last.
   const colLevels = p.colFields;
   const header = colLevels.length ? 1 + colLevels.length : 1;
   const columns: { records: number[]; data: number | null; kind: PivotLook['cols'][number] }[] = [];
   const walkCols = (nodes: AxisNode[], depth: number) => {
     for (const n of nodes) {
-      put(1 + depth, 1 + columns.length, n.label, 'header');
+      put(1 + depth, dc + columns.length, n.label, 'header');
       if (!n.children.length) {
         columns.push({ records: n.records, data: n.data, kind: 'item' });
         continue;
       }
       walkCols(n.children, depth + 1);
       if (colLevels[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false) {
-        put(1 + depth, 1 + columns.length, `${n.label} Total`, 'header');
+        put(1 + depth, dc + columns.length, `${n.label} Total`, 'header');
         columns.push({ records: n.records, data: n.data, kind: 'sub' });
       }
     }
@@ -485,40 +512,63 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     if (real && p.grandCols) {
       if (colLevels.includes(-2)) {
         p.dataFields.forEach((d, data) => {
-          put(1, 1 + columns.length, `Total ${d.name}`, 'header');
+          put(1, dc + columns.length, `Total ${d.name}`, 'header');
           columns.push({ records: all, data, kind: 'grand' });
         });
       } else {
-        put(1, 1 + columns.length, 'Grand Total', 'header');
+        put(1, dc + columns.length, 'Grand Total', 'header');
         columns.push({ records: all, data: null, kind: 'grand' });
       }
     }
     // The caption row: the value's name (when there is one), and what is across.
     if (p.dataFields.length === 1) put(0, 0, p.dataFields[0].name, 'header');
-    put(0, 1, real ? p.colHeader : p.dataCaption, 'header');
+    put(0, dc, real ? p.colHeader : p.dataCaption, 'header');
   } else {
     columns.push({ records: all, data: null, kind: 'item' });
     // One value, and not down the rows: its name heads the column.
-    if (!p.rowFields.includes(-2)) put(0, 1, p.dataFields[0].name, 'header');
+    if (!p.rowFields.includes(-2)) put(0, dc, p.dataFields[0].name, 'header');
   }
+  // The label columns' heads: the row header, then the name of the field each further column starts with.
   put(header - 1, 0, p.rowHeader, 'header');
-  // Rows: the row fields' tree, an outer item's row holding its subtotal (but not when the values are under it).
+  p.rowFields.forEach((f, d) => {
+    if (labels.col[d] > 0 && labels.col[d - 1] !== labels.col[d]) put(header - 1, labels.col[d], f === -2 ? p.dataCaption : (p.cache.fields[f]?.name ?? ''), 'header');
+  });
+  // Rows: the row fields' tree. An item with items under it has a row of its own (outline) holding its subtotal (at the
+  // top), or a subtotal row after them (at the bottom); in the tabular layout its first inner item is on its row and its
+  // subtotal after them. No subtotals over the values.
   let row = header;
   const rowLooks: PivotRowLook[] = [];
+  const endRow = (look: PivotRowLook) => {
+    rowLooks.push(look);
+    row++;
+  };
   const rowValues = (under: number[], data: number | null, role: PivotCell['role']) =>
     columns.forEach((c, j) => {
       const d = data ?? c.data ?? 0;
-      put(row, 1 + j, valueOf(under, c.records, d), role, undefined, d);
+      put(row, dc + j, valueOf(under, c.records, d), role, undefined, d);
     });
   const walkRows = (nodes: AxisNode[], depth: number) => {
     for (const n of nodes) {
       const leaf = !n.children.length;
-      put(row, 0, n.label, leaf ? 'label' : 'subtotal', depth);
-      rowLooks.push({ depth, leaf, subtotal: false, grand: false });
-      if (leaf) rowValues(n.records, n.data, 'value');
-      else if (p.rowFields[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false) rowValues(n.records, n.data, 'subtotal');
-      row++;
-      if (!leaf) walkRows(n.children, depth + 1);
+      put(row, labels.col[depth], n.label, leaf ? 'label' : 'subtotal', labels.indent[depth]);
+      if (leaf) {
+        rowValues(n.records, n.data, 'value');
+        endRow({ depth, leaf, subtotal: false, grand: false });
+        continue;
+      }
+      const options = rowFieldOptions(p, depth);
+      const subtotals = p.rowFields[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false;
+      const top = options.outline && options.subtotalTop;
+      if (options.outline) {
+        if (subtotals && top) rowValues(n.records, n.data, 'subtotal');
+        endRow({ depth, leaf, subtotal: false, grand: false });
+      }
+      walkRows(n.children, depth + 1);
+      if (subtotals && !top) {
+        put(row, labels.col[depth], `${n.label} Total`, 'subtotal', labels.indent[depth]);
+        rowValues(n.records, n.data, 'subtotal');
+        endRow({ depth, leaf, subtotal: true, grand: false });
+      }
     }
   };
   walkRows(tree(p.rowFields, 0, all), 0);
@@ -526,22 +576,21 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     if (p.rowFields.includes(-2)) {
       p.dataFields.forEach((d, data) => {
         put(row, 0, `Total ${d.name}`, 'grand');
-        rowLooks.push({ depth: 0, leaf: true, subtotal: false, grand: true });
         rowValues(all, data, 'grand');
-        row++;
+        endRow({ depth: 0, leaf: true, subtotal: false, grand: true });
       });
     } else {
       put(row, 0, 'Grand Total', 'grand');
-      rowLooks.push({ depth: 0, leaf: true, subtotal: false, grand: true });
       rowValues(all, null, 'grand');
-      row++;
+      endRow({ depth: 0, leaf: true, subtotal: false, grand: true });
     }
   }
   // Filters above the body, a blank row between: each field's name, and the item it shows.
   p.pageFields.forEach((page, k) => {
     const r = -(p.pageFields.length + 1) + k;
     put(r, 0, p.cache.fields[page.field]?.name ?? '', 'header');
-    put(r, 1, page.item === null ? '(All)' : label(page.field, items[page.field]?.[page.item] ?? 0), 'label');
+    const several = page.item === null && !!p.fields[page.field]?.hidden?.length;
+    put(r, 1, page.item === null ? (several ? '(Multiple Items)' : '(All)') : label(page.field, items[page.field]?.[page.item] ?? 0), 'label');
   });
   const summaries = p.cache.fields.map((_, f): FieldSummary => {
     const values = source.records.map((rec) => rec[f]);
@@ -555,7 +604,47 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
       max: numbers.length ? Math.max(...numbers) : null,
     };
   });
-  return { cells, rows: row, cols: 1 + columns.length, shared, items, summaries, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: 1, look: { headerRows: header, labelCols: 1, rows: rowLooks, cols: columns.map((c) => c.kind) } };
+  return { cells, rows: row, cols: dc + columns.length, shared, items, summaries, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: dc, look: { headerRows: header, labelCols: dc, rows: rowLooks, cols: columns.map((c) => c.kind) } };
+}
+
+/** A row field's layout, by its place in the row fields (the values, -2, take the compact layout). */
+function rowFieldOptions(p: PivotTable, depth: number): { compact: boolean; outline: boolean; subtotalTop: boolean } {
+  const f = p.fields[p.rowFields[depth]];
+  return { compact: f?.compact !== false, outline: f?.outline !== false, subtotalTop: f?.subtotalTop !== false };
+}
+
+const labelColumns = new WeakMap<PivotTable, { col: number[]; indent: number[]; count: number }>();
+
+/** Where each row field's labels go (by its place in the row fields): its column, and its indent there. A field after a
+ * compact one (in the outline layout) shares its column, indented one more; any other starts a column of its own. */
+export function rowLabelColumns(p: PivotTable): { col: number[]; indent: number[]; count: number } {
+  let out = labelColumns.get(p);
+  if (!out) {
+    const col: number[] = [];
+    const indent: number[] = [];
+    p.rowFields.forEach((_, d) => {
+      const before = d > 0 ? rowFieldOptions(p, d - 1) : null;
+      const shares = !!before && before.compact && before.outline;
+      col.push(d === 0 ? 0 : shares ? col[d - 1] : col[d - 1] + 1);
+      indent.push(d === 0 ? 0 : shares ? indent[d - 1] + 1 : 0);
+    });
+    out = { col, indent, count: col.length ? col[col.length - 1] + 1 : 1 };
+    labelColumns.set(p, out);
+  }
+  return out;
+}
+
+/** Excel's order for a sorted field's items: numbers, then text (ignoring case), then logical values; blanks last. */
+function compareItems(a: string | number | boolean | null, b: string | number | boolean | null, descending: boolean): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+  const rank = (v: string | number | boolean) => (typeof v === 'number' ? 0 : typeof v === 'string' ? 1 : 2);
+  let c = rank(a) - rank(b);
+  if (!c) {
+    const x = typeof a === 'string' ? a.toLowerCase() : +a;
+    const y = typeof b === 'string' ? b.toLowerCase() : +b;
+    c = x < y ? -1 : x > y ? 1 : 0;
+  }
+  return descending ? -c : c;
 }
 
 // --- The field list ----------------------------------------------------------------------------------------------------
@@ -567,7 +656,13 @@ export interface PivotChoice {
   cols: number[];
   values: { field: number; fn: PivotFunction }[];
   filters: { field: number; item: string | null }[];
+  /** Its layout down the rows, where its subtotals go, and which grand totals it shows (as they were when left out). */
+  layout?: PivotLayoutKind;
+  subtotals?: 'top' | 'bottom' | 'none';
+  grand?: 'both' | 'rows' | 'cols' | 'none';
 }
+
+export type PivotLayoutKind = 'compact' | 'outline' | 'tabular';
 
 const FN_NAMES: Record<PivotFunction, string> = { sum: 'Sum', count: 'Count', average: 'Average', max: 'Max', min: 'Min', product: 'Product', countNums: 'Count', stdDev: 'StdDev', stdDevp: 'StdDevp', var: 'Var', varp: 'Varp' };
 
@@ -582,7 +677,18 @@ export function pivotChoice(p: PivotTable): PivotChoice {
       const v = shared === undefined ? null : p.cache.fields[f.field]?.shared[shared];
       return { field: f.field, item: v === null || v === undefined ? null : String(v) };
     }),
+    ...pivotOptions(p),
   };
+}
+
+/** A pivot's layout, subtotals and grand totals, as the field list shows them (its first row field's layout). */
+export function pivotOptions(p: PivotTable): Required<Pick<PivotChoice, 'layout' | 'subtotals' | 'grand'>> {
+  const rows = p.rowFields.filter((f) => f >= 0).map((f) => p.fields[f]);
+  const first = rows[0];
+  const layout: PivotLayoutKind = first?.outline === false ? 'tabular' : first?.compact === false ? 'outline' : 'compact';
+  const subtotals = rows.length && rows.every((f) => f?.subtotal === false) ? 'none' : rows.some((f) => f?.subtotalTop === false) || layout === 'tabular' ? 'bottom' : 'top';
+  const grand = p.grandRows && p.grandCols ? 'both' : p.grandRows ? 'rows' : p.grandCols ? 'cols' : 'none';
+  return { layout, subtotals, grand };
 }
 
 /** A pivot given the field list's choice: its fields' places and its values; the values across when there are several. */
@@ -591,11 +697,28 @@ export function applyChoice(p: PivotTable, choice: PivotChoice): PivotTable {
   const several = choice.values.length > 1;
   const used = new Set([...choice.rows, ...choice.cols, ...choice.filters.map((f) => f.field)]);
   const fields = p.cache.fields.map(
-    (_, i): PivotField => ({
-      axis: choice.rows.includes(i) ? 'row' : choice.cols.includes(i) ? 'col' : choice.filters.some((f) => f.field === i) ? 'page' : null,
-      items: used.has(i) ? [...(p.fields[i]?.items ?? [])] : [],
-      subtotal: p.fields[i]?.subtotal ?? true,
-    }),
+    (_, i): PivotField => {
+      const field: PivotField = {
+        ...p.fields[i],
+        axis: choice.rows.includes(i) ? 'row' : choice.cols.includes(i) ? 'col' : choice.filters.some((f) => f.field === i) ? 'page' : null,
+        items: used.has(i) ? [...(p.fields[i]?.items ?? [])] : [],
+        subtotal: p.fields[i]?.subtotal ?? true,
+      };
+      if (!used.has(i)) delete field.hidden;
+      // The layout and subtotals the choice gives (all fields alike, as Excel's Report Layout and Subtotals set them).
+      if (choice.layout) {
+        delete field.compact;
+        delete field.outline;
+        if (choice.layout !== 'compact') field.compact = false;
+        if (choice.layout === 'tabular') field.outline = false;
+      }
+      if (choice.subtotals) {
+        field.subtotal = choice.subtotals !== 'none';
+        delete field.subtotalTop;
+        if (choice.subtotals === 'bottom') field.subtotalTop = false;
+      }
+      return field;
+    },
   );
   // A filter's item: its place in the field's items (its value added to the cache when the cache does not have it yet).
   const cache = { ...p.cache, fields: p.cache.fields.map((f) => ({ ...f, shared: [...f.shared] })) };
@@ -616,9 +739,67 @@ export function applyChoice(p: PivotTable, choice: PivotChoice): PivotTable {
     dataFields: choice.values.map((v) => ({ name: `${FN_NAMES[v.fn]} of ${names[v.field] ?? ''}`, field: v.field, fn: v.fn, numFmtId: null })),
     fields,
     cache,
+    ...(choice.grand && { grandRows: choice.grand === 'both' || choice.grand === 'rows', grandCols: choice.grand === 'both' || choice.grand === 'cols' }),
     look: undefined,
     refreshed: true,
   };
+}
+
+// --- Sorting and filtering a field (its button's card) --------------------------------------------------------------
+
+/** Where a pivot's field buttons are (sheet cells) and the fields each is for: a label column's head (the fields whose
+ * labels are in that column), the column labels' head, and each filter's item. `filtered` when one of its fields hides
+ * items or shows one. */
+export function pivotButtons(p: PivotTable, look: PivotLook): { row: number; col: number; fields: number[]; filtered: boolean }[] {
+  const out: { row: number; col: number; fields: number[]; filtered: boolean }[] = [];
+  const { r0, c0 } = p.location;
+  const filtered = (fields: number[]) => fields.some((f) => !!p.fields[f]?.hidden?.length || p.pageFields.some((page) => page.field === f && page.item !== null));
+  const labels = rowLabelColumns(p);
+  for (let c = 0; c < look.labelCols; c++) {
+    const fields = p.rowFields.filter((f, d) => f >= 0 && labels.col[d] === c);
+    if (fields.length) out.push({ row: r0 + look.headerRows - 1, col: c0 + c, fields, filtered: filtered(fields) });
+  }
+  const across = p.colFields.filter((f) => f >= 0);
+  if (across.length) out.push({ row: r0, col: c0 + look.labelCols, fields: across, filtered: filtered(across) });
+  p.pageFields.forEach((page, k) => out.push({ row: r0 - (p.pageFields.length + 1) + k, col: c0 + 1, fields: [page.field], filtered: filtered([page.field]) }));
+  return out;
+}
+
+/** An item's text, as the pivot shows it. */
+function itemText(p: PivotTable, field: number, shared: number): string {
+  const v = p.cache.fields[field]?.shared[shared];
+  return v === null || v === undefined ? '(blank)' : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : String(v);
+}
+
+/** A field's items (their texts, in its order) and those shown (null: all of them), for its card. */
+export function pivotFieldItems(p: PivotTable, field: number): { values: string[]; shown: string[] | null } {
+  const f = p.fields[field];
+  if (!f) return { values: [], shown: null };
+  const values = f.items.map((x) => itemText(p, field, x));
+  const page = p.pageFields.find((x) => x.field === field);
+  if (page && page.item !== null) return { values, shown: [values[page.item] ?? ''] };
+  const hidden = new Set(f.hidden ?? []);
+  return { values, shown: hidden.size ? f.items.filter((x) => !hidden.has(x)).map((x) => itemText(p, field, x)) : null };
+}
+
+/** A pivot with a field sorted, or showing only some of its items (null: all). A filter showing one item shows it as its
+ * item; showing several, as hidden items, as Excel does. */
+export function setPivotField(p: PivotTable, field: number, change: { sort?: 'ascending' | 'descending'; shown?: string[] | null }): PivotTable {
+  const f = p.fields[field];
+  if (!f) return p;
+  const next: PivotField = { ...f };
+  if (change.sort) next.sort = change.sort;
+  let pageFields = p.pageFields;
+  if (change.shown !== undefined) {
+    const shown = change.shown && new Set(change.shown.map((v) => v.toLowerCase()));
+    const hidden = shown ? f.items.filter((x) => !shown.has(itemText(p, field, x).toLowerCase())) : [];
+    delete next.hidden;
+    const isPage = p.pageFields.some((x) => x.field === field);
+    const single = isPage && shown && f.items.length - hidden.length === 1 ? f.items.findIndex((x) => !hidden.includes(x)) : -1;
+    if (isPage) pageFields = p.pageFields.map((x) => (x.field === field ? { field, item: single >= 0 ? single : null } : x));
+    if (hidden.length && single < 0) next.hidden = hidden;
+  }
+  return { ...p, fields: p.fields.map((x, i) => (i === field ? next : x)), pageFields, look: undefined, refreshed: true };
 }
 
 /** A new pivot (Insert › PivotTable) of a block of cells, its first row the fields' names; laid out by a refresh. */
@@ -679,7 +860,9 @@ export function pivotPaint(p: PivotTable, look: PivotLook, row: number, col: num
   if (body >= 0 && !at) return null;
   if (at && col < look.labelCols) {
     out.left = true;
-    if (!at.grand && at.depth) out.indent = at.depth;
+    const labels = rowLabelColumns(p);
+    const indent = labels.col[at.depth] === col ? labels.indent[at.depth] : 0;
+    if (!at.grand && indent) out.indent = indent;
   }
   const m = /^PivotStyle(Light|Medium|Dark)(\d+)$/.exec(p.style.name);
   if (m) {

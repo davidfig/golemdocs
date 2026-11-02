@@ -100,6 +100,9 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-02 | `e2e/editing/hyperlink.spec.ts` › Insert Hyperlink dialog › "data:text/html,hi" is refused with a message | Took 1 min and failed in pass one (a side run was going at the same time), passed on retry; alone, passed |
 | 2026-11-02 | `e2e/editing/hyperlink.spec.ts` › editing and removing a link › Remove Link takes the link off and keeps the text | Timed out at 30.4 s in pass one, passed on retry; alone, passed |
 | 2026-11-02 | `e2e/collab/folders.spec.ts` › moving documents into a folder keeps them there as the dashboard refreshes, and after a reload | Again, the same way as on 2026-10-26: first attempt in the heavy pass, "0 items" after both drags, passed on retry; alone with no retries, passed. Third time: likely a real race (a drag while the dashboard redraws after New Folder), not yet looked into |
+| 2026-11-02 | `client/test/layoutWorker.test.ts` › opening a Markdown document reports it, lays out its pages and finishes | A unit test (no `@heavy` pass for those): its first open waits on the worker's first load through Vite while every other test file starts at once, and timed out in two full `pnpm --filter @golemdocs/client test` runs on the viewer branch. Alone, passed every time. Fails the same way on plain `main` (0.31.0) under the same load, so it is not that branch's |
+| 2026-11-02 | `client/test/markdown.test.ts` › pathological large inputs finish quickly (linear-ish) | A wall-clock limit; took 16-18 s and failed in full runs made while an e2e run was going, on the viewer branch and on plain `main` alike. Alone, passed |
+| 2026-11-02 | `client/test/layoutWorker.pdf.test.ts` › a picture can be added to a page | "a page draws the picture" was false, once, in a full run on plain `main` with an e2e run going; passed in the other full runs. Not looked into |
 
 ## Performance traces (`golem:*`)
 

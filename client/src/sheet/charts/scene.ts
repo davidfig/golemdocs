@@ -170,6 +170,23 @@ export class Painter {
 /** An estimate of a text's width (points): the page measures it exactly when it draws. */
 const textWidth = (text: string, size: number): number => text.length * size * 0.52;
 
+/** A text's lines, broken at its line breaks and between words so each fits in `max` points (a word longer than that keeps its own line). */
+export function wrapText(text: string, size: number, max: number): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    let line = '';
+    for (const word of paragraph.split(' ')) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && textWidth(next, size) > max) {
+        lines.push(line);
+        line = word;
+      } else line = next;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 /** Round steps (1, 2, 5 times a power of ten) from min to max, about `count` of them. */
 export function niceScale(min: number, max: number, count: number): { min: number; max: number; step: number } {
   if (!(max > min)) {
@@ -193,8 +210,10 @@ export function layoutChart(chart: Chart, series: Resolved[][], width: number, h
   let left = PAD;
   let right = width - PAD;
   if (chart.title) {
-    p.text(chart.title, width / 2, top + TITLE_SIZE * 0.6, TITLE_SIZE, TEXT, 'center');
-    top += TITLE_SIZE * 1.5;
+    // Excel wraps a title at about four fifths of the chart's width.
+    const lines = wrapText(chart.title, TITLE_SIZE, width * 0.8);
+    lines.forEach((line, i) => p.text(line, width / 2, top + TITLE_SIZE * (0.6 + i * 1.2), TITLE_SIZE, TEXT, 'center'));
+    top += TITLE_SIZE * (1.5 + (lines.length - 1) * 1.2);
   }
   // The legend: the series, or a pie's categories.
   const first = chart.groups[0];

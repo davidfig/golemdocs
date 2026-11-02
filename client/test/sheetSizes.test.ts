@@ -71,3 +71,18 @@ test('a state taken out comes back the same', () => {
   assert.equal(back.position(10), sizes.position(10));
   assert.deepEqual([...back.specials()], [3, 5]);
 });
+
+test('a range past the end stops at the last index with a size, not the hidden ones after it', () => {
+  // As a sheet whose columns after C are hidden: A, B and C, then 16,381 columns of no width.
+  const sizes = new Sizes(16_384, 48);
+  sizes.set(0, 180);
+  for (let i = 3; i < 16_384; i++) sizes.setHidden(i, true);
+  assert.equal(sizes.indexAt(1000), 16_383);
+  assert.equal(sizes.endAt(1000), 2);
+  assert.equal(sizes.endAt(200), 1);
+  assert.equal(sizes.endAt(sizes.total()), 2);
+  // Nothing hidden: the same as indexAt.
+  const plain = new Sizes(100, 15);
+  assert.equal(plain.endAt(10_000), 99);
+  assert.equal(plain.endAt(31), 2);
+});

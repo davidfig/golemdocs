@@ -10,7 +10,7 @@ import { Worksheet } from '../src/sheet/model/worksheet.ts';
 import { Workbook } from '../src/sheet/model/workbook.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../src/sheet/xlsx/write.ts';
-import { chartScene, niceScale } from '../src/sheet/charts/scene.ts';
+import { chartScene, niceScale, wrapText } from '../src/sheet/charts/scene.ts';
 import { sparklineScene } from '../src/sheet/charts/sparklineScene.ts';
 import { readChart } from '../src/sheet/charts/model.ts';
 import { changeKind } from '../src/sheet/charts/make.ts';
@@ -274,4 +274,14 @@ test('nice scales: steps of 1, 2 or 5 times a power of ten', () => {
   assert.deepEqual(niceScale(0, 21, 5), { min: 0, max: 25, step: 5 });
   assert.deepEqual(niceScale(0, 0.87, 5), { min: 0, max: 1, step: 0.2 });
   assert.deepEqual(niceScale(-3, 48, 5), { min: -10, max: 50, step: 10 });
+});
+
+test('a long chart title wraps between words to fit the chart, keeping its own line breaks', () => {
+  const title = 'Spending outpaced income by $26,161 this period';
+  assert.deepEqual(wrapText(title, 14, 1000), [title]);
+  const lines = wrapText(title, 14, 200);
+  assert.ok(lines.length > 1);
+  assert.equal(lines.join(' '), title);
+  for (const line of lines) assert.ok(line.length * 14 * 0.52 <= 200, line);
+  assert.deepEqual(wrapText('Sales\nby region', 14, 1000), ['Sales', 'by region']);
 });

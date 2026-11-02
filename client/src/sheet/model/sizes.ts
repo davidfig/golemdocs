@@ -84,17 +84,33 @@ export class Sizes {
   indexAt(point: number): number {
     if (point <= 0) return 0;
     if (!this.tree) return Math.min(this.count - 1, Math.floor(point / this.defaultSize));
-    // Fenwick descent: the largest i with position(i) <= point.
+    return Math.min(this.descend(point, false), this.count - 1);
+  }
+
+  /**
+   * The last index of a range ending at a point: as `indexAt`, but past the end it is the last index with any size, never
+   * the hidden ones after it (a sheet whose columns after C are hidden ends at C, not at XFD).
+   */
+  endAt(point: number): number {
+    const total = this.total();
+    if (point < total || total <= 0) return this.indexAt(point);
+    if (!this.tree) return this.count - 1;
+    return Math.min(this.descend(total, true), this.count - 1);
+  }
+
+  /** Fenwick descent: the largest i with position(i) <= point (or < point, when strict). */
+  private descend(point: number, strict: boolean): number {
+    const tree = this.tree!;
     let i = 0;
     let rest = point;
     for (let step = 1 << Math.floor(Math.log2(this.count)); step > 0; step >>= 1) {
       const next = i + step;
-      if (next <= this.count && this.tree[next] <= rest) {
+      if (next <= this.count && (strict ? tree[next] < rest : tree[next] <= rest)) {
         i = next;
-        rest -= this.tree[next];
+        rest -= tree[next];
       }
     }
-    return Math.min(i, this.count - 1);
+    return i;
   }
 
   /** Inserts `n` default-sized indices at `at`; the last `n` fall off the end. */

@@ -457,7 +457,7 @@ export class SheetRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // The row header is as wide as the last row number in view needs.
-    const lastRowInView = Math.min(MAX_ROWS - 1, g.rows.indexAt(camera.y + g.frozenHeight + cssHeight / scale));
+    const lastRowInView = Math.min(MAX_ROWS - 1, g.rows.endAt(camera.y + g.frozenHeight + cssHeight / scale));
     this.headerWidth = g.headerWidth(lastRowInView);
     const regions = (this.regions = g.regions(cssWidth, cssHeight, scale, camera.x, camera.y, this.headerWidth));
     const rowPx = g.rows.default * scale;
@@ -475,9 +475,9 @@ export class SheetRenderer {
       const docRight = docLeft + region.width / scale;
       const docBottom = docTop + region.height / scale;
       const r0 = g.rows.indexAt(docTop);
-      const r1 = Math.min(MAX_ROWS - 1, g.rows.indexAt(docBottom));
+      const r1 = Math.min(MAX_ROWS - 1, g.rows.endAt(docBottom));
       const c0 = g.cols.indexAt(docLeft);
-      const c1 = Math.min(MAX_COLUMNS - 1, g.cols.indexAt(docRight));
+      const c1 = Math.min(MAX_COLUMNS - 1, g.cols.endAt(docRight));
       const frameRects = new RectList();
       // The sheet itself.
       frameRects.push(0, 0, g.width, g.height, packColor(COLOR.sheet));
@@ -794,7 +794,7 @@ export class SheetRenderer {
         const length = axis === 'row' ? region.height : region.width;
         const pos = (i: number) => start + (sizes.position(i) - origin) * scale;
         const i0 = sizes.indexAt(origin);
-        const i1 = Math.min(sizes.count - 1, sizes.indexAt(origin + length / scale) + 1);
+        const i1 = Math.min(sizes.count - 1, sizes.endAt(origin + length / scale) + 1);
         // A summary is the index after a run of a deeper level; walk the view's indexes (and one past) for them.
         for (let i = Math.max(1, i0); i <= i1 + 1; i++) {
           const before = groups.levels.get(i - 1) ?? 0;
@@ -916,7 +916,7 @@ export class SheetRenderer {
       if (!columnsDone.has(region.x)) {
         columnsDone.add(region.x);
         const c0 = g.cols.indexAt(region.originX);
-        const c1 = Math.min(MAX_COLUMNS - 1, g.cols.indexAt(region.originX + region.width / scale));
+        const c1 = Math.min(MAX_COLUMNS - 1, g.cols.endAt(region.originX + region.width / scale));
         for (let c = c0; c <= c1; c++) {
           const w = g.cols.size(c) * scale;
           if (w <= 0) continue;
@@ -932,7 +932,7 @@ export class SheetRenderer {
       if (!rowsDone.has(region.y)) {
         rowsDone.add(region.y);
         const r0 = g.rows.indexAt(region.originY);
-        const r1 = Math.min(MAX_ROWS - 1, g.rows.indexAt(region.originY + region.height / scale));
+        const r1 = Math.min(MAX_ROWS - 1, g.rows.endAt(region.originY + region.height / scale));
         const rowPx = g.rows.default * scale;
         // Far out, a label every so many rows (as many as fit), at round numbers.
         const every = rowPx >= 12 ? 1 : niceStep(14 / Math.max(rowPx, 1e-6));

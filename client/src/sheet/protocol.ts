@@ -341,6 +341,8 @@ export type ToWorker =
   | { t: 'charts'; id: number; sheet: number }
   /** The sheet's page setup, print area and titles, for the Page Setup dialog. */
   | { t: 'pageSetup'; id: number; sheet: number }
+  /** The active sheet's top left (its first tile, and the sizes of its columns and rows), for its thumbnail. */
+  | { t: 'thumbnail'; id: number; sheet: number }
   /** What the sheet prints: its pages, and the tiles and sizes of the cells on them. */
   | { t: 'print'; id: number; sheet: number }
   /** The sheet's Solver model. */
@@ -376,6 +378,7 @@ export type FromWorker =
   | { t: 'scenarioSummary'; id: number; rows: SummaryValue[][] | null }
   | { t: 'solverModel'; id: number; model: SolverModel | null }
   | { t: 'print'; id: number; data: PrintData }
+  | { t: 'thumbnail'; id: number; tile: CellTile | null; cols: number[]; rows: number[] }
   | { t: 'pageSetup'; id: number; setup: PageSetup; area: CellRange | null; titleRows: [number, number] | null; titleCols: [number, number] | null }
   | ({ t: 'solve'; id: number } & SolverOutcome)
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }

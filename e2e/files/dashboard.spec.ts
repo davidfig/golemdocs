@@ -1,6 +1,8 @@
 // File ▸ Open: the documents dashboard (every document saved in this browser, as thumbnails).
 
 import type { Locator, Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MOD, expect, test, type App } from './fixtures';
 import { formatLabel, importFile, status, text, waitForOpen, waitForSaved } from './helpers';
 import { pngPixels } from '../layout/helpers';
@@ -61,6 +63,29 @@ test('every card shows a thumbnail of its first page (a text file\'s is its firs
     const loaded = await images.nth(i).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0 && img.src.startsWith('blob:'));
     expect(loaded).toBe(true);
   }
+});
+
+test('a workbook\'s card shows the top left of its sheet', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await importFile(app, { name: 'charts.xlsx', mimeType: 'application/octet-stream', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/charts-excel.xlsx')) });
+  await waitForSaved(page);
+  await app.menu('File', 'Open…');
+  const image = cards(page).filter({ hasText: 'charts' }).locator('.wm-thumb img');
+  await expect(image).toHaveCount(1, { timeout: 20_000 });
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+  // Not a blank page: the sheet's gridlines and text are on it.
+  const dark = await image.evaluate((img: HTMLImageElement) => {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const g = c.getContext('2d')!;
+    g.drawImage(img, 0, 0);
+    const data = g.getImageData(0, 0, c.width, c.height / 4).data;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i] < 160) n++;
+    return n;
+  });
+  expect(dark).toBeGreaterThan(50);
 });
 
 test('under Dark Pages the thumbnails are dark pages with light letters', async ({ app, page }) => {

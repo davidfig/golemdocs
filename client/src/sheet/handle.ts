@@ -88,6 +88,11 @@ export class SheetEditor {
     return this.view?.isOpen ? this.view.save() : null;
   }
 
+  /** The active sheet's top left as a thumbnail (null when nothing is open). */
+  thumbnail(): Promise<Blob | null> {
+    return this.view?.isOpen ? this.view.thumbnail() : Promise.resolve(null);
+  }
+
   /** File › Page Setup for the active sheet. */
   pageSetup(): void {
     void this.view?.pageSetup();

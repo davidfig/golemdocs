@@ -1888,7 +1888,12 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
  * copy). Never fails the save: without a thumbnail the dashboard just shows a blank page.
  */
 async function makeThumbnail(info: SavedInfo): Promise<void> {
-  if (sheetView.active) return;
+  // A workbook's is the top left of its active sheet (see sheet/thumbnail.ts).
+  if (sheetView.active) {
+    const blob = await sheetView.thumbnail().catch(() => null);
+    if (blob) await saveThumbnail(info.id, blob, info.updatedAt).catch(() => undefined);
+    return;
+  }
   const page = pages[0];
   const text = textView.active;
   if (!text && (!page || !gl)) return;

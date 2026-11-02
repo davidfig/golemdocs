@@ -33,6 +33,7 @@ import { askDataTable, askGoalSeek, showGoalSeekStatus } from './whatIfDialogs.t
 import { openScenarioManager } from './scenarioDialog.ts';
 import { askSolver, showSolverResults } from './solverDialog.ts';
 import { askSheetPageSetup } from './pageSetupDialog.ts';
+import { sheetThumbnail } from './thumbnail.ts';
 import { parseCells } from './scenarios.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
@@ -364,6 +365,12 @@ export class SheetEditorView {
   // --- Saving ---
 
   /** The workbook as .xlsx, and its new memory image. */
+  /** The active sheet's top left as a thumbnail picture (a file card's), or null. */
+  async thumbnail(): Promise<Blob | null> {
+    const reply = await this.ask<Extract<FromWorker, { t: 'thumbnail' }>>({ t: 'thumbnail', id: this.id(), sheet: this.sheetIndex }).catch(() => null);
+    return reply?.tile ? sheetThumbnail(reply.tile, reply.cols, reply.rows) : null;
+  }
+
   /** The active sheet as a PDF, as it prints: its pages from the worker, drawn in the app's fonts (sheetPdf.ts, loaded
    * and the fonts' files loaded now). */
   async printPdf(): Promise<Uint8Array> {

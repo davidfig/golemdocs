@@ -582,6 +582,10 @@ in `main.ts`), as a text file's does; the room's workbook is followed across tho
 never applies changes to a `cells` room (`applyLog`). Edited together, cell by cell, is for later. The watch banner sits
 under the formula bar and column headers while a sheet is open.
 
+**Thumbnails.** A workbook's file card shows the top left of its active sheet (`sheet/thumbnail.ts`): the worker's first
+tile (A1:P64) with its column widths and row heights, drawn on a page-shaped canvas at page scale (fills, gridlines,
+borders, text in the browser's fonts), made after a save as a document's first page is (`makeThumbnail`).
+
 **Search.** A workbook's search index is the page's (its active sheet's rows as shown, `segmentsFromBytes`): the server
 answers 422 for one without logging a failure, as for a PDF.
 

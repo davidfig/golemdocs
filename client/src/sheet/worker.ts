@@ -335,6 +335,12 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
       }
+      case 'thumbnail': {
+        const sheet = book.sheets[m.sheet];
+        if (!sheet || !isWorksheet(sheet)) return post({ t: 'thumbnail', id: m.id, tile: null, cols: [], rows: [] });
+        const tile = cellTile(book, m.sheet, sheet, { level: 0, tx: 0, ty: 0 }, cache);
+        return post({ t: 'thumbnail', id: m.id, tile, cols: Array.from({ length: 16 }, (_, c) => sheet.colSizes.size(c)), rows: Array.from({ length: 64 }, (_, r) => sheet.rowSizes.size(r)) });
+      }
       case 'pageSetup': {
         const sheet = book.sheets[m.sheet];
         if (!sheet || !isWorksheet(sheet)) return;

@@ -7,7 +7,7 @@ import { History } from '../src/sheet/edit.ts';
 import { Engine } from '../src/sheet/formula/engine.ts';
 import { Kind } from '../src/sheet/model/column.ts';
 import type { Worksheet } from '../src/sheet/model/worksheet.ts';
-import { readDelimited, sheetNameOf, writeDelimitedSheet } from '../src/sheet/delimited.ts';
+import { DelimitedLoad, readDelimited, sheetNameOf, writeDelimitedSheet } from '../src/sheet/delimited.ts';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -70,4 +70,18 @@ test('a CSV of 150,000 rows is read whole (a paste that large once overflowed th
   const sheet = book.sheets[0] as Worksheet;
   assert.equal(sheet.grid.rows, 150_000);
   assert.equal(sheet.grid.columns[1]!.value(149_999), 149_999);
+});
+
+test('a CSV read a few rows at a time is the same as one read whole, and is written back the same', () => {
+  const whole = readDelimited(bytes(SAMPLE), 'sales.csv', 'csv');
+  const load = new DelimitedLoad(bytes(SAMPLE), 'sales.csv', 'csv');
+  let steps = 1;
+  while (load.step(2)) steps++;
+  assert.equal(steps, 3);
+  assert.equal(load.rows, 5);
+  assert.deepEqual(load.format, whole.format);
+  assert.equal(text(writeDelimitedSheet(load.book, load.format).bytes), SAMPLE);
+  const a = whole.book.sheets[0] as Worksheet;
+  const b = load.book.sheets[0] as Worksheet;
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 8; c++) assert.equal(b.grid.columns[c]?.kind(r), a.grid.columns[c]?.kind(r), `${r},${c}`);
 });

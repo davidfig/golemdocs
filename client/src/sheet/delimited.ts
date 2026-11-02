@@ -3,7 +3,7 @@
 // were: the active sheet's values as shown, with the file's delimiter, encoding, line endings and final line ending.
 // Formulas, other sheets and formatting are not kept by such a file: `lossy` says when something was left out.
 
-import { parseDelimited, sniffDelimiter, writeDelimited } from '../formats/csv.ts';
+import { DelimitedReader, sniffDelimiter, writeDelimited } from '../formats/csv.ts';
 import { decodeText } from '../formats/textFiles.ts';
 import type { TextEncoding } from '../formats/textFiles.ts';
 import { applyEdit } from './edit.ts';
@@ -34,23 +34,62 @@ export function sheetNameOf(fileName: string): string {
 }
 
 export function readDelimited(bytes: Uint8Array, fileName: string, kind: DelimitedKind): { book: Workbook; format: DelimitedFormat } {
-  const { text, encoding, bom } = decodeText(bytes);
-  const delimiter = kind === 'tsv' ? '\t' : sniffDelimiter(text);
-  const parsed = parseDelimited(text, delimiter);
-  const book = new Workbook();
-  book.sheets.push(new Worksheet(sheetNameOf(fileName), 1));
-  if (parsed.rows.length) applyEdit(book, 0, { kind: 'paste', at: { row: 0, col: 0 }, rows: parsed.rows });
-  const sheet = book.sheets[0] as Worksheet;
-  // Every value shows as it was written, so a file written back unchanged is the same: a number whose zeros the General
-  // format would drop (1.50, 00123) gets a format that keeps them, as one keeps them in Excel; anything else that would
-  // not show the same (a 20-digit number) stays text. Formulas are calculated, as Excel does.
-  const formats = new Map<string, number>();
-  const styleFor = (code: string) => {
-    let style = formats.get(code);
-    if (style === undefined) formats.set(code, (style = restyle(book.styles, 0, { numFmt: code }, { top: false, bottom: false, left: false, right: false }, null)));
-    return style;
-  };
-  parsed.rows.forEach((fields, row) =>
+  const load = new DelimitedLoad(bytes, fileName, kind);
+  while (load.step(DELIMITED_BATCH));
+  return { book: load.book, format: load.format };
+}
+
+/** Rows read into the sheet at a time: a large file shows its first rows at once, then grows as the rest comes in. */
+export const DELIMITED_BATCH = 16384;
+
+/** A CSV or TSV file being read into its workbook a batch of rows at a time (`step`), so the rows read so far can be shown. */
+export class DelimitedLoad {
+  readonly book = new Workbook();
+  readonly format: DelimitedFormat;
+  /** Rows read so far. */
+  rows = 0;
+  private readonly sheet: Worksheet;
+  private readonly reader: DelimitedReader;
+  private readonly length: number;
+  private readonly formats = new Map<string, number>();
+
+  constructor(bytes: Uint8Array, fileName: string, kind: DelimitedKind) {
+    const { text, encoding, bom } = decodeText(bytes);
+    const delimiter = kind === 'tsv' ? '\t' : sniffDelimiter(text);
+    this.reader = new DelimitedReader(text, delimiter);
+    this.length = text.length;
+    this.sheet = new Worksheet(sheetNameOf(fileName), 1);
+    this.book.sheets.push(this.sheet);
+    this.format = { kind, delimiter, encoding, bom, lineEnding: '\n', trailingNewline: false, widths: [] };
+  }
+
+  /** Reads up to `count` more rows into the sheet; false once the whole file is in. */
+  step(count: number): boolean {
+    const batch: string[][] = [];
+    for (let row = batch.length < count ? this.reader.next() : null; row; row = batch.length < count ? this.reader.next() : null) batch.push(row);
+    if (batch.length) {
+      applyEdit(this.book, 0, { kind: 'paste', at: { row: this.rows, col: 0 }, rows: batch });
+      batch.forEach((fields, i) => this.keepAsWritten(this.rows + i, fields));
+      for (const fields of batch) this.format.widths.push(fields.length);
+      this.rows += batch.length;
+    }
+    const more = this.reader.position < this.length;
+    if (!more) {
+      this.format.lineEnding = this.reader.lineEnding ?? '\n';
+      this.format.trailingNewline = this.reader.trailingNewline;
+    }
+    this.sheet.dirty = { cells: false, layout: false };
+    this.book.dirty = false;
+    return more;
+  }
+
+  /**
+   * Every value shows as it was written, so a file written back unchanged is the same: a number whose zeros the General
+   * format would drop (1.50, 00123) gets a format that keeps them, as one keeps them in Excel; anything else that would
+   * not show the same (a 20-digit number) stays text. Formulas are calculated, as Excel does.
+   */
+  private keepAsWritten(row: number, fields: string[]): void {
+    const { book, sheet } = this;
     fields.forEach((field, col) => {
       const column = sheet.grid.columns[col];
       if (!column || column.formulaAt(row)) return;
@@ -61,17 +100,20 @@ export function readDelimited(bytes: Uint8Array, fileName: string, kind: Delimit
       if (kind === Kind.Number) {
         const zeros = /^-?(\d+)\.(\d+)$/.exec(field) ?? /^(0\d+)$/.exec(field);
         const code = zeros ? (zeros[2] !== undefined ? `0.${'0'.repeat(zeros[2].length)}` : '0'.repeat(zeros[1].length)) : null;
-        if (code && shows(styleFor(code))) {
-          sheet.grid.set(row, col, Kind.Number, column.value(row), styleFor(code));
+        if (code && shows(this.styleFor(code))) {
+          sheet.grid.set(row, col, Kind.Number, column.value(row), this.styleFor(code));
           return;
         }
       }
       sheet.grid.set(row, col, Kind.String, book.strings.add(field), 0);
-    }),
-  );
-  sheet.dirty = { cells: false, layout: false };
-  book.dirty = false;
-  return { book, format: { kind, delimiter, encoding, bom, lineEnding: parsed.lineEnding, trailingNewline: parsed.trailingNewline, widths: parsed.rows.map((r) => r.length) } };
+    });
+  }
+
+  private styleFor(code: string): number {
+    let style = this.formats.get(code);
+    if (style === undefined) this.formats.set(code, (style = restyle(this.book.styles, 0, { numFmt: code }, { top: false, bottom: false, left: false, right: false }, null)));
+    return style;
+  }
 }
 
 /** The active sheet as the file, and whether anything the file cannot hold was left out (other sheets, formulas, charts). */

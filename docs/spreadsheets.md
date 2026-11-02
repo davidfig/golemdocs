@@ -596,6 +596,14 @@ that leaves something out (formulas, other sheets, charts) says so once. They ha
 before (named `.csv`) is turned back into the file on opening (`formats/wdocDelimited.ts`); the vault keeps workbooks, CSV
 and TSV as the files themselves. The status bar shows a sheet's rows and columns.
 
+A large file streams in as an `.xlsx` sheet does: `DelimitedLoad` reads `DELIMITED_BATCH` rows at a time (the rows from
+`DelimitedReader` in `formats/csv.ts`, which takes each field as a slice of the text), the worker posts `opened` after the
+first batch and `progress` after each other, and edits and saves wait for the rest (`loading`, in `settled`). Strings typed
+or read are encoded straight into the pool, and only the last few thousand are kept as JavaScript strings. Two million rows
+of twelve fields (350 MB) read in about 15 s in Node, in under 700 MB. While rows come in, the page marks only the tiles of
+the new rows out of date; a tile out of date is drawn as it was until its new one comes (`stale` in the renderer), so the
+sheet never blinks empty while it updates.
+
 **Convert To.** Excel Workbook is a target for every document (its first table becomes the sheet). Between Excel, CSV and
 TSV a workbook stays in the grid: the sheet worker writes it as the other (`saveAs`), and it opens as that.
 

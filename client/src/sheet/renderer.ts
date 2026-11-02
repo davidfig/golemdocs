@@ -245,10 +245,16 @@ export class SheetRenderer {
   private readonly triangles: TriangleBatchRenderer;
   private readonly overview: OverviewRenderer;
   private charts = new Map<string, BuiltChart>();
-  private cellTiles = new Map<string, { tile: CellTile; built: BuiltCells | null }>();
-  private overviewTiles = new Map<string, { tile: OverviewTile; built: BuiltOverview | null }>();
+  /**
+   * Tiles as last received. A tile made out of date (`stale`: its cells changed, or more rows streamed in) is still drawn
+   * until the new one comes, and asked for again, so the sheet never blinks empty while it updates.
+   */
+  private cellTiles = new Map<string, { tile: CellTile; built: BuiltCells | null; stale?: boolean }>();
+  private overviewTiles = new Map<string, { tile: OverviewTile; built: BuiltOverview | null; stale?: boolean }>();
   private styles = new Map<number, DrawStyle>();
   private requested = new Set<string>();
+  /** Tiles asked for before they were made out of date: what comes back for them is already stale. */
+  private staleInFlight = new Set<string>();
   private frameGarbage: { rects: RectBatch[]; text: TextBatch[] } = { rects: [], text: [] };
   /** Asks the worker for tiles (set by the view). */
   want: (sheet: number, keys: TileKey[]) => void = () => {};
@@ -271,10 +277,11 @@ export class SheetRenderer {
   putCells(tile: CellTile): void {
     const id = tileId(tile.sheet, tile.key);
     this.requested.delete(id);
+    const stale = this.staleInFlight.delete(id);
     for (const [index, style] of tile.styles) this.styles.set(index, style);
     const old = this.cellTiles.get(id);
     if (old?.built) this.freeCells(old.built);
-    this.cellTiles.set(id, { tile, built: null });
+    this.cellTiles.set(id, { tile, built: null, stale });
     while (this.cellTiles.size > KEEP_CELL_TILES) {
       const first = this.cellTiles.keys().next().value!;
       const gone = this.cellTiles.get(first)!;
@@ -286,9 +293,10 @@ export class SheetRenderer {
   putOverview(tile: OverviewTile): void {
     const id = tileId(tile.sheet, tile.key);
     this.requested.delete(id);
+    const stale = this.staleInFlight.delete(id);
     const old = this.overviewTiles.get(id);
     if (old?.built?.texture) this.gl.deleteTexture(old.built.texture);
-    this.overviewTiles.set(id, { tile, built: null });
+    this.overviewTiles.set(id, { tile, built: null, stale });
     while (this.overviewTiles.size > KEEP_OVERVIEW) {
       const first = this.overviewTiles.keys().next().value!;
       const gone = this.overviewTiles.get(first)!;
@@ -297,7 +305,6 @@ export class SheetRenderer {
     }
   }
 
-  /** Forgets tiles of a sheet: all of them, or the cell tiles touching `ranges` (the overview always goes: the worker remade it). */
   /** The width of a line of text in a style, in points (null while its font is not loaded). */
   textWidth(text: string, style: DrawStyle): number | null {
     const font = this.fonts.font(style.font, style.bold, style.italic);
@@ -317,24 +324,25 @@ export class SheetRenderer {
     return this.styles.get(index);
   }
 
+  /**
+   * Makes tiles of a sheet out of date: all of them, or the cell tiles touching `ranges` (the overview always: the worker
+   * remade it). They are drawn as they are until their new ones come, and asked for again.
+   */
   invalidate(sheet: number, ranges?: CellRange[]): void {
-    for (const [id, entry] of this.cellTiles) {
-      if (entry.tile.sheet !== sheet) continue;
-      const { tx, ty } = entry.tile.key;
-      const r0 = ty * CELL_TILE_ROWS;
-      const c0 = tx * CELL_TILE_COLS;
-      // Text may spill from a cell into the tiles beside it: a change near a tile's edge reaches its neighbours.
-      const touched = !ranges || ranges.some((r) => r.r0 <= r0 + CELL_TILE_ROWS - 1 && r.r1 >= r0 && r.c0 - 32 <= c0 + CELL_TILE_COLS - 1 && r.c1 + 32 >= c0);
-      if (!touched) continue;
-      if (entry.built) this.freeCells(entry.built);
-      this.cellTiles.delete(id);
+    // Text may spill from a cell into the tiles beside it: a change near a tile's edge reaches its neighbours.
+    const touched = (key: TileKey) => {
+      if (key.level !== 0 || !ranges) return true;
+      const r0 = key.ty * CELL_TILE_ROWS;
+      const c0 = key.tx * CELL_TILE_COLS;
+      return ranges.some((r) => r.r0 <= r0 + CELL_TILE_ROWS - 1 && r.r1 >= r0 && r.c0 - 32 <= c0 + CELL_TILE_COLS - 1 && r.c1 + 32 >= c0);
+    };
+    for (const entry of this.cellTiles.values()) if (entry.tile.sheet === sheet && touched(entry.tile.key)) entry.stale = true;
+    for (const entry of this.overviewTiles.values()) if (entry.tile.sheet === sheet) entry.stale = true;
+    // A tile already asked for comes back as it was before this change: it is drawn, then asked for again.
+    for (const id of this.requested) {
+      const [s, level, tx, ty] = id.split(':').map(Number);
+      if (s === sheet && touched({ level, tx, ty })) this.staleInFlight.add(id);
     }
-    for (const [id, entry] of this.overviewTiles) {
-      if (entry.tile.sheet !== sheet) continue;
-      if (entry.built?.texture) this.gl.deleteTexture(entry.built.texture);
-      this.overviewTiles.delete(id);
-    }
-    for (const id of [...this.requested]) if (id.startsWith(`${sheet}:`)) this.requested.delete(id);
   }
 
   /** Builds the cell tiles of a range again from what they hold (the cell being edited changed, not the cells). */
@@ -355,6 +363,7 @@ export class SheetRenderer {
     this.cellTiles.clear();
     this.overviewTiles.clear();
     this.requested.clear();
+    this.staleInFlight.clear();
     this.styles.clear();
   }
 
@@ -490,10 +499,10 @@ export class SheetRenderer {
         for (const key of keys) {
           const id = tileId(frame.sheet, key);
           const entry = this.cellTiles.get(id);
-          if (!entry) {
+          if (!entry || entry.stale) {
             if (!this.requested.has(id)) wanted.push(key);
             pending = true;
-            continue;
+            if (!entry) continue;
           }
           if (!entry.built || entry.built.fontsVersion !== this.fonts.version) {
             if (performance.now() - started > BUDGET_MS && entry.built) {
@@ -529,10 +538,10 @@ export class SheetRenderer {
             const y1 = g.y(Math.min(MAX_ROWS, rowA + span));
             const x0 = g.x(colA);
             const x1 = g.x(Math.min(MAX_COLUMNS, colA + span));
-            if (!entry) {
+            if (!entry || entry.stale) {
               if (!this.requested.has(id)) wanted.push(key);
               pending = true;
-              continue;
+              if (!entry) continue;
             }
             if (!entry.tile.rgba.length) {
               blanks.push(x0, y0, x1 - x0, y1 - y0, packColor(COLOR.sheet, overviewAlpha));

@@ -3,6 +3,7 @@
 // JavaScript strings; one is decoded only when something shows or compares it. See docs/spreadsheets.md.
 
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 
 export class StringPool {
   private bytes: Uint8Array = new Uint8Array(1 << 16);
@@ -57,10 +58,13 @@ export class StringPool {
     return id;
   }
 
-  /** Adds plain text (typed by someone). */
+  /** Adds plain text (typed by someone, or read from a CSV file: millions of them, so they are encoded in place and not all kept as strings). */
   add(text: string): number {
-    const encoded = new TextEncoder().encode(text);
-    const id = this.push(encoded, 0, encoded.length, false);
+    // UTF-8 takes at most three bytes for each UTF-16 unit.
+    this.reserve(text.length * 3);
+    const id = this.begin(false);
+    this.used += encoder.encodeInto(text, this.bytes.subarray(this.used)).written;
+    if (this.cache.size > 4096) this.cache.clear();
     this.cache.set(id, text);
     return id;
   }

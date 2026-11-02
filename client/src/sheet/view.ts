@@ -260,8 +260,10 @@ export class SheetEditorView {
         this.progress = t('sheet.reading', { rows: m.rows.toLocaleString() });
         this.showStatus();
         if (m.sheet === this.sheetIndex && this.book) {
+          // Only the rows just read are new: the tiles above them stay as they are (asking for them again made them blink).
+          const before = this.book.sheets[m.sheet].rows;
           this.book.sheets[m.sheet].rows = m.rows;
-          this.renderer.invalidate(m.sheet);
+          this.renderer.invalidate(m.sheet, [{ r0: Math.min(before, m.rows), c0: 0, r1: Math.max(before, m.rows), c1: MAX_COLUMNS - 1 }]);
           this.deps.render();
         }
         break;

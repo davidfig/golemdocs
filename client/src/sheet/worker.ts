@@ -7,7 +7,7 @@
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
 import { calculateDataTables, goalSeek, runSolver, scenarioSummaryRows } from './whatIf.ts';
 import { readSolverModel } from './solver.ts';
-import { readDelimited, writeDelimitedSheet } from './delimited.ts';
+import { DELIMITED_BATCH, DelimitedLoad, writeDelimitedSheet } from './delimited.ts';
 import type { DelimitedFormat, DelimitedKind } from './delimited.ts';
 import { printNames } from './print.ts';
 import { parseRange } from './refs.ts';
@@ -53,12 +53,20 @@ let delimited: DelimitedFormat | null = null;
 let saving: Promise<unknown> | null = null;
 /** A recalculation under way (it gives way to tile requests): edits and saves wait for it. */
 let calculating: Promise<unknown> | null = null;
+/** The open workbook being read (its rows streaming in): edits and saves wait for it, tiles and reads go on. */
+let loading: Promise<unknown> | null = null;
+/** Settles once the workbook being opened can be shown; messages that come before then wait for it. */
+let ready: Promise<void> | null = null;
 
 const post = (message: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(message, transfer);
 
-/** Waits until no save or recalculation is under way (another edit may start one while this waits, so it checks again). */
+/**
+ * Waits until the workbook is all read and no save or recalculation is under way (another edit may start one while this
+ * waits, so it checks again). Tiles and cells are answered while a large file is still coming in; edits and saves wait.
+ */
 async function settled(): Promise<void> {
-  while (saving || calculating) {
+  while (saving || calculating || loading) {
+    await loading;
     await saving;
     await calculating;
   }
@@ -114,21 +122,31 @@ export function info(b: Workbook): BookInfo {
   };
 }
 
-async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', format?: DelimitedKind): Promise<void> {
+/** `opened` is called once the workbook can be shown (its first rows are in); the promise settles once all of it is read. */
+async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', format: DelimitedKind | undefined, opened: () => void): Promise<void> {
   const started = performance.now();
   source = await fingerprint(bytes);
   delimited = null;
   if (format) {
-    // A CSV or TSV file: read whole into one sheet, its formulas calculated; it has no memory image.
-    const read = readDelimited(bytes, name, format);
-    book = read.book;
-    delimited = read.format;
+    // A CSV or TSV file: read into one sheet a batch of rows at a time, shown as they come in (as an .xlsx sheet streams
+    // in), then its formulas calculated; it has no memory image.
+    const load = new DelimitedLoad(bytes, name, format);
+    let more = load.step(DELIMITED_BATCH);
+    book = load.book;
+    delimited = load.format;
     cache = new TileCache(book);
     history = new History(book);
     engine = new Engine(book);
-    engine.recalculateAll();
     painters = new Map();
     post({ t: 'opened', info: info(book), fromImage: false, ms: performance.now() - started });
+    opened();
+    while (more) {
+      await yieldToEvents();
+      more = load.step(DELIMITED_BATCH);
+      cache.forgetOverview(0);
+      post({ t: 'progress', sheet: 0, rows: load.rows });
+    }
+    engine.recalculateAll();
     post({ t: 'loaded', info: info(book) });
     return;
   }
@@ -140,6 +158,7 @@ async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', form
   engine = new Engine(book);
   painters = new Map();
   post({ t: 'opened', info: info(book), fromImage: !!mapped, ms: performance.now() - started });
+  opened();
   if (!mapped) {
     const active = book.activeSheet;
     const progress = (sheet: number, rows: number) => {
@@ -293,9 +312,23 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
   try {
     if (m.t === 'open') {
       book = null;
-      await open(new Uint8Array(m.bytes), m.image ? new Uint8Array(m.image) : null, m.name, m.format);
+      let opened!: () => void;
+      ready = new Promise<void>((resolve) => (opened = resolve));
+      const reading = open(new Uint8Array(m.bytes), m.image ? new Uint8Array(m.image) : null, m.name, m.format, opened);
+      loading = reading.then(
+        () => undefined,
+        () => undefined,
+      );
+      try {
+        await reading;
+      } finally {
+        loading = null;
+        opened();
+      }
       return;
     }
+    // A message sent just after `open` (a save) waits for the workbook rather than failing.
+    if (!book && ready) await ready;
     if (!book || !cache || !history) throw new Error('no workbook is open');
     switch (m.t) {
       case 'tiles': {

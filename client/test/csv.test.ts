@@ -30,6 +30,21 @@ test('tolerates a missing final newline, blank fields and quotes inside unquoted
   assert.deepEqual(parseDelimited('', ',').rows, []);
 });
 
+test('text after a closing quote is kept; the line ending is the first outside quotes; a last delimiter adds an empty field', () => {
+  assert.deepEqual(parseDelimited('"a"b,c\n', ',').rows, [['ab', 'c']]);
+  const crlf = parseDelimited('"x\ny",z\r\nq\r\n', ',');
+  assert.deepEqual(crlf.rows, [['x\ny', 'z'], ['q']]);
+  assert.equal(crlf.lineEnding, '\r\n');
+  assert.equal(crlf.trailingNewline, true);
+  const cr = parseDelimited('a\rb', ',');
+  assert.deepEqual(cr.rows, [['a'], ['b']]);
+  assert.equal(cr.lineEnding, '\r');
+  assert.equal(cr.trailingNewline, false);
+  assert.deepEqual(parseDelimited('a,', ',').rows, [['a', '']]);
+  assert.deepEqual(parseDelimited('\n\nb\n', ',').rows, [[''], [''], ['b']]);
+  assert.deepEqual(parseDelimited('a,"open\nnever closed', ',').rows, [['a', 'open\nnever closed']]);
+});
+
 test('sniffs the delimiter', () => {
   assert.equal(sniffDelimiter('a;b;c\n1;2;3\n'), ';');
   assert.equal(sniffDelimiter('a|b\n1|2\n'), '|');

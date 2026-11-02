@@ -380,6 +380,8 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
     }
     case 'paste': {
       const { row, col } = op.at;
+      // A column of dates is one style with one format: found once, not for each of a million cells.
+      const formats = new Map<string, number>();
       op.rows.forEach((cells, dr) =>
         cells.forEach((text, dc) => {
           const r = row + dr;
@@ -389,7 +391,7 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
           if (parsed.kind === 'formula') {
             grid.column(c).setFormula(r, { text: toFileFormula(parsed.text), originRow: r, originCol: c, kind: 'normal', shared: -1, dynamic: true });
             grid.set(r, c, Kind.Blank, 0, grid.column(c).style(r));
-          } else setValue(book, grid, r, c, parsed);
+          } else setValue(book, grid, r, c, parsed, formats);
         }),
       );
       const filled = rangeOf(op)!;
@@ -1050,7 +1052,8 @@ function moveReferences(book: Workbook, change: Move, moveCells: () => void): vo
 }
 
 /** Puts a value typed or pasted into a cell, giving a General cell the format the typing implied. */
-function setValue(book: Workbook, grid: Grid, r: number, c: number, parsed: Exclude<ReturnType<typeof parseInput>, { kind: 'formula' }>): void {
+/** `formats`: styles with a typed value's number format, by the style and format, kept across the cells of one edit. */
+function setValue(book: Workbook, grid: Grid, r: number, c: number, parsed: Exclude<ReturnType<typeof parseInput>, { kind: 'formula' }>, formats?: Map<string, number>): void {
   const column = grid.column(c);
   if (column.formulaAt(r)) column.setFormula(r, null);
   let style = column.style(r);
@@ -1059,8 +1062,14 @@ function setValue(book: Workbook, grid: Grid, r: number, c: number, parsed: Excl
       grid.set(r, c, style ? Kind.Blank : Kind.Empty, 0, style);
       return;
     case Kind.Number:
-      if (parsed.format && book.styles.format(style)?.numFmt === 0) {
-        style = book.styles.internFormat({ ...book.styles.format(style), numFmt: book.styles.formatId(parsed.format) });
+      if (parsed.format) {
+        const key = `${style}\u0000${parsed.format}`;
+        const known = formats?.get(key);
+        if (known !== undefined) style = known;
+        else {
+          if (book.styles.format(style)?.numFmt === 0) style = book.styles.internFormat({ ...book.styles.format(style), numFmt: book.styles.formatId(parsed.format) });
+          formats?.set(key, style);
+        }
       }
       grid.set(r, c, Kind.Number, parsed.value, style);
       return;

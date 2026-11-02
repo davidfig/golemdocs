@@ -7,7 +7,7 @@
 import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
-import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, type SavedInfo } from './storage/local.ts';
+import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, saveFromCloudIfSent, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
 
 export interface Uploaded {
@@ -266,6 +266,18 @@ export interface OpenedFromCloud {
   usedBrowserCopy: boolean;
   /** With `early`: the browser copy still being written (`info` is what it will be; this settles with the real record). */
   stored?: Promise<SavedInfo>;
+}
+
+/**
+ * Makes `bytes`, which the account has just stored as `cloud` (the vault sync put them there or fetched them from there), this
+ * browser's copy of it, so opening it needs no download. A copy with changes the account hasn't got is left as it is (its upload
+ * sorts that out), and one that already has this version isn't written again. Nor is `open`, the copy open in the editor: what is
+ * on screen would be saved over it as if it had this version's changes (main.ts puts them in itself, as edits).
+ */
+export async function keepSyncedCopy(cloud: { id: string; name: string; updatedAt: number }, bytes: Uint8Array, owner: string, open: string | null = null): Promise<void> {
+  const linked = (await listSaved()).find((d) => d.cloudId === cloud.id && (d.owner === undefined || d.owner === owner));
+  if (linked && (linked.id === open || linked.cloudUpdatedAt === cloud.updatedAt || linked.updatedAt > (linked.cloudSyncedAt ?? 0))) return;
+  await saveFromCloudIfSent({ id: linked?.id, name: cloud.name, bytes, owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
 }
 
 /**

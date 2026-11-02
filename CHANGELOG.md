@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.31.1 - Unreleased
+
+### Fixed
+
+- In the desktop app, files that changed in your vault folder no longer download again when you open them. The app keeps the copy it just synced, so they open straight away.
+
 ## 0.31.0 - 2026-11-02
 
 ### Added

@@ -4742,7 +4742,7 @@ function refreshWith(source: DocumentSource): Promise<boolean | 'typed'> {
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
 let vaultWatched = false;
 async function connectVault(): Promise<void> {
-  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched) });
+  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched), openLocalId: () => current.localId });
   if (vaultService && !vaultWatched) {
     vaultWatched = true;
     let last = vaultService.current.state;

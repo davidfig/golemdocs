@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.31.0 - Unreleased
+
+### Changed
+
+- Someone you share a document with as “Can view” (File › Share) now opens it in a simple read-only viewer: pages, zoom, find, and select and copy, with nothing to edit. They see the latest saved version, and it catches up by itself while you keep working. Choosing between “Can edit” and “Can view” in the Share dialog is now a pair of buttons.
+
 ## 0.30.1 - 2026-10-31
 
 ### Changed

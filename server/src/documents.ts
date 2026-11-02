@@ -291,7 +291,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         }
       } else {
         // The file, whole or put together from its chunks (see fileStore.ts).
-        const response = await documentResponse(env, docxKey(access.ownerId, id), access.ownerId, id, DOCX);
+        const response = await documentResponse(env, docxKey(access.ownerId, id), access.ownerId, id, DOCX, request.headers.get('if-none-match'));
         if (response) return response;
       }
     }
@@ -649,7 +649,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
 
   // GET /api/documents/:id: the .docx bytes.
   if (request.method === 'GET') {
-    const response = await documentResponse(env, row.r2_key, ownerId, id, DOCX);
+    const response = await documentResponse(env, row.r2_key, ownerId, id, DOCX, request.headers.get('if-none-match'));
     if (!response) throw new HttpError(404, 'document file is missing');
     return response;
   }

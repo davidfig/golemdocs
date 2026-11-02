@@ -1,13 +1,17 @@
-// The embeddable viewer's build (`pnpm --filter @golemdocs/client build:viewer`): viewer.html and everything it loads, in dist-viewer/,
-// with relative paths so the folder works wherever a host puts it, and the fonts it needs in dist-viewer/fonts/. The app's own build
-// (vite.config.ts) is left as it is: the viewer is a separate folder for another app to bundle, not part of the site.
-// See docs/architecture/viewer.md.
+// The embeddable viewer's builds. See docs/architecture/viewer.md.
+//
+// - `pnpm --filter @golemdocs/client build:viewer`: viewer.html and everything it loads, in dist-viewer/, with relative paths so the
+//   folder works wherever a host puts it, and the fonts it needs in dist-viewer/fonts/: for another app to bundle.
+// - `--mode site` (part of the client's `build`): the site's page for documents shared view-only (view/index.html, at /view/), written
+//   into the site's dist/ after the app's own build, with the site's fonts.
+//
+// Either way the app's build (vite.config.ts) is left as it is: the viewer is a build of its own, so it adds no chunk to the app.
 //
 // VIEWER_FONTS (comma-separated family ids, or `all`, `extras`, `cjk`) changes the font set, VIEWER_FONT_FILES=1 adds the .ttf files.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { mergeConfig, type Plugin } from 'vite';
+import { defineConfig, mergeConfig, type Plugin, type PluginOption } from 'vite';
 import app from './vite.config.ts';
 import { VIEWER_FONTS, viewerFontSet } from './src/viewer/fonts.ts';
 
@@ -43,14 +47,26 @@ function noUiFont(): Plugin {
   };
 }
 
-export default mergeConfig(app, {
-  base: './',
-  // The site's public files (every font, the dictionaries, the marketing pages) are not the viewer's: its fonts are written by viewerFonts.
-  publicDir: false,
-  plugins: [viewerFonts(), noUiFont()],
-  build: {
-    outDir: 'dist-viewer',
-    emptyOutDir: true,
-    rollupOptions: { input: { viewer: path.resolve(import.meta.dirname, 'viewer.html') } },
-  },
-});
+/** The app's config without what belongs to the app's own build: its build id (build.json, which the viewer must not overwrite) and its marketing pages. */
+const appConfig = { ...app, plugins: (app.plugins ?? []).filter((p: PluginOption) => !(p && 'name' in p && (p.name === 'build-id' || p.name === 'welcome-content'))) };
+
+export default defineConfig(({ mode }) =>
+  mergeConfig(appConfig, {
+    // Nothing the viewer runs checks the build id; it is defined for any module that names it.
+    define: { __BUILD_ID__: JSON.stringify('') },
+    // The site's public files (every font, the dictionaries, the marketing pages) are not the viewer's: its fonts are written by
+    // viewerFonts, and on the site the app's build has already copied them.
+    publicDir: false,
+    ...(mode === 'site'
+      ? {
+          plugins: [noUiFont()],
+          // Into the site's own output, beside the app (whose files it leaves).
+          build: { outDir: 'dist', emptyOutDir: false, rollupOptions: { input: { view: path.resolve(import.meta.dirname, 'view/index.html') } } },
+        }
+      : {
+          base: './',
+          plugins: [viewerFonts(), noUiFont()],
+          build: { outDir: 'dist-viewer', emptyOutDir: true, rollupOptions: { input: { viewer: path.resolve(import.meta.dirname, 'viewer.html') } } },
+        }),
+  }),
+);

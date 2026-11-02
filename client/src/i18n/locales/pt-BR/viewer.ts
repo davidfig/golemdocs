@@ -14,4 +14,7 @@ export const viewer: Partial<Messages> = {
   'viewer.find': 'Localizar',
   'viewer.closeFind': 'Fechar localização',
   'viewer.findUnavailable': 'A localização ainda não está disponível nas páginas originais de um PDF.',
+  'viewer.signIn': 'Entrar',
+  'viewer.signInToView': 'Entre para ver este documento.',
+  'viewer.viewOnlyTitle': '{name} (somente leitura)',
 };

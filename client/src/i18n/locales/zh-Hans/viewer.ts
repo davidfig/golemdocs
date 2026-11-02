@@ -14,4 +14,7 @@ export const viewer: Partial<Messages> = {
   'viewer.find': '查找',
   'viewer.closeFind': '关闭查找',
   'viewer.findUnavailable': 'PDF 的原始页面中暂时无法查找。',
+  'viewer.signIn': '登录',
+  'viewer.signInToView': '登录后即可查看此文档。',
+  'viewer.viewOnlyTitle': '{name}（仅查看）',
 };

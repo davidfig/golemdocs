@@ -80,6 +80,15 @@ html.wm-viewer-page body {
   min-width: 4em;
 }
 
+.wm-viewer-title {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
 .wm-viewer-spacer {
   flex: 1;
 }
@@ -125,6 +134,11 @@ html.wm-viewer-page body {
   text-align: center;
   color: var(--wm-muted);
   pointer-events: none;
+}
+
+/* A message's link (the shared-document page's "Sign in") can be clicked through the status, which otherwise lets the pointer by. */
+.wm-viewer-status a {
+  pointer-events: auto;
 }
 
 .wm-viewer-status[hidden] {

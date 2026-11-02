@@ -55,7 +55,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.nobody': '아직 공유한 사람이 없습니다.',
   'dialogs.share.done': '완료',
   'dialogs.share.peopleHeading': '사용자',
-  'dialogs.share.note': '상대방이 Golem Docs에 한 번 로그인한 적이 있어야 합니다. 편집자와 보기 권한 사용자는 변경 내용을 실시간으로 볼 수 있습니다.',
+  'dialogs.share.note': '상대방은 Golem Docs에 한 번 로그인한 적이 있어야 합니다. 편집자는 변경 사항을 실시간으로 보고, 보기 권한이 있는 사람은 문서가 저장될 때마다 갱신되는 읽기 전용 사본을 봅니다.',
 
   // Sign in
   'dialogs.signIn.title': '로그인',

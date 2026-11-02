@@ -18,7 +18,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Collaboration](architecture/collaboration.md) | Rooms, the central log, handoff and settle, one gateway and one transport |
 | [UI](architecture/ui.md) | App shell, actions and commands, shared components, spelling, the home site |
 | [Build and testing](architecture/build-and-testing.md) | Workspace, lazy chunks, unit and e2e tests, CI, deploy, release |
-| [Embeddable viewer](architecture/viewer.md) | The read-only viewer other apps frame (satchel.email): its API and messages, build, font set, running it sandboxed |
+| [Embeddable viewer](architecture/viewer.md) | The read-only viewer: in other apps (satchel.email) and for documents shared view-only; its API and messages, build, font set, running it sandboxed |
 
 ## Feature and subsystem docs
 
@@ -55,7 +55,6 @@ Known loose ends, as of 2026-10-05:
 Docs that disagree with the code:
 
 - `ops/README.md` still describes the removed dev-server and SharedWorker rooms.
-- `client/src/ui/shareDialog.ts` builds a native `<select>`, which AGENTS.md forbids.
 - The comment in `server/wrangler.jsonc` says cloud documents are off in the `local` environment; they work there.
 
 ## Keeping these docs current

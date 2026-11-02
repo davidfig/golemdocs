@@ -1,6 +1,6 @@
 # The embeddable viewer
 
-A read-only viewer for one file, built from the editor's own layout worker and WebGL renderer, for another app to show documents in. The first host is the mail client satchel.email, which shows attachments in it. The viewer scrolls, zooms (Ctrl/⌘ + and −, the buttons, a pinch), moves between pages, finds text, and selects and copies. It does nothing else: no storage, rooms, spelling, autocorrect, library, sync or menus. It fetches nothing but its own code and the fonts under the host's `fontBase`. A link that is clicked is handed to the host and never followed.
+A read-only viewer for one file, built from the editor's own layout worker and WebGL renderer. It has two hosts: another app that shows documents in it (the mail client satchel.email, for attachments), and the site itself, for a document shared view-only. The viewer scrolls, zooms (Ctrl/⌘ + and −, the buttons, a pinch), moves between pages, finds text, and selects and copies. It does nothing else: no storage, rooms, spelling, autocorrect, library, sync or menus. It fetches nothing but its own code and the fonts under the host's `fontBase`. A link that is clicked is handed to the host and never followed.
 
 It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`): Word (.docx, .doc), OpenDocument, Rich Text, HTML, MHTML, EML, EPUB, Markdown and the other markup formats, CSV/TSV, Jupyter notebooks, pictures, SVG, PDF and plain text. A file of any other kind is reported as an error.
 
@@ -24,6 +24,15 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
 - **Input.** A hidden textarea holds the focus (`inputmode="none"`, so no on-screen keyboard), for copy and the keys; whatever is typed in it is dropped. A press sends `pointer` commands (a double click a word, a triple a paragraph, a drag extends), a click that didn't move asks `linkAt`, and a link that passes `linkForHost` (http, https, mailto, tel, ftp) goes to `onLink`. Wheel scrolls, Ctrl/⌘ + wheel or a pinch zooms, arrows, Page Up/Down, Space, Home and End scroll, Ctrl/⌘ A selects all, Ctrl/⌘ F opens the find bar, F3 or Ctrl/⌘ G finds again. Copy (and cut, which only copies) puts the selection's text and HTML on the clipboard.
 - **The bar** is built from the shared parts (`iconButton` with `.wm-tbutton`, `.wm-input`, `.wm-find-message`, the `--wm-*` colours) and its words go through `t('viewer.*')` (with `dialogs.find.*` reused). The UI font is the system's: the app's Atkinson Hyperlegible is a web font of the site's, so the viewer's build strips its `@font-face` rules (`noUiFont` in `vite.viewer.config.ts`).
 
+## Shared view-only: the site's own host
+
+A document shared with someone as "Can view" (File › Share; `viewer` in `shares`) opens for them in the viewer, not the editor. `openShared` in `main.ts` sends them to `/view/?doc=<id>` (replacing the app's page in the history). That page is `client/view/index.html` and `src/viewer/share.ts`: it reads `/api/shared` for the document's name and role, fetches the file with the person's own session, and calls `mount` with the site's `/fonts/`, the system's light or dark appearance, and the title "<name> (view only)" in the bar. A link opens in a new tab. Someone who may edit it is sent back to the app; someone signed out is asked to sign in (through the app, which returns them here); a document no longer shared says so.
+
+- **Snapshot, refreshed on save, not live.** The page asks for the file again every 30 s and when the tab is looked at again, with `If-None-Match`; the server answers 304 while it is unchanged, so a check costs no download. A newer file is shown in place (`Viewer.reload`: the old pages stay until the new ones arrive, and the view keeps its place and zoom). While someone edits, the file is saved within seconds (an editor's autosave, or a shared room's snapshot about 5 s after an edit), so the viewer is at most about half a minute behind. A live view through the room (which has a `viewer` role) would need the room client, remote-edit rendering and handoff on the viewer's side, would differ by room kind, and would stop the viewer being one embeddable component. A snapshot that catches up is enough for reading.
+- **The server enforces it, not the page.** A viewer share can't save, upload, rename, move, change history, add room pictures, share or delete: see [Server](server.md#sharing). The page never tries; if it did, it would be refused.
+- **Built with the site.** The client's `build` runs the viewer config a second time in `site` mode (`vite.viewer.config.ts`), which writes `view/index.html` and its chunks into the site's `dist/` beside the app, without touching the app's chunks or its `build.json`. In development Vite serves it at `/view/`.
+- **Who may share view-only** is who may share at all: the owner, while they have sync. No schema change was needed: `shares.role` already had `viewer`.
+
 ## API
 
 `mount(el, options) → { destroy() }` (`client/src/viewer/viewer.ts`). It sets the colour scheme on the root element, so it is meant to own its document: the viewer page, or a frame of its own.
@@ -38,8 +47,9 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
 | `onOpened({ name, format, pages })` | The file is open and laid out; `format` is what it was read as (`docx`, `md`, `pdf`...). |
 | `onError(message)` | It can't be shown (an unknown kind, a damaged file, no WebGL 2). |
 | `onLink(url)` | A link was clicked. |
+| `title` | Shown in the bar beside the page number. |
 
-`destroy()` stops the worker, frees the GPU (`WEBGL_lose_context`) and removes what it added.
+`destroy()` stops the worker, frees the GPU (`WEBGL_lose_context`) and removes what it added. `reload(bytes)` shows a newer version of the same file in place, keeping the view where it was.
 
 ## The viewer page and its messages
 
@@ -52,7 +62,7 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
 
 ## Building it
 
-`pnpm --filter @golemdocs/client build:viewer` (`client/vite.viewer.config.ts`) writes `client/dist-viewer/`: `viewer.html`, `assets/` and `fonts/`, with relative paths (`base: './'`), so the folder works wherever a host puts it. It is not part of the site: the app's build (`vite.config.ts`) is unchanged, and none of the site's `public/` files are copied. The build reuses the app's config, so the layout worker is the same `layoutCore` chunk.
+`pnpm --filter @golemdocs/client build:viewer` (`client/vite.viewer.config.ts`) writes `client/dist-viewer/`: `viewer.html`, `assets/` and `fonts/`, with relative paths (`base: './'`), so the folder works wherever a host puts it. The app's build (`vite.config.ts`) is unchanged by it, and none of the site's `public/` files are copied. (The site's own copy, the shared-document page, is built by the same config in `site` mode; see above.) The build reuses the app's config, so the layout worker is the same `layoutCore` chunk.
 
 What a session loads (sizes minified; gzip in brackets):
 
@@ -112,6 +122,7 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | File | |
 | --- | --- |
 | `client/viewer.html`, `client/src/viewer/main.ts` | The viewer page and its messages |
+| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view/?doc=<id>`) |
 | `client/src/viewer/viewer.ts` | `mount`: rendering, input, the bar, `startLayoutWorker` |
 | `client/src/viewer/protocol.ts` | Message types, `linkForHost`, zoom steps, page numbers (pure; `client/test/viewer.test.ts`) |
 | `client/src/viewer/fonts.ts` | The font set the build bundles (pure; tested there too) |
@@ -119,6 +130,7 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | `client/vite.viewer.config.ts` | The viewer's build |
 | `client/src/layout/layoutClient.ts` | `openReadOnly`, `terminate`, the `fontBase` and `startWorker` options |
 | `e2e/viewer/viewer.spec.ts`, `e2e/viewer/sandbox.spec.ts` | The viewer page in the dev server; the built viewer sandboxed, in Chromium and WebKit |
+| `e2e/collab/share-view-only.spec.ts` | Sharing as Can view, opening it in the viewer, catching up with a save, refused writes |
 
 ## Related docs
 

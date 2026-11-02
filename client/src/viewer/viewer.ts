@@ -34,6 +34,8 @@ export interface ViewerOptions {
   dark?: boolean;
   /** The language of the viewer's own words (a BCP 47 tag; default English). */
   locale?: string;
+  /** Shown in the bar beside the page number (a shared document's name, say). */
+  title?: string;
   /** A link in the document was clicked (only web, mail, phone and FTP addresses are passed on). */
   onLink?(url: string): void;
   /** The document is open and laid out. */
@@ -45,6 +47,8 @@ export interface ViewerOptions {
 export interface Viewer {
   /** Takes the viewer down: stops its worker, frees the GPU and removes what it added to `el`. */
   destroy(): void;
+  /** Shows a newer version of the same file in place of the one shown, at the same place and zoom (`onOpened` is told again). */
+  reload(bytes: ArrayBuffer | Uint8Array): void;
 }
 
 /** Points of grey between pages. */
@@ -167,8 +171,16 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     camera.y = bounds.y - 24 * pointsPerCss;
   }
 
+  /** A newer version is being opened (`reload`): the old pages stay until its first pages arrive, then go. */
+  let replacing = false;
+
   function applyLayout(update: LayoutUpdate): void {
     if (!gl || !atlases) return;
+    if (replacing && update.pages.length) {
+      replacing = false;
+      for (const page of pagesById.values()) page.dispose(gl);
+      pagesById.clear();
+    }
     for (const encoded of update.pages) {
       pagesById.get(encoded.id)?.dispose(gl);
       pagesById.set(encoded.id, new GpuPage(encoded, atlases));
@@ -589,6 +601,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       tool(ICON_DOWN, t('viewer.nextPage'), () => goToPage(currentPage() + 1)),
       pageField,
       pageCount,
+      ...(options.title ? [h('span', { class: 'wm-viewer-title', text: options.title, title: options.title })] : []),
       h('span', { class: 'wm-viewer-spacer' }),
       tool(ICON_MINUS, t('viewer.zoomOut'), () => zoomTo(stepZoom(camera.zoom, -1))),
       zoomLabel,
@@ -619,8 +632,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
 
     if (!gl || !worker || !renderer) return fail(t('app.webglUnsupported'));
     desk = readDesk(doc) ?? LIGHT_DESK;
-    const bytes = options.bytes instanceof ArrayBuffer ? options.bytes : options.bytes.slice().buffer;
-    const source = sourceFromFile(options.name, bytes);
+    const source = sourceFromFile(options.name, bufferOf(options.bytes));
     if (!source) return fail(t('viewer.cannotOpen', { name: options.name }));
     showStatus(t('viewer.opening', { name: options.name }));
     worker.setLocale(locale);
@@ -631,6 +643,12 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   })();
 
   return {
+    reload(bytes) {
+      const source = sourceFromFile(options.name, bufferOf(bytes));
+      if (destroyed || !worker || !source) return;
+      replacing = true;
+      worker.openReadOnly(source, listener);
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -663,6 +681,11 @@ export function startLayoutWorker(win: Window, name: string): Worker {
   // `origin`, not `location.origin`: the location is still the page's address, but the page's origin is "null".
   if (win.origin !== 'null') return new Worker(url, { type: 'module', name });
   return new Worker(`data:text/javascript,${encodeURIComponent(`import ${JSON.stringify(url)};`)}`, { type: 'module', name });
+}
+
+/** The bytes as an ArrayBuffer of their own (one passed as such is used as it is, and transferred to the worker). */
+function bufferOf(bytes: ArrayBuffer | Uint8Array): ArrayBuffer {
+  return bytes instanceof ArrayBuffer ? bytes : bytes.slice().buffer;
 }
 
 /** The color behind the pages: the scheme's --wm-desk, 0-1 per channel. */

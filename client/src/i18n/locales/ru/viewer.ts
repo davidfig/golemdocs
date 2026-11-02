@@ -14,4 +14,7 @@ export const viewer: Partial<Messages> = {
   'viewer.find': 'Найти',
   'viewer.closeFind': 'Закрыть поиск',
   'viewer.findUnavailable': 'Поиск пока недоступен на собственных страницах PDF.',
+  'viewer.signIn': 'Войти',
+  'viewer.signInToView': 'Войдите, чтобы увидеть этот документ.',
+  'viewer.viewOnlyTitle': '{name} (только просмотр)',
 };

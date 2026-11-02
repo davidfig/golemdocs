@@ -16,6 +16,8 @@ import { Kind } from './model/column.ts';
 import { restyle } from './format/styleChange.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { parseRange, rangeName } from './refs.ts';
+import { mixTo } from './tables.ts';
+import type { TablePaint } from './tables.ts';
 
 /** A cache's field: its name, and the values its items index (`sharedItems`, in their order). */
 export interface CacheField {
@@ -78,16 +80,49 @@ export interface PivotTable {
   colHeader: string;
   grandRows: boolean;
   grandCols: boolean;
+  /** Its built-in style (`PivotStyleLight16`, Excel's default) and which of the style's parts it shows. */
+  style: PivotStyle;
+  /** The shape of its rows and columns as last laid out (from the file's rowItems and colItems, or a refresh here). */
+  look?: PivotLook;
   part: string;
   cache: PivotCache;
   /** Laid out here since it was read: its parts are brought in line when the workbook is written. */
   refreshed?: boolean;
 }
 
+export interface PivotStyle {
+  name: string;
+  rowHeaders: boolean;
+  colHeaders: boolean;
+  rowStripes: boolean;
+  colStripes: boolean;
+}
+
+export const DEFAULT_PIVOT_STYLE: PivotStyle = { name: 'PivotStyleLight16', rowHeaders: true, colHeaders: true, rowStripes: false, colStripes: false };
+
+/** A body row: how deep its item is (0 for the outermost row field), whether it has items under it, whether it is a
+ * subtotal row of its own (subtotals at the bottom) or the grand total. */
+export interface PivotRowLook {
+  depth: number;
+  leaf: boolean;
+  subtotal: boolean;
+  grand: boolean;
+}
+
+/** Where a pivot's body starts (from its location's top left), and what each body row and column is. */
+export interface PivotLook {
+  headerRows: number;
+  labelCols: number;
+  rows: PivotRowLook[];
+  /** The body's columns (from `labelCols`): 'sub' for a subtotal, 'grand' for a grand total. */
+  cols: ('item' | 'sub' | 'grand')[];
+}
+
 const local = (e: XmlElement) => e.name.slice(e.name.indexOf(':') + 1);
 const kid = (e: XmlElement | undefined, name: string) => (e ? [...elements(e)].find((c) => local(c) === name) : undefined);
 const kids = (e: XmlElement | undefined, name: string) => (e ? [...elements(e)].filter((c) => local(c) === name) : []);
 const off = (v: string | undefined) => v === '0' || v === 'false';
+const on = (v: string | undefined) => v === '1' || v === 'true';
 
 function sharedValue(e: XmlElement): string | number | boolean | null {
   const v = e.attrs.v;
@@ -126,10 +161,15 @@ export function readPivotTable(root: XmlElement, part: string, cache: PivotCache
   );
   const fieldList = (name: string) => kids(kid(root, name), 'field').map((f) => +(f.attrs.x ?? 0));
   const a = root.attrs;
+  const info = kid(root, 'pivotTableStyleInfo')?.attrs;
+  const style: PivotStyle = info
+    ? { name: info.name ?? '', rowHeaders: !off(info.showRowHeaders), colHeaders: !off(info.showColHeaders), rowStripes: on(info.showRowStripes), colStripes: on(info.showColStripes) }
+    : { ...DEFAULT_PIVOT_STYLE, name: '' };
+  const rowFields = fieldList('rowFields');
   return {
     name: a.name ?? '',
     location,
-    rowFields: fieldList('rowFields'),
+    rowFields,
     colFields: fieldList('colFields'),
     pageFields: kids(kid(root, 'pageFields'), 'pageField').map((f) => ({ field: +(f.attrs.fld ?? 0), item: f.attrs.item === undefined ? null : +f.attrs.item })),
     dataFields: kids(kid(root, 'dataFields'), 'dataField').map((d) => ({
@@ -144,9 +184,29 @@ export function readPivotTable(root: XmlElement, part: string, cache: PivotCache
     colHeader: a.colHeaderCaption ?? 'Column Labels',
     grandRows: !off(a.rowGrandTotals),
     grandCols: !off(a.colGrandTotals),
+    style,
+    look: readLook(root, loc!, rowFields.length),
     part,
     cache,
   };
+}
+
+/** The shape Excel saved a pivot in: its rowItems and colItems (an item's depth is the members it repeats from the one
+ * before, `r`, and the ones it lists). None when they were not saved (a pivot laid out here). */
+function readLook(root: XmlElement, loc: XmlElement, rowFieldCount: number): PivotLook | undefined {
+  const rowItems = kid(root, 'rowItems');
+  if (!rowItems) return undefined;
+  const depth = (i: XmlElement) => +(i.attrs.r ?? 0) + Math.max(1, kids(i, 'x').length) - 1;
+  const rows = kids(rowItems, 'i').map((i): PivotRowLook => {
+    const t = i.attrs.t ?? 'data';
+    const d = t === 'grand' ? 0 : depth(i);
+    return { depth: d, leaf: t === 'grand' || (t === 'data' && d >= rowFieldCount - 1), subtotal: t !== 'data' && t !== 'grand' && t !== 'blank', grand: t === 'grand' };
+  });
+  const cols = kids(kid(root, 'colItems'), 'i').map((i) => {
+    const t = i.attrs.t ?? 'data';
+    return t === 'grand' ? 'grand' : t === 'data' || t === 'blank' ? 'item' : 'sub';
+  });
+  return { headerRows: +(loc.attrs.firstDataRow ?? 1), labelCols: +(loc.attrs.firstDataCol ?? 1), rows, cols };
 }
 
 /** The pivot tables of a sheet, each with its cache. */
@@ -198,6 +258,7 @@ export interface PivotLayout {
   firstHeaderRow: number;
   firstDataRow: number;
   firstDataCol: number;
+  look: PivotLook;
 }
 
 /** The source as records: a field's value per row (strings, numbers, booleans; null for an empty cell). */
@@ -315,7 +376,7 @@ export function refreshPivot(book: Workbook, sheet: Worksheet, index: number): {
   const fields = p.fields.map((f, i) => ({ ...f, items: layout.items[i] ?? f.items }));
   const cache = { ...p.cache, fields: p.cache.fields.map((f, i) => ({ ...f, shared: layout.shared[i], summary: layout.summaries[i] })) };
   // Other pivots of the same cache share its values.
-  sheet.pivots = sheet.pivots.map((x, i) => (i === index ? { ...p, location: at, fields, cache, refreshed: true } : x.cache.part === cache.part ? { ...x, cache } : x));
+  sheet.pivots = sheet.pivots.map((x, i) => (i === index ? { ...p, location: at, fields, cache, look: layout.look, refreshed: true } : x.cache.part === cache.part ? { ...x, cache } : x));
   return { range: { r0: Math.min(old.r0, at.r0), c0: Math.min(old.c0, at.c0), r1: Math.max(old.r1, at.r1), c1: Math.max(old.c1, at.c1) } };
 }
 
@@ -403,18 +464,18 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
   // Columns: the column fields' tree, a subtotal after an outer item's group (not over the values), grand totals last.
   const colLevels = p.colFields;
   const header = colLevels.length ? 1 + colLevels.length : 1;
-  const columns: { records: number[]; data: number | null }[] = [];
+  const columns: { records: number[]; data: number | null; kind: PivotLook['cols'][number] }[] = [];
   const walkCols = (nodes: AxisNode[], depth: number) => {
     for (const n of nodes) {
       put(1 + depth, 1 + columns.length, n.label, 'header');
       if (!n.children.length) {
-        columns.push({ records: n.records, data: n.data });
+        columns.push({ records: n.records, data: n.data, kind: 'item' });
         continue;
       }
       walkCols(n.children, depth + 1);
       if (colLevels[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false) {
         put(1 + depth, 1 + columns.length, `${n.label} Total`, 'header');
-        columns.push({ records: n.records, data: n.data });
+        columns.push({ records: n.records, data: n.data, kind: 'sub' });
       }
     }
   };
@@ -425,24 +486,25 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
       if (colLevels.includes(-2)) {
         p.dataFields.forEach((d, data) => {
           put(1, 1 + columns.length, `Total ${d.name}`, 'header');
-          columns.push({ records: all, data });
+          columns.push({ records: all, data, kind: 'grand' });
         });
       } else {
         put(1, 1 + columns.length, 'Grand Total', 'header');
-        columns.push({ records: all, data: null });
+        columns.push({ records: all, data: null, kind: 'grand' });
       }
     }
     // The caption row: the value's name (when there is one), and what is across.
     if (p.dataFields.length === 1) put(0, 0, p.dataFields[0].name, 'header');
     put(0, 1, real ? p.colHeader : p.dataCaption, 'header');
   } else {
-    columns.push({ records: all, data: null });
+    columns.push({ records: all, data: null, kind: 'item' });
     // One value, and not down the rows: its name heads the column.
     if (!p.rowFields.includes(-2)) put(0, 1, p.dataFields[0].name, 'header');
   }
   put(header - 1, 0, p.rowHeader, 'header');
   // Rows: the row fields' tree, an outer item's row holding its subtotal (but not when the values are under it).
   let row = header;
+  const rowLooks: PivotRowLook[] = [];
   const rowValues = (under: number[], data: number | null, role: PivotCell['role']) =>
     columns.forEach((c, j) => {
       const d = data ?? c.data ?? 0;
@@ -452,6 +514,7 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     for (const n of nodes) {
       const leaf = !n.children.length;
       put(row, 0, n.label, leaf ? 'label' : 'subtotal', depth);
+      rowLooks.push({ depth, leaf, subtotal: false, grand: false });
       if (leaf) rowValues(n.records, n.data, 'value');
       else if (p.rowFields[depth + 1] !== -2 && p.fields[n.field]?.subtotal !== false) rowValues(n.records, n.data, 'subtotal');
       row++;
@@ -463,11 +526,13 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
     if (p.rowFields.includes(-2)) {
       p.dataFields.forEach((d, data) => {
         put(row, 0, `Total ${d.name}`, 'grand');
+        rowLooks.push({ depth: 0, leaf: true, subtotal: false, grand: true });
         rowValues(all, data, 'grand');
         row++;
       });
     } else {
       put(row, 0, 'Grand Total', 'grand');
+      rowLooks.push({ depth: 0, leaf: true, subtotal: false, grand: true });
       rowValues(all, null, 'grand');
       row++;
     }
@@ -490,7 +555,7 @@ export function pivotLayout(p: PivotTable, source: PivotSource): PivotLayout {
       max: numbers.length ? Math.max(...numbers) : null,
     };
   });
-  return { cells, rows: row, cols: 1 + columns.length, shared, items, summaries, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: 1 };
+  return { cells, rows: row, cols: 1 + columns.length, shared, items, summaries, firstHeaderRow: header > 1 ? 1 : 0, firstDataRow: header, firstDataCol: 1, look: { headerRows: header, labelCols: 1, rows: rowLooks, cols: columns.map((c) => c.kind) } };
 }
 
 // --- The field list ----------------------------------------------------------------------------------------------------
@@ -551,6 +616,7 @@ export function applyChoice(p: PivotTable, choice: PivotChoice): PivotTable {
     dataFields: choice.values.map((v) => ({ name: `${FN_NAMES[v.fn]} of ${names[v.field] ?? ''}`, field: v.field, fn: v.fn, numFmtId: null })),
     fields,
     cache,
+    look: undefined,
     refreshed: true,
   };
 }
@@ -570,8 +636,84 @@ export function newPivot(sourceSheet: string, block: CellRange, names: string[],
     colHeader: 'Column Labels',
     grandRows: true,
     grandCols: true,
+    style: { ...DEFAULT_PIVOT_STYLE },
     part: '',
     cache: { part: '', sheet: sourceSheet, ref: rangeName(block), fields: names.map((n) => ({ name: n, shared: [] })) },
     refreshed: true,
   };
+}
+
+// --- The look --------------------------------------------------------------------------------------------------------
+
+const looks = new WeakMap<PivotTable, PivotLook | null>();
+
+/** A pivot's shape for drawing: as saved or last laid out, or (for one saved without it, as this app saves them) laid
+ * out once from its source. */
+export function pivotLookOf(book: Workbook, p: PivotTable): PivotLook | null {
+  if (p.look) return p.look;
+  let look = looks.get(p);
+  if (look === undefined) {
+    const source = pivotSupported(p) ? pivotSource(book, p, (s, r, c) => gridValue(book, s, r, c)) : null;
+    look = source ? pivotLayout(p, source).look : null;
+    looks.set(p, look);
+  }
+  return look;
+}
+
+/** What a pivot style paints a cell with: a table style's paint, and a row label's indent and alignment. */
+export interface PivotPaint extends TablePaint {
+  indent?: number;
+  left?: boolean;
+}
+
+/**
+ * How a built-in pivot style (PivotStyleLight1-28, Medium1-28, Dark1-28) paints a cell at `row`, `col` from the pivot's
+ * top left (its body's, not its filters'). Each style uses one theme colour by its number (black, or accents 1 to 6,
+ * going round), as Excel's do; this follows their shape (shaded or lined headers and grand totals, bold outer items,
+ * stripes), not every pixel. Row labels are indented by their depth whatever the style.
+ */
+export function pivotPaint(p: PivotTable, look: PivotLook, row: number, col: number, accents: number[], dark: number): PivotPaint | null {
+  const out: PivotPaint = {};
+  const body = row - look.headerRows;
+  const at = body >= 0 ? look.rows[body] : undefined;
+  if (body >= 0 && !at) return null;
+  if (at && col < look.labelCols) {
+    out.left = true;
+    if (!at.grand && at.depth) out.indent = at.depth;
+  }
+  const m = /^PivotStyle(Light|Medium|Dark)(\d+)$/.exec(p.style.name);
+  if (m) {
+    const family = m[1];
+    const n = +m[2];
+    const accent = (n - 1) % 7 === 0 ? dark : accents[((n - 1) % 7) - 1] ?? dark;
+    const group = Math.floor((n - 1) / 7);
+    const tint = (t: number) => mixTo(accent, 0xffffff, t);
+    const header = body < 0 && p.style.colHeaders;
+    const lastHeader = body === -1;
+    const grand = !!at?.grand || (body >= 0 && look.cols[col - look.labelCols] === 'grand' && p.style.colHeaders);
+    // An outer item's row, with its subtotal (or a subtotal row of its own).
+    const outer = !!at && !at.grand && (!at.leaf || at.subtotal) && at.depth === 0 && p.style.rowHeaders;
+    const stripe = !!at && !at.grand && ((p.style.rowStripes && body % 2 === 0) || (p.style.colStripes && col >= look.labelCols && (col - look.labelCols) % 2 === 0));
+    if (family === 'Light') {
+      if (header) {
+        if (group === 1) Object.assign(out, { fill: accent, bold: true, color: 0xffffff });
+        else Object.assign(out, { fill: group >= 2 ? tint(0.8) : undefined, bold: true, bottom: lastHeader ? accent : undefined });
+      } else if (at?.grand) Object.assign(out, { fill: group >= 2 ? tint(0.8) : undefined, bold: true, top: accent });
+      else if (outer) Object.assign(out, { bold: true, fill: group === 3 ? tint(0.9) : undefined, bottom: group === 1 ? undefined : accent });
+      else if (stripe) out.fill = tint(0.8);
+    } else if (family === 'Medium') {
+      if (header) Object.assign(out, { fill: accent, bold: true, color: 0xffffff });
+      else if (at?.grand) Object.assign(out, { fill: tint(0.4), bold: true, top: accent });
+      else if (outer) Object.assign(out, { fill: tint(0.6), bold: true });
+      else if (grand) Object.assign(out, { fill: tint(0.8), bold: true });
+      else if (stripe) out.fill = tint(0.8);
+    } else {
+      if (header) Object.assign(out, { fill: mixTo(accent, 0x000000, 0.5), bold: true, color: 0xffffff });
+      else if (at?.grand) Object.assign(out, { fill: mixTo(accent, 0x000000, 0.5), bold: true, color: 0xffffff });
+      else if (outer) Object.assign(out, { fill: accent, bold: true, color: 0xffffff });
+      else Object.assign(out, { fill: stripe || grand ? tint(0.4) : tint(0.6) });
+    }
+  }
+  for (const k of Object.keys(out) as (keyof PivotPaint)[]) if (out[k] === undefined) delete out[k];
+  return Object.keys(out).length ? out : null;
 }

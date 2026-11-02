@@ -13,7 +13,8 @@ import type { NumberFormat } from './format/numberFormat.ts';
 import { drawStyle, mix } from './draw.ts';
 import type { CellOverlay, ConditionalPainter } from './conditional.ts';
 import { tablePaint } from './tables.ts';
-import type { TablePaint } from './tables.ts';
+import { pivotLookOf, pivotPaint } from './pivot.ts';
+import type { PivotPaint } from './pivot.ts';
 import { resolveColor } from './model/theme.ts';
 import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE } from './protocol.ts';
 import type { CellPaint, CellTile, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
@@ -61,9 +62,9 @@ export class TileCache {
     return id;
   }
 
-  /** The style a cell of a table shows: the table style's paint under the cell's own look. */
-  tableStyle(base: number, paint: TablePaint): number {
-    const key = `t${base}|${paint.fill ?? ''}|${paint.bold ? 1 : 0}|${paint.color ?? ''}|${paint.top ?? ''}|${paint.bottom ?? ''}`;
+  /** The style a cell of a table or pivot shows: the style's paint under the cell's own look. */
+  tableStyle(base: number, paint: PivotPaint): number {
+    const key = `t${base}|${paint.fill ?? ''}|${paint.bold ? 1 : 0}|${paint.color ?? ''}|${paint.top ?? ''}|${paint.bottom ?? ''}|${paint.indent ?? ''}|${paint.left ? 1 : 0}`;
     let id = this.overlays.get(key);
     if (id === undefined) {
       id = OVERLAY_STYLES + this.overlays.size;
@@ -75,6 +76,8 @@ export class TileCache {
       if (paint.color !== undefined && style.color === 0) style.color = paint.color;
       if (paint.top !== undefined && !style.borders[2]) style.borders[2] = [0.75, paint.top];
       if (paint.bottom !== undefined && !style.borders[3]) style.borders[3] = [0.75, paint.bottom];
+      if (paint.left && style.horizontal === 'general') style.horizontal = 'left';
+      if (paint.indent && !style.indent) style.indent = paint.indent;
       this.styles.set(id, style);
     }
     return id;
@@ -167,6 +170,7 @@ export function cellTile(book: Workbook, index: number, sheet: Worksheet, key: T
     cell.note = true;
   }
   if (sheet.tables.length) applyTables(book, sheet, cells, r0, r1, c0, c1, cache);
+  if (sheet.pivots.length) applyPivots(book, sheet, cells, r0, r1, c0, c1, cache);
   if (conditional && sheet.conditional.length) applyConditional(book, sheet, cells, r0, r1, c0, c1, cache, conditional);
   const used = [...new Set(cells.map((c) => c.style))];
   return { sheet: index, key, cells, merges, styles: used.map((s) => [s, cache.style(s)]), version: cache.version };
@@ -185,6 +189,33 @@ function applyTables(book: Workbook, sheet: Worksheet, cells: CellPaint[], r0: n
         if (!paint) continue;
         let cell = at.get(row * MAX_COLUMNS + col);
         if (!cell) {
+          cell = { row, col, text: '', style: sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0, type: 'text', spillLeft: 0, spillRight: 0 };
+          cells.push(cell);
+          at.set(row * MAX_COLUMNS + col, cell);
+        }
+        cell.style = cache.tableStyle(cell.style, paint);
+      }
+    }
+  }
+}
+
+/** Paints the tile's cells that are in pivots with their pivots' styles, and indents their row labels. */
+function applyPivots(book: Workbook, sheet: Worksheet, cells: CellPaint[], r0: number, r1: number, c0: number, c1: number, cache: TileCache): void {
+  const at = new Map(cells.map((c) => [c.row * MAX_COLUMNS + c.col, c]));
+  const colors = book.theme.colors;
+  const accents = colors.slice(4, 10);
+  for (const p of sheet.pivots) {
+    const r = p.location;
+    if (r.r1 < r0 || r.r0 >= r1 || r.c1 < c0 || r.c0 >= c1) continue;
+    const look = pivotLookOf(book, p);
+    if (!look) continue;
+    for (let row = Math.max(r0, r.r0); row <= Math.min(r1 - 1, r.r1); row++) {
+      for (let col = Math.max(c0, r.c0); col <= Math.min(c1 - 1, r.c1); col++) {
+        const paint = pivotPaint(p, look, row - r.r0, col - r.c0, accents, colors[0]);
+        if (!paint) continue;
+        let cell = at.get(row * MAX_COLUMNS + col);
+        if (!cell) {
+          if (paint.fill === undefined && paint.top === undefined && paint.bottom === undefined) continue;
           cell = { row, col, text: '', style: sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0, type: 'text', spillLeft: 0, spillRight: 0 };
           cells.push(cell);
           at.set(row * MAX_COLUMNS + col, cell);

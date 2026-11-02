@@ -234,7 +234,7 @@ export function tablePaint(table: Table, row: number, col: number, accents: numb
   return out.fill === undefined && !out.bold && out.color === undefined && out.top === undefined && out.bottom === undefined ? null : out;
 }
 
-function mixTo(a: number, b: number, t: number): number {
+export function mixTo(a: number, b: number, t: number): number {
   const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }

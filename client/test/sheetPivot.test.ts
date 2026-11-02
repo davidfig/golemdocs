@@ -10,7 +10,7 @@ import { Kind } from '../src/sheet/model/column.ts';
 import type { Worksheet } from '../src/sheet/model/worksheet.ts';
 import type { Workbook } from '../src/sheet/model/workbook.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
-import { pivotLayout, pivotSource, pivotSupported } from '../src/sheet/pivot.ts';
+import { pivotLayout, pivotLookOf, pivotPaint, pivotSource, pivotSupported } from '../src/sheet/pivot.ts';
 import type { PivotLayout } from '../src/sheet/pivot.ts';
 import { History } from '../src/sheet/edit.ts';
 import { Workbook as Book } from '../src/sheet/model/workbook.ts';
@@ -72,6 +72,8 @@ for (const name of ['pivots-excel.xlsx', 'pivots2-excel.xlsx']) {
         const excel = cellsAt(book, sheet, p.location.r0 - above, p.location.c0, layout.rows + above, layout.cols).map((row) => row.map((t) => (/^-?[\d.]+$/.test(t) ? String(Math.round(+t * 1e8) / 1e8) : t)));
         assert.deepEqual(layoutText(layout, above), excel, p.name);
         assert.deepEqual([p.location.r1 - p.location.r0 + 1, p.location.c1 - p.location.c0 + 1], [layout.rows, layout.cols], `${p.name}'s size`);
+        // Its shape as Excel saved it (rowItems, colItems) is the one laid out here.
+        assert.deepEqual(layout.look, p.look, `${p.name}'s look`);
       }
     }
     assert.equal(count, name === 'pivots-excel.xlsx' ? 2 : 4);
@@ -149,4 +151,30 @@ test('new values in the source become new items, after the old ones, in the orde
   assert.deepEqual(text[1], ['Row Labels', 'Pens', 'Ink', 'Paper', 'Glue', 'Grand Total']);
   assert.deepEqual(layout.shared[0], ['East', 'West', 'North', 'South', 'Central']);
   assert.deepEqual(layout.items[0], [0, 1, 2, 3, 4]);
+});
+
+test('a pivot style shades the header and grand total, bolds outer items, and indents inner labels', async () => {
+  const { book, sheet } = await open('pivots-excel.xlsx');
+  const p = sheet.pivots[1]; // ByRegion: Region, then Product, down; Excel's default PivotStyleLight16
+  assert.equal(p.style.name, 'PivotStyleLight16');
+  const look = pivotLookOf(book, p)!;
+  const accent = 0x4472c4;
+  const paint = (row: number, col: number) => pivotPaint(p, look, row, col, [accent, 0, 0, 0, 0, 0], 0);
+  const header = paint(look.headerRows - 1, 1)!;
+  assert.ok(header.bold && header.fill !== undefined && header.bottom === accent);
+  const outer = look.rows.findIndex((r) => !r.leaf && !r.grand);
+  // Checked against Excel's own drawing of it (saved as a PDF): outer items bold with a line under them, the grand total
+  // column plain.
+  assert.deepEqual(paint(look.headerRows + outer, 0), { left: true, bold: true, bottom: accent });
+  assert.deepEqual(paint(look.headerRows + outer + 1, 0), { left: true, indent: 1 });
+  assert.equal(paint(look.headerRows + outer + 1, 1), null);
+  const grand = paint(look.headerRows + look.rows.length - 1, 1)!;
+  assert.ok(grand.bold && grand.top === accent && grand.fill === header.fill);
+  // Refreshed and saved here (without rowItems) and read again, it is laid out once for its look.
+  new History(book).apply(1, { kind: 'refreshPivots' });
+  assert.deepEqual(sheet.pivots[1].look, look);
+  const written = await readWorkbook(await writeWorkbook(book));
+  const back = (written.sheets[1] as Worksheet).pivots[1];
+  assert.equal(back.look, undefined);
+  assert.deepEqual(pivotLookOf(written, back), look);
 });

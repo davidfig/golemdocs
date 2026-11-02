@@ -189,7 +189,7 @@ function newTable(p: PivotTable, cacheId: number): XmlElement {
       outlineData: 1,
       multipleFieldFilters: 0,
     },
-    [el('location', { ref: rangeName(p.location) }), el('pivotTableStyleInfo', { name: 'PivotStyleLight16', showRowHeaders: 1, showColHeaders: 1, showRowStripes: 0, showColStripes: 0, showLastColumn: 1 })],
+    [el('location', { ref: rangeName(p.location) }), el('pivotTableStyleInfo', { name: p.style.name || 'PivotStyleLight16', showRowHeaders: +p.style.rowHeaders, showColHeaders: +p.style.colHeaders, showRowStripes: +p.style.rowStripes, showColStripes: +p.style.colStripes, showLastColumn: 1 })],
   );
 }
 

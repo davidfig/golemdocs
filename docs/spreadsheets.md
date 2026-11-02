@@ -469,9 +469,18 @@ The field list's choices are `choiceButton` (`ui/dropdown.ts`): the drop-down li
 the toolbar's `dropdown` is now built on; a popup opened from inside a modal dialog goes into it (`openPopup`), since a
 modal dialog makes the rest of the page inert.
 
-**Next in M6**: pivot styles drawn; Excel's outline and tabular layouts, subtotals at the bottom, item sorting and
-hidden items; pivot tables; what-if tools (Goal
-Seek, data tables, scenarios, Solver); print and PDF.
+**Pivot styles.** Excel draws a pivot's look from its style (`pivotTableStyleInfo`) rather than saving it in the cells,
+so the tiles lay it on, as they do a table's (`applyPivots` in `tiles.ts`, `pivotPaint` in `pivot.ts`): header rows
+shaded with a line under them, outer items bold with a line under them, the grand total row shaded with a line over it,
+stripes when asked for, and the row labels left-aligned and indented by their depth. The built-in Light, Medium and Dark
+families are drawn by their shape from one theme colour each, as table styles are; Excel's default (PivotStyleLight16)
+was checked against Excel's own drawing of it. What each body row and column is (`PivotLook`: an item's depth, whether it
+has items under it, subtotals, grand totals) comes from the rowItems and colItems Excel saves, or from the layout after a
+refresh here; a pivot saved here (without them) is laid out once from its source for it (`pivotLookOf`). The layout's
+shape is checked against Excel's rowItems and colItems for every fixture pivot.
+
+**Next in M6**: Excel's outline and tabular layouts, subtotals at the bottom, item sorting and hidden items; what-if tools
+(Goal Seek, data tables, scenarios, Solver); print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

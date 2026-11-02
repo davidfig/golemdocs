@@ -226,6 +226,18 @@ function usedRange(sheet: Worksheet): CellRange | null {
       c1 = Math.max(c1, c);
     });
   }
+  // Charts print too: the cells they reach count as in use.
+  for (const chart of sheet.charts) {
+    const { from, to, size } = chart.anchor;
+    const end = to ?? {
+      col: sheet.colSizes.indexAt(sheet.colSizes.position(from.col) + from.dx + (size?.width ?? 360)),
+      row: sheet.rowSizes.indexAt(sheet.rowSizes.position(from.row) + from.dy + (size?.height ?? 216)),
+      dx: 1,
+      dy: 1,
+    };
+    r1 = Math.max(r1, end.dy > 0 ? end.row : end.row - 1);
+    c1 = Math.max(c1, end.dx > 0 ? end.col : end.col - 1);
+  }
   if (r1 < 0) return null;
   // Excel prints from A1 when the cells in use start near it, as most sheets do.
   return { r0: 0, c0: 0, r1, c1 };

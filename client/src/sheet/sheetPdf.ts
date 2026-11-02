@@ -1,6 +1,7 @@
 // A sheet as a PDF (File › Print, Print Preview; docs/spreadsheets.md, M6): its pages as print.ts cuts them, drawn from
 // the same tiles the grid draws (fills, borders, merged cells, text placed by cellText.ts in the same fonts), with the
-// title rows and columns on every page, gridlines and headings when the page setup asks, and the header and footer.
+// title rows and columns on every page, gridlines and headings when the page setup asks, charts and sparklines where
+// they are (a chart a break goes through is split, as Excel prints it), and the header and footer.
 // Fonts are embedded as the document exporter embeds them (pdfExport.ts). Loaded only when a sheet is printed.
 
 import { PdfDocument } from '@golemdocs/pdf';
@@ -57,6 +58,11 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
   };
   fontOf(defaultStyle.font, false, false);
   fontOf(defaultStyle.font, true, false);
+  // Charts' text is in Calibri, as the grid draws it.
+  if (data.charts?.length) {
+    fontOf('Calibri', false, false);
+    fontOf('Calibri', true, false);
+  }
   for (const s of styles.values()) fontOf(s.font, s.bold, s.italic);
   await set.ensure([...resolved.values()].map((f) => f.face));
   const embedded = new Map<string, EmbeddedFont>();
@@ -103,12 +109,11 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
     for (const run of lineRuns(list)) d.textRun(run.pieces, run.first.x, run.first.y, { font: pdfFont(run.first.font), size: run.first.size, color: rgb(colorOf(run.first.color)) });
   };
   /** Text in the default font, its left edge at x (center or right: x is its middle or right edge). */
-  const label = (d: PageDrawing, text: string, x: number, baseline: number, align: 'left' | 'center' | 'right', color = 0, bold = false) => {
+  const label = (d: PageDrawing, text: string, x: number, baseline: number, align: 'left' | 'center' | 'right', color = 0, bold = false, size = defaultStyle.size, family = defaultStyle.font) => {
     if (!text) return;
-    const f = fontOf(defaultStyle.font, bold, false);
+    const f = fontOf(family, bold, false);
     const m = set.metrics(f.face);
     if (!m) return;
-    const size = defaultStyle.size;
     let width = 0;
     const chars: { cp: number; x: number }[] = [];
     for (const ch of text) {
@@ -266,6 +271,30 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
           if (style.underline === 2) d.rect(line.left, at + thick * 2, line.right - line.left, thick, { fill: rgb(color) });
         }
         if (style.strike && line.chars.length) d.rect(line.left, line.baseline - metrics.strikeoutPosition * style.size, line.right - line.left, Math.max(metrics.strikeoutThickness * style.size, 0.5), { fill: rgb(color) });
+      }
+    }
+    // Charts and sparklines over the cells: their triangles (one path per colour run), then their text, as the grid draws
+    // them (a text's y is its middle).
+    for (const scene of data.charts ?? []) {
+      const sx = ox + scene.x - colX[c0];
+      const sy = oy + scene.y - rowY[r0];
+      if (sx > ox + w || sy > oy + h || sx + scene.width < ox || sy + scene.height < oy) continue;
+      const p = scene.points;
+      let color = -1;
+      for (let t = 0; t + 5 < p.length; t += 6) {
+        const c = scene.colors[t / 2];
+        if (c !== color) {
+          if (color >= 0) d.fill();
+          d.fillColor(rgb(c));
+          color = c;
+        }
+        d.moveTo(sx + p[t], sy + p[t + 1]).lineTo(sx + p[t + 2], sy + p[t + 3]).lineTo(sx + p[t + 4], sy + p[t + 5]).closePath();
+      }
+      if (color >= 0) d.fill();
+      const calibri = set.metrics(fontOf('Calibri', false, false).face);
+      for (const run of scene.texts) {
+        const middle = calibri ? ((calibri.ascent - calibri.descent) * run.size) / 2 : run.size / 3;
+        label(d, run.text, sx + run.x, sy + run.y + middle, run.align, run.color, run.bold, run.size, 'Calibri');
       }
     }
     d.restore();

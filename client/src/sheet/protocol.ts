@@ -394,4 +394,6 @@ export interface PrintData {
   tiles: CellTile[];
   cols: number[];
   rows: number[];
+  /** The sheet's charts and sparklines, laid out (in sheet points). */
+  charts?: ChartScene[];
 }

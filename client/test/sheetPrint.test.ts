@@ -12,6 +12,8 @@ import { PdfDocument, extractText } from '@golemdocs/pdf';
 import type { Worksheet } from '../src/sheet/model/worksheet.ts';
 import { headerFooterText, printLayout, printNames } from '../src/sheet/print.ts';
 import { History } from '../src/sheet/edit.ts';
+import { Engine } from '../src/sheet/formula/engine.ts';
+import { chartScene } from '../src/sheet/charts/scene.ts';
 import { sheetToPdf } from '../src/sheet/sheetPdf.ts';
 import { TileCache, printData } from '../src/sheet/tiles.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
@@ -104,4 +106,18 @@ test('Page Setup, Set Print Area and Page Breaks are edits, written to the file 
   for (let i = 0; i < 5; i++) history.undo();
   assert.equal(sheet.pageSetup.orientation, 'portrait');
   assert.deepEqual(printNames(book.names, 0), { area: null, titleRows: null, titleCols: null });
+});
+
+test('charts print where they are: the pages reach them, and their titles are on the first page', hasFonts ? {} : { skip: 'run `pnpm fonts` first' }, async () => {
+  const book = await readWorkbook(fixture('charts-excel.xlsx'));
+  const engine = new Engine(book);
+  engine.recalculateAll();
+  const sheet = book.sheets[0] as Worksheet;
+  const data = printData(book, 0, sheet, new TileCache(book));
+  // Its cells end at D7; its charts reach column O.
+  assert.ok(data.layout.pages.some((p) => p.cols[1] > 10));
+  data.charts = sheet.charts.map((c, i) => chartScene(book, engine, 0, sheet, c, `0:${i}`));
+  const pdf = PdfDocument.load(await sheetToPdf(data, fonts!, 'charts.xlsx'));
+  const first = extractText(pdf.pages[0]).items.map((t) => t.text).join(' ');
+  for (const title of ['Sales by month', 'Trend', 'South']) assert.ok(first.includes(title), title);
 });

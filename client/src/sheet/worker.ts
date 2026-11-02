@@ -345,7 +345,14 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const sheet = book.sheets[m.sheet];
         if (!sheet || !isWorksheet(sheet)) return;
         const conditional = sheet.conditional.length && engine ? painterFor(m.sheet, sheet) : undefined;
-        return post({ t: 'print', id: m.id, data: printData(book, m.sheet, sheet, cache, conditional) });
+        const data = printData(book, m.sheet, sheet, cache, conditional);
+        // Charts and sparklines print where they are, in each page's cells.
+        if (engine) {
+          data.charts = sheet.charts.map((c, i) => chartScene(book!, engine!, m.sheet, sheet, c, `${m.sheet}:${i}`));
+          const sparklines = sparklineScene(book, engine, m.sheet, sheet);
+          if (sparklines) data.charts.push(sparklines);
+        }
+        return post({ t: 'print', id: m.id, data });
       }
       case 'solverModel':
         return post({ t: 'solverModel', id: m.id, model: readSolverModel(book.names, m.sheet) });

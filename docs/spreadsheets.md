@@ -560,7 +560,7 @@ their files) draws each page as the grid draws its cells (fills, data bars, grid
 text placed by `placeText` in the same fonts, embedded and subset as the document exporter does), scaled, the title rows
 and columns on every page past them, the headings in grey boxes, and the header and footer (`headerFooterText`: &L &C &R,
 &P, &N, &A, &F, &D, &T; font codes left out) in the margins. A workbook prints its active sheet: it is no longer opened
-as a document to print. Charts and pictures are not printed yet.
+as a document to print. Charts and sparklines print where they are (`PrintData.charts`, the scenes the grid draws; the cells a chart reaches count as in use), a chart a page edge goes through cut there as Excel cuts it.
 
 **Page Setup for sheets** (`pageSetupDialog.ts`; File › Page Setup with a sheet open). Excel's four tabs, built from the
 document's Page Setup classes: Page (orientation, scale or fit to so many pages, paper), Margins (with centring),
@@ -570,7 +570,7 @@ the selection as the print area or clears it (`printArea`); Sheet › Page Break
 left of its column (only the one there is room for at the top row or first column), removes them, or resets them all
 (`pageBreak`). Edits that change names keep the names for undo (`BookSnapshot.names`).
 
-M6 is done, but for printing charts and pictures (left for later).
+M6 is done.
 
 ### M5: data and formatting (done, 2026-11-01)
 

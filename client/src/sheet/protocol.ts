@@ -3,7 +3,7 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
-import type { PrintLayout } from './print.ts';
+import type { PageSetup, PrintLayout } from './print.ts';
 import type { SolverModel } from './solver.ts';
 import type { SolverOutcome } from './whatIf.ts';
 import type { Scenarios, SummaryLabels, SummaryValue } from './scenarios.ts';
@@ -261,6 +261,12 @@ export type EditOp =
   | { kind: 'showScenario'; index: number }
   /** Summary: a new sheet (before this one) of the rows the worker worked out; `results` the result cells as typed. */
   | { kind: 'scenarioSummary'; rows: SummaryValue[][]; results: string; name: string }
+  /** File › Page Setup: how the sheet prints, its print area and its title rows and columns. */
+  | { kind: 'pageSetup'; setup: PageSetup; area: CellRange | null; titleRows: [number, number] | null; titleCols: [number, number] | null }
+  /** Sheet › Print Area › Set (a range) or Clear (null). */
+  | { kind: 'printArea'; range: CellRange | null }
+  /** Sheet › Page Break: one inserted or removed at a cell (above its row, left of its column), or all of them reset. */
+  | { kind: 'pageBreak'; action: 'insert' | 'remove' | 'reset'; row: number; col: number }
   /** What-If › Solver: the sheet's model kept (in its hidden names), or taken away. */
   | { kind: 'solverModel'; model: SolverModel | null }
   /** Values put in cells, as typed (Solver's solution kept). */
@@ -333,6 +339,8 @@ export type ToWorker =
   | { t: 'pivotFields'; id: number; sheet: number; index?: number; range?: CellRange }
   /** The sheet's charts, laid out with its data as it is now. */
   | { t: 'charts'; id: number; sheet: number }
+  /** The sheet's page setup, print area and titles, for the Page Setup dialog. */
+  | { t: 'pageSetup'; id: number; sheet: number }
   /** What the sheet prints: its pages, and the tiles and sizes of the cells on them. */
   | { t: 'print'; id: number; sheet: number }
   /** The sheet's Solver model. */
@@ -368,6 +376,7 @@ export type FromWorker =
   | { t: 'scenarioSummary'; id: number; rows: SummaryValue[][] | null }
   | { t: 'solverModel'; id: number; model: SolverModel | null }
   | { t: 'print'; id: number; data: PrintData }
+  | { t: 'pageSetup'; id: number; setup: PageSetup; area: CellRange | null; titleRows: [number, number] | null; titleCols: [number, number] | null }
   | ({ t: 'solve'; id: number } & SolverOutcome)
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }

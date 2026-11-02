@@ -422,7 +422,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'setAlignment':
         return true;
       case 'dialog':
-        return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll';
+        return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll' || action.name === 'pageSetup';
     }
   }
   // The text editor edits text and nothing else: no formatting or document properties (printing and converting open the file as a document first).

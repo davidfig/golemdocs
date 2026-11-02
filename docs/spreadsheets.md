@@ -562,7 +562,15 @@ and columns on every page past them, the headings in grey boxes, and the header 
 &P, &N, &A, &F, &D, &T; font codes left out) in the margins. A workbook prints its active sheet: it is no longer opened
 as a document to print. Charts and pictures are not printed yet.
 
-**Next in M6**: the Page Setup dialog for sheets (print area and titles, page breaks).
+**Page Setup for sheets** (`pageSetupDialog.ts`; File › Page Setup with a sheet open). Excel's four tabs, built from the
+document's Page Setup classes: Page (orientation, scale or fit to so many pages, paper), Margins (with centring),
+Header/Footer (each in its three parts, Excel's codes typed as they are), Sheet (print area, rows and columns to repeat,
+gridlines, headings, page order). OK is one `pageSetup` edit (the setup, and the print names). Sheet › Print Area sets
+the selection as the print area or clears it (`printArea`); Sheet › Page Breaks inserts a break above the active row and
+left of its column (only the one there is room for at the top row or first column), removes them, or resets them all
+(`pageBreak`). Edits that change names keep the names for undo (`BookSnapshot.names`).
+
+M6 is done, but for printing charts and pictures (left for later).
 
 ### M5: data and formatting (done, 2026-11-01)
 

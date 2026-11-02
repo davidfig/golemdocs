@@ -11,6 +11,7 @@ import { FontSet } from '@golemdocs/layout';
 import { PdfDocument, extractText } from '@golemdocs/pdf';
 import type { Worksheet } from '../src/sheet/model/worksheet.ts';
 import { headerFooterText, printLayout, printNames } from '../src/sheet/print.ts';
+import { History } from '../src/sheet/edit.ts';
 import { sheetToPdf } from '../src/sheet/sheetPdf.ts';
 import { TileCache, printData } from '../src/sheet/tiles.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
@@ -77,4 +78,30 @@ test('headers and footers: their parts, with the page, pages, sheet and file fil
   const fields = { page: 2, pages: 5, sheet: 'Budget', file: 'plan.xlsx', date: new Date(2026, 10, 2) };
   assert.deepEqual(headerFooterText('&LPage &P of &N&C&"Arial,Bold"&14&A&R&F && more', fields), { left: 'Page 2 of 5', center: 'Budget', right: 'plan.xlsx & more' });
   assert.deepEqual(headerFooterText('Plain', fields), { left: '', center: 'Plain', right: '' });
+});
+
+test('Page Setup, Set Print Area and Page Breaks are edits, written to the file and undone', async () => {
+  const book = await readWorkbook(fixture('print.xlsx'));
+  const sheet = book.sheets[0] as Worksheet;
+  const history = new History(book);
+  history.apply(0, { kind: 'pageSetup', setup: { ...sheet.pageSetup, orientation: 'landscape', header: '&CBudget' }, area: { r0: 0, c0: 0, r1: 9, c1: 2 }, titleRows: [0, 1], titleCols: null });
+  assert.equal(sheet.pageSetup.orientation, 'landscape');
+  assert.deepEqual(printNames(book.names, 0), { area: { r0: 0, c0: 0, r1: 9, c1: 2 }, titleRows: [0, 1], titleCols: null });
+  history.apply(0, { kind: 'printArea', range: null });
+  assert.deepEqual(printNames(book.names, 0), { area: null, titleRows: [0, 1], titleCols: null });
+  // A break above row 30 and left of column B, then the column's taken away; all reset.
+  history.apply(0, { kind: 'pageBreak', action: 'insert', row: 29, col: 1 });
+  assert.deepEqual([sheet.pageSetup.rowBreaks, sheet.pageSetup.colBreaks], [[29], [1]]);
+  history.apply(0, { kind: 'pageBreak', action: 'remove', row: 5, col: 1 });
+  assert.deepEqual([sheet.pageSetup.rowBreaks, sheet.pageSetup.colBreaks], [[29], []]);
+  assert.deepEqual(printLayout(book, sheet, 0, sheet.pageSetup).pages[0].rows, [0, 28]);
+  sheet.dirty.layout = true;
+  const back = await readWorkbook(await writeWorkbook(book));
+  assert.deepEqual((back.sheets[0] as Worksheet).pageSetup, sheet.pageSetup);
+  assert.deepEqual(printNames(back.names, 0).titleRows, [0, 1]);
+  history.apply(0, { kind: 'pageBreak', action: 'reset', row: 0, col: 0 });
+  assert.deepEqual(sheet.pageSetup.rowBreaks, []);
+  for (let i = 0; i < 5; i++) history.undo();
+  assert.equal(sheet.pageSetup.orientation, 'portrait');
+  assert.deepEqual(printNames(book.names, 0), { area: null, titleRows: null, titleCols: null });
 });

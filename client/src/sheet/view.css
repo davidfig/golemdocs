@@ -347,6 +347,18 @@
   display: contents;
 }
 
+/* File › Page Setup for a sheet: a header's or footer's three parts side by side, and the hint at their codes. */
+.wm-sheet-page-parts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.wm-sheet-page-hint {
+  margin-top: 6px;
+  opacity: 0.7;
+}
+
 /* What-If › Solver: a label beside its control (the goal, the method); the constraints' list shorter than scenarios'. */
 .wm-sheet-solver-goal {
   display: flex;

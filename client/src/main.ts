@@ -4526,6 +4526,7 @@ const chromeHost = createChromeHost({
   },
   showUpdates: () => updateDialog.open(),
   showPageSetup: () => {
+    if (sheetView.active) return sheetView.pageSetup();
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
       focusInput();

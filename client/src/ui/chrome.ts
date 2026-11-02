@@ -955,6 +955,8 @@ export class Chrome {
           cmd('sheet.filter'),
           cmd('sheet.insertTable'),
           sub(t('sheet.pivot'), [cmd('sheet.pivotFields'), cmd('sheet.refreshPivots')]),
+          sub(t('sheet.printArea'), [cmd('sheet.setPrintArea'), cmd('sheet.clearPrintArea')]),
+          sub(t('sheet.pageBreaks'), [cmd('sheet.insertPageBreak'), cmd('sheet.removePageBreak'), cmd('sheet.resetPageBreaks')]),
           sub(t('sheet.whatIf'), [cmd('sheet.scenarioManager'), cmd('sheet.goalSeek'), cmd('sheet.dataTable'), cmd('sheet.solver')]),
           cmd('sheet.newNote'),
           cmd('sheet.deleteNote'),

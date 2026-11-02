@@ -7,6 +7,7 @@
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
 import { calculateDataTables, goalSeek, runSolver, scenarioSummaryRows } from './whatIf.ts';
 import { readSolverModel } from './solver.ts';
+import { printNames } from './print.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { currentRegion } from './edit.ts';
@@ -333,6 +334,11 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
+      }
+      case 'pageSetup': {
+        const sheet = book.sheets[m.sheet];
+        if (!sheet || !isWorksheet(sheet)) return;
+        return post({ t: 'pageSetup', id: m.id, setup: sheet.pageSetup, ...printNames(book.names, m.sheet) });
       }
       case 'print': {
         await settled();

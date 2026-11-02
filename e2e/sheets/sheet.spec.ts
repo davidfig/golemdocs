@@ -508,6 +508,52 @@ test('File › Print Preview prints the active sheet as its page setup says, and
   expect((await state(page)).info?.name).toBe('Breaks');
 });
 
+test('File › Page Setup turns a sheet on its side and repeats its first row; Set Print Area prints only the selection', async ({ app, page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url?: string | URL) => {
+      (window as unknown as { __opened: string[] }).__opened.push(String(url));
+      return {} as Window;
+    }) as typeof window.open;
+  });
+  const preview = async () => {
+    const before = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened.length);
+    await app.menu('File', 'Print Preview');
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened.length), { timeout: 20_000 }).toBe(before + 1);
+    const base64 = await page.evaluate(async () => {
+      const opened = (window as unknown as { __opened: string[] }).__opened;
+      const bytes = new Uint8Array(await (await fetch(opened[opened.length - 1])).arrayBuffer());
+      let out = '';
+      for (const b of bytes) out += String.fromCharCode(b);
+      return btoa(out);
+    });
+    return PdfDocument.load(new Uint8Array(Buffer.from(base64, 'base64')));
+  };
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'print.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/print.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'print.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await app.menu('File', 'Page Setup…');
+  const dialog = page.getByRole('dialog', { name: 'Page Setup' });
+  await dialog.getByRole('button', { name: 'Landscape' }).click();
+  await dialog.getByRole('tab', { name: 'Sheet' }).click();
+  await dialog.getByRole('textbox', { name: 'Rows to repeat at top' }).fill('1:1');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  let pdf = await preview();
+  expect(pdf.pages[0].mediaBox.slice(2)).toEqual([792, 612]);
+  // The second page starts with row 1 again.
+  expect(extractText(pdf.pages[1]).items[0].text).toBe('R1C1');
+  // Only A1:B3.
+  await clickCell(page, 0, 0);
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowRight');
+  await app.menu('Sheet', 'Print Area', 'Set Print Area');
+  pdf = await preview();
+  expect(pdf.pageCount).toBe(1);
+  expect(extractText(pdf.pages[0]).items.map((t) => t.text).join(' ')).toBe('R1C1 R1C2 R2C1 R2C2 R3C1 R3C2');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

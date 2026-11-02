@@ -88,6 +88,11 @@ export class SheetEditor {
     return this.view?.isOpen ? this.view.save() : null;
   }
 
+  /** File › Page Setup for the active sheet. */
+  pageSetup(): void {
+    void this.view?.pageSetup();
+  }
+
   /** The active sheet as a PDF, as it prints (null when nothing is open). */
   printPdf(): Promise<Uint8Array> | null {
     return this.view?.isOpen ? this.view.printPdf() : null;

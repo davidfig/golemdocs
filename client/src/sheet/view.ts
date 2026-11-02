@@ -32,6 +32,7 @@ import { askPivotFields } from './pivotFieldsDialog.ts';
 import { askDataTable, askGoalSeek, showGoalSeekStatus } from './whatIfDialogs.ts';
 import { openScenarioManager } from './scenarioDialog.ts';
 import { askSolver, showSolverResults } from './solverDialog.ts';
+import { askSheetPageSetup } from './pageSetupDialog.ts';
 import { parseCells } from './scenarios.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
@@ -1448,6 +1449,17 @@ export class SheetEditorView {
     void this.edit({ kind: 'dataTable', range, rowInput: cell(ask.row) ?? null, colInput: cell(ask.col) ?? null });
   }
 
+  /** File › Page Setup for the active sheet: its page setup, print area and titles in a dialog; OK is one edit. */
+  async pageSetup(): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const sheet = this.sheetIndex;
+    const reply = await this.ask<Extract<FromWorker, { t: 'pageSetup' }>>({ t: 'pageSetup', id: this.id(), sheet }).catch(() => null);
+    if (!reply) return;
+    const choice = await askSheetPageSetup(reply);
+    this.afterCard();
+    if (choice && sheet === this.sheetIndex) void this.edit({ kind: 'pageSetup', ...choice });
+  }
+
   /** Sheet › What-If Analysis › Solver: the model asked for (and kept in the sheet), solved in the worker, and the
    * solution kept (as an edit of the changing cells) if the person says so. */
   private async solver(): Promise<void> {
@@ -1865,6 +1877,17 @@ export class SheetEditorView {
         break;
       case 'solver':
         void this.solver();
+        break;
+      case 'setPrintArea':
+        void this.edit({ kind: 'printArea', range: this.selection });
+        break;
+      case 'clearPrintArea':
+        void this.edit({ kind: 'printArea', range: null });
+        break;
+      case 'insertPageBreak':
+      case 'removePageBreak':
+      case 'resetPageBreaks':
+        void this.edit({ kind: 'pageBreak', action: op === 'insertPageBreak' ? 'insert' : op === 'removePageBreak' ? 'remove' : 'reset', row: this.active.row, col: this.active.col });
         break;
       case 'protectSheet':
       case 'unprotectSheet':

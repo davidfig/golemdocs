@@ -13,7 +13,7 @@
 // links > search > formatting > comments > sections > tables. This file adds `apply`, which
 // dispatches a command to them.
 
-import { commentRanges, inlinesLength, paragraphLength, type Drawing, type Paragraph } from '@golemdocs/docx';
+import { commentRanges, inlinesLength, paragraphLength, paragraphText, type Drawing, type Paragraph } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
 import { type Command, type CommandResult, NO_CHANGE, combine } from './types.ts';
 import { EditorTables } from './tables.ts';
@@ -88,6 +88,18 @@ export class Editor extends EditorTables {
         const list = this.paragraphs();
         const last = list[list.length - 1];
         this.selection = { anchor: { paragraph: list[0], offset: 0 }, focus: { paragraph: last, offset: paragraphLength(last) } };
+        return NO_CHANGE;
+      }
+      case 'selectWord': {
+        if (!this.collapsed) return NO_CHANGE;
+        const at = this.selection.focus;
+        // The word the caret is in, else the one it is just after.
+        for (const pos of at.offset > 0 ? [at, { ...at, offset: at.offset - 1 }] : [at]) {
+          const [start, end] = this.wordAt(pos);
+          if (!/[\p{L}\p{N}]/u.test(paragraphText(start.paragraph).slice(start.offset, end.offset))) continue;
+          this.selection = { anchor: start, focus: end };
+          break;
+        }
         return NO_CHANGE;
       }
       case 'formatText':

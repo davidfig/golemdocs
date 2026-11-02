@@ -55,7 +55,8 @@ import { PdfEditTools } from './ui/pdfEditTools.ts';
 import { PdfTextLayer } from './ui/pdfTextLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
 import { PictureFrame } from './ui/pictureFrame.ts';
-import { showPopupMenu } from './ui/popupMenu.ts';
+import { showPopupMenu, type PopupItem } from './ui/popupMenu.ts';
+import { inCaseOf, synonymsOf } from './spelling/thesaurus.ts';
 import { PictureDetourBar } from './ui/pictureDetourBar.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
@@ -93,6 +94,7 @@ import { SpellDialog } from './ui/spellDialog.ts';
 import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect } from './ui/autoCorrect.ts';
 import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
+import { ThesaurusDialog } from './ui/thesaurusDialog.ts';
 import { loadIgnored, saveIgnored, withIgnored, type Ignored } from './spelling/ignored.ts';
 import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
@@ -3439,19 +3441,52 @@ async function pictureMenu(hit: { page: GpuPage; x: number; y: number }, at: { x
 }
 
 /** The right-click menu in a table: the Table menu's Insert and Delete commands, run through the same registry. */
-function tableMenu(at: { x: number; y: number }): void {
+/** Synonyms the right-click menu offers for a word: the first few of each meaning. */
+const MENU_SYNONYMS = 10;
+
+/** The right-click menu on text with no mistake under the pointer: the word's synonyms (with the Thesaurus), and in a table the table's commands. */
+function textMenu(at: { x: number; y: number }, word: NonNullable<SelectionUpdate['spell']>['word'], table: boolean): void {
   const item = (id: string) => ({ label: chrome.registry.get(id).plainLabel, run: () => void chrome.registry.execute(id) });
   const label = (key: Parameters<typeof t>[0]) => stripMnemonic(t(key));
-  showPopupMenu(
-    [
+  const items: PopupItem[] = [];
+  if (word) {
+    const selectWord = () => send({ kind: 'select', paragraph: word.paragraph, from: word.from, to: word.to });
+    // The menu opens at once: the synonyms come from the layout worker (which fetches the thesaurus the first time) and fill the submenu when they arrive.
+    const none: PopupItem[] = [{ label: t('spelling.thesaurus.none'), run: () => undefined, disabled: true }];
+    const synonyms = worker.thesaurus(word.text).then(
+      (found): PopupItem[] => {
+        const words = [...new Set((found?.meanings ?? []).flatMap((m) => synonymsOf(m).slice(0, 3)))].slice(0, MENU_SYNONYMS).map((s) => inCaseOf(word.text, s));
+        if (!words.length) return none;
+        return words.map((synonym) => ({
+          label: synonym,
+          run: () => {
+            selectWord();
+            send({ kind: 'insertText', text: synonym });
+          },
+        }));
+      },
+      () => none,
+    );
+    items.push(
+      { label: t('spelling.synonyms'), items: synonyms, pending: t('spelling.synonymsLoading') },
+      {
+        label: chrome.registry.get('tools.thesaurus').plainLabel,
+        run: () => {
+          const selected = nextSelection();
+          selectWord();
+          void selected.then(() => thesaurusDialog.open());
+        },
+      },
+    );
+  }
+  if (table) {
+    if (items.length) items.push('separator');
+    items.push(
       { label: label('chrome.table.insert'), items: [item('table.insertRowAbove'), item('table.insertRowBelow'), item('table.insertColumnLeft'), item('table.insertColumnRight')] },
       { label: label('chrome.table.delete'), items: [item('table.deleteRows'), item('table.deleteColumns'), item('table.deleteTable')] },
-    ],
-    at.x,
-    at.y,
-    stripMnemonic(t('chrome.menu.table')),
-    focusInput,
-  );
+    );
+  }
+  showPopupMenu(items, at.x, at.y, word ? t('spelling.synonyms') : stripMnemonic(t('chrome.menu.table')), focusInput);
 }
 
 /** Where a double click was, when the picture it is on had not been picked yet: it is opened in the image editor once it is. */
@@ -3492,7 +3527,7 @@ function applySelection(update: SelectionUpdate): void {
   updateCursor();
   if (update.search) findDialog.report(update.search);
   if (update.spell?.menu) {
-    if (!update.spell.issue && update.spell.table && spellMenuAt && !spellMenuAt.hover) tableMenu(spellMenuAt);
+    if (!update.spell.issue && (update.spell.table || update.spell.word) && spellMenuAt && !spellMenuAt.hover) textMenu(spellMenuAt, update.spell.word, !!update.spell.table);
     else showSpellMenu(update.spell.issue, spellMenuAt);
     spellMenuAt = null;
   } else if (update.spell) spellDialog.report(update.spell);
@@ -3567,7 +3602,7 @@ function send(command: WireCommand): void {
   // A drawing in the document is being edited: the document waits.
   if (embeddedDrawing) return;
   if (!BACKGROUND_COMMANDS.has(command.kind)) commandsSent++;
-  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties') {
+  if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties' && command.kind !== 'selectWord') {
     editSent = performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
@@ -4619,6 +4654,7 @@ const chromeHost = createChromeHost({
   showSearchAll: () => searchPanel.show(),
   showFind: (tab) => (textView.active ? textEngine.find(tab) : sheetView.active ? sheetEngine.find(tab) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
+  showThesaurus: () => void thesaurusDialog.open(),
   showWordCount: () => wordCountDialog.open(),
   showOptions: () => showOptions(focusInput),
   paste: async () => {
@@ -4914,7 +4950,7 @@ function refreshWith(source: DocumentSource): Promise<boolean | 'typed'> {
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
 let vaultWatched = false;
 async function connectVault(): Promise<void> {
-  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched) });
+  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched), openLocalId: () => current.localId });
   if (vaultService && !vaultWatched) {
     vaultWatched = true;
     let last = vaultService.current.state;
@@ -5016,6 +5052,27 @@ const spellDialog: SpellDialog = new SpellDialog(document.body, {
   selectedText: () => (textView.active ? (textView.selectedText ?? '') : selection.text),
   userWords,
   addUserWord,
+  focusEditor: focusInput,
+});
+
+// Tools ▸ Thesaurus: the selected word, or the word at the caret (which is selected, so Replace can type over it).
+const thesaurusDialog = new ThesaurusDialog(document.body, {
+  pickWord: async () => {
+    if (textView.active) {
+      if (!textView.selectedText) textView.selectWord();
+      return textView.selectedText ?? '';
+    }
+    if (!selection.text) {
+      // Updates for earlier commands (moving the caret) may come first: wait for the word, for a second at most.
+      const until = performance.now() + 1000;
+      send({ kind: 'selectWord' });
+      while (!selection.text && performance.now() < until) await Promise.race([nextSelection(), new Promise((resolve) => setTimeout(resolve, 100))]);
+    }
+    return selection.text;
+  },
+  selectedText: () => (textView.active ? (textView.selectedText ?? '') : selection.text),
+  lookUp: (word) => worker.thesaurus(word),
+  replace: (text) => (textView.active ? textEngine.insert(text) : send({ kind: 'insertText', text })),
   focusEditor: focusInput,
 });
 

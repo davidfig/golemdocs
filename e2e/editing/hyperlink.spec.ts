@@ -102,7 +102,7 @@ test.describe('Insert Hyperlink dialog', () => {
   }
 
   for (const bad of ['javascript:alert(1)', 'data:text/html,hi', 'two words here', 'file:///etc/passwd']) {
-    test(`"${bad}" is refused with a message`, async ({ app }) => {
+    test(`"${bad}" is refused with a message`, { tag: '@heavy' }, async ({ app }) => {
       await app.blank();
       await typeAndSelect(app, 'link');
       const box = await openLinkDialog(app);
@@ -218,7 +218,7 @@ test.describe('editing and removing a link', () => {
     await expect.poll(() => app.text()).toBe('before renamed after');
   });
 
-  test('Remove Link takes the link off and keeps the text', async ({ app }) => {
+  test('Remove Link takes the link off and keeps the text', { tag: '@heavy' }, async ({ app }) => {
     await linked(app);
     await caretInLink(app);
     const box = await openLinkDialog(app);

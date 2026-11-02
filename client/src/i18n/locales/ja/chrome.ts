@@ -75,6 +75,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.tabs': 'タブとリーダー(&T)…',
   'chrome.format.styles': 'スタイル(&Y)…',
   'chrome.tools.spelling': 'スペルチェックと文章校正(&S)…',
+  'chrome.tools.thesaurus': '類義語辞典(&H)…',
   'chrome.tools.wordCount': '文字カウント(&W)…',
   'chrome.tools.trackChanges': '変更履歴の記録(&T)',
   'chrome.tools.autoFormat': '入力時に自動書式設定(&A)',

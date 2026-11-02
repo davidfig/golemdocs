@@ -4,8 +4,11 @@
 import { h } from './dom.ts';
 import { ICONS } from './icons.ts';
 
-/** A row's `icon` is SVG markup, drawn in the gutter before its label. */
-export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean; icon?: string } | { label: string; items: readonly PopupItem[] };
+/**
+ * A row of the menu. A row's `icon` is SVG markup, drawn in the gutter before its label. A submenu's `items` can be a promise
+ * (rows still being looked up): its row is there at once, and its menu says `pending` until they arrive, then shows them in place.
+ */
+export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean; icon?: string } | { label: string; items: readonly PopupItem[] | Promise<readonly PopupItem[]>; pending?: string };
 
 let open: { close: () => void } | null = null;
 
@@ -39,10 +42,24 @@ export function showPopupMenu(items: readonly PopupItem[], x: number, y: number,
         gutter.append(icon);
       }
       const el = h('div', { class: `wm-item${disabled ? ' disabled' : ''}`, attrs: { role: 'menuitem', tabindex: '-1', ...(disabled ? { 'aria-disabled': 'true' } : {}) } }, gutter, text);
+      // A submenu still coming: a row that says so until it arrives, then its rows (in place, if it is open by then).
+      let rowsOf: readonly PopupItem[] | null = null;
+      if ('items' in item) {
+        if (Array.isArray(item.items)) rowsOf = item.items;
+        else
+          void (item.items as Promise<readonly PopupItem[]>).then(
+            (arrived) => {
+              rowsOf = arrived;
+              if (menus[depth] === menu && menus[depth + 1]?.dataset.pending === 'true' && open?.close === close) openChild();
+            },
+            () => undefined,
+          );
+      }
       const openChild = () => {
         closeChildren();
         if (!('items' in item)) return;
-        const child = build(item.items, depth + 1);
+        const child = build(rowsOf ?? [{ label: item.pending ?? '', run: () => undefined, disabled: true }], depth + 1);
+        if (!rowsOf) child.dataset.pending = 'true';
         const box = el.getBoundingClientRect();
         document.body.append(child);
         menus.push(child);

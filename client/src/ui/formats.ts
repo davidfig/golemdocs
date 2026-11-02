@@ -443,7 +443,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'changeCase':
         return false;
       case 'dialog':
-        return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll' || action.name === 'spelling';
+        return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll' || action.name === 'spelling' || action.name === 'thesaurus';
     }
   }
   switch (action.kind) {
@@ -511,6 +511,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
         case 'replace':
         case 'pasteSpecial':
         case 'spelling':
+        case 'thesaurus':
         case 'dateTime':
           return profile.editable;
         case 'font':

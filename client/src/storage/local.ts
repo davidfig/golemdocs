@@ -177,12 +177,19 @@ interface WriteInput {
   owner?: string;
   /** The folder it goes in; kept from the saved copy when absent. */
   folderId?: string;
+  /** Only over a copy of the same cloud document with nothing unsent (see `keepSyncedCopy` in ../library.ts): otherwise nothing is written. */
+  onlyIfSent?: boolean;
 }
 
 /** A copy of bytes that owns its buffer exactly (a view of a bigger buffer would take all of it into the database). */
 const own = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
 
 async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
+  return (await writeUnlessUnsent(input, cloud))!;
+}
+
+/** `write`, except that with `onlyIfSent` it writes nothing (and is null) over a copy that has changes the cloud hasn't got. */
+async function writeUnlessUnsent(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo | null> {
   const db = await openDb();
   const view = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes);
   const id = input.id ?? crypto.randomUUID();
@@ -196,6 +203,7 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
   const previous = input.id ? await versionDue(db, input.id, view.length) : null;
   for (;;) {
     const info = await commit(db, id, input, view, plan, cloud, previous);
+    if (info === 'unsent') return null;
     if (info) {
       if (previous?.whole) await keepWhole(db, id, previous.info, previous.whole);
       return info;
@@ -233,11 +241,16 @@ async function letGo(tx: IDBTransaction, hashes: Iterable<string>): Promise<void
 }
 
 /** Writes a document in one transaction: null (having written nothing) if a chunk the plan counted on is not there. */
-async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }, previous?: DueVersion | null): Promise<SavedInfo | null> {
+async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }, previous?: DueVersion | null): Promise<SavedInfo | null | 'unsent'> {
   const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES], 'readwrite');
   const meta = tx.objectStore(META);
   const manifests = tx.objectStore(MANIFESTS);
   const existing = input.id ? ((await done(meta.get(input.id))) as SavedInfo | undefined) : undefined;
+  // Checked here, in the transaction that writes, so a save made since the caller looked is never written over.
+  if (input.onlyIfSent && existing && (existing.cloudId !== cloud?.id || existing.updatedAt > (existing.cloudSyncedAt ?? 0))) {
+    await finished(tx);
+    return 'unsent';
+  }
   const old = input.id ? ((await done(manifests.get(input.id))) as StoredManifest | undefined) : undefined;
   let write: (() => void) | null = null;
   if (plan) {
@@ -311,6 +324,11 @@ export function saveSaved(input: WriteInput): Promise<SavedInfo> {
 /** Saves bytes that came from the cloud, and marks this copy as identical to it. */
 export function saveFromCloud(input: WriteInput & { cloudId: string; cloudUpdatedAt?: number }): Promise<SavedInfo> {
   return write(input, { id: input.cloudId, updatedAt: input.cloudUpdatedAt });
+}
+
+/** `saveFromCloud` over a copy with nothing unsent only: null, having written nothing, when the copy has changes the cloud hasn't got. */
+export function saveFromCloudIfSent(input: WriteInput & { cloudId: string; cloudUpdatedAt?: number }): Promise<SavedInfo | null> {
+  return writeUnlessUnsent({ ...input, onlyIfSent: true }, { id: input.cloudId, updatedAt: input.cloudUpdatedAt });
 }
 
 /**

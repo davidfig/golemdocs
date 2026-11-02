@@ -75,6 +75,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.tabs': 'Tab&stopps…',
   'chrome.format.styles': 'Format&vorlagen…',
   'chrome.tools.spelling': '&Rechtschreibung und Grammatik…',
+  'chrome.tools.thesaurus': 'T&hesaurus…',
   'chrome.tools.wordCount': '&Wörter zählen…',
   'chrome.tools.trackChanges': '&Änderungen nachverfolgen',
   'chrome.tools.autoFormat': '&Automatisch formatieren beim Tippen',

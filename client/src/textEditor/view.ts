@@ -635,6 +635,20 @@ export class TextEditorView {
     this.focus();
   }
 
+  /** Selects the word the caret is in (or just after), when nothing is selected; for the Thesaurus. */
+  selectWord(): void {
+    const index = this.index;
+    if (!index || !isCollapsed(this.sel)) return;
+    const { line, col } = this.sel.focus;
+    const { text } = shown(index, line);
+    for (const at of col > 0 ? [col, col - 1] : [col]) {
+      const word = wordAt(text, at);
+      if (!/[\p{L}\p{N}]/u.test(text.slice(word.from, word.to))) continue;
+      this.setSelection({ anchor: { line, col: word.from }, focus: { line, col: word.to } });
+      return;
+    }
+  }
+
   selectAll(): void {
     const index = this.index;
     if (!index?.count) return;

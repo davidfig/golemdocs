@@ -482,6 +482,7 @@ export class Chrome {
     // Tools
     r.add(
       dialog('tools.spelling', t('chrome.tools.spelling'), 'spelling', { icon: 'spelling', shortcut: 'F7' }),
+      dialog('tools.thesaurus', t('chrome.tools.thesaurus'), 'thesaurus', { shortcut: 'Shift+F7' }),
       dialog('tools.wordCount', t('chrome.tools.wordCount'), 'wordCount', { icon: 'wordCount' }),
       a('tools.trackChanges', t('chrome.tools.trackChanges'), { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
       dialog('tools.options', t('chrome.tools.options'), 'options', { shortcut: 'Mod+,' }),
@@ -703,6 +704,7 @@ export class Chrome {
       cmd('view.darkPages'),
       heading(t('chrome.menu.tools')),
       cmd('tools.spelling'),
+      cmd('tools.thesaurus'),
       cmd('tools.wordCount'),
       cmd('tools.trackChanges'),
       cmd('tools.autoFormat'),
@@ -907,7 +909,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),

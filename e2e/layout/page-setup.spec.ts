@@ -50,7 +50,7 @@ test.describe('Page Setup dialog', () => {
     expect((await readPageSetup(app)).left).toBe(1);
   });
 
-  test('Landscape swaps the paper width and height and turns the page on its side', async ({ app }) => {
+  test('Landscape swaps the paper width and height and turns the page on its side', { tag: '@heavy' }, async ({ app }) => {
     await pageSetup(app, { orientation: 'landscape' });
     await expect.poll(() => pageBoxes(app.page)).toEqual([{ width: 792, height: 612 }]);
     expect(await readPageSetup(app)).toMatchObject({ orientation: 'landscape', width: 11, height: 8.5, paper: 'Letter' });

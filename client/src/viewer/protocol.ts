@@ -94,3 +94,20 @@ export function parsePageNumber(text: string, count: number): number | null {
   const n = Number(match[1]);
   return n >= 1 && n <= count ? n - 1 : null;
 }
+
+/**
+ * What the shared-document page (share.ts) does with the answer to a check for a newer save: show the `newer` file, keep what is
+ * shown while it is `unchanged` or the check can be `retried` (offline, a server error), or take the document away because access
+ * has `ended` (no longer shared, made an editor, the owner's plan ended) or the person was `signedOut`.
+ */
+export type CheckOutcome = 'newer' | 'unchanged' | 'retry' | 'ended' | 'signedOut';
+
+/** The outcome for a response's status, or for no response at all (`null`: the request failed, offline). */
+export function checkOutcome(status: number | null): CheckOutcome {
+  if (status === 200) return 'newer';
+  if (status === 304) return 'unchanged';
+  if (status === 401) return 'signedOut';
+  // 404: unknown or dropped token (unshared, left, made an editor). 403: the owner's subscription ended, which ends every share.
+  if (status === 404 || status === 403) return 'ended';
+  return 'retry';
+}

@@ -12,6 +12,7 @@
 import { loadLocale, pickLocale, t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
 import { mountSignIn } from '../ui/signIn.ts';
+import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
 
 /** How often the file is checked for a newer save while the page is in view. */
@@ -25,6 +26,9 @@ function say(text: string): HTMLElement {
   return more;
 }
 
+/** The page's own title, put back when the document is taken away. */
+const PAGE_TITLE = document.title;
+
 async function start(): Promise<void> {
   const locale = pickLocale(navigator.languages ?? [navigator.language]);
   await loadLocale(locale).catch(() => undefined);
@@ -32,13 +36,14 @@ async function start(): Promise<void> {
   const token = new URLSearchParams(location.search).get('s') ?? '';
   if (!/^[\w-]+$/.test(token)) return void say(t('app.sharedGone'));
   const api = `/api/view/${encodeURIComponent(token)}`;
+  // Signing in comes straight back here.
+  const signInHere = (): void => void mountSignIn(say(t('viewer.signInToView')), `/view/?s=${encodeURIComponent(token)}`);
 
   let name: string;
   let file: Response;
   try {
     const info = await fetch(api, { cache: 'no-store' });
-    // Signing in comes straight back here.
-    if (info.status === 401) return void mountSignIn(say(t('viewer.signInToView')), `/view/?s=${encodeURIComponent(token)}`);
+    if (info.status === 401) return signInHere();
     // Unknown, someone else's, or no longer shared view-only: all the same to the page.
     if (info.status === 404) return void say(t('app.sharedGone'));
     if (!info.ok) throw new Error(`HTTP ${info.status}`);
@@ -66,24 +71,37 @@ async function start(): Promise<void> {
   });
 
   let checking = false;
+  let ended = false;
   const check = async (): Promise<void> => {
-    if (checking || document.visibilityState !== 'visible') return;
+    if (checking || ended || document.visibilityState !== 'visible') return;
     checking = true;
     try {
-      const response = await fetch(`${api}/file`, { cache: 'no-store', headers: etag ? { 'if-none-match': etag } : {} });
-      if (response.status === 200) {
-        etag = response.headers.get('etag');
-        viewer.reload(await response.arrayBuffer());
+      const response = await fetch(`${api}/file`, { cache: 'no-store', headers: etag ? { 'if-none-match': etag } : {} }).catch(() => null);
+      const outcome = checkOutcome(response?.status ?? null);
+      if (outcome === 'newer') {
+        etag = response!.headers.get('etag');
+        viewer.reload(await response!.arrayBuffer());
+      } else if (outcome === 'ended' || outcome === 'signedOut') {
+        // Access is over: the document goes, pages, text and worker with it (not just hidden), and nothing more is asked.
+        ended = true;
+        clearInterval(timer);
+        document.removeEventListener('visibilitychange', onShown);
+        viewer.destroy();
+        document.title = PAGE_TITLE;
+        if (outcome === 'ended') say(t('app.sharedGone'));
+        else signInHere();
       }
-      // 304: unchanged. Anything else (offline, no longer shared): what is shown stays.
+      // Unchanged, offline or a server error: what is shown stays, and the next check tries again.
     } catch {
-      // Offline: tried again next time.
+      // The newer file broke off on the way: tried again next time.
     } finally {
       checking = false;
     }
   };
-  setInterval(() => void check(), CHECK_MS);
-  document.addEventListener('visibilitychange', () => void check());
+  const timer = setInterval(() => void check(), CHECK_MS);
+  // A tab looked at again checks at once: one whose access ended while it was in the background clears as soon as it is seen.
+  const onShown = (): void => void check();
+  document.addEventListener('visibilitychange', onShown);
 }
 
 void start();

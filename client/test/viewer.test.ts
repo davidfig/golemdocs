@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { FontManifest } from '@golemdocs/layout';
-import { fitWidthZoom, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, ZOOM_STEPS } from '../src/viewer/protocol.ts';
+import { checkOutcome, fitWidthZoom, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, ZOOM_STEPS } from '../src/viewer/protocol.ts';
 import { VIEWER_FONTS, viewerFontSet } from '../src/viewer/fonts.ts';
 
 test('an open message is read with its bytes, and anything else is ignored', () => {
@@ -103,4 +103,13 @@ test('a font set can add families, their extra pages, CJK and the math font, and
   const withFiles = viewerFontSet(manifest, ['arial'], true);
   assert.ok(withFiles.files.includes('arial/regular.ttf'));
   assert.ok(withFiles.manifest.families.every((f) => f.faces.every((face) => face.font === undefined || withFiles.files.includes(face.font))));
+});
+
+test('a check for a newer save shows it, keeps what is shown while unchanged or unreachable, and ends when access does', () => {
+  assert.equal(checkOutcome(200), 'newer');
+  assert.equal(checkOutcome(304), 'unchanged');
+  assert.equal(checkOutcome(404), 'ended', 'unshared, left, made an editor');
+  assert.equal(checkOutcome(403), 'ended', 'the owner’s plan ended');
+  assert.equal(checkOutcome(401), 'signedOut');
+  for (const status of [null, 500, 502, 503, 429, 408]) assert.equal(checkOutcome(status), 'retry', String(status));
 });

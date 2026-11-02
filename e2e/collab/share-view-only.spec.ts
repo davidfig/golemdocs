@@ -141,3 +141,73 @@ test('the address dies when the share becomes an editor\'s, the document\'s id o
   await owner.context.close();
   await guest.context.close();
 });
+
+/** Makes the open viewer check for a newer save now (as it does when its tab is looked at again), rather than in half a minute. */
+const checkNow = (page: Page) => page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+/** The open viewer has let the document go: the message instead of its pages, and nothing of it left on the page. */
+async function expectGone(page: Page): Promise<void> {
+  await expect(page.getByRole('status')).toContainText('no longer shared with you');
+  await expect(page.locator('.wm-viewer canvas')).toHaveCount(0);
+  await expect(page.locator('.wm-viewer-title')).toHaveCount(0);
+  await expect(page).not.toHaveTitle(/Plan\.docx/);
+  expect(await page.content()).not.toContain('the plan');
+}
+
+test('an open viewer lets the document go once the owner removes the person in the Share dialog, and a reload stays gone', async ({ browser }) => {
+  const owner = await newPerson(browser, 'owner');
+  const guest = await newPerson(browser, 'guest');
+  await guest.page.goto('/?doc=welcome');
+  const doc = await uploadDoc(owner.page, 'Plan.docx', await makeDocx(browser, ['the plan']));
+  await openCloud(owner.page, doc.id);
+  await shareWith(owner.page, doc.id, guest.email, 'viewer');
+  const address = `/view/?s=${await viewTokenOf(guest.page, doc.id)}`;
+  await guest.page.goto(address);
+  await expect.poll(() => viewerText(guest.page)).toBe('the plan');
+
+  await owner.app.menu('File', 'Share');
+  const dialog = owner.page.locator('dialog.wm-share');
+  await dialog.getByRole('listitem').filter({ hasText: guest.email }).getByRole('button', { name: 'Remove' }).click();
+  await expect(dialog.getByText('Not shared with anyone yet.')).toBeVisible();
+
+  await checkNow(guest.page);
+  await expectGone(guest.page);
+  await guest.page.goto(address);
+  await expectGone(guest.page);
+  await owner.context.close();
+  await guest.context.close();
+});
+
+test('an open viewer lets the document go once the person leaves it from their dashboard', async ({ browser }) => {
+  const owner = await newPerson(browser, 'owner');
+  const guest = await newPerson(browser, 'guest');
+  await guest.page.goto('/?doc=welcome');
+  await owner.page.goto('/?doc=welcome');
+  const doc = await uploadDoc(owner.page, 'Plan.docx', await makeDocx(browser, ['the plan']));
+  await shareWith(owner.page, doc.id, guest.email, 'viewer');
+  const address = `/view/?s=${await viewTokenOf(guest.page, doc.id)}`;
+  const viewer = await guest.context.newPage();
+  await viewer.goto(address);
+  await expect.poll(() => viewerText(viewer)).toBe('the plan');
+
+  // In another tab of theirs: File › Open, the card under "Shared with me", Leave (asked twice, like every such button).
+  await guest.page.goto('/?doc=welcome');
+  await guest.app.ready();
+  await guest.app.menu('File', 'Open');
+  const card = guest.page.locator('.wm-dashboard article.wm-card').filter({ hasText: 'Plan.docx' });
+  await expect(card).toBeVisible();
+  // A card's buttons show when it is pointed at.
+  await card.hover();
+  const leave = card.locator('button.wm-danger');
+  await leave.click();
+  await leave.click();
+  await expect(card).toHaveCount(0);
+
+  await viewer.bringToFront();
+  await checkNow(viewer);
+  await expectGone(viewer);
+  await viewer.reload();
+  await expectGone(viewer);
+  await owner.context.close();
+  await guest.context.close();
+});

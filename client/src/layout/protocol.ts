@@ -15,6 +15,7 @@ import type { FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
 import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
+import type { LookUp } from '../spelling/thesaurus.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -288,7 +289,9 @@ export type ToWorker =
   /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
   | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null }
   /** What is wrong in each of some lines of a plain text file (no document is involved): `sample` is the beginning of the file, which says its language. `at` asks instead for the problem under an offset of the line `texts[at.index]`. */
-  | { type: 'spellText'; request: number; texts: string[]; sample: string; spelling: boolean; grammar: boolean; at?: { index: number; offset: number } };
+  | { type: 'spellText'; request: number; texts: string[]; sample: string; spelling: boolean; grammar: boolean; at?: { index: number; offset: number } }
+  /** The meanings of a word in the thesaurus (fetched and read here the first time, so the page never parses it). Answered with `thesaurus`. */
+  | { type: 'thesaurus'; request: number; word: string };
 
 /** A mistake in a line of text: where it is, and whether it is spelling (0) or grammar (1). */
 export interface TextMark {
@@ -339,7 +342,7 @@ export interface SelectionUpdate {
   /** Formatting at the caret or across the selection, for the toolbar. */
   format: FormatState;
   /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
-  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean; /** After a `spellAt`: the point is in an editable table (the caret is moved there unless it was already in the selection), so the menu can offer the table's commands. */ table?: boolean };
+  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean; /** After a `spellAt`: the point is in an editable table (the caret is moved there unless it was already in the selection), so the menu can offer the table's commands. */ table?: boolean; /** After a right-click `spellAt` on no mistake in editable text: the word under the point (its paragraph among the document's, and where it is in it), for its synonyms. */ word?: { text: string; paragraph: number; from: number; to: number } };
   /** The squiggles under what is wrong (check-as-you-type): page id, x, y, width, height, kind (0 spelling, 1 grammar) per mark. */
   spellMarks?: Float64Array;
   /** Set once after `getProperties`. */
@@ -436,7 +439,9 @@ export type FromWorker =
   /** `typed`: not put in, because the document was edited here meanwhile (those edits win; `ok` is true, as nothing needs opening again). */
   | { type: 'refreshed'; request: number; ok: boolean; typed?: boolean }
   /** The answer to a `spellText`: the marks of every line (a language whose dictionary is still loading has none yet, and `loading` says so), or the problem at `at`. */
-  | { type: 'spellText'; request: number; marks: TextMark[][]; issue: SpellIssue | null; loading: boolean };
+  | { type: 'spellText'; request: number; marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }
+  /** The answer to a `thesaurus`: the word's meanings, null when the thesaurus doesn't have it, or `failed` when the thesaurus could not be loaded. */
+  | { type: 'thesaurus'; request: number; result: LookUp | null; failed?: boolean };
 
 /** What Tools ▸ Word Count shows. `selection`: they are for the selected text, not the document. */
 export interface WordStats {

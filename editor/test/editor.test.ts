@@ -122,6 +122,21 @@ test('selected text for the clipboard', skip, async () => {
   assert.equal(editor.selectedText(), 'one two\nthree\nfour five');
 });
 
+test('selectWord selects the word at the caret, and only a word', skip, async () => {
+  const { editor, apply } = await setup(['one two  three']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'right' }, { kind: 'selectWord' });
+  assert.equal(editor.selectedText(), 'one');
+  // Just after a word: that word.
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'wordRight' }, { kind: 'move', to: 'left' }, { kind: 'selectWord' });
+  assert.equal(editor.selectedText(), 'one');
+  // Among spaces: nothing.
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'move', to: 'wordLeft' }, { kind: 'move', to: 'left' }, { kind: 'selectWord' });
+  assert.equal(editor.selectedText(), '');
+  // A selection is left as it is.
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'right', extend: true }, { kind: 'selectWord' });
+  assert.equal(editor.selectedText(), 'o');
+});
+
 test('selected paragraphs keep their formatting and are cut to the selection', skip, async () => {
   const { editor, apply } = await setup(['one two', 'three', 'four five'], (doc) => {
     for (const p of paragraphsIn(doc.body)) for (const c of p.children) if (c.kind === 'run') c.properties.bold = true;

@@ -94,6 +94,11 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-10-26 | `e2e/editing/spelling.spec.ts` › grammar › turning off Check grammar leaves only spelling problems | Failed at 11.6 s in pass one (the repeated-word finding never showed), passed on retry; alone, passed four times in about 2-3 s |
 | 2026-10-26 | `e2e/editing/spelling.spec.ts` › squiggles and the right-click menu › with "Check spelling as you type" off there is no spelling menu | Hung for 9.4 min in pass one, passed on retry; alone, passed in 3 s |
 | 2026-10-26 | `e2e/collab/folders.spec.ts` › moving documents into a folder keeps them there as the dashboard refreshes, and after a reload | Already `@heavy`. Failed on its first attempt in the heavy pass twice running, as the first test on a fresh server beside a second worker: both drags landed nothing ("0 items"), passed on retry. Alone and cold, with no retries, passed twice in 6.5 s. If it turns up again, look at a drag that starts while the dashboard is still redrawing after New Folder |
+| 2026-11-02 | `e2e/layout/math.spec.ts` › equations in saved files › a Word file with an equation opens again with the equation in it | Took 1 min and failed in pass one, passed on retry; alone, passed |
+| 2026-11-02 | `e2e/layout/page-setup.spec.ts` › Page Setup dialog › Landscape swaps the paper width and height and turns the page on its side | Timed out at 30.5 s in pass one, passed on retry; alone, passed |
+| 2026-11-02 | `e2e/editing/hyperlink.spec.ts` › Insert Hyperlink dialog › "data:text/html,hi" is refused with a message | Took 1 min and failed in pass one (a side run was going at the same time), passed on retry; alone, passed |
+| 2026-11-02 | `e2e/editing/hyperlink.spec.ts` › editing and removing a link › Remove Link takes the link off and keeps the text | Timed out at 30.4 s in pass one, passed on retry; alone, passed |
+| 2026-11-02 | `e2e/collab/folders.spec.ts` › moving documents into a folder keeps them there as the dashboard refreshes, and after a reload | Again, the same way as on 2026-10-26: first attempt in the heavy pass, "0 items" after both drags, passed on retry; alone with no retries, passed. Third time: likely a real race (a drag while the dashboard redraws after New Folder), not yet looked into |
 
 ## Performance traces (`golem:*`)
 

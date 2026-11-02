@@ -4,6 +4,7 @@ import type { FaceDescriptor } from '@golemdocs/layout';
 import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
+import type { LookUp } from '../spelling/thesaurus.ts';
 import type { DocumentSource, FromWorker, LayoutTimings, LayoutUpdate, RoomOptions, RoomState, SelectionUpdate, SpellIssue, TextMark, ToWorker, WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -45,6 +46,7 @@ export class LayoutClient {
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
+  private readonly thesaurusRequests = new Map<number, (answer: { result: LookUp | null; failed?: boolean }) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
@@ -179,6 +181,15 @@ export class LayoutClient {
     });
   }
 
+  /** The meanings of a word in the thesaurus, or null when it doesn't have the word. Rejects when the thesaurus could not be loaded (it is tried again next time). */
+  thesaurus(word: string): Promise<LookUp | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve, reject) => {
+      this.thesaurusRequests.set(request, (answer) => (answer.failed ? reject(new Error('thesaurus')) : resolve(answer.result)));
+      this.send({ type: 'thesaurus', request, word });
+    });
+  }
+
   /** The whole open document as a .wdoc; `lens` records a different format to edit it as when next opened. */
   save(lens?: Format): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'save', doc: this.doc, request, lens })).then((bytes) => new Uint8Array(bytes));
@@ -237,6 +248,11 @@ export class LayoutClient {
     if (message.type === 'linkAt') {
       this.linkRequests.get(message.request)?.({ url: message.url, text: message.text, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'thesaurus') {
+      this.thesaurusRequests.get(message.request)?.(message);
+      this.thesaurusRequests.delete(message.request);
       return;
     }
     if (message.type === 'spellText') {

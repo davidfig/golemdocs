@@ -5,6 +5,7 @@
 import { t, type MessageKey } from '../i18n/index.ts';
 import type { SpellIssue, WireCommand } from '../layout/protocol.ts';
 import { h, makeDraggable } from './dom.ts';
+import { listBox, type ListBox } from './listBox.ts';
 import { dialogTitleBar } from './popup.ts';
 
 export interface SpellHost {
@@ -44,7 +45,7 @@ export class SpellDialog {
   private issue: SpellIssue | null = null;
   private readonly label: HTMLElement;
   private readonly sentence: HTMLElement;
-  private readonly suggestions: HTMLSelectElement;
+  private readonly suggestions: ListBox;
   private readonly suggestionsLabel: HTMLElement;
   private readonly grammar: HTMLInputElement;
   private readonly asYouType: HTMLInputElement;
@@ -70,7 +71,11 @@ export class SpellDialog {
     this.label = h('label', { text: t('spelling.notInDictionary') });
     this.sentence = h('div', { class: 'wm-spell-sentence', attrs: { role: 'status', 'aria-live': 'polite' } });
     this.suggestionsLabel = h('label', { text: t('spelling.suggestionsField') });
-    this.suggestions = h('select', { class: 'wm-input wm-spell-suggestions', attrs: { size: '5', 'aria-label': t('spelling.suggestionsLabel') } });
+    this.suggestions = listBox(t('spelling.suggestionsLabel'), {
+      onChoose: () => {
+        if (!this.change.disabled) this.replace(false);
+      },
+    });
     this.grammar = h('input', { attrs: { type: 'checkbox' } });
     this.grammar.checked = this.live.grammar;
     this.asYouType = h('input', { attrs: { type: 'checkbox' } });
@@ -98,7 +103,7 @@ export class SpellDialog {
           this.label,
           this.sentence,
           this.suggestionsLabel,
-          this.suggestions,
+          this.suggestions.el,
           h('label', { class: 'wm-find-case' }, this.grammar, t('spelling.checkGrammar')),
           h('label', { class: 'wm-find-case' }, this.asYouType, t('spelling.asYouType')),
           this.message,
@@ -115,13 +120,7 @@ export class SpellDialog {
       if (e.key === 'Escape') {
         e.preventDefault();
         this.hide();
-      } else if (e.key === 'Enter' && e.target === this.suggestions && !this.change.disabled) {
-        e.preventDefault();
-        this.replace(false);
       }
-    });
-    this.suggestions.addEventListener('dblclick', () => {
-      if (!this.change.disabled) this.replace(false);
     });
     this.grammar.addEventListener('change', () => {
       this.live.grammar = this.grammar.checked;
@@ -176,7 +175,7 @@ export class SpellDialog {
     this.issue = result.issue;
     const { issue } = result;
     this.sentence.replaceChildren();
-    this.suggestions.replaceChildren();
+    this.suggestions.set([]);
     if (!issue) {
       this.label.textContent = t('spelling.completeLabel');
       this.sentence.textContent = t('spelling.complete');
@@ -189,13 +188,7 @@ export class SpellDialog {
     this.sentence.className = `wm-spell-sentence ${grammar ? 'grammar' : 'spelling'}`;
     // A whitespace-only problem (an extra space) is shown as a visible mark.
     this.sentence.append(issue.before, h('span', { class: 'wm-spell-problem', text: issue.text.trim() ? issue.text : '␣'.repeat(Math.min(issue.text.length, 4)) }), issue.after);
-    for (const suggestion of issue.suggestions) {
-      const option = h('option', { text: suggestion });
-      option.value = suggestion;
-      this.suggestions.append(option);
-    }
-    if (issue.suggestions.length) this.suggestions.selectedIndex = 0;
-    else this.suggestions.append(h('option', { text: t('spelling.noSuggestions'), attrs: { disabled: '' } }));
+    this.suggestions.set(issue.suggestions.length ? issue.suggestions : [{ note: t('spelling.noSuggestions') }]);
     this.setProblem(true);
     this.ignoreAll.textContent = grammar ? t('spelling.ignoreRule') : t('spelling.ignoreAll');
     this.add.hidden = grammar;
@@ -210,7 +203,7 @@ export class SpellDialog {
   private setProblem(problem: boolean): void {
     for (const el of [this.ignoreOnce, this.ignoreAll, this.add, this.change, this.changeAll]) el.hidden = !problem;
     this.again.hidden = problem;
-    this.suggestions.hidden = !problem;
+    this.suggestions.el.hidden = !problem;
     this.suggestionsLabel.hidden = !problem;
     if (!problem) {
       this.issue = null;

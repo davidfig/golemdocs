@@ -273,6 +273,13 @@ solvedEngine.recalculateAll();
 const solved = runSolver(solvedBook, solvedEngine, 0, readSolverModel(solvedBook.names, 0)!);
 new History(solvedBook).apply(0, { kind: 'setCells', cells: solved.values.map(([r, c, v]) => [r, c, Math.round(v * 1e9) / 1e9]) });
 books.set('solver-solved.xlsx', solvedBook);
+// A macro-enabled workbook, a template and a macro-enabled template made by Excel, each edited here: Excel opens each as
+// what it is (the workbook part's content type is kept).
+for (const ext of ['xlsm', 'xltx', 'xltm']) {
+  const kinds = await readWorkbook(readFileSync(path.join(ROOT, `client/test/fixtures/sheets/kinds-excel.${ext}`)));
+  new History(kinds).apply(0, { kind: 'input', range: { r0: 9, c0: 0, r1: 9, c1: 0 }, text: 'edited' });
+  books.set(`kinds-edited.${ext}`, kinds);
+}
 const compareFormulaValues = new Set(['typed.xlsx', 'data-table-made.xlsx', 'data-tables-changed.xlsx']);
 
 const generated = path.join(ROOT, '.cache/sheets/sheet-100000x20.xlsx');
@@ -292,7 +299,8 @@ const pairs: [string, string][] = [];
 for (const [name, book] of books) {
   const ours = path.join(OUT, name);
   writeFileSync(ours, await writeWorkbook(book));
-  pairs.push([ours, path.join(OUT, name.replace(/\.xlsx$/, '.excel.xlsx'))]);
+  // Excel saves its copy as a plain workbook, whatever ours was (a macro-enabled workbook, a template).
+  pairs.push([ours, path.join(OUT, name.replace(/\.(xlsx|xlsm|xltx|xltm)$/, '.excel.xlsx'))]);
 }
 const started = performance.now();
 await recalculateInExcel(pairs);

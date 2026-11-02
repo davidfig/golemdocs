@@ -24,8 +24,10 @@ export async function recalculateInExcel(pairs: [input: string, output: string][
   try {
     const args: string[] = [];
     pairs.forEach(([input], i) => {
-      const stem = path.basename(input, '.xlsx');
-      const inside = path.join(run, `${i}-${stem}.xlsx`);
+      // Each copy keeps its own extension: Excel refuses a macro-enabled workbook or a template named .xlsx.
+      const ext = path.extname(input);
+      const stem = path.basename(input, ext);
+      const inside = path.join(run, `${i}-${stem}${ext}`);
       copyFileSync(input, inside);
       args.push(inside, path.join(run, `${i}-${stem}.out.xlsx`));
     });

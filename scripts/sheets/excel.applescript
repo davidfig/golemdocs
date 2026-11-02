@@ -14,7 +14,8 @@ on run argv
 					set outputPath to item (i + 1) of argv
 					set step to "opening " & inputPath
 					open workbook workbook file name inputPath
-					set wb to workbook (my fileName(inputPath))
+					-- A template opens as a new workbook named after it (Book1 and the like), so take the one just opened.
+					set wb to active workbook
 					set step to "calculating " & inputPath
 					calculate full
 					set step to "saving " & outputPath

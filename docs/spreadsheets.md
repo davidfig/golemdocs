@@ -572,7 +572,7 @@ left of its column (only the one there is room for at the top row or first colum
 
 M6 is done.
 
-### M7: together and around (under way, 2026-11-02)
+### M7: together and around (done, 2026-11-02)
 
 **Rooms.** A workbook in the account joins a room of the kind `cells`, watched (`ROOM_POLICY`): whoever opens it first
 holds it and edits and saves it as if alone; everyone else (another person, or another device of the same account) sees
@@ -601,6 +601,12 @@ TSV a workbook stays in the grid: the sheet worker writes it as the other (`save
 
 **Search.** A workbook's search index is the page's (its active sheet's rows as shown, `segmentsFromBytes`): the server
 answers 422 for one without logging a failure, as for a PDF.
+
+**Macro-enabled workbooks and templates.** `.xlsm`, `.xltx` and `.xltm` open and save as `.xlsx` does, keeping their name
+and the workbook part's content type (a macro project is kept, never run). Checked in Excel (`kinds-edited.*` in
+`check.ts`, from `kinds-excel.*`, which Excel saved): each copy keeps its own extension in Excel's folder (Excel refuses a
+macro-enabled workbook named `.xlsx`), and a template opens as a new workbook named after it, so the script takes the
+workbook just opened rather than finding it by name.
 
 ### M5: data and formatting (done, 2026-11-01)
 

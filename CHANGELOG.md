@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.31.0 - Unreleased
+## 0.31.0 - 2026-11-02
 
 ### Added
 

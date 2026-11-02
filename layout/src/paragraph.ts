@@ -12,11 +12,16 @@ import { TAB, TextCollector } from './runs.ts';
 import type { SourceSpan } from './offsets.ts';
 import { layerKey } from './context.ts';
 import { cjkBreakBetween, isCjk } from './fonts/cjk.ts';
+import { emojiAt, emojiSequence, isInvisible } from './fonts/emoji.ts';
 import { emitMarks, formattingMarksOn } from './marks.ts';
 import type { MathLayout } from './math/layout.ts';
 import type { MathEquation } from '@golemdocs/docx';
 
 const SPACE = 0x20;
+/** Cluster flags of a UTF-16 unit (see the shaping loop in layoutParagraphUncached). */
+const JOINED = 1;
+const EMOJI_FIRST = 2;
+const EMOJI_LAST = 4;
 const twips = (v: number | undefined) => (v ?? 0) / 20;
 
 /** Rect layers: behind text (shading, highlight) or over it (underline, borders). */
@@ -288,16 +293,73 @@ function layoutParagraphUncached(
   const mathLayouts = new Map<number, MathLayout>();
   if (mathMetrics && mathData && mathEngine) for (const [at, equation] of maths) mathLayouts.set(at, mathOf(equation, mathMetrics, mathData, mathEngine));
 
-  // Per-character shaping: glyph, face, size and advance.
+  // Per-character shaping: glyph, face, size and advance. A character is one glyph on its first UTF-16 unit; the
+  // units after it in the same cluster (the second half of a surrogate pair, the rest of an emoji sequence) are
+  // JOINED: no glyph, no width, no caret stop of their own, and no line break before them.
   const glyphs = new Int32Array(n);
   const faceOf = new Uint8Array(n);
   const sizes = new Float32Array(n);
   const advances = new Float32Array(n);
+  const cluster = new Uint8Array(n);
+  /** The emoji glyph and the fallback face that draws a sequence, or -1. */
+  const emojiGlyph = (style: RunStyle, sequence: number[]): number => {
+    for (let f = style.emojiStart; f < style.fallbacks.length; f++) {
+      const g = style.fallbacks[f].metrics.sequence(sequence);
+      if (g >= 0) return (g << 8) | f;
+    }
+    return -1;
+  };
   for (let i = 0; i < n; i++) {
     const style = styles[styleOf[i]];
     let code = text.charCodeAt(i);
     let size = style.size;
-    if (style.smallCaps && isLower(code)) {
+    if (cluster[i] & JOINED) {
+      sizes[i] = size;
+      glyphs[i] = -1;
+      faceOf[i] = faceOf[i - 1];
+      continue;
+    }
+    // An emoji: one glyph for the whole sequence, or else one for each of its joined parts.
+    const emoji = style.emojiStart < style.fallbacks.length && code >= 0x23 ? emojiAt(text, i) : 0;
+    if (emoji) {
+      const whole = emojiGlyph(style, emojiSequence(text, i, i + emoji));
+      const parts: [number, number][] = whole >= 0 ? [[i, whole]] : [];
+      if (whole < 0) {
+        for (let from = i, j = i; j <= i + emoji; j++) {
+          if (j < i + emoji && text.charCodeAt(j) !== 0x200d) continue;
+          const part = emojiGlyph(style, emojiSequence(text, from, j));
+          if (part < 0) {
+            parts.length = 0;
+            break;
+          }
+          parts.push([from, part]);
+          from = j + 1;
+        }
+      }
+      if (parts.length) {
+        for (let j = i; j < i + emoji; j++) {
+          sizes[j] = size;
+          glyphs[j] = -1;
+          faceOf[j] = faceOf[i];
+          cluster[j] = j === i ? EMOJI_FIRST : JOINED;
+        }
+        cluster[i + emoji - 1] |= EMOJI_LAST;
+        for (const [at, found] of parts) {
+          const fallback = style.fallbacks[found & 0xff];
+          glyphs[at] = found >> 8;
+          faceOf[at] = fontOf(fallback.font, fallback.metrics);
+          advances[at] = Math.floor((fallback.metrics.advance(found >> 8) * size + style.letterSpacing) * 20) / 20;
+        }
+        i += emoji - 1;
+        continue;
+      }
+    }
+    // A character beyond the Basic Multilingual Plane is a surrogate pair.
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < n && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      code = text.codePointAt(i)!;
+      cluster[i + 1] = JOINED;
+    }
+    if (style.smallCaps && code < 0x10000 && isLower(code)) {
       code = text[i].toUpperCase().charCodeAt(0);
       size *= 0.8;
     }
@@ -306,9 +368,12 @@ function layoutParagraphUncached(
     let face = fontOf(style.font, metrics);
     let glyph = code < 0x20 || code === 0xfffc || code === 0xad ? -1 : metrics.glyph(code);
     if (glyph < 0 && code > 0x20 && code !== 0xfffc && code !== 0xad) {
-      // Ordinary text never tries the CJK pages.
-      const tries = isCjk(code) ? style.fallbacks.length : style.cjkStart;
+      // Ordinary text never tries the CJK pages; a pictograph shown as text (☺ with no U+FE0F) tries the emoji pages last.
+      const cjk = isCjk(code);
+      const tries = cjk ? style.emojiStart : code >= 0xa9 ? style.fallbacks.length : style.cjkStart;
       for (let f = 0; f < tries; f++) {
+        if (f === style.cjkStart && !cjk) f = style.emojiStart;
+        if (f >= tries) break;
         const fallback = style.fallbacks[f];
         const g = fallback.metrics.glyph(code);
         if (g >= 0) {
@@ -322,7 +387,7 @@ function layoutParagraphUncached(
     glyphs[i] = glyph;
     faceOf[i] = face;
     if (code === 0xfffc) advances[i] = mathLayouts.has(i) ? mathLayouts.get(i)!.width * size : (objects.get(i)?.width ?? 0) / 12700;
-    else if (code === 0xad || code === 0x0a || code === 0x0c || code === 0x0b) advances[i] = 0;
+    else if (code === 0xad || code === 0x0a || code === 0x0c || code === 0x0b || (glyph < 0 && isInvisible(code))) advances[i] = 0;
     // Advances are floored to whole twips, as word processors lay text out in twips; this
     // decides line breaks on the last few points of a line.
     else advances[i] = Math.floor((metrics.advance(glyph) * size + style.letterSpacing) * 20) / 20;
@@ -405,12 +470,14 @@ function layoutParagraphUncached(
         if (tab.leader && tab.leader !== 'none') leaders.set(i, tab.leader);
       }
       const w = advances[i];
-      if (code !== SPACE && x + w > rightEdge + 0.01 && i > start) {
+      if (code !== SPACE && x + w > rightEdge + 0.01 && i > start && !(cluster[i] & JOINED)) {
         if (lastBreak >= start) i = lastBreak + 1;
         break;
       }
       x += w;
-      if (isBreakAfter(code, i + 1 < n ? text.charCodeAt(i + 1) : 0)) lastBreak = i;
+      // Emoji break like ideographs: before and after each, never inside one.
+      const next = i + 1 < n ? cluster[i + 1] : 0;
+      if (!(next & JOINED) && (isBreakAfter(code, i + 1 < n ? text.charCodeAt(i + 1) : 0) || cluster[i] & EMOJI_LAST || next & EMOJI_FIRST)) lastBreak = i;
       i++;
     }
     const end = i;
@@ -520,8 +587,11 @@ function layoutParagraphUncached(
     // Caret stops for the visible offsets on this line (the list label has none).
     const firstVisible = Math.max(start, labelLength);
     const stops = new Float32Array(Math.max(end - firstVisible, 0) + 1);
+    // The units inside a cluster share its first unit's stop, so a click never lands inside one.
+    let clusterPen = pen;
     for (let j = start; j < end; j++) {
-      if (j >= firstVisible) stops[j - firstVisible] = pen;
+      if (!(cluster[j] & JOINED)) clusterPen = pen;
+      if (j >= firstVisible) stops[j - firstVisible] = clusterPen;
       const code = text.charCodeAt(j);
       let w = advances[j];
       if (code === SPACE && j >= justifyFrom && j < contentEnd) w += extraPerSpace;

@@ -76,6 +76,7 @@ export interface Bounds {
 /** msdf-atlas-gen JSON layout. */
 export interface MsdfLayout {
   atlas: {
+    /** `msdf` or `mtsdf`; `color` for an emoji page, whose atlas holds color sprites drawn as they are (distanceRange 0). */
     type: string;
     distanceRange: number;
     size: number;
@@ -96,6 +97,8 @@ export interface MsdfLayout {
     index?: number;
     /** Absent for glyphs no code point maps to: the size variants and assembly pieces of a math font. */
     unicode?: number;
+    /** An emoji page's glyph for a sequence of code points (ZWJ, flag, keycap, skin tone), U+FE0F left out (see fonts/emoji.ts). */
+    sequence?: number[];
     /** Horizontal advance in ems. */
     advance: number;
     /** Quad relative to the pen position, in ems (y down). Absent for blank glyphs such as space. */

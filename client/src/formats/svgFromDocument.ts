@@ -14,6 +14,7 @@ import { fmt } from '../vector/matrix.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
 import { sniffImage, MIME } from './images.ts';
 import { standardFamily } from './standardFonts.ts';
+import { emojiText } from './emojiSprites.ts';
 
 const GENERIC = { Times: 'serif', Helvetica: 'sans-serif', Courier: 'monospace' } as const;
 /** CSS pixels per point: a page is drawn at its size on paper. */
@@ -38,7 +39,7 @@ function base64(bytes: Uint8Array): string {
 function textRuns(list: GlyphList, nodes: SceneNode[]): void {
   const { font, metrics } = list;
   const generic = GENERIC[standardFamily(font)];
-  const family = `'${font.family.wordName}', '${font.family.substitute}', ${generic}`;
+  const family = metrics.color ? `'${font.family.substitute}', emoji, ${generic}` : `'${font.family.wordName}', '${font.family.substitute}', ${generic}`;
   const bold = font.face.weight >= 600 || font.syntheticBold;
   const italic = font.face.italic || font.syntheticItalic;
   let text = '';
@@ -58,8 +59,10 @@ function textRuns(list: GlyphList, nodes: SceneNode[]): void {
     first = null;
   };
   for (let i = 0; i < list.count; i++) {
+    // An emoji is its characters (a whole sequence, for an emoji page's glyph), which the viewer's emoji font draws.
     const code = metrics.layout.glyphs[list.glyph(i)]?.unicode;
-    if (code === undefined) continue;
+    const chars = metrics.color ? emojiText(metrics, list.glyph(i)) : code === undefined ? '' : String.fromCodePoint(code);
+    if (!chars) continue;
     const x = list.x(i);
     const y = list.y(i);
     const size = list.size(i);
@@ -71,10 +74,12 @@ function textRuns(list: GlyphList, nodes: SceneNode[]): void {
       xs.push(end);
     }
     first ??= { y, size, color };
-    text += String.fromCodePoint(code);
+    text += chars;
     // An astral character is two UTF-16 units but one position.
     xs.push(x);
     end = x + metrics.advance(list.glyph(i)) * size;
+    // Each emoji is a text of its own: a sequence is many characters at one position.
+    if (metrics.color) flush();
   }
   flush();
 }

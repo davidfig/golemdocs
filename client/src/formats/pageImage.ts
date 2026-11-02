@@ -5,6 +5,7 @@
 import type { WordDocument } from '@golemdocs/docx';
 import { TrueTypeFont } from '@golemdocs/pdf';
 import { layoutDocument, type FontSet, type GlyphList } from '@golemdocs/layout';
+import { emojiBox, EmojiSprites } from './emojiSprites.ts';
 import { decodeImage, encodeCanvas, makeCanvas, type OutputType } from './imageCodec.ts';
 import { standardFamily } from './standardFonts.ts';
 
@@ -49,6 +50,7 @@ export async function documentToImage(doc: WordDocument, fonts: FontSet, type: O
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  const emoji = new EmojiSprites(fonts);
   const bitmaps = new Map<string, ImageBitmap | null>();
   const bitmapFor = async (part: string): Promise<ImageBitmap | null> => {
     if (!bitmaps.has(part)) bitmaps.set(part, await doc.media(part).then((bytes) => decodeImage(bytes)).catch(() => null));
@@ -99,6 +101,19 @@ export async function documentToImage(doc: WordDocument, fonts: FontSet, type: O
         }
         continue;
       }
+      if (metrics.color) {
+        // Emoji: their sprites, as the editor shows them.
+        for (let i = 0; i < list.count; i++) {
+          const g = list.glyph(i);
+          const box = emojiBox(metrics, g, list.x(i), list.y(i), list.size(i));
+          const sprite = box && (await emoji.sprite(metrics, g));
+          if (!box || !sprite) continue;
+          ctx.globalAlpha = (list.color(i) >>> 24) / 255;
+          ctx.drawImage(sprite.atlas, sprite.sx, sprite.sy, sprite.sw, sprite.sh, box.x, box.y, box.width, box.height);
+          ctx.globalAlpha = 1;
+        }
+        continue;
+      }
       const bold = font.face.weight >= 600 || font.syntheticBold;
       const italic = font.face.italic || font.syntheticItalic;
       for (let i = 0; i < list.count; i++) {
@@ -115,5 +130,6 @@ export async function documentToImage(doc: WordDocument, fonts: FontSet, type: O
     top += page.height;
   }
   for (const bitmap of bitmaps.values()) bitmap?.close();
+  emoji.close();
   return encodeCanvas(canvas, type);
 }

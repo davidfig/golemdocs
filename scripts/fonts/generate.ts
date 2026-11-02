@@ -19,19 +19,19 @@
 // libpng (macOS: `brew install cmake freetype libpng`). Set MSDF_ATLAS_GEN to use an
 // existing binary instead.
 
-import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ARCHIVES, ATLAS, FAMILIES, MATH_RANGES, MSDF_ATLAS_GEN, type FaceSpec, type FamilySpec, type FileRef } from './sources.ts';
 import { readFontMetrics, type FontMetrics } from './ttf-metrics.ts';
 import { mathGlyphSet, readMathFont, type GlyphConstruction, type MathFontInfo } from './ttf-math.ts';
 import sharp from 'sharp';
+import { CACHE, download } from './download.ts';
+import { EMOJI_GROUP } from '../../layout/src/fonts/emoji.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
-const CACHE = path.join(ROOT, '.cache');
 const OUT = path.join(ROOT, 'client', 'public', 'fonts');
 const CHARSET = path.join(HERE, 'charset.txt');
 
@@ -81,25 +81,6 @@ function run(cmd: string, args: string[], opts: { cwd?: string; quiet?: boolean 
 
 function hasCommand(cmd: string): boolean {
   return !spawnSync(cmd, ['--version'], { stdio: 'ignore' }).error;
-}
-
-const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
-
-async function download(url: string, expected: string): Promise<string> {
-  const dest = path.join(CACHE, 'downloads', expected);
-  if (existsSync(dest)) return dest;
-  console.log(`  download ${url}`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  const data = Buffer.from(await res.arrayBuffer());
-  const actual = sha256(data);
-  if (actual !== expected) {
-    throw new Error(`checksum mismatch for ${url}\n  expected ${expected}\n  actual   ${actual}`);
-  }
-  mkdirSync(path.dirname(dest), { recursive: true });
-  writeFileSync(`${dest}.tmp`, data);
-  renameSync(`${dest}.tmp`, dest);
-  return dest;
 }
 
 async function resolveFile(ref: FileRef): Promise<string> {
@@ -443,7 +424,11 @@ async function main(): Promise<void> {
   const manifest: Manifest = {
     atlas: { ...ATLAS, generator: `msdf-atlas-gen@${MSDF_ATLAS_GEN.commit}` },
     // Keep manifest order stable (sources.ts order) regardless of --only.
-    families: FAMILIES.map((f) => generated.get(f.id)).filter((f): f is ManifestFamily => !!f),
+    families: [
+      ...FAMILIES.map((f) => generated.get(f.id)).filter((f): f is ManifestFamily => !!f),
+      // The emoji pages are made by emoji.ts (`pnpm fonts:emoji`): kept as they are.
+      ...(existsSync(manifestPath) ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as Manifest).families.filter((f) => f.page?.group === EMOJI_GROUP) : []),
+    ],
   };
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Wrote ${path.relative(ROOT, manifestPath)}`);

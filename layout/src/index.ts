@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 export * from './display.ts';
 export { FaceMetrics } from './fonts/faceMetrics.ts';
+export { addEmoji, EMOJI_GROUP, emojiAt, emojiPageKey, emojiSequence, isInvisible, MAYBE_EMOJI } from './fonts/emoji.ts';
 export { isCjk, isHangul, langOfFontName, langOfTag, noLineEnd, noLineStart, type CjkLang } from './fonts/cjk.ts';
 export { FontSet, FALLBACK_FAMILY, type FontFileLoader, type FontJsonLoader, type FontRequest, type ResolvedFont } from './fonts/fontSet.ts';
 export type * from './fonts/fontTypes.ts';

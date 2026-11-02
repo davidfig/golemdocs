@@ -31,6 +31,7 @@
 - File › Print and Print Preview print a workbook's sheet as Excel does: its paper, margins, scale or fit to pages, print area, title rows and columns repeated on each page, page breaks, gridlines, headings, header and footer. The workbook stays open in the grid. Charts and sparklines print too. File › Page Setup sets them, Sheet › Print Area sets the selection as the print area, and Sheet › Page Breaks adds or removes page breaks.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales, data bars and icon sets, recalculated as the values change.
 - Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
+- Emoji show in color everywhere: documents of every format, text files, and PDF, picture and SVG downloads. Families, flags, keycaps and skin tones each show as one emoji, and the caret, selection and Backspace treat each as one character. The emoji images load only when a document uses one.
 
 ### Fixed
 

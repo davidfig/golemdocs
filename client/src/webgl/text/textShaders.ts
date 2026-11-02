@@ -49,6 +49,7 @@ precision mediump float;
 uniform mediump sampler2D u_atlas;
 uniform vec2 u_atlasSize; // texels
 uniform float u_embolden; // synthetic bold, in SDF units (0 = none)
+uniform float u_color;    // 1: the atlas holds premultiplied color sprites (emoji), drawn as they are
 
 in highp vec2 v_uv;
 flat in float v_screenPxRange;
@@ -68,6 +69,11 @@ float coverage(highp vec2 uv, float pxRange) {
 }
 
 void main() {
+  // Emoji: the sprite's own colors (mipmapped), faded only by the text's alpha. Dark Pages leaves them as they are.
+  if (u_color > 0.5) {
+    outColor = texture(u_atlas, v_uv) * v_color.a;
+    return;
+  }
   highp vec2 dx = dFdx(v_uv);
   highp vec2 dy = dFdy(v_uv);
   // Atlas texels spanned by one screen pixel. Above ~1.5 the single bilinear sample aliases

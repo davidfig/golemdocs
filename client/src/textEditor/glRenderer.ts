@@ -175,9 +175,10 @@ export class LineRenderer {
       }
       laid.rows.forEach((row, r) => {
         const baseline = y + r * LINE + BASELINE;
-        forEachCell(laid.text, row, (_i, cp, cell) => {
+        forEachCell(laid.text, row, (i, cp, cell, _width, emoji) => {
           if (cp <= 32) return;
-          const ref = fonts.glyph(cp);
+          // An emoji (a whole sequence) is one color glyph; one no page has shows its first character.
+          const ref = (emoji ? fonts.emoji(laid.text.slice(i, i + emoji)) : null) ?? fonts.glyph(cp);
           if (ref?.visible) put(lists, ref, scene.textLeft + cell * CELL, baseline, color);
         });
       });

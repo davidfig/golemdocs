@@ -59,6 +59,22 @@ test('an emoji is one character of two UTF-16 units and two cells', () => {
   assert.deepEqual(seen, [[0, 97, 0, 1], [1, 0x1f600, 1, 2], [3, 98, 3, 1]]);
 });
 
+test('an emoji sequence (ZWJ family, flag, skin tone) is one character of two cells', () => {
+  const family = '👨‍👩‍👧‍👦';
+  const text = `a${family}🇯🇵👍🏽b`;
+  const row = layoutLine(text, 80)[0];
+  assert.equal(row.cells, 1 + 2 + 2 + 2 + 1);
+  const seen: number[][] = [];
+  forEachCell(text, row, (index, _cp, cell, width, emoji) => seen.push([index, cell, width, emoji]));
+  const at = 1 + family.length;
+  assert.deepEqual(seen, [[0, 0, 1, 0], [1, 1, 2, family.length], [at, 3, 2, 4], [at + 4, 5, 2, 4], [at + 8, 7, 1, 0]]);
+  // A click inside the family lands before or after it, never inside.
+  assert.equal(indexAtCell(text, row, 1.4), 1);
+  assert.equal(indexAtCell(text, row, 2.6), at);
+  // A row never breaks inside one.
+  for (const r of layoutLine(family.repeat(5), 3)) assert.equal(r.from % family.length, 0);
+});
+
 test('combining marks sit on the cell of the letter before them', () => {
   const text = 'éx';
   const row = layoutLine(text, 80)[0];

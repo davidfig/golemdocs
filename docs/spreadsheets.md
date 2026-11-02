@@ -515,7 +515,20 @@ on `data-tables.xlsx`) are worked out to Excel's values; a table made here and E
 by Excel, come out the same. The command takes the selected block (headers included) and the input cells from a dialog
 (`askDataTable`, `whatIfDialogs.ts`).
 
-**Next in M6**: scenarios, Solver; print and PDF.
+**Scenarios** (`scenarios.ts`, `scenarioDialog.ts`; Sheet › What-If Analysis › Scenario Manager). A sheet's
+`<scenarios>` (each a name, a comment and its input cells' values; the one shown; the summary's result cells) are read and
+written as Excel keeps them, and move with inserted and deleted rows and columns. The dialog lists them with Show, Add,
+Edit, Delete and Summary, each change made at once as an edit: `scenarios` (the list), `showScenario` (its values typed
+into its cells, undone like typing). Summary asks for the result cells; the worker shows each scenario in turn against
+the engine to read them (`scenarioSummaryRows`, the sheet put back afterwards) and the `scenarioSummary` edit puts the
+rows on a new sheet before this one, in Excel's layout (changing cells, then result cells, with Current Values and a
+column per scenario; the words in the person's language). Excel's AppleScript cannot make a summary, so its layout is
+not checked against Excel's; Excel opening a workbook with a scenario added and shown keeps all of them.
+
+**Calculating on opening.** A workbook that asks for it (`calcPr fullCalcOnLoad`, as files written by programs that do not
+calculate do, and this app's own when its values may be stale) is recalculated once all its sheets are read.
+
+**Next in M6**: Solver; print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

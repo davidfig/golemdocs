@@ -30,6 +30,8 @@ import { ChartTitleCard } from './chartTitleCard.ts';
 import { askChartData } from './chartDataDialog.ts';
 import { askPivotFields } from './pivotFieldsDialog.ts';
 import { askDataTable, askGoalSeek, showGoalSeekStatus } from './whatIfDialogs.ts';
+import { openScenarioManager } from './scenarioDialog.ts';
+import { parseCells } from './scenarios.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -1437,6 +1439,30 @@ export class SheetEditorView {
     void this.edit({ kind: 'dataTable', range, rowInput: cell(ask.row) ?? null, colInput: cell(ask.col) ?? null });
   }
 
+  /** Sheet › What-If Analysis › Scenario Manager: the sheet's scenarios in a dialog; each change is an edit. */
+  private async scenarioManager(): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const sheet = this.sheetIndex;
+    const reply = await this.ask<Extract<FromWorker, { t: 'scenarios' }>>({ t: 'scenarios', id: this.id(), sheet }).catch(() => null);
+    if (!reply) return;
+    let summary: string | null = null;
+    await openScenarioManager({
+      scenarios: reply.scenarios,
+      valuesOf: async (cells) =>
+        Promise.all(cells.map(async (c) => (await this.ask<Extract<FromWorker, { t: 'cell' }>>({ t: 'cell', id: this.id(), sheet, row: c.row, col: c.col }).catch(() => null))?.content.input ?? '')),
+      change: (scenarios) => void this.edit({ kind: 'scenarios', scenarios }),
+      show: (index) => void this.edit({ kind: 'showScenario', index }),
+      summary: (results) => (summary = results),
+    });
+    this.afterCard();
+    if (summary === null || sheet !== this.sheetIndex) return;
+    const results = parseCells(summary) ?? [];
+    const labels = { title: t('sheet.scenario.summaryTitle'), current: t('sheet.scenario.current'), changing: t('sheet.scenario.changingCells'), results: t('sheet.scenario.resultCells'), notes: [t('sheet.scenario.note')] };
+    const rows = await this.ask<Extract<FromWorker, { t: 'scenarioSummary' }>>({ t: 'scenarioSummary', id: this.id(), sheet, results, labels }).catch(() => null);
+    if (!rows?.rows) return;
+    void this.edit({ kind: 'scenarioSummary', rows: rows.rows, results: summary, name: labels.title });
+  }
+
   /** Sheet › Protect Sheet or Unprotect Sheet: the password asked for (protecting, or a sheet that has one). */
   private async protectSheet(on: boolean): Promise<void> {
     if (this.readOnly || !this.info) return;
@@ -1804,6 +1830,9 @@ export class SheetEditorView {
         break;
       case 'dataTable':
         void this.dataTable();
+        break;
+      case 'scenarioManager':
+        void this.scenarioManager();
         break;
       case 'protectSheet':
       case 'unprotectSheet':

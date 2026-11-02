@@ -3,6 +3,7 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
+import type { Scenarios, SummaryLabels, SummaryValue } from './scenarios.ts';
 import type { PivotChoice } from './pivot.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { ChartAnchor } from './charts/model.ts';
@@ -251,6 +252,12 @@ export type EditOp =
   /** What-If › Data Table: a block (its first row and column the inputs' values and formulas) made a data table of one
    * or two input cells. */
   | { kind: 'dataTable'; range: CellRange; rowInput: { row: number; col: number } | null; colInput: { row: number; col: number } | null }
+  /** What-If › Scenario Manager: the sheet's scenarios as the dialog leaves them (added, changed, deleted). */
+  | { kind: 'scenarios'; scenarios: Scenarios | null }
+  /** Show: a scenario's values put in its cells. */
+  | { kind: 'showScenario'; index: number }
+  /** Summary: a new sheet (before this one) of the rows the worker worked out; `results` the result cells as typed. */
+  | { kind: 'scenarioSummary'; rows: SummaryValue[][]; results: string; name: string }
   /** Refresh: the sheet's pivot tables laid out again from their sources. */
   | { kind: 'refreshPivots' }
   /** Insert › Sparklines: one per row of a block of cells, in the column after it. */
@@ -319,6 +326,10 @@ export type ToWorker =
   | { t: 'pivotFields'; id: number; sheet: number; index?: number; range?: CellRange }
   /** The sheet's charts, laid out with its data as it is now. */
   | { t: 'charts'; id: number; sheet: number }
+  /** The sheet's scenarios, and the values their cells hold now (by "row,col", as typed). */
+  | { t: 'scenarios'; id: number; sheet: number }
+  /** The scenario summary's rows: each scenario's values and the result cells' values with it. */
+  | { t: 'scenarioSummary'; id: number; sheet: number; results: { row: number; col: number }[]; labels: SummaryLabels }
   /** Goal Seek: the value of `changing` (a constant) that brings `target`'s formula to `goal`; the sheet is left as it was. */
   | { t: 'goalSeek'; id: number; sheet: number; target: { row: number; col: number }; goal: number; changing: { row: number; col: number } }
   | { t: 'find'; id: number; sheet: number; text: string; from: { row: number; col: number }; backwards: boolean; matchCase: boolean; wholeCell: boolean; formulas: boolean; allSheets: boolean }
@@ -340,6 +351,8 @@ export type FromWorker =
   | { t: 'pivotFields'; id: number; names: string[]; values: string[][]; choice: PivotChoice | null }
   | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
   | { t: 'goalSeek'; id: number; found: boolean; value: number; result: number | null; message?: string }
+  | { t: 'scenarios'; id: number; scenarios: Scenarios | null; values: Record<string, string> }
+  | { t: 'scenarioSummary'; id: number; rows: SummaryValue[][] | null }
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }
   | { t: 'copy'; id: number; text: string; html: string }

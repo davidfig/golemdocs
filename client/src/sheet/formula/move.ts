@@ -5,6 +5,7 @@
 // A formula run is one text for many cells, and a relative reference reaches a different row from each cell; an insert can
 // move the cells some of them read and not others. So a run is cut where that changes, and each piece gets its own text.
 
+import { moveScenarios } from '../scenarios.ts';
 import { rewriteChart } from '../charts/model.ts';
 import type { AnchorPoint } from '../charts/model.ts';
 import type { Worksheet } from '../model/worksheet.ts';
@@ -324,6 +325,12 @@ export function moveCharts(book: Workbook, move: Move): void {
   };
   sheet.charts = sheet.charts.map((c) => ({ ...c, anchor: { ...c.anchor, from: shift(c.anchor.from), to: c.anchor.to && shift(c.anchor.to) } }));
   sheet.dirty.layout = true;
+}
+
+/** A sheet's scenarios' cells after a move. */
+export function moveScenarioCells(book: Workbook, move: Move): void {
+  const sheet = book.sheets[move.sheet];
+  if (isWorksheet(sheet)) sheet.scenarios = moveScenarios(sheet.scenarios, move.axis, move.at, move.n);
 }
 
 export function moveNotes(book: Workbook, move: Move): void {

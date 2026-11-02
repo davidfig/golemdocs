@@ -17,7 +17,7 @@ import { Worksheet, cellKey, keyCol, keyRow } from './model/worksheet.ts';
 import type { CellRange, Pane } from './model/worksheet.ts';
 import { expandStructured, fromFileFormula, toFileFormula } from './formula/fileNames.ts';
 import { shiftFormula } from './formula/shift.ts';
-import { deleteSheetText, moveCharts, moveSparklines, moveConditional, moveFilter, moveFormulas, moveNotes, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
+import { deleteSheetText, moveCharts, moveSparklines, moveConditional, moveFilter, moveFormulas, moveNotes, moveScenarioCells, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
 import type { Move } from './formula/move.ts';
 import { restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
@@ -56,6 +56,7 @@ interface SheetSnapshot {
     validations: Worksheet['validations'];
     notes: Worksheet['notes'];
     protection: Worksheet['protection'];
+    scenarios: Worksheet['scenarios'];
     charts: Worksheet['charts'];
     sparklines: Worksheet['sparklines'];
     pivots: Worksheet['pivots'];
@@ -194,6 +195,7 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
     case 'pivotFields':
     case 'pivotField':
     case 'dataTable':
+    case 'showScenario':
       return 'cells';
     case 'insertRows':
     case 'deleteRows':
@@ -218,7 +220,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
     for (const sheet of book.sheets) if (isWorksheet(sheet)) for (const column of sheet.grid.columns) if (column?.formulas.length) columns.push([column, column.formulas.map((f) => ({ ...f }))]);
     out.formulas = { columns, names: book.names.map((n) => ({ ...n })), charts: book.sheets.filter(isWorksheet).map((s): [Worksheet, Worksheet['charts'], Worksheet['sparklines']] => [s, s.charts, s.sparklines]) };
   }
-  if (op.kind === 'addSheet' || op.kind === 'insertPivot' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
+  if (op.kind === 'addSheet' || op.kind === 'insertPivot' || op.kind === 'scenarioSummary' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
     out.sheets = { list: book.sheets.slice(), titles: book.sheets.map((s) => s.name), parts: book.source ? book.source.parts.map((p) => ({ ...p })) : [], names: book.names.map((n) => ({ ...n })), active: book.activeSheet, removed: (book.source?.removed ?? []).slice() };
     return out;
   }
@@ -236,7 +238,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'dataTable' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'dataTable' || op.kind === 'scenarios' || op.kind === 'showScenario' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -252,6 +254,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
       validations: sheet.validations,
       notes: sheet.notes,
       protection: sheet.protection,
+      scenarios: sheet.scenarios,
       charts: sheet.charts,
       sparklines: sheet.sparklines,
       pivots: sheet.pivots,
@@ -312,6 +315,7 @@ function restore(book: Workbook, snap: BookSnapshot): void {
     sheet.validations = s.meta.validations;
     sheet.notes = s.meta.notes;
     sheet.protection = s.meta.protection;
+    sheet.scenarios = s.meta.scenarios;
     sheet.charts = s.meta.charts;
     sheet.sparklines = s.meta.sparklines;
     sheet.pivots = s.meta.pivots;
@@ -522,6 +526,41 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       next = { ...next, chart, anchor: change.anchor ?? next.anchor };
       sheet.charts = sheet.charts.map((x, i) => (i === op.index ? next : x));
       return { ranges: [] };
+    }
+    case 'scenarios':
+      sheet.scenarios = op.scenarios && op.scenarios.list.length ? op.scenarios : null;
+      return { ranges: [] };
+    case 'showScenario': {
+      const s = sheet.scenarios;
+      const scenario = s?.list[op.index];
+      if (!s || !scenario) return { ranges: [] };
+      // Each value as if typed into its cell (a number keeps the cell's format; a formula there gives way to it).
+      for (const i of scenario.inputs) {
+        grid.column(i.col).setFormula(i.row, null);
+        const parsed = parseInput(i.value, book.date1904);
+        if (parsed.kind === 'formula') continue;
+        setValue(book, grid, i.row, i.col, parsed);
+      }
+      sheet.scenarios = { ...s, current: op.index, show: op.index };
+      return { ranges: scenario.inputs.map((i) => ({ r0: i.row, c0: i.col, r1: i.row, c1: i.col })) };
+    }
+    case 'scenarioSummary': {
+      sheet.scenarios = sheet.scenarios && { ...sheet.scenarios, results: op.results };
+      let name = op.name;
+      for (let n = 2; sheetNameProblem(book, name); n++) name = `${op.name} ${n}`;
+      const at = book.sheets.indexOf(sheet);
+      const added = addSheet(book, at, name);
+      if (added.message) return added;
+      const summary = book.sheets[at] as Worksheet;
+      op.rows.forEach((cells, r) =>
+        cells.forEach((v, c) => {
+          if (v === null || v === undefined) return;
+          if (typeof v === 'number') summary.grid.set(r, c, Kind.Number, v, 0);
+          else if (typeof v === 'boolean') summary.grid.set(r, c, Kind.Boolean, v ? 1 : 0, 0);
+          else summary.grid.set(r, c, Kind.String, book.strings.add(v), 0);
+        }),
+      );
+      return added;
     }
     case 'dataTable': {
       const r = op.range;
@@ -953,6 +992,7 @@ function moveReferences(book: Workbook, change: Move, moveCells: () => void): vo
   moveTables(book, change);
   moveValidations(book, change);
   moveNotes(book, change);
+  moveScenarioCells(book, change);
   moveCharts(book, change);
   moveSparklines(book, change);
 }

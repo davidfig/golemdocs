@@ -955,7 +955,7 @@ export class Chrome {
           cmd('sheet.filter'),
           cmd('sheet.insertTable'),
           sub(t('sheet.pivot'), [cmd('sheet.pivotFields'), cmd('sheet.refreshPivots')]),
-          sub(t('sheet.whatIf'), [cmd('sheet.goalSeek'), cmd('sheet.dataTable')]),
+          sub(t('sheet.whatIf'), [cmd('sheet.scenarioManager'), cmd('sheet.goalSeek'), cmd('sheet.dataTable')]),
           cmd('sheet.newNote'),
           cmd('sheet.deleteNote'),
           sub(t('sheet.protection'), [cmd('sheet.protectSheet'), cmd('sheet.unprotectSheet'), cmd('sheet.lockCells'), cmd('sheet.unlockCells')]),

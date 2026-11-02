@@ -11,6 +11,8 @@ import type { Workbook } from './model/workbook.ts';
 import { isWorksheet } from './model/workbook.ts';
 import type { CellRange, Worksheet } from './model/worksheet.ts';
 import { parseRange, rangeName } from './refs.ts';
+import { scenarioSummary } from './scenarios.ts';
+import type { SummaryLabels, SummaryValue } from './scenarios.ts';
 
 /** Excel's Goal Seek stops within this of the goal (Options › Formulas › Maximum Change), after at most this many tries. */
 export const GOAL_SEEK_CHANGE = 0.001;
@@ -211,4 +213,38 @@ export function calculateDataTables(book: Workbook, engine: Engine): Box[] {
     }
   });
   return done;
+}
+
+// --- Scenarios ---------------------------------------------------------------------------------------------------------
+
+const asValue = (v: ReturnType<Engine['value']>): SummaryValue => (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean' ? v : v === null || v === undefined ? null : String(v));
+
+/** The scenario summary's rows (scenarios.ts): each scenario shown in turn against the engine for its result cells, the
+ * sheet put back afterwards. */
+export function scenarioSummaryRows(book: Workbook, engine: Engine, sheetIndex: number, results: { row: number; col: number }[], labels: SummaryLabels): SummaryValue[][] | null {
+  const sheet = book.sheets[sheetIndex];
+  if (!isWorksheet(sheet) || !sheet.scenarios?.list.length) return null;
+  const scenarios = sheet.scenarios;
+  const grid = sheet.grid;
+  const cells = [...new Map(scenarios.list.flatMap((x) => x.inputs).map((i) => [`${i.row},${i.col}`, { row: i.row, col: i.col }])).values()];
+  const saved = cells.map((c) => {
+    const column = grid.columns[c.col];
+    return { ...c, kind: column?.kind(c.row) ?? Kind.Empty, value: column?.value(c.row) ?? 0, style: column?.style(c.row) ?? 0 };
+  });
+  const boxes = cells.map((c) => ({ sheet: sheetIndex, r0: c.row, c0: c.col, r1: c.row, c1: c.col }));
+  const now = new Map(results.map((c) => [`${c.row},${c.col}`, asValue(engine.value(sheetIndex, c.row, c.col))]));
+  const shown = scenarios.list.map((x) => {
+    for (const i of x.inputs) {
+      const n = i.value.trim() === '' ? NaN : Number(i.value);
+      const style = grid.columns[i.col]?.style(i.row) ?? 0;
+      if (Number.isFinite(n)) grid.set(i.row, i.col, Kind.Number, n, style);
+      else grid.set(i.row, i.col, Kind.String, book.strings.add(i.value), style);
+    }
+    engine.recalculate(boxes);
+    const out = new Map(results.map((c) => [`${c.row},${c.col}`, asValue(engine.value(sheetIndex, c.row, c.col))]));
+    for (const c of saved) grid.set(c.row, c.col, c.kind, c.value, c.style);
+    return out;
+  });
+  engine.recalculate(boxes);
+  return scenarioSummary(scenarios, labels, (c) => asValue(engine.value(sheetIndex, c.row, c.col)), results, (i, c) => (i === null ? now : shown[i]).get(`${c.row},${c.col}`) ?? null);
 }

@@ -39,6 +39,9 @@ export class Workbook {
   names: DefinedName[] = [];
   /** Dates count from 1904-01-01 (old Mac workbooks) instead of 1900-01-00. */
   date1904 = false;
+  /** The file asks for everything to be calculated when it is opened (`calcPr fullCalcOnLoad`): its values may be stale
+   * or missing (a file written by a program that does not calculate). */
+  fullCalcOnLoad = false;
   activeSheet = 0;
   /** What it was read from, and where each part is in it; null for a workbook made here. */
   source: {

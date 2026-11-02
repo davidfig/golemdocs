@@ -320,6 +320,33 @@
   width: 100%;
 }
 
+/* What-If › Scenario Manager: the list (with the chosen one's cells and comment under it) beside its buttons. */
+.wm-sheet-scenario {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.wm-sheet-scenario-list {
+  height: 160px;
+  border: 1px solid var(--wm-border);
+}
+
+.wm-sheet-scenario-about {
+  margin-top: 6px;
+  min-height: 2.6em;
+}
+
+.wm-sheet-scenario-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wm-sheet-scenario-values {
+  display: contents;
+}
+
 /* A pivot button's card for several fields: the field's choice above the sort buttons. */
 .wm-sheet-filter-field .wm-dropdown {
   width: 100%;

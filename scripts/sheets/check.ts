@@ -14,7 +14,7 @@ import { readWorkbook } from '../../client/src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
 import { History } from '../../client/src/sheet/edit.ts';
 import { pivotChoice } from '../../client/src/sheet/pivot.ts';
-import { calculateDataTables } from '../../client/src/sheet/whatIf.ts';
+import { calculateDataTables, scenarioSummaryRows } from '../../client/src/sheet/whatIf.ts';
 import { OpcPackage } from '../../docx/src/index.ts';
 import { PIVOT_SALES } from './fixtures.ts';
 import { Engine } from '../../client/src/sheet/formula/engine.ts';
@@ -253,6 +253,18 @@ new History(retabled).apply(0, { kind: 'input', range: { r0: 1, c0: 2, r1: 1, c1
 retabledEngine.recalculate([{ sheet: 0, r0: 1, c0: 2, r1: 1, c1: 2 }]);
 calculateDataTables(retabled, retabledEngine);
 books.set('data-tables-changed.xlsx', retabled);
+// Scenarios: one added here and shown (its values in its cells), and a summary sheet made.
+const scened = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/scenarios.xlsx')));
+const scenedEngine = new Engine(scened);
+scenedEngine.recalculateAll();
+const scenedSheet = scened.sheets[0] as Worksheet;
+const scenedHistory = new History(scened);
+scenedHistory.apply(0, { kind: 'scenarios', scenarios: { ...scenedSheet.scenarios!, list: [...scenedSheet.scenarios!.list, { name: 'Mid', comment: 'Made here', user: '', locked: true, hidden: false, inputs: [{ row: 0, col: 1, value: '11' }] }] } });
+scenedHistory.apply(0, { kind: 'showScenario', index: 2 });
+scenedEngine.recalculate([{ sheet: 0, r0: 0, c0: 1, r1: 0, c1: 1 }]);
+const summaryRows = scenarioSummaryRows(scened, scenedEngine, 0, [{ row: 2, col: 1 }, { row: 3, col: 1 }], { title: 'Scenario Summary', current: 'Current Values:', changing: 'Changing Cells:', results: 'Result Cells:', notes: ['Notes'] })!;
+scenedHistory.apply(0, { kind: 'scenarioSummary', rows: summaryRows, results: 'B3:B4', name: 'Scenario Summary' });
+books.set('scenarios-made.xlsx', scened);
 const compareFormulaValues = new Set(['typed.xlsx', 'data-table-made.xlsx', 'data-tables-changed.xlsx']);
 
 const generated = path.join(ROOT, '.cache/sheets/sheet-100000x20.xlsx');

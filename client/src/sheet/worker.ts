@@ -5,7 +5,7 @@
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
-import { calculateDataTables, goalSeek } from './whatIf.ts';
+import { calculateDataTables, goalSeek, scenarioSummaryRows } from './whatIf.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { currentRegion } from './edit.ts';
@@ -132,6 +132,8 @@ async function open(bytes: Uint8Array, image: Uint8Array | null): Promise<void> 
       await loadSheet(book, i, undefined, yieldToEvents);
     }
     engine?.formulasChanged();
+    // A file that asks to be calculated on opening is (its values may be missing), as Excel does.
+    if (book.fullCalcOnLoad) resetEngine(true);
     post({ t: 'loaded', info: info(book) });
     // The image of what was just read, for the next open (the page keeps it next to the file).
     const made = workbookImage(book, source);
@@ -330,6 +332,21 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
+      }
+      case 'scenarios': {
+        await settled();
+        const sheet = book.sheets[m.sheet];
+        const scenarios = sheet && isWorksheet(sheet) ? sheet.scenarios : null;
+        const values: Record<string, string> = {};
+        for (const i of scenarios?.list.flatMap((x) => x.inputs) ?? []) {
+          const v = engine?.value(m.sheet, i.row, i.col);
+          values[`${i.row},${i.col}`] = typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean' ? String(v) : '';
+        }
+        return post({ t: 'scenarios', id: m.id, scenarios, values });
+      }
+      case 'scenarioSummary': {
+        await settled();
+        return post({ t: 'scenarioSummary', id: m.id, rows: engine ? scenarioSummaryRows(book, engine, m.sheet, m.results, m.labels) : null });
       }
       case 'goalSeek': {
         await settled();

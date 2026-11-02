@@ -413,6 +413,41 @@ test('Sheet › What-If Analysis › Data Table fills a block with its formula f
   await expect.poll(async () => (await state(page)).content.display).toBe('303');
 });
 
+test('Sheet › What-If Analysis › Scenario Manager shows a scenario, adds one, and makes a summary', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'scenarios.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/scenarios.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'scenarios.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await app.menu('Sheet', 'What-If Analysis', 'Scenario Manager…');
+  const manager = page.getByRole('dialog', { name: 'Scenario Manager' });
+  await manager.getByRole('option', { name: 'Worst' }).click();
+  await manager.getByRole('button', { name: 'Show' }).click();
+  // Another: a price of 11, the units as they are now (60, Worst's).
+  await manager.getByRole('button', { name: 'Add…' }).click();
+  const adding = page.getByRole('dialog', { name: 'Add Scenario' });
+  await adding.getByRole('textbox', { name: 'Scenario name' }).fill('Mid');
+  await adding.getByRole('textbox', { name: 'Changing cells' }).fill('B1,B2');
+  await adding.getByRole('textbox', { name: 'Comment' }).click();
+  await expect(adding.getByRole('textbox', { name: 'B2' })).toHaveValue('60');
+  await adding.getByRole('textbox', { name: 'B1' }).fill('11');
+  await adding.getByRole('button', { name: 'OK' }).click();
+  await expect(manager.getByRole('option', { name: 'Mid' })).toBeVisible();
+  await manager.locator('.wm-dialog-buttons').getByRole('button', { name: 'Close' }).click();
+  await clickCell(page, 0, 1);
+  await expect.poll(async () => (await state(page)).content.input).toBe('8');
+  // The summary: a new sheet, Best's revenue (12 × 150) under its name.
+  await app.menu('Sheet', 'What-If Analysis', 'Scenario Manager…');
+  await manager.getByRole('button', { name: 'Summary…' }).click();
+  const summary = page.getByRole('dialog', { name: 'Scenario Summary' });
+  await summary.getByRole('textbox', { name: 'Result cells' }).fill('B3:B4');
+  await summary.getByRole('button', { name: 'OK' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Scenario Summary');
+  await clickCell(page, 7, 4);
+  await expect.poll(async () => (await state(page)).content.input).toBe('1800');
+  await clickCell(page, 7, 6);
+  await expect.poll(async () => (await state(page)).content.input).toBe('660');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

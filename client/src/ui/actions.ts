@@ -103,6 +103,7 @@ export const SHEET_OPS = [
   'pivotFields',
   'goalSeek',
   'dataTable',
+  'scenarioManager',
   'protectSheet',
   'unprotectSheet',
   'lockCells',

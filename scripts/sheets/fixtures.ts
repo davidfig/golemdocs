@@ -124,6 +124,30 @@ export async function dataTablesWorkbook(): Promise<Uint8Array> {
   return writeWorkbook(book);
 }
 
+/**
+ * scenarios.xlsx: a price (B1) and units (B2), revenue (B3 = B1*B2) and profit (B4 = B3-500), with two scenarios for the
+ * price and units, Best (12, 150) and Worst (8, 60). scenarios-excel.xlsx is it with Excel's own scenario summary of
+ * B3:B4 added.
+ */
+export async function scenariosWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  const sheet = new Worksheet('Model', 1);
+  book.sheets.push(sheet);
+  new History(book).apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Price', '10'], ['Units', '100'], ['Revenue', '=B1*B2'], ['Profit', '=B3-500']] });
+  const input = (row: number, value: string) => ({ row, col: 1, value });
+  sheet.scenarios = {
+    list: [
+      { name: 'Best', comment: 'High price and volume', user: 'golemdocs', locked: true, hidden: false, inputs: [input(0, '12'), input(1, '150')] },
+      { name: 'Worst', comment: '', user: 'golemdocs', locked: true, hidden: false, inputs: [input(0, '8'), input(1, '60')] },
+    ],
+    current: null,
+    show: null,
+    results: '',
+  };
+  sheet.dirty.layout = true;
+  return writeWorkbook(book);
+}
+
 /** The data pivots.xlsx summarises: twelve sales (Sales!A1:D13). */
 export const PIVOT_SALES = [
   ['Region', 'Product', 'Month', 'Amount'],
@@ -271,6 +295,7 @@ export async function pivotShapesWorkbook(only?: string[], given?: PivotShape[])
 }
 
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
+  writeFileSync(path.join(FIXTURES, 'scenarios.xlsx'), await scenariosWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots2.xlsx'), await pivotShapesWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots3.xlsx'), await pivotShapesWorkbook(undefined, PIVOT_OPTIONS));
   writeFileSync(path.join(FIXTURES, 'pivots.xlsx'), await pivotsWorkbook());

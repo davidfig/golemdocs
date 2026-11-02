@@ -57,6 +57,8 @@ export async function readWorkbook(bytes: Uint8Array, options: ReadOptions = {})
 
   const pr = child(workbookXml, 'workbookPr');
   book.date1904 = pr?.attrs.date1904 === '1' || pr?.attrs.date1904 === 'true';
+  const calc = child(workbookXml, 'calcPr')?.attrs.fullCalcOnLoad;
+  book.fullCalcOnLoad = calc === '1' || calc === 'true';
   const view = child(child(workbookXml, 'bookViews') ?? workbookXml, 'workbookView');
   book.activeSheet = +(view?.attrs.activeTab ?? 0);
 

@@ -56,7 +56,7 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 (globalThis as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
-const { openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
+const { keepSyncedCopy, openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
 const { downloadDocument } = await import('../src/cloud.ts');
 const sync = await import('../src/sync.ts');
 const { loadLibrary } = sync;
@@ -190,6 +190,45 @@ test('opening from the cloud never overwrites browser edits the cloud doesn’t 
   assert.deepEqual([...new Uint8Array(opened.bytes)], [1, 1, 1]);
   assert.equal(calls.length, 0, 'did not even download');
   assert.deepEqual([...new Uint8Array((await local.getSaved(first.info.id))!.bytes)], [1, 1, 1]);
+});
+
+test('what the vault sync sends or fetches becomes the copy here, so opening it downloads nothing', async () => {
+  cloudHas = true;
+  cloudVersion = 5;
+  await keepSyncedCopy({ id: 'c1', name: 'Doc.docx', updatedAt: 5 }, bytes(5, 5), 'u1');
+  const [copy] = await local.listSaved();
+  assert.equal(copy?.cloudId, 'c1');
+  assert.equal(copy?.cloudUpdatedAt, 5);
+  assert.equal(sync.hasUnsentChanges(copy!), false);
+  calls = [];
+  const opened = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 5 }, 'u1');
+  assert.deepEqual([...new Uint8Array(opened.bytes)], [5, 5]);
+  assert.equal(calls.length, 0, 'nothing downloaded');
+  // A newer version replaces it in place: still one copy.
+  await keepSyncedCopy({ id: 'c1', name: 'Doc.docx', updatedAt: 6 }, bytes(6), 'u1');
+  const after = await local.listSaved();
+  assert.equal(after.length, 1);
+  assert.equal(after[0]!.cloudUpdatedAt, 6);
+  assert.deepEqual([...new Uint8Array((await local.getSaved(copy!.id))!.bytes)], [6]);
+});
+
+test('the vault sync never writes over edits here the account hasn’t got, nor the copy open in the editor', async () => {
+  const first = await local.saveFromCloud({ name: 'Doc.docx', bytes: bytes(1), owner: 'u1', cloudId: 'c1', cloudUpdatedAt: 1 });
+  await local.saveSaved({ id: first.id, name: 'Doc.docx', bytes: bytes(1, 1) }); // edited here
+  await keepSyncedCopy({ id: 'c1', name: 'Doc.docx', updatedAt: 2 }, bytes(2), 'u1');
+  assert.deepEqual([...new Uint8Array((await local.getSaved(first.id))!.bytes)], [1, 1]);
+  assert.equal((await local.getSaved(first.id))!.info.cloudUpdatedAt, 1, 'its upload still finds the account moved on');
+
+  const open = await local.saveFromCloud({ name: 'Open.docx', bytes: bytes(3), owner: 'u1', cloudId: 'c2', cloudUpdatedAt: 1 });
+  await keepSyncedCopy({ id: 'c2', name: 'Open.docx', updatedAt: 2 }, bytes(4), 'u1', open.id);
+  assert.deepEqual([...new Uint8Array((await local.getSaved(open.id))!.bytes)], [3]);
+});
+
+test('a copy saved to after the sync looked is not written over', async () => {
+  const first = await local.saveFromCloud({ name: 'Doc.docx', bytes: bytes(1), owner: 'u1', cloudId: 'c1', cloudUpdatedAt: 1 });
+  await local.saveSaved({ id: first.id, name: 'Doc.docx', bytes: bytes(7) });
+  assert.equal(await local.saveFromCloudIfSent({ id: first.id, name: 'Doc.docx', bytes: bytes(2), owner: 'u1', cloudId: 'c1', cloudUpdatedAt: 2 }), null);
+  assert.deepEqual([...new Uint8Array((await local.getSaved(first.id))!.bytes)], [7]);
 });
 
 const image = (type = 'image/webp') => new Blob([new Uint8Array([1, 2, 3])], { type });

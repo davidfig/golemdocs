@@ -4,6 +4,7 @@
 
 import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
+import { wordRange } from '@golemdocs/editor/textUnits';
 import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type Pos, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
 import { cloudRoomTransport } from '../collab/cloudRoom.ts';
 import { RoomClient, type RoomHost, type RoomStart } from '../collab/roomClient.ts';
@@ -90,6 +91,7 @@ import { withDrawingText } from '../formats/drawingText.ts';
 import { annotatedPdf, reflow } from '../formats/pdfFile.ts';
 import { APP_WORDS } from '../spelling/appWords.ts';
 import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../spelling/dictionary.ts';
+import { loadThesaurus } from '../spelling/thesaurus.ts';
 import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLanguage, type Unchecked } from '../spelling/languages.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
@@ -323,7 +325,7 @@ function applySettings(wire: WireCommand): void {
   else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
 
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
@@ -1919,6 +1921,18 @@ class OpenDocument {
       if (editor.collapsed || against(start) > 0 || against(end) < 0) editor.apply({ kind: 'select', paragraph: at, from: hit.offset, to: hit.offset });
       this.spell = { issue: null, menu: true, table: true };
     }
+    // No mistake: the word under the point, for the menu's synonyms.
+    if (hit && !this.spell.issue && select && !this.readOnly && FORMATS[this.format as DocumentKind]?.editable) {
+      const text = paragraphText(hit.paragraph);
+      // A click on the right half of a word's last letter is at its end: the word before the point.
+      for (const offset of hit.offset > 0 ? [hit.offset, hit.offset - 1] : [hit.offset]) {
+        const [from, to] = wordRange(text, offset);
+        const word = text.slice(from, to);
+        if (!/[\p{L}]/u.test(word)) continue;
+        this.spell = { ...this.spell, word: { text: word, paragraph: editor.paragraphs().indexOf(hit.paragraph), from, to } };
+        break;
+      }
+    }
     this.reveal = false;
     this.sendSelection();
   }
@@ -2870,6 +2884,15 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
         console.error(e);
         post({ type: 'spellText', request: message.request, marks: [], issue: null, loading: false });
       });
+      break;
+    case 'thesaurus':
+      loadThesaurus().then(
+        (thesaurus) => post({ type: 'thesaurus', request: message.request, result: thesaurus.lookUp(message.word) }),
+        (e: unknown) => {
+          console.error(e);
+          post({ type: 'thesaurus', request: message.request, result: null, failed: true });
+        },
+      );
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });

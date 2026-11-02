@@ -2218,9 +2218,49 @@ html.wm-titlebar .wm-format {
   color: #007a33;
 }
 
-.wm-spell-suggestions {
-  height: auto;
-  padding: 1px;
+/* A list to pick from in a dialog (ui/listBox.ts): a field `--wm-list-rows` rows tall. */
+.wm-list-box {
+  box-sizing: border-box;
+  height: calc(var(--wm-list-rows, 5) * 22px + 4px);
+  max-height: none;
+  margin-bottom: 5px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  outline: none;
+}
+
+.wm-list-box:focus {
+  border-color: var(--wm-accent);
+  box-shadow: 0 0 0 3px var(--wm-accent-ring);
+}
+
+.wm-list-box .wm-option {
+  line-height: 14px;
+}
+
+.wm-list-box .wm-option.disabled {
+  color: var(--wm-disabled);
+}
+
+/* --- Thesaurus ------------------------------------------------------------------------------- */
+
+.wm-dialog.wm-thesaurus {
+  width: 520px;
+}
+
+.wm-thesaurus-lists {
+  display: flex;
+  gap: 10px;
+}
+
+.wm-thesaurus-lists > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 /* --- Columns --------------------------------------------------------------------------------- */

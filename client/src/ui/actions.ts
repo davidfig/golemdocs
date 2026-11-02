@@ -64,6 +64,8 @@ export type DialogName =
   | 'searchAll'
   | 'pasteSpecial'
   | 'spelling'
+  /** Tools ▸ Thesaurus: words of the same meaning as the selected one. */
+  | 'thesaurus'
   | 'wordCount'
   | 'options'
   | 'pageNumbers'

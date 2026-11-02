@@ -1,7 +1,9 @@
 // Laying out one line of a big text file on a grid of cells, for drawing, caret placement and clicks. The text is monospace:
-// every character takes one cell (0.6 em in JetBrains Mono), wide East-Asian characters two, combining marks none, and a tab
-// runs to the next multiple of 8. A long line is broken after as many cells as fit (a row never starts with nothing on it).
+// every character takes one cell (0.6 em in JetBrains Mono), wide East-Asian characters two, combining marks none, an emoji
+// (a whole sequence: ZWJ, flag, keycap, skin tone) two, and a tab runs to the next multiple of 8. A long line is broken after as many cells as fit (a row never starts with nothing on it).
 // Positions are UTF-16 indices, as everywhere else in textEditor/.
+
+import { emojiAt } from '@golemdocs/layout';
 
 /** Cells a tab stop is apart. */
 export const TAB = 8;
@@ -22,6 +24,15 @@ export function cellWidth(cp: number): 0 | 1 | 2 {
   if (cp < 0x300) return 1;
   if (cp >= 0x1100 && (cp <= 0x115f || (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f) || (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe6f) || (cp >= 0xff00 && cp <= 0xff60) || (cp >= 0xffe0 && cp <= 0xffe6) || (cp >= 0x1f300 && cp <= 0x1f64f) || (cp >= 0x1f900 && cp <= 0x1f9ff) || (cp >= 0x20000 && cp <= 0x3fffd))) return 2;
   return isZeroWidth(cp) ? 0 : 1;
+}
+
+/** The character at UTF-16 `i`: its first code point, its length in UTF-16 units (a whole emoji sequence is one character) and its cells (`cell` is where it starts, for a tab). */
+function charAt(text: string, i: number, cell: number): { cp: number; length: number; width: number; emoji: boolean } {
+  const cp = text.codePointAt(i)!;
+  if (cp === 9) return { cp, length: 1, width: TAB - (cell % TAB), emoji: false };
+  const emoji = cp >= 0x23 ? emojiAt(text, i) : 0;
+  if (emoji) return { cp, length: emoji, width: 2, emoji: true };
+  return { cp, length: cp > 0xffff ? 2 : 1, width: cellWidth(cp), emoji: false };
 }
 
 /** One row of a laid-out line: the text [from, to) and how many cells it fills. */
@@ -47,9 +58,9 @@ export function layoutLine(text: string, columns: number): Row[] {
   let from = 0;
   let cells = 0;
   for (let i = 0; i < text.length; ) {
-    const cp = text.codePointAt(i)!;
-    const length = cp > 0xffff ? 2 : 1;
-    let width = cp === 9 ? TAB - (cells % TAB) : cellWidth(cp);
+    const char = charAt(text, i, cells);
+    const { cp, length } = char;
+    let { width } = char;
     // Break before a character that does not fit (but never leave a row empty).
     if (width > 0 && cells + width > columns && i > from) {
       rows.push({ from, to: i, cells });
@@ -70,15 +81,14 @@ export function rowCount(text: string, columns: number): number {
   return PLAIN.test(text) ? Math.max(1, Math.ceil(text.length / columns)) : layoutLine(text, columns).length;
 }
 
-/** Calls `visit` for each character of a row with its UTF-16 index, code point, cell (from the row's start) and width in cells. */
-export function forEachCell(text: string, row: Row, visit: (index: number, cp: number, cell: number, width: number) => void): void {
+/** Calls `visit` for each character of a row with its UTF-16 index, (first) code point, cell (from the row's start), width in cells, and for an emoji its UTF-16 length (0 for other characters). */
+export function forEachCell(text: string, row: Row, visit: (index: number, cp: number, cell: number, width: number, emoji: number) => void): void {
   let cell = 0;
   for (let i = row.from; i < row.to; ) {
-    const cp = text.codePointAt(i)!;
-    const width = cp === 9 ? TAB - (cell % TAB) : cellWidth(cp);
-    visit(i, cp, cell, width);
+    const { cp, length, width, emoji } = charAt(text, i, cell);
+    visit(i, cp, cell, width, emoji ? length : 0);
     cell += width;
-    i += cp > 0xffff ? 2 : 1;
+    i += length;
   }
 }
 
@@ -93,9 +103,9 @@ export function cellAt(text: string, row: Row, index: number): number {
       found = cell;
       break;
     }
-    const cp = text.codePointAt(i)!;
-    cell += cp === 9 ? TAB - (cell % TAB) : cellWidth(cp);
-    i += cp > 0xffff ? 2 : 1;
+    const { length, width } = charAt(text, i, cell);
+    cell += width;
+    i += length;
   }
   return found;
 }
@@ -106,11 +116,10 @@ export function indexAtCell(text: string, row: Row, target: number): number {
   if (PLAIN.test(text)) return Math.min(row.from + Math.round(target), row.to);
   let cell = 0;
   for (let i = row.from; i < row.to; ) {
-    const cp = text.codePointAt(i)!;
-    const width = cp === 9 ? TAB - (cell % TAB) : cellWidth(cp);
+    const { length, width } = charAt(text, i, cell);
     if (target < cell + width / 2) return i;
     cell += width;
-    i += cp > 0xffff ? 2 : 1;
+    i += length;
   }
   return row.to;
 }

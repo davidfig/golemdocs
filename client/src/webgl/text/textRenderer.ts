@@ -5,7 +5,7 @@ import type { TextBatch } from './textBatch.ts';
 import { TEXT_FRAGMENT, TEXT_VERTEX } from './textShaders.ts';
 
 const UNIFORMS = [
-  'u_glyphTable', 'u_atlas', 'u_translate', 'u_scale', 'u_viewport', 'u_distanceRangeEm', 'u_skew', 'u_embolden', 'u_atlasSize', 'u_darkPages',
+  'u_glyphTable', 'u_atlas', 'u_translate', 'u_scale', 'u_viewport', 'u_distanceRangeEm', 'u_skew', 'u_embolden', 'u_atlasSize', 'u_darkPages', 'u_color',
 ] as const;
 
 const ATLAS_UNIT = 0;
@@ -61,12 +61,13 @@ export class TextRenderer {
         gl.bindTexture(gl.TEXTURE_2D, face.glyphTable);
         gl.uniform1f(this.u.u_distanceRangeEm, face.distanceRangeEm);
         gl.uniform2f(this.u.u_atlasSize, face.atlasWidth, face.atlasHeight);
+        gl.uniform1f(this.u.u_color, face.color ? 1 : 0);
         boundFace = face;
       }
       // Origin minus camera in float64 here, so far-away pages stay precise in float32.
       gl.uniform2f(this.u.u_translate, (batch.originX - camera.x) * scale, (batch.originY - camera.y) * scale);
-      gl.uniform1f(this.u.u_skew, batch.style.skew);
-      gl.uniform1f(this.u.u_embolden, batch.style.embolden / face.distanceRangeEm);
+      gl.uniform1f(this.u.u_skew, face.color ? 0 : batch.style.skew);
+      gl.uniform1f(this.u.u_embolden, face.color ? 0 : batch.style.embolden / face.distanceRangeEm);
       gl.bindVertexArray(vao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, batch.count);
       stats.drawCalls++;

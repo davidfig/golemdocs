@@ -43,6 +43,10 @@ export class FaceMetrics {
 
   private readonly fastLookup: Int16Array;
   private readonly lookup = new Map<number, number>();
+  /** Glyphs of code point sequences (an emoji page's), keyed by the code points joined with commas. */
+  private readonly sequences = new Map<string, number>();
+  /** An emoji page: its atlas holds color sprites, not distance fields. */
+  readonly color: boolean;
   private readonly kerning = new Map<number, number>();
   private readonly missingAdvance: number;
 
@@ -60,13 +64,15 @@ export class FaceMetrics {
     this.fastLookup = new Int16Array(FAST_LOOKUP_LIMIT).fill(-1);
     glyphs.forEach((glyph, i) => {
       this.advances[i] = glyph.advance;
-      if (glyph.unicode === undefined) {
+      if (glyph.sequence) this.sequences.set(glyph.sequence.join(','), i);
+      else if (glyph.unicode === undefined) {
         // Reached by position only (a math font's size variants), never by code point.
       } else if (glyph.unicode < FAST_LOOKUP_LIMIT) this.fastLookup[glyph.unicode] = i;
       else this.lookup.set(glyph.unicode, i);
       if (glyph.planeBounds && glyph.atlasBounds) this.visible[i] = 1;
     });
     for (const pair of layout.kerning ?? []) this.kerning.set(pair.unicode1 * 0x110000 + pair.unicode2, pair.advance);
+    this.color = layout.atlas.type === 'color';
     const space = this.glyph(0x20);
     this.missingAdvance = space >= 0 ? this.advances[space] : 0.25;
 
@@ -87,6 +93,12 @@ export class FaceMetrics {
     if (index >= 0) return index;
     const fallback = FALLBACKS[codepoint];
     return fallback === undefined ? -1 : this.glyph(fallback);
+  }
+
+  /** Glyph index for a sequence of code points (without U+FE0F), or -1; a single code point is looked up as by glyph(). */
+  sequence(codepoints: readonly number[]): number {
+    if (codepoints.length === 1) return this.glyph(codepoints[0]);
+    return this.sequences.get(codepoints.join(',')) ?? -1;
   }
 
   has(codepoint: number): boolean {

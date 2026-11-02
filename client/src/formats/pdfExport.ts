@@ -16,6 +16,7 @@ import type { WordDocument } from '@golemdocs/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@golemdocs/layout';
 import { commentAnnotations } from './pdfExportComments.ts';
 import { standardFamily } from './standardFonts.ts';
+import { emojiBox, EmojiSprites } from './emojiSprites.ts';
 import { PdfDocument, applyAnnotations, type EmbeddedFont, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@golemdocs/pdf';
 
 /** Characters WinAnsi lacks, with a close ASCII stand-in. */
@@ -100,6 +101,8 @@ type EmbeddedFor = (font: ResolvedFont) => EmbeddedFont | undefined;
 function collect(page: PageLayout, math: boolean, embeddedFor: EmbeddedFor): PlacedGlyph[] {
   const out: PlacedGlyph[] = [];
   for (const list of page.glyphs.values() as Iterable<GlyphList>) {
+    // Emoji are pictures, drawn by drawEmoji.
+    if (list.metrics.color) continue;
     const isMath = list.font.family.math !== undefined;
     // Without the math font's file, an equation can't be written: it is left out.
     if (isMath && !math) continue;
@@ -322,6 +325,27 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     return image;
   };
 
+  // Emoji: each sprite embedded once as a picture (with its alpha as a soft mask), placed where layout put the glyph.
+  const sprites = new EmojiSprites(fonts);
+  const emojiImages = new Map<string, PdfImage | null>();
+  const drawEmoji = async (d: PageDrawing, page: PageLayout) => {
+    for (const list of page.glyphs.values() as Iterable<GlyphList>) {
+      if (!list.metrics.color) continue;
+      for (let i = 0; i < list.count; i++) {
+        const g = list.glyph(i);
+        const box = emojiBox(list.metrics, g, list.x(i), list.y(i), list.size(i));
+        if (!box) continue;
+        const key = `${list.metrics.face.atlas}#${g}`;
+        if (!emojiImages.has(key)) {
+          const pixels = await sprites.pixels(list.metrics, g);
+          emojiImages.set(key, pixels && pdf.embedPixels(pixels));
+        }
+        const image = emojiImages.get(key);
+        if (image) d.image(image, box.x, box.y, box.width, box.height);
+      }
+    }
+  };
+
   const pages = layout.pages.length ? layout.pages : [undefined];
   for (const laid of pages) {
     const page = pdf.addPage(laid ? [laid.width, laid.height] : [612, 792]);
@@ -345,10 +369,12 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
       }
     }
 
+    await drawEmoji(d, laid);
     await drawImages(false);
     drawRects(d, laid.foreground);
     d.finish();
   }
+  sprites.close();
   const notes = commentAnnotations(doc, layout.pages);
   if (notes.length) applyAnnotations(pdf, notes);
   if (lostCount) {

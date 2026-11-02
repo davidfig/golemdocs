@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.32.0 - Unreleased
+
+### Added
+
+- Emoji show in color everywhere: documents of every format, text files, and PDF, picture and SVG downloads. Families, flags, keycaps and skin tones each show as one emoji, and the caret, selection and Backspace treat each as one character. The emoji images load only when a document uses one.
+
 ## 0.30.1 - 2026-10-31
 
 ### Changed

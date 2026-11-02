@@ -4625,6 +4625,738 @@
         "order": 4,
         "coverage": "noto-sans-tc-5/coverage.json"
       }
+    },
+    {
+      "id": "emoji-1",
+      "wordName": "Noto Color Emoji (1)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-1/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-1/regular.webp",
+          "layout": "emoji-1/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 0,
+        "coverage": "emoji-1/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-2",
+      "wordName": "Noto Color Emoji (2)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-2/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-2/regular.webp",
+          "layout": "emoji-2/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 1,
+        "coverage": "emoji-2/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-3",
+      "wordName": "Noto Color Emoji (3)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-3/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-3/regular.webp",
+          "layout": "emoji-3/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 2,
+        "coverage": "emoji-3/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-4",
+      "wordName": "Noto Color Emoji (4)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-4/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-4/regular.webp",
+          "layout": "emoji-4/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 3,
+        "coverage": "emoji-4/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-5",
+      "wordName": "Noto Color Emoji (5)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-5/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-5/regular.webp",
+          "layout": "emoji-5/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 4,
+        "coverage": "emoji-5/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-6",
+      "wordName": "Noto Color Emoji (6)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-6/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-6/regular.webp",
+          "layout": "emoji-6/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 5,
+        "coverage": "emoji-6/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-7",
+      "wordName": "Noto Color Emoji (7)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-7/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-7/regular.webp",
+          "layout": "emoji-7/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 6,
+        "coverage": "emoji-7/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-8",
+      "wordName": "Noto Color Emoji (8)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-8/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-8/regular.webp",
+          "layout": "emoji-8/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 7,
+        "coverage": "emoji-8/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-9",
+      "wordName": "Noto Color Emoji (9)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-9/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-9/regular.webp",
+          "layout": "emoji-9/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 8,
+        "coverage": "emoji-9/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-10",
+      "wordName": "Noto Color Emoji (10)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-10/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-10/regular.webp",
+          "layout": "emoji-10/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 9,
+        "coverage": "emoji-10/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-11",
+      "wordName": "Noto Color Emoji (11)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-11/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-11/regular.webp",
+          "layout": "emoji-11/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 10,
+        "coverage": "emoji-11/coverage.json"
+      }
+    },
+    {
+      "id": "emoji-12",
+      "wordName": "Noto Color Emoji (12)",
+      "substitute": "Noto Color Emoji",
+      "license": "OFL-1.1",
+      "licenseFile": "emoji-12/LICENSE.txt",
+      "aliases": {},
+      "faces": [
+        {
+          "weight": 400,
+          "italic": false,
+          "atlas": "emoji-12/regular.webp",
+          "layout": "emoji-12/regular.json",
+          "metrics": {
+            "unitsPerEm": 2048,
+            "hhea": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0
+            },
+            "typo": {
+              "ascender": 1900,
+              "descender": -500,
+              "lineGap": 0,
+              "useTypoMetrics": false
+            },
+            "win": {
+              "ascent": 1900,
+              "descent": 500
+            },
+            "xHeight": 0,
+            "capHeight": 1900,
+            "underline": {
+              "position": -1244,
+              "thickness": 131
+            },
+            "strikeout": {
+              "size": 102,
+              "position": 530
+            },
+            "subscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 286
+            },
+            "superscript": {
+              "xSize": 1331,
+              "ySize": 1433,
+              "xOffset": 0,
+              "yOffset": 983
+            }
+          }
+        }
+      ],
+      "page": {
+        "group": "emoji",
+        "order": 11,
+        "coverage": "emoji-12/coverage.json"
+      }
     }
   ]
 }

@@ -323,3 +323,30 @@ export const FAMILIES: FamilySpec[] = [
   ...cjkPages('zh-Hant', 'Noto Sans TC', 'notosanstc', 'NotoSansTC%5Bwght%5D.ttf', '864727d210d54f2537bbe23b3a839436c3992af72de9322af5270897246bd44f', 5),
 ];
 
+
+/**
+ * Color emoji: Noto Color Emoji's bitmaps (CBDT), cut into sprite atlas pages by scripts/fonts/emoji.ts
+ * (`pnpm fonts:emoji`). Unicode's list of ZWJ sequences picks the canonical spelling where the font also
+ * spells a sequence backwards (for right-to-left shaping).
+ */
+export const EMOJI = {
+  font: {
+    url: 'https://raw.githubusercontent.com/googlefonts/noto-emoji/8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/NotoColorEmoji.ttf',
+    sha256: '72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b',
+  },
+  license: 'OFL-1.1',
+  licenseFile: {
+    url: 'https://raw.githubusercontent.com/googlefonts/noto-emoji/8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/LICENSE',
+    sha256: '6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2',
+  },
+  zwjSequences: {
+    url: 'https://www.unicode.org/Public/emoji/16.0/emoji-zwj-sequences.txt',
+    sha256: '9423ec235474356f970a696506737e2d5d65453a67f45df66b8bbe920c3fab83',
+  },
+  /** Sprite height in the atlas, pixels (the font's bitmaps are 128 tall). */
+  height: 72,
+  /** Transparent pixels around each sprite, so mipmap levels down to 1/8 size do not bleed neighbors in. */
+  padding: 8,
+  /** Most sprites on one page (one 2048-wide texture). */
+  perPage: 336,
+} as const satisfies { font: FileRef; licenseFile: FileRef; zwjSequences: FileRef; [key: string]: unknown };

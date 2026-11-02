@@ -17,7 +17,8 @@ import { pivotLookOf, pivotPaint } from './pivot.ts';
 import type { PivotPaint } from './pivot.ts';
 import { resolveColor } from './model/theme.ts';
 import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE } from './protocol.ts';
-import type { CellPaint, CellTile, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
+import type { CellPaint, CellTile, DrawStyle, OverviewTile, PrintData, TileKey } from './protocol.ts';
+import { printLayout } from './print.ts';
 
 /** How far a cell's text may spill into empty neighbours, in cells. */
 const MAX_SPILL = 32;
@@ -424,4 +425,27 @@ function downsample(children: (Uint8Array | null)[]): Uint8Array {
     }
   }
   return out;
+}
+
+/** What a sheet prints (print.ts, sheetPdf.ts): its pages (at most a thousand), the tiles of every cell they or the titles
+ * printed on them reach, and the column widths and row heights as far as they go. */
+export function printData(book: Workbook, index: number, sheet: Worksheet, cache: TileCache, conditional?: ConditionalPainter): PrintData {
+  const layout = printLayout(book, sheet, index, sheet.pageSetup);
+  layout.pages = layout.pages.slice(0, 1000);
+  const keys = new Map<string, TileKey>();
+  const add = (rows: [number, number], cols: [number, number]) => {
+    for (let ty = Math.floor(rows[0] / CELL_TILE_ROWS); ty <= Math.floor(rows[1] / CELL_TILE_ROWS); ty++)
+      for (let tx = Math.floor(cols[0] / CELL_TILE_COLS); tx <= Math.floor(cols[1] / CELL_TILE_COLS); tx++) keys.set(`${tx}:${ty}`, { level: 0, tx, ty });
+  };
+  let maxRow = 0;
+  let maxCol = 0;
+  for (const p of layout.pages) {
+    for (const r of [p.rows, ...(layout.titleRows ? [layout.titleRows] : [])]) for (const c of [p.cols, ...(layout.titleCols ? [layout.titleCols] : [])]) add(r, c);
+    maxRow = Math.max(maxRow, p.rows[1], layout.titleRows?.[1] ?? 0);
+    maxCol = Math.max(maxCol, p.cols[1], layout.titleCols?.[1] ?? 0);
+  }
+  const tiles = [...keys.values()].map((k) => cellTile(book, index, sheet, k, cache, conditional));
+  const cols = Array.from({ length: maxCol + 2 }, (_, c) => sheet.colSizes.size(c));
+  const rows = Array.from({ length: maxRow + 2 }, (_, r) => sheet.rowSizes.size(r));
+  return { layout, sheetName: sheet.name, tiles, cols, rows };
 }

@@ -28,7 +28,7 @@ const ASCII_FALLBACKS: Record<number, string> = {
   0x2022: '•', 0x25cf: '•', 0x25aa: '•', 0x2023: '•',
 };
 
-function standardName(font: ResolvedFont): string {
+export function standardName(font: ResolvedFont): string {
   const bold = font.face.weight >= 600 || font.syntheticBold;
   const italic = font.face.italic || font.syntheticItalic;
   switch (standardFamily(font)) {
@@ -42,10 +42,10 @@ function standardName(font: ResolvedFont): string {
 }
 
 /** Whether a font is drawn from its own file: it has one, and isn't one layout fakes a style of (a standard font shows those better). */
-const embeddable = (font: ResolvedFont): boolean => !!font.face.font && !font.syntheticBold && !font.syntheticItalic;
+export const embeddable = (font: ResolvedFont): boolean => !!font.face.font && !font.syntheticBold && !font.syntheticItalic;
 
 /** Layout's packed little-endian RGBA8 to a PDF color and alpha. */
-function unpack(packed: number): { color: [number, number, number]; alpha: number } {
+export function unpack(packed: number): { color: [number, number, number]; alpha: number } {
   return {
     color: [(packed & 0xff) / 255, ((packed >> 8) & 0xff) / 255, ((packed >> 16) & 0xff) / 255],
     alpha: (packed >>> 24) / 255,
@@ -53,7 +53,7 @@ function unpack(packed: number): { color: [number, number, number]; alpha: numbe
 }
 
 /** A glyph with everything the exporter needs. */
-interface PlacedGlyph {
+export interface PlacedGlyph {
   x: number;
   y: number;
   size: number;
@@ -182,13 +182,13 @@ function readingOrder(page: PageLayout, glyphs: PlacedGlyph[]): PlacedGlyph[][] 
   return result;
 }
 
-interface Run {
+export interface Run {
   first: PlacedGlyph;
   pieces: RunGlyph[];
 }
 
 /** Splits a line into runs of one font, size, color and baseline, inserting real spaces at gaps. */
-function lineRuns(line: PlacedGlyph[]): Run[] {
+export function lineRuns(line: PlacedGlyph[]): Run[] {
   const runs: Run[] = [];
   let run: Run | undefined;
   let prev: PlacedGlyph | undefined;

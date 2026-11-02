@@ -88,6 +88,11 @@ export class SheetEditor {
     return this.view?.isOpen ? this.view.save() : null;
   }
 
+  /** The active sheet as a PDF, as it prints (null when nothing is open). */
+  printPdf(): Promise<Uint8Array> | null {
+    return this.view?.isOpen ? this.view.printPdf() : null;
+  }
+
   draw(darkPages: boolean): void {
     this.view?.draw(darkPages);
   }

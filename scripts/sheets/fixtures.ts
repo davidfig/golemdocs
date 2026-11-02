@@ -5,6 +5,7 @@
 // validation.xlsx: a Status column (B2:B20) that takes Open, Done or Blocked from a drop-down list, and a Score column
 // (C2:C20) that takes whole numbers from 1 to 10.
 
+import { setPrintNames } from '../../client/src/sheet/print.ts';
 import { emptyModel } from '../../client/src/sheet/solver.ts';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -163,6 +164,35 @@ export async function solverWorkbook(): Promise<Uint8Array> {
   return writeWorkbook(book);
 }
 
+/**
+ * print.xlsx: a sheet for each page setup, every cell saying where it is ("R5C2"), so each page's text says which cells
+ * it holds. print-excel.pdf is Excel's PDF of it. Long: 120 rows down. Wide: 40 rows of 20 columns. Fit: the same fitted
+ * to one landscape page. Breaks: manual breaks after row 20 and column C, row 1 repeated, gridlines, headings, a header
+ * and footer. Area: a print area (B2:H70) on A4 at 150%, over then down.
+ */
+export async function printWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  const names = ['Long', 'Wide', 'Fit', 'Breaks', 'Area'];
+  names.forEach((name, i) => book.sheets.push(new Worksheet(name, i + 1)));
+  const history = new History(book);
+  const fill = (sheet: number, rows: number, cols: number) =>
+    history.apply(sheet, { kind: 'paste', at: { row: 0, col: 0 }, rows: Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => `R${r + 1}C${c + 1}`)) });
+  fill(0, 120, 3);
+  fill(1, 40, 20);
+  fill(2, 40, 20);
+  fill(3, 60, 8);
+  fill(4, 80, 10);
+  const sheets = book.sheets as Worksheet[];
+  sheets[2].pageSetup = { ...sheets[2].pageSetup, orientation: 'landscape', fitToPage: true, fitWidth: 1, fitHeight: 1 };
+  sheets[3].pageSetup = { ...sheets[3].pageSetup, rowBreaks: [20], colBreaks: [3], gridLines: true, headings: true, header: '&CPage &P of &N', footer: '&L&A' };
+  sheets[4].pageSetup = { ...sheets[4].pageSetup, paperSize: 9, scale: 150, overThenDown: true };
+  book.names = setPrintNames(book.names, 3, 'Breaks', null, [0, 0], null);
+  book.names = setPrintNames(book.names, 4, 'Area', { r0: 1, c0: 1, r1: 69, c1: 7 }, null, null);
+  for (const s of sheets) s.dirty.layout = true;
+  book.dirty = true;
+  return writeWorkbook(book);
+}
+
 /** The data pivots.xlsx summarises: twelve sales (Sales!A1:D13). */
 export const PIVOT_SALES = [
   ['Region', 'Product', 'Month', 'Amount'],
@@ -312,6 +342,7 @@ export async function pivotShapesWorkbook(only?: string[], given?: PivotShape[])
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
   writeFileSync(path.join(FIXTURES, 'scenarios.xlsx'), await scenariosWorkbook());
   writeFileSync(path.join(FIXTURES, 'solver.xlsx'), await solverWorkbook());
+  writeFileSync(path.join(FIXTURES, 'print.xlsx'), await printWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots2.xlsx'), await pivotShapesWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots3.xlsx'), await pivotShapesWorkbook(undefined, PIVOT_OPTIONS));
   writeFileSync(path.join(FIXTURES, 'pivots.xlsx'), await pivotsWorkbook());

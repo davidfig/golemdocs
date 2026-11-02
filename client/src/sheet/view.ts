@@ -363,6 +363,14 @@ export class SheetEditorView {
   // --- Saving ---
 
   /** The workbook as .xlsx, and its new memory image. */
+  /** The active sheet as a PDF, as it prints: its pages from the worker, drawn in the app's fonts (sheetPdf.ts, loaded
+   * and the fonts' files loaded now). */
+  async printPdf(): Promise<Uint8Array> {
+    const reply = await this.ask<Extract<FromWorker, { t: 'print' }>>({ t: 'print', id: this.id(), sheet: this.sheetIndex });
+    const { printSheet } = await import('./sheetPdf.ts');
+    return printSheet(reply.data, this.fileName);
+  }
+
   async save(): Promise<{ xlsx: Uint8Array; image: Uint8Array; sha256: string }> {
     // A cell being typed into is left alone: what is saved is what was entered (an autosave must never end someone's typing).
     const reply = await this.ask<Extract<FromWorker, { t: 'saved' }>>({ t: 'save', id: this.id() });

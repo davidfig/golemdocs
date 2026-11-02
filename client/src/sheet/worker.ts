@@ -31,7 +31,7 @@ import { allows, listChoices, validationAt } from './validation.ts';
 import { resolveColor } from './model/theme.ts';
 import type { CellBox } from './formula/engine.ts';
 import { mapWorkbook, workbookImage } from './image.ts';
-import { cellTile, overviewTile, TileCache } from './tiles.ts';
+import { cellTile, printData, overviewTile, TileCache } from './tiles.ts';
 import type { BookInfo, CellContent, Changed, EditOp, FromWorker, SheetInfo, ToWorker } from './protocol.ts';
 import { loadSheet, readWorkbook } from './xlsx/read.ts';
 import { writeWorkbook } from './xlsx/write.ts';
@@ -333,6 +333,13 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
+      }
+      case 'print': {
+        await settled();
+        const sheet = book.sheets[m.sheet];
+        if (!sheet || !isWorksheet(sheet)) return;
+        const conditional = sheet.conditional.length && engine ? painterFor(m.sheet, sheet) : undefined;
+        return post({ t: 'print', id: m.id, data: printData(book, m.sheet, sheet, cache, conditional) });
       }
       case 'solverModel':
         return post({ t: 'solverModel', id: m.id, model: readSolverModel(book.names, m.sheet) });

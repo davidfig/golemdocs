@@ -2397,8 +2397,10 @@ async function download(): Promise<void> {
  * Download), then printed from a hidden frame, or opened in a new tab to look at first.
  */
 async function print(preview: boolean): Promise<void> {
-  if (!(await openAsDocument())) return;
-  const bytes = await worker.convert('pdf');
+  // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
+  const sheetPdf = sheetView.active ? sheetView.printPdf() : null;
+  if (!sheetPdf && !(await openAsDocument())) return;
+  const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
     if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));

@@ -542,7 +542,27 @@ genetic algorithm). Whole-number and binary cells go through branch and bound ov
 now. Tested on textbook problems with known answers (Excel's AppleScript cannot run Solver); Excel opening a model and
 solution saved here keeps them.
 
-**Next in M6**: print and PDF.
+**Printing** (`print.ts`, `sheetPdf.ts`; File › Print and Print Preview). A sheet's page setup is read and written as
+Excel keeps it (`readPageSetup`, `writePageSetup`: paper, orientation, scale or fit to so many pages, margins, gridlines,
+headings, centring, the header and footer's codes, first page number, page order, manual breaks; the elements' other
+attributes kept), with its print area and title rows and columns from its `_xlnm.Print_Area` and `_xlnm.Print_Titles`
+names (`printNames`, `setPrintNames`). `printLayout` cuts the print area (or the cells in use, from A1) into pages: the
+paper less its margins, the headings and the titles; at the scale asked for, or the largest whole percent (at most 100)
+that fits it into so many pages across and down; a page starting at each manual break; down then over, or over then down.
+Every page of `print.xlsx` comes out as Excel's own PDF of it has them (`print-excel.pdf`, compared page by page in
+`sheetPrint.test.ts`), with the sizes Excel for Mac prints default rows and columns at (14 and 53 points, where the screen
+has 15 and 48). The app prints at the sizes it shows, as Excel for Windows does, so Excel for Mac may fit a few more rows
+and fewer columns on a page.
+
+`printData` (`tiles.ts`) gathers what the pages need from the worker: the layout, the tiles of every cell on them (and the
+titles), and the column widths and row heights. `sheetToPdf` (loaded only when a sheet prints, with the app's fonts and
+their files) draws each page as the grid draws its cells (fills, data bars, gridlines when asked, borders, merged cells,
+text placed by `placeText` in the same fonts, embedded and subset as the document exporter does), scaled, the title rows
+and columns on every page past them, the headings in grey boxes, and the header and footer (`headerFooterText`: &L &C &R,
+&P, &N, &A, &F, &D, &T; font codes left out) in the margins. A workbook prints its active sheet: it is no longer opened
+as a document to print. Charts and pictures are not printed yet.
+
+**Next in M6**: the Page Setup dialog for sheets (print area and titles, page breaks).
 
 ### M5: data and formatting (done, 2026-11-01)
 

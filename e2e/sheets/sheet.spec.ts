@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MOD, expect, test } from '../files/fixtures';
 import { dropFile, readZip, waitForOpen } from '../files/helpers';
+import { PdfDocument, extractText } from '../../pdf/src/index.ts';
 
 interface SheetState {
   fromImage: boolean;
@@ -475,6 +476,36 @@ test('Sheet › What-If Analysis › Solver solves the model saved in a workbook
   await expect.poll(async () => (await state(page)).content.display).toBe('36');
   await page.keyboard.press(`${MOD}+z`);
   await expect.poll(async () => (await state(page)).content.display).toBe('0');
+});
+
+test('File › Print Preview prints the active sheet as its page setup says, and the workbook stays in the grid', async ({ app, page }) => {
+  // window.open is stubbed: the test reads the PDF the preview would open.
+  await page.addInitScript(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url?: string | URL) => {
+      (window as unknown as { __opened: string[] }).__opened.push(String(url));
+      return {} as Window;
+    }) as typeof window.open;
+  });
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'print.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/print.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'print.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await page.getByRole('tab', { name: 'Breaks' }).click();
+  await expect.poll(async () => (await state(page)).info?.name).toBe('Breaks');
+  await app.menu('File', 'Print Preview');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened.length), { timeout: 20_000 }).toBe(1);
+  const base64 = await page.evaluate(async () => {
+    const bytes = new Uint8Array(await (await fetch((window as unknown as { __opened: string[] }).__opened[0])).arrayBuffer());
+    let out = '';
+    for (const b of bytes) out += String.fromCharCode(b);
+    return btoa(out);
+  });
+  const pdf = PdfDocument.load(new Uint8Array(Buffer.from(base64, 'base64')));
+  // Breaks prints on four pages (a break after row 20 and after column C), its header on each.
+  expect(pdf.pageCount).toBe(4);
+  expect(extractText(pdf.pages[3]).items.map((t) => t.text).join(' ')).toContain('Page 4 of 4');
+  expect((await state(page)).info?.name).toBe('Breaks');
 });
 
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {

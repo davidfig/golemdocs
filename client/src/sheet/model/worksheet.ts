@@ -9,6 +9,8 @@ import type { Validation } from '../validation.ts';
 import type { Note, NoteParts } from '../notes.ts';
 import type { SheetProtection } from '../protection.ts';
 import type { Scenarios } from '../scenarios.ts';
+import { DEFAULT_PAGE_SETUP } from '../print.ts';
+import type { PageSetup } from '../print.ts';
 import type { SheetChart } from '../charts/model.ts';
 import type { SparklineGroup } from '../sparklines.ts';
 import type { PivotTable } from '../pivot.ts';
@@ -71,6 +73,8 @@ export class Worksheet {
   protection: SheetProtection | null = null;
   /** What-If › Scenario Manager: the sheet's scenarios (scenarios.ts), or null. */
   scenarios: Scenarios | null = null;
+  /** How it prints (print.ts): paper, margins, scale, headers and footers, breaks. */
+  pageSetup: PageSetup = { ...DEFAULT_PAGE_SETUP, margins: { ...DEFAULT_PAGE_SETUP.margins } };
   /** For the next write only: the sheet's `<legacyDrawing>` (the notes' VML drawing) made (its relationship) or taken
    * away (null), when the writer added or removed the notes' parts. */
   legacyDrawing: string | null | undefined = undefined;

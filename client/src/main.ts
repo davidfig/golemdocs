@@ -2295,9 +2295,9 @@ async function openShared(id: string): Promise<void> {
       pendingNotice = t('app.sharedGone');
       return;
     }
-    // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts). It takes this page's
-    // place in the history, so Back goes to where they chose it from.
-    if (doc.role === 'viewer') return location.replace(`/view/?doc=${encodeURIComponent(doc.id)}`);
+    // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts), at the share's own address
+    // rather than the document's id. It takes this page's place in the history, so Back goes to where they chose it from.
+    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view/?s=${encodeURIComponent(doc.viewToken)}`);
     setStatus(t('app.openingShared'));
     worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });

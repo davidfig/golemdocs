@@ -18,6 +18,8 @@ export interface CloudDocument {
   folderId?: string | null;
   /** What this user may do with it. Anything but 'owner' is a document someone shared with them. */
   role?: 'owner' | 'editor' | 'viewer';
+  /** A document shared with this user view-only: the share's own address for the viewer (/view/?s=<token>), not the document's id. */
+  viewToken?: string;
   /** Who shared it (documents shared with this user). */
   owner?: { name: string | null; email: string | null };
 }

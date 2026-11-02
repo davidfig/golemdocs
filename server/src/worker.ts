@@ -5,7 +5,7 @@ import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
 import { handleDownloads } from './downloads.ts';
-import { handleDocuments, ownStorage, resolveAccess, type DocumentRoute } from './documents.ts';
+import { handleDocuments, handleView, ownStorage, resolveAccess, type DocumentRoute } from './documents.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
@@ -98,6 +98,10 @@ const handler: ExportedHandler = {
         const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId, roomMatch[2] ? null : await pictureOf(env, userId));
         return joinRoom(env, docId, headers, !!roomMatch[2]);
       }
+
+      // GET /api/view/:token[/file]: a document shared view-only, by its share's own address (see handleView).
+      const viewMatch = /^\/api\/view\/([^/]+)(\/file)?$/.exec(path);
+      if (viewMatch) return await handleView(request, env, userId, viewMatch[1], !!viewMatch[2]);
 
       // GET /api/subscription: whether this user has paid for sync.
       if (path === '/api/subscription' && request.method === 'GET') return json({ ...((await subscriptionFor(env, userId)) ?? { status: 'none', active: false, currentPeriodEnd: null, cancelAtPeriodEnd: false }), sync: await hasSync(env, userId) });

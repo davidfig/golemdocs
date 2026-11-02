@@ -26,12 +26,12 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
 
 ## Shared view-only: the site's own host
 
-A document shared with someone as "Can view" (File › Share; `viewer` in `shares`) opens for them in the viewer, not the editor. `openShared` in `main.ts` sends them to `/view/?doc=<id>` (replacing the app's page in the history). That page is `client/view/index.html` and `src/viewer/share.ts`: it reads `/api/shared` for the document's name and role, fetches the file with the person's own session, and calls `mount` with the site's `/fonts/`, the system's light or dark appearance, and the title "<name> (view only)" in the bar. A link opens in a new tab. Someone who may edit it is sent back to the app; someone signed out is asked to sign in (through the app, which returns them here); a document no longer shared says so.
+A document shared with someone as "Can view" (File › Share; `viewer` in `shares`) opens for them in the viewer, not the editor. `openShared` in `main.ts` sends them to `/view/?s=<token>` (replacing the app's page in the history). The token is the share's own random address (`shares.view_token`, see [Server](server.md#sharing)), never the document's id: nothing on the page, in its address or in what the server sends it names the document. That page is `client/view/index.html` and `src/viewer/share.ts`: it reads `/api/view/<token>` for the document's name, fetches `/api/view/<token>/file` with the person's own session (the server answers only the person it was shared with), and calls `mount` with the site's `/fonts/`, the system's light or dark appearance, and the title "<name> (view only)" in the bar. A link opens in a new tab. Someone signed out is shown the sign-in buttons (`mountSignIn`), which return them to the same address. An unknown token, one that died (unshared, or made an editor, which opens in the app instead) and one that is someone else's all show that the document is no longer shared.
 
-- **Snapshot, refreshed on save, not live.** The page asks for the file again every 30 s and when the tab is looked at again, with `If-None-Match`; the server answers 304 while it is unchanged, so a check costs no download. A newer file is shown in place (`Viewer.reload`: the old pages stay until the new ones arrive, and the view keeps its place and zoom). While someone edits, the file is saved within seconds (an editor's autosave, or a shared room's snapshot about 5 s after an edit), so the viewer is at most about half a minute behind. A live view through the room (which has a `viewer` role) would need the room client, remote-edit rendering and handoff on the viewer's side, would differ by room kind, and would stop the viewer being one embeddable component. A snapshot that catches up is enough for reading.
+- **Snapshot, refreshed on save, not live.** The page asks for `/api/view/<token>/file` again every 30 s and when the tab is looked at again, with `If-None-Match`; the server answers 304 while it is unchanged, so a check costs no download. A newer file is shown in place (`Viewer.reload`: the old pages stay until the new ones arrive, and the view keeps its place and zoom). While someone edits, the file is saved within seconds (an editor's autosave, or a shared room's snapshot about 5 s after an edit), so the viewer is at most about half a minute behind. A live view through the room (which has a `viewer` role) would need the room client, remote-edit rendering and handoff on the viewer's side, would differ by room kind, and would stop the viewer being one embeddable component. A snapshot that catches up is enough for reading.
 - **The server enforces it, not the page.** A viewer share can't save, upload, rename, move, change history, add room pictures, share or delete: see [Server](server.md#sharing). The page never tries; if it did, it would be refused.
 - **Built with the site.** The client's `build` runs the viewer config a second time in `site` mode (`vite.viewer.config.ts`), which writes `view/index.html` and its chunks into the site's `dist/` beside the app, without touching the app's chunks or its `build.json`. In development Vite serves it at `/view/`.
-- **Who may share view-only** is who may share at all: the owner, while they have sync. No schema change was needed: `shares.role` already had `viewer`.
+- **Who may share view-only** is who may share at all: the owner, while they have sync. The one schema change is the share's viewer address (`shares.view_token`).
 
 ## API
 
@@ -122,7 +122,7 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | File | |
 | --- | --- |
 | `client/viewer.html`, `client/src/viewer/main.ts` | The viewer page and its messages |
-| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view/?doc=<id>`) |
+| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view/?s=<token>`) |
 | `client/src/viewer/viewer.ts` | `mount`: rendering, input, the bar, `startLayoutWorker` |
 | `client/src/viewer/protocol.ts` | Message types, `linkForHost`, zoom steps, page numbers (pure; `client/test/viewer.test.ts`) |
 | `client/src/viewer/fonts.ts` | The font set the build bundles (pure; tested there too) |
@@ -130,7 +130,7 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | `client/vite.viewer.config.ts` | The viewer's build |
 | `client/src/layout/layoutClient.ts` | `openReadOnly`, `terminate`, the `fontBase` and `startWorker` options |
 | `e2e/viewer/viewer.spec.ts`, `e2e/viewer/sandbox.spec.ts` | The viewer page in the dev server; the built viewer sandboxed, in Chromium and WebKit |
-| `e2e/collab/share-view-only.spec.ts` | Sharing as Can view, opening it in the viewer, catching up with a save, refused writes |
+| `e2e/collab/share-view-only.spec.ts` | Sharing as Can view, opening it in the viewer under its token (no response names the document), catching up with a save, refused writes, a dead token |
 
 ## Related docs
 

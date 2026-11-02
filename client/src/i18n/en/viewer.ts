@@ -14,7 +14,6 @@ export const viewer = {
   'viewer.find': 'Find',
   'viewer.closeFind': 'Close Find',
   'viewer.findUnavailable': 'Find isn\'t available in a PDF\'s own pages yet.',
-  'viewer.signIn': 'Sign in',
   'viewer.signInToView': 'Sign in to see this document.',
   'viewer.viewOnlyTitle': '{name} (view only)',
 } as const;

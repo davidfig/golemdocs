@@ -2,10 +2,48 @@
 // neighbours, wrapped, or replaced by #### when a number does not fit, and cut at the edges it may not cross (whole
 // characters are left out, decision 5). Pure: the page gives each character's advance; this places them.
 
+import { MAYBE_EMOJI, emojiAt } from '@golemdocs/layout';
 import type { DrawStyle } from './protocol.ts';
 
 /** Space between a cell's edge and its text, in points (Excel's 3 pixels at 100%). */
 export const PAD = 2.25;
+
+/**
+ * Calls `each` for every unit of a text: a character, or a whole emoji sequence (a family, a flag, a keycap) given as
+ * `emoji`, which is drawn as one color glyph. `drawn` says whether a sequence has its glyph yet: one without it (its page
+ * still loading) is given character by character, so it shows as text until its glyph comes.
+ */
+export function eachUnit(text: string, each: (cp: number, emoji: string | undefined) => void, drawn: (emoji: string) => boolean = () => true): void {
+  if (!MAYBE_EMOJI.test(text)) {
+    for (const ch of text) each(ch.codePointAt(0)!, undefined);
+    return;
+  }
+  for (let i = 0; i < text.length; ) {
+    const cp = text.codePointAt(i)!;
+    const length = emojiAt(text, i);
+    if (length > 0) {
+      const emoji = text.slice(i, i + length);
+      if (drawn(emoji)) each(cp, emoji);
+      else for (const ch of emoji) each(ch.codePointAt(0)!, undefined);
+      i += length;
+      continue;
+    }
+    each(cp, undefined);
+    i += cp > 0xffff ? 2 : 1;
+  }
+}
+
+/** A text's units as strings (an emoji sequence whole), for breaking a word that is too long for its line. */
+export function units(text: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  eachUnit(text, (cp, emoji) => {
+    const length = emoji ? emoji.length : cp > 0xffff ? 2 : 1;
+    out.push(text.slice(i, i + length));
+    i += length;
+  });
+  return out;
+}
 
 export interface Box {
   x0: number;
@@ -15,8 +53,8 @@ export interface Box {
 }
 
 export interface PlacedLine {
-  /** Characters and where each starts, in points. */
-  chars: { cp: number; x: number }[];
+  /** Characters and where each starts, in points; an emoji sequence is one, its text in `emoji`. */
+  chars: { cp: number; x: number; emoji?: string }[];
   baseline: number;
   /** Where the line starts and ends, for underlines. */
   left: number;
@@ -26,6 +64,8 @@ export interface PlacedLine {
 export interface Measure {
   /** A character's advance, in ems. */
   advance(cp: number): number;
+  /** An emoji sequence's advance, in ems, or null while it has no glyph (it is then measured and drawn as its characters). */
+  emoji?(text: string): number | null;
   ascent: number;
   descent: number;
   /** Line height in ems (for wrapped text). */
@@ -38,9 +78,11 @@ export interface Measure {
  */
 export function placeText(text: string, style: DrawStyle, type: 'number' | 'text' | 'logical', box: Box, left: number, right: number, m: Measure, fill?: { char: string; at: number }): PlacedLine[] {
   const size = style.size;
+  const drawn = (emoji: string) => m.emoji?.(emoji) != null;
+  const advance = (cp: number, emoji: string | undefined) => (emoji ? m.emoji!(emoji)! : m.advance(cp)) * size;
   const width = (s: string) => {
     let w = 0;
-    for (const ch of s) w += m.advance(ch.codePointAt(0)!) * size;
+    eachUnit(s, (cp, emoji) => (w += advance(cp, emoji)), drawn);
     return w;
   };
   const indent = style.indent * 3 * m.advance(0x30) * size;
@@ -76,15 +118,18 @@ export function placeText(text: string, style: DrawStyle, type: 'number' | 'text
     if (h === 'right') x = box.x1 - PAD - indent - w;
     else if (h === 'center' || h === 'centerContinuous' || h === 'distributed') x = (box.x0 + box.x1 - w) / 2;
     else x = box.x0 + PAD + indent;
-    const chars: { cp: number; x: number }[] = [];
+    const chars: PlacedLine['chars'] = [];
     let at = x;
-    for (const ch of line) {
-      const cp = ch.codePointAt(0)!;
-      const advance = m.advance(cp) * size;
-      // Whole characters only, inside what the cell may reach.
-      if (at >= left - 0.01 && at + advance <= right + 0.01) chars.push({ cp, x: at });
-      at += advance;
-    }
+    eachUnit(
+      line,
+      (cp, emoji) => {
+        const w = advance(cp, emoji);
+        // Whole characters only, inside what the cell may reach.
+        if (at >= left - 0.01 && at + w <= right + 0.01) chars.push(emoji ? { cp, x: at, emoji } : { cp, x: at });
+        at += w;
+      },
+      drawn,
+    );
     out.push({ chars, baseline, left: Math.max(x, left), right: Math.min(at, right) });
   });
   return out;
@@ -102,9 +147,9 @@ export function wrap(text: string, width: number, measure: (s: string) => number
         line = '';
       }
       if (!line && measure(word.trimEnd()) > width) {
-        // Too long for a line on its own: as many characters as fit, then the rest.
+        // Too long for a line on its own: as many characters as fit, then the rest (an emoji sequence is never split).
         let piece = '';
-        for (const ch of word) {
+        for (const ch of units(word)) {
           if (piece && measure(piece + ch) > width) {
             out.push(piece);
             piece = '';

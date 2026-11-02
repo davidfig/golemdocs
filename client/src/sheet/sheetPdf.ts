@@ -5,13 +5,14 @@
 // Fonts are embedded as the document exporter embeds them (pdfExport.ts). Loaded only when a sheet is printed.
 
 import { PdfDocument } from '@golemdocs/pdf';
-import type { EmbeddedFont, PageDrawing, PdfFont } from '@golemdocs/pdf';
-import type { FontSet, ResolvedFont } from '@golemdocs/layout';
-import { FALLBACK_FAMILY } from '@golemdocs/layout';
+import type { EmbeddedFont, PageDrawing, PdfFont, PdfImage } from '@golemdocs/pdf';
+import type { FaceMetrics, FontSet, ResolvedFont } from '@golemdocs/layout';
+import { FALLBACK_FAMILY, MAYBE_EMOJI, addEmoji, emojiSequence } from '@golemdocs/layout';
 import { loadAppFonts } from '../formats/appFonts.ts';
+import { EmojiSprites, emojiBox } from '../formats/emojiSprites.ts';
 import { embeddable, lineRuns, pdfChar, standardName } from '../formats/pdfExport.ts';
 import type { PlacedGlyph } from '../formats/pdfExport.ts';
-import { PAD, placeText } from './cellText.ts';
+import { PAD, eachUnit, placeText } from './cellText.ts';
 import type { Box, Measure } from './cellText.ts';
 import { columnName } from './model/column.ts';
 import type { CellRange } from './model/worksheet.ts';
@@ -85,10 +86,52 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
     if (!s) standard.set(name, (s = pdf.standardFont(name)));
     return s;
   };
+  // Emoji: their pages loaded, and each sprite embedded once as a picture (with its alpha as a soft mask), as the document
+  // exporter does; a sequence no page has is written as its characters.
+  const pages0 = new Set<number>();
+  const texts = [...[...cells.values()].map((c) => c.text), ...(data.charts ?? []).flatMap((s) => s.texts.map((t) => t.text))].filter((t) => t && MAYBE_EMOJI.test(t));
+  for (const text of texts) addEmoji(text, pages0);
+  const emoji = new Map<string, { metrics: FaceMetrics; glyph: number; image: PdfImage | null }>();
+  if (pages0.size) {
+    await set.ensureEmoji(pages0);
+    const sprites = new EmojiSprites(set);
+    const embeddedImages = new Map<string, PdfImage | null>();
+    for (const text of texts) {
+      const found: string[] = [];
+      eachUnit(text, (_cp, e) => e && found.push(e));
+      for (const e of found) {
+        if (emoji.has(e)) continue;
+        const sequence = emojiSequence(e);
+        for (const font of set.emojiFonts()) {
+          const metrics = set.metrics(font.face);
+          const glyph = metrics ? metrics.sequence(sequence) : -1;
+          if (!metrics || glyph < 0) continue;
+          const key = `${metrics.face.atlas}#${glyph}`;
+          if (!embeddedImages.has(key)) {
+            const pixels = await sprites.pixels(metrics, glyph);
+            embeddedImages.set(key, pixels && pdf.embedPixels(pixels));
+          }
+          emoji.set(e, { metrics, glyph, image: embeddedImages.get(key)! });
+          break;
+        }
+      }
+    }
+    sprites.close();
+  }
+  /** Draws an emoji at pen position (x, baseline). */
+  const drawEmoji = (d: PageDrawing, e: string, x: number, baseline: number, size: number) => {
+    const found = emoji.get(e);
+    const box = found?.image && emojiBox(found.metrics, found.glyph, x, baseline, size);
+    if (box) d.image(found!.image!, box.x, box.y, box.width, box.height);
+  };
+  const emojiAdvance = (e: string) => {
+    const found = emoji.get(e);
+    return found ? found.metrics.advance(found.glyph) : null;
+  };
   const measureOf = (f: ResolvedFont): Measure | null => {
     const m = set.metrics(f.face);
     if (!m) return null;
-    return { advance: (cp) => m.advance(m.glyph(cp)), ascent: m.ascent, descent: m.descent, lineHeight: m.lineHeight };
+    return { advance: (cp) => m.advance(m.glyph(cp)), emoji: emojiAdvance, ascent: m.ascent, descent: m.descent, lineHeight: m.lineHeight };
   };
   /** Glyphs for placed text: each character's own glyph in an embedded font, else its WinAnsi stand-in. */
   const glyphs = (f: ResolvedFont, size: number, color: number, chars: { cp: number; x: number }[], baseline: number): PlacedGlyph[] => {
@@ -115,14 +158,18 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
     const m = set.metrics(f.face);
     if (!m) return;
     let width = 0;
-    const chars: { cp: number; x: number }[] = [];
-    for (const ch of text) {
-      const cp = ch.codePointAt(0)!;
-      chars.push({ cp, x: width });
-      width += m.advance(m.glyph(cp)) * size;
-    }
+    const chars: { cp: number; x: number; emoji?: string }[] = [];
+    eachUnit(
+      text,
+      (cp, e) => {
+        chars.push(e ? { cp, x: width, emoji: e } : { cp, x: width });
+        width += (e ? emojiAdvance(e)! : m.advance(m.glyph(cp))) * size;
+      },
+      (e) => emoji.has(e),
+    );
     const left = align === 'left' ? x : align === 'center' ? x - width / 2 : x - width;
-    writeText(d, glyphs(f, size, color, chars.map((c) => ({ ...c, x: c.x + left })), baseline).filter((g) => g.char !== ' '));
+    for (const c of chars) if (c.emoji) drawEmoji(d, c.emoji, c.x + left, baseline, size);
+    writeText(d, glyphs(f, size, color, chars.filter((c) => !c.emoji).map((c) => ({ ...c, x: c.x + left })), baseline).filter((g) => g.char !== ' '));
   };
 
   const colX = prefix(cols);
@@ -262,7 +309,8 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
       const color = cell.color ?? style.color;
       const placed = placeText(cell.text, style, cell.type, b, reachLeft, reachRight, measure, cell.fill);
       for (const line of placed) {
-        writeText(d, glyphs(f, style.size, color, line.chars.filter((c) => c.cp > 32), line.baseline));
+        for (const c of line.chars) if (c.emoji) drawEmoji(d, c.emoji, c.x, line.baseline, style.size);
+        writeText(d, glyphs(f, style.size, color, line.chars.filter((c) => c.cp > 32 && !c.emoji), line.baseline));
         const metrics = set.metrics(f.face)!;
         if (style.underline && line.chars.length) {
           const thick = Math.max(metrics.underlineThickness * style.size, 0.5);

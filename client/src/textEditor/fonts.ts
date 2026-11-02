@@ -117,8 +117,11 @@ export class MonoFonts {
     if (this.emojiAsked.has(text)) this.emojiFound.set(text, null);
     else {
       this.emojiAsked.add(text);
+      // Asked for again before the page comes, it is null; once the page is here those answers go, so it is looked up
+      // afresh (and is null for good only if no page has it).
       this.set.ensureEmoji([emojiPageKey(sequence)]).then(
         () => {
+          for (const [key, value] of this.emojiFound) if (value === null) this.emojiFound.delete(key);
           this.version++;
           this.onLoad();
         },

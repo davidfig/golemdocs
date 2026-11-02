@@ -3,7 +3,7 @@
 // fetched the first time a cell uses it; characters its font lacks come from its pages, then Calibri's, then the CJK pages,
 // the order documents use. Until something arrives it is left out, and `version` goes up when it comes.
 
-import { FALLBACK_FAMILY, FontSet, describeFace, isCjk } from '@golemdocs/layout';
+import { FALLBACK_FAMILY, FontSet, describeFace, emojiPageKey, emojiSequence, isCjk } from '@golemdocs/layout';
 import type { CjkLang, FaceMetrics, ResolvedFont } from '@golemdocs/layout';
 import type { AtlasLibrary, GpuFace } from '../webgl/text/gpuFace.ts';
 
@@ -86,6 +86,43 @@ export class CellFonts {
       this.asked.add(codePoint);
       this.queued.add(codePoint);
       if (!this.timer) this.timer = window.setTimeout(() => void this.fetch(font), 0);
+    }
+    return null;
+  }
+
+  private readonly emojiFound = new Map<string, CellGlyph | null>();
+  private readonly emojiAsked = new Set<string>();
+
+  /**
+   * The color glyph of an emoji (the text of one whole sequence, from `emojiAt`), or null while its page loads (`version`
+   * goes up when it comes) or if no page has it: then its characters are drawn one by one, as the text editor does.
+   */
+  emoji(text: string): CellGlyph | null {
+    const hit = this.emojiFound.get(text);
+    if (hit !== undefined) return hit;
+    const sequence = emojiSequence(text);
+    for (const font of this.set.emojiFonts()) {
+      const metrics = this.set.metrics(font.face)!;
+      const glyph = metrics.sequence(sequence);
+      if (glyph < 0) continue;
+      const face = this.atlases.define(describeFace(metrics));
+      const found = face ? { face, font, metrics, glyph, visible: metrics.visible[glyph] === 1, advance: metrics.advance(glyph) } : null;
+      this.emojiFound.set(text, found);
+      return found;
+    }
+    if (this.emojiAsked.has(text)) this.emojiFound.set(text, null);
+    else {
+      this.emojiAsked.add(text);
+      // Asked for again before the page comes (a cell measures, then places, its text), it is null; once the page is
+      // here those answers go, so it is looked up afresh (and is null for good only if no page has it).
+      const settle = () => {
+        for (const [key, value] of this.emojiFound) if (value === null) this.emojiFound.delete(key);
+        this.loaded();
+      };
+      this.set.ensureEmoji([emojiPageKey(sequence)]).then(settle, (e: unknown) => {
+        console.warn('emoji for cells did not load', e);
+        settle();
+      });
     }
     return null;
   }

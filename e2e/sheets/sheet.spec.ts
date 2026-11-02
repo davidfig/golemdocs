@@ -20,6 +20,7 @@ interface SheetState {
   sheets: string[];
   canUndo: boolean;
   canRedo: boolean;
+  emoji: { glyphs: number; ready: boolean };
 }
 
 const state = (page: Page): Promise<SheetState> => page.evaluate(() => (window as unknown as { sheetEditor: { state(): SheetState } }).sheetEditor.state());
@@ -788,4 +789,14 @@ test('opening it again from this browser maps its memory image', async ({ app, p
   await app.ready();
   await expect.poll(async () => (await state(page))?.info?.name, { timeout: 20_000 }).toBe('Cases');
   expect((await state(page)).fromImage).toBe(true);
+});
+
+test('emoji in cells show as color glyphs, a family or a flag as one', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  const text = 'Name,Mood\nAnn 👨‍👩‍👧,😀\nBob 🇫🇷,👍🏽\n';
+  await dropFile(page, { name: 'moods.csv', buffer: Buffer.from(text), mimeType: 'text/csv' });
+  await waitForOpen(app, 'moods.csv');
+  await expect.poll(async () => (await state(page)).loaded, { timeout: 20_000 }).toBe(true);
+  // Four emoji, each one glyph (the family's three people and joiners, the flag's two letters, the thumb and its tone).
+  await expect.poll(async () => (await state(page)).emoji, { timeout: 20_000 }).toEqual({ glyphs: 4, ready: true });
 });

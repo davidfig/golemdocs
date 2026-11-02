@@ -5,7 +5,7 @@
 // and kept in small caches, each with its own float64 origin so float32 stays exact a million rows down.
 
 import type { CellIcon } from './protocol.ts';
-import { GlyphList, RectList, packColor } from '@golemdocs/layout';
+import { GlyphList, RectList, isInvisible, packColor } from '@golemdocs/layout';
 import { CSS_PX_PER_POINT, Camera } from '../view/camera.ts';
 import { DARK_PAGES_GLSL, createProgram, uniforms } from '../webgl/program.ts';
 import { SYNTHETIC_EMBOLDEN, SYNTHETIC_SKEW } from '../webgl/gpuPage.ts';
@@ -15,7 +15,7 @@ import type { GpuFace } from '../webgl/text/gpuFace.ts';
 import { TextRenderer } from '../webgl/text/textRenderer.ts';
 import { MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
 import type { CellRange } from './model/worksheet.ts';
-import { PAD, placeText } from './cellText.ts';
+import { PAD, eachUnit, placeText } from './cellText.ts';
 import type { Measure } from './cellText.ts';
 import type { CellFonts } from './fonts.ts';
 import { HEADER_HEIGHT, OUTLINE_STEP, SheetGeometry } from './geometry.ts';
@@ -311,8 +311,26 @@ export class SheetRenderer {
     if (!font) return null;
     const metrics = this.fonts.metrics(font)!;
     let width = 0;
-    for (const ch of text) width += this.fonts.glyph(font, ch.codePointAt(0)!)?.advance ?? metrics.advance(-1);
+    eachUnit(
+      text,
+      (cp, emoji) => (width += (emoji ? this.fonts.emoji(emoji)?.advance : this.fonts.glyph(font, cp)?.advance) ?? (isInvisible(cp) ? 0 : metrics.advance(-1))),
+      (emoji) => this.fonts.emoji(emoji) !== null,
+    );
     return width * style.size;
+  }
+
+  /** How many emoji (color glyphs) the cell tiles built so far hold, and whether their atlases are in (for tests). */
+  emojiDrawn(): { glyphs: number; ready: boolean } {
+    let glyphs = 0;
+    let ready = true;
+    for (const entry of this.cellTiles.values()) {
+      for (const batch of entry.built?.text ?? []) {
+        if (!batch.face.color) continue;
+        glyphs += batch.count;
+        ready &&= batch.face.ready;
+      }
+    }
+    return { glyphs, ready };
   }
 
   rememberStyle(index: number, style: DrawStyle): void {
@@ -409,20 +427,28 @@ export class SheetRenderer {
       const font = this.fonts.font('Calibri', run.bold, false);
       const metrics = font && this.fonts.metrics(font);
       if (!font || !metrics) continue;
+      // A character, or an emoji sequence as one color glyph (its characters until its page comes).
+      const drawn = (emoji: string) => this.fonts.emoji(emoji) !== null;
+      const glyphOf = (cp: number, emoji: string | undefined) => (emoji ? this.fonts.emoji(emoji) : this.fonts.glyph(font, cp));
+      const advanceOf = (cp: number, emoji: string | undefined) => (glyphOf(cp, emoji)?.advance ?? (isInvisible(cp) ? 0 : 0.5)) * run.size;
       let width = 0;
-      for (const ch of run.text) width += (this.fonts.glyph(font, ch.codePointAt(0)!)?.advance ?? 0.5) * run.size;
+      eachUnit(run.text, (cp, emoji) => (width += advanceOf(cp, emoji)), drawn);
       let x = run.align === 'left' ? run.x : run.align === 'right' ? run.x - width : run.x - width / 2;
       const baseline = run.y + ((metrics.ascent - metrics.descent) * run.size) / 2;
       const color = packColor(run.color);
-      for (const ch of run.text) {
-        const glyph = this.fonts.glyph(font, ch.codePointAt(0)!);
-        if (glyph?.visible) {
-          let list = lists.get(glyph.face);
-          if (!list) lists.set(glyph.face, (list = new GlyphList(glyph.font, glyph.metrics)));
-          list.push(x, baseline, run.size, glyph.glyph, color);
-        }
-        x += (glyph?.advance ?? 0.5) * run.size;
-      }
+      eachUnit(
+        run.text,
+        (cp, emoji) => {
+          const glyph = glyphOf(cp, emoji);
+          if (glyph?.visible) {
+            let list = lists.get(glyph.face);
+            if (!list) lists.set(glyph.face, (list = new GlyphList(glyph.font, glyph.metrics)));
+            list.push(x, baseline, run.size, glyph.glyph, color);
+          }
+          x += advanceOf(cp, emoji);
+        },
+        drawn,
+      );
     }
     const text = [...lists].map(([face, list]) => new TextBatch(face, { skew: 0, embolden: 0 }, list.buffer, list.count, scene.x, scene.y));
     return { scene, fontsVersion: this.fonts.version, triangles, text };
@@ -702,7 +728,8 @@ export class SheetRenderer {
       if (!font) continue;
       const metrics = this.fonts.metrics(font)!;
       const measure: Measure = {
-        advance: (cp) => this.fonts.glyph(font, cp)?.advance ?? metrics.advance(-1),
+        advance: (cp) => this.fonts.glyph(font, cp)?.advance ?? (isInvisible(cp) ? 0 : metrics.advance(-1)),
+        emoji: (text) => this.fonts.emoji(text)?.advance ?? null,
         ascent: metrics.ascent,
         descent: metrics.descent,
         lineHeight: metrics.lineHeight,
@@ -713,13 +740,16 @@ export class SheetRenderer {
       const skew = font.syntheticItalic ? SYNTHETIC_SKEW : 0;
       const embolden = font.syntheticBold ? SYNTHETIC_EMBOLDEN : 0;
       for (const line of placeText(cell.text, style, cell.type, box, reachLeft, reachRight, measure, cell.fill)) {
-        for (const { cp, x: gx } of line.chars) {
+        for (const { cp, x: gx, emoji } of line.chars) {
           if (cp <= 32) continue;
-          const glyph = this.fonts.glyph(font, cp);
+          const glyph = emoji ? this.fonts.emoji(emoji) : this.fonts.glyph(font, cp);
           if (!glyph?.visible) continue;
-          const key = `${glyph.face.id}:${skew}:${embolden}`;
+          // An emoji is a picture: never slanted or thickened for a style its font has no face for.
+          const s = emoji ? 0 : skew;
+          const e = emoji ? 0 : embolden;
+          const key = `${glyph.face.id}:${s}:${e}`;
           let entry = lists.get(key);
-          if (!entry) lists.set(key, (entry = { face: glyph.face, list: new GlyphList(glyph.font, glyph.metrics), skew, embolden }));
+          if (!entry) lists.set(key, (entry = { face: glyph.face, list: new GlyphList(glyph.font, glyph.metrics), skew: s, embolden: e }));
           entry.list.push(gx - originX, line.baseline - originY, style.size, glyph.glyph, color);
         }
         if (style.underline && line.chars.length) {

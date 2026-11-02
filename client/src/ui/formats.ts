@@ -141,9 +141,6 @@ const WEB: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   codeBlocks: true,
 };
 
-/** A grid of text: tables and nothing else. */
-const GRID: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, tables: true };
-
 const MARKUP_MARKS: Mark[] = ['bold', 'italic', 'code', 'superscript', 'subscript'];
 
 /** What the lightweight markup formats (LaTeX, AsciiDoc, reStructuredText, Org) can express: structure and simple marks. */
@@ -253,8 +250,9 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     codeBlocks: true,
     horizontalRule: true,
   },
+  // CSV and TSV are edited in the grid too (see ../sheet/delimited.ts).
   csv: {
-    ...GRID,
+    ...SHEET,
     kind: 'csv',
     get label() {
       return t('menus.format.csv');
@@ -263,7 +261,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     mime: 'text/csv',
   },
   tsv: {
-    ...GRID,
+    ...SHEET,
     kind: 'tsv',
     get label() {
       return t('menus.format.tsv');
@@ -321,7 +319,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
 };
 
 /** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
-export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'xlsx', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
 
 /** What a picture can be converted to: the picture types, and the document types that can hold it. */
 export const PICTURE_CONVERT_ORDER: DocumentKind[] = ['png', 'jpeg', 'webp', 'svg', 'svgz', 'docx', 'pdf'];
@@ -340,7 +338,7 @@ export const FORMAT_GROUPS: { id: 'popular' | 'documents' | 'web' | 'data' | 'ma
   { id: 'popular', kinds: ['docx', 'pdf', 'html', 'md', 'txt'] },
   { id: 'documents', kinds: ['odt', 'rtf'] },
   { id: 'web', kinds: ['epub', 'fb2', 'mhtml'] },
-  { id: 'data', kinds: ['csv', 'tsv'] },
+  { id: 'data', kinds: ['xlsx', 'csv', 'tsv'] },
   { id: 'markup', kinds: ['tex', 'typst', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'docbook', 'jats', 'opml'] },
   { id: 'images', kinds: ['png', 'jpeg', 'webp'] },
   { id: 'vector', kinds: ['svg', 'svgz'] },

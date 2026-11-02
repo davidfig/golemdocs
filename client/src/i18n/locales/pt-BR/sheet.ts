@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': 'Varp',
   'sheet.pivot.ok': 'OK',
   'sheet.pivot.cancel': 'Cancelar',
+  'sheet.csvLossy': 'Salvo como {format}: apenas os valores da planilha ativa são mantidos (não as fórmulas, outras planilhas, gráficos e formatação). Para mantê-los, converta-o em uma Pasta de Trabalho do Excel.',
   'sheet.op.setPrintArea': 'Definir Área de Impressão',
   'sheet.op.clearPrintArea': 'Limpar Área de Impressão',
   'sheet.op.insertPageBreak': 'Inserir Quebra de Página',

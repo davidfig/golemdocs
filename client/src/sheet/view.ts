@@ -40,6 +40,7 @@ import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
 import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
+import type { DelimitedKind } from './delimited.ts';
 import './view.css';
 
 /** A row of filter buttons: the AutoFilter's, a table's (`table`), or a pivot field's button (one cell, `pivot`). */
@@ -301,15 +302,16 @@ export class SheetEditorView {
   // --- Opening and closing ---
 
   /** Opens a workbook: the file's bytes, and its memory image if one was kept. */
-  open(name: string, bytes: Uint8Array, image: Uint8Array | null): void {
+  open(name: string, bytes: Uint8Array, image: Uint8Array | null, format?: DelimitedKind): void {
     this.close();
     this.name = name;
+    this.lossNoted = false;
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.receive(e.data);
     this.worker.onerror = (e) => this.deps.notify(t('app.openFailed', { message: e.message }));
     const buffer = bytes.slice().buffer;
     const imageBuffer = image ? image.slice().buffer : null;
-    this.send({ t: 'open', name, bytes: buffer, image: imageBuffer }, imageBuffer ? [buffer, imageBuffer] : [buffer]);
+    this.send({ t: 'open', name, bytes: buffer, image: imageBuffer, format }, imageBuffer ? [buffer, imageBuffer] : [buffer]);
     this.el.hidden = false;
     this.progress = t('sheet.opening');
     this.showStatus();
@@ -364,7 +366,6 @@ export class SheetEditorView {
 
   // --- Saving ---
 
-  /** The workbook as .xlsx, and its new memory image. */
   /** The active sheet's top left as a thumbnail picture (a file card's), or null. */
   async thumbnail(): Promise<Blob | null> {
     const reply = await this.ask<Extract<FromWorker, { t: 'thumbnail' }>>({ t: 'thumbnail', id: this.id(), sheet: this.sheetIndex }).catch(() => null);
@@ -379,10 +380,30 @@ export class SheetEditorView {
     return printSheet(reply.data, this.fileName);
   }
 
-  async save(): Promise<{ xlsx: Uint8Array; image: Uint8Array; sha256: string }> {
+  /** A cell of the active sheet, as typed and as shown. */
+  async cellContent(row: number, col: number): Promise<{ input: string; display: string } | null> {
+    const reply = await this.ask<Extract<FromWorker, { t: 'cell' }>>({ t: 'cell', id: this.id(), sheet: this.sheetIndex, row, col }).catch(() => null);
+    return reply ? { input: reply.content.input, display: reply.content.display } : null;
+  }
+
+  /** The workbook written as another of the grid's formats (File › Convert To). */
+  async saveAs(format: 'xlsx' | DelimitedKind): Promise<Uint8Array> {
+    const reply = await this.ask<Extract<FromWorker, { t: 'savedAs' }>>({ t: 'saveAs', id: this.id(), format });
+    return new Uint8Array(reply.file);
+  }
+
+  /** A CSV or TSV file was told it keeps only the active sheet's values (said once, the first save that leaves something out). */
+  private lossNoted = false;
+
+  /** The file as it is now (.xlsx, or the CSV or TSV it was), and its new memory image (empty for CSV and TSV). */
+  async save(): Promise<{ file: Uint8Array; image: Uint8Array; sha256: string }> {
     // A cell being typed into is left alone: what is saved is what was entered (an autosave must never end someone's typing).
     const reply = await this.ask<Extract<FromWorker, { t: 'saved' }>>({ t: 'save', id: this.id() });
-    return { xlsx: new Uint8Array(reply.xlsx), image: new Uint8Array(reply.image), sha256: reply.sha256 };
+    if (reply.lossy && !this.lossNoted) {
+      this.lossNoted = true;
+      this.deps.notify(t('sheet.csvLossy', { format: reply.lossyFormat ?? 'CSV' }));
+    }
+    return { file: new Uint8Array(reply.file), image: new Uint8Array(reply.image), sha256: reply.sha256 };
   }
 
   // --- Drawing ---
@@ -2128,6 +2149,11 @@ export class SheetEditorView {
 
   debugState(): unknown {
     return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, sparklines: Math.round(this.charts.sparklines?.points.reduce((a, b) => a + b, 0) ?? 0), chartBoxes: this.charts.scenes.map((s) => [Math.round(s.x), Math.round(s.y), Math.round(s.width), Math.round(s.height)]), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0 };
+  }
+
+  /** The active sheet's size (rows and columns in use), for the status bar; null until it is known. */
+  get size(): { rows: number; columns: number } | null {
+    return this.info && !this.progress ? { rows: this.info.rows, columns: this.info.cols } : null;
   }
 
   /** The point (CSS pixels on the canvas) at the middle of a cell, for tests. */

@@ -20,6 +20,8 @@
 - Charts in workbooks show over their cells: column and bar, line, area, pie, doughnut and scatter charts, with their titles, legends and axes. They change as their data does, and move with their cells when rows and columns are inserted or deleted. Insert › Chart makes a chart of the selected cells; click a chart to pick it, drag it to move it or its corners to resize it, press Delete to remove it, or right-click it to change its type, legend or title, or its series and categories with Select Data. A chart changed this way keeps the formatting it had in Excel.
 - Sparklines in workbooks show in their cells: lines, columns and win/loss, with their high, low and negative points marked, and they move with their cells. Insert › Sparklines adds them to the selected rows, and Clear Sparklines takes them away.
 - Insert › PivotTable makes a pivot table of the selected cells on a new sheet: choose its rows, columns, values (sum, count, average and more) and filters in the field list. Right-click a pivot table to change its fields or refresh it from its data. Pivot tables are laid out as Excel lays them out. They are drawn in their pivot style (shaded headers and grand totals, bold outer items, indented inner ones), as in Excel. The field list sets a pivot table's layout (compact, outline or tabular), where its subtotals go and which grand totals it shows, and a pivot table's Row Labels and Column Labels buttons sort a field or choose which of its items to show.
+- CSV and TSV files open in the spreadsheet grid at every size, and are saved back as the same files: unchanged rows stay exactly as they were.
+- File › Convert To › Excel Workbook turns a document's first table into a workbook, and a workbook converts to and from CSV and TSV without leaving the grid.
 - A workbook's card in File › Open shows the top of its sheet.
 - A workbook in your account is edited on one device at a time: open it on another computer or share it, and the others see it read-only, updated each time it is saved, and can take it over.
 - Sheet › What-If Analysis › Goal Seek finds the value of a cell that brings a formula to the value you want.
@@ -33,6 +35,8 @@
 ### Fixed
 
 - Workbooks saved by programs that don't calculate formulas showed empty cells where the formulas were; they are now calculated when opened.
+- An Excel workbook synced from the desktop folder opened as a document holding only its first sheet's table; it now opens as the workbook.
+- Pasting a hundred thousand rows or more into a sheet failed.
 
 ## 0.30.1 - 2026-10-31
 

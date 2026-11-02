@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': '분산',
   'sheet.pivot.ok': '확인',
   'sheet.pivot.cancel': '취소',
+  'sheet.csvLossy': '{format}(으)로 저장했습니다: 활성 시트의 값만 유지됩니다(수식, 다른 시트, 차트, 서식은 유지되지 않음). 유지하려면 Excel 통합 문서로 변환하세요.',
   'sheet.op.setPrintArea': '인쇄 영역 설정',
   'sheet.op.clearPrintArea': '인쇄 영역 해제',
   'sheet.op.insertPageBreak': '페이지 나누기 삽입',

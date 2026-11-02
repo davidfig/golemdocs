@@ -132,6 +132,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': 'Vous modifiez désormais en {label}. Le document conserve tout le reste ; seul le téléchargement d’un fichier {extension} omet toute la mise en forme, les tableaux et les images.',
   'app.switchedHtml': 'Vous modifiez désormais en {label}. Le document conserve tout le reste ; seul le téléchargement d’un fichier {extension} omet la mise en page, les en-têtes et pieds de page, les commentaires et les images intégrées.',
   'app.switchedLossless': 'Vous modifiez désormais en {label}. Rien n’a été perdu.',
+  'app.switchedXlsx': 'Vous modifiez maintenant un classeur Excel : le premier tableau du document est sa feuille. Le reste du document n’est pas dans le classeur.',
   'app.unsupportedFormat': '{label} n’est pas encore pris en charge',
   'app.cannotOpenFormat': 'Impossible d’ouvrir {label}',
   'app.unsupportedOpen': 'L’ouverture des fichiers {kind} n’est pas encore prise en charge ({name})',

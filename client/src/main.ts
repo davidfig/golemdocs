@@ -393,7 +393,7 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
+type OpenOptions = { delimited?: 'csv' | 'tsv'; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -502,6 +502,24 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   // A workbook is edited in the spreadsheet editor (`asDocument`: its active sheet as a table, for printing and converting).
   if (source.kind === 'xlsx' && !options.asDocument) {
     void openSheet(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
+  // A CSV or TSV saved as a document, as they all were before they opened in the grid (its name says what it is edited as):
+  // its table becomes the file, opened in the grid and saved as that from now on.
+  if (source.kind === 'wdoc' && /\.(csv|tsv|tab)$/i.test(source.name) && !options.asDocument && !options.wdocChecked) {
+    const latest = openTicket();
+    void import('./formats/wdocDelimited.ts')
+      .then(({ delimitedFromWdoc }) => delimitedFromWdoc(new Uint8Array(source.bytes)))
+      .then((file) => {
+        if (!latest()) return;
+        if (file) void openSheet(source.name, file.bytes, { ...options, delimited: file.kind });
+        else open(source, { ...options, wdocChecked: true });
+      });
+    return;
+  }
+  // CSV and TSV files too, at every size (saved back as they were: see sheet/delimited.ts).
+  if ((source.kind === 'csv' || source.kind === 'tsv') && !options.asDocument) {
+    void openSheet(source.name, new Uint8Array(source.bytes), { ...options, delimited: source.kind });
     return;
   }
   openRequests++;
@@ -850,7 +868,7 @@ async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> 
     client: crypto.randomUUID(),
     name: room.user,
     color: room.color,
-    serialize: async () => (await sheetView.save())?.xlsx ?? new Uint8Array(0),
+    serialize: async () => (await sheetView.save())?.file ?? new Uint8Array(0),
     changed: (state) => {
       const d = open();
       if (!d) return;
@@ -1299,7 +1317,7 @@ async function uploadShared(): Promise<void> {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
     const sheetSave = sheetView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).xlsx : null) ?? (await worker.save());
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).file : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -1938,7 +1956,7 @@ function saveInBrowser(): Promise<string | null> {
   // Asked for now, while the worker (or the large-text editor) still has this document.
   const large = textView.active;
   const sheetSave = sheetView.save();
-  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.xlsx) : worker.save();
+  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.file) : worker.save();
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -1951,7 +1969,12 @@ function saveInBrowser(): Promise<string | null> {
       const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
       linksAfter?.();
       // The workbook's memory image goes with the file it was made from.
-      if (sheetSave) void sheetSave.then((saved) => saveImage(info.id, saved.image)).catch(() => undefined);
+      if (sheetSave)
+        void sheetSave
+          .then(async (saved) => {
+            if (saved.image.length) await saveImage(info.id, saved.image);
+          })
+          .catch(() => undefined);
       doc.localId = info.id;
       rememberIgnored(doc);
       if (doc === current) {
@@ -2466,7 +2489,7 @@ async function download(): Promise<void> {
     const name = large ? textView.fileName : fileName();
     const type = large ? 'text/plain' : FORMATS[current.kind].mime;
     const sheetSave = sheetView.save();
-    const bytes = large ?? (sheetSave ? (await sheetSave).xlsx : await worker.convert(current.kind as Format));
+    const bytes = large ?? (sheetSave ? (await sheetSave).file : await worker.convert(current.kind as Format));
     if (await saveFile(name, bytes, type)) setStatus(t('app.downloaded', { name }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
@@ -2525,7 +2548,9 @@ function switchedNotice(to: Format): string {
  * the original pages are kept, and shown again as PDF (with a warning once the text is edited).
  */
 async function convertTo(to: DocumentKind): Promise<void> {
-  if (!(await openAsDocument())) return;
+  // Between the grid's own formats (Excel, CSV, TSV) a workbook stays in the grid: the spreadsheet editor writes it as the other.
+  const inGrid = sheetView.active && (to === 'xlsx' || to === 'csv' || to === 'tsv') ? sheetView.saveAs(to) : null;
+  if (!inGrid && !(await openAsDocument())) return;
   const from = current.kind;
   if (to === from) return;
   // A drawing's pictures are made from the drawing itself (at full resolution), as a document's pages are drawn into one.
@@ -2544,7 +2569,9 @@ async function convertTo(to: DocumentKind): Promise<void> {
   const doc = current;
   doc.unsavedSince = 0;
   const name = stem(current.name) + FORMATS[to].extensions[0];
-  const bytes = worker.save(to);
+  // A document becomes a workbook proper (its first table, a sheet), to edit in the grid; other formats keep the document in the app's own file.
+  const toWorkbook = !inGrid && to === 'xlsx';
+  const bytes = inGrid ?? (toWorkbook ? worker.convert('xlsx') : worker.save(to));
   bytes.catch(() => {});
   const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner: account?.id }));
   saving = done.catch(() => null);
@@ -2566,7 +2593,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName: current.name, kind: current.kind });
-  pendingNotice = switchedNotice(to);
+  pendingNotice = toWorkbook ? t('app.switchedXlsx') : switchedNotice(to);
 }
 
 /**
@@ -2941,14 +2968,14 @@ async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions =
   openRequests++;
   // Opened again in place of itself (watching, it was saved): it keeps its room.
   const keptRoom = options.keepRoom && sheetRoomHandle ? current.room : null;
-  const { opening } = beginOpen({ kind: 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared, keepRoom: keptRoom !== null });
+  const { opening } = beginOpen({ kind: options.delimited ?? 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared, keepRoom: keptRoom !== null });
   worker.close();
   sheetImageFor = opening;
   // A workbook opens at its first cell, at 100%: not where the last document was.
   camera.zoom = Math.min(Math.max(1, camera.minZoom), camera.maxZoom);
   camera.x = 0;
   camera.y = 0;
-  sheetView.open(name, bytes, image);
+  sheetView.open(name, bytes, image, options.delimited);
   sheetView.readOnly = options.shared?.role === 'viewer';
   if (keptRoom) {
     opening.room = keptRoom;
@@ -2983,7 +3010,8 @@ async function openAsDocument(): Promise<boolean> {
     const before = current;
     await saveNow();
     const ready = nextDocumentReady();
-    open({ kind: 'xlsx', name: before.name, bytes: saved.xlsx.slice().buffer }, { asDocument: true, localId: before.localId ?? undefined });
+    const kind = before.kind === 'csv' || before.kind === 'tsv' ? before.kind : 'xlsx';
+    open({ kind, name: before.name, bytes: saved.file.slice().buffer }, { asDocument: true, localId: before.localId ?? undefined });
     await ready;
     return true;
   }
@@ -5373,6 +5401,7 @@ Object.assign(window, {
   sheetEditor: {
     state: () => sheetView.debugState(),
     pointOf: (row: number, col: number) => sheetView.pointOf(row, col),
+    cell: (row: number, col: number) => sheetView.cell(row, col),
     screenOf: (x: number, y: number) => sheetView.screenOf(x, y),
     columnEdge: (col: number) => sheetView.columnEdge(col),
   },
@@ -5756,7 +5785,10 @@ function updateFooter(): void {
     return;
   }
   if (sheetView.active) {
-    footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: null });
+    // The sheet's size, as a CSV document's was shown.
+    const size = sheetView.size;
+    const words = size && { pages: 0, words: 0, charactersWithSpaces: 0, charactersWithoutSpaces: 0, paragraphs: 0, lines: 0, selection: false, table: size };
+    footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words, selection: null, picture: null, view: 'print', canFlow: false, text: null });
     return;
   }
   let picture = null;

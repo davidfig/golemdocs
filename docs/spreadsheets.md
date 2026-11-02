@@ -586,6 +586,19 @@ under the formula bar and column headers while a sheet is open.
 tile (A1:P64) with its column widths and row heights, drawn on a page-shaped canvas at page scale (fills, gridlines,
 borders, text in the browser's fonts), made after a save as a document's first page is (`makeThumbnail`).
 
+**CSV and TSV in the grid** (decision 2; `sheet/delimited.ts`). They open in the spreadsheet editor at every size (no
+longer as a Word table, or in the text editor from 8 MB): read into one sheet named after the file, each value as if
+typed (numbers, dates, formulas calculated), and each showing as written: a number the General format would show
+differently gets a format that keeps its zeros (1.50, 00123), and one a number cannot hold (20 digits) stays text, so a
+file written back unchanged is the same byte for byte (the delimiter, encoding, byte order mark, line endings, final line
+ending and each row's empty fields at its end are kept). Saving writes the active sheet's values as shown; the first save
+that leaves something out (formulas, other sheets, charts) says so once. They have no memory image. A `.wdoc` saved as CSV
+before (named `.csv`) is turned back into the file on opening (`formats/wdocDelimited.ts`); the vault keeps workbooks, CSV
+and TSV as the files themselves. The status bar shows a sheet's rows and columns.
+
+**Convert To.** Excel Workbook is a target for every document (its first table becomes the sheet). Between Excel, CSV and
+TSV a workbook stays in the grid: the sheet worker writes it as the other (`saveAs`), and it opens as that.
+
 **Search.** A workbook's search index is the page's (its active sheet's rows as shown, `segmentsFromBytes`): the server
 answers 422 for one without logging a failure, as for a PDF.
 

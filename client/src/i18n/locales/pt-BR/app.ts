@@ -132,6 +132,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': 'Agora editando como {label}. O documento mantém todo o resto; somente ao baixar um arquivo {extension} ficam de fora toda a formatação, as tabelas e as imagens.',
   'app.switchedHtml': 'Agora editando como {label}. O documento mantém todo o resto; somente ao baixar um arquivo {extension} ficam de fora a configuração de página, cabeçalhos e rodapés, comentários e imagens incorporadas.',
   'app.switchedLossless': 'Agora editando como {label}. Nada foi perdido.',
+  'app.switchedXlsx': 'Agora editando como Pasta de Trabalho do Excel: a primeira tabela do documento é a planilha. O restante do documento não está na pasta de trabalho.',
   'app.unsupportedFormat': '{label} ainda não é compatível',
   'app.cannotOpenFormat': 'Não é possível abrir {label}',
   'app.unsupportedOpen': 'Abrir arquivos {kind} ainda não é compatível ({name})',

@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': 'Var pop.',
   'sheet.pivot.ok': 'OK',
   'sheet.pivot.cancel': 'Annulla',
+  'sheet.csvLossy': 'Salvato come {format}: vengono conservati solo i valori del foglio attivo (non le formule, gli altri fogli, i grafici e la formattazione). Per conservarli, convertirlo in una cartella di lavoro di Excel.',
   'sheet.op.setPrintArea': 'Imposta area di stampa',
   'sheet.op.clearPrintArea': 'Cancella area di stampa',
   'sheet.op.insertPageBreak': 'Inserisci interruzione di pagina',

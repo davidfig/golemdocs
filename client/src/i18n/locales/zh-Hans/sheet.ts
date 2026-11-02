@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': '总体方差',
   'sheet.pivot.ok': '确定',
   'sheet.pivot.cancel': '取消',
+  'sheet.csvLossy': '已另存为 {format}：仅保留活动工作表的值（不保留公式、其他工作表、图表和格式）。要保留它们，请转换为 Excel 工作簿。',
   'sheet.op.setPrintArea': '设置打印区域',
   'sheet.op.clearPrintArea': '取消打印区域',
   'sheet.op.insertPageBreak': '插入分页符',

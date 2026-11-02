@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': 'VarianzN',
   'sheet.pivot.ok': 'OK',
   'sheet.pivot.cancel': 'Abbrechen',
+  'sheet.csvLossy': 'Als {format} gespeichert: Nur die Werte des aktiven Blatts bleiben erhalten (nicht seine Formeln, andere Blätter, Diagramme und Formatierung). Um sie zu behalten, wandeln Sie die Datei in eine Excel-Arbeitsmappe um.',
   'sheet.op.setPrintArea': 'Druckbereich festlegen',
   'sheet.op.clearPrintArea': 'Druckbereich aufheben',
   'sheet.op.insertPageBreak': 'Seitenumbruch einfügen',

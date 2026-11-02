@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': '分散',
   'sheet.pivot.ok': 'OK',
   'sheet.pivot.cancel': 'キャンセル',
+  'sheet.csvLossy': '{format} として保存しました: アクティブなシートの値のみが保持されます (数式、ほかのシート、グラフ、書式は保持されません)。保持するには Excel ブックに変換してください。',
   'sheet.op.setPrintArea': '印刷範囲の設定',
   'sheet.op.clearPrintArea': '印刷範囲のクリア',
   'sheet.op.insertPageBreak': '改ページの挿入',

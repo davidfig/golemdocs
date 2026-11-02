@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': 'Несмещённая дисперсия',
   'sheet.pivot.ok': 'ОК',
   'sheet.pivot.cancel': 'Отмена',
+  'sheet.csvLossy': 'Сохранено как {format}: сохраняются только значения активного листа (без формул, других листов, диаграмм и форматирования). Чтобы сохранить их, преобразуйте файл в книгу Excel.',
   'sheet.op.setPrintArea': 'Задать область печати',
   'sheet.op.clearPrintArea': 'Убрать область печати',
   'sheet.op.insertPageBreak': 'Вставить разрыв страницы',

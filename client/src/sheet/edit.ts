@@ -164,7 +164,8 @@ function rangeOf(op: EditOp): CellRange | null {
     case 'input':
       return op.range;
     case 'paste':
-      return { r0: op.at.row, c0: op.at.col, r1: op.at.row + Math.max(0, op.rows.length - 1), c1: op.at.col + Math.max(0, ...op.rows.map((r) => r.length - 1)) };
+      // Not Math.max(...rows): a paste of a hundred thousand rows would overflow the stack.
+      return { r0: op.at.row, c0: op.at.col, r1: op.at.row + Math.max(0, op.rows.length - 1), c1: op.at.col + op.rows.reduce((m, r) => Math.max(m, r.length - 1), 0) };
     case 'clear':
       return op.ranges[0] ?? null;
     default:

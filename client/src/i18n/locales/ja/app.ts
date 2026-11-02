@@ -126,6 +126,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': '{label} として編集しています。ドキュメントにはそれ以外の内容もすべて保持されます。{extension} ファイルとしてダウンロードした場合のみ、すべての書式、表、画像が省かれます。',
   'app.switchedHtml': '{label} として編集しています。ドキュメントにはそれ以外の内容もすべて保持されます。{extension} ファイルとしてダウンロードした場合のみ、ページ設定、ヘッダーとフッター、コメント、埋め込み画像が省かれます。',
   'app.switchedLossless': '{label} として編集しています。失われたものはありません。',
+  'app.switchedXlsx': 'Excel ブックとして編集しています: 文書の最初の表がシートになりました。文書の残りはブックに含まれません。',
   'app.unsupportedFormat': '{label} にはまだ対応していません',
   'app.cannotOpenFormat': '{label} を開けません',
   'app.unsupportedOpen': '{kind} ファイルを開くことにはまだ対応していません({name})',

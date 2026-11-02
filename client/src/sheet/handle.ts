@@ -40,9 +40,9 @@ export class SheetEditor {
     return this.view?.isOpen ? this.view : null;
   }
 
-  open(name: string, bytes: Uint8Array, image: Uint8Array | null): void {
+  open(name: string, bytes: Uint8Array, image: Uint8Array | null, format?: 'csv' | 'tsv'): void {
     if (!this.view) throw new Error('the spreadsheet editor is not loaded');
-    this.view.open(name, bytes, image);
+    this.view.open(name, bytes, image, format);
   }
 
   close(): void {
@@ -83,9 +83,14 @@ export class SheetEditor {
     return this.view?.isDragging ?? false;
   }
 
-  /** The workbook as .xlsx and its memory image (null when nothing is open). */
-  save(): Promise<{ xlsx: Uint8Array; image: Uint8Array; sha256: string }> | null {
+  /** The file (.xlsx, or the CSV or TSV it was) and its memory image (null when nothing is open). */
+  save(): Promise<{ file: Uint8Array; image: Uint8Array; sha256: string }> | null {
     return this.view?.isOpen ? this.view.save() : null;
+  }
+
+  /** The workbook written as another of the grid's formats (null when nothing is open). */
+  saveAs(format: 'xlsx' | 'csv' | 'tsv'): Promise<Uint8Array> | null {
+    return this.view?.isOpen ? this.view.saveAs(format) : null;
   }
 
   /** The active sheet's top left as a thumbnail (null when nothing is open). */
@@ -175,6 +180,11 @@ export class SheetEditor {
     return this.view?.footerInfo() ?? null;
   }
 
+  /** The active sheet's size, for the status bar (null when nothing is open or it is still opening). */
+  get size(): { rows: number; columns: number } | null {
+    return this.view?.isOpen ? this.view.size : null;
+  }
+
   debugState(): unknown {
     return this.view?.debugState() ?? null;
   }
@@ -185,6 +195,11 @@ export class SheetEditor {
 
   pointOf(row: number, col: number): { x: number; y: number } | null {
     return this.view?.pointOf(row, col) ?? null;
+  }
+
+  /** A cell of the active sheet, as typed and as shown (for the end-to-end tests). */
+  cell(row: number, col: number): Promise<{ input: string; display: string } | null> {
+    return this.view?.cellContent(row, col) ?? Promise.resolve(null);
   }
 
   screenOf(x: number, y: number): { x: number; y: number } | null {

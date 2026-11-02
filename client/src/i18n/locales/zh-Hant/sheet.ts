@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': '母體變異數',
   'sheet.pivot.ok': '確定',
   'sheet.pivot.cancel': '取消',
+  'sheet.csvLossy': '已儲存為 {format}：只保留使用中工作表的值（不保留公式、其他工作表、圖表和格式）。若要保留，請轉換為 Excel 活頁簿。',
   'sheet.op.setPrintArea': '設定列印範圍',
   'sheet.op.clearPrintArea': '清除列印範圍',
   'sheet.op.insertPageBreak': '插入分頁',

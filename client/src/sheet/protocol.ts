@@ -3,6 +3,7 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
+import type { DelimitedKind } from './delimited.ts';
 import type { PageSetup, PrintLayout } from './print.ts';
 import type { SolverModel } from './solver.ts';
 import type { SolverOutcome } from './whatIf.ts';
@@ -319,7 +320,8 @@ export interface Changed {
 }
 
 export type ToWorker =
-  | { t: 'open'; name: string; bytes: ArrayBuffer; image: ArrayBuffer | null }
+  /** A workbook (.xlsx), or a CSV or TSV file (`format`), opened into the grid. */
+  | { t: 'open'; name: string; bytes: ArrayBuffer; image: ArrayBuffer | null; format?: DelimitedKind }
   | { t: 'tiles'; id: number; sheet: number; keys: TileKey[] }
   | { t: 'cell'; id: number; sheet: number; row: number; col: number }
   | { t: 'styles'; id: number; ids: number[] }
@@ -345,6 +347,8 @@ export type ToWorker =
   | { t: 'thumbnail'; id: number; sheet: number }
   /** What the sheet prints: its pages, and the tiles and sizes of the cells on them. */
   | { t: 'print'; id: number; sheet: number }
+  /** The workbook written as another of the grid's formats (File › Convert To): .xlsx, or its active sheet as CSV or TSV. */
+  | { t: 'saveAs'; id: number; format: 'xlsx' | DelimitedKind }
   /** The sheet's Solver model. */
   | { t: 'solverModel'; id: number; sheet: number }
   /** Solver run on a model; the sheet is left as it was. */
@@ -377,6 +381,7 @@ export type FromWorker =
   | { t: 'scenarios'; id: number; scenarios: Scenarios | null; values: Record<string, string> }
   | { t: 'scenarioSummary'; id: number; rows: SummaryValue[][] | null }
   | { t: 'solverModel'; id: number; model: SolverModel | null }
+  | { t: 'savedAs'; id: number; file: ArrayBuffer }
   | { t: 'print'; id: number; data: PrintData }
   | { t: 'thumbnail'; id: number; tile: CellTile | null; cols: number[]; rows: number[] }
   | { t: 'pageSetup'; id: number; setup: PageSetup; area: CellRange | null; titleRows: [number, number] | null; titleCols: [number, number] | null }
@@ -385,7 +390,8 @@ export type FromWorker =
   | { t: 'changed'; id: number; changed: Changed }
   | { t: 'copy'; id: number; text: string; html: string }
   | { t: 'found'; id: number; at: { sheet: number; row: number; col: number } | null }
-  | { t: 'saved'; id: number; xlsx: ArrayBuffer; image: ArrayBuffer; sha256: string }
+  /** The file as it is now (.xlsx, or the CSV or TSV it was: `lossy` when that left something out), and its memory image (empty for CSV and TSV). */
+  | { t: 'saved'; id: number; file: ArrayBuffer; image: ArrayBuffer; sha256: string; lossy?: boolean; lossyFormat?: string }
   | { t: 'end'; id: number; at: { row: number; col: number } }
   | { t: 'error'; id: number; message: string };
 

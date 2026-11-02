@@ -7,6 +7,8 @@
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
 import { calculateDataTables, goalSeek, runSolver, scenarioSummaryRows } from './whatIf.ts';
 import { readSolverModel } from './solver.ts';
+import { readDelimited, writeDelimitedSheet } from './delimited.ts';
+import type { DelimitedFormat, DelimitedKind } from './delimited.ts';
 import { printNames } from './print.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
@@ -45,6 +47,8 @@ let history: History | null = null;
 let engine: Engine | null = null;
 /** The open file's fingerprint (what its image must match). */
 let source: { sha256: string; size: number } | null = null;
+/** A CSV or TSV file in the grid: how to write it back (null for a workbook). */
+let delimited: DelimitedFormat | null = null;
 /** A save under way: edits wait for it, so the file is written from one state of the workbook (tiles and reads go on). */
 let saving: Promise<unknown> | null = null;
 /** A recalculation under way (it gives way to tile requests): edits and saves wait for it. */
@@ -110,9 +114,24 @@ export function info(b: Workbook): BookInfo {
   };
 }
 
-async function open(bytes: Uint8Array, image: Uint8Array | null): Promise<void> {
+async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', format?: DelimitedKind): Promise<void> {
   const started = performance.now();
   source = await fingerprint(bytes);
+  delimited = null;
+  if (format) {
+    // A CSV or TSV file: read whole into one sheet, its formulas calculated; it has no memory image.
+    const read = readDelimited(bytes, name, format);
+    book = read.book;
+    delimited = read.format;
+    cache = new TileCache(book);
+    history = new History(book);
+    engine = new Engine(book);
+    engine.recalculateAll();
+    painters = new Map();
+    post({ t: 'opened', info: info(book), fromImage: false, ms: performance.now() - started });
+    post({ t: 'loaded', info: info(book) });
+    return;
+  }
   const mapped = await mapWorkbook(image, bytes, source).catch(() => null);
   // From the file: the workbook's structure first, then the active sheet as it streams in (shown as it comes), then the rest.
   book = mapped ?? (await readWorkbook(bytes, { structureOnly: true }));
@@ -274,7 +293,7 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
   try {
     if (m.t === 'open') {
       book = null;
-      await open(new Uint8Array(m.bytes), m.image ? new Uint8Array(m.image) : null);
+      await open(new Uint8Array(m.bytes), m.image ? new Uint8Array(m.image) : null, m.name, m.format);
       return;
     }
     if (!book || !cache || !history) throw new Error('no workbook is open');
@@ -359,6 +378,17 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
           if (sparklines) data.charts.push(sparklines);
         }
         return post({ t: 'print', id: m.id, data });
+      }
+      case 'saveAs': {
+        await settled();
+        let file: Uint8Array;
+        if (m.format === 'xlsx') file = await writeWorkbook(book, { pause: yieldToEvents, recalculate: engine?.incomplete ?? true });
+        else {
+          // A CSV or TSV file as it was (its encoding and line endings), or as Excel writes one.
+          const base: DelimitedFormat = delimited ?? { kind: m.format, delimiter: ',', encoding: 'utf-8', bom: false, lineEnding: '\r\n', trailingNewline: true, widths: [] };
+          file = writeDelimitedSheet(book, { ...base, kind: m.format, delimiter: m.format === 'tsv' ? '\t' : base.delimiter === '\t' ? ',' : base.delimiter }).bytes;
+        }
+        return post({ t: 'savedAs', id: m.id, file: file.buffer as ArrayBuffer }, [file.buffer as ArrayBuffer]);
       }
       case 'solverModel':
         return post({ t: 'solverModel', id: m.id, model: readSolverModel(book.names, m.sheet) });
@@ -455,6 +485,13 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       }
       case 'save': {
         await settled();
+        if (delimited) {
+          const written = writeDelimitedSheet(book, delimited);
+          source = await fingerprint(written.bytes);
+          for (const sheet of book.sheets) if (isWorksheet(sheet)) sheet.dirty = { cells: false, layout: false };
+          book.dirty = false;
+          return post({ t: 'saved', id: m.id, file: written.bytes.buffer as ArrayBuffer, image: new ArrayBuffer(0), sha256: source.sha256, lossy: written.lossy, lossyFormat: delimited.kind.toUpperCase() }, [written.bytes.buffer as ArrayBuffer]);
+        }
         // Our values are Excel's unless some formula uses what the engine cannot calculate yet: then Excel recalculates on opening.
         const writing = writeWorkbook(book, { pause: yieldToEvents, recalculate: engine?.incomplete ?? true });
         saving = writing.catch(() => undefined);
@@ -465,7 +502,7 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         for (const sheet of book.sheets) if (isWorksheet(sheet)) sheet.dirty = { cells: false, layout: false };
         book.dirty = false;
         book.styles.dirty = false;
-        post({ t: 'saved', id: m.id, xlsx: xlsx.buffer as ArrayBuffer, image: image.buffer as ArrayBuffer, sha256: source.sha256 }, [xlsx.buffer as ArrayBuffer, image.buffer as ArrayBuffer]);
+        post({ t: 'saved', id: m.id, file: xlsx.buffer as ArrayBuffer, image: image.buffer as ArrayBuffer, sha256: source.sha256 }, [xlsx.buffer as ArrayBuffer, image.buffer as ArrayBuffer]);
         return;
       }
     }

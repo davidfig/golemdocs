@@ -126,6 +126,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': '当前以 {label} 编辑。文档会保留其他所有内容；只有在下载 {extension} 文件时，才会丢失所有格式、表格和图片。',
   'app.switchedHtml': '当前以 {label} 编辑。文档会保留其他所有内容；只有在下载 {extension} 文件时，才会丢失页面设置、页眉和页脚、批注以及嵌入的图片。',
   'app.switchedLossless': '当前以 {label} 编辑。没有任何内容丢失。',
+  'app.switchedXlsx': '现在作为 Excel 工作簿编辑：文档的第一个表格成为其工作表。文档的其余部分不在工作簿中。',
   'app.unsupportedFormat': '尚不支持 {label}',
   'app.cannotOpenFormat': '无法打开 {label}',
   'app.unsupportedOpen': '尚不支持打开 {kind} 文件（{name}）',

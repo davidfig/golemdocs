@@ -126,6 +126,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': '이제 {label}(으)로 편집하고 있습니다. 문서는 나머지 내용을 모두 유지하며, {extension} 파일로 다운로드할 때만 모든 서식, 표 및 이미지가 빠집니다.',
   'app.switchedHtml': '이제 {label}(으)로 편집하고 있습니다. 문서는 나머지 내용을 모두 유지하며, {extension} 파일로 다운로드할 때만 페이지 설정, 머리글과 바닥글, 메모 및 포함된 그림이 빠집니다.',
   'app.switchedLossless': '이제 {label}(으)로 편집하고 있습니다. 손실된 내용은 없습니다.',
+  'app.switchedXlsx': '이제 Excel 통합 문서로 편집합니다: 문서의 첫 번째 표가 시트가 되었습니다. 문서의 나머지는 통합 문서에 없습니다.',
   'app.unsupportedFormat': '{label}은(는) 아직 지원되지 않습니다',
   'app.cannotOpenFormat': '{label}을(를) 열 수 없습니다',
   'app.unsupportedOpen': '{kind} 파일 열기는 아직 지원되지 않습니다({name})',

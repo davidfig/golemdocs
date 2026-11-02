@@ -132,6 +132,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': 'Sie bearbeiten jetzt als {label}. Das Dokument behält alles andere; nur beim Herunterladen einer {extension}-Datei gehen sämtliche Formatierungen, Tabellen und Bilder verloren.',
   'app.switchedHtml': 'Sie bearbeiten jetzt als {label}. Das Dokument behält alles andere; nur beim Herunterladen einer {extension}-Datei gehen Seitenaufbau, Kopf- und Fußzeilen, Kommentare und eingebettete Bilder verloren.',
   'app.switchedLossless': 'Sie bearbeiten jetzt als {label}. Es ist nichts verloren gegangen.',
+  'app.switchedXlsx': 'Sie bearbeiten jetzt als Excel-Arbeitsmappe: Die erste Tabelle des Dokuments ist ihr Blatt. Der Rest des Dokuments ist nicht in der Arbeitsmappe.',
   'app.unsupportedFormat': '{label} wird noch nicht unterstützt',
   'app.cannotOpenFormat': '{label} kann nicht geöffnet werden',
   'app.unsupportedOpen': 'Das Öffnen von {kind}-Dateien wird noch nicht unterstützt ({name})',

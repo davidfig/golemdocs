@@ -47,14 +47,14 @@ test('plain text: edited in the text editor, which has no formatting, tables or 
   expect(hasItem(await menuContents(app, 'Edit'), 'Find')).toBe(true);
 });
 
-test('CSV: a grid has tables and nothing else', async ({ app }) => {
+test('CSV: edited in the spreadsheet grid, with its menus', async ({ app }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('a.csv', 'a,b\n1,2\n'));
+  expect(await menuContents(app, 'Sheet')).not.toBeNull();
   const insert = await menuContents(app, 'Insert');
-  expect(hasItem(insert, 'Table')).toBe(true);
-  for (const item of ['Picture', 'Hyperlink', 'Code Block']) expect(hasItem(insert, item, true), item).toBe(false);
-  expect((await menuContents(app, 'Format'))?.items).toEqual(['Change Case']);
-  expect(await menuContents(app, 'Table')).not.toBeNull();
+  for (const item of ['Chart', 'PivotTable']) expect(hasItem(insert, item), item).toBe(true);
+  for (const item of ['Picture', 'Code Block']) expect(hasItem(insert, item, true), item).toBe(false);
+  expect(await menuContents(app, 'Table')).toBeNull();
 });
 
 test('markup formats (LaTeX) keep structure and simple marks only', async ({ app }) => {

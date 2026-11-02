@@ -153,6 +153,7 @@ export const sheet = {
   'sheet.pivot.fn.varp': 'Varp',
   'sheet.pivot.ok': 'OK',
   'sheet.pivot.cancel': 'Annuler',
+  'sheet.csvLossy': 'Enregistré en {format} : seules les valeurs de la feuille active sont conservées (pas ses formules, ni les autres feuilles, graphiques et mises en forme). Pour les garder, convertissez-le en classeur Excel.',
   'sheet.op.setPrintArea': 'Définir la zone d’impression',
   'sheet.op.clearPrintArea': 'Annuler la zone d’impression',
   'sheet.op.insertPageBreak': 'Insérer un saut de page',

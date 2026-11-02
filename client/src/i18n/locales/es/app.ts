@@ -132,6 +132,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': 'Ahora se edita como {label}. El documento conserva todo lo demás; solo al descargar un archivo {extension} se omiten todo el formato, las tablas y las imágenes.',
   'app.switchedHtml': 'Ahora se edita como {label}. El documento conserva todo lo demás; solo al descargar un archivo {extension} se omiten la configuración de página, los encabezados y pies de página, los comentarios y las imágenes incrustadas.',
   'app.switchedLossless': 'Ahora se edita como {label}. No se perdió nada.',
+  'app.switchedXlsx': 'Ahora se edita como libro de Excel: la primera tabla del documento es su hoja. El resto del documento no está en el libro.',
   'app.unsupportedFormat': '{label} aún no es compatible',
   'app.cannotOpenFormat': 'No se puede abrir {label}',
   'app.unsupportedOpen': 'Abrir archivos {kind} aún no es compatible ({name})',

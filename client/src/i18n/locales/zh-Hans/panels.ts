@@ -65,6 +65,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedWithMe': '与我共享',
   'panels.dashboard.newBlankLabel': '新建文档',
   'panels.dashboard.newBlank': '新建文档',
+  'panels.dashboard.newKind': '新建 {type}',
   'panels.dashboard.importLabel': '从此电脑导入文件',
   'panels.dashboard.importFolderLabel': '从此计算机导入文件夹',
   'panels.dashboard.import': '导入文件',

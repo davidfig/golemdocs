@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The PDF object model (ISO 32000-2 §7.3): the eight basic types plus indirect references.
 //
 // Arrays are plain JS arrays and numbers plain JS numbers; names are interned, so they

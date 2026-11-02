@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Shadings (§8.7.4) reduced to what a vector renderer can paint: axial and radial gradients as
 // color stops along a parameter, in the shading's own space with the matrix that places it on the
 // page. Function-based and mesh shadings (types 1 and 4 to 7) are not read: the caller leaves those out.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Text extraction: interprets a page's content (§9.4) to find every piece of shown text,
 // where it is, and how large, then joins the pieces into lines and words.
 

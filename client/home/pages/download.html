@@ -1,0 +1,25 @@
+      <article class="page">
+        <p class="kicker">{{download.kicker}}</p>
+        <h1>{{download.h1}}</h1>
+        <p class="lede">{{download.lede}}</p>
+        <div id="dl" hidden>
+          <div class="cta"><a class="btn primary big" id="dl-main"></a></div>
+          <p class="dl-meta" id="dl-version"></p>
+          <p class="dl-meta" id="dl-note" hidden>{{download.noteWindows}}</p>
+          <details class="dl-all">
+            <summary>{{download.other}}</summary>
+            <ul id="dl-list"></ul>
+          </details>
+        </div>
+        <p class="dl-meta" id="dl-soon" hidden>{{download.soon}}</p>
+        <span hidden id="dl-text" data-get="{{download.get}}" data-version="{{download.version}}" data-mac="{{download.mac}}" data-windows="{{download.windows}}" data-linux="{{download.linux}}"></span>
+
+        <h2>{{download.folder.h}}</h2>
+        <p class="text">{{download.folder.p}}</p>
+        <p class="note-small">{{sync.note}}</p>
+        <h2>{{download.phone.h}}</h2>
+        <p class="text">{{download.phone.p}}</p>
+        <h2>{{download.browser.h}}</h2>
+        <p class="text">{{download.browser.p}}</p>
+        <div class="cta"><a class="btn big" href="/">{{home.open}}</a></div>
+      </article>

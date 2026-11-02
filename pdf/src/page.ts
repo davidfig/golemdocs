@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A page of a document (§7.7.3.3): geometry with inherited attributes, content streams and
 // resources.
 

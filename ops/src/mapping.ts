@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Position maps: how an applied operation moves positions, and how to move positions and
 // operations through a sequence of them (rebasing pending edits over remote ones, keeping
 // undo history and selections valid while others edit).

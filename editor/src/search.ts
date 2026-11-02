@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Find and replace.
 import { type CommandResult, NO_CHANGE } from './types.ts';
 

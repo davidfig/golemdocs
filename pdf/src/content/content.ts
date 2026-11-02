@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Content streams (§7.8.2, §8.9.7): parsing into operations and writing them back.
 
 import { PdfDict, PdfName, type PdfObject } from '../core/objects.ts';

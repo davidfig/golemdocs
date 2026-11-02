@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Fonts chosen by name for text an edit sets or adds: one of the standard 14, or a font the app has (Arial, Calibri...) written
 // into the file from its font file. The caller supplies the bytes of a font file (`ApplyOptions.fontFile`, a plain lookup, so the
 // caller loads what edits need beforehand); without them the nearest standard font is used, as text always can be shown.

@@ -177,7 +177,8 @@ export class VaultService {
 
   /** Runs one sync now. `allowMassDelete` is for after the person confirmed a plan that was held back. */
   async syncNow(options: { allowMassDelete?: boolean } = {}): Promise<void> {
-    if (this.running || !this.status.root) return;
+    const root = this.status.root;
+    if (this.running || !root) return;
     this.running = true;
     this.progress({ phase: 'access' });
     try {
@@ -202,14 +203,14 @@ export class VaultService {
         await Promise.race([this.hooks.settled(), new Promise((resolve) => setTimeout(resolve, SETTLE_MS))]);
       }
       const account = this.account(); // signing out can happen while waiting
-      const report = await syncVault(realHost(this.bridge, this.codec, account), { ...options, progress: (p) => this.progress(p) });
+      const report = await syncVault(realHost(root, this.bridge, this.codec, account), { ...options, progress: (p) => this.progress(p) });
       // What the sync itself wrote is not a change to sync again.
       this.signature = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
       this.lastAccountLook = Date.now();
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
       this.set({ state, report, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
-      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed > 0) this.hooks.changed(report.touched);
+      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved > 0) this.hooks.changed(report.touched);
     } catch (error) {
       const offline = error instanceof TypeError || (error instanceof CloudError && error.status >= 500);
       this.set({ progress: undefined, state: offline ? 'offline' : error instanceof CloudError && error.status === 401 ? 'signedOut' : 'error', message: error instanceof Error ? error.message : String(error) });

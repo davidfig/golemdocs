@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // What a renderer needs to pick a substitute face for a PDF font: a family name, style flags,
 // and serif/monospace hints, from the font's name and descriptor.
 

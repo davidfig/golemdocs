@@ -1,11 +1,76 @@
 # What’s New in Golem Docs
 
-## 0.27.0 - Unreleased
+## 0.31.0 - Unreleased
 
 ### Added
 
 - Tools › Thesaurus (Shift+F7): look up words of the same meaning as the selected word, or the word at the caret, and replace it with one. Double-click a word in the list to look that one up in turn; Previous goes back. The thesaurus is in English.
 - Right-click a word for its synonyms: pick one to put it in place of the word, or choose Thesaurus… to see them all.
+
+## 0.30.1 - 2026-10-31
+
+### Changed
+
+- The website’s About page now says Golem Docs is open source, and that you can ask for a feature or send the code for it on GitHub.
+
+### Fixed
+
+- Taking over a PDF or picture someone else was editing could leave you with the copy from before their last change, so the next save would lose it. You now always get what they had.
+
+## 0.30.0 - 2026-10-31
+
+### Added
+
+- Golem Docs is open source. A new Open source page on the website explains why, and how you can use the app, run your own copy, or build on the code. The home page now leads with the editor and shows how to keep a second brain in plain files, with links between notes.
+
+### Changed
+
+- Menus, toolbars, dialogs and the rest of the app now use Atkinson Hyperlegible Next, a font designed so letters that look alike (I, l and 1; O and 0) are easy to tell apart. It looks the same on every computer and phone. Russian, Japanese, Korean and Chinese still use your system’s font.
+
+### Fixed
+
+- Saving a Markdown file no longer drops the titles of links and pictures (`![alt](picture.png "title")`) or rewrites their addresses: an address is saved the way it was written, with or without `<` `>`. Titles also become the link’s tooltip in Word.
+- A folder deleted or renamed in your vault folder (by another program, or from the command line) now disappears from your documents too, once nothing is left in it, instead of staying behind empty.
+
+## 0.29.0 - 2026-10-31
+
+### Added
+
+- Right-clicking in the documents view or the Files sidebar now offers the last three types of document you used (New Markdown, say) straight away, so you need not open the New document list. The full list is still there below them.
+
+### Changed
+
+- The toolbar’s New button, and New in the documents view, now show the icon of the type of document they make (the one you used last), and their tooltip names it.
+
+### Fixed
+
+- On a phone or tablet, opening the documents view no longer puts the cursor in the search box, so the keyboard stays closed until you tap it.
+
+## 0.28.0 - 2026-10-26
+
+### Added
+
+- The website’s ai and Pricing pages now explain how to use your documents on several computers for free: put your Golem Docs folder in iCloud Drive, Dropbox, OneDrive or Google Drive and choose it on each computer.
+
+### Changed
+
+- When a document was changed in two places before they could catch up (offline on a laptop, say, while an ai app edited it in your vault folder on another computer), the changes are now merged if they are in different paragraphs, instead of being kept as a conflicted copy. Changes to the same paragraph are still kept apart, and Version History has each side as it was.
+- A document you have open shows a change saved from your vault folder on another computer (by an ai app working there, say) as soon as it is saved, highlighted for a moment, and your next edit builds on it instead of being kept as a conflicted copy.
+
+### Fixed
+
+- A vault folder kept in iCloud Drive, Dropbox or a similar cloud drive and opened in Golem Docs on a second computer no longer has its files deleted. Each computer now keeps its own record of the folder. If a sync would delete most of the folder’s files, it now waits for you to confirm, as it already did when most files were missing.
+
+## 0.27.0 - 2026-10-24
+
+### Added
+
+- In the desktop app, Cmd+W (Ctrl+W on Windows) closes the open document, like File › Close.
+
+### Changed
+
+- The website has a new look, in every language: separate pages for using Golem Docs with your ai, every format it opens, pricing, a journal of what changed, and downloads, with a home page that shows the editor and an ai at work instead of describing them.
+- The Files sidebar is now open when you start, on a screen wide enough for it. Close it, or choose View › Files Sidebar, and it stays the way you left it.
 
 ## 0.26.0 - 2026-10-24
 

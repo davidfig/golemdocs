@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Collaboration: a central, ordered log of transactions, with clients editing optimistically.
 //
 // The server holds the log and a version (its length). A client applies its own edits at

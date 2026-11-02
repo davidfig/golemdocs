@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Open Packaging Conventions: the parts, content types and relationships inside a .docx.
 //
 // Part names here are ZIP entry names without a leading slash ("word/document.xml").

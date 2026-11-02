@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Scanning a page for what can be edited in place: each piece of shown text (with the glyphs it
 // is made of, so it can be shown again exactly), each image, each painted path and each form
 // XObject, with the index of the content operation that draws it. Everything is in the page's

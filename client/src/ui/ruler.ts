@@ -102,6 +102,11 @@ export class Ruler {
     this.handlers = handlers;
     this.canvas.setAttribute('aria-hidden', 'true');
     el.append(this.canvas);
+    // The UI font (--wm-font) can arrive after the first drawing: draw the numbers again in it.
+    document.fonts?.addEventListener('loadingdone', () => {
+      this.shown = '';
+      this.redraw();
+    });
     if (!handlers) return;
     this.canvas.addEventListener('pointerdown', (e) => this.down(e));
     this.canvas.addEventListener('pointermove', (e) => this.move(e));

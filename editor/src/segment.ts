@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Text segmentation for caret movement and selection: CJK-aware word boundaries and grapheme clusters.
  *

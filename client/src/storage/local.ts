@@ -51,6 +51,8 @@ const HISTORY = 'history';
 const HISTORY_DATA = 'historyData';
 // Documents deleted from this browser, kept for 30 days (see "Trash" below): their catalogue records by document id. Everything else about them (bytes, chunks, history, thumbnail) stays where it was.
 const TRASH = 'trash';
+// The last version a document and its cloud copy agreed on (see "Synced base" below), by document id: what a merge starts from.
+const BASES = 'bases';
 
 /** What is stored of a document kept as chunks. */
 export interface StoredManifest {
@@ -68,7 +70,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 7);
+      const request = indexedDB.open(DB_NAME, 8);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -88,6 +90,7 @@ function openDb(): Promise<IDBDatabase> {
           request.result.createObjectStore(HISTORY_DATA);
         }
         if (from < 7) request.result.createObjectStore(TRASH);
+        if (from < 8) request.result.createObjectStore(BASES);
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -227,7 +230,7 @@ async function letGo(tx: IDBTransaction, hashes: Iterable<string>): Promise<void
 
 /** Writes a document in one transaction: null (having written nothing) if a chunk the plan counted on is not there. */
 async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }, previous?: DueVersion | null): Promise<SavedInfo | null> {
-  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES], 'readwrite');
   const meta = tx.objectStore(META);
   const manifests = tx.objectStore(MANIFESTS);
   const existing = input.id ? ((await done(meta.get(input.id))) as SavedInfo | undefined) : undefined;
@@ -290,6 +293,8 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
   meta.put(info);
   if (write) write();
   else tx.objectStore(BYTES).put(own(view), id);
+  // A copy that has just come from the cloud is the cloud copy: what a later merge starts from.
+  if (cloud) keepBase(tx, id, plan ? null : view, cloud.updatedAt);
   await finished(tx);
   return info;
 }
@@ -308,9 +313,9 @@ export function saveFromCloud(input: WriteInput & { cloudId: string; cloudUpdate
  * Records that the saved copy as of `syncedAt` (its `updatedAt` when it was read for upload) is
  * what's in the cloud. Saves made while it was uploading stay out of sync. A `name` renames it.
  */
-export async function markSynced(id: string, sync: { cloudId: string; syncedAt: number; cloudUpdatedAt?: number; name?: string; syncedHashes?: readonly string[] }): Promise<void> {
+export async function markSynced(id: string, sync: { cloudId: string; syncedAt: number; cloudUpdatedAt?: number; name?: string; syncedHashes?: readonly string[]; base?: Uint8Array }): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, MANIFESTS], 'readwrite');
+  const tx = db.transaction([META, MANIFESTS, BASES], 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
   if (info) {
     // The chunks the cloud copy now has, for the next upload to leave out.
@@ -323,6 +328,8 @@ export async function markSynced(id: string, sync: { cloudId: string; syncedAt: 
       cloudSyncedAt: sync.syncedAt,
       ...(sync.cloudUpdatedAt !== undefined && { cloudUpdatedAt: sync.cloudUpdatedAt }),
     });
+    // The bytes the cloud copy now has (`base`: what was uploaded) are the next merge's starting point; without them the old one is out of date.
+    if (sync.cloudUpdatedAt !== undefined) keepBase(tx, id, sync.base ?? null, sync.cloudUpdatedAt);
   }
   await finished(tx);
 }
@@ -452,8 +459,9 @@ export async function deleteOwnedBy(owner: string): Promise<void> {
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH, BASES], 'readwrite');
   tx.objectStore(TRASH).delete(id);
+  tx.objectStore(BASES).delete(id);
   await forgetHistory(tx, id);
   await release(tx, id);
   tx.objectStore(META).delete(id);
@@ -470,7 +478,7 @@ export async function deleteSaved(id: string): Promise<void> {
  */
 export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES], 'readwrite');
   const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
   const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
   if (unchanged) {
@@ -480,6 +488,7 @@ export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> 
     tx.objectStore(BYTES).delete(seen.id);
     tx.objectStore(THUMBS).delete(seen.id);
     tx.objectStore(SEARCH).delete(seen.id);
+    tx.objectStore(BASES).delete(seen.id);
   }
   await finished(tx);
   return unchanged;
@@ -803,4 +812,53 @@ export async function restoreTrashedSaved(id: string, owner?: string): Promise<S
 export async function purgeTrashedSaved(id?: string): Promise<void> {
   const ids = id !== undefined ? [id] : (await trashedRecords()).map((r) => r.info.id);
   for (const one of ids) await deleteSaved(one);
+}
+
+// --- Synced base ----------------------------------------------------------------------------------------------------------
+// The bytes of the last version a document and its cloud copy agreed on (downloaded, or uploaded), and that version's `updatedAt` in
+// the cloud. When an upload finds the cloud copy changed elsewhere, a merge starts from these (see ../formats/merge.ts, ../library.ts):
+// without them the two versions can only be kept apart. Kept only for documents not kept as chunks, so it costs at most one copy of
+// each small document.
+
+export interface SyncedBase {
+  cloudUpdatedAt: number;
+  bytes: ArrayBuffer;
+}
+
+/** Records (or, with no bytes, forgets) a document's synced base, in a transaction that has BASES. */
+function keepBase(tx: IDBTransaction, id: string, bytes: Uint8Array | null, cloudUpdatedAt: number | undefined): void {
+  const store = tx.objectStore(BASES);
+  if (bytes && cloudUpdatedAt !== undefined && bytes.byteLength < CHUNK_MIN_FILE) store.put({ cloudUpdatedAt, bytes: own(bytes) } satisfies SyncedBase, id);
+  else store.delete(id);
+}
+
+export async function getSyncedBase(id: string): Promise<SyncedBase | null> {
+  const db = await openDb();
+  return ((await done(db.transaction(BASES).objectStore(BASES).get(id))) as SyncedBase | undefined) ?? null;
+}
+
+/**
+ * Replaces a document's copy here with `bytes` (a merge of it and the cloud copy), now based on the cloud copy at `cloudUpdatedAt`
+ * whose bytes are `base`: the next upload sends it on top of that version. Only if the copy is still the one the merge was made from
+ * (`seenUpdatedAt`) and is small enough not to be kept as chunks; false, having changed nothing, otherwise. What it replaces is kept in
+ * the document's history first, so a merge can always be undone.
+ */
+export async function rebaseSaved(id: string, change: { seenUpdatedAt: number; bytes: Uint8Array; base: Uint8Array; cloudUpdatedAt: number }): Promise<boolean> {
+  if (change.bytes.byteLength >= CHUNK_MIN_FILE) return false;
+  const db = await openDb();
+  const before = await getSaved(id);
+  if (!before || before.info.updatedAt !== change.seenUpdatedAt) return false;
+  await keepWhole(db, id, before.info, before.bytes);
+  const tx = db.transaction([META, BYTES, MANIFESTS, BASES], 'readwrite');
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  const chunked = (await done(tx.objectStore(MANIFESTS).get(id))) !== undefined;
+  if (!info || info.updatedAt !== change.seenUpdatedAt || chunked) {
+    await finished(tx);
+    return false;
+  }
+  tx.objectStore(META).put({ ...info, size: change.bytes.byteLength, updatedAt: Math.max(Date.now(), info.updatedAt + 1), cloudUpdatedAt: change.cloudUpdatedAt } satisfies SavedInfo);
+  tx.objectStore(BYTES).put(own(change.bytes), id);
+  keepBase(tx, id, change.base, change.cloudUpdatedAt);
+  await finished(tx);
+  return true;
 }

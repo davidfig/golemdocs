@@ -307,7 +307,8 @@ export class Chrome {
     r.add(
       a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
       a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
-      a('file.close', t('chrome.file.close'), { kind: 'close' }, { tooltip: t('chrome.file.close.tip') }),
+      // Only the desktop app gets Mod+W: in a browser the key closes the tab, and a page can't take it.
+      a('file.close', t('chrome.file.close'), { kind: 'close' }, { tooltip: t('chrome.file.close.tip'), ...(isDesktopApp() && { shortcut: 'Mod+W' }) }),
       a('file.import', t('chrome.file.import'), { kind: 'import' }, { tooltip: t('chrome.file.import.tip') }),
       a('file.importFolder', t('chrome.file.importFolder'), { kind: 'importFolder' }, { tooltip: t('chrome.file.importFolder.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),

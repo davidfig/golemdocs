@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Tokenizer and object parser for PDF syntax (§7.2, §7.3), shared by the file reader and the
 // content stream parser. Lenient where real files are sloppy (bad stream lengths, stray
 // tokens, malformed numbers), strict only where guessing would silently corrupt data.

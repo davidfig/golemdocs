@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A document as a list of plain paragraphs: what a search index holds. The browser's and the
 // server's search indexes both use it, so a paragraph number means the same thing to each. Numbering is that of `paragraphsIn` (tables included).
 

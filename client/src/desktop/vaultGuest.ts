@@ -6,7 +6,7 @@
 // this browser's trash (30 days), like the account's.
 
 import type { Folder } from '../folders.ts';
-import { getSaved, keepVersion, listLocalFolders, listSaved, ownedBy, putLocalFolder, saveSaved, setSavedFolder, trashSaved } from '../storage/local.ts';
+import { deleteLocalFolder, getSaved, keepVersion, listLocalFolders, listSaved, ownedBy, putLocalFolder, saveSaved, setSavedFolder, trashSaved } from '../storage/local.ts';
 import { safeName } from './vaultPlan.ts';
 import type { VaultCloud } from './vaultSync.ts';
 
@@ -59,5 +59,9 @@ export function guestCloud(): VaultCloud {
     },
     keepVersion: async (id) => void (await keepVersion(id)),
     trash: trashSaved,
+    async removeFolder(id) {
+      await deleteLocalFolder(id, folders.find((f) => f.id === id)?.parentId ?? null);
+      folders = folders.filter((f) => f.id !== id);
+    },
   };
 }

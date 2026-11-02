@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A document's full-text search index: which words and tags are in which paragraphs, plus each
 // paragraph's start for showing a hit. One module serves the page (an index kept in the browser
 // for every document it has) and the server (one kept next to each cloud document, so a second

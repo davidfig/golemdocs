@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Finding a drawing in a paragraph, and changing where a floating one sits.
 import { cloneElement, inlinesLength, itemLength, el, type Drawing, type Inline, type XmlElement } from '@golemdocs/docx';
 

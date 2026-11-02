@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Links (§12.5.6.5) and the document outline, or bookmarks (§12.3.3).
 
 import { N, PdfDict, PdfName, PdfRef, PdfString, type PdfObject } from '../core/objects.ts';

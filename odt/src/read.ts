@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // ODT -> WordDocument + OdtExtension.
 //
 // Styles: common paragraph and text styles become Word styles (built-in LibreOffice names map

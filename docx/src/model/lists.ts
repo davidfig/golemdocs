@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // List numbering: turns a paragraph's numbering reference into its label ("3.", "iv)", "•").
 // Feed paragraphs in document order; counters carry state between them.
 

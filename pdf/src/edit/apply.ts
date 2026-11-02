@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Editing a PDF's content in place. Edits are a plain list (saved as JSON with the document, like
 // annotations and form fields); `applyEdits` makes the document's pages show exactly that list,
 // always starting again from each page's original content, so the list can change freely

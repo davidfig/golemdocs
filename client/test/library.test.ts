@@ -19,9 +19,11 @@ let cloudBytes: Uint8Array;
 let cloudVersion: number;
 /** What the next created document is called. */
 let created: number;
+/** The bytes of each save of c1 the server accepted. */
+let puts: Uint8Array[];
 
 function stubServer() {
-  globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: unknown }) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
     calls.push({ method, url });
@@ -37,6 +39,7 @@ function stubServer() {
     if (method === 'PUT' && url.startsWith('/api/documents/c1?')) {
       if (!cloudHas) return json({ error: 'not found' }, 404);
       if (query.has('base') && Number(query.get('base')) !== cloudVersion) return json({ error: 'changed elsewhere' }, 409);
+      if (init?.body instanceof Uint8Array || init?.body instanceof ArrayBuffer) puts.push(new Uint8Array(init.body.slice(0)));
       cloudVersion++;
       return json({ ...meta, updatedAt: cloudVersion });
     }
@@ -67,6 +70,7 @@ beforeEach(async () => {
   cloudBytes = bytes(9, 9, 9);
   cloudVersion = 1;
   created = 1;
+  puts = [];
   stubServer();
 });
 
@@ -259,7 +263,9 @@ test('a copy changed in the account since it was opened is saved as a conflicted
   calls = [];
   const { doc: copy, conflictCopy } = await uploadToCloud(doc.id);
   assert.equal(conflictCopy, true);
-  assert.deepEqual(calls.map((c) => c.method).slice(0, 3), ['PUT', 'GET', 'POST'], 'refused, compared with the account’s, then saved alongside');
+  assert.equal(calls[0]!.method, 'PUT', 'refused');
+  assert.equal(calls.filter((c) => c.method === 'PUT' && c.url.startsWith('/api/documents/c1?')).length, 1, 'never sent over the account’s');
+  assert.equal(calls.at(-1)!.method, 'POST', 'then saved alongside (these bytes can’t be merged)');
   assert.equal(copy.name, 'Doc (conflicted copy).docx');
   const info = (await local.getSaved(doc.id))!.info;
   assert.equal(info.cloudId, copy.id, 'this copy carries on as the conflicted one');
@@ -487,4 +493,128 @@ test('deleting more ids than the server takes in a request is split into several
   assert.ok(sent.every((b) => b.ids.length + b.folders.length <= 500));
   assert.equal(sent.length, 3);
   assert.equal(result.ok.length, 1102);
+});
+
+// --- Merging with the account's copy (src/formats/merge.ts) ------------------------------------------------------------------
+
+const { WordDocument, paragraphsIn, paragraphText, ZipArchive } = await import('@golemdocs/docx');
+
+/** A .docx with one paragraph per text. */
+async function docx(...texts: string[]): Promise<Uint8Array> {
+  const doc = await WordDocument.create();
+  doc.body = texts.map((text) => ({ kind: 'paragraph' as const, properties: {}, attrs: {}, children: [{ kind: 'run' as const, properties: {}, attrs: {}, content: [{ kind: 'text' as const, text }] }] }));
+  return doc.write();
+}
+
+const textsOf = async (bytes: Uint8Array) => paragraphsIn((await WordDocument.read(bytes)).body).map(paragraphText);
+
+/** A copy here opened from the account's c1 at version 1 (so their common version is kept), then edited here to `mine`. */
+async function openedThenEdited(base: Uint8Array, mine: Uint8Array) {
+  cloudHas = true;
+  cloudBytes = base;
+  const { info } = await openFromCloud({ id: 'c1', name: 'Doc.docx', updatedAt: 1 });
+  await local.saveSaved({ id: info.id, name: 'Doc.docx', bytes: mine });
+  return info.id;
+}
+
+test('changed here and in the account in different paragraphs: merged, and sent on top of the account’s version', async () => {
+  const id = await openedThenEdited(await docx('One.', 'Two.', 'Three.'), await docx('One, edited here.', 'Two.', 'Three.'));
+  cloudBytes = await docx('One.', 'Two.', 'Three, edited by the ai.');
+  cloudVersion = 2;
+  const { conflictCopy, merged, doc } = await uploadToCloud(id);
+  assert.equal(conflictCopy, false);
+  assert.equal(merged, true);
+  assert.equal(doc.id, 'c1');
+  assert.deepEqual(await textsOf(puts.at(-1)!), ['One, edited here.', 'Two.', 'Three, edited by the ai.']);
+  assert.equal(cloudVersion, 3, 'saved over the account’s version 2, which it includes');
+  const here = (await local.getSaved(id))!;
+  assert.deepEqual(await textsOf(new Uint8Array(here.bytes)), ['One, edited here.', 'Two.', 'Three, edited by the ai.']);
+  assert.equal(here.info.cloudUpdatedAt, 3);
+  assert.ok(here.info.updatedAt <= (here.info.cloudSyncedAt ?? 0), 'in step with the account');
+  // What was here before the merge is kept in this browser's history.
+  const versions = await local.listVersions(id);
+  assert.ok(versions.length >= 1);
+  assert.deepEqual(await textsOf(new Uint8Array((await local.getVersion(id, versions[0]!.version))!)), ['One, edited here.', 'Two.', 'Three.']);
+  // The next merge starts from what was sent.
+  assert.equal((await local.getSyncedBase(id))!.cloudUpdatedAt, 3);
+});
+
+test('the same paragraph changed here and in the account is kept as a conflicted copy, as before', async () => {
+  const id = await openedThenEdited(await docx('Hello world.', 'Other.'), await docx('Hello there, world.', 'Other.'));
+  cloudBytes = await docx('Hello world!', 'Other.');
+  cloudVersion = 2;
+  const { conflictCopy, merged } = await uploadToCloud(id);
+  assert.equal(conflictCopy, true);
+  assert.equal(merged, undefined);
+  assert.equal(puts.length, 0, 'nothing sent over the account’s');
+  assert.equal(cloudVersion, 2);
+});
+
+test('without the version both started from (it was never in step here), nothing is merged', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: await docx('A.', 'B.') });
+  await uploadToCloud(doc.id); // c1, version 1, sent from here: that is the common version
+  await local.deleteSaved(doc.id);
+  // A copy that was never in step: linked to c1, but nothing kept of the version it started from.
+  const copy = await local.saveSaved({ name: 'Doc.docx', bytes: await docx('A, mine.', 'B.') });
+  await local.markSynced(copy.id, { cloudId: 'c1', syncedAt: 0, cloudUpdatedAt: 1 });
+  cloudBytes = await docx('A.', 'B, theirs.');
+  cloudVersion = 2;
+  const { conflictCopy } = await uploadToCloud(copy.id);
+  assert.equal(conflictCopy, true);
+});
+
+test('an upload sent from here keeps what it sent as the next merge’s starting point', async () => {
+  const doc = await local.saveSaved({ name: 'Doc.docx', bytes: await docx('A.', 'B.') });
+  await uploadToCloud(doc.id);
+  const base = await local.getSyncedBase(doc.id);
+  assert.equal(base?.cloudUpdatedAt, 1);
+  assert.deepEqual(await textsOf(new Uint8Array(base!.bytes)), ['A.', 'B.']);
+  await local.deleteSaved(doc.id);
+  assert.equal(await local.getSyncedBase(doc.id), null, 'and it goes with the document');
+});
+
+test('the person saying no (typing in it, say) keeps the two apart', async () => {
+  const id = await openedThenEdited(await docx('One.', 'Two.'), await docx('One, mine.', 'Two.'));
+  cloudBytes = await docx('One.', 'Two, theirs.');
+  cloudVersion = 2;
+  const { conflictCopy } = await uploadToCloud(id, true, { replace: async () => false });
+  assert.equal(conflictCopy, true);
+});
+
+test('.wdoc files merge their document, and take an entry changed on one side whole', async () => {
+  const { mergeStored } = await import('../src/formats/merge.ts');
+  const { writeWdoc } = await import('../src/formats/wdoc.ts');
+  const wdoc = async (texts: string[], frontMatter?: string) =>
+    writeWdoc({ manifest: { version: 1, lens: 'md', origin: 'md', pagesCurrent: false }, document: await docx(...texts), original: null, extensions: frontMatter ? { md: { frontMatter } } : {} });
+  const merged = await mergeStored(await wdoc(['A.', 'B.']), await wdoc(['A, mine.', 'B.']), await wdoc(['A.', 'B, theirs.'], 'tags: [x]'));
+  assert.ok(merged);
+  const zip = ZipArchive.read(merged);
+  assert.equal([...zip.entries.keys()][0], 'mimetype');
+  assert.deepEqual(await textsOf(await zip.entries.get('document.docx')!.read()), ['A, mine.', 'B, theirs.']);
+  assert.match(await zip.entries.get('extensions/md.json')!.text(), /tags: \[x\]/);
+  // Front matter changed differently on both sides is not merged.
+  assert.equal(await mergeStored(await wdoc(['A.'], 'a: 1'), await wdoc(['A.'], 'a: 2'), await wdoc(['A.'], 'a: 3')), null);
+});
+
+test('a document uploaded as a bare .docx and saved here as a .wdoc still merges', async () => {
+  const { mergeStored } = await import('../src/formats/merge.ts');
+  const { writeWdoc } = await import('../src/formats/wdoc.ts');
+  const mine = await writeWdoc({ manifest: { version: 1, lens: 'docx', origin: 'docx', pagesCurrent: false }, document: await docx('A, mine.', 'B.'), original: null, extensions: {} });
+  const merged = await mergeStored(await docx('A.', 'B.'), mine, await docx('A.', 'B, theirs.'));
+  assert.ok(merged);
+  const zip = ZipArchive.read(merged);
+  assert.equal([...zip.entries.keys()][0], 'mimetype');
+  assert.deepEqual(await textsOf(await zip.entries.get('document.docx')!.read()), ['A, mine.', 'B, theirs.']);
+});
+
+test('a bare .docx on the other side leaves this copy’s other entries as they are', async () => {
+  const { mergeStored } = await import('../src/formats/merge.ts');
+  const { writeWdoc } = await import('../src/formats/wdoc.ts');
+  const wdoc = async (texts: string[]) => writeWdoc({ manifest: { version: 1, lens: 'md', origin: 'md', pagesCurrent: false }, document: await docx(...texts), original: null, extensions: { md: { frontMatter: 'a: 1' } } });
+  const merged = await mergeStored(await wdoc(['A.', 'B.']), await wdoc(['A, mine.', 'B.']), await docx('A.', 'B, theirs.'));
+  assert.ok(merged);
+  const zip = ZipArchive.read(merged);
+  assert.match(await zip.entries.get('manifest.json')!.text(), /"lens": "md"/);
+  assert.match(await zip.entries.get('extensions/md.json')!.text(), /a: 1/);
+  assert.deepEqual(await textsOf(await zip.entries.get('document.docx')!.read()), ['A, mine.', 'B, theirs.']);
 });

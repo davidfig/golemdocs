@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Structure recovery: turns a page's positioned text (extractText) into the blocks an editable
 // document is made of: paragraphs, headings and list items, in reading order.
 //

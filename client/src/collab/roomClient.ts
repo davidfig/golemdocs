@@ -55,7 +55,7 @@ export interface RoomHost {
   pointers(people: Person[]): void;
   /** The room can't be reached while we're alone in it: the document goes on as if it had no room (and is saved as usual). */
   lost(): void;
-  /** A watched room: the holder saved the document (`updatedAt` is its new version); a watcher opens it again. */
+  /** A watched room: the holder saved the document (`updatedAt` is its new version); a watcher opens it again. Alone in a room edited together: a save went in (perhaps this session's own). */
   saved?(updatedAt: number): void;
   /** A watched room, to its holder: someone takes over; save what there is, then call `released()`. */
   release?(): void;
@@ -351,8 +351,13 @@ export class RoomClient {
         this.announce();
         break;
       case 'saved':
+        // A document edited together, open here alone: saved by someone else (or by this session: the page tells which).
+        if (!this.watched) {
+          if (this.mode === 'solo') host.saved?.(message.updatedAt);
+          break;
+        }
         // Not sent to whoever held it then: this one opens it again, even if it holds it by now.
-        if (!this.watched || message.updatedAt <= this.latestSaved) break;
+        if (message.updatedAt <= this.latestSaved) break;
         this.latestSaved = message.updatedAt;
         this.announce();
         host.saved?.(message.updatedAt);

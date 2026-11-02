@@ -138,7 +138,32 @@ test('images become link placeholders and export back as images', async () => {
   assert.equal(links.length, 2);
   assert.equal(runs(links[0].children).map(runText).join(''), '[Image: the alt]');
   assert.equal(runs(links[1].children).map(runText).join(''), '[Image]');
-  assert.equal(documentToMarkdown(doc), 'see ![the alt](pic.png) and ![](b.png)\n');
+  assert.equal(links[0].attrs['w:tooltip'], 't');
+  assert.equal(documentToMarkdown(doc), 'see ![the alt](pic.png "t") and ![](b.png)\n');
+});
+
+test('link and image titles and destinations round-trip as written', async () => {
+  // A blog's interactive scene is named in an image's title, so dropping it loses the scene.
+  const md =
+    'A ![a cafe](https://sewcrates.com/scenes/cafe.png "scene:cafe") and [a study](https://doi.org/10.1016/0005-7967(89)90144-7) ' +
+    'and [titled](https://x.example/a_(b) "say \\"hi\\"") and [plain](https://x.example/a_) and [code `x`](u "t").\n';
+  assert.equal(await roundTrip(md), md);
+  const links = paragraphs(await markdownToDocument(md))[0].children.filter((c): c is Hyperlink => c.kind === 'hyperlink');
+  assert.deepEqual(
+    links.map((l) => l.attrs['w:tooltip']),
+    ['scene:cafe', undefined, 'say "hi"', undefined, 't'],
+  );
+  // A destination is written back as it was, <> and escapes included, while it still points where it did.
+  const angled = '[a](<https://doi.org/10.1016/0005-7967(89)90144-7>) ![b](<pic (1).png> "t") [c](x\\_y)\n';
+  assert.equal(await roundTrip(angled), angled);
+  const doc = await markdownToDocument(angled);
+  const first = paragraphs(doc)[0].children.find((c): c is Hyperlink => c.kind === 'hyperlink')!;
+  first.url = 'https://changed.example/a(b)';
+  assert.ok(documentToMarkdown(doc).startsWith('[a](https://changed.example/a(b)) '));
+  // Other title quotes are read, and written back with double quotes; unbalanced parentheses still need <>.
+  assert.equal(await roundTrip("[a](u 't') [b](v (t)) [c](<x(y>)\n"), '[a](u "t") [b](v "t") [c](<x(y>)\n');
+  // A titled link isn't turned into an autolink, which can't hold a title.
+  assert.equal(await roundTrip('[https://x.example](https://x.example "t")\n'), '[https://x.example](https://x.example "t")\n');
 });
 
 test('bullet lists: real numbering, nesting levels, ListParagraph style', async () => {
@@ -375,7 +400,7 @@ test('export: hyperlinks, autolinks and anchors', async () => {
     para([link('http://a.example/x_(y)', 'a [b]'), run(' '), link('https://plain.example', 'https://plain.example'), run(' '), link('has space', 'sp')]),
   );
   // Destinations with parentheses or spaces are written in <...> form; brackets in link text are escaped.
-  assert.equal(documentToMarkdown(doc), '[a \\[b\\]](<http://a.example/x_(y)>) <https://plain.example> [sp](<has space>)\n');
+  assert.equal(documentToMarkdown(doc), '[a \\[b\\]](http://a.example/x_(y)) <https://plain.example> [sp](<has space>)\n');
   const anchor = await build(para([{ kind: 'hyperlink', anchor: 'sec', children: [run('jump')], attrs: {} }]));
   assert.equal(documentToMarkdown(anchor), '[jump](#sec)\n');
 });

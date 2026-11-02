@@ -21,6 +21,8 @@ export const vault: Catalog = {
   'vault.status.wrongAccount': 'このフォルダは別のアカウントのものです。別のフォルダを選択してください。',
   'vault.status.blocked': '{count} 件のファイルがフォルダにありません。削除するつもりだった場合、アカウントのごみ箱に 30 日間保管されます。',
   'vault.deleteMissing': '{count} 件のドキュメントを削除',
+  'vault.status.blockedHere': '{count} 件のドキュメントが Golem Docs から消えましたが、ファイルはフォルダに残っています。意図して削除した場合は、ファイルも削除してください。',
+  'vault.deleteFiles': '{count} 件のファイルを削除',
   'vault.skipped': '{count} 件のドキュメントはアカウントに残り、フォルダにはコピーされません。',
   'vault.introLocal': 'ドキュメントは、このコンピュータのフォルダにファイルとして保存されます。そこでファイルを変更するとここのドキュメントが更新され、ここでドキュメントを変更するとファイルが更新されます。両方が変更されていた場合はフォルダのファイルが優先され、以前のバージョンはドキュメントの履歴に残ります。',
   'vault.status.blockedLocal': '{count} 件のファイルがフォルダにありません。削除するつもりだった場合、ごみ箱に 30 日間保管されます。',

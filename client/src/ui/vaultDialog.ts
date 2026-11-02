@@ -77,6 +77,7 @@ export class VaultDialog {
         case 'access':
           return t('vault.status.access', { message: s.message ?? '', hint: isMac() ? t('vault.status.access.mac') : '' });
         case 'blocked':
+          if (s.report?.blocked?.reason === 'mass-delete-here') return t('vault.status.blockedHere', { count: s.report.blocked.count });
           return t(service.signedIn ? 'vault.status.blocked' : 'vault.status.blockedLocal', { count: s.report?.blocked?.count ?? 0 });
       }
     };
@@ -117,7 +118,7 @@ export class VaultDialog {
       retry.hidden = s.state !== 'access' && s.state !== 'error';
       privacy.hidden = s.state !== 'access' || !isMac();
       confirm.hidden = s.state !== 'blocked';
-      confirm.textContent = t('vault.deleteMissing', { count: s.report?.blocked?.count ?? 0 });
+      confirm.textContent = t(s.report?.blocked?.reason === 'mass-delete-here' ? 'vault.deleteFiles' : 'vault.deleteMissing', { count: s.report?.blocked?.count ?? 0 });
     };
 
     const unsubscribe = service.subscribe(render);

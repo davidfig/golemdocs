@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // OMML (Office Math Markup Language, the m: namespace) to and from the math tree.
 //
 // Equations sit in a paragraph as `Raw` inlines holding an m:oMath (inline) or m:oMathPara

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Interprets a page's content into a renderer-agnostic display list: positioned glyphs, solid
 // rectangles and images, in points from the top-left of the displayed page (crop box, /Rotate
 // applied, y down). No dependency on any layout or graphics package.

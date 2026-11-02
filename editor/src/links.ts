@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Hyperlinks, equations and pictures under the selection or a point.
 import { NO_CHANGE, type CommandResult, type Position } from './types.ts';
 import type { Command } from './types.ts';

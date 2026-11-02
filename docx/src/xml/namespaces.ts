@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Namespace URIs the DOCX reader interprets, mapped to the prefixes the code uses.
 // Parsing rewrites element and attribute names into these canonical prefixes, so reader code
 // can match 'w:p' even if a producer bound the namespace to another prefix. Both the

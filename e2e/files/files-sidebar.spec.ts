@@ -1,12 +1,12 @@
 // View > Files Sidebar: the documents as a tree beside the editor.
 
 import { expect, test } from './fixtures';
-import { dropFileOn, dropFilesOn, importFile, status, text, waitForOpen, waitForSaved } from './helpers';
+import { dropFileOn, dropFilesOn, formatLabel, importFile, status, text, waitForOpen, waitForSaved } from './helpers';
 
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
 const row = (page: import('@playwright/test').Page, name: string) => panel(page).locator('.wm-files-file', { hasText: name });
 
-test('it is closed until chosen, lists the documents, opens one on a click, and the choice is kept', async ({ app, page }) => {
+test('View opens it, it lists the documents, opens one on a click, and the choice is kept', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await expect(panel(page)).toBeHidden();
   for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
@@ -29,6 +29,27 @@ test('it is closed until chosen, lists the documents, opens one on a click, and 
   await expect(panel(page)).toBeVisible();
   await panel(page).getByRole('button', { name: 'Close' }).click();
   await expect(panel(page)).toBeHidden();
+});
+
+test.describe('by default', () => {
+  // The suite starts with the sidebar closed; these start from the app's own default.
+  test.use({ filesSidebarDefault: true });
+
+  test('it is open by default in a wide window, until chosen otherwise', async ({ app, page }) => {
+    await app.goto('?doc=welcome');
+    await expect(panel(page)).toBeVisible();
+    await app.menu('View', 'Files Sidebar');
+    await expect(panel(page)).toBeHidden();
+    await page.reload();
+    await app.ready();
+    await expect(panel(page)).toBeHidden();
+  });
+
+  test('it is closed by default in a narrow window', async ({ app, page }) => {
+    await page.setViewportSize({ width: 900, height: 800 });
+    await app.goto('?doc=welcome');
+    await expect(panel(page)).toBeHidden();
+  });
 });
 
 test('dragging its edge resizes it, and the width is kept', async ({ app, page }) => {
@@ -74,6 +95,32 @@ test('right click makes a folder, renames it, and deletes it with what is in it'
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(folder).toHaveCount(0);
   await expect(row(page, 'inside')).toHaveCount(0);
+});
+
+test('right click offers the types used last, and New on the toolbar makes and shows the last one', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
+    await importFile(app, file);
+    await waitForSaved(page, file.name);
+  }
+  // The type used last is the one the toolbar's New makes, and its tooltip says so.
+  const newButton = page.getByRole('toolbar').getByRole('button', { name: 'New', exact: true });
+  await expect(newButton).toHaveAttribute('title', /^New Markdown \(\.md\)/);
+  await expect(newButton.locator('.wm-file-icon svg')).toHaveCount(1);
+
+  await app.menu('View', 'Files Sidebar');
+  await panel(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
+  const rows = page.locator('.wm-popup-menu').first().getByRole('menuitem');
+  await expect(rows.nth(0)).toHaveText('New Markdown (.md)');
+  await expect(rows.nth(1)).toHaveText('New Plain Text (.txt)');
+  // Only types used are offered: two so far, then the list of them all.
+  await expect(rows.nth(2)).toHaveText('New document');
+  await expect(rows.nth(0).locator('svg')).toHaveCount(1);
+
+  await rows.nth(1).click();
+  await waitForOpen(app, 'Document1');
+  expect(await formatLabel(page)).toBe('Plain Text');
+  await expect(newButton).toHaveAttribute('title', /^New Plain Text \(\.txt\)/);
 });
 
 test('collapse all closes every folder', async ({ app, page }) => {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Undo and redo for one user's edits.
 //
 // An undo entry holds the inverse operations of one or more local transactions (typing is

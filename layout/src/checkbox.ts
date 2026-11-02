@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A check box drawn from rectangles, for the list labels of task lists (see CHECKBOX in @golemdocs/docx):
 // no bundled font has a ballot box, and a drawn one can be as large and as sharp as the text it is beside.
 

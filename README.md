@@ -1,6 +1,20 @@
 # Golem Docs
 
-A Word-style editor for the browser. Text is drawn with WebGL (MSDF glyph atlases), so zooming stays sharp and large documents stay fast. Documents are saved in the browser with no account; signed in, they are saved to the account instead (the browser keeps a cache for speed and offline work).
+**One editor for every kind of document.** Open, edit and keep Word files, PDFs, spreadsheets, notes and drawings together, organized in folders on your computer.
+
+[Open Golem Docs](https://golemdocs.com) · [Download for your computer](https://golemdocs.com/home/download) · [Why it's open source](https://golemdocs.com/home/open-source)
+
+- **A real editor.** Pages that print the way they look, PDFs you can edit and fill in, Markdown notes, vector drawings, pictures and spreadsheets, all in one app. It opens Word, OpenDocument, PDF, Markdown, HTML, EPUB, CSV, SVG, images and ZIP archives, and stays fast with all of War and Peace on screen.
+- **Your second brain, in plain files.** Notes link to each other with `[[wikilinks]]` that follow a rename, next to your Word files and PDFs. Every document is an ordinary file in a folder you choose, so an Obsidian vault opens as it is.
+- **No ai inside, on purpose.** If you use an ai app (Claude, ChatGPT, Codex, Cursor...), point it at your folder and it works on the same files. Golem Docs shows its changes a few seconds later and keeps the earlier versions.
+- **Free, with no account.** It runs in your browser and on Mac, Windows and Linux. $3 a month adds sync across devices, sharing and live editing together, and pays for the server.
+- **Open source, all of it:** the editor, the server, and the libraries that read and write each format.
+
+Made by [David Figatner](https://yopeyopey.com/about/) with [Claude](https://claude.ai/). Much of the code was written by Claude, with David steering: work that would have taken one person years.
+
+## How it's built
+
+Text is drawn with WebGL (MSDF glyph atlases), so zooming stays sharp and large documents stay fast. Documents are saved in the browser with no account; signed in, they are saved to the account instead (the browser keeps a cache for speed and offline work). The desktop app keeps every document as a file in a folder on disk, in step with the account.
 
 pnpm workspace:
 
@@ -8,7 +22,18 @@ pnpm workspace:
 | --- | --- |
 | `client` | The app: Vite + WebGL renderer, menus and toolbars, browser storage |
 | `server` | Cloudflare Worker: sign-in, cloud documents (D1 for the catalogue, R2 for the files), sharing, and multiplayer rooms (a Durable Object per document) |
-| `docx`, `layout`, `editor`, `ops`, `pdf` | Format, layout, editing and collaboration libraries used by the client |
+| `desktop` | Tauri shell for Mac, Windows and Linux: the web app in a native window, with the documents folder kept in sync |
+| `docx`, `odt`, `pdf` | Readers and writers for Word, OpenDocument and PDF |
+| `layout`, `editor`, `ops` | Page layout, editing, and the operations that merge live edits |
+
+## License
+
+| Part | License |
+| --- | --- |
+| The app: `client`, `server`, `desktop`, and everything else not listed below | [AGPL-3.0](LICENSE) |
+| The libraries: `docx`, `layout`, `editor`, `ops`, `odt`, `pdf` | MIT (each package's `LICENSE`) |
+
+Fonts, spelling dictionaries and the PDF font metrics keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The Golem Docs name and logo aren't covered by these licenses: see [TRADEMARKS.md](TRADEMARKS.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Run it locally
 

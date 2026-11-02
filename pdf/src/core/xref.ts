@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Cross-reference data (§7.5.4, §7.5.8): classic tables, cross-reference streams, hybrid
 // files and incremental-update chains, plus reconstruction by scanning when the xref is
 // missing or damaged.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Markup annotations (§12.5.6.10–12): text highlights, underlines and strikeouts, and sticky notes,
 // as a plain layer the app can edit, save as JSON and write back into the file.
 //

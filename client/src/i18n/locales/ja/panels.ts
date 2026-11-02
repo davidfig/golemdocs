@@ -65,6 +65,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedWithMe': '共有アイテム',
   'panels.dashboard.newBlankLabel': '新規ドキュメント',
   'panels.dashboard.newBlank': '新規ドキュメント',
+  'panels.dashboard.newKind': '新規: {type}',
   'panels.dashboard.importLabel': 'このコンピューターからファイルを読み込む',
   'panels.dashboard.importFolderLabel': 'このコンピューターからフォルダーをインポート',
   'panels.dashboard.import': 'ファイルを読み込む',

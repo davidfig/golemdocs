@@ -5,10 +5,10 @@ import { h } from './dom.ts';
 import { ICONS } from './icons.ts';
 
 /**
- * A row of the menu. A submenu's `items` can be a promise (rows still being looked up): its row is there at once,
- * and its menu says `pending` until they arrive, then shows them in place.
+ * A row of the menu. A row's `icon` is SVG markup, drawn in the gutter before its label. A submenu's `items` can be a promise
+ * (rows still being looked up): its row is there at once, and its menu says `pending` until they arrive, then shows them in place.
  */
-export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean } | { label: string; items: readonly PopupItem[] | Promise<readonly PopupItem[]>; pending?: string };
+export type PopupItem = 'separator' | { label: string; run: () => void; disabled?: boolean; icon?: string } | { label: string; items: readonly PopupItem[] | Promise<readonly PopupItem[]>; pending?: string };
 
 let open: { close: () => void } | null = null;
 
@@ -35,7 +35,13 @@ export function showPopupMenu(items: readonly PopupItem[], x: number, y: number,
       }
       const disabled = 'disabled' in item && item.disabled;
       const text = h('span', { class: 'label', text: item.label });
-      const el = h('div', { class: `wm-item${disabled ? ' disabled' : ''}`, attrs: { role: 'menuitem', tabindex: '-1', ...(disabled ? { 'aria-disabled': 'true' } : {}) } }, h('span', { class: 'wm-gutter' }), text);
+      const gutter = h('span', { class: 'wm-gutter' });
+      if ('icon' in item && item.icon) {
+        const icon = h('span', { class: 'icon' });
+        icon.innerHTML = item.icon;
+        gutter.append(icon);
+      }
+      const el = h('div', { class: `wm-item${disabled ? ' disabled' : ''}`, attrs: { role: 'menuitem', tabindex: '-1', ...(disabled ? { 'aria-disabled': 'true' } : {}) } }, gutter, text);
       // A submenu still coming: a row that says so until it arrives, then its rows (in place, if it is open by then).
       let rowsOf: readonly PopupItem[] | null = null;
       if ('items' in item) {

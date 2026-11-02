@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Grouping a page's text runs into what a person edits: lines (runs on one baseline that read
 // as one) and blocks (a paragraph: three or more consecutive left-aligned lines that wrap into
 // each other, or else a single line). PDFs have no such structure, so this is a guess from geometry, and the block an

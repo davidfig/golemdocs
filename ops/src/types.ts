@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Operations: the edits a document goes through, as plain JSON.
 //
 // Paragraphs are addressed by id (w14:paraId, kept in the file) and positions by model offset

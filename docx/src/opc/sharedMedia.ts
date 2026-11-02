@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Pictures that people editing a document together add. Their bytes can't ride in the changes a room passes on (those are small
 // and ordered), so each is kept by what it is: the part is named for the SHA-256 of its bytes. Two people can't give different
 // pictures one name, a picture added twice is one part, and whoever needs a part they don't have asks the room for it by hash.

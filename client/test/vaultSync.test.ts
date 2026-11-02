@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { FontSet } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument, readAnnotations } from '../../pdf/src/index.ts';
 import { fromVaultFile, toVaultFile, vaultFormat } from '../src/desktop/vaultCodec.ts';
-import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost } from '../src/desktop/vaultSync.ts';
+import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost, type VaultMemory } from '../src/desktop/vaultSync.ts';
 import { readWdoc, writeWdoc, WDOC_VERSION } from '../src/formats/wdoc.ts';
 import { installFakeCanvas } from './fakeCanvas.ts';
 
@@ -22,24 +22,26 @@ interface Doc {
   createdAt: number;
 }
 
-/** An account in memory. Stored bytes are "wdoc:" + the file, so the codec is visible in the assertions. */
+/** An account in memory. Stored bytes are "wdoc:" + the file, so the codec is visible in the assertions. A folder, once
+ * made, stays until it is removed, as the account's do; its id is its path. */
 function fakeCloud() {
   let clock = 100;
   let ids = 0;
   const docs = new Map<string, Doc>();
+  const folders = new Map<string, { id: string; name: string; parentId: string | null }>();
   const calls: string[] = [];
+  const folderFor = (dir: string[]): string | null => {
+    let parent: string | null = null;
+    for (const name of dir) {
+      const id: string = parent ? `${parent}/${name}` : name;
+      if (!folders.has(id)) folders.set(id, { id, name, parentId: parent });
+      parent = id;
+    }
+    return parent;
+  };
   const cloud: VaultCloud = {
     async list() {
-      const folders = new Map<string, { id: string; name: string; parentId: string | null }>();
-      const placed = [...docs.values()].map((d) => {
-        let parent: string | null = null;
-        for (const name of d.dir) {
-          const key = `${parent}/${name}`;
-          if (!folders.has(key)) folders.set(key, { id: key, name, parentId: parent });
-          parent = key;
-        }
-        return { id: d.id, name: d.name, folderId: parent, createdAt: d.createdAt, updatedAt: d.updatedAt };
-      });
+      const placed = [...docs.values()].map((d) => ({ id: d.id, name: d.name, folderId: folderFor(d.dir), createdAt: d.createdAt, updatedAt: d.updatedAt }));
       return { docs: placed, folders: [...folders.values()] };
     },
     async download(id) {
@@ -71,6 +73,10 @@ function fakeCloud() {
       calls.push(`trash ${id}`);
       docs.delete(id);
     },
+    async removeFolder(id) {
+      calls.push(`rmdir ${id}`);
+      folders.delete(id);
+    },
   };
   const add = (path: string, content: string, id = `a${++ids}`) => {
     const parts = path.split('/');
@@ -82,7 +88,7 @@ function fakeCloud() {
     d.bytes = text(`wdoc:${content}`);
     d.updatedAt = ++clock;
   };
-  return { cloud, docs, calls, add, edit };
+  return { cloud, docs, folders, calls, add, edit, folderFor };
 }
 
 /** A folder in memory that behaves like the native side: hidden names are not listed, and every write has a new time. */
@@ -122,10 +128,20 @@ const codec: VaultCodec = {
   kept: (name) => !/\.zip$/i.test(name),
 };
 
+/** One computer's memory of the vault. */
+function fakeMemory() {
+  let text: string | null = null;
+  const memory: VaultMemory = {
+    load: async () => text,
+    save: async (t) => void (text = t),
+  };
+  return memory;
+}
+
 function setup(account = 'u1') {
   const account_ = fakeCloud();
   const folder = fakeDisk();
-  const host: VaultHost = { disk: folder.disk, cloud: account_.cloud, codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account };
+  const host: VaultHost = { disk: folder.disk, memory: fakeMemory(), cloud: account_.cloud, codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account };
   const sync = (options?: { allowMassDelete?: boolean }) => syncVault(host, options);
   return { ...account_, folder, host, sync };
 }
@@ -272,6 +288,102 @@ test('a file moved in the vault renames the same document', async () => {
   assert.equal(counts(await s.sync()), quiet, 'the rename the account made to itself is not downloaded back');
 });
 
+test('a folder whose files were moved up and which was then deleted in the vault goes from the account', async () => {
+  const s = setup();
+  const paper = s.add('Posts/Essay/Paper (2013)/Paper.md', 'notes');
+  const pdf = s.add('Posts/Essay/Paper (2013)/Paper.txt', 'pdf');
+  s.add('Posts/Essay/Essay.md', 'essay');
+  await s.sync();
+  // mv "Paper (2013)"/* .. && rmdir "Paper (2013)"
+  for (const name of ['Paper.md', 'Paper.txt']) {
+    s.folder.files.set(`Posts/Essay/${name}`, s.folder.files.get(`Posts/Essay/Paper (2013)/${name}`)!);
+    s.folder.files.delete(`Posts/Essay/Paper (2013)/${name}`);
+  }
+  const report = await s.sync();
+  assert.equal(counts(report), '0,0,0,2,0,0,0');
+  assert.equal(report.foldersRemoved, 1);
+  assert.deepEqual(report.errors, []);
+  assert.deepEqual(s.calls.slice(-3), [`place ${paper} Posts/Essay/Paper.md`, `place ${pdf} Posts/Essay/Paper.txt`, 'rmdir Posts/Essay/Paper (2013)']);
+  assert.deepEqual([...s.folders.keys()].sort(), ['Posts', 'Posts/Essay']);
+  const again = await s.sync();
+  assert.equal(counts(again), quiet);
+  assert.equal(again.foldersRemoved, 0);
+});
+
+test('a folder deleted in the vault with its files goes to the trash with them, nested folders too', async () => {
+  const s = setup();
+  const a = s.add('Old/a.md', 'a');
+  const b = s.add('Old/Deeper/b.md', 'b');
+  s.add('keep.md', 'k');
+  s.add('one.md', '1');
+  s.add('two.md', '2');
+  await s.sync();
+  s.folder.files.delete('Old/a.md');
+  s.folder.files.delete('Old/Deeper/b.md');
+  const report = await s.sync();
+  assert.equal(report.trashed, 2);
+  assert.equal(report.foldersRemoved, 2);
+  assert.deepEqual(s.calls.slice(-4), [`trash ${a}`, `trash ${b}`, 'rmdir Old/Deeper', 'rmdir Old']);
+  assert.deepEqual([...s.folders.keys()], []);
+});
+
+test('a folder renamed in the vault takes its documents to the new name and the old one goes', async () => {
+  const s = setup();
+  const id = s.add('Drafts/one.md', 'x');
+  await s.sync();
+  s.folder.files.set('Published/one.md', s.folder.files.get('Drafts/one.md')!);
+  s.folder.files.delete('Drafts/one.md');
+  const report = await s.sync();
+  assert.equal(report.renamed, 1);
+  assert.equal(report.foldersRemoved, 1);
+  assert.deepEqual(s.docs.get(id)!.dir, ['Published']);
+  assert.deepEqual([...s.folders.keys()], ['Published']);
+});
+
+test('folders the vault never had, or that were emptied in the account, are not removed', async () => {
+  const s = setup();
+  const id = s.add('Shelf/one.md', 'x');
+  s.folderFor(['Empty']);
+  await s.sync();
+  Object.assign(s.docs.get(id)!, { dir: [], updatedAt: 9999 }); // moved out of Shelf in the app
+  assert.equal(counts(await s.sync()), '1,0,0,0,1,0,0');
+  assert.deepEqual(s.folder.paths(), ['one.md']);
+  const again = await s.sync();
+  assert.equal(again.foldersRemoved, 0);
+  assert.deepEqual([...s.folders.keys()].sort(), ['Empty', 'Shelf']);
+});
+
+test('a folder gone from the vault stays while it holds a document the vault does not keep, and goes once it is empty', async () => {
+  const s = setup();
+  s.add('Box/one.md', 'x');
+  const zip = s.add('Box/photos.zip', 'zip');
+  await s.sync();
+  s.folder.files.delete('Box/one.md');
+  const report = await s.sync();
+  assert.equal(report.trashed, 1);
+  assert.equal(report.foldersRemoved, 0);
+  assert.ok(s.folders.has('Box'));
+  s.docs.delete(zip);
+  assert.equal((await s.sync()).foldersRemoved, 1, 'it was remembered as gone from the vault');
+  assert.equal(s.folders.has('Box'), false);
+});
+
+test('a vault synced before folders were remembered removes none on its first sync', async () => {
+  const s = setup();
+  s.add('Notes/one.md', 'x');
+  await s.sync();
+  const memory = JSON.parse((await s.host.memory.load())!);
+  assert.deepEqual(memory.folders, ['Notes']);
+  delete memory.folders;
+  await s.host.memory.save(JSON.stringify(memory));
+  s.folder.files.set('one.md', s.folder.files.get('Notes/one.md')!);
+  s.folder.files.delete('Notes/one.md');
+  const report = await s.sync();
+  assert.equal(report.renamed, 1);
+  assert.equal(report.foldersRemoved, 0);
+  assert.ok(s.folders.has('Notes'));
+});
+
 test('a document renamed in the account moves the file', async () => {
   const s = setup();
   const id = s.add('one.md', 'content');
@@ -361,13 +473,56 @@ test('an emptied vault is not copied to the account until confirmed', async () =
   assert.equal(s.docs.size, 0);
 });
 
-test('the sync state is kept in the hidden state file', async () => {
+test('the sync state is kept in this computer\'s memory, and the folder only says whose it is', async () => {
   const s = setup();
   s.add('one.md', 'x');
   await s.sync();
-  const state = JSON.parse(s.folder.get(STATE_PATH)!);
-  assert.equal(state.account, 'u1');
-  assert.equal(state.entries.length, 1);
+  assert.equal(JSON.parse((await s.host.memory.load())!).entries.length, 1);
+  assert.deepEqual(JSON.parse(s.folder.get(STATE_PATH)!), { version: 1, account: 'u1', entries: [] });
+});
+
+test('a sync state an older version kept in the folder is taken over once, so nothing is synced again', async () => {
+  const s = setup();
+  s.add('one.md', 'x');
+  s.add('two.md', 'y');
+  await s.sync();
+  // As an older version left it: the whole manifest in the folder, and no memory on this computer.
+  s.folder.put(STATE_PATH, (await s.host.memory.load())!);
+  s.calls.length = 0;
+  const report = await syncVault({ ...s.host, memory: fakeMemory() });
+  assert.equal(counts(report), quiet);
+  assert.deepEqual(s.calls, []);
+  assert.deepEqual(JSON.parse(s.folder.get(STATE_PATH)!).entries, [], 'and the folder keeps only the owner from then on');
+});
+
+test('two signed-out computers sharing a folder (iCloud Drive, Dropbox) each take its files in, and neither deletes them', async () => {
+  const a = setup(GUEST_ACCOUNT);
+  for (let i = 0; i < 3; i++) a.add(`n${i}.md`, `note ${i}`);
+  await a.sync();
+  // An older version's manifest in the folder names computer A's documents, which computer B has never had.
+  a.folder.put(STATE_PATH, (await a.host.memory.load())!);
+  const b = fakeCloud();
+  const onB: VaultHost = { ...a.host, cloud: b.cloud, memory: fakeMemory() };
+  const first = await syncVault(onB);
+  assert.deepEqual(first.errors, []);
+  assert.equal(`${first.deletedHere},${first.created}`, '0,3');
+  assert.deepEqual(a.folder.paths(), ['n0.md', 'n1.md', 'n2.md']);
+  // An edit on B reaches A through the folder, and A's next sync deletes nothing either.
+  const id = [...b.docs.values()].find((d) => d.name === 'n1.md')!.id;
+  b.edit(id, 'changed on B');
+  await syncVault(onB);
+  const back = await a.sync();
+  assert.equal(`${back.uploaded},${back.deletedHere},${back.trashed}`, '1,0,0');
+  assert.equal(read([...a.docs.values()].find((d) => d.name === 'n1.md')!.bytes), 'wdoc:changed on B');
+});
+
+test('a folder that belongs to an account is not used signed out on another computer either', async () => {
+  const s = setup('u1');
+  s.add('one.md', 'x');
+  await s.sync();
+  const report = await syncVault({ ...s.host, account: GUEST_ACCOUNT, cloud: fakeCloud().cloud, memory: fakeMemory() });
+  assert.equal(report.wrongAccount, true);
+  assert.deepEqual(s.folder.paths(), ['one.md']);
 });
 
 test('with the real converters, PDFs and pictures go out as the files they are and a changed one comes back in place of the document', async () => {

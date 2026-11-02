@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The units of text a caret moves by: characters (grapheme clusters), words and the word around a point. One set of rules
 // for every editor (documents and plain text files), over a string and UTF-16 offsets. Edges of the string (where a caret
 // would go to the next or previous line) are the caller's: these functions stop there.

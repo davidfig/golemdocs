@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Stream filters (§7.4). Decoding is synchronous and hand-written; image codecs (DCT, JPX,
 // CCITT, JBIG2) are left encoded for whoever consumes the image. Encoding uses the platform's
 // Compression Streams API for Flate, and is only needed when saving.

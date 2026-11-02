@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Drawing on a page: an immediate-mode builder that records content-stream operations and
 // registers the fonts, images and graphics states it uses in the page's resources.
 //

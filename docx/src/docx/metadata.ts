@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Document properties (File ▸ Properties): the title, author and so on kept in docProps/core.xml
 // (Dublin Core and package metadata) and docProps/app.xml (Word's extended properties). Reading
 // matches elements by their local name, so any prefix a producer used works; writing changes only

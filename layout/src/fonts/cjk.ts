@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // East Asian text: which characters need the CJK fonts, which language a run is in, and the
 // line breaking rules (kinsoku) of Japanese and Chinese typography.
 

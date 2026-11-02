@@ -80,6 +80,7 @@ export const panels = {
   'panels.dashboard.sharedWithMe': 'Shared with me',
   'panels.dashboard.newBlankLabel': 'New document',
   'panels.dashboard.newBlank': 'New document',
+  'panels.dashboard.newKind': 'New {type}',
   'panels.dashboard.importLabel': 'Import a file from this computer',
   'panels.dashboard.importFolderLabel': 'Import a folder from this computer',
   'panels.dashboard.import': 'Import file',

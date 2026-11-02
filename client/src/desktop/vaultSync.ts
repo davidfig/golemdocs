@@ -1,15 +1,19 @@
 // Runs one sync of the vault: reads the folder and the account, asks `planVault` what to do, does it, and records
-// what it did in `.golemdocs/state.json` so the next sync can tell an edit from a file that was only touched.
+// what it did in this computer's memory of the vault (`VaultMemory`) so the next sync can tell an edit from a file that
+// was only touched. The folder itself keeps only whose it is (`.golemdocs/state.json`), because it may be shared with other
+// computers (iCloud Drive, Dropbox...) that link its files to documents of their own.
 //
 // Everything outside (the disk, the account, the converter, hashing) comes in through `VaultHost`, so the whole
 // sync runs in tests against in-memory stand-ins. One action failing is reported and the rest carry on; what failed
 // is still different from the manifest, so the next sync tries it again.
 
-import { cloudPaths, needsHash, planVault, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction } from './vaultPlan.ts';
+import { cloudPaths, folderPaths, foldersOf, needsHash, planVault, vanishedFolders, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
 
 /** Failures in a row after which a sync stops: a bad file is skipped, but every file failing is a problem to show now. */
 const GIVE_UP_AFTER = 5;
 
+/** In the folder: which account the vault belongs to, with no entries. Before the memory moved to `VaultMemory` it held the
+ * whole manifest, which a computer with no memory of its own still takes in once (see `adoptable`). */
 export const STATE_PATH = '.golemdocs/state.json';
 
 /** The `account` of a vault kept while nobody is signed in (its documents are the ones saved in this browser). */
@@ -36,6 +40,8 @@ export interface VaultCloud {
   keepVersion(id: string): Promise<void>;
   /** Moves a document to the account's trash. */
   trash(id: string): Promise<void>;
+  /** Removes an empty folder (see `vanishedFolders`). */
+  removeFolder(id: string): Promise<void>;
 }
 
 export interface VaultCodec {
@@ -46,8 +52,16 @@ export interface VaultCodec {
   kept(name: string): boolean;
 }
 
+/** Where this computer keeps its memory of the vault between syncs, as text (vaultMemory.ts). */
+export interface VaultMemory {
+  /** Null when there is none yet; throws when the memory can't be read, which stops the sync before it changes anything. */
+  load(): Promise<string | null>;
+  save(text: string): Promise<void>;
+}
+
 export interface VaultHost {
   disk: VaultDisk;
+  memory: VaultMemory;
   cloud: VaultCloud;
   codec: VaultCodec;
   /** Hex SHA-256. */
@@ -60,6 +74,8 @@ interface State {
   version: 1;
   account: string;
   entries: ManifestEntry[];
+  /** The folders that held files in the vault after the last sync, so one removed from the vault can be told from one never in it. */
+  folders?: string[];
 }
 
 /** Where a running sync is, for the dialog: the step, and for the last one how many of the changes are done and which file is being worked on. */
@@ -88,13 +104,15 @@ export interface SyncReport {
   movedHere: number;
   deletedHere: number;
   trashed: number;
+  /** Folders removed from the account because they were removed from the vault. */
+  foldersRemoved: number;
   /** Documents the vault does not keep (a name with no file format the app opens) and so left alone, plus any that had no file to write. */
   skipped: number;
   errors: { action: VaultAction; message: string }[];
   /** The documents (by the other side's id) whose content, name or place the sync changed there or deleted: one open in an editor is out of date. */
   touched: string[];
   /** The plan was not run because it would delete most of the vault; confirm and sync again with `allowMassDelete`. */
-  blocked?: { reason: 'mass-delete'; count: number };
+  blocked?: VaultPlan['blocked'];
   /** Documents the account lists but has no file for (paths they would have): not copied. */
   missing: string[];
   /** The sync gave up after this many failures in a row (something is wrong for every file, so going on would only repeat it); the rest was not tried. */
@@ -106,32 +124,55 @@ export interface SyncReport {
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 const directoryOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')).split('/') : []);
 
-async function loadState(host: VaultHost): Promise<State | null> {
+function parseState(text: string | null): State | null {
   try {
-    const parsed = JSON.parse(new TextDecoder().decode(await host.disk.read(STATE_PATH))) as State;
-    return parsed?.version === 1 && Array.isArray(parsed.entries) ? parsed : null;
+    const parsed = text === null ? null : (JSON.parse(text) as State);
+    return parsed?.version === 1 && typeof parsed.account === 'string' && Array.isArray(parsed.entries) ? parsed : null;
   } catch {
-    return null; // none yet, or unreadable: a vault with no memory, which the plan treats as filled before it was linked
+    return null; // unreadable: a vault with no memory, which the plan treats as filled before it was linked
   }
 }
 
-const saveState = (host: VaultHost, state: State) => host.disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify(state)));
+async function readFolderState(host: VaultHost): Promise<State | null> {
+  try {
+    return parseState(new TextDecoder().decode(await host.disk.read(STATE_PATH)));
+  } catch {
+    return null; // none yet
+  }
+}
+
+/**
+ * Whether remembered entries are this side's. Signed out, the ids are documents saved in this browser: entries none of whose
+ * documents are here were written by another computer (a folder state from before `VaultMemory`, brought by iCloud or Dropbox)
+ * or outlived this browser's storage, and planning with them would delete every file as "deleted on the other side". They are
+ * dropped, so the files are taken in as new documents. An account's ids are the same on every computer, so its entries are kept.
+ */
+function adoptable(entries: ManifestEntry[], account: string, listed: ReadonlySet<string>): ManifestEntry[] {
+  if (account !== GUEST_ACCOUNT || entries.some((e) => listed.has(e.id))) return entries;
+  return [];
+}
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
-  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, skipped: 0, errors: [], touched: [], missing: [] };
+  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, skipped: 0, errors: [], touched: [], missing: [] };
   const { disk, cloud, codec } = host;
 
-  const saved = await loadState(host);
+  const remembered = parseState(await host.memory.load());
+  const folderState = await readFolderState(host);
   // A vault kept while signed out is taken over by the account that signs in: with no memory, the plan matches files to
   // documents by path and the file wins, so nothing is lost. A vault linked to an account is never given to another
-  // account, nor to a signed-out browser (that would copy its files into documents the account would then duplicate).
-  if (saved && saved.account !== host.account && (saved.account !== GUEST_ACCOUNT || host.account === GUEST_ACCOUNT)) return { ...report, wrongAccount: true };
-  const state: State = saved && saved.account === host.account ? saved : { version: 1, account: host.account, entries: [] };
+  // account, nor to a signed-out browser (that would copy its files into documents the account would then duplicate). The
+  // folder says whose it is to every computer that shares it; this computer's memory says it here.
+  const refuses = (owner: State | null) => !!owner && owner.account !== host.account && (owner.account !== GUEST_ACCOUNT || host.account === GUEST_ACCOUNT);
+  if (refuses(remembered) || refuses(folderState)) return { ...report, wrongAccount: true };
+  // This computer's memory, or (once, with none) the manifest an older version kept in the folder.
+  const saved = remembered ?? folderState;
+  const state: State = saved && saved.account === host.account ? { ...saved } : { version: 1, account: host.account, entries: [] };
 
   const tell = options.progress ?? (() => {});
   tell({ phase: 'account' });
   const listing = await cloud.list();
   report.accountDocs = listing.docs.length;
+  state.entries = adoptable(state.entries, host.account, new Set(listing.docs.map((d) => d.id)));
   tell({ phase: 'folder', accountDocs: report.accountDocs });
   const all = cloudPaths(listing.docs, listing.folders);
   const nameOf = new Map(listing.docs.map((d) => [d.id, d.name]));
@@ -153,6 +194,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   const remoteById = new Map(kept.map((c) => [c.id, c]));
   const touched = new Set<string>(); // documents whose metadata changed in the account without their bytes
   const taken = new Set(local.map((f) => f.path)); // paths in use, so a move or download never writes over a different file
+  const removedHere = new Set<string>(); // files this sync deleted or moved away
 
   const record = (id: string, path: string, bytes: Uint8Array, mtimeMs: number, cloudUpdatedAt: number, hash: string) =>
     entries.set(id, { id, path, hash, size: bytes.byteLength, mtimeMs, cloudUpdatedAt });
@@ -222,6 +264,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         const file = await disk.read(action.from);
         const mtime = await disk.write(action.to, file);
         await disk.remove(action.from);
+        removedHere.add(action.from);
         taken.delete(action.from);
         taken.add(action.to);
         const entry = entries.get(action.id)!;
@@ -231,6 +274,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
       }
       case 'deleteLocal':
         await disk.remove(action.path);
+        removedHere.add(action.path);
         entries.delete(action.id);
         report.deletedHere++;
         return;
@@ -242,6 +286,10 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         return;
       case 'forget':
         entries.delete(action.id);
+        return;
+      case 'removeFolder':
+        await cloud.removeFolder(action.id);
+        report.foldersRemoved++;
         return;
     }
   }
@@ -279,7 +327,34 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     }
   }
 
+  // Folders removed from the vault (deleted, or renamed: their files are in the new one by now) go from the account once empty there.
+  // Only those that held files at the last sync: with no memory of folders yet, nothing is removed. One that is not removed yet
+  // (it still holds documents, say a held-back delete's, or the account could not be reached) is looked at again next time.
+  const onDisk = foldersOf(scanned.map((f) => f.path));
+  const stillGone = new Set((state.folders ?? []).filter((path) => !onDisk.has(path)));
+  if (stillGone.size) {
+    try {
+      const after = await cloud.list();
+      for (const { id, path } of vanishedFolders(stillGone, onDisk, after.docs, after.folders)) {
+        const action: VaultAction = { kind: 'removeFolder', id, path };
+        await run(action).then(
+          () => stillGone.delete(path),
+          (error) => report.errors.push({ action, message: error instanceof Error ? error.message : String(error) }),
+        );
+      }
+      const inAccount = new Set(folderPaths(after.folders).values());
+      for (const path of stillGone) if (!inAccount.has(path)) stillGone.delete(path);
+    } catch {
+      /* the account could not be listed: try again next time */
+    }
+  }
+
   state.entries = [...entries.values()];
-  await saveState(host, state);
+  const filesNow = [...scanned.map((f) => f.path).filter((path) => !removedHere.has(path)), ...state.entries.map((e) => e.path)];
+  state.folders = [...new Set([...foldersOf(filesNow), ...stillGone])].sort();
+  await host.memory.save(JSON.stringify(state));
+  if (folderState?.account !== host.account || folderState.entries.length) {
+    await disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify({ version: 1, account: host.account, entries: [] } satisfies State)));
+  }
   return report;
 }

@@ -21,6 +21,8 @@ export const vault: Catalog = {
   'vault.status.wrongAccount': '此資料夾屬於另一個帳號。請選擇其他資料夾。',
   'vault.status.blocked': '資料夾中缺少 {count} 個檔案。如果你是有意刪除，它們會在帳號的資源回收筒中保留 30 天。',
   'vault.deleteMissing': '刪除 {count} 份文件',
+  'vault.status.blockedHere': '有 {count} 份文件已不在 Golem Docs 中，但它們的檔案仍在資料夾裡。如果是有意刪除的，請把這些檔案也刪除。',
+  'vault.deleteFiles': '刪除 {count} 個檔案',
   'vault.skipped': '{count} 份文件會保留在你的帳號中，不會複製到資料夾。',
   'vault.introLocal': '你的文件會以檔案形式存放在這台電腦的資料夾中。在那裡變更檔案，這裡的文件會隨之更新；在這裡變更文件，檔案也會更新。如果兩邊都變更了，以資料夾中的檔案為準，先前的版本會保留在文件的紀錄中。',
   'vault.status.blockedLocal': '資料夾中缺少 {count} 個檔案。如果你是有意刪除，它們會在資源回收筒中保留 30 天。',

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Reading and writing document content: blocks (paragraphs, tables), inlines (runs,
 // hyperlinks) and run content (text, tabs, breaks, fields, drawings).
 

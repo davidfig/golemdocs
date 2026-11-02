@@ -78,7 +78,7 @@ The page updates itself (it is the website), so only the shell, the Rust code an
 
 ## The download page
 
-golemdocs.com/download redirects to the **Download** section of the home page (`client/home/template.html`, strings `download.*` in every `client/home/locales/*.json`). It reads `GET /api/downloads` and shows the installer for the visitor's computer first, then the rest under *Other downloads*; before the first publish it says the app is not ready.
+golemdocs.com/download redirects to the site's **Download** page, `/home/download` (`client/home/pages/download.html`, strings `download.*` in every `client/home/locales/*.json`). It reads `GET /api/downloads` and shows the installer for the visitor's computer first, then the rest under *Other downloads*; before the first publish it says the app is not ready.
 
 - **Serving** (`server/src/downloads.ts`): public, no sign-in. `GET /api/downloads` is `latest.json` (`{ version, date, files: [{ name, platform, size }] }`); `GET /api/downloads/<file>` streams the installer from R2 as an attachment, cached for a year (a name never changes its bytes). File names are restricted to `[A-Za-z0-9._+-]`, so nothing outside `downloads/desktop/` can be read, and `latest.json` is never served as a file.
 - **Publishing** (`scripts/publish-desktop.ts`, `pnpm publish:desktop [vX.Y.Z] [--dry-run]`): refuses a release that lacks a Mac, a Windows or a Linux installer, or that has a file of another version; uploads the installers, then the manifest, so the page never lists a version whose files are not all there. Only the Worker needs deploying once for the route; later releases are just this script (no website deploy).

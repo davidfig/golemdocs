@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The font program a PDF font dictionary embeds (§9.9), read for its glyph outlines so a renderer
 // can draw the document's own letterforms rather than a stand-in: Type 1 (/FontFile), TrueType
 // (/FontFile2) and CFF (/FontFile3: Type1C, CIDFontType0C, OpenType), for simple fonts and for

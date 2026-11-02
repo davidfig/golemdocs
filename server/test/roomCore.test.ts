@@ -465,11 +465,18 @@ test('a save is told to the watchers, not to the holder', async () => {
   t.core.saved(5000);
   assert.deepEqual(b.inbox.at(-1), { type: 'saved', updatedAt: 5000 });
   assert.ok(!t.types(a).includes('saved'));
-  // A room edited together says nothing: its own saves are what people see.
-  const u = await setup();
-  const c = await u.join('c');
-  u.core.saved(5000);
-  assert.ok(!u.types(c).includes('saved'));
+});
+
+test('a room edited together tells someone alone in it of a save (an ai app’s, say), and says nothing once it is shared', async () => {
+  const t = await setup();
+  const a = await t.join('a');
+  t.core.saved(5000);
+  assert.deepEqual(a.inbox.at(-1), { type: 'saved', updatedAt: 5000 });
+  const b = await t.join('b');
+  assert.notEqual(t.store.m.mode, 'solo');
+  t.core.saved(6000);
+  assert.ok(!t.types(b).includes('saved'));
+  assert.ok(!a.inbox.some((m) => m.type === 'saved' && m.updatedAt === 6000));
 });
 
 test('taking over asks the holder to save what it has, and the document is the taker’s once it has', async () => {

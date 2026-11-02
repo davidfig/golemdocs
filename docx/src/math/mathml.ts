@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The math tree as MathML (Presentation MathML, the subset browsers draw natively). It is what
 // the Insert Equation dialog previews with, and what an HTML export writes for an equation.
 

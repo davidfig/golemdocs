@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Paragraph ids and where every block lives.
 //
 // Ids are Word's own paragraph ids (w14:paraId: 8 hex digits below 0x80000000), stored in the

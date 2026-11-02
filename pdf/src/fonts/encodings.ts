@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Simple-font encodings, glyph names to Unicode, and the standard 14 fonts' metrics, over the
 // generated tables in data.ts.
 

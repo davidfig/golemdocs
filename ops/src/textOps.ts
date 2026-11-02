@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Editing a plain text file together. A change is "replace `remove` bytes at `at` with `text`", in UTF-8 byte offsets of the
 // file (so a client's piece table and the server's bytes mean the same thing, and no line numbers are involved). The room puts
 // the changes of every client in one order (collab.ts's protocol); a client whose changes lost the race transforms them over the

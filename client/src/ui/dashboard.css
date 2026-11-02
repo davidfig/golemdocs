@@ -206,11 +206,6 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   opacity: 0.5;
 }
 
-.wm-file-icon {
-  display: inline-flex;
-  flex: none;
-}
-
 .wm-card-meta {
   color: var(--wm-muted);
   font-size: 12px;

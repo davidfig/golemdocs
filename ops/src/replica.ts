@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A document being edited: local edits as transactions, undo and redo, and (when connected)
 // collaboration. This is what an editor drives and what a server-side document could reuse.
 

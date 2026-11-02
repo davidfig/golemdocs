@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Editing: a selection in model positions, commands that edit the model (and tell layout
 // what changed), and caret/selection geometry from the laid-out lines.
 //

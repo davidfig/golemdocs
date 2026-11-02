@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // A minimal PNG writer: 8-bit gray, RGB or RGBA, zlib "stored" (uncompressed) blocks. Big but
 // trivial, synchronous, and it needs no platform APIs.
 

@@ -54,11 +54,13 @@ async function capture(frames: string): Promise<number> {
   const browser = await chromium.launch({ channel: 'chromium', args: ['--use-angle=metal', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
   try {
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2 });
-    // Spelling marks (the Russian names) and the pages sidebar would only add noise.
+    // Spelling marks (the Russian names), the pages and files sidebars and the signed-out notice would only add noise.
     await context.addInitScript(() => {
       try {
         localStorage.setItem('word.spelling.asYouType', 'off');
         localStorage.setItem('word.pagesPanel', 'off');
+        localStorage.setItem('word.filesPanel', 'off');
+        localStorage.setItem('golem.sharedDeviceNotice.dismissed', '1');
       } catch {
         // No storage: the clip just shows them.
       }

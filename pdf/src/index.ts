@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 export { PdfDocument, PdfError, deepEqual, formatDate, parseDate, type LoadOptions, type SaveOptions } from './document.ts';
 export { PdfPage, INHERITABLE, type Box } from './page.ts';
 export {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Searching text: the options of a Find, the expression they make, and a replacement with `$1`-style references. One set of
 // rules for every editor (documents and plain text files). Words are the ones the caret moves by (`textUnits.ts`).
 

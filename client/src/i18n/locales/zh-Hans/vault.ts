@@ -21,6 +21,8 @@ export const vault: Catalog = {
   'vault.status.wrongAccount': '此文件夹属于另一个账户。请选择其他文件夹。',
   'vault.status.blocked': '文件夹中缺少 {count} 个文件。如果你是有意删除，它们会在账户的回收站中保留 30 天。',
   'vault.deleteMissing': '删除 {count} 个文档',
+  'vault.status.blockedHere': '有 {count} 个文档已不在 Golem Docs 中，但它们的文件仍在文件夹里。如果是有意删除的，请把这些文件也删除。',
+  'vault.deleteFiles': '删除 {count} 个文件',
   'vault.skipped': '{count} 个文档保留在你的账户中，不会复制到文件夹。',
   'vault.introLocal': '你的文档以文件形式保存在这台电脑的文件夹中。在那里更改文件，这里的文档会随之更新；在这里更改文档，文件也会更新。如果两边都更改了，以文件夹中的文件为准，之前的版本会保留在文档的历史记录中。',
   'vault.status.blockedLocal': '文件夹中缺少 {count} 个文件。如果你是有意删除，它们会在回收站中保留 30 天。',

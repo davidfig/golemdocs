@@ -90,3 +90,11 @@ test('unreachable, the account\'s documents as last listed still show', async ()
   assert.deepEqual(library.cloud.map((d) => d.id).sort(), ['c1', 'c2']);
   assert.ok(library.problem);
 });
+
+test('a copy\'s account id is known before the library is first read', async () => {
+  const saved = await local.saveFromCloud({ name: 'c1.docx', bytes: new ArrayBuffer(1), owner: 'u1', cloudId: 'c1', cloudUpdatedAt: 1 });
+  const library = store();
+  assert.equal(library.local.length, 0);
+  assert.equal(await library.cloudIdOf(saved.id), 'c1');
+  assert.equal(await library.cloudIdOf('nope'), undefined);
+});

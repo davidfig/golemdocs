@@ -1,11 +1,12 @@
 // The real `VaultHost`: the folder through the native bridge, the account through cloud.ts, the converter that
 // is handed in (convertClient.ts: another thread). Kept apart from vaultSync.ts so that file runs in tests with nothing but memory.
 
-import { createDocument, deleteDocuments, downloadDocument, listDocuments, listFolders, moveDocuments, putFolders, renameCloudDocument, saveCloudVersion, saveDocument, throwIfFailed } from '../cloud.ts';
+import { createDocument, deleteDocuments, downloadDocument, listDocuments, listFolders, moveDocuments, putFolders, removeFolders, renameCloudDocument, saveCloudVersion, saveDocument, throwIfFailed } from '../cloud.ts';
 import type { Folder } from '../folders.ts';
 import type { DesktopBridge } from './bridge.ts';
 import { safeName } from './vaultPlan.ts';
 import { guestCloud } from './vaultGuest.ts';
+import { vaultMemory } from './vaultMemory.ts';
 import { GUEST_ACCOUNT, type VaultCloud, type VaultCodec, type VaultHost } from './vaultSync.ts';
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -54,10 +55,14 @@ export function accountCloud(): VaultCloud {
     async trash(id) {
       throwIfFailed(await deleteDocuments([id]));
     },
+    async removeFolder(id) {
+      throwIfFailed(await removeFolders([id]));
+      folders = folders.filter((f) => f.id !== id);
+    },
   };
 }
 
-/** The vault's host for the signed-in account, or (null) for the documents saved in this browser. */
-export function realHost(disk: DesktopBridge, codec: VaultCodec, account: string | null): VaultHost {
-  return { disk, cloud: account ? accountCloud() : guestCloud(), codec, hash: sha256Hex, account: account ?? GUEST_ACCOUNT };
+/** The host of the vault at `root` for the signed-in account, or (null) for the documents saved in this browser. */
+export function realHost(root: string, disk: DesktopBridge, codec: VaultCodec, account: string | null): VaultHost {
+  return { disk, memory: vaultMemory(root), cloud: account ? accountCloud() : guestCloud(), codec, hash: sha256Hex, account: account ?? GUEST_ACCOUNT };
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Positions, selections, commands and results of the editor.
 
 import { type Block, type DocumentProperties, type Drawing, type Inline, type Paragraph, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';

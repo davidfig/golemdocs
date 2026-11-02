@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Schemas for run, paragraph, section and table property elements.
 
 import type {

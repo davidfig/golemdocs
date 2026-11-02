@@ -65,6 +65,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedWithMe': '나와 공유됨',
   'panels.dashboard.newBlankLabel': '새 문서',
   'panels.dashboard.newBlank': '새 문서',
+  'panels.dashboard.newKind': '새 {type}',
   'panels.dashboard.importLabel': '이 컴퓨터에서 파일 가져오기',
   'panels.dashboard.importFolderLabel': '이 컴퓨터에서 폴더 가져오기',
   'panels.dashboard.import': '파일 가져오기',

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Defaults for a new document: Word's Normal template (the Calibri-era defaults, matching
 // the font set the renderer ships), US Letter with 1" margins.
 

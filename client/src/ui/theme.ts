@@ -58,6 +58,7 @@ let darkPages = read(PAGES_KEY) === 'on';
 
 let desk: [number, number, number] | null = null;
 let accent: string | null = null;
+let font: string | null = null;
 const listeners = new Set<() => void>();
 
 export function currentScheme(): SchemeId {
@@ -153,4 +154,10 @@ export function deskColor(): readonly [number, number, number] {
 export function accentColor(): string {
   accent ??= getComputedStyle(document.documentElement).getPropertyValue('--wm-hot-border').trim() || '#316ac5';
   return accent;
+}
+
+/** The UI font stack (--wm-font), for labels drawn on a canvas. It is the same in every scheme. */
+export function uiFont(): string {
+  font ??= getComputedStyle(document.documentElement).getPropertyValue('--wm-font').trim() || 'sans-serif';
+  return font;
 }

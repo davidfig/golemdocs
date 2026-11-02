@@ -21,6 +21,8 @@ export const vault: Catalog = {
   'vault.status.wrongAccount': '이 폴더는 다른 계정의 것입니다. 다른 폴더를 선택하세요.',
   'vault.status.blocked': '폴더에서 파일 {count}개가 없어졌습니다. 삭제하려던 것이라면 계정의 휴지통에 30일 동안 보관됩니다.',
   'vault.deleteMissing': '문서 {count}개 삭제',
+  'vault.status.blockedHere': '문서 {count}개가 Golem Docs에서 사라졌지만 파일은 폴더에 남아 있습니다. 일부러 삭제한 것이라면 파일도 삭제하세요.',
+  'vault.deleteFiles': '파일 {count}개 삭제',
   'vault.skipped': '문서 {count}개는 계정에 남고 폴더로 복사되지 않습니다.',
   'vault.introLocal': '문서는 이 컴퓨터의 폴더에 파일로 보관됩니다. 그곳에서 파일을 바꾸면 여기의 문서가 업데이트되고, 여기에서 문서를 바꾸면 파일이 업데이트됩니다. 둘 다 바뀐 경우에는 폴더의 파일이 우선하며, 이전 버전은 문서의 기록에 남습니다.',
   'vault.status.blockedLocal': '폴더에서 파일 {count}개가 없어졌습니다. 삭제하려던 것이라면 휴지통에 30일 동안 보관됩니다.',

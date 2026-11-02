@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Text editing on the model.
 //
 // Positions are model offsets within a paragraph: every UTF-16 unit of text (w:t, w:delText,

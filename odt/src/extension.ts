@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // The ODT extension: what an OpenDocument text file can hold that the WordDocument core can't.
 // It is plain JSON (strings, numbers, records, arrays), kept beside the core in the universal
 // document, so switching to another format and back to ODT restores it.

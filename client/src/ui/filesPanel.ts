@@ -18,7 +18,7 @@ import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { showPopupMenu, type PopupItem } from './popupMenu.ts';
 import { onContextMenu } from './contextMenu.ts';
-import { newKindItems } from './newKinds.ts';
+import { newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
 import './filesPanel.css';
@@ -339,7 +339,8 @@ export class FilesPanel {
     return [
       { label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(folder.id) },
       'separator',
-      { label: t('panels.dashboard.newBlank'), items: newKindItems((kind) => this.host.newDocument(folder.id, kind)) },
+      ...newMenuItems((kind) => this.host.newDocument(folder.id, kind)),
+      'separator',
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
@@ -354,7 +355,8 @@ export class FilesPanel {
   /** What a right click on the empty part offers: the same as on the Documents screen, at the top level. */
   private rootItems(): PopupItem[] {
     return [
-      { label: t('panels.dashboard.newBlank'), items: newKindItems((kind) => this.host.newDocument(null, kind)) },
+      ...newMenuItems((kind) => this.host.newDocument(null, kind)),
+      'separator',
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(null) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(null) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(null) },

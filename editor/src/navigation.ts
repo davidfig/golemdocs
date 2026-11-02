@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Moving the caret, and caret and selection geometry from the laid-out lines.
 import { type Position, type MoveTarget, type Rect, type Caret, type SelectionGeometry } from './types.ts';
 import type { Selection as OpSelection } from '@golemdocs/ops';

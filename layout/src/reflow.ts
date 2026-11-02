@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Normal view: the text reflows to the window instead of the sheet. While a width is set, every
 // section is laid out as one column that wide, with slim margins and no headers or footers; the
 // page height stays as it was, so the document is cut into pieces drawn edge to edge, with no

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Interactive form fields (§12.7): text boxes, check boxes, radio buttons and choice lists, as a
 // plain layer the app can fill in, rearrange, save as JSON and write back into the file.
 //

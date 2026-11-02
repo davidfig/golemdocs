@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Merging and splitting table cells, as functions from one table to another.
 //
 // A table is rows of cells, but a cell can span several grid columns (gridSpan) and several rows

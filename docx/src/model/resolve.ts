@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Effective formatting: what a paragraph or run actually looks like after applying document
 // defaults, the style hierarchy, numbering and direct formatting, in Word's order.
 

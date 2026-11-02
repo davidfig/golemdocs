@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Editing a block of text as text: the block becomes a list of cells (one per glyph, still holding
 // the bytes and style it was shown with), the new text is matched against them so unchanged
 // characters keep their own glyphs and styles, characters typed take the style of their

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Math layout: turns a math tree into positioned glyphs and rules, following the TeX algorithm
 // (The TeXbook, Appendix G) with the parameters of an OpenType MATH table (the constants,
 // italic corrections, accent attachment points, size variants and glyph assemblies in MathData).

@@ -102,6 +102,7 @@ export const SHEET_OPS = [
   'insertPivot',
   'pivotFields',
   'goalSeek',
+  'dataTable',
   'protectSheet',
   'unprotectSheet',
   'lockCells',

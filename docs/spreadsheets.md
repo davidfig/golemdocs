@@ -503,7 +503,19 @@ if they fail, steps out on both sides until the formula crosses the goal, then h
 or after a few hundred tries, and reports a solution when within Excel's Maximum Change (0.001). The cell is put back
 afterwards, and the status card's OK applies the value found as an ordinary input edit, so it undoes like typing.
 
-**Next in M6**: data tables, scenarios, Solver; print and PDF.
+**Data tables** (`whatIf.ts`; Sheet › What-If Analysis › Data Table, Excel's `{=TABLE()}`). Saved as a `dataTable`
+formula run on its first result cell (`<f t="dataTable" ref dt2D dtr r1 r2>`; `dataTableOf` reads it, `dataTableRun`
+makes it): with one input, its values are down the column left of the results and its formulas across the row above
+(`dtr="0"`, r1 the column input) or the other way round (`dtr="1"`, r1 the row input); with two, its formula is the corner,
+r1 the row input and r2 the column input. The engine skips such a run (a workbook with one is no longer "incomplete");
+after every recalculation the worker works every table out (`calculateDataTables`: for each cell, the inputs set to its
+row's and column's values, the engine recalculated, the formula read; the inputs put back, then what reads the table
+recalculated), up to 20,000 cells a pass. Excel's three kinds (`data-tables-excel.xlsx`, made by Excel's own Data Table
+on `data-tables.xlsx`) are worked out to Excel's values; a table made here and Excel's with a header changed, recalculated
+by Excel, come out the same. The command takes the selected block (headers included) and the input cells from a dialog
+(`askDataTable`, `whatIfDialogs.ts`).
+
+**Next in M6**: scenarios, Solver; print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

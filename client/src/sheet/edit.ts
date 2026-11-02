@@ -4,6 +4,7 @@
 // in other formulas are moved by the engine too when rows and columns move.
 
 import { newSparklineGroup } from './sparklines.ts';
+import { dataTableRun } from './whatIf.ts';
 import { applyChoice, gridValue, newPivot, refreshPivot, setPivotField } from './pivot.ts';
 import { rangeName } from './refs.ts';
 import { changeKind, newChart, withData } from './charts/make.ts';
@@ -192,6 +193,7 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
     case 'refreshPivots':
     case 'pivotFields':
     case 'pivotField':
+    case 'dataTable':
       return 'cells';
     case 'insertRows':
     case 'deleteRows':
@@ -234,7 +236,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'dataTable' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -520,6 +522,21 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       next = { ...next, chart, anchor: change.anchor ?? next.anchor };
       sheet.charts = sheet.charts.map((x, i) => (i === op.index ? next : x));
       return { ranges: [] };
+    }
+    case 'dataTable': {
+      const r = op.range;
+      const results = { r0: r.r0 + 1, c0: r.c0 + 1, r1: r.r1, c1: r.c1 };
+      const inside = (c: { row: number; col: number } | null) => !!c && c.row >= r.r0 && c.row <= r.r1 && c.col >= r.c0 && c.col <= r.c1;
+      if (r.r1 <= r.r0 || r.c1 <= r.c0 || (!op.rowInput && !op.colInput)) return { ranges: [], message: 'dataTableShape' };
+      if (inside(op.rowInput) || inside(op.colInput)) return { ranges: [], message: 'dataTableInput' };
+      // The results lose what they held (their values are worked out after the edit); the first holds the table.
+      for (let col = results.c0; col <= results.c1; col++) {
+        const column = sheet.grid.column(col);
+        column.setFormulas(results.r0, results.r1, null);
+        for (let row = results.r0; row <= results.r1; row++) sheet.grid.set(row, col, Kind.Number, 0, column.style(row));
+      }
+      sheet.grid.column(results.c0).setFormula(results.r0, dataTableRun({ range: results, rowInput: op.rowInput, colInput: op.colInput }));
+      return { ranges: [results] };
     }
     case 'protect':
       if (op.on) sheet.protection = protect(op.password);

@@ -21,6 +21,7 @@
 - Sparklines in workbooks show in their cells: lines, columns and win/loss, with their high, low and negative points marked, and they move with their cells. Insert › Sparklines adds them to the selected rows, and Clear Sparklines takes them away.
 - Insert › PivotTable makes a pivot table of the selected cells on a new sheet: choose its rows, columns, values (sum, count, average and more) and filters in the field list. Right-click a pivot table to change its fields or refresh it from its data. Pivot tables are laid out as Excel lays them out. They are drawn in their pivot style (shaded headers and grand totals, bold outer items, indented inner ones), as in Excel. The field list sets a pivot table's layout (compact, outline or tabular), where its subtotals go and which grand totals it shows, and a pivot table's Row Labels and Column Labels buttons sort a field or choose which of its items to show.
 - Sheet › What-If Analysis › Goal Seek finds the value of a cell that brings a formula to the value you want.
+- Sheet › What-If Analysis › Data Table shows a formula's results for a row and a column of inputs, and data tables in Excel workbooks now update as you edit.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales, data bars and icon sets, recalculated as the values change.
 - Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
 

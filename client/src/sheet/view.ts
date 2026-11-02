@@ -29,7 +29,7 @@ import { askSheetPassword } from './protectDialog.ts';
 import { ChartTitleCard } from './chartTitleCard.ts';
 import { askChartData } from './chartDataDialog.ts';
 import { askPivotFields } from './pivotFieldsDialog.ts';
-import { askGoalSeek, showGoalSeekStatus } from './goalSeekDialog.ts';
+import { askDataTable, askGoalSeek, showGoalSeekStatus } from './whatIfDialogs.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -1419,6 +1419,24 @@ export class SheetEditorView {
     void this.edit({ kind: 'input', range: { r0: changing.row, c0: changing.col, r1: changing.row, c1: changing.col }, text: String(reply.value) });
   }
 
+  /** Sheet › What-If Analysis › Data Table: the selected block (headers included) made a data table of the input cells
+   * asked for. */
+  private async dataTable(): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const sheet = this.sheetIndex;
+    const range = this.selection;
+    if (this.ranges.length !== 1 || range.r1 <= range.r0 || range.c1 <= range.c0) return this.deps.notify(t('sheet.dataTable.shape'));
+    const cell = (text: string) => {
+      if (!text) return null;
+      const r = parseRange(text.replace(/\$/g, ''));
+      return r && r.r0 === r.r1 && r.c0 === r.c1 ? { row: r.r0, col: r.c0 } : undefined;
+    };
+    const ask = await askDataTable((row, col) => (!row && !col ? t('sheet.dataTable.none') : cell(row) === undefined || cell(col) === undefined ? t('sheet.dataTable.badCell') : null));
+    this.afterCard();
+    if (!ask || sheet !== this.sheetIndex) return;
+    void this.edit({ kind: 'dataTable', range, rowInput: cell(ask.row) ?? null, colInput: cell(ask.col) ?? null });
+  }
+
   /** Sheet › Protect Sheet or Unprotect Sheet: the password asked for (protecting, or a sheet that has one). */
   private async protectSheet(on: boolean): Promise<void> {
     if (this.readOnly || !this.info) return;
@@ -1784,6 +1802,9 @@ export class SheetEditorView {
       case 'goalSeek':
         void this.goalSeek();
         break;
+      case 'dataTable':
+        void this.dataTable();
+        break;
       case 'protectSheet':
       case 'unprotectSheet':
         void this.protectSheet(op === 'protectSheet');
@@ -2090,6 +2111,10 @@ function messageFor(code: string): string {
       return t('sheet.chart.badData');
     case 'wrongPassword':
       return t('sheet.wrongPassword');
+    case 'dataTableShape':
+      return t('sheet.dataTable.shape');
+    case 'dataTableInput':
+      return t('sheet.dataTable.inside');
     case 'goalSeekTarget':
       return t('sheet.goalSeek.noFormula');
     case 'goalSeekChanging':

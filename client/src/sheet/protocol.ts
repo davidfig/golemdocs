@@ -248,6 +248,9 @@ export type EditOp =
   | { kind: 'pivotFields'; index: number; choice: PivotChoice }
   /** A pivot field's button: its items sorted, or only some of them shown (null: all), and the pivot laid out. */
   | { kind: 'pivotField'; index: number; field: number; sort?: 'ascending' | 'descending'; shown?: string[] | null }
+  /** What-If › Data Table: a block (its first row and column the inputs' values and formulas) made a data table of one
+   * or two input cells. */
+  | { kind: 'dataTable'; range: CellRange; rowInput: { row: number; col: number } | null; colInput: { row: number; col: number } | null }
   /** Refresh: the sheet's pivot tables laid out again from their sources. */
   | { kind: 'refreshPivots' }
   /** Insert › Sparklines: one per row of a block of cells, in the column after it. */

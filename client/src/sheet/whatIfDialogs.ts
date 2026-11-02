@@ -1,5 +1,5 @@
-// Sheet › What-If Analysis › Goal Seek: the formula's cell, the value it should come to, and the cell to change, asked in a
-// dialog (as Excel's); then whether the answer found is kept.
+// Sheet › What-If Analysis: Goal Seek's dialog (the formula's cell, the value it should come to, and the cell to change),
+// then whether the answer found is kept; Data Table's (its row and column input cells). Dialogs, as Excel's are.
 
 import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
@@ -75,4 +75,46 @@ export function showGoalSeekStatus(target: string, found: boolean, goal: string,
     h('p', { text: t('sheet.goalSeek.current', { value: result }) }),
   );
   return showConfirm(t('sheet.goalSeek.status'), body, t('sheet.pivot.ok'));
+}
+
+/** Data Table's input cells (as typed; either may be left empty, not both). Resolves null if cancelled. `check` says what
+ * is wrong with an answer, or null. */
+export function askDataTable(check: (row: string, col: string) => string | null): Promise<{ row: string; col: string } | null> {
+  return new Promise((resolve) => {
+    const title = t('sheet.dataTable');
+    const field = (label: string) => h('input', { class: 'wm-input', attrs: { type: 'text', 'aria-label': label, autocomplete: 'off', spellcheck: 'false' } });
+    const row = field(t('sheet.dataTable.row'));
+    const col = field(t('sheet.dataTable.col'));
+    const message = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
+    const ok = h('button', { class: 'wm-button wm-primary', text: t('sheet.pivot.ok'), attrs: { type: 'submit' } });
+    const cancel = h('button', { class: 'wm-button', text: t('sheet.pivot.cancel'), attrs: { type: 'button' } });
+    const form = h(
+      'form',
+      { attrs: { method: 'dialog' } },
+      h('div', { class: 'wm-dialog-body wm-link-body' }, h('label', { text: t('sheet.dataTable.row') }), row, h('label', { text: t('sheet.dataTable.col') }), col, message),
+      h('div', { class: 'wm-dialog-buttons' }, ok, cancel),
+    );
+    const dialog = h('dialog', { class: 'wm-dialog wm-link', attrs: { 'aria-label': title } }, dialogTitleBar(title, () => dialog.close()), form);
+    let answer: { row: string; col: string } | null = null;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const problem = check(row.value.trim(), col.value.trim());
+      if (problem) {
+        message.textContent = problem;
+        return;
+      }
+      answer = { row: row.value.trim(), col: col.value.trim() };
+      dialog.close();
+    });
+    cancel.addEventListener('click', () => dialog.close());
+    // Keys stay in the dialog: the sheet's handlers listen on the window.
+    dialog.addEventListener('keydown', (e) => e.stopPropagation());
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(answer);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    row.focus();
+  });
 }

@@ -378,6 +378,41 @@ test('Sheet › What-If Analysis › Goal Seek finds the input that brings a for
   await expect.poll(async () => Math.round(+(await state(page)).content.display)).toBe(103);
 });
 
+test('Sheet › What-If Analysis › Data Table fills a block with its formula for each pair of inputs', async ({ app, page }) => {
+  await open(app, page);
+  // D20 adds up its inputs (I20, I21); 1, 2, 3 across for I21, 10, 20, 30 down for I20.
+  const type = async (row: number, col: number, text: string) => {
+    await clickCell(page, row, col);
+    await page.keyboard.type(text);
+    await page.keyboard.press('Enter');
+  };
+  await type(19, 8, '5');
+  await type(20, 8, '7');
+  await type(19, 3, '=I20*100+I21');
+  for (const [i, v] of ['1', '2', '3'].entries()) await type(19, 4 + i, v);
+  for (const [i, v] of ['10', '20', '30'].entries()) await type(20 + i, 3, v);
+  await clickCell(page, 19, 3);
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  await app.menu('Sheet', 'What-If Analysis', 'Data Table…');
+  const dialog = page.getByRole('dialog', { name: 'Data Table' });
+  await dialog.getByRole('textbox', { name: 'Row input cell' }).fill('I21');
+  await dialog.getByRole('textbox', { name: 'Column input cell' }).fill('I20');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await clickCell(page, 20, 4);
+  await expect.poll(async () => (await state(page)).content.display).toBe('1001');
+  await clickCell(page, 22, 6);
+  await expect.poll(async () => (await state(page)).content.display).toBe('3003');
+  // It follows its formula.
+  await type(19, 3, '=I20*10+I21');
+  await clickCell(page, 22, 6);
+  await expect.poll(async () => (await state(page)).content.display).toBe('303');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

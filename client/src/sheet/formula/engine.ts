@@ -415,8 +415,8 @@ export class Engine implements Host {
     this.clearSpill(old, null);
   }
 
-  /** Stores a value as the grid holds it (a blank result is 0, as Excel shows it). */
-  private write(sheet: number, row: number, col: number, v: Scalar): void {
+  /** Stores a value as the grid holds it (a blank result is 0, as Excel shows it). Data tables store theirs so too. */
+  write(sheet: number, row: number, col: number, v: Scalar): void {
     const grid = this.worksheet(sheet)!.grid;
     const column = grid.column(col);
     const style = column.style(row);
@@ -480,7 +480,7 @@ export class Engine implements Host {
     }
   }
 
-  /** Whether some formula uses what the engine cannot calculate yet (an unknown function, a table reference, a data table). */
+  /** Whether some formula uses what the engine cannot calculate yet (an unknown function, a table reference). */
   get incomplete(): boolean {
     this.index();
     return this.unsupported;
@@ -517,10 +517,8 @@ export class Engine implements Host {
   }
 
   private indexRun(at: RunAt): void {
-    if (at.run.kind === 'dataTable') {
-      this.unsupported = true;
-      return;
-    }
+    // A data table's cells are filled by the what-if code (whatIf.ts), not by a formula of their own.
+    if (at.run.kind === 'dataTable') return;
     // A dynamic array read from the file fills the range the file gives it.
     const anchor = cellKeyOf(at.sheet, at.run.first, at.col);
     if (at.run.dynamic && at.run.ref && !this.spills.has(anchor)) {

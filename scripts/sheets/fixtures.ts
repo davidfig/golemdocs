@@ -104,6 +104,26 @@ export async function sparklinesWorkbook(): Promise<Uint8Array> {
   return pkg.write();
 }
 
+/**
+ * data-tables.xlsx: two inputs (A1 = 2, A2 = 3) and the cells three data tables need (data-tables-excel.xlsx is Excel's
+ * What-If › Data Table run on it): C1:D4, the inputs 1, 2, 3 down C and =A1*10 in D1 (column input A1); F1:I2, =A1+100
+ * in F2 and the inputs 1, 2, 3 across G1:I1 (row input A1); K1:N4, =A1*A2 in K1, 1, 2, 3 across (row input A1) and 10,
+ * 20, 30 down (column input A2).
+ */
+export async function dataTablesWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  book.sheets.push(new Worksheet('Tables', 1));
+  const history = new History(book);
+  const put = (ref: string, rows: string[][]) => history.apply(0, { kind: 'paste', at: { row: +ref.slice(1) - 1, col: ref.charCodeAt(0) - 65 }, rows });
+  put('A1', [['2'], ['3']]);
+  put('C2', [['1'], ['2'], ['3']]);
+  put('D1', [['=A1*10']]);
+  put('F2', [['=A1+100']]);
+  put('G1', [['1', '2', '3']]);
+  put('K1', [['=A1*A2', '1', '2', '3'], ['10'], ['20'], ['30']]);
+  return writeWorkbook(book);
+}
+
 /** The data pivots.xlsx summarises: twelve sales (Sales!A1:D13). */
 export const PIVOT_SALES = [
   ['Region', 'Product', 'Month', 'Amount'],

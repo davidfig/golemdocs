@@ -5,7 +5,7 @@
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
-import { goalSeek } from './whatIf.ts';
+import { calculateDataTables, goalSeek } from './whatIf.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { currentRegion } from './edit.ts';
@@ -171,6 +171,7 @@ function resetEngine(recalculateAll: boolean): void {
   engine = new Engine(book!);
   if (recalculateAll) {
     engine.recalculateAll();
+    calculateDataTables(book!, engine);
     for (let i = 0; i < book!.sheets.length; i++) cache!.forgetOverview(i);
   }
 }
@@ -184,6 +185,8 @@ async function recalculate(sheet: number, changed: Changed): Promise<void> {
   const work = engine.recalculateInSlices(boxes, yieldToEvents);
   calculating = work.catch(() => undefined);
   const done = await work.finally(() => (calculating = null));
+  // Data tables are worked out again from the values just calculated.
+  done.push(...calculateDataTables(book!, engine));
   // Conditional formats look at the values just calculated.
   painters = new Map();
   for (const box of done) {

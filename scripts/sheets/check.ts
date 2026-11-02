@@ -14,6 +14,7 @@ import { readWorkbook } from '../../client/src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
 import { History } from '../../client/src/sheet/edit.ts';
 import { pivotChoice } from '../../client/src/sheet/pivot.ts';
+import { calculateDataTables } from '../../client/src/sheet/whatIf.ts';
 import { OpcPackage } from '../../docx/src/index.ts';
 import { PIVOT_SALES } from './fixtures.ts';
 import { Engine } from '../../client/src/sheet/formula/engine.ts';
@@ -234,7 +235,25 @@ for (const name of ['sparklines', 'sparklines-excel']) {
 }
 books.set('notes-made.xlsx', noted);
 books.set('notes-new.xlsx', unnoted);
-const compareFormulaValues = new Set(['typed.xlsx']);
+// Data tables worked out here: one of two inputs made by What-If › Data Table, and Excel's three with a header changed.
+const dataTabled = new Workbook();
+dataTabled.sheets.push(new Worksheet('Loan', 1));
+const tabledHistory = new History(dataTabled);
+tabledHistory.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['=F1*100+F2', '15', '20', '30', '', '0.5'], ['4', '', '', '', '', '7'], ['5'], ['6']] });
+const tabledEngine = new Engine(dataTabled);
+tabledEngine.recalculateAll();
+tabledHistory.apply(0, { kind: 'dataTable', range: { r0: 0, c0: 0, r1: 3, c1: 3 }, rowInput: { row: 1, col: 5 }, colInput: { row: 0, col: 5 } });
+tabledEngine.recalculate([{ sheet: 0, r0: 0, c0: 0, r1: 3, c1: 3 }]);
+calculateDataTables(dataTabled, tabledEngine);
+books.set('data-table-made.xlsx', dataTabled);
+const retabled = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/data-tables-excel.xlsx')));
+const retabledEngine = new Engine(retabled);
+retabledEngine.recalculateAll();
+new History(retabled).apply(0, { kind: 'input', range: { r0: 1, c0: 2, r1: 1, c1: 2 }, text: '7' });
+retabledEngine.recalculate([{ sheet: 0, r0: 1, c0: 2, r1: 1, c1: 2 }]);
+calculateDataTables(retabled, retabledEngine);
+books.set('data-tables-changed.xlsx', retabled);
+const compareFormulaValues = new Set(['typed.xlsx', 'data-table-made.xlsx', 'data-tables-changed.xlsx']);
 
 const generated = path.join(ROOT, '.cache/sheets/sheet-100000x20.xlsx');
 try {

@@ -29,6 +29,7 @@ import { askSheetPassword } from './protectDialog.ts';
 import { ChartTitleCard } from './chartTitleCard.ts';
 import { askChartData } from './chartDataDialog.ts';
 import { askPivotFields } from './pivotFieldsDialog.ts';
+import { askGoalSeek, showGoalSeekStatus } from './goalSeekDialog.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
 import { parseRange, rangeName } from './refs.ts';
@@ -1395,6 +1396,29 @@ export class SheetEditorView {
     this.focus();
   }
 
+  /** Sheet › What-If Analysis › Goal Seek: the cells and goal asked for, the answer found in the worker, kept (as an
+   * ordinary edit of the changing cell) if the person says OK. */
+  private async goalSeek(): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const sheet = this.sheetIndex;
+    const cell = (text: string) => {
+      const r = parseRange(text.replace(/\$/g, ''));
+      return r && r.r0 === r.r1 && r.c0 === r.c1 ? { row: r.r0, col: r.c0 } : null;
+    };
+    const ask = await askGoalSeek(`${columnName(this.active.col)}${this.active.row + 1}`, (a) => (!cell(a.target) ? t('sheet.goalSeek.badSet') : !cell(a.changing) ? t('sheet.goalSeek.badBy') : null));
+    this.afterCard();
+    if (!ask || sheet !== this.sheetIndex) return;
+    const target = cell(ask.target)!;
+    const changing = cell(ask.changing)!;
+    const reply = await this.ask<Extract<FromWorker, { t: 'goalSeek' }>>({ t: 'goalSeek', id: this.id(), sheet, target, goal: ask.goal, changing }).catch(() => null);
+    if (!reply) return;
+    if (reply.message) return this.deps.notify(messageFor(reply.message));
+    const keep = await showGoalSeekStatus(ask.target.toUpperCase(), reply.found, String(ask.goal), reply.result === null ? '#N/A' : String(Number(reply.result.toPrecision(10))));
+    this.afterCard();
+    if (!keep || sheet !== this.sheetIndex) return;
+    void this.edit({ kind: 'input', range: { r0: changing.row, c0: changing.col, r1: changing.row, c1: changing.col }, text: String(reply.value) });
+  }
+
   /** Sheet › Protect Sheet or Unprotect Sheet: the password asked for (protecting, or a sheet that has one). */
   private async protectSheet(on: boolean): Promise<void> {
     if (this.readOnly || !this.info) return;
@@ -1757,6 +1781,9 @@ export class SheetEditorView {
       case 'ungroupColumns':
         void this.edit({ kind: 'group', axis: 'col', from: sel.c0, to: sel.c1, by: op === 'groupColumns' ? 1 : -1 });
         return;
+      case 'goalSeek':
+        void this.goalSeek();
+        break;
       case 'protectSheet':
       case 'unprotectSheet':
         void this.protectSheet(op === 'protectSheet');
@@ -2063,6 +2090,10 @@ function messageFor(code: string): string {
       return t('sheet.chart.badData');
     case 'wrongPassword':
       return t('sheet.wrongPassword');
+    case 'goalSeekTarget':
+      return t('sheet.goalSeek.noFormula');
+    case 'goalSeekChanging':
+      return t('sheet.goalSeek.notConstant');
   }
   return code;
 }

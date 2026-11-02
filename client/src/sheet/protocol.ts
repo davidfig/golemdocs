@@ -316,6 +316,8 @@ export type ToWorker =
   | { t: 'pivotFields'; id: number; sheet: number; index?: number; range?: CellRange }
   /** The sheet's charts, laid out with its data as it is now. */
   | { t: 'charts'; id: number; sheet: number }
+  /** Goal Seek: the value of `changing` (a constant) that brings `target`'s formula to `goal`; the sheet is left as it was. */
+  | { t: 'goalSeek'; id: number; sheet: number; target: { row: number; col: number }; goal: number; changing: { row: number; col: number } }
   | { t: 'find'; id: number; sheet: number; text: string; from: { row: number; col: number }; backwards: boolean; matchCase: boolean; wholeCell: boolean; formulas: boolean; allSheets: boolean }
   | { t: 'save'; id: number }
   | { t: 'end'; sheet: number; from: { row: number; col: number }; dRow: number; dCol: number; id: number };
@@ -334,6 +336,7 @@ export type FromWorker =
   | { t: 'charts'; id: number; scenes: ChartScene[]; sparklines: ChartScene | null }
   | { t: 'pivotFields'; id: number; names: string[]; values: string[][]; choice: PivotChoice | null }
   | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
+  | { t: 'goalSeek'; id: number; found: boolean; value: number; result: number | null; message?: string }
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }
   | { t: 'copy'; id: number; text: string; html: string }

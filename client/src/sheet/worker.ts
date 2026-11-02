@@ -5,6 +5,7 @@
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
+import { goalSeek } from './whatIf.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { currentRegion } from './edit.ts';
@@ -326,6 +327,12 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
+      }
+      case 'goalSeek': {
+        await settled();
+        const sheet = book.sheets[m.sheet];
+        if (!engine || !sheet || !isWorksheet(sheet)) return post({ t: 'goalSeek', id: m.id, found: false, value: 0, result: null });
+        return post({ t: 'goalSeek', id: m.id, ...goalSeek(engine, sheet, m.sheet, m.target, m.goal, m.changing) });
       }
       case 'pivotFields': {
         await settled();

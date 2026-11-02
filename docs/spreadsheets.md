@@ -496,7 +496,14 @@ buttons (`pivotButtons`: each label column's head, the column labels' head, each
 items it shows: the `pivotField` edit (`setPivotField`). The writer keeps each field's flags, its items' own attributes and
 `h`, and the grand totals. Excel refreshing a pivot changed in all these ways comes out cell for cell the same.
 
-**Next in M6**: what-if tools (Goal Seek, data tables, scenarios, Solver); print and PDF.
+**Goal Seek** (`whatIf.ts`, `goalSeekDialog.ts`; Sheet › What-If Analysis › Goal Seek). The dialog asks for the formula's
+cell, the value it should come to and the cell to change (a constant). The worker tries values against the engine
+itself (`goalSeek`: the cell set, `engine.recalculate` on it, the formula read): secant steps from the cell's value, and
+if they fail, steps out on both sides until the formula crosses the goal, then halving; it stops within 1e-12 of the goal
+or after a few hundred tries, and reports a solution when within Excel's Maximum Change (0.001). The cell is put back
+afterwards, and the status card's OK applies the value found as an ordinary input edit, so it undoes like typing.
+
+**Next in M6**: data tables, scenarios, Solver; print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

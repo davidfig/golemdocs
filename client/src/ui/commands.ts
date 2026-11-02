@@ -196,7 +196,7 @@ export class CommandRegistry {
     // A dialog takes the keyboard for itself, and so do the link form and a workbook's note card (over the document).
     const action = this.actionOf(command);
     const kind = action?.kind;
-    const opensDialog = kind === 'dialog' || kind === 'insertLink' || (action?.kind === 'sheet' && (action.op === 'newNote' || action.op === 'protectSheet' || action.op === 'unprotectSheet'));
+    const opensDialog = kind === 'dialog' || kind === 'insertLink' || (action?.kind === 'sheet' && (action.op === 'newNote' || action.op === 'protectSheet' || action.op === 'unprotectSheet' || action.op === 'goalSeek'));
     if (options.refocus !== false && !opensDialog) host.focusEditor();
     return true;
   }

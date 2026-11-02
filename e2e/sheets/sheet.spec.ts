@@ -354,6 +354,30 @@ test('a pivot’s Row Labels button sorts and filters a field; the field list se
   await expect.poll(async () => (await state(page)).content.input).toBe('Product');
 });
 
+test('Sheet › What-If Analysis › Goal Seek finds the input that brings a formula to a value, kept with OK', async ({ app, page }) => {
+  await open(app, page);
+  // Empty cells out of the way: D26 holds 5, E26 its square plus 3.
+  await clickCell(page, 25, 3);
+  await page.keyboard.type('5');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('=D26^2+3');
+  await page.keyboard.press('Enter');
+  await clickCell(page, 25, 4);
+  await app.menu('Sheet', 'What-If Analysis', 'Goal Seek…');
+  const dialog = page.getByRole('dialog', { name: 'Goal Seek' });
+  await expect(dialog.getByRole('textbox', { name: 'Set cell' })).toHaveValue('E26');
+  await dialog.getByRole('textbox', { name: 'To value' }).fill('103');
+  await dialog.getByRole('textbox', { name: 'By changing cell' }).fill('D26');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  const status = page.getByRole('dialog').filter({ hasText: 'found a solution' });
+  await expect(status).toContainText('Current value: 103');
+  await status.getByRole('button', { name: 'OK' }).click();
+  await clickCell(page, 25, 3);
+  await expect.poll(async () => Math.round(+(await state(page)).content.input * 1e6) / 1e6).toBe(10);
+  await clickCell(page, 25, 4);
+  await expect.poll(async () => Math.round(+(await state(page)).content.display)).toBe(103);
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

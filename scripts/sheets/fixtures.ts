@@ -5,6 +5,7 @@
 // validation.xlsx: a Status column (B2:B20) that takes Open, Done or Blocked from a drop-down list, and a Score column
 // (C2:C20) that takes whole numbers from 1 to 10.
 
+import { emptyModel } from '../../client/src/sheet/solver.ts';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { History } from '../../client/src/sheet/edit.ts';
@@ -145,6 +146,20 @@ export async function scenariosWorkbook(): Promise<Uint8Array> {
     results: '',
   };
   sheet.dirty.layout = true;
+  return writeWorkbook(book);
+}
+
+/**
+ * solver.xlsx: a product mix for Solver. Two products' amounts (B1, B2), the profit (B4 = 3*B1 + 5*B2), three resources'
+ * use (C1:C3) and limits (D1:D3). With B1:B2 changing to make B4 as large as it can be within C1:C3 <= D1:D3, the
+ * answer is 2 and 6, a profit of 36. Its Solver model (Simplex LP) is saved in it as Excel saves one.
+ */
+export async function solverWorkbook(): Promise<Uint8Array> {
+  const book = new Workbook();
+  book.sheets.push(new Worksheet('Plan', 1));
+  const history = new History(book);
+  history.apply(0, { kind: 'paste', at: { row: 0, col: 0 }, rows: [['Product A', '0', '=B1', '4'], ['Product B', '0', '=2*B2', '12'], ['', '', '=3*B1+2*B2', '18'], ['Profit', '=3*B1+5*B2']] });
+  history.apply(0, { kind: 'solverModel', model: { ...emptyModel(), objective: 'B4', changing: 'B1:B2', constraints: [{ lhs: 'C1:C3', rel: 'le', rhs: 'D1:D3' }], method: 'simplex' } });
   return writeWorkbook(book);
 }
 
@@ -296,6 +311,7 @@ export async function pivotShapesWorkbook(only?: string[], given?: PivotShape[])
 
 if (import.meta.filename === path.resolve(process.argv[1] ?? '')) {
   writeFileSync(path.join(FIXTURES, 'scenarios.xlsx'), await scenariosWorkbook());
+  writeFileSync(path.join(FIXTURES, 'solver.xlsx'), await solverWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots2.xlsx'), await pivotShapesWorkbook());
   writeFileSync(path.join(FIXTURES, 'pivots3.xlsx'), await pivotShapesWorkbook(undefined, PIVOT_OPTIONS));
   writeFileSync(path.join(FIXTURES, 'pivots.xlsx'), await pivotsWorkbook());

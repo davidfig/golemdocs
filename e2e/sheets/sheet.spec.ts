@@ -448,6 +448,35 @@ test('Sheet › What-If Analysis › Scenario Manager shows a scenario, adds one
   await expect.poll(async () => (await state(page)).content.input).toBe('660');
 });
 
+test('Sheet › What-If Analysis › Solver solves the model saved in a workbook, a constraint added again, and keeps the solution', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'solver.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/solver.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'solver.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await app.menu('Sheet', 'What-If Analysis', 'Solver…');
+  const dialog = page.getByRole('dialog', { name: 'Solver', exact: true });
+  await expect(dialog.getByRole('textbox', { name: 'Set objective' })).toHaveValue('B4');
+  await expect(dialog.getByRole('textbox', { name: 'By changing cells' })).toHaveValue('B1:B2');
+  // The constraint taken away and added again.
+  await dialog.getByRole('option', { name: 'C1:C3 <= D1:D3' }).click();
+  await dialog.getByRole('button', { name: 'Delete' }).click();
+  await expect(dialog.getByRole('option')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Add…' }).click();
+  const adding = page.getByRole('dialog', { name: 'Add Constraint' });
+  await adding.getByRole('textbox', { name: 'Cell reference' }).fill('C1:C3');
+  await adding.getByRole('textbox', { name: 'Constraint' }).fill('D1:D3');
+  await adding.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog.getByRole('option', { name: 'C1:C3 <= D1:D3' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Solve' }).click();
+  const results = page.getByRole('dialog', { name: 'Solver Results' });
+  await expect(results).toContainText('Solver found a solution');
+  await results.getByRole('button', { name: 'Keep Solver Solution' }).click();
+  await clickCell(page, 3, 1);
+  await expect.poll(async () => (await state(page)).content.display).toBe('36');
+  await page.keyboard.press(`${MOD}+z`);
+  await expect.poll(async () => (await state(page)).content.display).toBe('0');
+});
+
 test('sparklines are drawn in their cells and follow their data', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await dropFile(page, { name: 'sparklines.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/sparklines-excel.xlsx')), mimeType: 'application/octet-stream' });

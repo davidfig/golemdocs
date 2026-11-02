@@ -23,6 +23,7 @@
 - Sheet › What-If Analysis › Goal Seek finds the value of a cell that brings a formula to the value you want.
 - Sheet › What-If Analysis › Data Table shows a formula's results for a row and a column of inputs, and data tables in Excel workbooks now update as you edit.
 - Sheet › What-If Analysis › Scenario Manager keeps named sets of input values: show one, add, edit or delete them, and make a summary sheet of what each gives. Excel's scenarios are kept.
+- Sheet › What-If Analysis › Solver makes a formula as large or small as it can be, or brings it to a value, by changing cells within constraints, with the Simplex LP and GRG Nonlinear methods and whole-number cells. Solver models saved in Excel open here, and the other way round.
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales, data bars and icon sets, recalculated as the values change.
 - Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
 

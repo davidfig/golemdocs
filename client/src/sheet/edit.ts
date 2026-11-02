@@ -5,6 +5,7 @@
 
 import { newSparklineGroup } from './sparklines.ts';
 import { dataTableRun } from './whatIf.ts';
+import { writeSolverModel } from './solver.ts';
 import { applyChoice, gridValue, newPivot, refreshPivot, setPivotField } from './pivot.ts';
 import { rangeName } from './refs.ts';
 import { changeKind, newChart, withData } from './charts/make.ts';
@@ -197,6 +198,8 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
     case 'dataTable':
     case 'showScenario':
       return 'cells';
+    case 'setCells':
+      return [...new Set(op.cells.map((c) => c[1]))];
     case 'insertRows':
     case 'deleteRows':
     case 'insertColumns':
@@ -220,7 +223,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
     for (const sheet of book.sheets) if (isWorksheet(sheet)) for (const column of sheet.grid.columns) if (column?.formulas.length) columns.push([column, column.formulas.map((f) => ({ ...f }))]);
     out.formulas = { columns, names: book.names.map((n) => ({ ...n })), charts: book.sheets.filter(isWorksheet).map((s): [Worksheet, Worksheet['charts'], Worksheet['sparklines']] => [s, s.charts, s.sparklines]) };
   }
-  if (op.kind === 'addSheet' || op.kind === 'insertPivot' || op.kind === 'scenarioSummary' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
+  if (op.kind === 'addSheet' || op.kind === 'insertPivot' || op.kind === 'scenarioSummary' || op.kind === 'solverModel' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
     out.sheets = { list: book.sheets.slice(), titles: book.sheets.map((s) => s.name), parts: book.source ? book.source.parts.map((p) => ({ ...p })) : [], names: book.names.map((n) => ({ ...n })), active: book.activeSheet, removed: (book.source?.removed ?? []).slice() };
     return out;
   }
@@ -527,6 +530,17 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       sheet.charts = sheet.charts.map((x, i) => (i === op.index ? next : x));
       return { ranges: [] };
     }
+    case 'solverModel':
+      book.names = writeSolverModel(book.names, index, quoteSheet(sheet.name), op.model);
+      book.dirty = true;
+      return { ranges: [] };
+    case 'setCells':
+      for (const [row, col, value] of op.cells) {
+        grid.column(col).setFormula(row, null);
+        const parsed = parseInput(String(value), book.date1904);
+        if (parsed.kind !== 'formula') setValue(book, grid, row, col, parsed);
+      }
+      return { ranges: op.cells.map(([r, c]) => ({ r0: r, c0: c, r1: r, c1: c })) };
     case 'scenarios':
       sheet.scenarios = op.scenarios && op.scenarios.list.length ? op.scenarios : null;
       return { ranges: [] };

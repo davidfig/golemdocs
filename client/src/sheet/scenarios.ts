@@ -85,13 +85,13 @@ export function moveScenarios(s: Scenarios | null, axis: 'row' | 'col', at: numb
   return { ...s, list: s.list.map((x) => ({ ...x, inputs: x.inputs.map(move).filter((i): i is ScenarioInput => !!i) })) };
 }
 
-/** Cells as typed in the dialogs ("B1,B2", "B1:B3 D4", "$B$1"), or null if one is not a cell or range. */
-export function parseCells(text: string): { row: number; col: number }[] | null {
+/** Cells as typed in the dialogs ("B1,B2", "B1:B3 D4", "$B$1"), or null if one is not a cell or range; at most `limit`. */
+export function parseCells(text: string, limit = 32): { row: number; col: number }[] | null {
   const out: { row: number; col: number }[] = [];
   for (const part of text.split(/[,;\s]+/).filter(Boolean)) {
     const r = parseRange(part.replace(/\$/g, ''));
     if (!r) return null;
-    for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) if (out.length < 32) out.push({ row, col });
+    for (let row = r.r0; row <= r.r1; row++) for (let col = r.c0; col <= r.c1; col++) if (out.length < limit) out.push({ row, col });
   }
   return out;
 }

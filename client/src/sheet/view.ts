@@ -31,6 +31,7 @@ import { askChartData } from './chartDataDialog.ts';
 import { askPivotFields } from './pivotFieldsDialog.ts';
 import { askDataTable, askGoalSeek, showGoalSeekStatus } from './whatIfDialogs.ts';
 import { openScenarioManager } from './scenarioDialog.ts';
+import { askSolver, showSolverResults } from './solverDialog.ts';
 import { parseCells } from './scenarios.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
@@ -1439,6 +1440,26 @@ export class SheetEditorView {
     void this.edit({ kind: 'dataTable', range, rowInput: cell(ask.row) ?? null, colInput: cell(ask.col) ?? null });
   }
 
+  /** Sheet › What-If Analysis › Solver: the model asked for (and kept in the sheet), solved in the worker, and the
+   * solution kept (as an edit of the changing cells) if the person says so. */
+  private async solver(): Promise<void> {
+    if (this.readOnly || !this.info) return;
+    const sheet = this.sheetIndex;
+    const reply = await this.ask<Extract<FromWorker, { t: 'solverModel' }>>({ t: 'solverModel', id: this.id(), sheet }).catch(() => null);
+    if (!reply) return;
+    const asked = await askSolver(reply.model, `${columnName(this.active.col)}${this.active.row + 1}`);
+    this.afterCard();
+    if (!asked || sheet !== this.sheetIndex) return;
+    if (JSON.stringify(asked.model) !== JSON.stringify(reply.model)) await this.edit({ kind: 'solverModel', model: asked.model });
+    if (!asked.solve) return;
+    const solved = await this.ask<Extract<FromWorker, { t: 'solve' }>>({ t: 'solve', id: this.id(), sheet, model: asked.model }).catch(() => null);
+    if (!solved) return;
+    if (solved.message) return this.deps.notify(messageFor(solved.message));
+    const keep = await showSolverResults(solved.status);
+    this.afterCard();
+    if (keep && sheet === this.sheetIndex) void this.edit({ kind: 'setCells', cells: solved.values });
+  }
+
   /** Sheet › What-If Analysis › Scenario Manager: the sheet's scenarios in a dialog; each change is an edit. */
   private async scenarioManager(): Promise<void> {
     if (this.readOnly || !this.info) return;
@@ -1834,6 +1855,9 @@ export class SheetEditorView {
       case 'scenarioManager':
         void this.scenarioManager();
         break;
+      case 'solver':
+        void this.solver();
+        break;
       case 'protectSheet':
       case 'unprotectSheet':
         void this.protectSheet(op === 'protectSheet');
@@ -2140,6 +2164,12 @@ function messageFor(code: string): string {
       return t('sheet.chart.badData');
     case 'wrongPassword':
       return t('sheet.wrongPassword');
+    case 'solverObjective':
+    case 'solverChanging':
+    case 'solverConstraint':
+    case 'solverDifferent':
+    case 'solverTooMany':
+      return t(`sheet.solver.problem.${code}` as MessageKey);
     case 'dataTableShape':
       return t('sheet.dataTable.shape');
     case 'dataTableInput':

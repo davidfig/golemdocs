@@ -104,6 +104,7 @@ export const SHEET_OPS = [
   'goalSeek',
   'dataTable',
   'scenarioManager',
+  'solver',
   'protectSheet',
   'unprotectSheet',
   'lockCells',

@@ -11,7 +11,9 @@ import type { Workbook } from './model/workbook.ts';
 import { isWorksheet } from './model/workbook.ts';
 import type { CellRange, Worksheet } from './model/worksheet.ts';
 import { parseRange, rangeName } from './refs.ts';
-import { scenarioSummary } from './scenarios.ts';
+import { parseCells, scenarioSummary } from './scenarios.ts';
+import { solve } from './solver.ts';
+import type { SolverModel, SolverProblem, SolverStatus } from './solver.ts';
 import type { SummaryLabels, SummaryValue } from './scenarios.ts';
 
 /** Excel's Goal Seek stops within this of the goal (Options › Formulas › Maximum Change), after at most this many tries. */
@@ -247,4 +249,85 @@ export function scenarioSummaryRows(book: Workbook, engine: Engine, sheetIndex: 
   });
   engine.recalculate(boxes);
   return scenarioSummary(scenarios, labels, (c) => asValue(engine.value(sheetIndex, c.row, c.col)), results, (i, c) => (i === null ? now : shown[i]).get(`${c.row},${c.col}`) ?? null);
+}
+
+// --- Solver ----------------------------------------------------------------------------------------------------------
+
+export interface SolverOutcome {
+  status: SolverStatus;
+  /** The changing cells' values found (row, col, value). */
+  values: [number, number, number][];
+  objective: number;
+  /** Why it could not start: a cell that is not one, a constraint of the wrong shape, all-different. */
+  message?: 'solverObjective' | 'solverChanging' | 'solverConstraint' | 'solverDifferent' | 'solverTooMany';
+}
+
+/**
+ * Solver on a sheet: the model's cells turned into a problem the engine evaluates (the changing cells set, the sheet
+ * recalculated, the objective and constraint cells read), solved, and the cells put back as they were.
+ */
+export function runSolver(book: Workbook, engine: Engine, sheetIndex: number, model: SolverModel): SolverOutcome {
+  const fail = (message: SolverOutcome['message']): SolverOutcome => ({ status: 'error', values: [], objective: NaN, message });
+  const sheet = book.sheets[sheetIndex];
+  if (!isWorksheet(sheet)) return fail('solverObjective');
+  const objective = parseCells(model.objective, 2);
+  if (!objective || objective.length !== 1) return fail('solverObjective');
+  const changing = parseCells(model.changing, 201);
+  if (!changing?.length) return fail('solverChanging');
+  if (changing.length > 200) return fail('solverTooMany');
+  const index = new Map(changing.map((c, j) => [`${c.row},${c.col}`, j]));
+  // Each constraint, cell by cell: a side read from a cell, or a number.
+  type Side = { row: number; col: number } | number;
+  const rows: { lhs: Side; rel: 'le' | 'eq' | 'ge'; rhs: Side }[] = [];
+  const integers = new Set<number>();
+  for (const c of model.constraints) {
+    const lhs = parseCells(c.lhs, 10000);
+    if (!lhs?.length) return fail('solverConstraint');
+    if (c.rel === 'dif') return fail('solverDifferent');
+    if (c.rel === 'int' || c.rel === 'bin') {
+      for (const cell of lhs) {
+        const j = index.get(`${cell.row},${cell.col}`);
+        if (j === undefined) return fail('solverConstraint');
+        integers.add(j);
+        if (c.rel === 'bin') rows.push({ lhs: cell, rel: 'ge', rhs: 0 }, { lhs: cell, rel: 'le', rhs: 1 });
+      }
+      continue;
+    }
+    const number = c.rhs.trim() !== '' && Number.isFinite(Number(c.rhs)) ? Number(c.rhs) : null;
+    const rhs = number === null ? parseCells(c.rhs, 10000) : null;
+    if (number === null && (!rhs || (rhs.length !== 1 && rhs.length !== lhs.length))) return fail('solverConstraint');
+    lhs.forEach((cell, i) => rows.push({ lhs: cell, rel: c.rel as 'le' | 'eq' | 'ge', rhs: number ?? (rhs!.length === 1 ? rhs![0] : rhs![i]) }));
+  }
+  const grid = sheet.grid;
+  const saved = changing.map((c) => {
+    const column = grid.columns[c.col];
+    return { ...c, kind: column?.kind(c.row) ?? Kind.Empty, value: column?.value(c.row) ?? 0, style: column?.style(c.row) ?? 0 };
+  });
+  const boxes = changing.map((c) => ({ sheet: sheetIndex, r0: c.row, c0: c.col, r1: c.row, c1: c.col }));
+  const read = (side: Side): number => {
+    if (typeof side === 'number') return side;
+    const v = engine.value(sheetIndex, side.row, side.col);
+    return typeof v === 'number' ? v : typeof v === 'boolean' ? +v : v === null || v === undefined || v === '' ? 0 : NaN;
+  };
+  const problem: SolverProblem = {
+    n: changing.length,
+    start: saved.map((c) => (c.kind === Kind.Number ? c.value : 0)),
+    evaluate: (x) => {
+      changing.forEach((c, j) => grid.set(c.row, c.col, Kind.Number, x[j], saved[j].style));
+      engine.recalculate(boxes);
+      return { objective: read(objective[0]), lhs: rows.map((r) => read(r.lhs)), rhs: rows.map((r) => read(r.rhs)) };
+    },
+    rows: rows.map((r) => r.rel),
+    integers: [...integers],
+    goal: model.goal,
+    value: model.value,
+    nonNegative: model.nonNegative,
+  };
+  try {
+    const r = solve(problem, model.method);
+    return { status: r.status, values: changing.map((c, j) => [c.row, c.col, r.x[j]]), objective: r.objective };
+  } finally {
+    for (const c of saved) grid.set(c.row, c.col, c.kind, c.value, c.style);
+    engine.recalculate(boxes);
+  }
 }

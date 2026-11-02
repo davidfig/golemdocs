@@ -5,7 +5,8 @@
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
-import { calculateDataTables, goalSeek, scenarioSummaryRows } from './whatIf.ts';
+import { calculateDataTables, goalSeek, runSolver, scenarioSummaryRows } from './whatIf.ts';
+import { readSolverModel } from './solver.ts';
 import { parseRange } from './refs.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { currentRegion } from './edit.ts';
@@ -332,6 +333,13 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { values, blanks } = filterValues(book, sheet, filter, m.col);
         const column = filter.columns.find((c) => c.col === m.col - filter.range.c0);
         return post({ t: 'filterValues', id: m.id, values, blanks, shown: column?.values ?? null, shownBlanks: column ? column.blanks : true });
+      }
+      case 'solverModel':
+        return post({ t: 'solverModel', id: m.id, model: readSolverModel(book.names, m.sheet) });
+      case 'solve': {
+        await settled();
+        if (!engine) return post({ t: 'solve', id: m.id, status: 'error', values: [], objective: NaN });
+        return post({ t: 'solve', id: m.id, ...runSolver(book, engine, m.sheet, m.model) });
       }
       case 'scenarios': {
         await settled();

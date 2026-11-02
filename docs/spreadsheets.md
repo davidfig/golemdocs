@@ -528,7 +528,21 @@ not checked against Excel's; Excel opening a workbook with a scenario added and 
 **Calculating on opening.** A workbook that asks for it (`calcPr fullCalcOnLoad`, as files written by programs that do not
 calculate do, and this app's own when its values may be stale) is recalculated once all its sheets are read.
 
-**Next in M6**: Solver; print and PDF.
+**Solver** (`solver.ts`, `solverDialog.ts`, `runSolver` in `whatIf.ts`; Sheet › What-If Analysis › Solver). The model is
+kept as Excel keeps it, in the sheet's hidden names (`solver_opt`, `solver_typ`, `solver_val`, `solver_adj`, `solver_neg`,
+`solver_eng`, `solver_num`, `solver_lhsN`/`relN`/`rhsN`; the rest of Excel's options kept as they were): `readSolverModel`,
+`writeSolverModel`, the `solverModel` edit. `runSolver` turns its cells into a problem the engine evaluates (the changing
+cells set, the sheet recalculated, the objective and every constraint cell read; ranges compared cell by cell with a
+number, one cell or a range of the same size), solves it and puts the cells back; the results card keeps the solution as
+a `setCells` edit. The methods: Simplex LP finds the coefficients by moving one cell at a time, checks the model is
+linear at another point ("The linearity conditions... are not satisfied" otherwise), and runs a two-phase simplex on a
+dense tableau (Bland's rule; free cells split in two); GRG Nonlinear minimises an augmented Lagrangian by BFGS steps on
+numerical gradients, the cells kept non-negative by projection; Evolutionary is GRG from several random starts (no
+genetic algorithm). Whole-number and binary cells go through branch and bound over either; all-different is refused for
+now. Tested on textbook problems with known answers (Excel's AppleScript cannot run Solver); Excel opening a model and
+solution saved here keeps them.
+
+**Next in M6**: print and PDF.
 
 ### M5: data and formatting (done, 2026-11-01)
 

@@ -3,6 +3,8 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
 
+import type { SolverModel } from './solver.ts';
+import type { SolverOutcome } from './whatIf.ts';
 import type { Scenarios, SummaryLabels, SummaryValue } from './scenarios.ts';
 import type { PivotChoice } from './pivot.ts';
 import type { NewChartKind } from './charts/make.ts';
@@ -258,6 +260,10 @@ export type EditOp =
   | { kind: 'showScenario'; index: number }
   /** Summary: a new sheet (before this one) of the rows the worker worked out; `results` the result cells as typed. */
   | { kind: 'scenarioSummary'; rows: SummaryValue[][]; results: string; name: string }
+  /** What-If › Solver: the sheet's model kept (in its hidden names), or taken away. */
+  | { kind: 'solverModel'; model: SolverModel | null }
+  /** Values put in cells, as typed (Solver's solution kept). */
+  | { kind: 'setCells'; cells: [number, number, number][] }
   /** Refresh: the sheet's pivot tables laid out again from their sources. */
   | { kind: 'refreshPivots' }
   /** Insert › Sparklines: one per row of a block of cells, in the column after it. */
@@ -326,6 +332,10 @@ export type ToWorker =
   | { t: 'pivotFields'; id: number; sheet: number; index?: number; range?: CellRange }
   /** The sheet's charts, laid out with its data as it is now. */
   | { t: 'charts'; id: number; sheet: number }
+  /** The sheet's Solver model. */
+  | { t: 'solverModel'; id: number; sheet: number }
+  /** Solver run on a model; the sheet is left as it was. */
+  | { t: 'solve'; id: number; sheet: number; model: SolverModel }
   /** The sheet's scenarios, and the values their cells hold now (by "row,col", as typed). */
   | { t: 'scenarios'; id: number; sheet: number }
   /** The scenario summary's rows: each scenario's values and the result cells' values with it. */
@@ -353,6 +363,8 @@ export type FromWorker =
   | { t: 'goalSeek'; id: number; found: boolean; value: number; result: number | null; message?: string }
   | { t: 'scenarios'; id: number; scenarios: Scenarios | null; values: Record<string, string> }
   | { t: 'scenarioSummary'; id: number; rows: SummaryValue[][] | null }
+  | { t: 'solverModel'; id: number; model: SolverModel | null }
+  | ({ t: 'solve'; id: number } & SolverOutcome)
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }
   | { t: 'copy'; id: number; text: string; html: string }

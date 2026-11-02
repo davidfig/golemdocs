@@ -4,7 +4,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
-import { dialogTitleBar } from '../ui/popup.ts';
+import { button, field, modal } from './dialogParts.ts';
 import { parseCells } from './scenarios.ts';
 import type { Scenario, Scenarios } from './scenarios.ts';
 import { columnName } from './model/column.ts';
@@ -19,27 +19,6 @@ export interface ScenarioManagerDeps {
 }
 
 const cellName = (c: { row: number; col: number }) => `${columnName(c.col)}${c.row + 1}`;
-
-/** A modal dialog of the shared parts: a title bar, a body, buttons; resolves when closed. */
-function modal(title: string, body: Node[], buttons: HTMLElement[], onClose: () => void): HTMLDialogElement {
-  const dialog = h('dialog', { class: 'wm-dialog wm-link', attrs: { 'aria-label': title } }, dialogTitleBar(title, () => dialog.close()), h('div', { class: 'wm-dialog-body wm-link-body' }, ...body), h('div', { class: 'wm-dialog-buttons' }, ...buttons));
-  // Keys stay in the dialog: the sheet's handlers listen on the window.
-  dialog.addEventListener('keydown', (e) => e.stopPropagation());
-  dialog.addEventListener('close', () => {
-    dialog.remove();
-    onClose();
-  });
-  document.body.append(dialog);
-  dialog.showModal();
-  return dialog;
-}
-
-const button = (text: string, primary = false) => h('button', { class: primary ? 'wm-button wm-primary' : 'wm-button', text, attrs: { type: 'button' } });
-const field = (label: string, value = '') => {
-  const input = h('input', { class: 'wm-input', attrs: { type: 'text', 'aria-label': label, autocomplete: 'off', spellcheck: 'false' } });
-  input.value = value;
-  return input;
-};
 
 export function openScenarioManager(deps: ScenarioManagerDeps): Promise<void> {
   return new Promise((resolve) => {

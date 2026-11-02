@@ -14,7 +14,8 @@ import { readWorkbook } from '../../client/src/sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../client/src/sheet/xlsx/write.ts';
 import { History } from '../../client/src/sheet/edit.ts';
 import { pivotChoice } from '../../client/src/sheet/pivot.ts';
-import { calculateDataTables, scenarioSummaryRows } from '../../client/src/sheet/whatIf.ts';
+import { calculateDataTables, runSolver, scenarioSummaryRows } from '../../client/src/sheet/whatIf.ts';
+import { readSolverModel } from '../../client/src/sheet/solver.ts';
 import { OpcPackage } from '../../docx/src/index.ts';
 import { PIVOT_SALES } from './fixtures.ts';
 import { Engine } from '../../client/src/sheet/formula/engine.ts';
@@ -265,6 +266,13 @@ scenedEngine.recalculate([{ sheet: 0, r0: 0, c0: 1, r1: 0, c1: 1 }]);
 const summaryRows = scenarioSummaryRows(scened, scenedEngine, 0, [{ row: 2, col: 1 }, { row: 3, col: 1 }], { title: 'Scenario Summary', current: 'Current Values:', changing: 'Changing Cells:', results: 'Result Cells:', notes: ['Notes'] })!;
 scenedHistory.apply(0, { kind: 'scenarioSummary', rows: summaryRows, results: 'B3:B4', name: 'Scenario Summary' });
 books.set('scenarios-made.xlsx', scened);
+// A Solver model kept here, and its solution kept: Excel opens it.
+const solvedBook = await readWorkbook(readFileSync(path.join(ROOT, 'client/test/fixtures/sheets/solver.xlsx')));
+const solvedEngine = new Engine(solvedBook);
+solvedEngine.recalculateAll();
+const solved = runSolver(solvedBook, solvedEngine, 0, readSolverModel(solvedBook.names, 0)!);
+new History(solvedBook).apply(0, { kind: 'setCells', cells: solved.values.map(([r, c, v]) => [r, c, Math.round(v * 1e9) / 1e9]) });
+books.set('solver-solved.xlsx', solvedBook);
 const compareFormulaValues = new Set(['typed.xlsx', 'data-table-made.xlsx', 'data-tables-changed.xlsx']);
 
 const generated = path.join(ROOT, '.cache/sheets/sheet-100000x20.xlsx');

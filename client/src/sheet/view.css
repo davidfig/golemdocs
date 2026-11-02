@@ -347,6 +347,23 @@
   display: contents;
 }
 
+/* What-If › Solver: a label beside its control (the goal, the method); the constraints' list shorter than scenarios'. */
+.wm-sheet-solver-goal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.wm-sheet-solver-goal .wm-input {
+  width: 90px;
+}
+
+.wm-sheet-solver-list {
+  height: 110px;
+  border: 1px solid var(--wm-border);
+}
+
 /* A pivot button's card for several fields: the field's choice above the sort buttons. */
 .wm-sheet-filter-field .wm-dropdown {
   width: 100%;

@@ -34,6 +34,7 @@
 - Emoji show in color everywhere: documents of every format, text files, workbook cells and charts, and PDF, picture and SVG downloads and printed sheets. Families, flags, keycaps and skin tones each show as one emoji, and the caret, selection and Backspace treat each as one character. The emoji images load only when a document uses one.
 - On a phone or tablet, a long press selects the word under your finger, and a double tap does too; keep your finger down and drag to select more. Dragging near the top or bottom of the screen scrolls the document as you select.
 - On a phone or tablet, a selection has a handle at each end: drag one to change where the selection starts or ends.
+- The website’s footer has a Sponsor link, for anyone who wants to support Golem Docs through GitHub Sponsors.
 
 ### Changed
 

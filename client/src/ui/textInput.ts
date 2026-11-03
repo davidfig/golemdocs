@@ -99,6 +99,16 @@ export interface TextInputHandlers {
   paste(clip: Clipboard): void;
 }
 
+/**
+ * Gives an editor's textarea the keyboard. A modal dialog that closes hands the focus back to it without moving the document's
+ * selection in (Chrome), and then key presses arrive but typed text goes nowhere; focusing it again does nothing, as it already has
+ * the focus, so its own selection is set again instead, which brings the document's selection back to it.
+ */
+export function focusTextInput(input: HTMLTextAreaElement): void {
+  if (document.activeElement === input) input.setSelectionRange(input.selectionStart, input.selectionEnd, input.selectionDirection);
+  else input.focus({ preventScroll: true });
+}
+
 /** Wires the textarea an editor keeps focus in: typed text, input methods, copy, cut and paste. Key presses are the editor's (see `editKey`). */
 export function attachTextInput(input: HTMLTextAreaElement, h: TextInputHandlers): void {
   // Typed text arrives as input events (after keyboard layouts, dead keys and input methods have done their work), never as raw key presses.

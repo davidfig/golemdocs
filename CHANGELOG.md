@@ -6,6 +6,7 @@
 
 - A document opened from a view-only share or a public link no longer slides sideways when its page already fits the width of the window.
 - Dragging a document into a folder on the Open screen no longer sometimes does nothing. If the list refreshed while you were dragging, the drag was cancelled.
+- The first thing you typed after closing a window with Escape (Search All Documents, say) was sometimes lost. It now always reaches the document.
 
 ## 0.33.0 - 2026-11-03
 

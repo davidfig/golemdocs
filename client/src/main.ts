@@ -102,7 +102,7 @@ import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
 import { readClipboard, type Clipboard } from './ui/clipboard.ts';
 import { showPasteSpecialDialog } from './ui/pasteSpecialDialog.ts';
-import { attachTextInput, editKey, type EditKey } from './ui/textInput.ts';
+import { attachTextInput, editKey, focusTextInput, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
@@ -3633,7 +3633,7 @@ function focusInput(): void {
   if (!focusAllowed || current.none) return;
   if (textView.active) return textEngine.focus();
   if (sheetView.active) return sheetEngine.focus();
-  input.focus({ preventScroll: true });
+  focusTextInput(input);
 }
 
 // --- Rendering -------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 import { t } from '../i18n/index.ts';
 import type { MessageKey } from '../i18n/index.ts';
 import { h, iconButton, CLOSE_ICON } from '../ui/dom.ts';
-import { attachTextInput } from '../ui/textInput.ts';
+import { attachTextInput, focusTextInput } from '../ui/textInput.ts';
 import { showPopupMenu } from '../ui/popupMenu.ts';
 import type { PopupItem } from '../ui/popupMenu.ts';
 import { onContextMenu } from '../ui/contextMenu.ts';
@@ -2145,8 +2145,7 @@ export class SheetEditorView {
   // --- Focus and state ---
 
   focus(): void {
-    if (this.editing) this.cellEditor.focus({ preventScroll: true });
-    else this.input.focus({ preventScroll: true });
+    focusTextInput(this.editing ? this.cellEditor : this.input);
   }
 
   get hasFocus(): boolean {

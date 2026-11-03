@@ -17,7 +17,7 @@ import type { SearchOptions } from '@golemdocs/editor/pattern';
 import { MAX_SHARED_REPLACEMENTS, nextMatch, replaceAllLines, replaceRangesOf, searchLines } from './search.ts';
 import { mapOffset, type TextOp, type TextReplica } from '@golemdocs/ops/textOps';
 import { readClipboard, writeClipboardText } from '../ui/clipboard.ts';
-import { attachTextInput, editKey, type EditKey } from '../ui/textInput.ts';
+import { attachTextInput, editKey, focusTextInput, type EditKey } from '../ui/textInput.ts';
 import type { SpellIssue, TextMark } from '../layout/protocol.ts';
 import { TextSpell } from './spell.ts';
 import type { SpellDeps } from './spell.ts';
@@ -657,7 +657,7 @@ export class TextEditorView {
 
   /** Puts the keyboard focus in the text, so typing and the arrow, page and home/end keys work. */
   focus(): void {
-    this.input.focus({ preventScroll: true });
+    focusTextInput(this.input);
   }
 
   private get focused(): boolean {

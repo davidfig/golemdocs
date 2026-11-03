@@ -34,7 +34,7 @@ async function picturePair(browser: import('@playwright/test').Browser) {
   return { context, a, b };
 }
 
-test('what the holder draws over the picture reaches the watcher when it is saved, and the watcher cannot draw', async ({ browser }) => {
+test('what the holder draws over the picture reaches the watcher when it is saved, and the watcher cannot draw', { tag: '@heavy' }, async ({ browser }) => {
   const { context, a, b } = await picturePair(browser);
   await a.toolbarButton(/^Line$/).click();
   await drag(a, [40, 40], [240, 40]);

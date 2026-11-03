@@ -16,4 +16,6 @@ export const viewer: Partial<Messages> = {
   'viewer.findUnavailable': 'A localização ainda não está disponível nas páginas originais de um PDF.',
   'viewer.signInToView': 'Entre para ver este documento.',
   'viewer.viewOnlyTitle': '{name} (somente leitura)',
+  'viewer.download': 'Baixar',
+  'viewer.linkGone': 'Este link não funciona mais: o documento não está mais compartilhado publicamente.',
 };

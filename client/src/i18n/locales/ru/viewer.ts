@@ -16,4 +16,6 @@ export const viewer: Partial<Messages> = {
   'viewer.findUnavailable': 'Поиск пока недоступен на собственных страницах PDF.',
   'viewer.signInToView': 'Войдите, чтобы увидеть этот документ.',
   'viewer.viewOnlyTitle': '{name} (только просмотр)',
+  'viewer.download': 'Скачать',
+  'viewer.linkGone': 'Эта ссылка больше не работает: документ больше не опубликован.',
 };

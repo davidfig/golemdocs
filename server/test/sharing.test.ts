@@ -259,3 +259,71 @@ test('a view-only share from before viewer addresses gets one when it is first l
   assert.equal(await viewTokenOf(id), token, 'and keeps it');
   assert.equal((await w.call(ALICE, 'GET', `/api/view/${token}/file`)).status, 200);
 });
+
+// --- A document's public link -------------------------------------------------------------------
+
+const link = (id: string, method: string, as = OWNER) => w.call(as, method, `/api/documents/${id}/link`);
+const tokenOf = async (response: Response) => ((await response.json()) as { token: string | null }).token;
+
+test('a public link opens the document read-only for anyone, signed in or not, and names nothing', async () => {
+  const id = await create();
+  assert.equal(await tokenOf(await link(id, 'GET')), null, 'none until made');
+  const token = (await tokenOf(await link(id, 'PUT')))!;
+  assert.match(token, /^[A-Za-z0-9_-]{32}$/);
+  assert.ok(!token.includes(id));
+  assert.equal(await tokenOf(await link(id, 'PUT')), token, 'making it again keeps it');
+  assert.equal(await tokenOf(await link(id, 'GET')), token);
+
+  for (const who of [null, BOB, OWNER]) {
+    const info = await w.call(who, 'GET', `/api/public/${token}`);
+    assert.equal(info.status, 200, String(who));
+    assert.deepEqual(Object.keys((await info.json()) as object).sort(), ['name', 'updatedAt']);
+    const file = await w.call(who, 'GET', `/api/public/${token}/file`);
+    assert.equal(file.status, 200);
+    assert.deepEqual([...new Uint8Array(await file.arrayBuffer())], [1, 2, 3]);
+    for (const response of [info, file]) for (const [, value] of response.headers) assert.ok(!value.includes(id), value);
+    const unchanged = await w.call(who, 'GET', `/api/public/${token}/file`, { headers: { 'if-none-match': file.headers.get('etag')! } });
+    assert.equal(unchanged.status, 304);
+  }
+
+  // Read-only: the link opens nothing else, and the document's id opens nothing on its routes.
+  for (const method of ['PUT', 'POST', 'DELETE']) assert.equal((await w.call(null, method, `/api/public/${token}/file`, { body: bytes(9), type: DOCX })).status, 405, method);
+  assert.equal((await w.call(null, 'GET', `/api/documents/${id}`)).status, 401);
+  assert.equal((await w.call(BOB, 'GET', `/api/documents/${id}`)).status, 404);
+  for (const path of [`/api/public/${id}`, `/api/public/${id}/file`, '/api/public/short']) assert.equal((await w.call(null, 'GET', path)).status, 404, path);
+});
+
+test('only the owner sees or changes the public link', async () => {
+  const id = await create();
+  await share(id, ALICE, 'editor');
+  await share(id, BOB, 'viewer');
+  for (const who of [ALICE, BOB]) for (const method of ['GET', 'PUT', 'POST', 'DELETE']) assert.equal((await link(id, method, who)).status, 403, `${who} ${method}`);
+  assert.equal((await link(id, 'GET', null)).status, 401);
+});
+
+test('resetting the link kills the old one; turning it off or deleting the document kills it (404)', async () => {
+  const id = await create();
+  const first = (await tokenOf(await link(id, 'PUT')))!;
+  const second = (await tokenOf(await link(id, 'POST')))!;
+  assert.ok(second && second !== first);
+  assert.equal((await w.call(null, 'GET', `/api/public/${first}/file`)).status, 404);
+  assert.equal((await w.call(null, 'GET', `/api/public/${second}/file`)).status, 200);
+
+  assert.equal((await link(id, 'DELETE')).status, 204);
+  assert.equal(await tokenOf(await link(id, 'GET')), null);
+  assert.equal((await w.call(null, 'GET', `/api/public/${second}`)).status, 404);
+  const third = (await tokenOf(await link(id, 'PUT')))!;
+  assert.ok(third !== first && third !== second, 'turning it on again makes a new one');
+
+  assert.equal((await w.call(OWNER, 'DELETE', `/api/documents/${id}`)).status, 204);
+  await Promise.all(w.background);
+  assert.equal((await w.call(null, 'GET', `/api/public/${third}/file`)).status, 404);
+});
+
+test('a public link lasts only while its owner has sync', async () => {
+  const id = await create();
+  const token = (await tokenOf(await link(id, 'PUT')))!;
+  w.env.REQUIRE_SUBSCRIPTION = 'true';
+  assert.equal((await w.call(null, 'GET', `/api/public/${token}/file`)).status, 404);
+  assert.equal((await link(id, 'POST')).status, 402, 'and none can be made without it');
+});

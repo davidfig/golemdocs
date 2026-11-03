@@ -16,4 +16,6 @@ export const viewer: Partial<Messages> = {
   'viewer.findUnavailable': 'PDF 원본 페이지에서는 아직 찾기를 사용할 수 없습니다.',
   'viewer.signInToView': '이 문서를 보려면 로그인하세요.',
   'viewer.viewOnlyTitle': '{name} (보기 전용)',
+  'viewer.download': '다운로드',
+  'viewer.linkGone': '이 링크는 더 이상 작동하지 않습니다. 문서가 더 이상 공개 공유되지 않습니다.',
 };

@@ -52,6 +52,7 @@ export async function forgetDocuments(env: Env, docIds: readonly string[]): Prom
     await env.DIRECTORY.batch(
       docIds.slice(i, i + DIRECTORY_BATCH).flatMap((id) => [
         env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(id),
+        env.DIRECTORY.prepare('DELETE FROM public_links WHERE doc_id = ?').bind(id),
         env.DIRECTORY.prepare('DELETE FROM document_owners WHERE doc_id = ?').bind(id),
       ]),
     );
@@ -120,6 +121,37 @@ export async function viewShare(env: Env, token: string, userId: string): Promis
     .bind(token)
     .first<{ doc_id: string; grantee_id: string; owner_id: string }>();
   return row && row.grantee_id === userId ? { docId: row.doc_id, ownerId: row.owner_id } : null;
+}
+
+/** A document's public link (`public_links.token`), or null while it has none. */
+export async function publicLinkOf(env: Env, docId: string): Promise<string | null> {
+  const row = await env.DIRECTORY.prepare('SELECT token FROM public_links WHERE doc_id = ?').bind(docId).first<{ token: string }>();
+  return row?.token ?? null;
+}
+
+/** Gives a document a public link, keeping the one it has unless `reset`, which replaces it so copies of the old one stop working. */
+export async function makePublicLink(env: Env, docId: string, reset: boolean): Promise<string> {
+  await env.DIRECTORY.prepare(
+    `INSERT INTO public_links (doc_id, token, created_at) VALUES (?, ?, ?)
+     ON CONFLICT(doc_id) DO UPDATE SET token = CASE WHEN ? THEN excluded.token ELSE public_links.token END, created_at = CASE WHEN ? THEN excluded.created_at ELSE public_links.created_at END`,
+  )
+    .bind(docId, newViewToken(), Date.now(), reset ? 1 : 0, reset ? 1 : 0)
+    .run();
+  return (await publicLinkOf(env, docId))!;
+}
+
+/** Turns a document's public link off: the address answers 404 from now on. */
+export async function dropPublicLink(env: Env, docId: string): Promise<void> {
+  await env.DIRECTORY.prepare('DELETE FROM public_links WHERE doc_id = ?').bind(docId).run();
+}
+
+/** The document a public link opens, for anyone: null for an unknown or dropped token. */
+export async function publicShare(env: Env, token: string): Promise<{ docId: string; ownerId: string } | null> {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  const row = await env.DIRECTORY.prepare('SELECT p.doc_id, o.owner_id FROM public_links p JOIN document_owners o ON o.doc_id = p.doc_id WHERE p.token = ?')
+    .bind(token)
+    .first<{ doc_id: string; owner_id: string }>();
+  return row ? { docId: row.doc_id, ownerId: row.owner_id } : null;
 }
 
 export async function unshare(env: Env, docId: string, granteeId: string): Promise<void> {

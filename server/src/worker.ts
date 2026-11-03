@@ -5,7 +5,7 @@ import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
 import type { Env, ExportedHandler } from './cf.ts';
 import { handleDownloads } from './downloads.ts';
-import { handleDocuments, handleView, ownStorage, resolveAccess, type DocumentRoute } from './documents.ts';
+import { handleDocuments, handlePublic, handleView, ownStorage, resolveAccess, type DocumentRoute } from './documents.ts';
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
@@ -59,6 +59,10 @@ const handler: ExportedHandler = {
 
       // The desktop app's installers are public: they are downloaded before there is an account (downloads.ts).
       if (path === '/api/downloads' || path.startsWith('/api/downloads/')) return await handleDownloads(request, env, path);
+
+      // GET /api/public/:token[/file]: a document's public link, for anyone (see handlePublic).
+      const publicMatch = /^\/api\/public\/([^/]+)(\/file)?$/.exec(path);
+      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, !!publicMatch[2]);
 
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
@@ -167,7 +171,7 @@ const handler: ExportedHandler = {
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).
-      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|restore)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|restore)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub0, granteeId, action0] = match;
       // `/api/trash/:id/restore` has its action where the other collections have a sub-resource.

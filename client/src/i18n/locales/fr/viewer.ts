@@ -16,4 +16,6 @@ export const viewer: Partial<Messages> = {
   'viewer.findUnavailable': 'La recherche n\'est pas encore disponible dans les pages d\'origine d\'un PDF.',
   'viewer.signInToView': 'Connectez-vous pour voir ce document.',
   'viewer.viewOnlyTitle': '{name} (lecture seule)',
+  'viewer.download': 'Télécharger',
+  'viewer.linkGone': 'Ce lien ne fonctionne plus : le document n’est plus partagé publiquement.',
 };

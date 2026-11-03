@@ -11,7 +11,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkFolder, type FolderRow } from './folders.ts';
 import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
-import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
+import { accessFor, canWrite, dropPublicLink, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
@@ -240,7 +240,7 @@ export interface DocumentRoute {
   collection: 'documents' | 'shared' | 'trash';
   /** The document, or `batch` for the batch upload; undefined for the collection itself. */
   id?: string;
-  sub?: 'thumbnail' | 'index' | 'shares' | 'versions';
+  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link';
   /** Whose share a DELETE /api/documents/:id/shares/:userId removes, or which version /api/documents/:id/versions/:version is. */
   granteeId?: string;
   /** `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore. */
@@ -282,6 +282,28 @@ export async function handleView(request: Request, env: Env, userId: string, tok
   const response = await documentResponse(env, row.r2_key, share.ownerId, share.docId, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   return response;
+}
+
+/**
+ * GET /api/public/:token and /api/public/:token/file: a document's public link (`public_links`), as the viewer reads it at
+ * /view/?p=<token> (and embedded in other sites, /view/?p=<token>&embed), for anyone, signed in or not. The same answers as
+ * `handleView`. A dropped or reset link, a deleted document and an owner whose sync ended all get 404, so a link says
+ * nothing about why it stopped. Browsers may keep an answer for a minute, which is how long a dropped link can still show.
+ */
+export async function handlePublic(request: Request, env: Env, token: string, file: boolean): Promise<Response> {
+  if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+  const link = await publicShare(env, token);
+  if (!link || !(await hasSync(env, link.ownerId))) throw new HttpError(404, 'not found');
+  const db = await userDb(env, link.ownerId);
+  const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [link.docId]));
+  if (!row) throw new HttpError(404, 'not found');
+  const cache = 'public, max-age=60';
+  if (!file) return json({ name: row.name, updatedAt: row.updated_at }, 200, { 'cache-control': cache });
+  const response = await documentResponse(env, row.r2_key, link.ownerId, link.docId, DOCX, request.headers.get('if-none-match'));
+  if (!response) throw new HttpError(404, 'not found');
+  const headers = new Headers(response.headers);
+  headers.set('cache-control', cache);
+  return new Response(response.body, { status: response.status, headers });
 }
 
 export async function handleDocuments(request: Request, env: Env, userId: string, url: URL, route: DocumentRoute, defer?: (work: Promise<unknown>) => void): Promise<Response> {
@@ -558,6 +580,24 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       if (role !== 'owner' && granteeId !== userId) throw new HttpError(403, 'only the owner can remove other people');
       await unshare(env, id, granteeId);
       await kickFromRoom(env, id, granteeId);
+      return new Response(null, { status: 204 });
+    }
+    throw new HttpError(405, 'method not allowed');
+  }
+
+  // /api/documents/:id/link: its public link, which anyone may open read-only. Only the owner sees or changes it. GET answers
+  // { token } (null while there is none), PUT makes one (or keeps the one there is), POST makes a new one in place of the old, DELETE
+  // turns it off.
+  if (sub === 'link') {
+    if (role !== 'owner') throw new HttpError(403, 'only the owner can manage the public link');
+    if (granteeId !== undefined) throw new HttpError(404, 'not found');
+    if (request.method === 'GET') return json({ token: await publicLinkOf(env, id) });
+    if (request.method === 'PUT' || request.method === 'POST') {
+      requireStorage();
+      return json({ token: await makePublicLink(env, id, request.method === 'POST') });
+    }
+    if (request.method === 'DELETE') {
+      await dropPublicLink(env, id);
       return new Response(null, { status: 204 });
     }
     throw new HttpError(405, 'method not allowed');

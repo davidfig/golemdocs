@@ -50,7 +50,7 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill('nobody-here@example.com');
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
-    await expect(dialog.getByRole('status').last()).toHaveText('nobody with that email has signed in to Golem Docs yet');
+    await expect(dialog.getByRole('region', { name: 'People' }).getByRole('status')).toHaveText('nobody with that email has signed in to Golem Docs yet');
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
   });
@@ -60,7 +60,7 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill(owner.email);
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
-    await expect(dialog.getByRole('status').last()).toHaveText('you already own this document');
+    await expect(dialog.getByRole('region', { name: 'People' }).getByRole('status')).toHaveText('you already own this document');
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
   });
@@ -70,7 +70,7 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill('   ');
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
-    await expect(dialog.getByRole('status').last()).toHaveText('');
+    await expect(dialog.getByRole('region', { name: 'People' }).getByRole('status')).toHaveText('');
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
   });

@@ -16,4 +16,6 @@ export const viewer = {
   'viewer.findUnavailable': 'Find isn\'t available in a PDF\'s own pages yet.',
   'viewer.signInToView': 'Sign in to see this document.',
   'viewer.viewOnlyTitle': '{name} (view only)',
+  'viewer.download': 'Download',
+  'viewer.linkGone': 'This link no longer works: the document isn’t shared publicly any more.',
 } as const;

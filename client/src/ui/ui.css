@@ -1016,6 +1016,32 @@ html.wm-titlebar .wm-format {
   outline-offset: -2px;
 }
 
+/* In a dialog it sits beside .wm-input and .wm-button, so it takes their height, border and corners. */
+.wm-dialog .wm-segmented {
+  flex: none;
+  box-sizing: border-box;
+  height: 28px;
+  border-color: var(--wm-border);
+  border-radius: 5px;
+  background: var(--wm-field-bg);
+}
+
+.wm-dialog .wm-segment {
+  height: 100%;
+  padding: 0 12px;
+  border-left-color: var(--wm-border);
+}
+
+.wm-dialog .wm-segment[aria-pressed='true'] {
+  background: var(--wm-accent-ring);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.wm-dialog .wm-segment:focus-visible {
+  outline-color: var(--wm-accent);
+}
+
 .wm-fill-gradient {
   min-width: 190px;
 }

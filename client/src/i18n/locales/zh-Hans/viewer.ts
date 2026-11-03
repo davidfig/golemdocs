@@ -16,4 +16,6 @@ export const viewer: Partial<Messages> = {
   'viewer.findUnavailable': 'PDF 的原始页面中暂时无法查找。',
   'viewer.signInToView': '登录后即可查看此文档。',
   'viewer.viewOnlyTitle': '{name}（仅查看）',
+  'viewer.download': '下载',
+  'viewer.linkGone': '此链接已失效：该文档已不再公开共享。',
 };

@@ -374,6 +374,16 @@ export async function removeShare(id: string, userId: string): Promise<void> {
   await check(await send(`/api/documents/${id}/shares/${userId}`, { method: 'DELETE' }));
 }
 
+/** A document's public link token (null while it has none). `make` turns it on (keeping the one there is), `reset` replaces it, `off` turns it off. */
+export async function publicLink(id: string, change?: 'make' | 'reset' | 'off'): Promise<string | null> {
+  const method = change === 'make' ? 'PUT' : change === 'reset' ? 'POST' : change === 'off' ? 'DELETE' : 'GET';
+  const response = await check(await send(`/api/documents/${id}/link`, { method }));
+  return change === 'off' ? null : ((await response.json()) as { token: string | null }).token;
+}
+
+/** The address of a public link: the viewer for anyone, or with `embed`, the same viewer for a frame in another site. */
+export const publicLinkUrl = (token: string, embed = false): string => `${location.origin}/view/?p=${encodeURIComponent(token)}${embed ? '&embed' : ''}`;
+
 // --- History and the trash (server/src/versions.ts, trash.ts) ----------------------------------------------------------------
 
 /** A version of a document the account kept (`version` is the document's `updatedAt` as it was). */

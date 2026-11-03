@@ -55,6 +55,16 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.nobody': 'Noch für niemanden freigegeben.',
   'dialogs.share.done': 'Fertig',
   'dialogs.share.peopleHeading': 'Personen',
+  'dialogs.share.publicHeading': 'Öffentlicher Link',
+  'dialogs.share.publicNote': 'Alle mit dem Link können das Dokument lesen und herunterladen, ohne sich anzumelden, und andere Websites können es einbetten. Sie sehen jede gespeicherte Fassung.',
+  'dialogs.share.publicToggle': 'Alle mit dem Link können es ansehen',
+  'dialogs.share.publicLinkLabel': 'Öffentlicher Link',
+  'dialogs.share.copyLink': 'Link kopieren',
+  'dialogs.share.copyEmbed': 'Einbettungscode kopieren',
+  'dialogs.share.resetLink': 'Link zurücksetzen',
+  'dialogs.share.resetNote': 'Link zurücksetzen erzeugt eine neue Adresse; die alte funktioniert dann nicht mehr.',
+  'dialogs.share.copied': 'Kopiert.',
+  'dialogs.share.embedTitle': '{name} auf Golem Docs',
   'dialogs.share.note': 'Die Personen müssen sich einmal bei Golem Docs angemeldet haben. Bearbeiter sehen Änderungen in Echtzeit; Leser erhalten eine schreibgeschützte Kopie, die bei jedem Speichern des Dokuments aktualisiert wird.',
 
   // Sign in

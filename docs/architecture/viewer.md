@@ -34,6 +34,15 @@ A document shared with someone as "Can view" (File › Share; `viewer` in `share
 - **Built with the site.** The client's `build` runs the viewer config a second time in `site` mode (`vite.viewer.config.ts`), which writes `view/index.html` and its chunks into the site's `dist/` beside the app, without touching the app's chunks or its `build.json`. In development Vite serves it at `/view/`.
 - **Who may share view-only** is who may share at all: the owner, while they have sync. The one schema change is the share's viewer address (`shares.view_token`).
 
+## Public links and embedding
+
+A document may also have one **public link** (File › Share, *Public link*): `/view/?p=<token>`, the same page, for anyone, signed in or not. The token is `public_links.token` ([Server](server.md#sharing)), random and naming nothing, and the page reads `/api/public/<token>` and `/api/public/<token>/file`, which need no session. What differs from a person's view-only share (`src/viewer/share.ts`):
+
+- **No sign-in.** A 404 (link turned off, reset, the document deleted, or the owner's sync ended: the server doesn't say which) shows that the link no longer works.
+- **Download.** The bar has a Download button (`onDownload` in `mount`). The account keeps the document as a `.wdoc`, so the page keeps a copy of the stored bytes and turns them into the file its name says with `toVaultFile` (the same conversion the desktop vault writes, `desktop/vaultCodec.ts`), in the vault's convert worker, started on the first click (its page-side code is a few kB, so it is part of the page).
+- **Embedding.** `/view/?p=<token>&embed` is the same page with only the document's name in the bar. The Share dialog's Copy Embed Code gives an `<iframe>` of it (`embedCode` in `ui/shareDialog.ts`). The site sends no `X-Frame-Options` or `frame-ancestors`, so any site may frame it. A host that sandboxes the frame must allow `allow-scripts allow-same-origin` (the page reads the API on its own origin), and `allow-downloads` for Download, `allow-popups` for links.
+- **Cost.** Every visitor loads the viewer and the fonts the document uses (static files, cached), and the file once. A public page checks for a newer save every 2 minutes instead of 30 s, and only while it is in view; the server lets browsers keep its answers for a minute, which is also how long a link turned off can still show to someone who already had it open.
+
 ## API
 
 `mount(el, options) → { destroy() }` (`client/src/viewer/viewer.ts`). It sets the colour scheme on the root element, so it is meant to own its document: the viewer page, or a frame of its own.

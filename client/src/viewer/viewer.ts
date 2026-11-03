@@ -36,6 +36,8 @@ export interface ViewerOptions {
   locale?: string;
   /** Shown in the bar beside the page number (a shared document's name, say). */
   title?: string;
+  /** Shows a Download button in the bar, which calls this (a public link's page saves the file). */
+  onDownload?(): void;
   /** A link in the document was clicked (only web, mail, phone and FTP addresses are passed on). */
   onLink?(url: string): void;
   /** The document is open and laid out. */
@@ -66,6 +68,7 @@ const ICON_UP = 'M3 7.5L6 4.5L9 7.5';
 const ICON_DOWN = 'M3 4.5L6 7.5L9 4.5';
 const ICON_MINUS = 'M3 6H9';
 const ICON_PLUS = 'M3 6H9M6 3V9';
+const ICON_DOWNLOAD = 'M6 1.5V7.5M3.5 5L6 7.5L8.5 5M2 10H10';
 const ICON_FIND = 'M7.3 7.3L10.5 10.5M8.2 5A3.2 3.2 0 1 1 1.8 5A3.2 3.2 0 1 1 8.2 5';
 
 const LIGHT_DESK: readonly [number, number, number] = [0xe5 / 255, 0xe5 / 255, 0xe5 / 255];
@@ -607,6 +610,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       zoomLabel,
       tool(ICON_PLUS, t('viewer.zoomIn'), () => zoomTo(stepZoom(camera.zoom, 1))),
       tool(ICON_FIND, t('viewer.find'), openFind),
+      ...(options.onDownload ? [tool(ICON_DOWNLOAD, t('viewer.download'), options.onDownload)] : []),
     );
     findBar.append(query, tool(ICON_UP, t('dialogs.find.findPrevious'), () => findNext(true)), tool(ICON_DOWN, t('dialogs.find.findNext'), () => findNext(false)), findMessage, h('span', { class: 'wm-viewer-spacer' }), tool(CLOSE_ICON, t('viewer.closeFind'), closeFind));
     // `tool` hands the focus back to the document; the find bar's own buttons keep it in the search field.

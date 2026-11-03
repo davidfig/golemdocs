@@ -2,9 +2,14 @@
 
 ## 0.32.1 - Unreleased
 
+### Added
+
+- File › Share can turn on a public link: anyone with it can read the document and download it without signing in, and Copy Embed Code puts it on another website. Reset Link makes a new address and turning it off stops it working.
+
 ### Fixed
 
 - In the desktop app, a document changed in the vault folder while the app was closed no longer opens, disappears and opens again at launch: the change goes into it once it has opened.
+- The Can edit / Can view choice in File › Share now matches the email box and buttons beside it.
 
 ## 0.32.0 - 2026-11-03
 

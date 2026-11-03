@@ -55,6 +55,16 @@ export const dialogs: Catalog = {
   'dialogs.share.nobody': 'Пока ни с кем не открыт общий доступ.',
   'dialogs.share.done': 'Готово',
   'dialogs.share.peopleHeading': 'Пользователи',
+  'dialogs.share.publicHeading': 'Публичная ссылка',
+  'dialogs.share.publicNote': 'Любой, у кого есть ссылка, может читать и скачивать документ без входа, а другие сайты могут его встраивать. Видна каждая сохранённая версия.',
+  'dialogs.share.publicToggle': 'Все, у кого есть ссылка, могут просматривать',
+  'dialogs.share.publicLinkLabel': 'Публичная ссылка',
+  'dialogs.share.copyLink': 'Копировать ссылку',
+  'dialogs.share.copyEmbed': 'Копировать код для вставки',
+  'dialogs.share.resetLink': 'Сбросить ссылку',
+  'dialogs.share.resetNote': 'Сброс создаёт новый адрес; старый перестаёт работать.',
+  'dialogs.share.copied': 'Скопировано.',
+  'dialogs.share.embedTitle': '{name} в Golem Docs',
   'dialogs.share.note': 'Пользователи должны хотя бы раз войти в Golem Docs. Редакторы видят изменения в реальном времени; читатели получают копию только для чтения, которая обновляется при каждом сохранении документа.',
 
   // Sign in

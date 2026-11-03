@@ -139,7 +139,9 @@ export const together = (...contexts: BrowserContext[]) => ({ close: async () =>
  * account) and in its room with it. `context` closes both devices.
  */
 export async function secondDevice(browser: Browser, person: Person): Promise<{ context: ReturnType<typeof together>; a: App; b: App }> {
-  const doc = await waitForCloudDoc(person.page);
+  // The one open on `person`'s page, by name: the account may hold others too (the blank document a picture was imported from, say).
+  const open = await person.page.getByRole('textbox', { name: 'Document name' }).inputValue();
+  const doc = await waitForCloudDoc(person.page, (docs) => docs.find((d) => d.name === open || d.name.replace(/\.[^.]+$/, '') === open));
   // In its room first: of a document edited one person at a time (a PDF, a picture), the first to join is the one who edits it.
   await expect.poll(async () => (await roomOf(person.page)) !== null, { message: 'the first device joined the room', timeout: 30_000 }).toBe(true);
   const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });

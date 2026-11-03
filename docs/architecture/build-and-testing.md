@@ -106,6 +106,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-02 | `e2e/pdf/shapes.spec.ts` › Edit PDF: shapes › Delete removes the selected shape, and Undo brings it back | Timed out at 32.5 s in pass one of the same run, passed on retry in 2.7 s and alone in 5.6 s |
 | 2026-11-02 | `e2e/collab/room-picture.spec.ts` › what the holder draws over the picture reaches the watcher when it is saved, and the watcher cannot draw | Failed at 39.4 s in pass one of the 0.33.0 release run; alone, with the rest of its file on a side run's servers, passed in 14.5 s. The third test of this file logged here: if another turns up, look at the picture room's save-to-watcher path under load rather than tagging it |
 | 2026-11-02 | `e2e/editing/clipboard.spec.ts` › copy, cut and paste › Cut then Paste moves text | Failed at 12.3 s in pass one of the 0.33.0 release run; alone, the whole file passed on a side run's servers |
+| 2026-11-03 | `e2e/files/convert.spec.ts` › the notice after a conversion says what the new format leaves out | Failed at 12.3 s in pass one of the 0.33.1 release run; alone, passed five times in about 3 s |
 
 ## Performance traces (`golem:*`)
 

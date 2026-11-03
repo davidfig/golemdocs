@@ -58,7 +58,7 @@ test('converting to Markdown switches the document in place, keeps its text and 
   await expect(app.page.getByRole('button', { name: 'Open Document1.md' })).toBeVisible();
 });
 
-test('the notice after a conversion says what the new format leaves out', async ({ app }) => {
+test('the notice after a conversion says what the new format leaves out', { tag: '@heavy' }, async ({ app }) => {
   await blankWith(app, 'Some text');
   await convertTo(app, 'Plain Text (.txt)', 'Plain Text');
   await expect.poll(() => status(app.page)).toMatch(/only downloading a \.txt file leaves out all formatting, tables and images/);

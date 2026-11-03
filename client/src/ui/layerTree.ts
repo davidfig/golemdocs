@@ -6,7 +6,7 @@
 // differ. See "Consistent UI" in AGENTS.md.
 
 import { t } from '../i18n/index.ts';
-import { CLOSE_ICON, h, iconButton } from './dom.ts';
+import { CHEVRON_ICON, CLOSE_ICON, h, iconButton } from './dom.ts';
 import { showPopupMenu } from './popupMenu.ts';
 import type { PopupItem } from './popupMenu.ts';
 import './layersPanel.css';
@@ -15,7 +15,6 @@ const EYE = 'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6zM6 4.5a1.5 1.5 0 1 
 const EYE_CLOSED = 'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6zM2 10L10 2';
 const LOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 4 0v1.5';
 const UNLOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 3.9-.6';
-const CHEVRON = 'M4 2.5l4 3.5-4 3.5';
 
 /** Icons for the buttons at the bottom of a panel (the editors pass the ones they need). */
 export const LAYER_ICONS = {
@@ -184,7 +183,7 @@ export class LayerTree {
     const expand = h('span', { class: 'wm-layers-expand' });
     if (row.group) {
       const open = !this.closed.has(row.id);
-      const arrow = iconButton('wm-layers-toggle', CHEVRON, t(open ? 'vector.layersCollapse' : 'vector.layersExpand'));
+      const arrow = iconButton('wm-layers-toggle', CHEVRON_ICON, t(open ? 'vector.layersCollapse' : 'vector.layersExpand'));
       arrow.classList.toggle('open', open);
       arrow.addEventListener('click', (e) => {
         e.stopPropagation();

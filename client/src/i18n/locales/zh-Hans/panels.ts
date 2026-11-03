@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': '删除反馈',
   'panels.feedback.deleteAsk': '要删除这则反馈吗？此操作无法撤销。',
   'panels.feedback.resolved': '已解决',
+  'panels.feedback.expand': '展开',
+  'panels.feedback.collapse': '折叠',
   'panels.pages.label': '页面',
   'panels.pages.page': '第 {number} 页',
   'panels.pages.delete': '删除第 {number} 页',

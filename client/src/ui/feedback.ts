@@ -2,7 +2,7 @@
 // the admins, and the list they read, both over the server's /api/feedback endpoints.
 
 import { getLocale, t } from '../i18n/index.ts';
-import { h } from './dom.ts';
+import { CHEVRON_ICON, h, iconButton } from './dom.ts';
 import { showConfirm } from './popup.ts';
 
 const MAX_CHARS = 5000;
@@ -84,6 +84,14 @@ interface Entry {
   from: { name: string | null; email: string | null } | null;
 }
 
+/** Resolved entries the admin has opened again; the rest are shown collapsed. Kept across reloads of the list. */
+const expanded = new Set<number>();
+
+/** The first line of a message with something on it, for a collapsed entry. */
+export function firstLine(message: string): string {
+  return message.split('\n').find((line) => line.trim())?.trim() ?? '';
+}
+
 /** The body of Admin > Feedback: everything people have sent, newest first. */
 export function feedbackPanel(): HTMLElement {
   const body = h('div', { class: 'wm-feedback-list' }, h('p', { text: t('panels.feedback.loading') }));
@@ -135,17 +143,36 @@ function row(body: HTMLElement, entry: Entry): HTMLElement {
     const yes = await showConfirm(t('panels.feedback.deleteTitle'), h('p', { text: t('panels.feedback.deleteAsk') }), t('panels.feedback.delete'));
     return yes ? fetch(url, { method: 'DELETE' }) : null;
   });
-  return h(
+  const header = h('header', {}, h('strong', { text: who }), h('time', { text: new Date(entry.createdAt).toLocaleString(getLocale()) }));
+  const article = h(
     'article',
     { class: entry.resolvedAt ? 'wm-feedback-entry resolved' : 'wm-feedback-entry' },
-    h(
-      'header',
-      {},
-      h('strong', { text: who }),
-      h('time', { text: new Date(entry.createdAt).toLocaleString(getLocale()) }),
-    ),
+    header,
     // textContent, so whatever people typed is shown as text and never parsed.
     h('p', { class: 'wm-feedback-message', text: entry.message }),
     h('footer', {}, entry.resolvedAt ? h('span', { class: 'wm-feedback-badge', text: t('panels.feedback.resolved') }) : h('span'), error, h('span', { class: 'wm-feedback-actions' }, resolve, remove)),
   );
+  if (!entry.resolvedAt) return article;
+
+  // A resolved entry folds down to who sent it, when, and its first line.
+  const toggle = iconButton('wm-feedback-toggle', CHEVRON_ICON, '');
+  const summary = h('p', { class: 'wm-feedback-summary', text: firstLine(entry.message) });
+  const show = () => {
+    const open = expanded.has(entry.id);
+    article.classList.toggle('collapsed', !open);
+    toggle.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    const label = t(open ? 'panels.feedback.collapse' : 'panels.feedback.expand');
+    toggle.setAttribute('aria-label', label);
+    toggle.title = label;
+  };
+  header.prepend(toggle);
+  header.after(summary);
+  header.addEventListener('click', () => {
+    if (expanded.has(entry.id)) expanded.delete(entry.id);
+    else expanded.add(entry.id);
+    show();
+  });
+  show();
+  return article;
 }

@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'Feedback löschen',
   'panels.feedback.deleteAsk': 'Dieses Feedback löschen? Das lässt sich nicht rückgängig machen.',
   'panels.feedback.resolved': 'Erledigt',
+  'panels.feedback.expand': 'Aufklappen',
+  'panels.feedback.collapse': 'Zuklappen',
   'panels.pages.label': 'Seiten',
   'panels.pages.page': 'Seite {number}',
   'panels.pages.delete': 'Seite {number} löschen',

@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': '의견 삭제',
   'panels.feedback.deleteAsk': '이 의견을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.',
   'panels.feedback.resolved': '해결됨',
+  'panels.feedback.expand': '펼치기',
+  'panels.feedback.collapse': '접기',
   'panels.pages.label': '페이지',
   'panels.pages.page': '{number}페이지',
   'panels.pages.delete': '{number}페이지 삭제',

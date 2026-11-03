@@ -1016,6 +1016,32 @@ html.wm-titlebar .wm-format {
   outline-offset: -2px;
 }
 
+/* In a dialog it sits beside .wm-input and .wm-button, so it takes their height, border and corners. */
+.wm-dialog .wm-segmented {
+  flex: none;
+  box-sizing: border-box;
+  height: 28px;
+  border-color: var(--wm-border);
+  border-radius: 5px;
+  background: var(--wm-field-bg);
+}
+
+.wm-dialog .wm-segment {
+  height: 100%;
+  padding: 0 12px;
+  border-left-color: var(--wm-border);
+}
+
+.wm-dialog .wm-segment[aria-pressed='true'] {
+  background: var(--wm-accent-ring);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.wm-dialog .wm-segment:focus-visible {
+  outline-color: var(--wm-accent);
+}
+
 .wm-fill-gradient {
   min-width: 190px;
 }
@@ -2072,17 +2098,20 @@ html.wm-titlebar .wm-format {
   width: 420px;
 }
 
-/* Drawn over the document, not modal (see linkPopover.ts). */
-.wm-dialog.wm-link-over {
+/* A card drawn over the document, not modal (the link form, linkPopover.ts; a sheet's filter, sheet/filterCard.ts). */
+.wm-dialog.wm-over {
   position: fixed;
   z-index: 50;
   margin: 0;
   min-width: 0;
-  width: min(420px, calc(100vw - 8px));
 }
 
-.wm-dialog.wm-link-over[hidden] {
+.wm-dialog.wm-over[hidden] {
   display: none;
+}
+
+.wm-dialog.wm-link.wm-over {
+  width: min(420px, calc(100vw - 8px));
 }
 
 .wm-link-body {
@@ -3009,8 +3038,39 @@ body.wm-fullscreen #footer {
   display: none !important;
 }
 body.wm-fullscreen:not(.wm-fullscreen-menu) #chrome,
-body.wm-fullscreen .wm-toolbars {
-  display: none;
+body.wm-fullscreen .wm-toolbars,
+body.wm-fullscreen .wm-keys {
+  display: none !important;
+}
+/* Where the browser can't go full screen (a phone), this button in the corner leaves it. */
+.wm-fullscreen-exit {
+  position: fixed;
+  z-index: 50;
+  top: calc(env(safe-area-inset-top) + 8px);
+  right: calc(env(safe-area-inset-right) + 8px);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wm-border);
+  border-radius: 50%;
+  background: var(--wm-face);
+  color: var(--wm-text);
+  box-shadow: var(--wm-float-shadow);
+  opacity: 0.7;
+}
+.wm-fullscreen-exit:hover {
+  opacity: 1;
+}
+.wm-fullscreen-exit svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 #footer {
@@ -3225,4 +3285,47 @@ body.wm-fullscreen .wm-toolbars {
   padding: 12px;
   color: var(--wm-muted);
   text-align: center;
+}
+
+/* The handles at the ends of a selection made with a finger (see selectionHandles.ts). */
+
+.wm-sel-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-sel-handles[hidden],
+.wm-sel-handle[hidden] {
+  display: none;
+}
+
+.wm-sel-handle {
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  background: var(--wm-accent);
+  will-change: transform;
+}
+
+/* The knob a finger takes: above the start, below the end. */
+.wm-sel-handle::after {
+  content: '';
+  position: absolute;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--wm-accent);
+}
+
+.wm-sel-handle.start::after {
+  top: -11px;
+}
+
+.wm-sel-handle.end::after {
+  bottom: -11px;
 }

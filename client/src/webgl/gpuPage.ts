@@ -4,8 +4,8 @@ import type { AtlasLibrary } from './text/gpuFace.ts';
 import { TextBatch } from './text/textBatch.ts';
 
 /** Synthetic italic slant (~11°) and bold stroke growth (ems), as Word applies them. */
-const SYNTHETIC_SKEW = 0.2;
-const SYNTHETIC_EMBOLDEN = 0.02;
+export const SYNTHETIC_SKEW = 0.2;
+export const SYNTHETIC_EMBOLDEN = 0.02;
 
 interface Content {
   text: TextBatch[];

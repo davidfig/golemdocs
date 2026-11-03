@@ -7,6 +7,7 @@
 import { getLocale, t, type MessageKey } from '../i18n/index.ts';
 import type { WordStats } from '../layout/protocol.ts';
 import { h, setAttr, stripMnemonic } from './dom.ts';
+import { zoomPercent } from '../view/camera.ts';
 import type { DocumentKind, ViewMode } from './actions.ts';
 import { PICTURE_KINDS, VECTOR_KINDS } from './formats.ts';
 
@@ -88,7 +89,7 @@ export function footerSegments(info: FooterInfo): FooterSegment[] {
       else out.push({ key: 'panels.footer.words', params: { count: total.words } });
     }
   }
-  out.push({ key: 'panels.footer.zoom', params: { percent: Math.round(info.zoom * 100) } });
+  out.push({ key: 'panels.footer.zoom', params: { percent: zoomPercent(info.zoom) } });
   return out;
 }
 

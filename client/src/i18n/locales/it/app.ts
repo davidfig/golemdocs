@@ -132,6 +132,7 @@ export const app: Partial<Messages> = {
   'app.switchedTxt': 'Ora in modifica come {label}. Il documento conserva tutto il resto; solo scaricando un file {extension} vengono omessi tutta la formattazione, le tabelle e le immagini.',
   'app.switchedHtml': 'Ora in modifica come {label}. Il documento conserva tutto il resto; solo scaricando un file {extension} vengono omessi impostazione della pagina, intestazioni e piè di pagina, commenti e immagini incorporate.',
   'app.switchedLossless': 'Ora in modifica come {label}. Non è andato perso nulla.',
+  'app.switchedXlsx': 'Ora si modifica come cartella di lavoro di Excel: la prima tabella del documento è il suo foglio. Il resto del documento non è nella cartella di lavoro.',
   'app.unsupportedFormat': '{label} non è ancora supportato',
   'app.cannotOpenFormat': 'Impossibile aprire {label}',
   'app.unsupportedOpen': 'L’apertura dei file {kind} non è ancora supportata ({name})',

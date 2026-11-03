@@ -132,6 +132,7 @@ export const app = {
   'app.switchedTxt': 'Now editing as {label}. The document keeps everything else; only downloading a {extension} file leaves out all formatting, tables and images.',
   'app.switchedHtml': 'Now editing as {label}. The document keeps everything else; only downloading a {extension} file leaves out page setup, headers and footers, comments and embedded pictures.',
   'app.switchedLossless': 'Now editing as {label}. Nothing was lost.',
+  'app.switchedXlsx': 'Now editing as an Excel Workbook: the document’s first table is its sheet. The rest of the document is not in the workbook.',
   'app.unsupportedFormat': '{label} isn’t supported yet',
   'app.cannotOpenFormat': 'Can’t open {label}',
   'app.unsupportedOpen': 'Opening {kind} files isn’t supported yet ({name})',

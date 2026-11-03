@@ -717,3 +717,14 @@ test('a font name cannot end the generated style block', async () => {
   assert.ok(!html.includes('<script>'), html);
   assert.equal(html.split('</style>').length, 2);
 });
+
+test('for the clipboard, each paragraph carries its style’s indents itself (apps that paste HTML ignore the style sheet)', async () => {
+  const doc = await WordDocument.create();
+  doc.styles.styles.push({ type: 'paragraph', id: 'Body', name: 'Body', basedOn: 'Normal', paragraphProperties: { indent: { firstLine: 720 } }, attrs: {} });
+  doc.body = [para([run('Indented by its style')], { style: 'Body' }), para([run('Hanging instead')], { style: 'Body', indent: { hanging: 360 } })];
+  const page = documentToHtml(doc);
+  assert.doesNotMatch(page, /<p[^>]*style="[^"]*text-indent: 36pt/);
+  const clip = documentToHtml(doc, undefined, { inlineIndents: true });
+  assert.match(clip, /<p[^>]*style="[^"]*text-indent: 36pt[^"]*"[^>]*>Indented by its style/);
+  assert.match(clip, /<p[^>]*style="[^"]*text-indent: -18pt[^"]*"[^>]*>Hanging instead/);
+});

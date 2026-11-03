@@ -21,7 +21,7 @@ async function linked(app: App): Promise<{ x: number; y: number }> {
   return { x: start.x + 14, y: start.y };
 }
 
-const card = (app: App) => app.page.locator('.wm-link-over');
+const card = (app: App) => app.page.locator('.wm-link.wm-over');
 
 async function links(app: App): Promise<string[]> {
   const file = await app.download(() => app.menu('File', 'Download'));

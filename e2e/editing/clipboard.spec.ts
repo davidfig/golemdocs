@@ -19,7 +19,7 @@ test.describe('copy, cut and paste', () => {
     await expect.poll(() => app.text()).toBe('keep ');
   });
 
-  test('Cut then Paste moves text', async ({ app }) => {
+  test('Cut then Paste moves text', { tag: '@heavy' }, async ({ app }) => {
     await app.blank();
     await app.type('one two');
     await selectBy(app, 'Shift+ArrowLeft', 4, ' two');

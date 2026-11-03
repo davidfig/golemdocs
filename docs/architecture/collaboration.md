@@ -46,6 +46,7 @@ The first person into an empty room says what its changes are (`RoomKind`, store
 | `doc` | `Operation`s on text | `Engine` in `snapshot.ts` (`applyAll`) |
 | `text` | `TextOp` byte replacements (`ops/src/textOps.ts`, up to 16 MiB) | `applyTextOps` |
 | `objects` / `layers` / `nodes` | `put`/`del` of keyed objects (`ops/src/objects.ts`): PDF markup, picture shapes, drawing nodes | `applyObjects` rewrites one `.wdoc` extension entry |
+| `cells` | none: a workbook's room is watched (`ROOM_POLICY`), one session edits and saves the `.xlsx` | `applyLog` returns the file as it is |
 
 Presence (`presence` carets as `Selection` with paragraph ids, `pointer` mouse positions) is relayed and never logged. Carets are mapped through incoming changes in the worker (`Replica.mapSelection`).
 
@@ -65,7 +66,7 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 
 - **Server:** `server/src/roomGate.ts` is the *only* module that talks to the room Durable Object. Routes call `joinRoom`, `roomAllowsSave`, `endRooms`, `kickFromRoom`, `rejoinRoom`; none of them builds a room request, knows room paths, or checks whether `env.ROOMS` exists (a server without rooms answers as if nobody were editing). `roomHeaders` is the single place the trusted `x-user`, `x-role`, `x-owner`, `x-doc`, `x-picture` headers are set, replacing whatever the client sent.
 - **Client:** `client/src/collab/cloudRoom.ts` (`cloudRoomTransport`) is the single WebSocket + document-fetch transport, used by the layout worker (`joinNetwork`) and the text editor (`textEditor/textSync.ts`). The old SharedWorker "dev rooms" (`devServer.ts`, Share > Get Link, `?room=` links) are gone. Local development gets rooms from the simulated Durable Object in `wrangler dev --local`.
-- **Client hosts:** `RoomClient` knows nothing about documents; it needs a `RoomHost`. The layout worker builds three hosts that share one `presenceHost()`: `roomHost()` (text documents, via `Replica`), `layersRoomHost()` (pictures and drawings, via `ObjectSync`), `pdfRoomHost()` (PDF markup). The text editor has its own host in `textSync.ts`.
+- **Client hosts:** `RoomClient` knows nothing about documents; it needs a `RoomHost`. The layout worker builds three hosts that share one `presenceHost()`: `roomHost()` (text documents, via `Replica`), `layersRoomHost()` (pictures and drawings, via `ObjectSync`), `pdfRoomHost()` (PDF markup). The text editor has its own host in `textSync.ts`, and the spreadsheet editor one in `sheet/sheetSync.ts` (a watched room's: `serialize` is the workbook's `.xlsx`, and its `saved`, `release` and `flush` go to the page's `refreshWatched`, `releaseRoom` and `saveAndSend`, as the layout worker's `watchRoomHost` does; a watcher's workbook is read-only, and is opened again in place after each save, keeping its room).
 - `CollabServer` (`ops/src/collab.ts`) remains only as the in-memory reference server for tests (`ops/test`, `editor/test/fuzz.test.ts`, some `client/test` specs).
 
 ## Key files
@@ -82,7 +83,8 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 | `client/src/layout/layoutWorker.ts` | `joinNetwork`, `joinLate`, room hosts, read-only rule, picture sharing (`addMedia`) |
 | `client/src/layout/objectSync.ts` | Client side of object-list rooms |
 | `client/src/main.ts` | `roomStateChanged`, `networkRoom`, `joinTextRoom`, `sharedEdited`/`uploadShared`, `resumeAfterRoom`, `rejoinWhenBack` |
-| `client/src/ui/shareDialog.ts` | Owner shares by email as editor or viewer |
+| `client/src/ui/shareDialog.ts` | Owner shares by email as editor or viewer (Can edit / Can view, a `segmented` control) |
+| `client/src/viewer/share.ts` | The page a view-only share opens in (`/view/?s=<token>`, the share's own address) |
 | `server/src/worker.ts` | Routes `/api/rooms/:id` (WebSocket), `/document`, `/media/:hash`; auth, origin check, access, owner sync |
 | `server/src/roomGate.ts` | The only door to the room |
 | `server/src/room.ts` | Durable Object `Room`: sockets, SQLite `log` and `kv` tables, `CloudFiles` |
@@ -115,6 +117,7 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 
 - The Worker authenticates, checks `Origin` on the WebSocket handshake (cookies ride on cross-site handshakes), calls `resolveAccess`, and requires the **owner** to have sync (`requireOwnerSync`) because the room writes into the owner's storage, whoever joins.
 - The role travels to the room as `x-role`; the room never trusts the client. Viewers are accepted into the room but a viewer `submit` closes the connection (`badMessage`); in the worker `readOnly` also blocks local edits.
+- **A view-only share doesn't join the room at all.** The app sends someone who opens a document shared with them as a viewer to the read-only viewer page (`/view/?s=<token>`, the share's own random address; `src/viewer/share.ts`). It shows the last saved file and checks for a newer one every 30 s and when the tab is looked at again (`If-None-Match`, 304 while unchanged). A shared room snapshots within about 5 s of an edit, so it catches up within seconds of that. We chose this over watching the room live: it needs no room client, rendering of remote edits or handoff on the viewer's side, it works the same for every room kind (text, objects, PDFs), and it keeps the viewer one embeddable component. The room's viewer role stays for anyone who joins as one (a role changed while the document is open, say). See [Embeddable viewer](viewer.md).
 - Changing a role calls `rejoinRoom` (closes with `stale`, client reconnects with the new role). Removing someone calls `kickFromRoom` (closes with `revoked`). Deleting a document calls `endRooms` (revoked, then `store.wipe()`).
 - Presence `picture` comes from `pictureOf(env, userId)`, only on the WebSocket join.
 

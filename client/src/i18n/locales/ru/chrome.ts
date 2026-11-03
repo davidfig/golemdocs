@@ -152,6 +152,7 @@ export const chrome: Catalog = {
   'chrome.admin.debug': '&Отладка…',
   'chrome.view.fullScreen': 'Полно&экранный режим',
   'chrome.fullScreen.hint': 'Нажмите Esc, чтобы выйти из полноэкранного режима',
+  'chrome.fullScreen.exit': 'Выйти из полноэкранного режима',
   'chrome.view.darkMode': 'Темный &режим',
   'chrome.view.darkPages': 'Темные с&траницы',
   'chrome.view.matchSystem': 'Как в систем&е',

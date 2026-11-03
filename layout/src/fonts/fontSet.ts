@@ -4,6 +4,7 @@
 
 import { FaceMetrics } from './faceMetrics.ts';
 import { CJK_SIBLINGS, type CjkLang } from './cjk.ts';
+import { EMOJI_GROUP } from './emoji.ts';
 import type { FontManifest, ManifestFace, ManifestFamily, MathData, MsdfLayout } from './fontTypes.ts';
 import type { layoutMath } from '../math/layout.ts';
 
@@ -58,6 +59,12 @@ const FALLBACK_BY_NAME: Record<string, string> = {
   'liberation mono': 'Courier New',
   carlito: 'Calibri',
   caladea: 'Cambria',
+  // Families the app has, for a font set that leaves them out (the embeddable viewer's host may bundle only the common ones).
+  cambria: 'Times New Roman',
+  georgia: 'Times New Roman',
+  'segoe ui': 'Arial',
+  'comic sans ms': 'Arial',
+  'jetbrains mono': 'Courier New',
 };
 
 export class FontSet {
@@ -142,8 +149,9 @@ export class FontSet {
     if (cached) return cached;
 
     const name = request.font.toLowerCase();
+    // A font we don't have falls back as Word's would, and to the fallback family when even that one isn't in this font set.
     const entry =
-      this.byName.get(name) ?? this.byName.get((FALLBACK_BY_NAME[name] ?? FALLBACK_FAMILY).toLowerCase());
+      this.byName.get(name) ?? this.byName.get((FALLBACK_BY_NAME[name] ?? FALLBACK_FAMILY).toLowerCase()) ?? this.byName.get(FALLBACK_FAMILY.toLowerCase());
     if (!entry) throw new Error(`fallback font ${FALLBACK_FAMILY} is missing from the manifest`);
 
     const resolved = this.pick(entry.family, entry.weight, request);
@@ -252,6 +260,16 @@ export class FontSet {
     });
     await this.ensure([...needed].flatMap((family) => styles.map((style) => this.pick(family, undefined, { font: family.wordName, ...style }).face)));
     return remaining;
+  }
+
+  /** The emoji pages whose metrics are loaded. Emoji are never slanted or emboldened, whatever the run asks for. */
+  emojiFonts(): ResolvedFont[] {
+    return this.pageFonts(EMOJI_GROUP, false, false);
+  }
+
+  /** Loads the emoji pages holding the given page keys (see emojiPageKey in emoji.ts). */
+  async ensureEmoji(keys: Iterable<number>): Promise<void> {
+    await this.ensurePages(EMOJI_GROUP, keys);
   }
 
   /** Loads what drawing the given characters in a CJK language takes; each language takes the characters its pages hold, the rest go to its siblings. */

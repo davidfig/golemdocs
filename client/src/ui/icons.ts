@@ -317,6 +317,33 @@ export const ICONS: Record<string, string> = {
   columns: svg(
     `<path d="M3 5h7M3 9.6h7M3 14.2h7M3 18.8h5M14 5h7M14 9.6h7M14 14.2h7M14 18.8h5" stroke-width="2.2"/>`,
   ),
+  // Spreadsheets (the Sheet toolbar).
+  sheetCurrency: svg(
+    `<rect x="2.5" y="6" width="19" height="12" rx="2" fill="${GREEN}"/><circle cx="12" cy="12" r="3" fill="${PAPER}"/>` +
+      `<path d="M5.5 9v6M18.5 9v6" stroke="${PAPER}" stroke-width="1.4"/>`,
+  ),
+  sheetPercent: svg(
+    `<circle cx="7" cy="7" r="2.8" fill="${YELLOW}"/><circle cx="17" cy="17" r="2.8" fill="${YELLOW}"/>` + outlined('M18 5L6 19', BLUE, 2.2),
+  ),
+  sheetMoreDecimals: svg(
+    `<circle cx="4.5" cy="18.5" r="1.4" fill="${INK}"/><rect x="8" y="13.5" width="5" height="8" rx="2.5" fill="${PAPER}"/><rect x="15" y="13.5" width="5" height="8" rx="2.5" fill="${PAPER}"/>` +
+      outlined('M19 6.5H6M9.5 3.5l-3.5 3 3.5 3', BLUE, 1.8),
+  ),
+  sheetFewerDecimals: svg(
+    `<circle cx="4.5" cy="18.5" r="1.4" fill="${INK}"/><rect x="8" y="13.5" width="5" height="8" rx="2.5" fill="${PAPER}"/>` + outlined('M6 6.5h13M15.5 3.5l3.5 3-3.5 3', BLUE, 1.8),
+  ),
+  sheetWrap: svg(`<path d="M3 5h18M3 19h7" stroke-width="2.2"/>` + outlined('M3 12h14a3.5 3.5 0 0 1 0 7h-3.5M16.5 16.5L14 19l2.5 2.5', BLUE, 1.8)),
+  sheetMergeCenter: svg(
+    `<rect x="2.5" y="5" width="19" height="14" rx="1.5" fill="${PAPER}"/><path d="M12 5v3M12 16v3" stroke="${LINE}"/>` + outlined('M4.5 12h5M7.5 9.5L10 12l-2.5 2.5M19.5 12h-5M16.5 9.5L14 12l2.5 2.5', BLUE, 1.6),
+  ),
+  sheetBorderAll: svg(`<rect x="3.5" y="3.5" width="17" height="17" rx="1.5" fill="${PAPER}"/>` + outlined('M3.5 12h17M12 3.5v17M3.5 3.5h17v17h-17z', BLUE, 1.6)),
+  sheetBorderNone: svg(`<rect x="3.5" y="3.5" width="17" height="17" rx="1.5" stroke="${LINE}" stroke-dasharray="2 2.2"/><path d="M3.5 12h17M12 3.5v17" stroke="${LINE}" stroke-dasharray="2 2.2"/>`),
+  sheetAlignTop: svg(outlined('M3 4h18', BLUE, 2.2) + `<rect x="6" y="7.5" width="4.5" height="12" rx="1" fill="${SKY}"/><rect x="13.5" y="7.5" width="4.5" height="7" rx="1" fill="${SKY}"/>`),
+  sheetAlignMiddle: svg(`<rect x="6" y="4" width="4.5" height="16" rx="1" fill="${SKY}"/><rect x="13.5" y="7.5" width="4.5" height="9" rx="1" fill="${SKY}"/>` + outlined('M3 12h18', BLUE, 2.2)),
+  sheetAlignBottom: svg(`<rect x="6" y="4.5" width="4.5" height="12" rx="1" fill="${SKY}"/><rect x="13.5" y="9.5" width="4.5" height="7" rx="1" fill="${SKY}"/>` + outlined('M3 20h18', BLUE, 2.2)),
+  sheetSortAscending: svg(`<path d="M3 5h5M3 10h8M3 15h11M3 20h14" stroke-width="2.2"/>` + outlined('M19.5 3v16M16.5 16l3 3 3-3', BLUE, 1.8)),
+  sheetSortDescending: svg(`<path d="M3 5h14M3 10h11M3 15h8M3 20h5" stroke-width="2.2"/>` + outlined('M19.5 3v16M16.5 16l3 3 3-3', BLUE, 1.8)),
+  sheetFilter: svg(`<path d="M3.5 4h17l-6.5 8v6.5l-4 2V12z" fill="${BUTTER}"/>`),
   borders: svg(
     `<rect x="3.5" y="3.5" width="17" height="17" rx="1.5" stroke="${LINE}" stroke-dasharray="2 2.2"/>` +
       outlined('M3.5 20.5h17', BLUE, 2.4),

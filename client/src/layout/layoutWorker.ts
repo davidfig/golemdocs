@@ -73,7 +73,7 @@ async function changelogText(): Promise<string> {
   return (await import('../../../CHANGELOG.md?raw')).default;
 }
 import { CHANGE_MS } from '../webgl/overlayColors.ts';
-import { DICTIONARY_BASE, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
+import { DICTIONARY_BASE, fontBaseOf, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { formatCommand, type FormatAction } from './formatting.ts';
@@ -99,9 +99,10 @@ const SLICE_MS = 12;
 /** Longest selection text kept for the clipboard. */
 const CLIPBOARD_LIMIT = 4_000_000;
 /** A selection longer than this is copied as plain text only (writing its HTML after every change would be slow). */
-const SELECTION_HTML_LIMIT = 200_000;
+const SELECTION_HTML_LIMIT = 1_000_000;
 
-const fontsReady = loadAppFonts();
+// From the site, or from where the embeddable viewer's host serves them (the worker's name says, see `layoutWorkerName`).
+const fontsReady = loadAppFonts(fontBaseOf((self as { name?: string }).name));
 
 /** Loads the faces of the default font, which nearly every document uses, ahead of one that is still arriving. Never fails the document. */
 async function warmFonts(): Promise<void> {
@@ -237,6 +238,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     case 'tsv':
     case 'mhtml':
     case 'html':
+    case 'xlsx':
     case 'txt': {
       const { document, extensions } = await importDocument(source.kind, new Uint8Array(source.bytes));
       return flowing(source.name, document, source.kind, extensions);
@@ -711,7 +713,7 @@ class OpenDocument {
       try {
         const { documentToHtml } = await import('../formats/html.ts');
         const scratch = Object.assign(Object.create(Object.getPrototypeOf(document)), document, { body }) as WordDocument;
-        if (!this.closed && this.editor === editor) post({ type: 'selectionHtml', doc: this.doc, text, html: documentToHtml(scratch) });
+        if (!this.closed && this.editor === editor) post({ type: 'selectionHtml', doc: this.doc, text, html: documentToHtml(scratch, undefined, { inlineIndents: true }) });
       } catch {
         // The copy carries plain text only.
       }
@@ -1231,9 +1233,12 @@ class OpenDocument {
     });
   }
 
+  /** Opened read-only (the embeddable viewer): it can be looked at, selected, searched and copied, never changed. */
+  viewOnly = false;
+
   /** Viewers, anyone whose connection to the room is gone, and anyone watching while someone else holds the document can look but not edit. */
   get readOnly(): boolean {
-    return this.net !== null && (!this.net.canEdit || this.net.watching || this.net.catchingUp);
+    return this.viewOnly || (this.net !== null && (!this.net.canEdit || this.net.watching || this.net.catchingUp));
   }
 
   private postPointers(): void {
@@ -1848,7 +1853,8 @@ class OpenDocument {
 
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
-    if ((!live.spelling && !live.grammar) || !this.firstLayoutDone) return new Float64Array(0);
+    // Nothing can be corrected in a document opened read-only, so nothing is underlined (and no dictionary is fetched).
+    if ((!live.spelling && !live.grammar) || !this.firstLayoutDone || this.viewOnly) return new Float64Array(0);
     const [start, end] = editor.ordered();
     const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
     // Typing along: the word just finished (and the space or mark after it) is not underlined until a pause, so a squiggle doesn't flash under every word as it is typed.
@@ -2497,12 +2503,15 @@ let current: OpenDocument | null = null;
  * Opens a document. Everything up to the first `await` happens at once, as the message is handled:
  * `current` is the new document from then on, so the messages sent after this one find it.
  */
-async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions, keepRoom?: boolean, version?: number): Promise<void> {
+async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOptions, keepRoom?: boolean, version?: number, readOnly = false): Promise<void> {
+  // Read-only from the start: never in a room (there is no one to edit it with).
+  if (readOnly) requestedRoom = undefined;
   // The same picture or drawing, changed: it keeps its room (when alone in it) rather than leaving and joining again.
-  const carried = keepRoom ? (current?.handOverRoom() ?? null) : null;
+  const carried = keepRoom && !readOnly ? (current?.handOverRoom() ?? null) : null;
   current?.leave();
   current?.controller.abort();
   const entry = new OpenDocument(doc);
+  entry.viewOnly = readOnly;
   current = entry;
   // What was ignored in the document before is not ignored in this one (the page sends its own once it is open).
   ignoreSpelling([], []);
@@ -2815,7 +2824,7 @@ function handleInbox(): void {
         .catch(() => {})
         .then(() => {
           held = false;
-          void open(message.doc, message.source, message.room, message.keepRoom, message.version);
+          void open(message.doc, message.source, message.room, message.keepRoom, message.version, message.readOnly);
           handleInbox();
         });
     } else {

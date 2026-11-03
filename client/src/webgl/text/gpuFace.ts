@@ -3,8 +3,11 @@ import { GLYPH_TABLE_WIDTH, glyphTableHeight, padGlyphTable } from './glyphTable
 
 let nextId = 0;
 
+/** Mipmap levels below full size a color (emoji) atlas has: its sprites are padded for 8x minification (scripts/fonts/emoji.ts). */
+const COLOR_MIP_LEVELS = 3;
+
 /**
- * One font face on the GPU: its MTSDF atlas plus a glyph table texture holding each glyph's
+ * One font face on the GPU: its MTSDF atlas (or, for an emoji page, color sprites) plus a glyph table texture holding each glyph's
  * quad (in ems) and atlas UVs, so glyph instances only need to carry a glyph index. The
  * table comes from the layout worker (FaceDescriptor); the atlas image loads separately, and
  * the face draws nothing until it arrives.
@@ -17,6 +20,8 @@ export class GpuFace {
   readonly atlasWidth: number;
   readonly atlasHeight: number;
   readonly glyphTable: WebGLTexture;
+  /** An emoji page: the atlas holds premultiplied color sprites, sampled with mipmaps, not a distance field. */
+  readonly color: boolean;
   atlas: WebGLTexture | null = null;
 
   constructor(
@@ -27,6 +32,7 @@ export class GpuFace {
     this.distanceRangeEm = descriptor.distanceRangeEm;
     this.atlasWidth = descriptor.atlasWidth;
     this.atlasHeight = descriptor.atlasHeight;
+    this.color = descriptor.color ?? false;
 
     // Two RGBA32F texels per glyph: [plane l, t, r, b] in ems, [atlas l, t, r, b] in UVs, folded
     // into rows of GLYPH_COLUMNS glyphs (see glyphTable.ts).
@@ -49,6 +55,22 @@ export class GpuFace {
     const gl = this.gl;
     this.atlas = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+    if (this.color && !(image instanceof Uint8Array)) {
+      // Color sprites (decoded premultiplied, see fetchAtlas), mipmapped so zoomed-out emoji neither shimmer nor bleed:
+      // each sprite has padding enough for COLOR_MIP_LEVELS halvings.
+      gl.texStorage2D(gl.TEXTURE_2D, COLOR_MIP_LEVELS + 1, gl.RGBA8, this.atlasWidth, this.atlasHeight);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, COLOR_MIP_LEVELS);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      image.close();
+      return;
+    }
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, this.atlasWidth, this.atlasHeight);
     // The distance field must reach the GPU byte-for-byte: no premultiply, no color management.
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -96,16 +118,17 @@ export class AtlasLibrary {
   warm(keys: Iterable<string>): void {
     for (const key of keys) {
       if (this.faces.has(key) || this.warmed.has(key)) continue;
-      const image = this.fetchAtlas(key);
+      const image = this.fetchAtlas(key, false);
       image.catch(() => this.warmed.delete(key));
       this.warmed.set(key, image);
     }
   }
 
-  private async fetchAtlas(key: string): Promise<ImageBitmap> {
+  /** A distance field must arrive byte for byte; color sprites are premultiplied, so blending and mipmaps treat their edges right. */
+  private async fetchAtlas(key: string, color: boolean): Promise<ImageBitmap> {
     const response = await fetch(new URL(key, new URL(this.baseUrl, location.href)));
     if (!response.ok) throw new Error(`${key}: HTTP ${response.status}`);
-    return createImageBitmap(await response.blob(), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    return createImageBitmap(await response.blob(), color ? { premultiplyAlpha: 'premultiply' } : { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
   }
 
   get(key: string): GpuFace | undefined {
@@ -135,7 +158,7 @@ export class AtlasLibrary {
     try {
       const warm = this.warmed.get(face.key);
       this.warmed.delete(face.key);
-      face.setAtlas(await (warm ?? this.fetchAtlas(face.key)).catch(() => this.fetchAtlas(face.key)));
+      face.setAtlas(await (warm ?? this.fetchAtlas(face.key, face.color)).catch(() => this.fetchAtlas(face.key, face.color)));
       this.onLoad();
     } catch (e) {
       console.error(e);

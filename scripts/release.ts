@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { filledWranglerConfig, missingForProduction } from './wrangler-config.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = 'https://golemdocs.com';
@@ -86,9 +87,13 @@ async function ship(): Promise<void> {
   if (!out('git', ['ls-remote', '--tags', 'origin', tag])) throw new Error(`${tag} is not on origin: git push origin main ${tag} first`);
   // The website is built from this checkout, so it must be exactly what the tag says: no later commits, nothing uncommitted.
   const tagged = out('git', ['rev-parse', `${tag}^{commit}`]);
+  // The Cloudflare ids the deploy needs, checked now rather than at the deploy, when the installers are already published.
+  const unfilled = missingForProduction(filledWranglerConfig());
   const problems = [
     out('git', ['rev-parse', 'HEAD']) !== tagged && `HEAD is not ${tag} (${tagged.slice(0, 7)}): check out the tag, or release what is on main as a new version`,
     out('git', ['status', '--porcelain']) !== '' && 'the working tree has uncommitted changes',
+    unfilled.length > 0 &&
+      `server/wrangler.local.json does not fill ${unfilled.join(', ')} (it is git-ignored, so a fresh checkout or worktree has none: copy it from your usual checkout)`,
   ].filter((p): p is string => typeof p === 'string');
   if (problems.length > 0) {
     if (!dryRun) throw new Error(`the website would not be ${tag}: ${problems.join('; ')}`);

@@ -133,7 +133,7 @@ test.describe('Edit PDF: shapes', () => {
     expect(Math.round(Math.abs(r[r.length - 1][3]))).toBe(80);
   });
 
-  test('Delete removes the selected shape, and Undo brings it back', async ({ app }) => {
+  test('Delete removes the selected shape, and Undo brings it back', { tag: '@heavy' }, async ({ app }) => {
     await tool(app.page, 'rect').click();
     await dragOnPage(app.page, 0, [200, 120], [300, 180]);
     const before = rects(await content(app)).length;

@@ -2,7 +2,7 @@
 
 **One editor for every kind of document.** Open, edit and keep Word files, PDFs, spreadsheets, notes and drawings together, organized in folders on your computer.
 
-[Open Golem Docs](https://golemdocs.com) · [Download for your computer](https://golemdocs.com/home/download) · [Why it's open source](https://golemdocs.com/home/open-source)
+[Open Golem Docs](https://golemdocs.com) · [Download for your computer](https://golemdocs.com/home/download) · [Why it's open source](https://golemdocs.com/home/open-source) · [Sponsor on GitHub](https://github.com/sponsors/davidfig)
 
 - **A real editor.** Pages that print the way they look, PDFs you can edit and fill in, Markdown notes, vector drawings, pictures and spreadsheets, all in one app. It opens Word, OpenDocument, PDF, Markdown, HTML, EPUB, CSV, SVG, images and ZIP archives, and stays fast with all of War and Peace on screen.
 - **Your second brain, in plain files.** Notes link to each other with `[[wikilinks]]` that follow a rename, next to your Word files and PDFs. Every document is an ordinary file in a folder you choose, so an Obsidian vault opens as it is.

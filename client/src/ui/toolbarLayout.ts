@@ -73,6 +73,12 @@ export const DEFAULT_LAYOUT: readonly ToolbarLayout[] = [
       'control.fontColor',
     ],
   },
+  // Only there for workbooks (the Sheet menu's formatting, sorting and filtering): empty for any other document.
+  {
+    name: 'Sheet',
+    visible: true,
+    items: ['sheet.numberCurrency', 'sheet.numberPercent', 'sheet.increaseDecimals', 'sheet.decreaseDecimals', SEPARATOR, 'sheet.borderBottom', 'sheet.borderAll', 'sheet.borderNone', SEPARATOR, 'sheet.mergeCenter', 'sheet.wrapText', 'sheet.alignTop', 'sheet.alignMiddle', 'sheet.alignBottom', SEPARATOR, 'sheet.sortAscending', 'sheet.sortDescending', 'sheet.filter'],
+  },
   // Only there for pictures: it has nothing to show for any other document, so it is left out.
   {
     name: 'Picture',
@@ -107,7 +113,7 @@ export const MOBILE_KEYS: readonly string[] = ['format.bold', 'format.italic', '
 
 /** A toolbar's name as shown (its `name` is an id, kept as saved). */
 export function toolbarTitle(name: string): string {
-  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name === 'Picture' ? t('picture.menu').replace('&', '') : name === 'Draw' ? t('picture.draw.toolbar') : name === 'Drawing' ? t('vector.toolbar') : name;
+  return name === 'Standard' ? t('menus.toolbar.standard') : name === 'Formatting' ? t('menus.toolbar.formatting') : name === 'Picture' ? t('picture.menu').replace('&', '') : name === 'Draw' ? t('picture.draw.toolbar') : name === 'Drawing' ? t('vector.toolbar') : name === 'Sheet' ? t('sheet.menu').replace('&', '') : name;
 }
 
 const STORAGE_KEY = 'word.toolbars.v1';

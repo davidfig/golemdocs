@@ -2,7 +2,7 @@
 // format the document is edited as, and the title.
 
 import { expect, test } from './fixtures';
-import { formatLabel, hasItem, importFile, menuContents, status, text } from './helpers';
+import { convertTo, formatLabel, hasItem, importFile, menuContents, sheetRows, status, text } from './helpers';
 
 interface Case {
   file: ReturnType<typeof text>;
@@ -47,24 +47,28 @@ for (const c of CASES) {
   });
 }
 
-test('a CSV opens as a table: one cell per value, quoted commas kept together', async ({ app }) => {
+test('a CSV opens in the grid: one cell per value, quoted commas kept together', async ({ app }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('people.csv', 'name,city\n"Smith, J",Paris\nBob,"New ""York"""\n'));
   expect(await formatLabel(app.page)).toBe('CSV (Comma-Separated)');
-  expect(await app.text()).toBe('name\ncity\nSmith, J\nParis\nBob\nNew "York"\n');
-  // A grid of text: the Table menu is offered, and there is no font or picture formatting.
-  const table = await menuContents(app, 'Table');
-  expect(table).not.toBeNull();
-  expect(await menuContents(app, 'Format').then((m) => m?.items ?? [])).toEqual(['Change Case']);
+  expect(await sheetRows(app.page, 3, 2)).toEqual([
+    ['name', 'city'],
+    ['Smith, J', 'Paris'],
+    ['Bob', 'New "York"'],
+  ]);
+  // The spreadsheet editor's menus.
+  expect(await menuContents(app, 'Sheet')).not.toBeNull();
   expect(hasItem(await menuContents(app, 'Insert'), 'Picture')).toBe(false);
 });
 
-test('a TSV opens as a table', async ({ app }) => {
+test('a TSV opens in the grid', async ({ app }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('grid.tsv', 'x\ty\n1\t2\n'));
   expect(await formatLabel(app.page)).toBe('TSV (Tab-Separated)');
-  expect(await app.text()).toBe('x\ny\n1\n2\n');
-  expect(await menuContents(app, 'Table')).not.toBeNull();
+  expect(await sheetRows(app.page, 2, 2)).toEqual([
+    ['x', 'y'],
+    ['1', '2'],
+  ]);
 });
 
 test('a Markdown table becomes a table and its front matter stays out of the text', async ({ app }) => {
@@ -110,4 +114,33 @@ test('an imported file is kept: it is in the recent list and survives a reload',
   await app.ready();
   expect(await app.text()).toBe('Kept\nstill here');
   await expect(page).toHaveTitle('keep.md - Golem Docs');
+});
+
+test('a document converts to an Excel Workbook: its first table, opened in the grid', async ({ app }) => {
+  await app.goto('?doc=welcome');
+  await importFile(app, text('t.md', '| a | b |\n|---|---|\n| 1 | 2 |\n'));
+  await convertTo(app, 'Excel Workbook (.xlsx)', 'Excel Workbook');
+  expect(await sheetRows(app.page, 2, 2)).toEqual([
+    ['a', 'b'],
+    ['1', '2'],
+  ]);
+});
+
+test('Convert To between CSV and Excel Workbook stays in the grid, the values as they were', async ({ app }) => {
+  await app.goto('?doc=welcome');
+  await importFile(app, text('prices.csv', 'item,price\npen,1.50\nink,12\n'));
+  await convertTo(app, 'Excel Workbook (.xlsx)', 'Excel Workbook');
+  expect(await sheetRows(app.page, 3, 2)).toEqual([
+    ['item', 'price'],
+    ['pen', '1.50'],
+    ['ink', '12'],
+  ]);
+  await convertTo(app, 'CSV (Comma-Separated) (.csv)', 'CSV (Comma-Separated)');
+  expect(await sheetRows(app.page, 2, 2)).toEqual([
+    ['item', 'price'],
+    ['pen', '1.50'],
+  ]);
+  const file = await app.download(() => app.menu('File', 'Download'));
+  expect(file.name).toBe('prices.csv');
+  expect(file.text.replace(/\r\n/g, '\n')).toBe('item,price\npen,1.50\nink,12\n');
 });

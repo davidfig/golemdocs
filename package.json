@@ -2,7 +2,7 @@
   "name": "golemdocs",
   "private": true,
   "description": "GolemDocs monorepo root (private, not published to npm)",
-  "version": "0.31.0",
+  "version": "0.33.0",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -14,6 +14,7 @@
     "typecheck": "tsc && pnpm --recursive typecheck",
     "build:home": "pnpm --filter @golemdocs/client build:home",
     "fonts": "tsx scripts/fonts/generate.ts",
+    "fonts:emoji": "tsx scripts/fonts/emoji.ts",
     "thesaurus": "tsx scripts/thesaurus.ts",
     "test": "pnpm --no-bail --filter @golemdocs/docx --filter @golemdocs/layout --filter @golemdocs/ops --filter @golemdocs/editor --filter @golemdocs/server --filter @golemdocs/client --filter @golemdocs/pdf --filter @golemdocs/odt test",
     "test:coverage": "tsx scripts/coverage.ts",

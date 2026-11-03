@@ -1,0 +1,1175 @@
+// Draws a sheet with the app's WebGL renderer (docs/spreadsheets.md, "Drawing: a hashed tile pyramid"). Each pane of the
+// canvas (geometry.ts) is drawn with a camera of its own: the sheet's white, gridlines one device pixel wide, the cells of
+// level-0 tiles (fills, borders, text laid out here with CellFonts, or a bar a word once rows are too small to read it),
+// the overview's textures (the same bars, drawn by the worker) faded in as rows get smaller still, the selection; then the row and column headers. Tiles are asked of the worker as they come into view
+// and kept in small caches, each with its own float64 origin so float32 stays exact a million rows down.
+
+import type { CellIcon } from './protocol.ts';
+import { GlyphList, RectList, isInvisible, packColor } from '@golemdocs/layout';
+import { CSS_PX_PER_POINT, Camera } from '../view/camera.ts';
+import { DARK_PAGES_GLSL, createProgram, uniforms } from '../webgl/program.ts';
+import { SYNTHETIC_EMBOLDEN, SYNTHETIC_SKEW } from '../webgl/gpuPage.ts';
+import { RectBatch, RectBatchRenderer } from '../webgl/shapes/rectBatch.ts';
+import { TextBatch } from '../webgl/text/textBatch.ts';
+import type { GpuFace } from '../webgl/text/gpuFace.ts';
+import { TextRenderer } from '../webgl/text/textRenderer.ts';
+import { MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
+import type { CellRange } from './model/worksheet.ts';
+import { INK_TOP, PAD, eachUnit, inkAlpha, inkSpans, placeText } from './cellText.ts';
+import type { Measure } from './cellText.ts';
+import type { CellFonts } from './fonts.ts';
+import { HEADER_HEIGHT, OUTLINE_STEP, SheetGeometry } from './geometry.ts';
+import type { Region } from './geometry.ts';
+import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE, overviewTexel, tileId } from './protocol.ts';
+import type { CellTile, ChartScene, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
+import { TriangleBatch, TriangleBatchRenderer } from '../webgl/shapes/triangleBatch.ts';
+
+/** Rows of this many CSS pixels or more show their text; below, each word is a bar, as the overview draws it. */
+const TEXT_ROWS = 5;
+/** Rows of this many CSS pixels or more show their cells; the overview fades in over them below, and below FADE_LOW is all there is. */
+const FADE_HIGH = 3;
+const FADE_LOW = 2;
+/** Gridlines fade out as rows shrink between these (the overview has none). */
+const GRID_HIGH = 9;
+const GRID_LOW = 3;
+/** The highest overview level: a texel of 2^17 points, so a sheet of a million rows is a few textures. */
+const MAX_LEVEL = 18;
+/** Tiles kept beyond those the last frame drew (always kept, however many a large screen shows). */
+const KEEP_CELL_TILES = 192;
+const KEEP_OVERVIEW = 96;
+/** Milliseconds a frame may spend building tiles; the rest are built in the frames after. */
+const BUDGET_MS = 10;
+
+const COLOR = {
+  sheet: 0xffffff,
+  grid: 0xd4d4d4,
+  header: 0xf3f3f3,
+  headerText: 0x444444,
+  headerLine: 0xc8c8c8,
+  headerSelected: 0xd9e4f5,
+  headerSelectedText: 0x1d4f91,
+  selectionFill: 0x1a73e8,
+  filterFace: 0xf3f3f3,
+  note: 0xd83a2e,
+  filterEdge: 0xababab,
+  filterArrow: 0x555555,
+  selectionLine: 0x1a73e8,
+  frozenLine: 0x9a9a9a,
+};
+
+/** Rectangles a conditional format's icon is drawn with: rows of spans across a square of `size` (spans as fractions of it). */
+export function drawIcon(list: RectList, icon: CellIcon, x: number, y: number, size: number): void {
+  const color = packColor(icon.color);
+  const empty = packColor(0xd9d9d9);
+  if (icon.shape === 'bars' || icon.shape === 'boxes') {
+    // Four bars rising left to right, or four squares, the first `level` quarters coloured.
+    for (let k = 0; k < 4; k++) {
+      const on = k < Math.round(icon.level * 4) ? color : empty;
+      if (icon.shape === 'bars') list.push(x + size * (k * 0.25 + 0.03), y + size * (1 - (k + 1) / 4), size * 0.19, (size * (k + 1)) / 4, on);
+      else list.push(x + size * ((k % 2) * 0.5 + 0.04), y + size * (Math.floor(k / 2) * 0.5 + 0.04), size * 0.42, size * 0.42, on);
+    }
+    return;
+  }
+  const rows = Math.max(6, Math.round(size));
+  const step = size / rows;
+  for (let i = 0; i < rows; i++) {
+    const t = (i + 0.5) / rows;
+    for (const [a, b, fill] of iconSpans(icon, t)) list.push(x + a * size, y + i * step, (b - a) * size, step + 0.05, fill === false ? empty : color);
+  }
+}
+
+/** The spans of a row of an icon (t from 0 at the top to 1 at the bottom): [from, to, coloured?]. */
+function iconSpans(icon: CellIcon, t: number): [number, number, boolean?][] {
+  const circle = (r: number): [number, number] | null => {
+    const d = r * r - (t - 0.5) ** 2;
+    return d > 0 ? [0.5 - Math.sqrt(d), 0.5 + Math.sqrt(d)] : null;
+  };
+  switch (icon.shape) {
+    case 'circle': {
+      const c = circle(0.48);
+      return c ? [c] : [];
+    }
+    case 'quarters': {
+      // A circle filled from the left by `level`, the rest pale.
+      const c = circle(0.48);
+      if (!c) return [];
+      const cut = c[0] + (c[1] - c[0]) * icon.level;
+      return [[c[0], cut], [cut, c[1], false]];
+    }
+    case 'star': {
+      // A diamond, filled to `level` from the left.
+      const half = 0.5 - Math.abs(t - 0.5);
+      const [a, b] = [0.5 - half, 0.5 + half];
+      const cut = a + (b - a) * icon.level;
+      return icon.level >= 1 ? [[a, b]] : [[a, cut], [cut, b, false]];
+    }
+    case 'triangleUp':
+      return t > 0.15 && t < 0.85 ? [[0.5 - (t - 0.15) * 0.7, 0.5 + (t - 0.15) * 0.7]] : [];
+    case 'triangleDown':
+      return t > 0.15 && t < 0.85 ? [[0.5 - (0.85 - t) * 0.7, 0.5 + (0.85 - t) * 0.7]] : [];
+    case 'dash':
+      return t > 0.4 && t < 0.6 ? [[0.15, 0.85]] : [];
+    case 'flag':
+      return t < 0.55 ? [[0.12, 0.22], [0.22, 0.9]] : [[0.12, 0.22]];
+    case 'up':
+    case 'down': {
+      // A head over the top half and a shaft under it (mirrored for down).
+      const u = icon.shape === 'up' ? t : 1 - t;
+      return u < 0.5 ? [[0.5 - u, 0.5 + u]] : [[0.36, 0.64]];
+    }
+    case 'right': {
+      const d = Math.abs(t - 0.5);
+      const head: [number, number] = [0.5, 0.5 + (0.5 - d)];
+      return d < 0.14 ? [[0.02, 0.5], head] : [head];
+    }
+    case 'upRight':
+    case 'downRight': {
+      // A diagonal stroke with a head at its far end, drawn row by row.
+      const u = icon.shape === 'upRight' ? t : 1 - t;
+      const along = 1 - u;
+      const spans: [number, number][] = [[Math.max(0, along - 0.14), Math.min(1, along + 0.14)]];
+      if (u < 0.45) spans.push([0.55, 0.98]);
+      return spans;
+    }
+    default:
+      return [];
+  }
+}
+
+/** The fill handle's size, in CSS pixels. */
+export const FILL_HANDLE = 6;
+
+export interface SheetFrame {
+  camera: Camera;
+  /** CSS pixels of the canvas covered by bars at its top and bottom: the sheet is drawn between them. */
+  top: number;
+  bottom: number;
+  sheet: number;
+  geometry: SheetGeometry;
+  gridlines: boolean;
+  /** Extent of the cells (rows and columns with something in them). */
+  extent: { rows: number; cols: number };
+  selection: CellRange[];
+  active: { row: number; col: number };
+  /** The cell being edited (its text is hidden under the editor). */
+  editing: { row: number; col: number } | null;
+  /** A range copied, shown with a dashed edge until the copy is used or dropped. */
+  copied: CellRange | null;
+  /** The range the fill handle is being dragged over. */
+  filling: CellRange | null;
+  /** AutoFilters (the sheet's, tables'): buttons on their first rows (blue on columns they filter). */
+  filters: { range: CellRange; filtered: number[] }[];
+  /** A cell whose list validation offers choices: its arrow, beside it. */
+  choices: { row: number; col: number } | null;
+  /** The sheet's charts, laid out (drawn over the cells). */
+  charts: ChartScene[];
+  /** The sheet's sparklines, all in one scene (drawn in their cells, under the charts). */
+  sparklines: ChartScene | null;
+  /** The chart picked (framed, with handles at its corners), by its place in `charts`. */
+  chart: number | null;
+  /** A chart being resized: where it will be (sheet points), drawn dashed. */
+  chartGhost: { x0: number; y0: number; x1: number; y1: number } | null;
+  darkPages: boolean;
+}
+
+/** A chart's GPU batches, kept while its scene is the same. */
+interface BuiltChart {
+  scene: ChartScene;
+  fontsVersion: number;
+  triangles: TriangleBatch;
+  text: TextBatch[];
+}
+
+interface BuiltCells {
+  version: number;
+  fontsVersion: number;
+  rects: RectBatch | null;
+  text: TextBatch[];
+  /** The text as a bar a word, drawn instead of `text` when rows are too small to read it. */
+  bars: RectBatch | null;
+}
+
+/** An overview tile placed for drawing: where in device pixels (relative to the viewport), and its texture. */
+interface OverviewQuad {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  texture: WebGLTexture;
+}
+
+interface BuiltOverview {
+  version: number;
+  texture: WebGLTexture | null;
+}
+
+/** A textured quad per overview tile, in document space, with an opacity (premultiplied blending). */
+class OverviewRenderer {
+  private readonly program: WebGLProgram;
+  private readonly u: Record<'u_origin' | 'u_size' | 'u_viewport' | 'u_alpha' | 'u_darkPages' | 'u_tex', WebGLUniformLocation>;
+  darkPages = false;
+
+  constructor(private readonly gl: WebGL2RenderingContext) {
+    this.program = createProgram(
+      gl,
+      `#version 300 es
+      uniform vec2 u_origin; uniform vec2 u_size; uniform vec2 u_viewport;
+      out vec2 v_uv;
+      void main() {
+        vec2 corner = vec2(gl_VertexID & 1, gl_VertexID >> 1);
+        v_uv = corner;
+        vec2 p = u_origin + corner * u_size;
+        gl_Position = vec4(p / u_viewport * vec2(2.0, -2.0) + vec2(-1.0, 1.0), 0.0, 1.0);
+      }`,
+      `#version 300 es
+      precision highp float;
+      uniform sampler2D u_tex; uniform float u_alpha;
+      ${DARK_PAGES_GLSL}
+      in vec2 v_uv; out vec4 color;
+      void main() {
+        vec4 c = texture(u_tex, v_uv);
+        color = vec4(pageColor(c.rgb), 1.0) * c.a * u_alpha;
+      }`,
+    );
+    this.u = uniforms(gl, this.program, ['u_origin', 'u_size', 'u_viewport', 'u_alpha', 'u_darkPages', 'u_tex'] as const);
+  }
+
+  /** Each quad: where in device pixels (relative to the viewport), its texture, its opacity. */
+  render(camera: Camera, quads: OverviewQuad[], alpha: number): void {
+    const gl = this.gl;
+    gl.useProgram(this.program);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
+    gl.uniform1f(this.u.u_alpha, alpha);
+    gl.uniform1f(this.u.u_darkPages, this.darkPages ? 1 : 0);
+    gl.uniform1i(this.u.u_tex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    for (const q of quads) {
+      gl.bindTexture(gl.TEXTURE_2D, q.texture);
+      gl.uniform2f(this.u.u_origin, q.x, q.y);
+      gl.uniform2f(this.u.u_size, q.width, q.height);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+  }
+
+  dispose(): void {
+    this.gl.deleteProgram(this.program);
+  }
+}
+
+export class SheetRenderer {
+  private readonly text: TextRenderer;
+  private readonly rects: RectBatchRenderer;
+  private readonly triangles: TriangleBatchRenderer;
+  private readonly overview: OverviewRenderer;
+  private charts = new Map<string, BuiltChart>();
+  /**
+   * Tiles as last received. A tile made out of date (`stale`: its cells changed, or more rows streamed in) is still drawn
+   * until the new one comes, and asked for again, so the sheet never blinks empty while it updates.
+   */
+  private cellTiles = new Map<string, { tile: CellTile; built: BuiltCells | null; stale?: boolean }>();
+  private overviewTiles = new Map<string, { tile: OverviewTile; built: BuiltOverview | null; stale?: boolean; blank: boolean }>();
+  /** How many tiles of each kind the last frame drew: the caches never drop below that, or tiles in view would push each other out. */
+  private cellsInView = 0;
+  private overviewInView = 0;
+  private styles = new Map<number, DrawStyle>();
+  private requested = new Set<string>();
+  /** Tiles asked for before they were made out of date: what comes back for them is already stale. */
+  private staleInFlight = new Set<string>();
+  private frameGarbage: { rects: RectBatch[]; text: TextBatch[] } = { rects: [], text: [] };
+  /** Asks the worker for tiles (set by the view). */
+  want: (sheet: number, keys: TileKey[]) => void = () => {};
+  /** The panes and header width of the last frame, for hit-testing. */
+  regions: Region[] = [];
+  headerWidth = 0;
+  /** The last frame's top inset (CSS pixels): regions are relative to it. */
+  private top = 0;
+
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    private readonly fonts: CellFonts,
+  ) {
+    this.text = new TextRenderer(gl);
+    this.rects = new RectBatchRenderer(gl);
+    this.triangles = new TriangleBatchRenderer(gl);
+    this.overview = new OverviewRenderer(gl);
+  }
+
+  putCells(tile: CellTile): void {
+    const id = tileId(tile.sheet, tile.key);
+    this.requested.delete(id);
+    const stale = this.staleInFlight.delete(id);
+    for (const [index, style] of tile.styles) this.styles.set(index, style);
+    const old = this.cellTiles.get(id);
+    if (old?.built) this.freeCells(old.built);
+    this.cellTiles.set(id, { tile, built: null, stale });
+    trimTiles(this.cellTiles, KEEP_CELL_TILES, this.cellsInView, (gone) => gone.built && this.freeCells(gone.built));
+  }
+
+  putOverview(tile: OverviewTile): void {
+    const id = tileId(tile.sheet, tile.key);
+    this.requested.delete(id);
+    const stale = this.staleInFlight.delete(id);
+    const old = this.overviewTiles.get(id);
+    if (old?.built?.texture) this.gl.deleteTexture(old.built.texture);
+    this.overviewTiles.set(id, { tile, built: null, stale, blank: !tile.rgba.length });
+    trimTiles(this.overviewTiles, KEEP_OVERVIEW, this.overviewInView, (gone) => gone.built?.texture && this.gl.deleteTexture(gone.built.texture));
+  }
+
+  /** The width of a line of text in a style, in points (null while its font is not loaded). */
+  textWidth(text: string, style: DrawStyle): number | null {
+    const font = this.fonts.font(style.font, style.bold, style.italic);
+    if (!font) return null;
+    const metrics = this.fonts.metrics(font)!;
+    let width = 0;
+    eachUnit(
+      text,
+      (cp, emoji) => (width += (emoji ? this.fonts.emoji(emoji)?.advance : this.fonts.glyph(font, cp)?.advance) ?? (isInvisible(cp) ? 0 : metrics.advance(-1))),
+      (emoji) => this.fonts.emoji(emoji) !== null,
+    );
+    return width * style.size;
+  }
+
+  /** How many emoji (color glyphs) the cell tiles built so far hold, and whether their atlases are in (for tests). */
+  emojiDrawn(): { glyphs: number; ready: boolean } {
+    let glyphs = 0;
+    let ready = true;
+    for (const entry of this.cellTiles.values()) {
+      for (const batch of entry.built?.text ?? []) {
+        if (!batch.face.color) continue;
+        glyphs += batch.count;
+        ready &&= batch.face.ready;
+      }
+    }
+    return { glyphs, ready };
+  }
+
+  rememberStyle(index: number, style: DrawStyle): void {
+    this.styles.set(index, style);
+  }
+
+  /** A style known from the tiles drawn so far. */
+  styleOf(index: number): DrawStyle | undefined {
+    return this.styles.get(index);
+  }
+
+  /**
+   * Makes tiles of a sheet out of date: all of them, or the cell tiles touching `ranges` (the overview always: the worker
+   * remade it). They are drawn as they are until their new ones come, and asked for again.
+   */
+  invalidate(sheet: number, ranges?: CellRange[]): void {
+    // Text may spill from a cell into the tiles beside it: a change near a tile's edge reaches its neighbours.
+    const touched = (key: TileKey) => {
+      if (key.level !== 0 || !ranges) return true;
+      const r0 = key.ty * CELL_TILE_ROWS;
+      const c0 = key.tx * CELL_TILE_COLS;
+      return ranges.some((r) => r.r0 <= r0 + CELL_TILE_ROWS - 1 && r.r1 >= r0 && r.c0 - 32 <= c0 + CELL_TILE_COLS - 1 && r.c1 + 32 >= c0);
+    };
+    for (const entry of this.cellTiles.values()) if (entry.tile.sheet === sheet && touched(entry.tile.key)) entry.stale = true;
+    for (const entry of this.overviewTiles.values()) if (entry.tile.sheet === sheet) entry.stale = true;
+    // A tile already asked for comes back as it was before this change: it is drawn, then asked for again.
+    for (const id of this.requested) {
+      const [s, level, tx, ty] = id.split(':').map(Number);
+      if (s === sheet && touched({ level, tx, ty })) this.staleInFlight.add(id);
+    }
+  }
+
+  /** Builds the cell tiles of a range again from what they hold (the cell being edited changed, not the cells). */
+  rebuild(sheet: number, range: CellRange): void {
+    for (const entry of this.cellTiles.values()) {
+      if (entry.tile.sheet !== sheet || !entry.built) continue;
+      const r0 = entry.tile.key.ty * CELL_TILE_ROWS;
+      const c0 = entry.tile.key.tx * CELL_TILE_COLS;
+      if (range.r0 > r0 + CELL_TILE_ROWS - 1 || range.r1 < r0 || range.c0 > c0 + CELL_TILE_COLS - 1 || range.c1 < c0) continue;
+      this.freeCells(entry.built);
+      entry.built = null;
+    }
+  }
+
+  reset(): void {
+    for (const entry of this.cellTiles.values()) if (entry.built) this.freeCells(entry.built);
+    for (const entry of this.overviewTiles.values()) if (entry.built?.texture) this.gl.deleteTexture(entry.built.texture);
+    this.cellTiles.clear();
+    this.overviewTiles.clear();
+    this.requested.clear();
+    this.staleInFlight.clear();
+    this.styles.clear();
+  }
+
+  dispose(): void {
+    this.reset();
+    this.freeGarbage();
+    this.text.dispose();
+    this.overview.dispose();
+  }
+
+  /** Draws the charts that reach into a pane's part of the sheet, building their batches when they are new. */
+  private drawCharts(view: Camera, scenes: ChartScene[], left: number, top: number, right: number, bottom: number, dark: boolean): void {
+    const live = new Set(scenes.map((s) => s.id));
+    for (const [id, built] of this.charts) {
+      if (live.has(id)) continue;
+      this.freeChart(built);
+      this.charts.delete(id);
+    }
+    // Charts may overlap: each is drawn whole (its shapes, then its text) before the next, over it.
+    this.triangles.darkPages = false;
+    this.text.darkPages = false;
+    for (const scene of scenes) {
+      if (scene.x > right || scene.y > bottom || scene.x + scene.width < left || scene.y + scene.height < top) continue;
+      let built = this.charts.get(scene.id);
+      if (built && (built.scene !== scene || built.fontsVersion !== this.fonts.version)) {
+        this.freeChart(built);
+        built = undefined;
+      }
+      if (!built) this.charts.set(scene.id, (built = this.buildChart(scene)));
+      // Charts keep their own colours in Dark Pages, as pictures do.
+      this.triangles.render(view, [built.triangles]);
+      this.text.render(view, sortByFace(built.text));
+    }
+    this.text.darkPages = dark;
+  }
+
+  private buildChart(scene: ChartScene): BuiltChart {
+    const colors = new Uint32Array(scene.colors.length);
+    for (let i = 0; i < colors.length; i++) colors[i] = packColor(scene.colors[i]);
+    const triangles = TriangleBatch.from(scene.points, colors, scene.x, scene.y);
+    const lists = new Map<GpuFace, GlyphList>();
+    for (const run of scene.texts) {
+      const font = this.fonts.font('Calibri', run.bold, false);
+      const metrics = font && this.fonts.metrics(font);
+      if (!font || !metrics) continue;
+      // A character, or an emoji sequence as one color glyph (its characters until its page comes).
+      const drawn = (emoji: string) => this.fonts.emoji(emoji) !== null;
+      const glyphOf = (cp: number, emoji: string | undefined) => (emoji ? this.fonts.emoji(emoji) : this.fonts.glyph(font, cp));
+      const advanceOf = (cp: number, emoji: string | undefined) => (glyphOf(cp, emoji)?.advance ?? (isInvisible(cp) ? 0 : 0.5)) * run.size;
+      let width = 0;
+      eachUnit(run.text, (cp, emoji) => (width += advanceOf(cp, emoji)), drawn);
+      let x = run.align === 'left' ? run.x : run.align === 'right' ? run.x - width : run.x - width / 2;
+      const baseline = run.y + ((metrics.ascent - metrics.descent) * run.size) / 2;
+      const color = packColor(run.color);
+      eachUnit(
+        run.text,
+        (cp, emoji) => {
+          const glyph = glyphOf(cp, emoji);
+          if (glyph?.visible) {
+            let list = lists.get(glyph.face);
+            if (!list) lists.set(glyph.face, (list = new GlyphList(glyph.font, glyph.metrics)));
+            list.push(x, baseline, run.size, glyph.glyph, color);
+          }
+          x += advanceOf(cp, emoji);
+        },
+        drawn,
+      );
+    }
+    const text = [...lists].map(([face, list]) => new TextBatch(face, { skew: 0, embolden: 0 }, list.buffer, list.count, scene.x, scene.y));
+    return { scene, fontsVersion: this.fonts.version, triangles, text };
+  }
+
+  private freeChart(built: BuiltChart): void {
+    built.triangles.dispose(this.gl);
+    for (const batch of built.text) batch.dispose(this.gl);
+  }
+
+  private freeCells(built: BuiltCells): void {
+    built.rects?.dispose(this.gl);
+    built.bars?.dispose(this.gl);
+    for (const batch of built.text) batch.dispose(this.gl);
+  }
+
+  private freeGarbage(): void {
+    for (const r of this.frameGarbage.rects) r.dispose(this.gl);
+    for (const t of this.frameGarbage.text) t.dispose(this.gl);
+    this.frameGarbage = { rects: [], text: [] };
+  }
+
+  /** Draws a frame. Returns whether it should be drawn again soon (tiles still to come or to build). */
+  draw(frame: SheetFrame): boolean {
+    const { gl } = this;
+    const { camera, geometry: g } = frame;
+    this.freeGarbage();
+    const dpr = camera.dpr;
+    const cssWidth = camera.width / dpr;
+    const canvasHeight = camera.height / dpr;
+    /** The area between the bars; regions are relative to its top. */
+    const cssHeight = Math.max(0, canvasHeight - frame.top - frame.bottom);
+    this.top = frame.top;
+    const scale = camera.zoom * CSS_PX_PER_POINT;
+    const darkDesk = frame.darkPages;
+    this.text.darkPages = this.rects.darkPages = this.overview.darkPages = frame.darkPages;
+
+    gl.disable(gl.SCISSOR_TEST);
+    gl.viewport(0, 0, camera.width, camera.height);
+    const desk = darkDesk ? 0x1e1f22 : 0xe8e8e8;
+    gl.clearColor(((desk >> 16) & 255) / 255, ((desk >> 8) & 255) / 255, (desk & 255) / 255, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // The row header is as wide as the last row number in view needs.
+    const lastRowInView = Math.min(MAX_ROWS - 1, g.rows.endAt(camera.y + g.frozenHeight + cssHeight / scale));
+    this.headerWidth = g.headerWidth(lastRowInView);
+    const regions = (this.regions = g.regions(cssWidth, cssHeight, scale, camera.x, camera.y, this.headerWidth));
+    const rowPx = g.rows.default * scale;
+    const cellsAlpha = Math.min(1, Math.max(0, (rowPx - FADE_LOW) / (FADE_HIGH - FADE_LOW)));
+    const gridAlpha = Math.min(1, Math.max(0, (rowPx - GRID_LOW) / (GRID_HIGH - GRID_LOW)));
+    const words = rowPx < TEXT_ROWS;
+    const overviewAlpha = 1 - cellsAlpha;
+    let pending = false;
+    const started = performance.now();
+    let cellsInView = 0;
+    let overviewInView = 0;
+    const wanted: TileKey[] = [];
+
+    for (const region of regions) {
+      const view = this.regionCamera(camera, region);
+      this.viewport(region, canvasHeight, dpr);
+      const docLeft = region.originX;
+      const docTop = region.originY;
+      const docRight = docLeft + region.width / scale;
+      const docBottom = docTop + region.height / scale;
+      const r0 = g.rows.indexAt(docTop);
+      const r1 = Math.min(MAX_ROWS - 1, g.rows.endAt(docBottom));
+      const c0 = g.cols.indexAt(docLeft);
+      const c1 = Math.min(MAX_COLUMNS - 1, g.cols.endAt(docRight));
+      const frameRects = new RectList();
+      // The sheet itself.
+      frameRects.push(0, 0, g.width, g.height, packColor(COLOR.sheet));
+      if (cellsAlpha > 0 && gridAlpha > 0 && frame.gridlines) this.gridlines(frameRects, g, r0, r1, c0, c1, 1 / (scale * dpr), gridAlpha);
+      this.drawRects(view, frameRects);
+
+      // Rows too small for text whose cells have not all come: the overview stays until they have.
+      let cellsMissing = false;
+      if (cellsAlpha > 0) {
+        const batches = { rects: [] as RectBatch[], text: [] as TextBatch[], bars: [] as RectBatch[] };
+        const keys = this.cellKeys(g, r0, r1, c0, c1);
+        for (const key of keys) {
+          const id = tileId(frame.sheet, key);
+          const entry = this.cellTiles.get(id);
+          cellsInView++;
+          if (!entry || entry.stale) {
+            if (!this.requested.has(id)) wanted.push(key);
+            pending = true;
+            if (!entry) {
+              cellsMissing = words;
+              continue;
+            }
+          }
+          if (!entry.built || entry.built.fontsVersion !== this.fonts.version) {
+            if (performance.now() - started > BUDGET_MS && entry.built) {
+              pending = true;
+            } else {
+              if (entry.built) this.freeCells(entry.built);
+              entry.built = this.buildCells(entry.tile, g, frame.editing);
+            }
+          }
+          if (entry.built.rects) batches.rects.push(entry.built.rects);
+          if (!words) batches.text.push(...entry.built.text);
+          else if (entry.built.bars) batches.bars.push(entry.built.bars);
+          // Most recently used last.
+          this.cellTiles.delete(id);
+          this.cellTiles.set(id, entry);
+        }
+        this.rects.render(view, batches.rects);
+        if (words) this.rects.render(view, batches.bars);
+        else this.text.render(view, sortByFace(batches.text));
+      }
+
+      const shownOverview = cellsMissing ? 1 : overviewAlpha;
+      if (shownOverview > 0) {
+        const overviewAlpha = shownOverview;
+        // Tiles are squares of the sheet in points, from its top left.
+        const level = overviewLevel(scale * dpr);
+        const span = overviewTexel(level) * OVERVIEW_TILE;
+        const quads: OverviewQuad[] = [];
+        /** Tiles of other levels drawn under a tile still to come (the four below it, or one above), so nothing blinks. */
+        const standIns = new Map<string, OverviewQuad>();
+        const blanks = new RectList();
+        // A cached tile as a quad (its texture made the first time), marked as just used; null if it has nothing to draw.
+        const place = (key: TileKey): OverviewQuad | null => {
+          const id = tileId(frame.sheet, key);
+          const entry = this.overviewTiles.get(id);
+          if (!entry || entry.blank) return null;
+          this.overviewTiles.delete(id);
+          this.overviewTiles.set(id, entry);
+          if (!entry.built) {
+            entry.built = { version: entry.tile.version, texture: this.texture(entry.tile.rgba) };
+            // The texture has the pixels now.
+            entry.tile = { ...entry.tile, rgba: new Uint8Array(0) };
+          }
+          if (!entry.built.texture) return null;
+          const size = overviewTexel(key.level) * OVERVIEW_TILE;
+          // Texels past the sheet's end are transparent; the quad covers the whole tile.
+          return { x: (key.tx * size - view.x) * view.scale, y: (key.ty * size - view.y) * view.scale, width: size * view.scale, height: size * view.scale, texture: entry.built.texture };
+        };
+        for (let ty = Math.floor(Math.max(0, docTop) / span); ty <= Math.floor(Math.min(docBottom, g.height) / span); ty++) {
+          for (let tx = Math.floor(Math.max(0, docLeft) / span); tx <= Math.floor(Math.min(docRight, g.width) / span); tx++) {
+            const key: TileKey = { level, tx, ty };
+            const id = tileId(frame.sheet, key);
+            const entry = this.overviewTiles.get(id);
+            const x0 = tx * span;
+            const y0 = ty * span;
+            const x1 = Math.min(g.width, x0 + span);
+            const y1 = Math.min(g.height, y0 + span);
+            if (x1 <= x0 || y1 <= y0) continue;
+            overviewInView++;
+            if (!entry || entry.stale) {
+              if (!this.requested.has(id)) wanted.push(key);
+              pending = true;
+            }
+            if (!entry) {
+              // Zooming out: the four finer tiles it is made of; zooming in: the nearest coarser one holding it.
+              let found = false;
+              if (level > 1) {
+                for (let k = 0; k < 4; k++) {
+                  const child = { level: level - 1, tx: tx * 2 + (k & 1), ty: ty * 2 + (k >> 1) };
+                  const quad = place(child);
+                  if (quad) standIns.set(tileId(frame.sheet, child), quad);
+                  found ||= this.overviewTiles.has(tileId(frame.sheet, child));
+                }
+              }
+              for (let up = 1; !found && up <= 4 && level + up <= MAX_LEVEL; up++) {
+                const parent = { level: level + up, tx: tx >> up, ty: ty >> up };
+                const parentId = tileId(frame.sheet, parent);
+                const quad = standIns.has(parentId) ? null : place(parent);
+                if (quad) standIns.set(parentId, quad);
+                found = standIns.has(parentId) || this.overviewTiles.has(parentId);
+              }
+              continue;
+            }
+            if (entry.blank) {
+              this.overviewTiles.delete(id);
+              this.overviewTiles.set(id, entry);
+              blanks.push(x0, y0, x1 - x0, y1 - y0, packColor(COLOR.sheet, overviewAlpha));
+              continue;
+            }
+            const quad = place(key);
+            if (quad) quads.push(quad);
+          }
+        }
+        this.overview.render(view, [...standIns.values()], overviewAlpha);
+        this.drawRects(view, blanks);
+        this.overview.render(view, quads, overviewAlpha);
+      }
+
+      // Charts, over the cells, in their places.
+      if (frame.charts.length || frame.sparklines) this.drawCharts(view, frame.sparklines ? [frame.sparklines, ...frame.charts] : frame.charts, docLeft, docTop, docRight, docBottom, frame.darkPages);
+
+      // The AutoFilter's buttons, the selection, the cell being edited's frame, and a copied range.
+      const over = new RectList();
+      for (const filter of frame.filters) this.filterButtons(over, filter, g, 1 / scale);
+      if (frame.choices) {
+        const box = choicesButton(g, frame.choices.row, frame.choices.col, 1 / scale);
+        if (box) this.dropButton(over, box, 1 / scale, false);
+      }
+      this.selection(over, frame, g, 1 / (scale * dpr));
+      if (frame.chartGhost) this.dashed(over, frame.chartGhost, 1.5 / scale, packColor(COLOR.selectionLine));
+      const picked = frame.chart === null ? undefined : frame.charts[frame.chart];
+      if (picked) {
+        const px = 1 / scale;
+        const box = { x0: picked.x, y0: picked.y, x1: picked.x + picked.width, y1: picked.y + picked.height };
+        outline(over, box, 1.5 * px, packColor(COLOR.selectionLine));
+        for (const [hx, hy] of [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]]) {
+          over.push(hx - 4 * px, hy - 4 * px, 8 * px, 8 * px, packColor(COLOR.selectionLine));
+          over.push(hx - 3 * px, hy - 3 * px, 6 * px, 6 * px, packColor(0xffffff));
+        }
+      }
+      if (frame.copied) this.dashed(over, rangeBox(g, frame.copied), 1.5 / scale, packColor(COLOR.selectionLine));
+      if (frame.filling) this.dashed(over, rangeBox(g, frame.filling), 1 / scale, packColor(COLOR.selectionLine));
+      this.drawRects(view, over);
+    }
+
+    gl.viewport(0, 0, camera.width, camera.height);
+    gl.disable(gl.SCISSOR_TEST);
+    this.headers(frame, regions, scale, cssWidth, cssHeight);
+
+    this.cellsInView = cellsInView;
+    this.overviewInView = overviewInView;
+    if (wanted.length) {
+      const fresh = wanted.filter((k) => !this.requested.has(tileId(frame.sheet, k)));
+      for (const k of fresh) this.requested.add(tileId(frame.sheet, k));
+      if (fresh.length) this.want(frame.sheet, fresh);
+    }
+    return pending;
+  }
+
+  private regionCamera(camera: Camera, region: Region): Camera {
+    const view = new Camera();
+    view.x = region.originX;
+    view.y = region.originY;
+    view.zoom = camera.zoom;
+    view.dpr = camera.dpr;
+    view.width = Math.max(1, Math.round(region.width * camera.dpr));
+    view.height = Math.max(1, Math.round(region.height * camera.dpr));
+    return view;
+  }
+
+  private viewport(region: Region, canvasHeight: number, dpr: number): void {
+    const gl = this.gl;
+    const x = Math.round(region.x * dpr);
+    const y = Math.round((canvasHeight - this.top - region.y - region.height) * dpr);
+    const w = Math.max(1, Math.round(region.width * dpr));
+    const h = Math.max(1, Math.round(region.height * dpr));
+    gl.viewport(x, y, w, h);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(x, y, w, h);
+  }
+
+  private drawRects(view: Camera, list: RectList): void {
+    if (!list.count) return;
+    const batch = new RectBatch(list.buffer, list.count, 0, 0);
+    this.frameGarbage.rects.push(batch);
+    this.rects.render(view, [batch]);
+  }
+
+  /** Lines between the cells in view, one device pixel wide whatever the zoom. */
+  private gridlines(list: RectList, g: SheetGeometry, r0: number, r1: number, c0: number, c1: number, px: number, alpha: number): void {
+    const color = packColor(COLOR.grid, alpha);
+    const top = g.y(r0);
+    const bottom = g.y(r1 + 1);
+    const left = g.x(c0);
+    const right = g.x(c1 + 1);
+    for (let c = c0; c <= c1 + 1; c++) if (c === 0 || g.cols.size(c - 1) > 0) list.push(g.x(c) - px / 2, top, px, bottom - top, color);
+    for (let r = r0; r <= r1 + 1; r++) if (r === 0 || g.rows.size(r - 1) > 0) list.push(left, g.y(r) - px / 2, right - left, px, color);
+  }
+
+  /** The tiles covering a block of cells, and those holding the top-left cell of merged ranges in view (they draw them). */
+  private cellKeys(g: SheetGeometry, r0: number, r1: number, c0: number, c1: number): TileKey[] {
+    const keys = new Map<string, TileKey>();
+    // A tile to the left may have text spilling into view.
+    const left = Math.max(0, Math.floor(c0 / CELL_TILE_COLS) - 1);
+    for (let ty = Math.floor(r0 / CELL_TILE_ROWS); ty <= Math.floor(r1 / CELL_TILE_ROWS); ty++) {
+      for (let tx = left; tx <= Math.floor(c1 / CELL_TILE_COLS); tx++) keys.set(`${tx}:${ty}`, { level: 0, tx, ty });
+    }
+    for (const m of g.merges) {
+      if (m.r1 < r0 || m.r0 > r1 || m.c1 < c0 || m.c0 > c1) continue;
+      const tx = Math.floor(m.c0 / CELL_TILE_COLS);
+      const ty = Math.floor(m.r0 / CELL_TILE_ROWS);
+      keys.set(`${tx}:${ty}`, { level: 0, tx, ty });
+    }
+    return [...keys.values()];
+  }
+
+  /** A tile's fills, borders and text, relative to its top-left cell. */
+  private buildCells(tile: CellTile, g: SheetGeometry, editing: { row: number; col: number } | null): BuiltCells {
+    const r0 = tile.key.ty * CELL_TILE_ROWS;
+    const c0 = tile.key.tx * CELL_TILE_COLS;
+    const originX = g.x(c0);
+    const originY = g.y(r0);
+    const fills = new RectList();
+    const borders = new RectList();
+    const bars = new RectList();
+    const lists = new Map<string, { face: GpuFace; list: GlyphList; skew: number; embolden: number }>();
+    // Merged ranges: one box, white (or filled) over the gridlines inside.
+    const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
+    for (const m of tile.merges) {
+      const box = rangeBox(g, m);
+      boxes.set(`${m.r0}:${m.c0}`, box);
+      fills.push(box.x0 - originX, box.y0 - originY, box.x1 - box.x0, box.y1 - box.y0, packColor(COLOR.sheet));
+    }
+    for (const cell of tile.cells) {
+      const style = this.styles.get(cell.style);
+      if (!style) continue;
+      const merged = boxes.get(`${cell.row}:${cell.col}`);
+      const box = merged ?? { x0: g.x(cell.col), y0: g.y(cell.row), x1: g.x(cell.col + 1), y1: g.y(cell.row + 1) };
+      if (box.x1 <= box.x0 || box.y1 <= box.y0) continue;
+      const x = box.x0 - originX;
+      const y = box.y0 - originY;
+      const w = box.x1 - box.x0;
+      const h = box.y1 - box.y0;
+      if (style.fill !== null) fills.push(x, y, w, h, packColor(style.fill));
+      if (cell.note) {
+        // A small red triangle in the top right corner, as steps.
+        const size = Math.min(6, w / 3, h / 3);
+        for (let i = 0; i < 4; i++) fills.push(x + w - size + (size * i) / 4, y + (size * i) / 4, size - (size * i) / 4, size / 4, packColor(COLOR.note));
+      }
+      if (cell.bar) fills.push(x + w * cell.bar.from + 1, y + 1.5, Math.max(0, w * (cell.bar.to - cell.bar.from) - 2), h - 3, packColor(cell.bar.color));
+      if (cell.icon) {
+        const size = Math.min(12, h - 3, w - 2);
+        if (size > 2) drawIcon(fills, cell.icon, x + 2, y + (h - size) / 2, size);
+      }
+      const [left, right, top, bottom] = style.borders;
+      if (left) borders.push(x - left[0] / 2, y, left[0], h, packColor(left[1]));
+      if (right) borders.push(x + w - right[0] / 2, y, right[0], h, packColor(right[1]));
+      if (top) borders.push(x, y - top[0] / 2, w, top[0], packColor(top[1]));
+      if (bottom) borders.push(x, y + h - bottom[0] / 2, w, bottom[0], packColor(bottom[1]));
+      if (!cell.text || (editing && editing.row === cell.row && editing.col === cell.col)) continue;
+      const font = this.fonts.font(style.font, style.bold, style.italic);
+      if (!font) continue;
+      const metrics = this.fonts.metrics(font)!;
+      const measure: Measure = {
+        advance: (cp) => this.fonts.glyph(font, cp)?.advance ?? (isInvisible(cp) ? 0 : metrics.advance(-1)),
+        emoji: (text) => this.fonts.emoji(text)?.advance ?? null,
+        ascent: metrics.ascent,
+        descent: metrics.descent,
+        lineHeight: metrics.lineHeight,
+      };
+      const reachLeft = cell.spillLeft ? g.x(cell.col - cell.spillLeft) + PAD : box.x0;
+      const reachRight = cell.spillRight ? g.x(cell.col + 1 + cell.spillRight) - PAD : box.x1;
+      const color = packColor(cell.color ?? style.color);
+      const skew = font.syntheticItalic ? SYNTHETIC_SKEW : 0;
+      const embolden = font.syntheticBold ? SYNTHETIC_EMBOLDEN : 0;
+      const ink = packColor(cell.color ?? style.color, inkAlpha(style));
+      for (const line of placeText(cell.text, style, cell.type, box, reachLeft, reachRight, measure, cell.fill)) {
+        for (const [a, b] of inkSpans(line, style.size, measure)) bars.push(a - originX, line.baseline - INK_TOP * style.size - originY, b - a, INK_TOP * style.size, ink);
+        for (const { cp, x: gx, emoji } of line.chars) {
+          if (cp <= 32) continue;
+          const glyph = emoji ? this.fonts.emoji(emoji) : this.fonts.glyph(font, cp);
+          if (!glyph?.visible) continue;
+          // An emoji is a picture: never slanted or thickened for a style its font has no face for.
+          const s = emoji ? 0 : skew;
+          const e = emoji ? 0 : embolden;
+          const key = `${glyph.face.id}:${s}:${e}`;
+          let entry = lists.get(key);
+          if (!entry) lists.set(key, (entry = { face: glyph.face, list: new GlyphList(glyph.font, glyph.metrics), skew: s, embolden: e }));
+          entry.list.push(gx - originX, line.baseline - originY, style.size, glyph.glyph, color);
+        }
+        if (style.underline && line.chars.length) {
+          const thickness = Math.max(metrics.underlineThickness * style.size, 0.5);
+          const at = line.baseline - metrics.underlinePosition * style.size;
+          borders.push(line.left - originX, at - originY, line.right - line.left, thickness, color);
+          if (style.underline === 2) borders.push(line.left - originX, at + thickness * 2 - originY, line.right - line.left, thickness, color);
+        }
+        if (style.strike && line.chars.length) {
+          const thickness = Math.max(metrics.strikeoutThickness * style.size, 0.5);
+          borders.push(line.left - originX, line.baseline - metrics.strikeoutPosition * style.size - originY, line.right - line.left, thickness, color);
+        }
+      }
+    }
+    // Fills first (over the gridlines), then borders, in one batch.
+    const all = new RectList();
+    all.append(fills);
+    all.append(borders);
+    const text = [...lists.values()].filter((e) => e.list.count).map((e) => new TextBatch(e.face, { skew: e.skew, embolden: e.embolden }, e.list.buffer, e.list.count, originX, originY));
+    return {
+      version: tile.version,
+      fontsVersion: this.fonts.version,
+      rects: all.count ? new RectBatch(all.buffer, all.count, originX, originY) : null,
+      text,
+      bars: bars.count ? new RectBatch(bars.buffer, bars.count, originX, originY) : null,
+    };
+  }
+
+  private texture(rgba: Uint8Array): WebGLTexture | null {
+    const gl = this.gl;
+    const texture = gl.createTexture();
+    if (!texture) return null;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, OVERVIEW_TILE, OVERVIEW_TILE, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return texture;
+  }
+
+  /** The selected ranges, tinted, with a border around each and a stronger one around the active cell. */
+  private selection(list: RectList, frame: SheetFrame, g: SheetGeometry, px: number): void {
+    const line = packColor(COLOR.selectionLine);
+    const tint = packColor(COLOR.selectionFill, 0.12);
+    const active = g.expand({ r0: frame.active.row, c0: frame.active.col, r1: frame.active.row, c1: frame.active.col });
+    const activeBox = rangeBox(g, active);
+    for (const range of frame.selection) {
+      const box = rangeBox(g, g.expand(range));
+      const single = range.r0 === range.r1 && range.c0 === range.c1;
+      if (!single || frame.selection.length > 1) {
+        // Tint everything but the active cell, as Excel does.
+        tintAround(list, box, activeBox, tint);
+      }
+      outline(list, box, 2 * px * 1.0, line);
+    }
+    outline(list, activeBox, 2 * px, line);
+    // The fill handle: a small square at the corner of a single selection.
+    if (frame.selection.length === 1) {
+      const box = rangeBox(g, g.expand(frame.selection[0]));
+      const size = FILL_HANDLE * px * frame.camera.dpr;
+      list.push(box.x1 - size / 2, box.y1 - size / 2, size, size, line);
+    }
+  }
+
+  /**
+   * The outline gutters: for each group in view a bar along it in its level's lane, ending at its summary row (or column,
+   * just after it) in a box, + when collapsed and - when open.
+   */
+  private outlines(rects: RectList, regions: Region[], g: SheetGeometry, scale: number, label: (text: string, cx: number, cy: number, color: number) => void): void {
+    const line = packColor(COLOR.headerText);
+    for (const axis of ['row', 'col'] as const) {
+      const groups = axis === 'row' ? g.rowOutline : g.colOutline;
+      if (!groups.depth) continue;
+      const sizes = axis === 'row' ? g.rows : g.cols;
+      const done = new Set<number>();
+      for (const region of regions) {
+        const key = axis === 'row' ? region.y : region.x;
+        if (done.has(key)) continue;
+        done.add(key);
+        const origin = axis === 'row' ? region.originY : region.originX;
+        const start = axis === 'row' ? region.y : region.x;
+        const length = axis === 'row' ? region.height : region.width;
+        const pos = (i: number) => start + (sizes.position(i) - origin) * scale;
+        const i0 = sizes.indexAt(origin);
+        const i1 = Math.min(sizes.count - 1, sizes.endAt(origin + length / scale) + 1);
+        // A summary is the index after a run of a deeper level; walk the view's indexes (and one past) for them.
+        for (let i = Math.max(1, i0); i <= i1 + 1; i++) {
+          const before = groups.levels.get(i - 1) ?? 0;
+          const here = groups.levels.get(i) ?? 0;
+          for (let level = here + 1; level <= before; level++) {
+            const run = groupBefore(groups.levels, i, level);
+            if (!run) continue;
+            const lane = (level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
+            const a = Math.max(start, pos(run[0]));
+            const b = Math.min(start + length, pos(i));
+            const closed = groups.collapsed.has(i);
+            if (!closed && b > a) {
+              if (axis === 'row') rects.push(lane - 0.5, a, 1, b - a, line);
+              else rects.push(a, lane - 0.5, b - a, 1, line);
+            }
+            // The box at the summary.
+            const centre = pos(i) + (sizes.size(i) * scale) / 2;
+            if (centre < start || centre > start + length) continue;
+            const half = 5;
+            const box = axis === 'row' ? { x0: lane - half, y0: centre - half, x1: lane + half, y1: centre + half } : { x0: centre - half, y0: lane - half, x1: centre + half, y1: lane + half };
+            outline(rects, box, 1, line);
+            label(closed ? '+' : '-', (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, line);
+          }
+        }
+      }
+    }
+  }
+
+  /** The AutoFilter's buttons: a framed square with a down arrow at the right of each cell of its first row. */
+  private filterButtons(list: RectList, filter: { range: CellRange; filtered: number[] }, g: SheetGeometry, cssPx: number): void {
+    const row = filter.range.r0;
+    for (let col = filter.range.c0; col <= filter.range.c1; col++) {
+      const box = filterButton(g, row, col, cssPx);
+      if (box) this.dropButton(list, box, cssPx, filter.filtered.includes(col));
+    }
+  }
+
+  /** A framed square with a down arrow (blue when `on`): a filter's button, a validation list's. */
+  private dropButton(list: RectList, box: { x0: number; y0: number; x1: number; y1: number }, cssPx: number, on: boolean): void {
+    list.push(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, packColor(COLOR.filterFace));
+    outline(list, box, cssPx, packColor(COLOR.filterEdge));
+    // The arrow: rows of a triangle, each a little narrower.
+    const w = (box.x1 - box.x0) * 0.5;
+    const cx = (box.x0 + box.x1) / 2;
+    const top = box.y0 + (box.y1 - box.y0) * 0.38;
+    const steps = 4;
+    for (let i = 0; i < steps; i++) {
+      const half = (w / 2) * (1 - i / steps);
+      list.push(cx - half, top + i * cssPx * 1.2, half * 2, cssPx * 1.2, packColor(on ? COLOR.selectionLine : COLOR.filterArrow));
+    }
+  }
+
+  private dashed(list: RectList, box: { x0: number; y0: number; x1: number; y1: number }, width: number, color: number): void {
+    const dash = width * 3;
+    for (let x = box.x0; x < box.x1; x += dash * 2) {
+      list.push(x, box.y0, Math.min(dash, box.x1 - x), width, color);
+      list.push(x, box.y1 - width, Math.min(dash, box.x1 - x), width, color);
+    }
+    for (let y = box.y0; y < box.y1; y += dash * 2) {
+      list.push(box.x0, y, width, Math.min(dash, box.y1 - y), color);
+      list.push(box.x1 - width, y, width, Math.min(dash, box.y1 - y), color);
+    }
+  }
+
+  /** Column letters along the top of each pane, row numbers down the left, and the corner. In CSS pixels (they do not zoom). */
+  private headers(frame: SheetFrame, regions: Region[], scale: number, cssWidth: number, cssHeight: number): void {
+    const { gl } = this;
+    const { camera, geometry: g } = frame;
+    const screen = new Camera();
+    screen.zoom = 1 / CSS_PX_PER_POINT;
+    screen.dpr = camera.dpr;
+    screen.width = camera.width;
+    screen.height = camera.height;
+    // Drawn in CSS pixels, from the top of the area between the bars.
+    screen.y = -this.top;
+    const rects = new RectList();
+    const font = this.fonts.font('Calibri', false, false);
+    const metrics = font && this.fonts.metrics(font);
+    const lists = new Map<GpuFace, GlyphList>();
+    const size = 11;
+    const label = (text: string, cx: number, cy: number, color: number) => {
+      if (!font || !metrics) return;
+      let width = 0;
+      for (const ch of text) width += (this.fonts.glyph(font, ch.codePointAt(0)!)?.advance ?? 0.5) * size;
+      let x = cx - width / 2;
+      const baseline = cy + ((metrics.ascent - metrics.descent) * size) / 2;
+      for (const ch of text) {
+        const glyph = this.fonts.glyph(font, ch.codePointAt(0)!);
+        if (glyph?.visible) {
+          let list = lists.get(glyph.face);
+          if (!list) lists.set(glyph.face, (list = new GlyphList(glyph.font, glyph.metrics)));
+          list.push(x, baseline, size, glyph.glyph, color);
+        }
+        x += (glyph?.advance ?? 0.5) * size;
+      }
+    };
+    const selectedCols = new Set<number>();
+    const selectedRows = new Set<number>();
+    for (const r of frame.selection) {
+      // Headers of selected cells light up (only for ranges of a sensible size: a whole column selects a million rows).
+      if (r.c1 - r.c0 < 2000) for (let c = r.c0; c <= r.c1; c++) selectedCols.add(c);
+      if (r.r1 - r.r0 < 5000) for (let row = r.r0; row <= r.r1; row++) selectedRows.add(row);
+    }
+    const left = this.headerWidth;
+    // Outline gutters above the column headers and left of the row headers; the headers after them.
+    const gutL = g.gutterLeft;
+    const gutT = g.gutterTop;
+    const top = g.headerHeight;
+    rects.push(0, 0, cssWidth, top, packColor(COLOR.header));
+    rects.push(0, 0, left, cssHeight, packColor(COLOR.header));
+    const headerText = packColor(COLOR.headerText);
+    const selectedText = packColor(COLOR.headerSelectedText);
+    const line = packColor(COLOR.headerLine);
+    // Each pane's columns along the top (once per column of panes), its rows down the left.
+    const columnsDone = new Set<number>();
+    const rowsDone = new Set<number>();
+    const showLabels = g.cols.default * scale >= 14;
+    for (const region of regions) {
+      if (!columnsDone.has(region.x)) {
+        columnsDone.add(region.x);
+        const c0 = g.cols.indexAt(region.originX);
+        const c1 = Math.min(MAX_COLUMNS - 1, g.cols.endAt(region.originX + region.width / scale));
+        for (let c = c0; c <= c1; c++) {
+          const w = g.cols.size(c) * scale;
+          if (w <= 0) continue;
+          const x = region.x + (g.x(c) - region.originX) * scale;
+          const x0 = Math.max(region.x, x);
+          const x1 = Math.min(region.x + region.width, x + w);
+          if (x1 <= x0) continue;
+          if (selectedCols.has(c)) rects.push(x0, gutT, x1 - x0, HEADER_HEIGHT, packColor(COLOR.headerSelected));
+          rects.push(x + w - 0.5, gutT, 1, HEADER_HEIGHT, line);
+          if (showLabels || c % Math.ceil(30 / Math.max(w, 0.1)) === 0) label(columnName(c), x + w / 2, gutT + HEADER_HEIGHT / 2, selectedCols.has(c) ? selectedText : headerText);
+        }
+      }
+      if (!rowsDone.has(region.y)) {
+        rowsDone.add(region.y);
+        const r0 = g.rows.indexAt(region.originY);
+        const r1 = Math.min(MAX_ROWS - 1, g.rows.endAt(region.originY + region.height / scale));
+        const rowPx = g.rows.default * scale;
+        // Far out, a label every so many rows (as many as fit), at round numbers.
+        const every = rowPx >= 12 ? 1 : niceStep(14 / Math.max(rowPx, 1e-6));
+        for (let r = r0; r <= r1; r++) {
+          const h = g.rows.size(r) * scale;
+          const y = region.y + (g.y(r) - region.originY) * scale;
+          if (selectedRows.has(r) && h > 0) rects.push(gutL, Math.max(region.y, y), left - gutL, Math.min(h, region.y + region.height - y), packColor(COLOR.headerSelected));
+          if (every === 1) {
+            if (h <= 0) continue;
+            rects.push(gutL, y + h - 0.5, left - gutL, 1, line);
+            label(String(r + 1), (gutL + left) / 2, y + h / 2, selectedRows.has(r) ? selectedText : headerText);
+          } else if ((r + 1) % every === 0) {
+            label(String(r + 1), (gutL + left) / 2, y, headerText);
+            r += every - 2;
+          }
+        }
+      }
+    }
+    rects.push(left - 1, 0, 1, cssHeight, line);
+    rects.push(0, top - 1, cssWidth, 1, line);
+    // Frozen panes: a line where they end.
+    if (g.frozenRows) rects.push(left, top + g.frozenHeight * scale - 0.5, cssWidth - left, 1, packColor(COLOR.frozenLine));
+    if (g.frozenCols) rects.push(left + g.frozenWidth * scale - 0.5, top, 1, cssHeight - top, packColor(COLOR.frozenLine));
+    // The groups in the gutters.
+    this.outlines(rects, regions, g, scale, label);
+    // The corner box (selects everything), and the level buttons where the gutters meet it.
+    rects.push(0, 0, left, top, packColor(COLOR.header));
+    rects.push(left - 1, 0, 1, top, line);
+    rects.push(0, top - 1, left, 1, line);
+    const levelButton = (x: number, y: number, n: number) => {
+      outline(rects, { x0: x + 2, y0: y + 2, x1: x + OUTLINE_STEP - 2, y1: y + OUTLINE_STEP - 2 }, 1, line);
+      label(String(n), x + OUTLINE_STEP / 2, y + OUTLINE_STEP / 2, headerText);
+    };
+    for (let n = 1; gutL && n <= g.rowOutline.depth + 1; n++) levelButton((n - 1) * OUTLINE_STEP, top - OUTLINE_STEP - 3, n);
+    for (let n = 1; gutT && n <= g.colOutline.depth + 1; n++) levelButton(left - OUTLINE_STEP - 3, (n - 1) * OUTLINE_STEP, n);
+    gl.disable(gl.SCISSOR_TEST);
+    const batch = new RectBatch(rects.buffer, rects.count, 0, 0);
+    this.frameGarbage.rects.push(batch);
+    this.rects.darkPages = false;
+    this.text.darkPages = false;
+    this.rects.render(screen, [batch]);
+    const text = [...lists].map(([face, list]) => new TextBatch(face, { skew: 0, embolden: 0 }, list.buffer, list.count, 0, 0));
+    this.frameGarbage.text.push(...text);
+    this.text.render(screen, text);
+  }
+}
+
+/** A group's run of indexes ending before `summary` at `level` or deeper (what its +/- box shows and hides). */
+export function groupBefore(levels: Map<number, number>, summary: number, level: number): [number, number] | null {
+  let first = summary - 1;
+  if ((levels.get(first) ?? 0) < level) return null;
+  while (first > 0 && (levels.get(first - 1) ?? 0) >= level) first--;
+  return [first, summary - 1];
+}
+
+/**
+ * Drops the least recently used tiles (first in the map) beyond `keep`, or beyond twice the tiles the last frame drew if
+ * that is more, so tiles in view never push each other out.
+ */
+export function trimTiles<T>(tiles: Map<string, T>, keep: number, inView: number, free: (gone: T) => unknown): void {
+  const limit = Math.max(keep, inView * 2);
+  while (tiles.size > limit) {
+    const first = tiles.keys().next().value!;
+    free(tiles.get(first)!);
+    tiles.delete(first);
+  }
+}
+
+/** The overview level to draw at this many device pixels a point. */
+export function overviewLevel(devicePxPerPoint: number): number {
+  // The level whose texels are no bigger than a device pixel, so the texture is only ever shrunk.
+  return Math.min(MAX_LEVEL, Math.max(1, 1 + Math.floor(Math.log2(1 / devicePxPerPoint))));
+}
+
+/** 1, 2, 5, 10, 20, 50... the first at least `n`. */
+function niceStep(n: number): number {
+  const power = 10 ** Math.floor(Math.log10(Math.max(1, n)));
+  for (const m of [1, 2, 5, 10]) if (m * power >= n) return m * power;
+  return 10 * power;
+}
+
+/** Where a cell's filter button is (sheet points): a square at its right, about 15 CSS pixels, never more than the cell. */
+export function filterButton(g: SheetGeometry, row: number, col: number, cssPx: number): { x0: number; y0: number; x1: number; y1: number } | null {
+  const x1 = g.x(col + 1) - cssPx;
+  const y1 = g.y(row + 1) - cssPx;
+  const size = Math.min(15 * cssPx, g.y(row + 1) - g.y(row) - 2 * cssPx, g.x(col + 1) - g.x(col) - 2 * cssPx);
+  if (size <= 0) return null;
+  return { x0: x1 - size, y0: y1 - size, x1, y1 };
+}
+
+/** Where a list validation's arrow is (sheet points): a square just right of the cell, as tall as it, at most 15 CSS pixels. */
+export function choicesButton(g: SheetGeometry, row: number, col: number, cssPx: number): { x0: number; y0: number; x1: number; y1: number } | null {
+  const size = Math.min(15 * cssPx, g.y(row + 1) - g.y(row));
+  if (size <= 0) return null;
+  const x0 = g.x(col + 1) + cssPx;
+  return { x0, y0: g.y(row + 1) - size, x1: x0 + size, y1: g.y(row + 1) };
+}
+
+function rangeBox(g: SheetGeometry, r: CellRange): { x0: number; y0: number; x1: number; y1: number } {
+  return { x0: g.x(r.c0), y0: g.y(r.r0), x1: g.x(Math.min(MAX_COLUMNS, r.c1 + 1)), y1: g.y(Math.min(MAX_ROWS, r.r1 + 1)) };
+}
+
+function outline(list: RectList, box: { x0: number; y0: number; x1: number; y1: number }, width: number, color: number): void {
+  list.push(box.x0 - width / 2, box.y0 - width / 2, box.x1 - box.x0 + width, width, color);
+  list.push(box.x0 - width / 2, box.y1 - width / 2, box.x1 - box.x0 + width, width, color);
+  list.push(box.x0 - width / 2, box.y0, width, box.y1 - box.y0, color);
+  list.push(box.x1 - width / 2, box.y0, width, box.y1 - box.y0, color);
+}
+
+/** Tints `box` except where `hole` is. */
+function tintAround(list: RectList, box: { x0: number; y0: number; x1: number; y1: number }, hole: { x0: number; y0: number; x1: number; y1: number }, color: number): void {
+  const h = { x0: Math.max(box.x0, hole.x0), y0: Math.max(box.y0, hole.y0), x1: Math.min(box.x1, hole.x1), y1: Math.min(box.y1, hole.y1) };
+  if (h.x1 <= h.x0 || h.y1 <= h.y0) {
+    list.push(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, color);
+    return;
+  }
+  list.push(box.x0, box.y0, box.x1 - box.x0, h.y0 - box.y0, color);
+  list.push(box.x0, h.y1, box.x1 - box.x0, box.y1 - h.y1, color);
+  list.push(box.x0, h.y0, h.x0 - box.x0, h.y1 - h.y0, color);
+  list.push(h.x1, h.y0, box.x1 - h.x1, h.y1 - h.y0, color);
+}
+
+function sortByFace(batches: TextBatch[]): TextBatch[] {
+  return batches.sort((a, b) => a.face.id - b.face.id);
+}

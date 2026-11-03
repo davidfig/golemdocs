@@ -21,6 +21,8 @@ export interface FaceDescriptor {
   glyphTable: Float32Array;
   /** The atlas image (RGBA, atlasWidth by atlasHeight), for a face built at runtime; otherwise it loads from `key`. */
   pixels?: Uint8Array;
+  /** An emoji page: the atlas holds color sprites, sampled as they are (with mipmaps) instead of as a distance field. */
+  color?: boolean;
 }
 
 export function describeFace(metrics: FaceMetrics): FaceDescriptor {
@@ -43,6 +45,7 @@ export function describeFace(metrics: FaceMetrics): FaceDescriptor {
     distanceRangeEm: atlas.distanceRange / atlas.size,
     glyphTable: table,
     ...(metrics.pixels && { pixels: metrics.pixels }),
+    ...(metrics.color && { color: true }),
   };
 }
 

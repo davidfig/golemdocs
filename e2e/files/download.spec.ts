@@ -1,7 +1,7 @@
 // File ▸ Download and Download All: names, what each format keeps and drops, and saving rules.
 
 import { MOD, expect, test } from './fixtures';
-import { blankWith, buildDocx, convertTo, importFile, readZip, status, text, waitForOpen, waitForSaved } from './helpers';
+import { blankWith, buildDocx, convertTo, importFile, readZip, sheetRows, status, text, waitForOpen, waitForSaved } from './helpers';
 
 test('Download gives a new document the .docx name and says so', async ({ app }) => {
   await blankWith(app, 'Hello');
@@ -93,15 +93,17 @@ test('UTF-8 text with a byte order mark keeps it', async ({ app }) => {
   expect(file.bytes.equals(original)).toBe(true);
 });
 
-test('editing a CSV cell saves it as the same CSV file', async ({ app }) => {
+test('editing a CSV cell saves it as the same CSV file', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('data.csv', 'name,age\nAnn,30\nBob,25\n'));
-  await app.focus();
-  await app.press(`${MOD}+Home`);
-  await app.type('Dr ');
+  expect(await sheetRows(page, 1, 1)).toEqual([['name']]);
+  // A1 is the active cell: typed over, the rest as it was.
+  await page.keyboard.type('Dr name');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await sheetRows(page, 1, 1))[0][0]).toBe('Dr name');
   const file = await app.download(() => app.menu('File', 'Download'));
   expect(file.name).toBe('data.csv');
-  expect(file.text.replace(/\r\n/g, '\n')).toBe('Dr name,age\nAnn,30\nBob,25\n');
+  expect(file.text).toBe('Dr name,age\nAnn,30\nBob,25\n');
 });
 
 test('Download All is refused while nothing is saved', async ({ app }) => {

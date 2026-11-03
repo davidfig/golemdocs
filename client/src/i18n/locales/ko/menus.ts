@@ -39,6 +39,7 @@ export const menus: Partial<Messages> = {
   'menus.format.csv': 'CSV(쉼표로 구분)',
   'menus.format.tsv': 'TSV(탭으로 구분)',
   'menus.format.txt': '일반 텍스트',
+  'menus.format.xlsx': 'Excel 통합 문서',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '전자 메일 메시지',
   'menus.format.png': 'PNG 이미지',

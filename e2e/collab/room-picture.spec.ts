@@ -34,7 +34,7 @@ async function picturePair(browser: import('@playwright/test').Browser) {
   return { context, a, b };
 }
 
-test('what the holder draws over the picture reaches the watcher when it is saved, and the watcher cannot draw', async ({ browser }) => {
+test('what the holder draws over the picture reaches the watcher when it is saved, and the watcher cannot draw', { tag: '@heavy' }, async ({ browser }) => {
   const { context, a, b } = await picturePair(browser);
   await a.toolbarButton(/^Line$/).click();
   await drag(a, [40, 40], [240, 40]);
@@ -68,7 +68,7 @@ test('taking over: the watcher holds the picture and can draw, and the one who h
   await context.close();
 });
 
-test('a device that comes back with changes the account does not have, while another holds the picture, keeps them as a conflicted copy', async ({ browser }) => {
+test('a device that comes back with changes the account does not have, while another holds the picture, keeps them as a conflicted copy', { tag: '@heavy' }, async ({ browser }) => {
   const person = await newPerson(browser, 'picture');
   await person.page.goto('/?doc=welcome');
   await openPicture(person.app, CANVAS());

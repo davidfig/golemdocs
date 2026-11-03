@@ -2,6 +2,7 @@
 // one place that decides, for both the document API and the collaboration rooms.
 
 import { pictureOf } from './accounts.ts';
+import { randomToken } from './crypto.ts';
 import type { Env } from './cf.ts';
 
 export type Role = 'owner' | 'editor' | 'viewer';
@@ -51,6 +52,7 @@ export async function forgetDocuments(env: Env, docIds: readonly string[]): Prom
     await env.DIRECTORY.batch(
       docIds.slice(i, i + DIRECTORY_BATCH).flatMap((id) => [
         env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(id),
+        env.DIRECTORY.prepare('DELETE FROM public_links WHERE doc_id = ?').bind(id),
         env.DIRECTORY.prepare('DELETE FROM document_owners WHERE doc_id = ?').bind(id),
       ]),
     );
@@ -80,12 +82,76 @@ export async function userByEmail(env: Env, email: string): Promise<string | nul
   return row?.user_id ?? null;
 }
 
+/** A new view-only share's address for the viewer (`shares.view_token`): 24 random bytes, base64url, from nothing else. */
+const newViewToken = (): string => randomToken(24);
+
+/**
+ * Shares a document, or changes the role. A view-only share gets a viewer address of its own (`view_token`), kept while it stays
+ * view-only; becoming an editor drops it, and becoming a viewer again makes a new one.
+ */
 export async function shareWith(env: Env, docId: string, granteeId: string, role: ShareRole): Promise<void> {
   await env.DIRECTORY.prepare(
-    'INSERT INTO shares (doc_id, grantee_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(doc_id, grantee_id) DO UPDATE SET role = excluded.role',
+    `INSERT INTO shares (doc_id, grantee_id, role, created_at, view_token) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(doc_id, grantee_id) DO UPDATE SET
+       view_token = CASE WHEN excluded.role <> 'viewer' THEN NULL WHEN shares.role = 'viewer' AND shares.view_token IS NOT NULL THEN shares.view_token ELSE excluded.view_token END,
+       role = excluded.role`,
   )
-    .bind(docId, granteeId, role, Date.now())
+    .bind(docId, granteeId, role, Date.now(), role === 'viewer' ? newViewToken() : null)
     .run();
+}
+
+/** A view-only share's viewer address, made now for a share from before there were any. Null for an editor's share or none. */
+export async function viewTokenFor(env: Env, docId: string, granteeId: string): Promise<string | null> {
+  await env.DIRECTORY.prepare("UPDATE shares SET view_token = ? WHERE doc_id = ? AND grantee_id = ? AND role = 'viewer' AND view_token IS NULL")
+    .bind(newViewToken(), docId, granteeId)
+    .run();
+  const row = await env.DIRECTORY.prepare("SELECT view_token FROM shares WHERE doc_id = ? AND grantee_id = ? AND role = 'viewer'").bind(docId, granteeId).first<{ view_token: string | null }>();
+  return row?.view_token ?? null;
+}
+
+/**
+ * The document a viewer address opens, for the person it was shared with and nobody else: null for an unknown or dropped token and
+ * for one that is someone else's (both answered 404, so a token says nothing about whether it ever existed).
+ */
+export async function viewShare(env: Env, token: string, userId: string): Promise<{ docId: string; ownerId: string } | null> {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  const row = await env.DIRECTORY.prepare(
+    "SELECT s.doc_id, s.grantee_id, o.owner_id FROM shares s JOIN document_owners o ON o.doc_id = s.doc_id WHERE s.view_token = ? AND s.role = 'viewer'",
+  )
+    .bind(token)
+    .first<{ doc_id: string; grantee_id: string; owner_id: string }>();
+  return row && row.grantee_id === userId ? { docId: row.doc_id, ownerId: row.owner_id } : null;
+}
+
+/** A document's public link (`public_links.token`), or null while it has none. */
+export async function publicLinkOf(env: Env, docId: string): Promise<string | null> {
+  const row = await env.DIRECTORY.prepare('SELECT token FROM public_links WHERE doc_id = ?').bind(docId).first<{ token: string }>();
+  return row?.token ?? null;
+}
+
+/** Gives a document a public link, keeping the one it has unless `reset`, which replaces it so copies of the old one stop working. */
+export async function makePublicLink(env: Env, docId: string, reset: boolean): Promise<string> {
+  await env.DIRECTORY.prepare(
+    `INSERT INTO public_links (doc_id, token, created_at) VALUES (?, ?, ?)
+     ON CONFLICT(doc_id) DO UPDATE SET token = CASE WHEN ? THEN excluded.token ELSE public_links.token END, created_at = CASE WHEN ? THEN excluded.created_at ELSE public_links.created_at END`,
+  )
+    .bind(docId, newViewToken(), Date.now(), reset ? 1 : 0, reset ? 1 : 0)
+    .run();
+  return (await publicLinkOf(env, docId))!;
+}
+
+/** Turns a document's public link off: the address answers 404 from now on. */
+export async function dropPublicLink(env: Env, docId: string): Promise<void> {
+  await env.DIRECTORY.prepare('DELETE FROM public_links WHERE doc_id = ?').bind(docId).run();
+}
+
+/** The document a public link opens, for anyone: null for an unknown or dropped token. */
+export async function publicShare(env: Env, token: string): Promise<{ docId: string; ownerId: string } | null> {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  const row = await env.DIRECTORY.prepare('SELECT p.doc_id, o.owner_id FROM public_links p JOIN document_owners o ON o.doc_id = p.doc_id WHERE p.token = ?')
+    .bind(token)
+    .first<{ doc_id: string; owner_id: string }>();
+  return row ? { docId: row.doc_id, ownerId: row.owner_id } : null;
 }
 
 export async function unshare(env: Env, docId: string, granteeId: string): Promise<void> {

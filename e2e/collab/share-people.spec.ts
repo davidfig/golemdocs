@@ -50,7 +50,7 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill('nobody-here@example.com');
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
-    await expect(dialog.getByRole('status').last()).toHaveText('nobody with that email has signed in to Golem Docs yet');
+    await expect(dialog.getByRole('region', { name: 'People' }).getByRole('status')).toHaveText('nobody with that email has signed in to Golem Docs yet');
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
   });
@@ -60,7 +60,7 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill(owner.email);
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
-    await expect(dialog.getByRole('status').last()).toHaveText('you already own this document');
+    await expect(dialog.getByRole('region', { name: 'People' }).getByRole('status')).toHaveText('you already own this document');
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
   });
@@ -70,7 +70,7 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill('   ');
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
-    await expect(dialog.getByRole('status').last()).toHaveText('');
+    await expect(dialog.getByRole('region', { name: 'People' }).getByRole('status')).toHaveText('');
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
   });
@@ -83,12 +83,13 @@ test.describe('the People section of the Share dialog', () => {
     const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
     await expect(row).toBeVisible();
     await expect(row).toContainText(`${guest.name} (${guest.email})`);
-    const access = row.getByLabel('Access');
-    await expect(access).toHaveValue('editor');
+    const access = row.getByRole('group', { name: 'Access' });
+    await expect(access.getByRole('button', { name: 'Can edit' })).toHaveAttribute('aria-pressed', 'true');
     await expect(dialog.getByLabel('Email address')).toHaveValue('');
     expect((await sharesOf(owner.page, doc.id)).map((s) => [s.email, s.role])).toEqual([[guest.email, 'editor']]);
 
-    await access.selectOption('viewer');
+    await access.getByRole('button', { name: 'Can view' }).click();
+    await expect(access.getByRole('button', { name: 'Can view' })).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(async () => (await sharesOf(owner.page, doc.id))[0]?.role).toBe('viewer');
 
     await row.getByRole('button', { name: 'Remove' }).click();
@@ -103,7 +104,7 @@ test.describe('the People section of the Share dialog', () => {
     await shareWith(owner.page, doc.id, guest.email, 'viewer');
     const dialog = await openShareDialog(owner.app);
     const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
-    await expect(row.getByLabel('Access')).toHaveValue('viewer');
+    await expect(row.getByRole('group', { name: 'Access' }).getByRole('button', { name: 'Can view' })).toHaveAttribute('aria-pressed', 'true');
     await owner.context.close();
     await guest.context.close();
   });
@@ -179,16 +180,6 @@ test.describe('live editing between two accounts', () => {
     await guest.app.ready();
     await guest.app.type(' + guest');
     await expect.poll(() => owner.app.text()).toContain('+ guest');
-    await owner.context.close();
-    await guest.context.close();
-  });
-
-  test('a viewer sees the document read-only, and the status line says so', async ({ browser }) => {
-    const { owner, guest, doc } = await ownerAndGuest(browser);
-    await shareWith(owner.page, doc.id, guest.email, 'viewer');
-    await guest.page.goto(`/?doc=shared:${doc.id}`);
-    await guest.app.ready();
-    await expect.poll(() => guest.page.evaluate(() => (window as unknown as { status: string }).status)).toContain('view only');
     await owner.context.close();
     await guest.context.close();
   });

@@ -1,9 +1,70 @@
 # What’s New in Golem Docs
 
-## 0.31.1 - Unreleased
+## 0.33.1 - Unreleased
 
 ### Fixed
 
+- A document opened from a view-only share or a public link no longer slides sideways when its page already fits the width of the window.
+
+## 0.33.0 - 2026-11-03
+
+### Added
+
+- File › Share can turn on a public link: anyone with it can read the document and download it without signing in, and Copy Embed Code puts it on another website. Reset Link makes a new address and turning it off stops it working.
+
+### Fixed
+
+- In the desktop app, a document changed in the vault folder while the app was closed no longer opens, disappears and opens again at launch: the change goes into it once it has opened.
+- The Can edit / Can view choice in File › Share now matches the email box and buttons beside it.
+
+## 0.32.0 - 2026-11-03
+
+### Added
+
+- Excel workbooks (.xlsx) open in a new spreadsheet editor: type into cells, insert and delete rows and columns, resize them, freeze panes, merge cells, add and rename sheets, copy and paste with other apps, find, and undo. Large workbooks of a million rows open, scroll and zoom smoothly, out to 0.1%, and open again in a moment from this browser. Zoomed out, text too small to read shows as grey lines just where it sits, so a sheet still looks like itself. Files save back as .xlsx that Excel opens as they were.
+- Formulas in workbooks calculate as you type, as Excel calculates them: hundreds of Excel's functions, dynamic arrays that spill into the cells below, and references that follow rows and columns as they are inserted and deleted.
+- Workbook cells can be formatted: bold, italic, underline, fonts and sizes, text and fill colours and alignment from the Format menu and the toolbar, and number formats, decimal places, borders and wrapped text from the Sheet menu. A Sheet toolbar shows while a workbook is open, with buttons for currency, percent, decimal places, borders, merging, wrapping, alignment, sorting and filtering.
+- Workbooks can be sorted (Sheet › Sort A to Z, Sort Z to A), Edit › Replace replaces text in cells, and double-clicking the edge of a column header fits the column to its contents.
+- Drag the corner of a workbook selection to fill cells: numbers, dates, months, days and numbered text carry on as a series, and formulas are copied with their references moved.
+- Sheet › Filter adds filter buttons to a workbook's header row: pick the values to show, or sort by the column.
+- Sheet › Insert Table turns a block of cells into a table, with filter buttons on its header row. A formula typed into an empty column of a table fills the whole column, and rows inserted into the table get it too.
+- Tables in workbooks show in their styles, and formulas can use structured references such as Sales[Amount] and [@Price].
+- Cells with a drop-down list of choices in a workbook show an arrow to pick from (or Alt+Down), and a value a cell's rules don't allow is turned away with the rule's message.
+- Notes in workbooks show as a red mark in the cell's corner, and rest the pointer on the cell to read them; they stay with their cells as rows and columns are inserted and deleted.
+- Sheet › Protection protects a workbook sheet, with a password if you like: its locked cells can't be changed until Unprotect Sheet, and Lock Cells and Unlock Cells choose which cells stay open. Sheets protected in Excel stay protected, and their passwords work in both.
+- Sheet › New Note adds a note to a workbook cell (or changes the one it has) in a card beside the cell, and Sheet › Delete Note takes it away.
+- Cells copied within a workbook paste with their formulas and formatting, and Sheet › Paste Special pastes only values, formulas or formatting, or rows and columns swapped.
+- Charts in workbooks show over their cells: column and bar, line, area, pie, doughnut and scatter charts, with their titles, legends and axes. They change as their data does, and move with their cells when rows and columns are inserted or deleted. Insert › Chart makes a chart of the selected cells; click a chart to pick it, drag it to move it or its corners to resize it, press Delete to remove it, or right-click it to change its type, legend or title, or its series and categories with Select Data. A chart changed this way keeps the formatting it had in Excel.
+- Sparklines in workbooks show in their cells: lines, columns and win/loss, with their high, low and negative points marked, and they move with their cells. Insert › Sparklines adds them to the selected rows, and Clear Sparklines takes them away.
+- Insert › PivotTable makes a pivot table of the selected cells on a new sheet: choose its rows, columns, values (sum, count, average and more) and filters in the field list. Right-click a pivot table to change its fields or refresh it from its data. Pivot tables are laid out as Excel lays them out. They are drawn in their pivot style (shaded headers and grand totals, bold outer items, indented inner ones), as in Excel. The field list sets a pivot table's layout (compact, outline or tabular), where its subtotals go and which grand totals it shows, and a pivot table's Row Labels and Column Labels buttons sort a field or choose which of its items to show.
+- CSV and TSV files open in the spreadsheet grid at every size, and are saved back as the same files: unchanged rows stay exactly as they were. A file of millions of rows shows its first rows at once and fills in as the rest is read.
+- File › Convert To › Excel Workbook turns a document's first table into a workbook, and a workbook converts to and from CSV and TSV without leaving the grid.
+- A workbook's card in File › Open shows the top of its sheet.
+- A workbook in your account is edited on one device at a time: open it on another computer or share it, and the others see it read-only, updated each time it is saved, and can take it over.
+- Sheet › What-If Analysis › Goal Seek finds the value of a cell that brings a formula to the value you want.
+- Sheet › What-If Analysis › Data Table shows a formula's results for a row and a column of inputs, and data tables in Excel workbooks now update as you edit.
+- Sheet › What-If Analysis › Scenario Manager keeps named sets of input values: show one, add, edit or delete them, and make a summary sheet of what each gives. Excel's scenarios are kept.
+- Sheet › What-If Analysis › Solver makes a formula as large or small as it can be, or brings it to a value, by changing cells within constraints, with the Simplex LP and GRG Nonlinear methods and whole-number cells. Solver models saved in Excel open here, and the other way round.
+- File › Print and Print Preview print a workbook's sheet as Excel does: its paper, margins, scale or fit to pages, print area, title rows and columns repeated on each page, page breaks, gridlines, headings, header and footer. The workbook stays open in the grid. Charts and sparklines print too. File › Page Setup sets them, Sheet › Print Area sets the selection as the print area, and Sheet › Page Breaks adds or removes page breaks.
+- Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales, data bars and icon sets, recalculated as the values change.
+- Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
+- Emoji show in color everywhere: documents of every format, text files, workbook cells and charts, and PDF, picture and SVG downloads and printed sheets. Families, flags, keycaps and skin tones each show as one emoji, and the caret, selection and Backspace treat each as one character. The emoji images load only when a document uses one.
+- On a phone or tablet, a long press selects the word under your finger, and a double tap does too; keep your finger down and drag to select more. Dragging near the top or bottom of the screen scrolls the document as you select.
+- On a phone or tablet, a selection has a handle at each end: drag one to change where the selection starts or ends.
+- The website’s footer has a Sponsor link, for anyone who wants to support Golem Docs through GitHub Sponsors.
+
+### Changed
+
+- On a phone or tablet, tapping inside a word puts the cursor at the end of the word, so you don't have to aim between two letters, and a double tap no longer needs to land on exactly the same spot.
+- Someone you share a document with as “Can view” (File › Share) now opens it in a simple read-only viewer: pages, zoom, find, and select and copy, with nothing to edit. They see the latest saved version, and it catches up by itself while you keep working; once you stop sharing it with them (or they leave it), it disappears from their screen. Choosing between “Can edit” and “Can view” in the Share dialog is now a pair of buttons.
+
+### Fixed
+
+- Workbooks saved by programs that don't calculate formulas showed empty cells where the formulas were; they are now calculated when opened.
+- An Excel workbook synced from the desktop folder opened as a document holding only its first sheet's table; it now opens as the workbook.
+- Pasting a hundred thousand rows or more into a sheet failed.
+- View › Full Screen works on phones, where the browser has no full screen of its own: the menus and toolbars go away, and a button in the corner brings them back. It is also in the phone's menu.
+- Copying and pasting into another app keeps paragraph indents that come from a paragraph’s style, and copying a long document (Edit › Select All) keeps its formatting.
 - In the desktop app, files that changed in your vault folder no longer download again when you open them. The app keeps the copy it just synced, so they open straight away.
 
 ## 0.31.0 - 2026-11-02

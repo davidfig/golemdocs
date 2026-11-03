@@ -16,6 +16,7 @@ import type { WordDocument } from '@golemdocs/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@golemdocs/layout';
 import { commentAnnotations } from './pdfExportComments.ts';
 import { standardFamily } from './standardFonts.ts';
+import { emojiBox, EmojiSprites } from './emojiSprites.ts';
 import { PdfDocument, applyAnnotations, type EmbeddedFont, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@golemdocs/pdf';
 
 /** Characters WinAnsi lacks, with a close ASCII stand-in. */
@@ -28,7 +29,7 @@ const ASCII_FALLBACKS: Record<number, string> = {
   0x2022: '•', 0x25cf: '•', 0x25aa: '•', 0x2023: '•',
 };
 
-function standardName(font: ResolvedFont): string {
+export function standardName(font: ResolvedFont): string {
   const bold = font.face.weight >= 600 || font.syntheticBold;
   const italic = font.face.italic || font.syntheticItalic;
   switch (standardFamily(font)) {
@@ -42,10 +43,10 @@ function standardName(font: ResolvedFont): string {
 }
 
 /** Whether a font is drawn from its own file: it has one, and isn't one layout fakes a style of (a standard font shows those better). */
-const embeddable = (font: ResolvedFont): boolean => !!font.face.font && !font.syntheticBold && !font.syntheticItalic;
+export const embeddable = (font: ResolvedFont): boolean => !!font.face.font && !font.syntheticBold && !font.syntheticItalic;
 
 /** Layout's packed little-endian RGBA8 to a PDF color and alpha. */
-function unpack(packed: number): { color: [number, number, number]; alpha: number } {
+export function unpack(packed: number): { color: [number, number, number]; alpha: number } {
   return {
     color: [(packed & 0xff) / 255, ((packed >> 8) & 0xff) / 255, ((packed >> 16) & 0xff) / 255],
     alpha: (packed >>> 24) / 255,
@@ -53,7 +54,7 @@ function unpack(packed: number): { color: [number, number, number]; alpha: numbe
 }
 
 /** A glyph with everything the exporter needs. */
-interface PlacedGlyph {
+export interface PlacedGlyph {
   x: number;
   y: number;
   size: number;
@@ -100,6 +101,8 @@ type EmbeddedFor = (font: ResolvedFont) => EmbeddedFont | undefined;
 function collect(page: PageLayout, math: boolean, embeddedFor: EmbeddedFor): PlacedGlyph[] {
   const out: PlacedGlyph[] = [];
   for (const list of page.glyphs.values() as Iterable<GlyphList>) {
+    // Emoji are pictures, drawn by drawEmoji.
+    if (list.metrics.color) continue;
     const isMath = list.font.family.math !== undefined;
     // Without the math font's file, an equation can't be written: it is left out.
     if (isMath && !math) continue;
@@ -182,13 +185,13 @@ function readingOrder(page: PageLayout, glyphs: PlacedGlyph[]): PlacedGlyph[][] 
   return result;
 }
 
-interface Run {
+export interface Run {
   first: PlacedGlyph;
   pieces: RunGlyph[];
 }
 
 /** Splits a line into runs of one font, size, color and baseline, inserting real spaces at gaps. */
-function lineRuns(line: PlacedGlyph[]): Run[] {
+export function lineRuns(line: PlacedGlyph[]): Run[] {
   const runs: Run[] = [];
   let run: Run | undefined;
   let prev: PlacedGlyph | undefined;
@@ -322,6 +325,27 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     return image;
   };
 
+  // Emoji: each sprite embedded once as a picture (with its alpha as a soft mask), placed where layout put the glyph.
+  const sprites = new EmojiSprites(fonts);
+  const emojiImages = new Map<string, PdfImage | null>();
+  const drawEmoji = async (d: PageDrawing, page: PageLayout) => {
+    for (const list of page.glyphs.values() as Iterable<GlyphList>) {
+      if (!list.metrics.color) continue;
+      for (let i = 0; i < list.count; i++) {
+        const g = list.glyph(i);
+        const box = emojiBox(list.metrics, g, list.x(i), list.y(i), list.size(i));
+        if (!box) continue;
+        const key = `${list.metrics.face.atlas}#${g}`;
+        if (!emojiImages.has(key)) {
+          const pixels = await sprites.pixels(list.metrics, g);
+          emojiImages.set(key, pixels && pdf.embedPixels(pixels));
+        }
+        const image = emojiImages.get(key);
+        if (image) d.image(image, box.x, box.y, box.width, box.height);
+      }
+    }
+  };
+
   const pages = layout.pages.length ? layout.pages : [undefined];
   for (const laid of pages) {
     const page = pdf.addPage(laid ? [laid.width, laid.height] : [612, 792]);
@@ -345,10 +369,12 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
       }
     }
 
+    await drawEmoji(d, laid);
     await drawImages(false);
     drawRects(d, laid.foreground);
     d.finish();
   }
+  sprites.close();
   const notes = commentAnnotations(doc, layout.pages);
   if (notes.length) applyAnnotations(pdf, notes);
   if (lostCount) {

@@ -37,15 +37,15 @@ import type { Selection } from './history.ts';
 export type RoomMode = 'solo' | 'handoff' | 'shared';
 export type RoomRole = 'owner' | 'editor' | 'viewer';
 
-/** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), a picture's shapes (`layers`), or a drawing's nodes (`nodes`); or, for a plain text file, changes to its bytes (`text`, see ./textOps.ts). */
-export type RoomKind = 'doc' | 'objects' | 'layers' | 'nodes' | 'text';
+/** What the changes sent to a room are: operations on text, or changes to objects (see objects.ts): a PDF's annotations, fields and edits (`objects`), a picture's shapes (`layers`), or a drawing's nodes (`nodes`); or, for a plain text file, changes to its bytes (`text`, see ./textOps.ts); or a workbook's (`cells`, watched: one session edits it at a time). */
+export type RoomKind = 'doc' | 'objects' | 'layers' | 'nodes' | 'text' | 'cells';
 
 /**
  * How several sessions in a room edit its document: together (`shared`: their changes are merged), or one at a time while the others
  * watch (`watch`). A kind is edited together only once its changes can all be merged: PDFs (pages are moved and rotated as whole new
  * files) and pictures (their pixels) are not yet, so they are held by one session. Making one shared is a change to this table.
  */
-export const ROOM_POLICY: Record<RoomKind, 'shared' | 'watch'> = { doc: 'shared', text: 'shared', nodes: 'shared', objects: 'watch', layers: 'watch' };
+export const ROOM_POLICY: Record<RoomKind, 'shared' | 'watch'> = { doc: 'shared', text: 'shared', nodes: 'shared', objects: 'watch', layers: 'watch', cells: 'watch' };
 
 /** Who holds a watched room's document (see ROOM_POLICY): their session, name and account. */
 export interface Holder {

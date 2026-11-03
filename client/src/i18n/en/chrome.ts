@@ -150,6 +150,7 @@ export const chrome = {
   'chrome.admin.debug': '&Debug…',
   'chrome.view.fullScreen': 'F&ull Screen',
   'chrome.fullScreen.hint': 'Press Esc to leave full screen',
+  'chrome.fullScreen.exit': 'Leave Full Screen',
   'chrome.view.darkMode': '&Dark Mode',
   'chrome.view.darkPages': 'Dark &Pages',
   'chrome.view.matchSystem': '&Match System',

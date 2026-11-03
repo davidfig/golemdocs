@@ -55,7 +55,17 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.nobody': '尚未与任何人共享。',
   'dialogs.share.done': '完成',
   'dialogs.share.peopleHeading': '人员',
-  'dialogs.share.note': '对方必须先登录过 Golem Docs。编辑者与查看者都能即时看到更改。',
+  'dialogs.share.publicHeading': '公开链接',
+  'dialogs.share.publicNote': '任何拥有链接的人都无需登录即可阅读和下载该文档，其他网站也可以嵌入它。他们看到的是每次保存后的版本。',
+  'dialogs.share.publicToggle': '任何拥有链接的人都可以查看',
+  'dialogs.share.publicLinkLabel': '公开链接',
+  'dialogs.share.copyLink': '复制链接',
+  'dialogs.share.copyEmbed': '复制嵌入代码',
+  'dialogs.share.resetLink': '重置链接',
+  'dialogs.share.resetNote': '重置链接会生成新地址，旧地址将失效。',
+  'dialogs.share.copied': '已复制。',
+  'dialogs.share.embedTitle': 'Golem Docs 上的 {name}',
+  'dialogs.share.note': '对方需要先登录过一次 Golem Docs。编辑者可实时看到更改；查看者看到的是只读副本，每次保存文档时都会更新。',
 
   // Sign in
   'dialogs.signIn.title': '登录',

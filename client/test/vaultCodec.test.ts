@@ -45,6 +45,14 @@ test('a Word file is kept byte for byte both ways', async () => {
   assert.equal(await toVaultFile(docx, 'Report.docx'), docx, 'plain Word bytes');
 });
 
+test('a workbook, a CSV and a TSV are kept as themselves both ways (the grid edits the files)', async () => {
+  const xlsx = readFileSync(new URL('./fixtures/sheets/print.xlsx', import.meta.url));
+  for (const [name, file] of [['Budget.xlsx', new Uint8Array(xlsx)], ['a.csv', text('a,b\n1,2\n')], ['a.tsv', text('a\tb\n')]] as const) {
+    assert.equal(await fromVaultFile(file, name), file, name);
+    assert.equal(await toVaultFile(file, name), file, name);
+  }
+});
+
 test('a stored document becomes a file in the format its name asks for', async () => {
   const stored = await fromVaultFile(text('# Heading\n\nBody text.\n'), 'a.md');
   const html = read(await toVaultFile(stored, 'a.html'));

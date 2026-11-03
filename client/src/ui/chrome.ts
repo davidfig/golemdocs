@@ -5,6 +5,7 @@
 
 import {
   DEFAULT_STATE,
+  SHEET_OPS,
   type Action,
   type Alignment,
   type CaseChange,
@@ -17,6 +18,7 @@ import {
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h, isFormField, modalOpen, segmented } from './dom.ts';
+import { zoomPercent } from '../view/camera.ts';
 import { sameValue } from './sameValue.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
@@ -34,7 +36,7 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerDocument, DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
-import { inAppMenuOnMac, installFullScreen, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
+import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
@@ -182,7 +184,7 @@ export class Chrome {
 
     window.addEventListener('keydown', (e) => this.shortcut(e), true);
     installFullScreen();
-    document.addEventListener('fullscreenchange', () => this.refresh());
+    onFullScreenChange(() => this.refresh());
 
     const fonts = host.fonts?.();
     if (fonts) {
@@ -221,7 +223,7 @@ export class Chrome {
   /** The zoom box's list of sizes, shown by `owner` (the status bar's zoom); a second click closes it. */
   showZoomList(owner: HTMLElement): void {
     if (popupOpenFor(owner)) return closePopup();
-    const current = `${Math.round(this.state.zoom * 100)}%`;
+    const current = `${zoomPercent(this.state.zoom)}%`;
     const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': t('chrome.control.zoom') } });
     for (const preset of zoomPresets()) {
       const chosen = preset.label === current;
@@ -373,8 +375,7 @@ export class Chrome {
         id: 'view.fullScreen',
         label: t('chrome.view.fullScreen'),
         run: toggleFullScreen,
-        checked: () => !!document.fullscreenElement,
-        enabled: () => document.fullscreenEnabled,
+        checked: isFullScreen,
       },
       a('view.zoomIn', t('chrome.view.zoomIn'), { kind: 'zoomBy', factor: 1.25 }, { shortcut: 'Mod+=' }),
       a('view.zoomOut', t('chrome.view.zoomOut'), { kind: 'zoomBy', factor: 0.8 }, { shortcut: 'Mod+-' }),
@@ -551,6 +552,26 @@ export class Chrome {
     }
     r.add(a('image.layers', t('vector.layers'), { kind: 'image', op: 'layers' }, { icon: 'layersStack', scope: 'picture', shortcut: PICTURE_KEYS.layers, checked: (s) => s.draw.layers }));
 
+    // Spreadsheets: the Sheet menu (the editor's own keys and context menus do the rest; see sheet/view.ts).
+    const SHEET_ICONS: Partial<Record<(typeof SHEET_OPS)[number], string>> = {
+      numberCurrency: 'sheetCurrency',
+      numberPercent: 'sheetPercent',
+      increaseDecimals: 'sheetMoreDecimals',
+      decreaseDecimals: 'sheetFewerDecimals',
+      borderBottom: 'borders',
+      borderAll: 'sheetBorderAll',
+      borderNone: 'sheetBorderNone',
+      mergeCenter: 'sheetMergeCenter',
+      wrapText: 'sheetWrap',
+      alignTop: 'sheetAlignTop',
+      alignMiddle: 'sheetAlignMiddle',
+      alignBottom: 'sheetAlignBottom',
+      sortAscending: 'sheetSortAscending',
+      sortDescending: 'sheetSortDescending',
+      filter: 'sheetFilter',
+    };
+    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
+
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
     for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text'], ['canvas', 'canvasTool']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, scope: 'vector', shortcut: VECTOR_TOOL_KEYS[tool], checked: (s) => s.vector.tool === tool }));
@@ -681,6 +702,7 @@ export class Chrome {
       cmd('view.pageWidth'),
       cmd('view.darkMode'),
       cmd('view.darkPages'),
+      cmd('view.fullScreen'),
       heading(t('chrome.menu.tools')),
       cmd('tools.spelling'),
       cmd('tools.thesaurus'),
@@ -839,6 +861,9 @@ export class Chrome {
           cmd('insert.drawing'),
           cmd('insert.textBox'),
           cmd('insert.table'),
+          cmd('sheet.insertPivot'),
+          sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
+          sub(t('sheet.sparklines'), [cmd('sheet.sparklineLine'), cmd('sheet.sparklineColumn'), cmd('sheet.sparklineWinLoss'), sep, cmd('sheet.clearSparklines')]),
           cmd('insert.horizontalRule'),
           cmd('insert.codeBlock'),
           sep,
@@ -899,6 +924,90 @@ export class Chrome {
           sep,
           cmd('table.selectTable'),
           cmd('table.properties'),
+        ],
+      },
+      {
+        label: t('sheet.menu'),
+        items: [
+          cmd('sheet.insertRowsAbove'),
+          cmd('sheet.insertRowsBelow'),
+          cmd('sheet.insertColumnsLeft'),
+          cmd('sheet.insertColumnsRight'),
+          sep,
+          cmd('sheet.deleteRows'),
+          cmd('sheet.deleteColumns'),
+          sep,
+          cmd('sheet.clearContents'),
+          cmd('sheet.clearFormats'),
+          cmd('sheet.clearAll'),
+          sep,
+          cmd('sheet.hideRows'),
+          cmd('sheet.unhideRows'),
+          cmd('sheet.hideColumns'),
+          cmd('sheet.unhideColumns'),
+          sep,
+          cmd('sheet.freezePanes'),
+          cmd('sheet.freezeTopRow'),
+          cmd('sheet.freezeFirstColumn'),
+          cmd('sheet.unfreezePanes'),
+          sep,
+          sub(t('sheet.pasteSpecial'), [cmd('sheet.pasteValues'), cmd('sheet.pasteFormulas'), cmd('sheet.pasteFormats'), cmd('sheet.pasteTranspose')]),
+          sep,
+          cmd('sheet.sortAscending'),
+          cmd('sheet.sortDescending'),
+          cmd('sheet.filter'),
+          cmd('sheet.insertTable'),
+          sub(t('sheet.pivot'), [cmd('sheet.pivotFields'), cmd('sheet.refreshPivots')]),
+          sub(t('sheet.printArea'), [cmd('sheet.setPrintArea'), cmd('sheet.clearPrintArea')]),
+          sub(t('sheet.pageBreaks'), [cmd('sheet.insertPageBreak'), cmd('sheet.removePageBreak'), cmd('sheet.resetPageBreaks')]),
+          sub(t('sheet.whatIf'), [cmd('sheet.scenarioManager'), cmd('sheet.goalSeek'), cmd('sheet.dataTable'), cmd('sheet.solver')]),
+          cmd('sheet.newNote'),
+          cmd('sheet.deleteNote'),
+          sub(t('sheet.protection'), [cmd('sheet.protectSheet'), cmd('sheet.unprotectSheet'), cmd('sheet.lockCells'), cmd('sheet.unlockCells')]),
+          sub(t('sheet.group'), [cmd('sheet.groupRows'), cmd('sheet.ungroupRows'), cmd('sheet.groupColumns'), cmd('sheet.ungroupColumns')]),
+          sep,
+          cmd('sheet.merge'),
+          cmd('sheet.mergeCenter'),
+          cmd('sheet.unmerge'),
+          sep,
+          sub(t('sheet.numberFormat'), [
+            cmd('sheet.numberGeneral'),
+            cmd('sheet.numberNumber'),
+            cmd('sheet.numberCurrency'),
+            cmd('sheet.numberAccounting'),
+            cmd('sheet.numberPercent'),
+            cmd('sheet.numberScientific'),
+            cmd('sheet.numberFraction'),
+            cmd('sheet.numberDate'),
+            cmd('sheet.numberLongDate'),
+            cmd('sheet.numberTime'),
+            cmd('sheet.numberText'),
+          ]),
+          cmd('sheet.increaseDecimals'),
+          cmd('sheet.decreaseDecimals'),
+          sub(t('sheet.borders'), [
+            cmd('sheet.borderAll'),
+            cmd('sheet.borderOutside'),
+            cmd('sheet.borderThickOutside'),
+            sep,
+            cmd('sheet.borderTop'),
+            cmd('sheet.borderBottom'),
+            cmd('sheet.borderLeft'),
+            cmd('sheet.borderRight'),
+            cmd('sheet.borderDoubleBottom'),
+            sep,
+            cmd('sheet.borderNone'),
+          ]),
+          cmd('sheet.wrapText'),
+          cmd('sheet.alignTop'),
+          cmd('sheet.alignMiddle'),
+          cmd('sheet.alignBottom'),
+          sep,
+          cmd('sheet.addSheet'),
+          cmd('sheet.renameSheet'),
+          cmd('sheet.deleteSheet'),
+          cmd('sheet.nextSheet'),
+          cmd('sheet.previousSheet'),
         ],
       },
       {
@@ -1052,7 +1161,7 @@ export class Chrome {
           label: t('chrome.control.zoom'),
           width: 52,
           options: () => zoomPresets().map((p) => p.label),
-          value: (s) => `${Math.round(s.zoom * 100)}%`,
+          value: (s) => `${zoomPercent(s.zoom)}%`,
           enabled: () => true,
           commit: (text) => {
             const preset = zoomPresets().find((p) => p.label.toLowerCase() === text.toLowerCase());

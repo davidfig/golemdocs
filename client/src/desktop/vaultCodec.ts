@@ -96,6 +96,8 @@ export async function fromVaultFile(file: Uint8Array, name: string): Promise<Uin
   // Word, and what the app reads but cannot write (`.doc`, GIF, BMP, HEIC), go in as they are, as an upload of them would: the app
   // opens them so and saves them as what it edits them as.
   if (format === 'docx' || (kind === 'image' && !/\.(png|jpe?g|webp)$/i.test(name))) return file;
+  // A workbook, CSV or TSV too: the account keeps them as the files themselves, edited in the grid.
+  if (format === 'xlsx' || format === 'csv' || format === 'tsv') return file;
   // A PDF becomes its own original: what was done to the one before it is in the file now.
   if (format === 'pdf') return writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: file, extensions: {} });
   const { document, extensions } = await importDocument(format, file);

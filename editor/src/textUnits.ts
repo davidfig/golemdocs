@@ -82,6 +82,14 @@ export function wordRange(text: string, offset: number): [number, number] {
   return [a, b];
 }
 
+/** Where a finger's tap puts the caret: inside a word, at its end (a finger can't aim between two letters); anywhere else, where it landed. */
+export function wordEnd(text: string, offset: number): number {
+  if (cjkWords(text) || !WORD.test(text[offset - 1] ?? ' ') || !WORD.test(text[offset] ?? ' ')) return offset;
+  let i = offset;
+  while (i < text.length && WORD.test(text[i])) i++;
+  return i;
+}
+
 /** Whether [from, to) is a whole word: what is either side is not part of a word (for CJK text, falls on word boundaries). */
 export function isWholeWord(text: string, from: number, to: number): boolean {
   const cjk = cjkWords(text);

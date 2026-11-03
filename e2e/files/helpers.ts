@@ -288,3 +288,21 @@ export async function blankWith(app: App, ...lines: string[]): Promise<void> {
     await app.type(lines[i]!);
   }
 }
+
+/** The active sheet's cells (rows by columns, as shown) of a file open in the grid, once it has loaded. */
+export async function sheetRows(page: Page, rows: number, cols: number): Promise<string[][]> {
+  await expect.poll(() => page.evaluate(() => (window as unknown as { sheetEditor: { state(): { loaded: boolean } | null } }).sheetEditor.state()?.loaded ?? false), { timeout: 20_000 }).toBe(true);
+  return page.evaluate(
+    async ([r, c]) => {
+      const editor = (window as unknown as { sheetEditor: { cell(row: number, col: number): Promise<{ display: string } | null> } }).sheetEditor;
+      const out: string[][] = [];
+      for (let row = 0; row < r; row++) {
+        const line: string[] = [];
+        for (let col = 0; col < c; col++) line.push((await editor.cell(row, col))?.display ?? '');
+        out.push(line);
+      }
+      return out;
+    },
+    [rows, cols],
+  );
+}

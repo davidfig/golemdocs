@@ -2,7 +2,7 @@
 // filter, go to line, wrapping, text size, copying and downloading the file as it was.
 
 import { MOD, expect, test } from './fixtures';
-import { dropFile, formatLabel, hasItem, importFile, menuContents, status, waitForOpen } from './helpers';
+import { dropFile, formatLabel, hasItem, importFile, menuContents, sheetRows, status, waitForOpen } from './helpers';
 import { clickNumber, expectLine, findBox, largeStatus, lineText, message, openBigFile, state, viewer, wrapToggle, statusBarOn } from './large-helpers';
 
 test.beforeEach(({ page }) => statusBarOn(page));
@@ -39,11 +39,14 @@ test('a file of 8 MB or more opens in the viewer, with its line count and size',
   await expect.poll(() => status(page), { intervals: [25] }).toMatch(/big\.txt is large \(\d+\.\d MB\), so it opens in the large-file editor/);
 });
 
-test('a large CSV opens in the viewer too, not as a table', async ({ app, page }) => {
+test('a large CSV opens in the grid (not the text viewer), every row of it', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await importFile(app, { name: 'big.csv', buffer: BIG });
-  await expect(viewer(page)).toBeVisible();
-  expect(await formatLabel(page)).toBe('Plain Text');
+  await expect(viewer(page)).toBeHidden();
+  expect(await formatLabel(page)).toBe('CSV (Comma-Separated)');
+  const [[first]] = await sheetRows(page, 1, 1);
+  expect(first).toMatch(/^Line 1 the quick brown fox/);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { sheetEditor: { state(): { info: { rows: number } } } }).sheetEditor.state().info.rows), { timeout: 30_000 }).toBe(150_000);
 });
 
 test('a large file dropped on the window opens in the viewer', async ({ app, page }) => {

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { cjkWords, graphemeAt, hasCjk, hasCombining, isWordBoundary, segmentAt, type Segment } from '../src/segment.ts';
+import { wordEnd } from '../src/textUnits.ts';
 
 test('hasCjk recognises Han, kana, Hangul and Bopomofo but not Latin', () => {
   for (const s of ['漢', 'ひらがな', 'カタカナ', 'ｶﾀ', '한글', 'ㄅ', 'a漢b', '𠀀']) assert.equal(hasCjk(s), true, s);
@@ -118,4 +119,15 @@ test('without Intl.Segmenter: words are runs of one script class', async () => {
   } finally {
     intl.Segmenter = real;
   }
+});
+
+test('wordEnd: a tap inside a word goes to its end; between words or at an edge it stays', () => {
+  const text = 'Hello there, world';
+  assert.equal(wordEnd(text, 2), 5);
+  assert.equal(wordEnd(text, 0), 0);
+  assert.equal(wordEnd(text, 5), 5);
+  assert.equal(wordEnd(text, 6), 6);
+  assert.equal(wordEnd(text, 8), 11);
+  assert.equal(wordEnd(text, 18), 18);
+  assert.equal(wordEnd('日本語です', 1), 1);
 });

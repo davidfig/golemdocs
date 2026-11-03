@@ -1,6 +1,9 @@
 /** CSS pixels per point at 100% zoom (Word: 1pt = 1/72in, 96 CSS px per inch). */
 export const CSS_PX_PER_POINT = 96 / 72;
 
+/** A zoom as the percentage shown: whole numbers, with a decimal below 10% (a sheet zooms out to 0.1%). */
+export const zoomPercent = (zoom: number): number => (zoom >= 0.1 ? Math.round(zoom * 100) : Math.round(zoom * 1000) / 10);
+
 /**
  * Maps document space (points, y down) to the canvas. Changing it never touches glyph
  * buffers, only uniforms, which is what makes zoom and scroll cheap.
@@ -53,13 +56,13 @@ export class Camera {
 
   /**
    * Keeps the view over the document: per axis the view may extend at most `padding` CSS px past
-   * `bounds`, and a document smaller than the view is centered instead
+   * `bounds` (`paddingX` sideways, if given), and a document smaller than the view is centered instead
    * (unless `scrollPastEnd` lets the view run half a screen past the end, which then wins).
    */
-  clamp(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24): void {
+  clamp(bounds: { x: number; y: number; width: number; height: number }, cssWidth: number, cssHeight: number, padding = 24, paddingX = padding): void {
     if (bounds.width <= 0 || bounds.height <= 0) return;
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
-    this.x = clampAxis(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, padding * pointsPerCss);
+    this.x = clampAxis(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, paddingX * pointsPerCss);
     this.y = clampAxis(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss, this.scrollPastEnd ? 0.5 : 0);
   }
 
@@ -71,6 +74,15 @@ export class Camera {
     const pointsPerCss = 1 / (this.zoom * CSS_PX_PER_POINT);
     this.x = clampAxisToStart(this.x, bounds.x, bounds.width, cssWidth * pointsPerCss, padding * pointsPerCss);
     this.y = clampAxisToStart(this.y, bounds.y, bounds.height, cssHeight * pointsPerCss, padding * pointsPerCss, this.scrollPastEnd ? 0.5 : 0);
+  }
+
+  /**
+   * How many CSS px `clamp` (with the same `paddingX`) lets the view move sideways over `bounds` at this zoom: 0 when the pages fit
+   * and are centered. Its own math, so what is said to scroll is what does.
+   */
+  sideRoom(bounds: { width: number }, cssWidth: number, paddingX = 24): number {
+    const cssPerPoint = this.zoom * CSS_PX_PER_POINT;
+    return Math.max(0, axisRoom(bounds.width * cssPerPoint, cssWidth, paddingX));
   }
 
   toDocument(cssX: number, cssY: number): { x: number; y: number } {
@@ -86,9 +98,14 @@ export class Camera {
  */
 function clampAxis(origin: number, start: number, size: number, view: number, pad: number, slack = 0): number {
   const min = start - pad;
-  const fit = start + size + pad - view;
-  if (fit < min) return (min + fit) / 2;
-  return Math.min(Math.max(origin, min), fit + view * slack);
+  const room = axisRoom(size, view, pad);
+  if (room < 0) return min + room / 2;
+  return Math.min(Math.max(origin, min), min + room + view * slack);
+}
+
+/** How far `clampAxis` lets the view move along an axis (any unit): the content and its padding less the view; below 0 when it fits, and is centered. */
+function axisRoom(size: number, view: number, pad: number): number {
+  return size + 2 * pad - view;
 }
 
 /** Clamps one axis of the view origin to at least the content's start and at most its end plus padding less the view (all in points); `slack` as in `clampAxis`. */

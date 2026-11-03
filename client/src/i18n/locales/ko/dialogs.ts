@@ -55,7 +55,17 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.nobody': '아직 공유한 사람이 없습니다.',
   'dialogs.share.done': '완료',
   'dialogs.share.peopleHeading': '사용자',
-  'dialogs.share.note': '상대방이 Golem Docs에 한 번 로그인한 적이 있어야 합니다. 편집자와 보기 권한 사용자는 변경 내용을 실시간으로 볼 수 있습니다.',
+  'dialogs.share.publicHeading': '공개 링크',
+  'dialogs.share.publicNote': '링크가 있는 사람은 누구나 로그인하지 않고 문서를 읽고 다운로드할 수 있으며, 다른 웹사이트에 삽입할 수도 있습니다. 저장될 때마다 새 버전이 보입니다.',
+  'dialogs.share.publicToggle': '링크가 있는 모든 사용자가 볼 수 있음',
+  'dialogs.share.publicLinkLabel': '공개 링크',
+  'dialogs.share.copyLink': '링크 복사',
+  'dialogs.share.copyEmbed': '삽입 코드 복사',
+  'dialogs.share.resetLink': '링크 재설정',
+  'dialogs.share.resetNote': '링크를 재설정하면 새 주소가 만들어지고 이전 주소는 더 이상 작동하지 않습니다.',
+  'dialogs.share.copied': '복사했습니다.',
+  'dialogs.share.embedTitle': 'Golem Docs의 {name}',
+  'dialogs.share.note': '상대방은 Golem Docs에 한 번 로그인한 적이 있어야 합니다. 편집자는 변경 사항을 실시간으로 보고, 보기 권한이 있는 사람은 문서가 저장될 때마다 갱신되는 읽기 전용 사본을 봅니다.',
 
   // Sign in
   'dialogs.signIn.title': '로그인',

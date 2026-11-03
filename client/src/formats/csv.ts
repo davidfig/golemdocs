@@ -92,51 +92,110 @@ export interface Parsed {
 }
 
 export function parseDelimited(text: string, delimiter: string): Parsed {
+  const reader = new DelimitedReader(text, delimiter);
   const rows: string[][] = [];
-  const firstEnding = /\r\n|\r|\n/.exec(text.replace(/"[^"]*"/g, ''))?.[0] ?? '\n';
-  let row: string[] = [];
-  let field = '';
-  let quoted = false;
-  let started = false; // the current field has had a character (so "" and a bare delimiter differ from nothing)
-  let trailingNewline = false;
-  const n = text.length;
-  const endField = () => {
-    row.push(field);
-    field = '';
-    started = false;
-  };
-  for (let i = 0; i < n; i++) {
-    const c = text[i];
-    trailingNewline = false;
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else quoted = false;
-      } else field += c;
-    } else if (c === '"' && !started) {
-      quoted = true;
-      started = true;
-    } else if (c === delimiter) {
-      endField();
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      endField();
-      rows.push(row);
-      row = [];
-      started = false;
-      trailingNewline = true;
-    } else {
-      field += c;
-      started = true;
+  for (let row = reader.next(); row; row = reader.next()) rows.push(row);
+  return { rows, lineEnding: reader.lineEnding ?? '\n', trailingNewline: reader.trailingNewline };
+}
+
+/**
+ * Reads delimited text a row at a time: each field as written, its quotes taken off ("" in a quoted field is one "). A field
+ * is a slice of the text rather than built a character at a time, and rows are read as asked for, so a file of millions of
+ * rows is never held as arrays all at once.
+ */
+export class DelimitedReader {
+  private at = 0;
+  /** The first line ending outside quotes: the file's (null until one is read). */
+  lineEnding: Parsed['lineEnding'] | null = null;
+  /** The text ends with a line ending (known once the last row is read). */
+  trailingNewline = false;
+  private readonly code: number;
+
+  constructor(
+    private readonly text: string,
+    delimiter: string,
+  ) {
+    this.code = delimiter.charCodeAt(0);
+  }
+
+  /** How far into the text the rows read so far reach. */
+  get position(): number {
+    return this.at;
+  }
+
+  /** The next row's fields, or null past the end. */
+  next(): string[] | null {
+    const { text, code } = this;
+    const n = text.length;
+    if (this.at >= n) return null;
+    const row: string[] = [];
+    let i = this.at;
+    for (;;) {
+      let field: string;
+      if (text.charCodeAt(i) === 34) {
+        // A quoted field: up to its closing quote, then anything written after that up to the field's end.
+        field = '';
+        let from = i + 1;
+        for (;;) {
+          const q = text.indexOf('"', from);
+          if (q < 0) {
+            field += text.slice(from);
+            i = n;
+            break;
+          }
+          if (text.charCodeAt(q + 1) === 34) {
+            field += text.slice(from, q + 1);
+            from = q + 2;
+            continue;
+          }
+          field += text.slice(from, q);
+          i = q + 1;
+          break;
+        }
+        const end = this.fieldEnd(i);
+        if (end > i) field += text.slice(i, end);
+        i = end;
+      } else {
+        const end = this.fieldEnd(i);
+        field = text.slice(i, end);
+        i = end;
+      }
+      row.push(field);
+      if (i >= n) {
+        this.at = n;
+        this.trailingNewline = false;
+        return row;
+      }
+      if (text.charCodeAt(i) === code) {
+        i++;
+        if (i >= n) {
+          // A delimiter last: one more, empty field.
+          row.push('');
+          this.at = n;
+          this.trailingNewline = false;
+          return row;
+        }
+        continue;
+      }
+      const ending = text.charCodeAt(i) === 10 ? '\n' : text.charCodeAt(i + 1) === 10 ? '\r\n' : '\r';
+      this.lineEnding ??= ending;
+      this.at = i + ending.length;
+      this.trailingNewline = this.at >= n;
+      return row;
     }
   }
-  if (!trailingNewline && (row.length > 0 || field !== '' || started)) {
-    endField();
-    rows.push(row);
+
+  /** Where an unquoted stretch starting at `i` ends: at the delimiter, a line ending or the end of the text. */
+  private fieldEnd(i: number): number {
+    const { text, code } = this;
+    const n = text.length;
+    while (i < n) {
+      const c = text.charCodeAt(i);
+      if (c === code || c === 10 || c === 13) return i;
+      i++;
+    }
+    return n;
   }
-  return { rows, lineEnding: firstEnding as Parsed['lineEnding'], trailingNewline };
 }
 
 // --- Layout of the grid as a table ---------------------------------------------------------------

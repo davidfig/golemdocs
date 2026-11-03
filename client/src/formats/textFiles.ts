@@ -56,7 +56,7 @@ export function encodeText(text: string, encoding: TextEncoding = 'utf-8', bom =
 export const LARGE_TEXT_BYTES = 8 * 1024 * 1024;
 
 /** Whether a file of this kind and size opens in the text editor rather than as a document: plain text always, and a table too big to be one (500,000 rows is no better than 500,000 paragraphs). */
-export const usesTextEngine = (kind: string, size: number): boolean => kind === 'txt' || ((kind === 'csv' || kind === 'tsv') && size >= LARGE_TEXT_BYTES);
+export const usesTextEngine = (kind: string, size: number): boolean => kind === 'txt' && size >= 0;
 
 /** The bytes of a text file as UTF-8, whatever it was in (UTF-16 and Windows-1252 files are converted; UTF-8 is used as it is, less its byte order mark). */
 export function toUtf8(bytes: Uint8Array): Uint8Array {

@@ -1,6 +1,6 @@
 # Plan: 50 MB text and log files
 
-**Status.** Done: the guard and threshold (files of 8 MB or more open in the large-text editor; text, CSV and TSV), line index,
+**Status.** Done: the guard and threshold (files of 8 MB or more open in the large-text editor; plain text only: CSV and TSV open in the spreadsheet grid at every size), line index,
 go to line, search, filter, level colouring, wrapped lines, format profile and chrome. Measured in a
 browser on a 51 MB, 500,000-line log: first lines on screen in about 100 ms, search 240 ms, page heap well under the 200 MB
 budget. **Editing is done too** (see *Editing, as built* below): a piece table under a live line index, a caret and

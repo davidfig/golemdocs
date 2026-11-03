@@ -37,7 +37,7 @@ When an upload is refused (409) and the other tab's upload isn't the reason, `up
 
 ## IndexedDB layout (`client/src/storage/local.ts`)
 
-Database `word`, version 8. Object stores:
+Database `word`, version 9. Object stores:
 
 | Store | Key -> value |
 | --- | --- |
@@ -50,6 +50,7 @@ Database `word`, version 8. Object stores:
 | `bases` | id -> `{ cloudUpdatedAt, bytes }`: the last version this copy and its cloud copy agreed on, for merging a conflict (documents under 2 MiB only; see "Merging a conflict") |
 | `folders` | the guest (signed-out) folder hierarchy |
 | `search` | per-document full-text index cache (`search/searchLibrary.ts`) |
+| `images` | id -> a document's memory image (a Blob): a workbook's cells as the spreadsheet editor holds them, so the next open maps them instead of reading the `.xlsx`. Used only while it was made from exactly the stored file (its SHA-256); per device, never uploaded. See [spreadsheets.md](../spreadsheets.md) |
 
 Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/shared/folder lists as last listed, for an instant dashboard; `sync.ts`), `golem.account` (last signed-in user, so offline still shows their documents; `auth.ts`), `golem.settingsSync` (settings baseline), `golemdocs.views` (per-document scroll, zoom, caret and selection, `viewMemory.ts`, capped at 200).
 

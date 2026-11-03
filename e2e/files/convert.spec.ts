@@ -20,6 +20,7 @@ test('Convert To lists every format in groups, with the current one disabled', a
     'EPUB Book (.epub)',
     'FictionBook (.fb2)',
     'Web Archive (.mhtml)',
+    'Excel Workbook (.xlsx)',
     'CSV (Comma-Separated) (.csv)',
     'TSV (Tab-Separated) (.tsv)',
     'LaTeX (.tex)',

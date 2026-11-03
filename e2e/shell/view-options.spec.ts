@@ -267,4 +267,17 @@ test.describe('Full Screen', () => {
     await leave(page);
     await expect(page.locator('.wm-toolbars')).toBeVisible();
   });
+
+  test('where the browser has no full screen (a phone), the app hides its own chrome and a button brings it back', async ({ app, page }) => {
+    await page.addInitScript(() => Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false }));
+    await app.blank();
+    await app.menu('View', 'Full Screen');
+    await expect(page.locator('body.wm-fullscreen')).toHaveCount(1);
+    await expect(page.locator('#chrome')).toBeHidden();
+    await expect(page.locator('.wm-toolbars')).toBeHidden();
+    await page.getByRole('button', { name: 'Leave Full Screen' }).click();
+    await expect(page.locator('body.wm-fullscreen')).toHaveCount(0);
+    await expect(page.locator('#chrome')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Leave Full Screen' })).toHaveCount(0);
+  });
 });

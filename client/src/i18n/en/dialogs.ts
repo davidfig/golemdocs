@@ -53,7 +53,17 @@ export const dialogs = {
   'dialogs.share.nobody': 'Not shared with anyone yet.',
   'dialogs.share.done': 'Done',
   'dialogs.share.peopleHeading': 'People',
-  'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors and viewers see changes live.',
+  'dialogs.share.publicHeading': 'Public link',
+  'dialogs.share.publicNote': 'Anyone with the link can read the document and download it, without signing in, and other websites can embed it. They see each saved version.',
+  'dialogs.share.publicToggle': 'Anyone with the link can view',
+  'dialogs.share.publicLinkLabel': 'Public link',
+  'dialogs.share.copyLink': 'Copy Link',
+  'dialogs.share.copyEmbed': 'Copy Embed Code',
+  'dialogs.share.resetLink': 'Reset Link',
+  'dialogs.share.resetNote': 'Reset Link makes a new address; the old one stops working.',
+  'dialogs.share.copied': 'Copied.',
+  'dialogs.share.embedTitle': '{name} on Golem Docs',
+  'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors see changes live; viewers get a read-only copy that catches up each time the document is saved.',
 
   // Sign in
   'dialogs.signIn.title': 'Sign in',

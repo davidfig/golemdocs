@@ -75,6 +75,8 @@ export interface RunStyle {
   fallbacks: { font: ResolvedFont; metrics: FaceMetrics }[];
   /** Fallbacks from this index on are CJK pages (only tried for CJK characters). */
   cjkStart: number;
+  /** Fallbacks from this index on are emoji pages (tried only for emoji, by sequence; see fonts/emoji.ts). */
+  emojiStart: number;
   size: number;
   color: number;
   /** Baseline shift in points, positive up (superscript, subscript, w:position). */
@@ -167,6 +169,8 @@ export function runStyle(ctx: LayoutContext, props: RunProperties): RunStyle {
   for (const cjk of ctx.fonts.cjkFonts(cjkLangOf(ctx, props), bold, italic)) {
     fallbacks.push({ font: cjk, metrics: ctx.fonts.metrics(cjk.face)! });
   }
+  const emojiStart = fallbacks.length;
+  for (const emoji of ctx.fonts.emojiFonts()) fallbacks.push({ font: emoji, metrics: ctx.fonts.metrics(emoji.face)! });
 
   let size = (props.size ?? 20) / 2;
   let rise = (props.position ?? 0) / 2;
@@ -195,6 +199,7 @@ export function runStyle(ctx: LayoutContext, props: RunProperties): RunStyle {
     metrics,
     fallbacks,
     cjkStart,
+    emojiStart,
     size,
     color: parseHexColor(props.color?.val) ?? autoColor,
     rise,

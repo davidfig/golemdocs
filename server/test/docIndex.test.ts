@@ -113,6 +113,21 @@ test('a file that is not a ZIP (a PDF, a picture) answers 422 without logging a 
   assert.deepEqual(logged, []);
 });
 
+test('a workbook answers 422 without logging a failure: the page makes its index from its active sheet as shown', async () => {
+  const xlsx = await writeZip([{ name: 'xl/workbook.xml', data: new TextEncoder().encode('<workbook/>') }]);
+  const r = await w.call(OWNER, 'POST', '/api/documents?name=Book.xlsx', { body: xlsx, type: 'application/octet-stream' });
+  const doc = (await r.json()) as any;
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void logged.push(args);
+  try {
+    assert.equal((await index(OWNER, doc.id)).status, 422);
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(logged, []);
+});
+
 test('deleting a document deletes its index too', async () => {
   const doc = await create('Zebra crossing');
   await index(OWNER, doc.id);

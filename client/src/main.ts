@@ -23,7 +23,7 @@ import {
   deleteOwnedBy,
   deleteSaved,
   getSaved,
-  getThumbnail,
+  getThumbnail, getImage, saveImage,
   listLocalFolders,
   listSaved,
   markSynced,
@@ -54,6 +54,7 @@ import { FormLayer } from './ui/formLayer.ts';
 import { PdfEditTools } from './ui/pdfEditTools.ts';
 import { PdfTextLayer } from './ui/pdfTextLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
+import { SelectionHandles, type HandleEnd } from './ui/selectionHandles.ts';
 import { PictureFrame } from './ui/pictureFrame.ts';
 import { showPopupMenu, type PopupItem } from './ui/popupMenu.ts';
 import { inCaseOf, synonymsOf } from './spelling/thesaurus.ts';
@@ -80,6 +81,7 @@ import { arrangePages, columnsToFill, nearestPage, type Bounds } from './documen
 import { LayoutClient } from './layout/layoutClient.ts';
 import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
 import type { TextRoom } from './textEditor/view.ts';
+import type { SheetRoom } from './sheet/sheetSync.ts';
 import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type WireCommand, type WordStats } from './layout/protocol.ts';
 import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from './webgl/text/gpuFace.ts';
@@ -126,6 +128,7 @@ import { askDropChoice } from './ui/dropChoice.ts';
 import { askDuplicate } from './ui/duplicateDialog.ts';
 import type { DocumentEngine } from './documentEngine.ts';
 import { TextEditor } from './textEditor/handle.ts';
+import { SheetEditor } from './sheet/handle.ts';
 import { showAdjustDialog, showBackgroundDialog, showPictureCanvasDialog, showResizeDialog } from './ui/pictureDialogs.ts';
 import { PictureLayersPanel } from './ui/pictureLayersPanel.ts';
 import { samplePicture } from './formats/imageSample.ts';
@@ -191,7 +194,7 @@ onScrollPastEndChange(() => {
   camera.scrollPastEnd = scrollPastEndOn();
   requestRender();
 });
-const renderer = new PageRenderer(gl);
+const renderer = new PageRenderer(gl, deskColor);
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 // The default font nearly every document uses: fetch its atlases now, not after the first layout.
 atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);
@@ -367,7 +370,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
   }
   if (source.kind === 'image') return kindFromName(source.name, 'png');
   if (source.kind === 'svg') return kindFromName(source.name, 'svg');
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' ? source.kind : 'docx';
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' || source.kind === 'xlsx' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -393,7 +396,7 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
+type OpenOptions = { delimited?: 'csv' | 'tsv'; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -414,7 +417,9 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   viewRestored = false;
   cropLayer.cancel();
   leaveTextRoom();
+  if (!options.keepRoom) leaveSheetRoom();
   textView.close();
+  sheetView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
   if (!options.pictureEdit) {
@@ -495,6 +500,29 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   // Plain text is edited in the text editor, not as a document (`asDocument`: for the things only a document does, such as printing).
   if (source.kind === 'txt' && !options.asDocument) {
     void openLarge(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
+  // A workbook is edited in the spreadsheet editor (`asDocument`: its active sheet as a table, for printing and converting).
+  if (source.kind === 'xlsx' && !options.asDocument) {
+    void openSheet(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
+  // A CSV or TSV saved as a document, as they all were before they opened in the grid (its name says what it is edited as):
+  // its table becomes the file, opened in the grid and saved as that from now on.
+  if (source.kind === 'wdoc' && /\.(csv|tsv|tab)$/i.test(source.name) && !options.asDocument && !options.wdocChecked) {
+    const latest = openTicket();
+    void import('./formats/wdocDelimited.ts')
+      .then(({ delimitedFromWdoc }) => delimitedFromWdoc(new Uint8Array(source.bytes)))
+      .then((file) => {
+        if (!latest()) return;
+        if (file) void openSheet(source.name, file.bytes, { ...options, delimited: file.kind });
+        else open(source, { ...options, wdocChecked: true });
+      });
+    return;
+  }
+  // CSV and TSV files too, at every size (saved back as they were: see sheet/delimited.ts).
+  if ((source.kind === 'csv' || source.kind === 'tsv') && !options.asDocument) {
+    void openSheet(source.name, new Uint8Array(source.bytes), { ...options, delimited: source.kind });
     return;
   }
   openRequests++;
@@ -649,7 +677,8 @@ async function releaseRoom(doc: OpenDocument): Promise<void> {
   try {
     await saveAndSend();
   } finally {
-    if (current === doc) worker.roomReleased();
+    if (current === doc && sheetRoomHandle) sheetRoomHandle.client.released();
+    else if (current === doc) worker.roomReleased();
   }
 }
 
@@ -745,7 +774,8 @@ async function keepWatchedEdits(doc: OpenDocument): Promise<void> {
 /** Asks to hold the open document someone else is editing (it is theirs to save first). */
 function takeOverEditing(): boolean {
   if (!current.room?.watching) return false;
-  worker.takeOver();
+  if (sheetRoomHandle) sheetRoomHandle.client.takeOver();
+  else worker.takeOver();
   setStatus(t('room.takingOver'));
   return true;
 }
@@ -812,6 +842,77 @@ function roomStateChanged(state: RoomState): void {
 }
 
 let textRoomHandle: TextRoom | null = null;
+let sheetRoomHandle: SheetRoom | null = null;
+/** The open workbook the room is for: a watcher opens it again after each save (a new open document, the same room). */
+let sheetRoomDoc: OpenDocument | null = null;
+
+function leaveSheetRoom(): void {
+  sheetRoomHandle?.client.leave();
+  sheetRoomHandle = null;
+  sheetRoomDoc = null;
+}
+
+/** A workbook in the account has a room of its own, watched (see sheet/sheetSync.ts): one session edits it, the others look. */
+async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> {
+  const room = networkRoom(cloudId);
+  if (!room || doc.roomRequested || current !== doc || !sheetView.active) return;
+  doc.roomRequested = true;
+  // The room client is loaded with the first workbook that has a room.
+  const { sheetRoom } = await import('./sheet/sheetSync.ts');
+  if (current !== doc || !sheetView.active) {
+    doc.roomRequested = false;
+    return;
+  }
+  sheetRoomDoc = doc;
+  /** The room's workbook, if it is the one open. */
+  const open = (): OpenDocument | null => (sheetRoomDoc && current === sheetRoomDoc ? sheetRoomDoc : null);
+  const handle = sheetRoom({
+    docId: cloudId,
+    client: crypto.randomUUID(),
+    name: room.user,
+    color: room.color,
+    serialize: async () => (await sheetView.save())?.file ?? new Uint8Array(0),
+    changed: (state) => {
+      const d = open();
+      if (!d) return;
+      // Watching (someone else holds it), or only allowed to look: read-only.
+      sheetView.readOnly = state.role === 'viewer' || state.watching || state.catchingUp || d.shared?.role === 'viewer';
+      roomStateChanged(state);
+    },
+    upload: async (bytes) => {
+      await saveDocument(cloudId, bytes);
+    },
+    lost: () => {
+      const d = open();
+      if (sheetRoomHandle === handle) leaveSheetRoom();
+      if (d) roomGone(d);
+    },
+    saved: (updatedAt) => {
+      const d = open();
+      if (!d) return;
+      if (d.room?.watching || d.room?.catchingUp) void refreshWatched(d, updatedAt);
+      else void accountSaved(d, updatedAt);
+    },
+    release: () => {
+      const d = open();
+      if (d) void releaseRoom(d);
+    },
+    flush: () => {
+      if (open()) void saveAndSend();
+    },
+  });
+  sheetRoomHandle = handle;
+  try {
+    const start = await handle.client.join();
+    if (!open() || sheetRoomHandle !== handle) return handle.client.leave();
+    handle.client.ready(start);
+  } catch {
+    // No room to be had: the workbook is edited alone, and saved as usual.
+    handle.client.leave();
+    if (sheetRoomHandle === handle) sheetRoomHandle = null;
+    doc.roomRequested = false;
+  }
+}
 
 function leaveTextRoom(): void {
   textRoomHandle?.client.leave();
@@ -1009,6 +1110,8 @@ let keepCamera = false;
 
 function placeCamera(): void {
   cameraPlaced = true;
+  // A workbook places its own camera when it opens (openSheet): pages left from the last document, or a resize, must not move it.
+  if (sheetView.active) return;
   if (keepCamera) {
     keepCamera = false;
     viewRestored = true;
@@ -1216,7 +1319,8 @@ async function uploadShared(): Promise<void> {
   try {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (await worker.save());
+    const sheetSave = sheetView.save();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).file : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -1355,8 +1459,8 @@ async function refreshLibrary(): Promise<void> {
 }
 
 /** Where to open a listed document from: the account only when this browser's copy is missing or older. */
-/** Waiting for a document other than `before` to finish opening (its first layout done, or failed). */
-const readyWaiters: { before: OpenDocument; resolve: () => void }[] = [];
+/** Waiting for a document other than `before` to finish opening (its first layout done, or failed); `before` null: whichever finishes next. */
+const readyWaiters: { before: OpenDocument | null; resolve: () => void }[] = [];
 
 function documentReady(): void {
   for (const waiter of readyWaiters.filter((w) => w.before !== current)) {
@@ -1365,9 +1469,8 @@ function documentReady(): void {
   }
 }
 
-/** Resolves once a document other than the one open now has opened (or `ms` have passed, for one that never does). */
-function nextDocumentReady(ms = 30_000): Promise<void> {
-  const before = current;
+/** Resolves once a document other than `before` (the one open now) has opened, or with `before` null the next to finish (or `ms` have passed, for one that never does). */
+function nextDocumentReady(ms = 30_000, before: OpenDocument | null = current): Promise<void> {
   return new Promise((resolve) => {
     const waiter = { before, resolve };
     readyWaiters.push(waiter);
@@ -1455,6 +1558,7 @@ function flushUploads(): Promise<void> {
 function joinRoomOf(doc: OpenDocument, cloudId: string): void {
   if (current !== doc || doc.roomRequested) return;
   if (textView.active) return void joinTextRoom(doc, cloudId);
+  if (sheetView.active) return void joinSheetRoom(doc, cloudId);
   const room = networkRoom(cloudId);
   if (!room) return;
   doc.roomRequested = true;
@@ -1617,7 +1721,7 @@ function renameDocument(input: string): string | null {
 }
 
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
-const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
+const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
@@ -1804,6 +1908,12 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
  * copy). Never fails the save: without a thumbnail the dashboard just shows a blank page.
  */
 async function makeThumbnail(info: SavedInfo): Promise<void> {
+  // A workbook's is the top left of its active sheet (see sheet/thumbnail.ts).
+  if (sheetView.active) {
+    const blob = await sheetView.thumbnail().catch(() => null);
+    if (blob) await saveThumbnail(info.id, blob, info.updatedAt).catch(() => undefined);
+    return;
+  }
   const page = pages[0];
   const text = textView.active;
   if (!text && (!page || !gl)) return;
@@ -1847,7 +1957,8 @@ function saveInBrowser(): Promise<string | null> {
   const name = fileName();
   // Asked for now, while the worker (or the large-text editor) still has this document.
   const large = textView.active;
-  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : worker.save();
+  const sheetSave = sheetView.save();
+  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.file) : worker.save();
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -1859,6 +1970,13 @@ function saveInBrowser(): Promise<string | null> {
       const linksAfter = was && was.name !== name ? keepLinks({ kind: 'rename', key: was.key, name }) : null;
       const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
       linksAfter?.();
+      // The workbook's memory image goes with the file it was made from.
+      if (sheetSave)
+        void sheetSave
+          .then(async (saved) => {
+            if (saved.image.length) await saveImage(info.id, saved.image);
+          })
+          .catch(() => undefined);
       doc.localId = info.id;
       rememberIgnored(doc);
       if (doc === current) {
@@ -2297,6 +2415,9 @@ async function openShared(id: string): Promise<void> {
       pendingNotice = t('app.sharedGone');
       return;
     }
+    // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts), at the share's own address
+    // rather than the document's id. It takes this page's place in the history, so Back goes to where they chose it from.
+    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view/?s=${encodeURIComponent(doc.viewToken)}`);
     setStatus(t('app.openingShared'));
     worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
@@ -2372,7 +2493,8 @@ async function download(): Promise<void> {
     // Named now: another document may be open by the time the bytes come back.
     const name = large ? textView.fileName : fileName();
     const type = large ? 'text/plain' : FORMATS[current.kind].mime;
-    const bytes = large ?? (await worker.convert(current.kind as Format));
+    const sheetSave = sheetView.save();
+    const bytes = large ?? (sheetSave ? (await sheetSave).file : await worker.convert(current.kind as Format));
     if (await saveFile(name, bytes, type)) setStatus(t('app.downloaded', { name }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
@@ -2384,8 +2506,10 @@ async function download(): Promise<void> {
  * Download), then printed from a hidden frame, or opened in a new tab to look at first.
  */
 async function print(preview: boolean): Promise<void> {
-  if (!(await openAsDocument())) return;
-  const bytes = await worker.convert('pdf');
+  // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
+  const sheetPdf = sheetView.active ? sheetView.printPdf() : null;
+  if (!sheetPdf && !(await openAsDocument())) return;
+  const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
     if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));
@@ -2429,7 +2553,9 @@ function switchedNotice(to: Format): string {
  * the original pages are kept, and shown again as PDF (with a warning once the text is edited).
  */
 async function convertTo(to: DocumentKind): Promise<void> {
-  if (!(await openAsDocument())) return;
+  // Between the grid's own formats (Excel, CSV, TSV) a workbook stays in the grid: the spreadsheet editor writes it as the other.
+  const inGrid = sheetView.active && (to === 'xlsx' || to === 'csv' || to === 'tsv') ? sheetView.saveAs(to) : null;
+  if (!inGrid && !(await openAsDocument())) return;
   const from = current.kind;
   if (to === from) return;
   // A drawing's pictures are made from the drawing itself (at full resolution), as a document's pages are drawn into one.
@@ -2448,7 +2574,9 @@ async function convertTo(to: DocumentKind): Promise<void> {
   const doc = current;
   doc.unsavedSince = 0;
   const name = stem(current.name) + FORMATS[to].extensions[0];
-  const bytes = worker.save(to);
+  // A document becomes a workbook proper (its first table, a sheet), to edit in the grid; other formats keep the document in the app's own file.
+  const toWorkbook = !inGrid && to === 'xlsx';
+  const bytes = inGrid ?? (toWorkbook ? worker.convert('xlsx') : worker.save(to));
   bytes.catch(() => {});
   const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner: account?.id }));
   saving = done.catch(() => null);
@@ -2470,7 +2598,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName: current.name, kind: current.kind });
-  pendingNotice = switchedNotice(to);
+  pendingNotice = toWorkbook ? t('app.switchedXlsx') : switchedNotice(to);
 }
 
 /**
@@ -2825,6 +2953,54 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
   if (cloudId) void accountKnown.then(() => joinTextRoom(opening, cloudId));
 }
 
+// --- Workbooks -------------------------------------------------------------------------------------
+// A workbook opens in the spreadsheet editor (docs/spreadsheets.md): its cells live in the editor's own worker and are drawn on the
+// canvas by it. The memory image kept with a saved workbook (storage/local.ts) opens it without reading the file again.
+
+/** The document a memory image that arrives belongs to (the workbook read last; null for one never saved here). */
+let sheetImageFor: OpenDocument | null = null;
+
+async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions = {}): Promise<void> {
+  const latest = openTicket();
+  let image: Uint8Array | null = null;
+  try {
+    await sheetView.load();
+    if (options.localId) image = await getImage(options.localId).catch(() => null);
+  } catch (e) {
+    return reportError(t('app.openFailed', { message: (e as Error).message }));
+  }
+  if (!latest()) return;
+  openRequests++;
+  // Opened again in place of itself (watching, it was saved): it keeps its room.
+  const keptRoom = options.keepRoom && sheetRoomHandle ? current.room : null;
+  const { opening } = beginOpen({ kind: options.delimited ?? 'xlsx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared, keepRoom: keptRoom !== null });
+  worker.close();
+  sheetImageFor = opening;
+  // A workbook opens at its first cell, at 100%: not where the last document was.
+  camera.zoom = Math.min(Math.max(1, camera.minZoom), camera.maxZoom);
+  camera.x = 0;
+  camera.y = 0;
+  sheetView.open(name, bytes, image, options.delimited);
+  sheetView.readOnly = options.shared?.role === 'viewer';
+  if (keptRoom) {
+    opening.room = keptRoom;
+    opening.roomRequested = true;
+    sheetRoomDoc = opening;
+    sheetRoomHandle?.client.refreshed(options.version);
+  } else {
+    // In the account: its room, once who is signed in is known.
+    const cloudId = options.cloudId ?? options.shared?.id;
+    if (cloudId) void accountKnown.then(() => joinSheetRoom(opening, cloudId));
+  }
+  loaded = true;
+  documentReady();
+  loadingScreen.hide();
+  setStatus(t('app.ready', { name }));
+  focusInput();
+  // A workbook that came from somewhere is kept in this browser at once, as a document is.
+  if (!options.localId && !options.shared) documentEdited();
+}
+
 /** The most of a big file that opens as an ordinary document: past this the document model costs too much (see docs/text-files.md). */
 const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
 
@@ -2833,6 +3009,17 @@ const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
  * of the file (it is the same file: the editor shows it again when it is opened next). True when there is a document to go on with.
  */
 async function openAsDocument(): Promise<boolean> {
+  if (sheetView.active) {
+    const saved = await sheetView.save();
+    if (!saved) return false;
+    const before = current;
+    await saveNow();
+    const ready = nextDocumentReady();
+    const kind = before.kind === 'csv' || before.kind === 'tsv' ? before.kind : 'xlsx';
+    open({ kind, name: before.name, bytes: saved.file.slice().buffer }, { asDocument: true, localId: before.localId ?? undefined });
+    await ready;
+    return true;
+  }
   if (!textView.active) return true;
   const bytes = textView.snapshot();
   if (!bytes || bytes.length > MAX_SELECTION_BYTES) {
@@ -3326,6 +3513,7 @@ function selectedHtml(): string | undefined {
 
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
+  selectionHandles.update(update.rects, byFinger && !!update.at && !textView.active);
   commentsPanel.update(update.comments, update.activeComment);
   selectionFormat = update.format;
   comments = update.comments.filter((c) => !c.parentId);
@@ -3444,6 +3632,7 @@ function focusByTap(): void {
 function focusInput(): void {
   if (!focusAllowed || current.none) return;
   if (textView.active) return textEngine.focus();
+  if (sheetView.active) return sheetEngine.focus();
   input.focus({ preventScroll: true });
 }
 
@@ -3573,6 +3762,11 @@ function render(): void {
     camera.clampToStart(area, canvas.clientWidth, canvas.clientHeight);
     const frame = textView.draw(pagesDark(), caretOn && document.hasFocus());
     lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
+  } else if (sheetView.active) {
+    // A workbook: drawn by the spreadsheet editor, from the top-left of its cells.
+    camera.clampToStart(sheetView.bounds(), canvas.clientWidth, canvas.clientHeight);
+    sheetView.draw(pagesDark());
+    lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else {
     if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
     if (renderer.flat) camera.x = bounds.x;
@@ -3591,16 +3785,16 @@ function render(): void {
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
     kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
-    hasSelection: textView.active ? textEngine.hasSelection : selection.text.length > 0,
+    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : selection.text.length > 0,
     zoom: camera.zoom,
-    pagesPanel: pagesOpen() && !textView.active && !reflowing(),
+    pagesPanel: pagesOpen() && !textView.active && !sheetView.active && !reflowing(),
     filesPanel: filesOpen,
     footer: footerOn,
     toolbars: toolbarsOn,
     rulerVisible: rulerOn,
-    format: selectionFormat,
-    canUndo: textView.active ? textEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: textView.active ? textEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    format: sheetView.active ? sheetView.formatState() : selectionFormat,
+    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
     formMode: annotating ? formMode : null,
     painting,
     draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
@@ -3613,6 +3807,7 @@ function render(): void {
   pdfTextLayer.position();
   pdfTools.position();
   pointerLayer.position();
+  selectionHandles.position();
   pictureFrame.position();
   commentsPanel.position();
   syncPagesPanel();
@@ -3705,14 +3900,20 @@ function pageAt(cssX: number, cssY: number): { page: GpuPage; x: number; y: numb
   return best && { page: best, x: point.x - best.x, y: point.y - best.y };
 }
 
-/** Clicks in quick succession at one spot (pointer events don't count them). */
+/** Clicks in quick succession at one spot (pointer events don't count them). A finger can't come down on the same spot twice, so taps count from further apart. */
 const MULTI_CLICK_MS = 500;
 const MULTI_CLICK_PX = 4;
+const MULTI_TAP_PX = 24;
 let lastClick = { time: 0, x: 0, y: 0, count: 0 };
 
+/** Whether a press would be the next click of the clicks before it. */
+function followsClick(e: Press): boolean {
+  const slop = e.touch ? MULTI_TAP_PX : MULTI_CLICK_PX;
+  return Math.abs(e.clientX - lastClick.x) <= slop && Math.abs(e.clientY - lastClick.y) <= slop && e.timeStamp - lastClick.time < MULTI_CLICK_MS;
+}
+
 function clickCount(e: Press): number {
-  const near = Math.abs(e.clientX - lastClick.x) <= MULTI_CLICK_PX && Math.abs(e.clientY - lastClick.y) <= MULTI_CLICK_PX;
-  const count = near && e.timeStamp - lastClick.time < MULTI_CLICK_MS ? lastClick.count + 1 : 1;
+  const count = followsClick(e) ? lastClick.count + 1 : 1;
   lastClick = { time: e.timeStamp, x: e.clientX, y: e.clientY, count };
   return count;
 }
@@ -3722,15 +3923,22 @@ let selecting = false;
 /** Latest drag position, sent once per frame. */
 let pendingDrag: { x: number; y: number } | null = null;
 
-/** The parts of a pointer event a press needs, so a touch tap can replay the press it held back. */
-type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 'timeStamp' | 'shiftKey' | 'metaKey' | 'ctrlKey'>;
+/**
+ * The parts of a pointer event a press needs, so a touch tap can replay the press it held back. A finger's press (`touch`) puts
+ * the caret at the end of the word it lands in; `word` selects that word (a long press).
+ */
+type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 'timeStamp' | 'shiftKey' | 'metaKey' | 'ctrlKey'> & { touch?: boolean; word?: boolean };
 
 function press(e: Press): void {
   focusByTap();
   // Putting the caret down is what shows the phone's typing bar (see Chrome.trackTyping).
   document.dispatchEvent(new Event('wm-caret'));
   if (textView.active) {
-    textView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e));
+    textView.press(e.offsetX, e.offsetY, e.shiftKey, e.word ? 2 : clickCount(e));
+    return;
+  }
+  if (sheetView.active) {
+    sheetView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e), e.metaKey || e.ctrlKey);
     return;
   }
   const hit = pageAt(e.offsetX, e.offsetY);
@@ -3755,7 +3963,7 @@ function press(e: Press): void {
     waitingDrag = null;
     return;
   }
-  const clicks = clickCount(e);
+  const clicks = e.word ? 1 : clickCount(e);
   // A double click on a vector drawing in the text edits the drawing.
   if (clicks === 2 && !embeddedDrawing && FORMATS[current.kind].editable && !isDrawing()) {
     const image = hit.page.images.find((i) => i.svg && hit.x >= i.x && hit.x <= i.x + i.width && hit.y >= i.y && hit.y <= i.y + i.height);
@@ -3767,9 +3975,10 @@ function press(e: Press): void {
     if (selectedPicture && !selectedPicture.svg && onSelectedPicture(hit.page.id, hit.x, hit.y)) return void editPicture(selectedPicture);
     if (awaitingSelection) pendingPictureEdit = { page: hit.page.id, x: hit.x, y: hit.y };
   }
-  const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
+  const unit = e.word || clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   if (clicks === 2) editMathUntil = performance.now() + 1000;
-  send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
+  const extend = e.shiftKey && unit === 'character';
+  send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend, unit, snap: e.touch && unit === 'character' && !extend });
   awaitingSelection = true;
   selecting = unit === 'character';
   // Whether this press landed on a picture is known once the worker answers: until then a drag waits.
@@ -3833,8 +4042,27 @@ function dropPicture(e: PointerEvent): void {
   send({ kind: 'moveDrawing', page: hit.page.id, x, y });
 }
 
-// Touch: one finger drags the page, two pinch and pan it, and a tap (a press that never moved) puts the caret down.
+// Touch: one finger drags the page, two pinch and pan it, and a tap (a press that never moved) puts the caret down. A long
+// press selects the word under the finger, as does a double tap; either way the finger, still down, then drags the selection.
 const TOUCH_SLOP_PX = 8;
+const LONG_PRESS_MS = 450;
+let longPressTimer = 0;
+/** The finger down is selecting text: moving it extends the selection instead of panning. */
+let touchSelecting = false;
+/** The last selection was made with a finger, so its ends get handles. */
+let byFinger = false;
+/**
+ * A handle the finger took: how far the text at that end is from the finger (CSS pixels), and, until the finger first moves,
+ * the other end, which the selection is set to start from then. A finger let go without moving was a tap after all.
+ */
+let grip: { dx: number; dy: number; anchor: [number, number] | null; tap: Press } | null = null;
+/** Where the selecting finger is on the canvas (CSS pixels), for scrolling when it is near the top or bottom; null until it first moves (a long press near an edge doesn't scroll). */
+let touchPoint: { x: number; y: number } | null = null;
+let edgeFrame = 0;
+/** Within this far of the top or bottom of the view (CSS pixels), a selecting finger scrolls the document. */
+const EDGE_PX = 48;
+/** The fastest that scrolls, at the very edge (CSS pixels per frame). */
+const EDGE_SPEED = 14;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
 /** Two or more fingers were down in this gesture: until every finger is up, nothing in it is a tap. */
@@ -3883,12 +4111,75 @@ function touchDown(e: PointerEvent): void {
   }
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (touches.size > 1) touchMulti = true;
+  clearTimeout(longPressTimer);
+  if (touchSelecting) return;
   if (touches.size === 1 && !touchMulti) {
-    touchTap = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false };
+    const tap: Press = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false, touch: true };
+    const handle = selectionHandles.hit(e.offsetX, e.offsetY);
+    if (handle) return grabHandle(handle, tap);
+    // The second tap of a double tap selects the word at once, so the finger can go on to drag the selection.
+    if (lastClick.count > 0 && followsClick(tap)) return startTouchSelect(tap);
+    touchTap = tap;
+    longPressTimer = window.setTimeout(() => {
+      if (touchTap === tap && touches.size === 1) startTouchSelect({ ...tap, word: true });
+    }, LONG_PRESS_MS);
   } else {
     touchTap = null;
     pinch = touches.size === 2 ? pinchState() : null;
   }
+}
+
+function startTouchSelect(at: Press): void {
+  touchTap = null;
+  press(at);
+  beginTouchSelect();
+}
+
+function beginTouchSelect(): void {
+  touchSelecting = true;
+  selecting = true;
+  touchPoint = null;
+  cancelAnimationFrame(edgeFrame);
+  edgeFrame = requestAnimationFrame(edgeScroll);
+}
+
+/** A finger took a selection handle: dragging it moves that end, the other staying put. */
+function grabHandle(which: HandleEnd, tap: Press): void {
+  const { offsetX: x, offsetY: y } = tap;
+  const at = selection.at;
+  const point = selectionHandles.point(which);
+  if (!at || !point) return;
+  const anchorFirst = (at.anchor[0] - at.focus[0] || at.anchor[1] - at.focus[1]) <= 0;
+  const [first, last] = anchorFirst ? [at.anchor, at.focus] : [at.focus, at.anchor];
+  touchTap = null;
+  grip = { dx: point.x - x, dy: point.y - y, anchor: which === 'end' ? first : last, tap };
+  beginTouchSelect();
+}
+
+/** The selection's end follows the finger. */
+function dragTouchSelection(): void {
+  if (!touchPoint || textView.active) return;
+  if (grip?.anchor) {
+    const [paragraph, offset] = grip.anchor;
+    grip.anchor = null;
+    send({ kind: 'select', paragraph, from: offset, to: offset, quiet: true });
+  }
+  dragSelection(touchPoint.x + (grip?.dx ?? 0), touchPoint.y + (grip?.dy ?? 0));
+}
+
+/** While a finger selects near the top or bottom of the view, the document scrolls, faster the nearer the edge, and the selection goes with it. */
+function edgeScroll(): void {
+  if (!touchSelecting) return;
+  edgeFrame = requestAnimationFrame(edgeScroll);
+  if (!touchPoint || grip?.anchor) return;
+  const height = canvas.clientHeight;
+  const y = touchPoint.y;
+  const speed = y < EDGE_PX ? -(EDGE_PX - Math.max(y, 0)) / EDGE_PX : y > height - EDGE_PX ? (Math.min(y, height) - (height - EDGE_PX)) / EDGE_PX : 0;
+  if (!speed) return;
+  userMoved = true;
+  camera.panBy(0, speed * EDGE_SPEED);
+  requestRender();
+  dragTouchSelection();
 }
 
 function touchMove(e: PointerEvent): void {
@@ -3898,6 +4189,15 @@ function touchMove(e: PointerEvent): void {
   const dy = e.clientY - last.y;
   if (touchTap && Math.hypot(e.clientX - touchTap.clientX, e.clientY - touchTap.clientY) > TOUCH_SLOP_PX) touchTap = null;
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchSelecting) {
+    // A handle only moves once the finger has: a finger's tremble on taking it is not a drag.
+    const still = grip?.anchor && Math.hypot(e.clientX - grip.tap.clientX, e.clientY - grip.tap.clientY) <= TOUCH_SLOP_PX;
+    if (e.isPrimary && !still) {
+      touchPoint = { x: e.offsetX, y: e.offsetY };
+      dragTouchSelection();
+    }
+    return;
+  }
   if (touchTap) return;
   userMoved = true;
   const rect = canvas.getBoundingClientRect();
@@ -3930,6 +4230,20 @@ canvas.addEventListener(
 
 function touchUp(e: PointerEvent): void {
   touches.delete(e.pointerId);
+  clearTimeout(longPressTimer);
+  if (touchSelecting) {
+    if (touches.size > 0) return;
+    touchSelecting = false;
+    touchMulti = false;
+    const unmoved = grip?.anchor ? grip.tap : null;
+    grip = null;
+    touchPoint = null;
+    cancelAnimationFrame(edgeFrame);
+    tappedAt = performance.now();
+    endPointer();
+    if (unmoved && e.type === 'pointerup') press(unmoved);
+    return;
+  }
   pinch = touches.size === 2 ? pinchState() : null;
   if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
   if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') {
@@ -3942,6 +4256,7 @@ function touchUp(e: PointerEvent): void {
 
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
+  byFinger = e.pointerType === 'touch';
   if (e.pointerType === 'touch') {
     e.preventDefault();
     touchDown(e);
@@ -4091,6 +4406,17 @@ canvas.addEventListener('pointermove', (e) => {
   overPicture = !!over && onSelectedPicture(over.page.id, over.x, over.y) && !pressed?.grab;
   if (overPicture !== overBefore) updateCursor();
   linkKeyChanged(e);
+  if (sheetView.active) {
+    // A workbook: a drag selects or resizes (or pans, with the middle button); the pointer shows what a press would do.
+    if (pan) {
+      userMoved = true;
+      camera.panBy(pan.x - e.clientX, pan.y - e.clientY);
+      pan = { x: e.clientX, y: e.clientY };
+      requestRender();
+    } else if (e.buttons) sheetView.drag(e.offsetX, e.offsetY);
+    else canvas.style.cursor = sheetView.cursorAt(e.offsetX, e.offsetY);
+    return;
+  }
   if (textView.active) {
     // A big text file: a drag selects (or pans, with the middle button), and there are no links to hover.
     if (pan) {
@@ -4116,6 +4442,11 @@ canvas.addEventListener('pointermove', (e) => {
     waitingDrag = { x: e.offsetX, y: e.offsetY };
     return;
   }
+  dragSelection(e.offsetX, e.offsetY);
+});
+
+/** The selection's moving end follows a drag to this canvas point (once a frame). */
+function dragSelection(x: number, y: number): void {
   if (!pendingDrag) {
     requestAnimationFrame(() => {
       const drag = pendingDrag;
@@ -4124,13 +4455,14 @@ canvas.addEventListener('pointermove', (e) => {
       if (hit && selecting) send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: true });
     });
   }
-  pendingDrag = { x: e.offsetX, y: e.offsetY };
-});
+  pendingDrag = { x, y };
+}
 
 const endPointer = () => {
   pan = null;
   selecting = false;
   textView.release();
+  sheetView.release();
 };
 canvas.addEventListener('pointerup', (e) => {
   if (e.pointerType === 'touch') return touchUp(e);
@@ -4432,7 +4764,7 @@ const chromeHost = createChromeHost({
   canvas,
   camera,
   pages: () => pages,
-  bounds: () => (textView.active ? textEngine.bounds() : bounds),
+  bounds: () => (textView.active ? textEngine.bounds() : sheetView.active ? sheetEngine.bounds() : bounds),
   open: (source) => {
     setUrl(new URLSearchParams(), true);
     open(source, { store: true });
@@ -4446,7 +4778,7 @@ const chromeHost = createChromeHost({
   importPicked: (files) => importDropped(pickedFolder(files)),
   print,
   showSearchAll: () => searchPanel.show(),
-  showFind: (tab) => (textView.active ? textEngine.find(tab) : findDialog.show(tab)),
+  showFind: (tab) => (textView.active ? textEngine.find(tab) : sheetView.active ? sheetEngine.find(tab) : findDialog.show(tab)),
   showSpelling: () => spellDialog.open(),
   showThesaurus: () => void thesaurusDialog.open(),
   showWordCount: () => wordCountDialog.open(),
@@ -4477,6 +4809,7 @@ const chromeHost = createChromeHost({
   },
   showUpdates: () => updateDialog.open(),
   showPageSetup: () => {
+    if (sheetView.active) return sheetView.pageSetup();
     void showPageSetupDialog(sectionPage ?? { width: 12240, height: 15840, landscape: false, top: 1440, bottom: 1440, left: 1440, right: 1440, gutter: 0, header: 720, footer: 720 }).then((choice) => {
       if (choice) send({ kind: 'setPage', ...choice });
       focusInput();
@@ -4530,7 +4863,8 @@ const chromeHost = createChromeHost({
   convert: convertTo,
   documentReady: nextDocumentReady,
   imageAction: pictureAction,
-  engine: () => (textView.active ? textEngine : null),
+  sheetAction: (op) => sheetView.sheetOp(op),
+  engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : null),
   openSelection,
   openLarge,
   drawStyle: (change) => setDrawStyle(change),
@@ -4724,6 +5058,9 @@ async function vaultChanged(touched: string[]): Promise<void> {
  * 'typed' when it was edited here meanwhile (those edits win, and nothing was put in).
  */
 async function refreshFromStore(doc: OpenDocument): Promise<boolean | 'typed'> {
+  // Still opening (a vault sync or the account's save arriving at launch): waited for, or the document would be opened all over again.
+  if (!loaded && doc === current) await nextDocumentReady(30_000, null);
+  if (current !== doc) return true;
   if (!doc.localId || !loaded || textView.active || annotating || isPicture() || isDrawing() || embeddedDrawing || grid) return false;
   const saved = await getSaved(doc.localId).catch(() => null);
   // Renamed too: opened again, so everything that shows its name has the new one.
@@ -4955,6 +5292,11 @@ window.addEventListener('keydown', spellHoverStop, true);
 canvas.addEventListener('contextmenu', (e) => {
   // The menu takes the pointer: a press that was under way is over, and the editor keeps the keyboard.
   endPointer();
+  if (sheetView.active) {
+    e.preventDefault();
+    sheetView.contextMenu(e.clientX, e.clientY, e.offsetX, e.offsetY);
+    return;
+  }
   if (textView.active) {
     // A plain text file: the same menu, from the text editor's own marks.
     if (!spellDialog.checkingLive) return;
@@ -5119,6 +5461,8 @@ const searchPanel = new SearchPanel({
   focusEditor: focusInput,
 });
 
+// The handles at the ends of a selection made with a finger (see ui/selectionHandles.ts).
+const selectionHandles = new SelectionHandles(document.getElementById('viewport')!, { camera, page: (id) => pagesById.get(id), order: (id) => pages.indexOf(pagesById.get(id)!) });
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
 // The frame around the picture selected in the text (see ui/pictureFrame.ts).
@@ -5193,6 +5537,63 @@ Object.assign(window, {
   },
 });
 textView.onState = () => requestRender();
+
+const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport')!, {
+  camera,
+  gl: gl!,
+  atlases,
+  fontBase: FONT_BASE,
+  locale: getLocale,
+  render: () => requestRender(),
+  viewKey: (e) => viewKey(e),
+  notify: (message) => reportError(message),
+  appKey: () => false,
+  author: () => commentAuthor(),
+});
+/** The spreadsheet editor as the chrome sees it (see documentEngine.ts). */
+const sheetEngine: DocumentEngine = {
+  get canUndo() {
+    return sheetView.canUndo;
+  },
+  get canRedo() {
+    return sheetView.canRedo;
+  },
+  get hasSelection() {
+    return sheetView.hasSelection;
+  },
+  snapshot: () => null,
+  bounds: () => sheetView.bounds(),
+  undo: () => sheetView.undo(),
+  redo: () => sheetView.redo(),
+  selectAll: () => sheetView.selectAll(),
+  insert: (text) => sheetView.insert(text),
+  copy: () => sheetView.copy(),
+  cut: () => sheetView.cut(),
+  paste: () => sheetView.paste(),
+  find: (tab) => sheetView.find(tab === 'replace'),
+  focus: () => sheetView.focus(),
+  format: (action) => sheetView.formatAction(action),
+};
+sheetView.onEdit = () => {
+  documentEdited();
+  requestRender();
+};
+sheetView.onState = () => requestRender();
+sheetView.onImage = (image) => {
+  // The image of the file just read is kept with the saved copy it came from, so the next open maps it.
+  const doc = sheetImageFor;
+  if (doc && doc === current && doc.localId) void saveImage(doc.localId, image).catch(() => undefined);
+};
+// What the spreadsheet editor shows, for the end-to-end tests (it is drawn by the GPU, so the page has no cells to read).
+Object.assign(window, {
+  sheetEditor: {
+    state: () => sheetView.debugState(),
+    pointOf: (row: number, col: number) => sheetView.pointOf(row, col),
+    cell: (row: number, col: number) => sheetView.cell(row, col),
+    screenOf: (x: number, y: number) => sheetView.screenOf(x, y),
+    columnEdge: (col: number) => sheetView.columnEdge(col),
+  },
+});
 // The vector editor (see ui/vectorSession.ts): a chunk of its own, fetched when the first drawing is opened.
 let vector: VectorSession | null = null;
 let vectorLoading: Promise<VectorSession> | null = null;
@@ -5569,6 +5970,13 @@ function updateFooter(): void {
   if (!visible) return;
   if (textView.active) {
     footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: textView.footerInfo() });
+    return;
+  }
+  if (sheetView.active) {
+    // The sheet's size, as a CSV document's was shown.
+    const size = sheetView.size;
+    const words = size && { pages: 0, words: 0, charactersWithSpaces: 0, charactersWithoutSpaces: 0, paragraphs: 0, lines: 0, selection: false, table: size };
+    footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words, selection: null, picture: null, view: 'print', canFlow: false, text: null });
     return;
   }
   let picture = null;

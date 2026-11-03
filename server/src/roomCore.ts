@@ -219,7 +219,7 @@ export class RoomCore {
     Object.assign(peer.state, { client, name: String(message.name).slice(0, 80), color: Number(message.color) | 0, selection: null, pointer: null, synced: false });
     peer.persist();
     // The first to join an empty room says what its changes are (it is a property of the document, the same for everyone).
-    if (this.meta.mode === 'solo' && this.members.length === 1) this.store.setMeta({ kind: message.kind === 'objects' || message.kind === 'layers' || message.kind === 'nodes' || message.kind === 'text' ? message.kind : 'doc' });
+    if (this.meta.mode === 'solo' && this.members.length === 1) this.store.setMeta({ kind: message.kind === 'objects' || message.kind === 'layers' || message.kind === 'nodes' || message.kind === 'text' || message.kind === 'cells' ? message.kind : 'doc' });
     if (this.watched) this.arrived(peer);
     const meta = this.meta;
     peer.send({ type: 'welcome', role: peer.state.role, client: peer.state.client!, mode: meta.mode, epoch: meta.epoch, people: this.people(), kind: meta.kind, user: peer.state.userId, holder: meta.holder });

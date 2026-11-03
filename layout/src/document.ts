@@ -27,6 +27,7 @@ import { FALLBACK_FAMILY, type FontSet } from './fonts/fontSet.ts';
 import type { ManifestFace } from './fonts/fontTypes.ts';
 import { cjkLangOf, type FieldValues, type LayoutContext, type RunStyle } from './context.ts';
 import { isCjk, type CjkLang } from './fonts/cjk.ts';
+import { addEmoji, MAYBE_EMOJI } from './fonts/emoji.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import { REFLOW_SIDE, REFLOW_VERTICAL, reflowWidth } from './reflow.ts';
 import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout } from './paragraph.ts';
@@ -298,6 +299,8 @@ interface PagedText {
   extra: Map<string, Map<string, { style: FaceStyle; chars: Set<number> }>>;
   /** The styles each family is used in. */
   styles: Map<string, Map<string, FaceStyle>>;
+  /** The page keys of its emoji (see emojiPageKey). */
+  emoji: Set<number>;
 }
 
 /**
@@ -306,7 +309,7 @@ interface PagedText {
  * The core atlases of every face must be loaded.
  */
 function pagedTextOf(doc: WordDocument, resolver: StyleResolver, fonts: FontSet): PagedText {
-  const found: PagedText = { cjk: new Map(), extra: new Map(), styles: new Map() };
+  const found: PagedText = { cjk: new Map(), extra: new Map(), styles: new Map(), emoji: new Set() };
   const ctx = { resolver, fonts };
   const fallback = fonts.resolve({ font: FALLBACK_FAMILY }).family;
   const visit = (node: { kind: string; [key: string]: any }, paragraphStyle: string | undefined): void => {
@@ -327,6 +330,7 @@ function pagedTextOf(doc: WordDocument, resolver: StyleResolver, fonts: FontSet)
           // Plain Latin text (nearly all of a big document) needs neither the CJK nor the extra pages: one test settles it.
           if (!BEYOND_LATIN1.test(item.text)) continue;
           if (CJK_TEXT.test(item.text)) addCjk(item.text, (cjk ??= new Set()));
+          if (MAYBE_EMOJI.test(item.text)) addEmoji(item.text, found.emoji);
           // Only what neither the run's font nor the fallback font has goes to the extra pages.
           if (core && fallbackCore) addMissing(item.text, core, (missing ??= new Set()));
         }
@@ -516,6 +520,7 @@ async function loadFonts(doc: WordDocument, resolver: StyleResolver, fonts: Font
   await Promise.all([
     ...[...paged.cjk].map(([lang, chars]) => fonts.ensureCjk(lang, chars)),
     ...[...paged.extra].flatMap(([group, styles]) => [...styles.values()].map(({ style, chars }) => fonts.ensurePages(group, chars, [style]))),
+    fonts.ensureEmoji(paged.emoji),
   ]);
   if (hasMath(doc)) await fonts.ensureMath();
   return paged;
@@ -680,6 +685,9 @@ export class LayoutSession {
     const loads: Promise<unknown>[] = [];
     const cjk = new Set<number>();
     addCjk(text, cjk);
+    const emoji = new Set<number>();
+    if (MAYBE_EMOJI.test(text)) addEmoji(text, emoji);
+    if (emoji.size) loads.push(this.fonts.ensureEmoji(emoji));
     if (cjk.size) for (const lang of new Set<CjkLang>([...this.cjkLangs, this.fonts.defaultCjkLang])) loads.push(this.fonts.ensureCjk(lang, cjk));
     const fallback = this.fonts.resolve({ font: FALLBACK_FAMILY }).family;
     const fallbackCore = this.fonts.metrics(fallback.faces[0]);

@@ -326,7 +326,13 @@ type ByteTransform = { readable: ReadableStream<Uint8Array>; writable: WritableS
 
 /** zlib-wrapped DEFLATE, as FlateDecode expects. */
 export async function flateEncode(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new CompressionStream('deflate') as unknown as ByteTransform);
+  // Made directly, not as a Blob's stream, which WebKit can't read in a worker with an opaque origin (see bytesStream in @golemdocs/docx).
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(data);
+      controller.close();
+    },
+  }).pipeThrough(new CompressionStream('deflate') as unknown as ByteTransform);
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 

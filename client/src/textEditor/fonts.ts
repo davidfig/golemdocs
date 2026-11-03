@@ -3,7 +3,7 @@
 // for a run's fallbacks. What a file needs is fetched when its text first shows a character that is not loaded yet; until then the
 // character is left out and the renderer draws again when the font arrives.
 
-import { FALLBACK_FAMILY, FontSet, describeFace, isCjk } from '@golemdocs/layout';
+import { FALLBACK_FAMILY, FontSet, describeFace, emojiPageKey, emojiSequence, isCjk } from '@golemdocs/layout';
 import type { CjkLang, FaceMetrics, ResolvedFont } from '@golemdocs/layout';
 import type { AtlasLibrary, GpuFace } from '../webgl/text/gpuFace.ts';
 
@@ -90,6 +90,43 @@ export class MonoFonts {
       this.asked.add(codePoint);
       this.queued.add(codePoint);
       if (!this.timer) this.timer = window.setTimeout(() => void this.fetch(), 0);
+    }
+    return null;
+  }
+
+  private readonly emojiFound = new Map<string, GlyphRef | null>();
+  private readonly emojiAsked = new Set<string>();
+
+  /**
+   * The color glyph of an emoji (the text of one whole sequence), or null while its page loads (`version` goes up
+   * when it comes) or if no page has it.
+   */
+  emoji(text: string): GlyphRef | null {
+    const hit = this.emojiFound.get(text);
+    if (hit !== undefined) return hit;
+    const sequence = emojiSequence(text);
+    for (const font of this.set.emojiFonts()) {
+      const metrics = this.set.metrics(font.face)!;
+      const glyph = metrics.sequence(sequence);
+      if (glyph < 0) continue;
+      const face = this.atlases.define(describeFace(metrics));
+      const ref = face ? { face, font, metrics, glyph, visible: metrics.visible[glyph] === 1 } : null;
+      this.emojiFound.set(text, ref);
+      return ref;
+    }
+    if (this.emojiAsked.has(text)) this.emojiFound.set(text, null);
+    else {
+      this.emojiAsked.add(text);
+      // Asked for again before the page comes, it is null; once the page is here those answers go, so it is looked up
+      // afresh (and is null for good only if no page has it).
+      this.set.ensureEmoji([emojiPageKey(sequence)]).then(
+        () => {
+          for (const [key, value] of this.emojiFound) if (value === null) this.emojiFound.delete(key);
+          this.version++;
+          this.onLoad();
+        },
+        (e: unknown) => console.warn('emoji for a large text file did not load', e),
+      );
     }
     return null;
   }

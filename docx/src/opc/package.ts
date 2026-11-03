@@ -6,7 +6,7 @@
 
 import { XmlError, el, elements, parseXml, serializeXml, type XmlElement } from '../xml/xml.ts';
 import { NS } from '../xml/namespaces.ts';
-import { ZipArchive, writeZip, type ZipEntry, type ZipInput } from '../zip/zip.ts';
+import { ZipArchive, ZipEntry, writeZip, type ZipInput } from '../zip/zip.ts';
 
 export const REL = {
   officeDocument: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
@@ -188,6 +188,8 @@ interface Part {
   entry?: ZipEntry;
   /** Replacement contents. */
   data?: Uint8Array;
+  /** Replacement contents already deflated (a part too big to hold uncompressed, written in pieces). */
+  deflated?: { deflated: Uint8Array; crc: number; size: number };
 }
 
 export class OpcPackage {
@@ -198,6 +200,8 @@ export class OpcPackage {
   private readonly overrides = new Map<string, string>();
   private readonly rels = new Map<string, Relationships>();
   private readonly relsEntries = new Map<string, ZipEntry>();
+  /** The original [Content_Types].xml, copied as it is while no part's type changed. */
+  private typesEntry: ZipEntry | null = null;
 
   static async read(bytes: Uint8Array): Promise<OpcPackage> {
     const zip = ZipArchive.read(bytes);
@@ -211,6 +215,7 @@ export class OpcPackage {
       if (e instanceof XmlError) throw new PackageError(`[Content_Types].xml: ${e.message}`);
       throw e;
     }
+    pkg.typesEntry = types;
     for (const item of elements(typesRoot)) {
       const { Extension: extension, PartName: partName, ContentType: contentType } = item.attrs;
       if (contentType === undefined) continue;
@@ -262,7 +267,37 @@ export class OpcPackage {
     const part = actual === undefined ? undefined : this.parts.get(actual);
     if (!part) throw new PackageError(`missing part ${name}`);
     if (part.data) return part.data;
+    if (part.deflated) throw new PackageError(`${name} is held deflated; stream it`);
     return part.entry!.read();
+  }
+
+  /** A part's contents in pieces, for parts too big to hold whole. */
+  async *stream(name: string): AsyncGenerator<Uint8Array> {
+    const actual = this.resolveName(name);
+    const part = actual === undefined ? undefined : this.parts.get(actual);
+    if (!part) throw new PackageError(`missing part ${name}`);
+    if (part.data) yield part.data;
+    else if (part.deflated) yield* new ZipEntry(name, 8, part.deflated.crc, part.deflated.size, part.deflated.deflated).stream();
+    else yield* part.entry!.stream();
+  }
+
+  /** The part's original entry while it has not been replaced (to copy it, or read its size). */
+  original(name: string): ZipEntry | undefined {
+    const actual = this.resolveName(name);
+    const part = actual === undefined ? undefined : this.parts.get(actual);
+    return part && !part.data && !part.deflated ? part.entry : undefined;
+  }
+
+  /** Adds or replaces a part with contents deflated elsewhere (deflatePieces). */
+  setDeflated(name: string, deflated: { deflated: Uint8Array; crc: number; size: number }, contentType?: string): void {
+    const actual = this.resolveName(name) ?? name;
+    this.parts.set(actual, { deflated });
+    this.lowerCaseNames.set(actual.toLowerCase(), actual);
+    const lower = actual.toLowerCase();
+    if (contentType && !this.overrides.has(lower) && this.contentType(actual) !== contentType) {
+      this.overrides.set(lower, contentType);
+      this.typesEntry = null;
+    }
   }
 
   async text(name: string): Promise<string> {
@@ -295,12 +330,15 @@ export class OpcPackage {
     const lower = actual.toLowerCase();
     if (contentType && !this.overrides.has(lower) && this.contentType(actual) !== contentType) {
       this.overrides.set(lower, contentType);
+      this.typesEntry = null;
     }
   }
 
   /** Registers a default content type for an extension (used for media). */
   setDefaultContentType(extension: string, contentType: string): void {
-    if (!this.defaults.has(extension.toLowerCase())) this.defaults.set(extension.toLowerCase(), contentType);
+    if (this.defaults.has(extension.toLowerCase())) return;
+    this.defaults.set(extension.toLowerCase(), contentType);
+    this.typesEntry = null;
   }
 
   delete(name: string): void {
@@ -308,7 +346,7 @@ export class OpcPackage {
     if (actual === undefined) return;
     this.parts.delete(actual);
     this.lowerCaseNames.delete(actual.toLowerCase());
-    this.overrides.delete(actual.toLowerCase());
+    if (this.overrides.delete(actual.toLowerCase())) this.typesEntry = null;
     this.rels.delete(actual);
     this.relsEntries.delete(relationshipsPartName(actual));
   }
@@ -341,7 +379,7 @@ export class OpcPackage {
         .filter(([name]) => this.lowerCaseNames.has(name))
         .map(([name, type]) => el('Override', { PartName: `/${this.lowerCaseNames.get(name)}`, ContentType: type })),
     ]);
-    inputs.push({ name: '[Content_Types].xml', data: new TextEncoder().encode(serializeXml(types)) });
+    inputs.push(this.typesEntry ? { name: '[Content_Types].xml', entry: this.typesEntry } : { name: '[Content_Types].xml', data: new TextEncoder().encode(serializeXml(types)) });
 
     // Relationship parts: regenerated if modified, otherwise copied.
     const relsWritten = new Set<string>();
@@ -359,7 +397,7 @@ export class OpcPackage {
     };
     addRels('');
     for (const [name, part] of this.parts) {
-      inputs.push(part.data ? { name, data: part.data, compress: !isCompressedMedia(name) } : { name, entry: part.entry! });
+      inputs.push(part.data ? { name, data: part.data, compress: !isCompressedMedia(name) } : part.deflated ? { name, ...part.deflated } : { name, entry: part.entry! });
       addRels(name);
     }
     return writeZip(inputs);

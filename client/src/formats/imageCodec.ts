@@ -3,6 +3,7 @@
 // images.ts (which only reads headers) because it needs a browser.
 
 import { MIME, sniffImage } from './images.ts';
+import { encodePng } from './pngEncode.ts';
 import type { ImageData, ImageType } from './images.ts';
 
 /** What a picture can be saved as: the types a canvas can encode. */
@@ -26,12 +27,33 @@ export function makeCanvas(width: number, height: number): Canvas2D {
 export async function decodeImage(bytes: Uint8Array, type?: ImageType): Promise<ImageBitmap> {
   const kind = type ?? sniffImage(bytes)?.type ?? 'png';
   const blob = new Blob([bytes as Uint8Array<ArrayBuffer>], { type: MIME[kind] });
-  if (kind !== 'heic') return createImageBitmap(blob);
-  // HEIC: the browser's own decoder where it has one (Safari), else libheif, a lazily loaded chunk that is not fetched until a browser needs it.
   try {
     return await createImageBitmap(blob);
-  } catch {
-    return (await import('./heicDecode.ts')).decodeHeicBitmap(bytes);
+  } catch (error) {
+    // WebKit can't read a Blob in a worker with an opaque origin (the embeddable viewer's, in a sandboxed frame), but its
+    // ImageDecoder takes the bytes themselves.
+    const decoded = await decodeBytes(bytes, MIME[kind]).catch(() => null);
+    if (decoded) return decoded;
+    // HEIC: the browser's own decoder where it has one (Safari), else libheif, a lazily loaded chunk that is not fetched until a browser needs it.
+    if (kind === 'heic') return (await import('./heicDecode.ts')).decodeHeicBitmap(bytes);
+    throw error;
+  }
+}
+
+/** A picture's first frame decoded by the browser's ImageDecoder (WebCodecs), straight from its bytes; null where there is none. */
+async function decodeBytes(bytes: Uint8Array, type: string): Promise<ImageBitmap | null> {
+  const Decoder = (globalThis as { ImageDecoder?: new (init: { data: Uint8Array; type: string }) => { decode(): Promise<{ image: VideoFrame }>; close(): void } }).ImageDecoder;
+  if (!Decoder) return null;
+  const decoder = new Decoder({ data: bytes, type });
+  try {
+    const { image } = await decoder.decode();
+    try {
+      return await createImageBitmap(image);
+    } finally {
+      image.close();
+    }
+  } finally {
+    decoder.close();
   }
 }
 
@@ -48,7 +70,16 @@ export async function encodeCanvas(canvas: Canvas2D['canvas'], type: OutputType,
   const options = { type: MIME[type], quality };
   const blob = 'convertToBlob' in source ? await source.convertToBlob(options) : await new Promise<Blob | null>((resolve) => (source as HTMLCanvasElement).toBlob(resolve, options.type, options.quality));
   if (!blob) throw new Error(`this browser can't save ${type} pictures`);
-  return new Uint8Array(await blob.arrayBuffer());
+  try {
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch (error) {
+    // WebKit can't read a Blob in a worker with an opaque origin (the embeddable viewer's, in a sandboxed frame): a PNG is written
+    // from the pixels instead. A JPEG or WebP has no such way, and is refused as before.
+    if (type !== 'png') throw error;
+    const context = (source as OffscreenCanvas).getContext('2d') as OffscreenCanvasRenderingContext2D | null;
+    if (!context) throw error;
+    return encodePng(context.getImageData(0, 0, source.width, source.height).data, source.width, source.height);
+  }
 }
 
 /** A picture file as another type (or the same bytes, when it already is that type). */
@@ -72,7 +103,11 @@ const SVG_LARGEST_SIDE = 8192;
 export async function toPng(name: string, bytes: Uint8Array): Promise<{ name: string; bytes: Uint8Array }> {
   const image = sniffImage(bytes);
   const stem = name.replace(/\.[^.]*$/, '');
-  if (image?.type === 'heic') return { name: `${stem}.jpg`, bytes: await transcode(bytes, 'jpeg', HEIC_JPEG_QUALITY) };
+  if (image?.type === 'heic') {
+    // Where a JPEG can't be written (WebKit, a worker with an opaque origin: see encodeCanvas), a PNG is.
+    const jpeg = await transcode(bytes, 'jpeg', HEIC_JPEG_QUALITY).catch(() => null);
+    return jpeg ? { name: `${stem}.jpg`, bytes: jpeg } : { name: `${stem}.png`, bytes: await transcode(bytes, 'png') };
+  }
   if (image && (image.type === 'png' || image.type === 'jpeg' || image.type === 'webp')) return { name, bytes };
   if (image) return { name: `${stem}.png`, bytes: await transcode(bytes, 'png') };
   // Not a raster type we know: SVG is drawn by an <img>, which is the one thing that renders it everywhere.

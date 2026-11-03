@@ -36,7 +36,7 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerDocument, DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
-import { inAppMenuOnMac, installFullScreen, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
+import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
@@ -184,7 +184,7 @@ export class Chrome {
 
     window.addEventListener('keydown', (e) => this.shortcut(e), true);
     installFullScreen();
-    document.addEventListener('fullscreenchange', () => this.refresh());
+    onFullScreenChange(() => this.refresh());
 
     const fonts = host.fonts?.();
     if (fonts) {
@@ -375,8 +375,7 @@ export class Chrome {
         id: 'view.fullScreen',
         label: t('chrome.view.fullScreen'),
         run: toggleFullScreen,
-        checked: () => !!document.fullscreenElement,
-        enabled: () => document.fullscreenEnabled,
+        checked: isFullScreen,
       },
       a('view.zoomIn', t('chrome.view.zoomIn'), { kind: 'zoomBy', factor: 1.25 }, { shortcut: 'Mod+=' }),
       a('view.zoomOut', t('chrome.view.zoomOut'), { kind: 'zoomBy', factor: 0.8 }, { shortcut: 'Mod+-' }),
@@ -703,6 +702,7 @@ export class Chrome {
       cmd('view.pageWidth'),
       cmd('view.darkMode'),
       cmd('view.darkPages'),
+      cmd('view.fullScreen'),
       heading(t('chrome.menu.tools')),
       cmd('tools.spelling'),
       cmd('tools.thesaurus'),

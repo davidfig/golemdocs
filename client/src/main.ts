@@ -54,6 +54,7 @@ import { FormLayer } from './ui/formLayer.ts';
 import { PdfEditTools } from './ui/pdfEditTools.ts';
 import { PdfTextLayer } from './ui/pdfTextLayer.ts';
 import { PointerLayer } from './ui/pointerLayer.ts';
+import { SelectionHandles, type HandleEnd } from './ui/selectionHandles.ts';
 import { PictureFrame } from './ui/pictureFrame.ts';
 import { showPopupMenu, type PopupItem } from './ui/popupMenu.ts';
 import { inCaseOf, synonymsOf } from './spelling/thesaurus.ts';
@@ -193,7 +194,7 @@ onScrollPastEndChange(() => {
   camera.scrollPastEnd = scrollPastEndOn();
   requestRender();
 });
-const renderer = new PageRenderer(gl);
+const renderer = new PageRenderer(gl, deskColor);
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 // The default font nearly every document uses: fetch its atlases now, not after the first layout.
 atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);
@@ -2415,6 +2416,9 @@ async function openShared(id: string): Promise<void> {
       pendingNotice = t('app.sharedGone');
       return;
     }
+    // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts), at the share's own address
+    // rather than the document's id. It takes this page's place in the history, so Back goes to where they chose it from.
+    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view/?s=${encodeURIComponent(doc.viewToken)}`);
     setStatus(t('app.openingShared'));
     worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
@@ -3510,6 +3514,7 @@ function selectedHtml(): string | undefined {
 
 function applySelection(update: SelectionUpdate): void {
   selection.update(update);
+  selectionHandles.update(update.rects, byFinger && !!update.at && !textView.active);
   commentsPanel.update(update.comments, update.activeComment);
   selectionFormat = update.format;
   comments = update.comments.filter((c) => !c.parentId);
@@ -3803,6 +3808,7 @@ function render(): void {
   pdfTextLayer.position();
   pdfTools.position();
   pointerLayer.position();
+  selectionHandles.position();
   pictureFrame.position();
   commentsPanel.position();
   syncPagesPanel();
@@ -3895,14 +3901,20 @@ function pageAt(cssX: number, cssY: number): { page: GpuPage; x: number; y: numb
   return best && { page: best, x: point.x - best.x, y: point.y - best.y };
 }
 
-/** Clicks in quick succession at one spot (pointer events don't count them). */
+/** Clicks in quick succession at one spot (pointer events don't count them). A finger can't come down on the same spot twice, so taps count from further apart. */
 const MULTI_CLICK_MS = 500;
 const MULTI_CLICK_PX = 4;
+const MULTI_TAP_PX = 24;
 let lastClick = { time: 0, x: 0, y: 0, count: 0 };
 
+/** Whether a press would be the next click of the clicks before it. */
+function followsClick(e: Press): boolean {
+  const slop = e.touch ? MULTI_TAP_PX : MULTI_CLICK_PX;
+  return Math.abs(e.clientX - lastClick.x) <= slop && Math.abs(e.clientY - lastClick.y) <= slop && e.timeStamp - lastClick.time < MULTI_CLICK_MS;
+}
+
 function clickCount(e: Press): number {
-  const near = Math.abs(e.clientX - lastClick.x) <= MULTI_CLICK_PX && Math.abs(e.clientY - lastClick.y) <= MULTI_CLICK_PX;
-  const count = near && e.timeStamp - lastClick.time < MULTI_CLICK_MS ? lastClick.count + 1 : 1;
+  const count = followsClick(e) ? lastClick.count + 1 : 1;
   lastClick = { time: e.timeStamp, x: e.clientX, y: e.clientY, count };
   return count;
 }
@@ -3912,15 +3924,18 @@ let selecting = false;
 /** Latest drag position, sent once per frame. */
 let pendingDrag: { x: number; y: number } | null = null;
 
-/** The parts of a pointer event a press needs, so a touch tap can replay the press it held back. */
-type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 'timeStamp' | 'shiftKey' | 'metaKey' | 'ctrlKey'>;
+/**
+ * The parts of a pointer event a press needs, so a touch tap can replay the press it held back. A finger's press (`touch`) puts
+ * the caret at the end of the word it lands in; `word` selects that word (a long press).
+ */
+type Press = Pick<PointerEvent, 'offsetX' | 'offsetY' | 'clientX' | 'clientY' | 'timeStamp' | 'shiftKey' | 'metaKey' | 'ctrlKey'> & { touch?: boolean; word?: boolean };
 
 function press(e: Press): void {
   focusByTap();
   // Putting the caret down is what shows the phone's typing bar (see Chrome.trackTyping).
   document.dispatchEvent(new Event('wm-caret'));
   if (textView.active) {
-    textView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e));
+    textView.press(e.offsetX, e.offsetY, e.shiftKey, e.word ? 2 : clickCount(e));
     return;
   }
   if (sheetView.active) {
@@ -3949,7 +3964,7 @@ function press(e: Press): void {
     waitingDrag = null;
     return;
   }
-  const clicks = clickCount(e);
+  const clicks = e.word ? 1 : clickCount(e);
   // A double click on a vector drawing in the text edits the drawing.
   if (clicks === 2 && !embeddedDrawing && FORMATS[current.kind].editable && !isDrawing()) {
     const image = hit.page.images.find((i) => i.svg && hit.x >= i.x && hit.x <= i.x + i.width && hit.y >= i.y && hit.y <= i.y + i.height);
@@ -3961,9 +3976,10 @@ function press(e: Press): void {
     if (selectedPicture && !selectedPicture.svg && onSelectedPicture(hit.page.id, hit.x, hit.y)) return void editPicture(selectedPicture);
     if (awaitingSelection) pendingPictureEdit = { page: hit.page.id, x: hit.x, y: hit.y };
   }
-  const unit = clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
+  const unit = e.word || clicks === 2 ? 'word' : clicks >= 3 ? 'paragraph' : 'character';
   if (clicks === 2) editMathUntil = performance.now() + 1000;
-  send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: e.shiftKey && unit === 'character', unit });
+  const extend = e.shiftKey && unit === 'character';
+  send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend, unit, snap: e.touch && unit === 'character' && !extend });
   awaitingSelection = true;
   selecting = unit === 'character';
   // Whether this press landed on a picture is known once the worker answers: until then a drag waits.
@@ -4027,8 +4043,27 @@ function dropPicture(e: PointerEvent): void {
   send({ kind: 'moveDrawing', page: hit.page.id, x, y });
 }
 
-// Touch: one finger drags the page, two pinch and pan it, and a tap (a press that never moved) puts the caret down.
+// Touch: one finger drags the page, two pinch and pan it, and a tap (a press that never moved) puts the caret down. A long
+// press selects the word under the finger, as does a double tap; either way the finger, still down, then drags the selection.
 const TOUCH_SLOP_PX = 8;
+const LONG_PRESS_MS = 450;
+let longPressTimer = 0;
+/** The finger down is selecting text: moving it extends the selection instead of panning. */
+let touchSelecting = false;
+/** The last selection was made with a finger, so its ends get handles. */
+let byFinger = false;
+/**
+ * A handle the finger took: how far the text at that end is from the finger (CSS pixels), and, until the finger first moves,
+ * the other end, which the selection is set to start from then. A finger let go without moving was a tap after all.
+ */
+let grip: { dx: number; dy: number; anchor: [number, number] | null; tap: Press } | null = null;
+/** Where the selecting finger is on the canvas (CSS pixels), for scrolling when it is near the top or bottom; null until it first moves (a long press near an edge doesn't scroll). */
+let touchPoint: { x: number; y: number } | null = null;
+let edgeFrame = 0;
+/** Within this far of the top or bottom of the view (CSS pixels), a selecting finger scrolls the document. */
+const EDGE_PX = 48;
+/** The fastest that scrolls, at the very edge (CSS pixels per frame). */
+const EDGE_SPEED = 14;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
 /** Two or more fingers were down in this gesture: until every finger is up, nothing in it is a tap. */
@@ -4077,12 +4112,75 @@ function touchDown(e: PointerEvent): void {
   }
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (touches.size > 1) touchMulti = true;
+  clearTimeout(longPressTimer);
+  if (touchSelecting) return;
   if (touches.size === 1 && !touchMulti) {
-    touchTap = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false };
+    const tap: Press = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false, touch: true };
+    const handle = selectionHandles.hit(e.offsetX, e.offsetY);
+    if (handle) return grabHandle(handle, tap);
+    // The second tap of a double tap selects the word at once, so the finger can go on to drag the selection.
+    if (lastClick.count > 0 && followsClick(tap)) return startTouchSelect(tap);
+    touchTap = tap;
+    longPressTimer = window.setTimeout(() => {
+      if (touchTap === tap && touches.size === 1) startTouchSelect({ ...tap, word: true });
+    }, LONG_PRESS_MS);
   } else {
     touchTap = null;
     pinch = touches.size === 2 ? pinchState() : null;
   }
+}
+
+function startTouchSelect(at: Press): void {
+  touchTap = null;
+  press(at);
+  beginTouchSelect();
+}
+
+function beginTouchSelect(): void {
+  touchSelecting = true;
+  selecting = true;
+  touchPoint = null;
+  cancelAnimationFrame(edgeFrame);
+  edgeFrame = requestAnimationFrame(edgeScroll);
+}
+
+/** A finger took a selection handle: dragging it moves that end, the other staying put. */
+function grabHandle(which: HandleEnd, tap: Press): void {
+  const { offsetX: x, offsetY: y } = tap;
+  const at = selection.at;
+  const point = selectionHandles.point(which);
+  if (!at || !point) return;
+  const anchorFirst = (at.anchor[0] - at.focus[0] || at.anchor[1] - at.focus[1]) <= 0;
+  const [first, last] = anchorFirst ? [at.anchor, at.focus] : [at.focus, at.anchor];
+  touchTap = null;
+  grip = { dx: point.x - x, dy: point.y - y, anchor: which === 'end' ? first : last, tap };
+  beginTouchSelect();
+}
+
+/** The selection's end follows the finger. */
+function dragTouchSelection(): void {
+  if (!touchPoint || textView.active) return;
+  if (grip?.anchor) {
+    const [paragraph, offset] = grip.anchor;
+    grip.anchor = null;
+    send({ kind: 'select', paragraph, from: offset, to: offset, quiet: true });
+  }
+  dragSelection(touchPoint.x + (grip?.dx ?? 0), touchPoint.y + (grip?.dy ?? 0));
+}
+
+/** While a finger selects near the top or bottom of the view, the document scrolls, faster the nearer the edge, and the selection goes with it. */
+function edgeScroll(): void {
+  if (!touchSelecting) return;
+  edgeFrame = requestAnimationFrame(edgeScroll);
+  if (!touchPoint || grip?.anchor) return;
+  const height = canvas.clientHeight;
+  const y = touchPoint.y;
+  const speed = y < EDGE_PX ? -(EDGE_PX - Math.max(y, 0)) / EDGE_PX : y > height - EDGE_PX ? (Math.min(y, height) - (height - EDGE_PX)) / EDGE_PX : 0;
+  if (!speed) return;
+  userMoved = true;
+  camera.panBy(0, speed * EDGE_SPEED);
+  requestRender();
+  dragTouchSelection();
 }
 
 function touchMove(e: PointerEvent): void {
@@ -4092,6 +4190,15 @@ function touchMove(e: PointerEvent): void {
   const dy = e.clientY - last.y;
   if (touchTap && Math.hypot(e.clientX - touchTap.clientX, e.clientY - touchTap.clientY) > TOUCH_SLOP_PX) touchTap = null;
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchSelecting) {
+    // A handle only moves once the finger has: a finger's tremble on taking it is not a drag.
+    const still = grip?.anchor && Math.hypot(e.clientX - grip.tap.clientX, e.clientY - grip.tap.clientY) <= TOUCH_SLOP_PX;
+    if (e.isPrimary && !still) {
+      touchPoint = { x: e.offsetX, y: e.offsetY };
+      dragTouchSelection();
+    }
+    return;
+  }
   if (touchTap) return;
   userMoved = true;
   const rect = canvas.getBoundingClientRect();
@@ -4124,6 +4231,20 @@ canvas.addEventListener(
 
 function touchUp(e: PointerEvent): void {
   touches.delete(e.pointerId);
+  clearTimeout(longPressTimer);
+  if (touchSelecting) {
+    if (touches.size > 0) return;
+    touchSelecting = false;
+    touchMulti = false;
+    const unmoved = grip?.anchor ? grip.tap : null;
+    grip = null;
+    touchPoint = null;
+    cancelAnimationFrame(edgeFrame);
+    tappedAt = performance.now();
+    endPointer();
+    if (unmoved && e.type === 'pointerup') press(unmoved);
+    return;
+  }
   pinch = touches.size === 2 ? pinchState() : null;
   if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
   if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') {
@@ -4136,6 +4257,7 @@ function touchUp(e: PointerEvent): void {
 
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
+  byFinger = e.pointerType === 'touch';
   if (e.pointerType === 'touch') {
     e.preventDefault();
     touchDown(e);
@@ -4321,6 +4443,11 @@ canvas.addEventListener('pointermove', (e) => {
     waitingDrag = { x: e.offsetX, y: e.offsetY };
     return;
   }
+  dragSelection(e.offsetX, e.offsetY);
+});
+
+/** The selection's moving end follows a drag to this canvas point (once a frame). */
+function dragSelection(x: number, y: number): void {
   if (!pendingDrag) {
     requestAnimationFrame(() => {
       const drag = pendingDrag;
@@ -4329,8 +4456,8 @@ canvas.addEventListener('pointermove', (e) => {
       if (hit && selecting) send({ kind: 'pointer', page: hit.page.id, x: hit.x, y: hit.y, extend: true });
     });
   }
-  pendingDrag = { x: e.offsetX, y: e.offsetY };
-});
+  pendingDrag = { x, y };
+}
 
 const endPointer = () => {
   pan = null;
@@ -5332,6 +5459,8 @@ const searchPanel = new SearchPanel({
   focusEditor: focusInput,
 });
 
+// The handles at the ends of a selection made with a finger (see ui/selectionHandles.ts).
+const selectionHandles = new SelectionHandles(document.getElementById('viewport')!, { camera, page: (id) => pagesById.get(id), order: (id) => pages.indexOf(pagesById.get(id)!) });
 // Other people's mouse pointers (see ui/pointerLayer.ts).
 const pointerLayer = new PointerLayer(document.getElementById('viewport')!, { camera, page: (index) => pages[index] });
 // The frame around the picture selected in the text (see ui/pictureFrame.ts).

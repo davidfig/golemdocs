@@ -55,7 +55,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.nobody': '尚未與任何人分享。',
   'dialogs.share.done': '完成',
   'dialogs.share.peopleHeading': '人員',
-  'dialogs.share.note': '對方必須先登入過 Golem Docs。編輯者與檢視者都能即時看到變更。',
+  'dialogs.share.note': '對方需要先登入過一次 Golem Docs。編輯者可即時看到變更；檢視者看到的是唯讀副本，每次儲存文件時都會更新。',
 
   // Sign in
   'dialogs.signIn.title': '登入',

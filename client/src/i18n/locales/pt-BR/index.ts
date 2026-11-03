@@ -20,7 +20,8 @@ import { spelling } from './spelling.ts';
 import { table } from './table.ts';
 import { vault } from './vault.ts';
 import { vector } from './vector.ts';
+import { viewer } from './viewer.ts';
 import { pageSetup } from './pageSetup.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

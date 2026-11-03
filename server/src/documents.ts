@@ -11,7 +11,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkFolder, type FolderRow } from './folders.ts';
 import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
-import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, type Access, type Role, type ShareRole } from './sharing.ts';
+import { accessFor, canWrite, forgetDocuments, person, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
@@ -264,6 +264,26 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  * checked the ids in the path and that cloud storage is configured. `defer` hands work over to carry
  * on after the response (a delete's cleanup); without it that work is done before answering.
  */
+/**
+ * GET /api/view/:token and /api/view/:token/file: a document shared view-only, as the read-only viewer (/view/?s=<token>) reads it:
+ * its name, and its file (304 for `If-None-Match` while unchanged). The token is the share's own (`shares.view_token`), and only the
+ * person it was shared with may use it; anyone else, and a token dropped by unsharing or a role change, gets 404. Nothing answered
+ * names the document's id.
+ */
+export async function handleView(request: Request, env: Env, userId: string, token: string, file: boolean): Promise<Response> {
+  if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+  const share = await viewShare(env, token, userId);
+  if (!share) throw new HttpError(404, 'not found');
+  if (!(await hasSync(env, share.ownerId))) throw new HttpError(403, 'the owner’s subscription has ended', 'subscription');
+  const db = await userDb(env, share.ownerId);
+  const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [share.docId]));
+  if (!row) throw new HttpError(404, 'not found');
+  if (!file) return json({ name: row.name, updatedAt: row.updated_at });
+  const response = await documentResponse(env, row.r2_key, share.ownerId, share.docId, DOCX, request.headers.get('if-none-match'));
+  if (!response) throw new HttpError(404, 'not found');
+  return response;
+}
+
 export async function handleDocuments(request: Request, env: Env, userId: string, url: URL, route: DocumentRoute, defer?: (work: Promise<unknown>) => void): Promise<Response> {
   const { collection, id, sub, granteeId, action } = route;
   const batchUpload = collection === 'documents' && id === 'batch' && sub === undefined;
@@ -291,7 +311,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         }
       } else {
         // The file, whole or put together from its chunks (see fileStore.ts).
-        const response = await documentResponse(env, docxKey(access.ownerId, id), access.ownerId, id, DOCX);
+        const response = await documentResponse(env, docxKey(access.ownerId, id), access.ownerId, id, DOCX, request.headers.get('if-none-match'));
         if (response) return response;
       }
     }
@@ -311,7 +331,16 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         // A share lasts while its owner has sync.
         if (!(await hasSync(env, ownerId))) return [];
         const [rows, owner] = await Promise.all([listDocuments(env, ownerId, await userDb(env, ownerId)), person(env, ownerId)]);
-        return rows.filter((row) => roles.has(row.id)).map((row) => ({ ...describe(row, roles.get(row.id)!), owner: { name: owner.name, email: owner.email } }));
+        return Promise.all(
+          rows
+            .filter((row) => roles.has(row.id))
+            .map(async (row) => {
+              const role = roles.get(row.id)!;
+              // A view-only share opens in the viewer at its own address (see handleView), never the document's id.
+              const viewToken = role === 'viewer' ? await viewTokenFor(env, row.id, userId) : null;
+              return { ...describe(row, role), owner: { name: owner.name, email: owner.email }, ...(viewToken && { viewToken }) };
+            }),
+        );
       }),
     );
     return json(perOwner.flat());
@@ -649,7 +678,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
 
   // GET /api/documents/:id: the .docx bytes.
   if (request.method === 'GET') {
-    const response = await documentResponse(env, row.r2_key, ownerId, id, DOCX);
+    const response = await documentResponse(env, row.r2_key, ownerId, id, DOCX, request.headers.get('if-none-match'));
     if (!response) throw new HttpError(404, 'document file is missing');
     return response;
   }

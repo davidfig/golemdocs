@@ -53,7 +53,7 @@ export const dialogs = {
   'dialogs.share.nobody': 'Not shared with anyone yet.',
   'dialogs.share.done': 'Done',
   'dialogs.share.peopleHeading': 'People',
-  'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors and viewers see changes live.',
+  'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors see changes live; viewers get a read-only copy that catches up each time the document is saved.',
 
   // Sign in
   'dialogs.signIn.title': 'Sign in',

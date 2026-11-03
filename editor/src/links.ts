@@ -2,13 +2,14 @@
 // Hyperlinks, equations and pictures under the selection or a point.
 import { NO_CHANGE, type CommandResult, type Position } from './types.ts';
 import type { Command } from './types.ts';
-import { paragraphLength, type Drawing } from '@golemdocs/docx';
+import { paragraphLength, paragraphText, type Drawing } from '@golemdocs/docx';
 
 import { inlineLength, inlinesLength, mathAt, plainText, readMathInline, runPropertiesAt, splitInlines, type MathEquation, type Hyperlink, type Inline, type Paragraph } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
 import { toModel, type ImageItem, type PageLayout } from '@golemdocs/layout';
 import { EditorEditing } from './editing.ts';
 import { drawingAt, findDrawing, placedOnPage } from './drawings.ts';
+import { wordEnd } from './textUnits.ts';
 
 export abstract class EditorLinks extends EditorEditing {
   /** The hyperlink at a position (a caret counts at either end of it), with its range. */
@@ -293,7 +294,7 @@ export abstract class EditorLinks extends EditorEditing {
     } else if (command.extend) {
       this.selection = { anchor: this.selection.anchor, focus: hit };
     } else {
-      this.collapse(hit);
+      this.collapse(command.snap ? { paragraph: hit.paragraph, offset: wordEnd(paragraphText(hit.paragraph), hit.offset) } : hit);
     }
   }
 }

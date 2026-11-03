@@ -4,7 +4,6 @@ import { ImageRenderer, type DrawImage } from './shapes/imageRenderer.ts';
 import { RectRenderer } from './shapes/rectRenderer.ts';
 import type { TextBatch } from './text/textBatch.ts';
 import { TextRenderer } from './text/textRenderer.ts';
-import { deskColor } from '../ui/theme.ts';
 import { DARK_PAGE_RGB } from './program.ts';
 import type { Camera } from '../view/camera.ts';
 import type { GpuPage } from './gpuPage.ts';
@@ -35,7 +34,11 @@ export class PageRenderer {
   private readonly batches: TextBatch[] = [];
   images: ImageRenderer | null = null;
 
-  constructor(private readonly gl: WebGL2RenderingContext) {
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    /** The color behind the pages, 0-1 per channel (the app's comes from its color scheme, ui/theme.ts; the viewer's from its host). */
+    private readonly deskColor: () => readonly [number, number, number],
+  ) {
     this.sheets = new RectRenderer(gl);
     this.rects = new RectBatchRenderer(gl);
     this.text = new TextRenderer(gl);
@@ -70,7 +73,7 @@ export class PageRenderer {
     }
 
     gl.viewport(0, 0, camera.width, camera.height);
-    const [r, g, b] = deskColor();
+    const [r, g, b] = this.deskColor();
     gl.clearColor(r, g, b, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 

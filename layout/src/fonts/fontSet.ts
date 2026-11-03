@@ -59,6 +59,12 @@ const FALLBACK_BY_NAME: Record<string, string> = {
   'liberation mono': 'Courier New',
   carlito: 'Calibri',
   caladea: 'Cambria',
+  // Families the app has, for a font set that leaves them out (the embeddable viewer's host may bundle only the common ones).
+  cambria: 'Times New Roman',
+  georgia: 'Times New Roman',
+  'segoe ui': 'Arial',
+  'comic sans ms': 'Arial',
+  'jetbrains mono': 'Courier New',
 };
 
 export class FontSet {
@@ -143,8 +149,9 @@ export class FontSet {
     if (cached) return cached;
 
     const name = request.font.toLowerCase();
+    // A font we don't have falls back as Word's would, and to the fallback family when even that one isn't in this font set.
     const entry =
-      this.byName.get(name) ?? this.byName.get((FALLBACK_BY_NAME[name] ?? FALLBACK_FAMILY).toLowerCase());
+      this.byName.get(name) ?? this.byName.get((FALLBACK_BY_NAME[name] ?? FALLBACK_FAMILY).toLowerCase()) ?? this.byName.get(FALLBACK_FAMILY.toLowerCase());
     if (!entry) throw new Error(`fallback font ${FALLBACK_FAMILY} is missing from the manifest`);
 
     const resolved = this.pick(entry.family, entry.weight, request);

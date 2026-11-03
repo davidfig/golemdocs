@@ -55,7 +55,7 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.nobody': 'Ainda não compartilhado com ninguém.',
   'dialogs.share.done': 'Concluído',
   'dialogs.share.peopleHeading': 'Pessoas',
-  'dialogs.share.note': 'As pessoas precisam ter entrado no Golem Docs pelo menos uma vez. Editores e leitores veem as alterações em tempo real.',
+  'dialogs.share.note': 'As pessoas precisam ter entrado no Golem Docs uma vez. Editores veem as alterações ao vivo; leitores recebem uma cópia somente leitura que é atualizada sempre que o documento é salvo.',
 
   // Sign in
   'dialogs.signIn.title': 'Entrar',

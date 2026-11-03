@@ -248,7 +248,17 @@ export type ToWorker =
   /** A document is on its way (still downloading): load the faces nearly every document uses now, so they are there when its bytes are. */
   | { type: 'warm' }
   /** `keepRoom`: the same picture or drawing, changed, opened in place of the open one: it keeps that one's room. */
-  | { type: 'open'; doc: number; source: DocumentSource; room?: RoomOptions; keepRoom?: boolean; /** With `keepRoom`: the saved version this is. */ version?: number }
+  | {
+      type: 'open';
+      doc: number;
+      source: DocumentSource;
+      room?: RoomOptions;
+      keepRoom?: boolean;
+      /** With `keepRoom`: the saved version this is. */
+      version?: number;
+      /** Shown read-only from the start (the embeddable viewer): selecting, finding and copying only, with no room and no squiggles. */
+      readOnly?: boolean;
+    }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
@@ -477,3 +487,18 @@ export const DICTIONARY_BASE = `${(import.meta.env?.BASE_URL ?? "/")}dictionarie
 
 /** Font files, relative to the site root (the worker and the page both load from here). */
 export const FONT_BASE = `${(import.meta.env?.BASE_URL ?? "/")}fonts/`;
+
+/**
+ * The layout worker's name, which carries where it loads fonts from when that isn't `FONT_BASE` (the embeddable viewer, whose host
+ * serves them). The name is read as the worker starts, before any message: the fonts are being fetched by then.
+ */
+export function layoutWorkerName(fontBase?: string): string {
+  return fontBase && fontBase !== FONT_BASE ? `layout ${fontBase}` : 'layout';
+}
+
+/** Where a layout worker of this name loads fonts from (see `layoutWorkerName`). Always ends in a slash. */
+export function fontBaseOf(workerName: string | undefined): string {
+  const base = workerName?.startsWith('layout ') ? workerName.slice('layout '.length).trim() : '';
+  if (!base) return FONT_BASE;
+  return base.endsWith('/') ? base : `${base}/`;
+}

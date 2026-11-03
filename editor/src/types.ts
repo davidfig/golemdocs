@@ -53,7 +53,7 @@ export type Command =
   | { kind: 'delete'; direction: 'backward' | 'forward'; unit?: 'character' | 'word' }
   | { kind: 'move'; to: MoveTarget; extend?: boolean }
   /** A click or drag at page-relative points; `unit` selects a word or paragraph (double/triple click). */
-  | { kind: 'pointer'; page: PageLayout; x: number; y: number; extend?: boolean; unit?: 'character' | 'word' | 'paragraph' }
+  | { kind: 'pointer'; page: PageLayout; x: number; y: number; extend?: boolean; unit?: 'character' | 'word' | 'paragraph'; snap?: boolean }
   /** Replaces the vector drawing whose SVG is package part `svg` (or, for '*', the one drawing a document is) with another version of it (it was edited in place), as one undoable step. Its size is kept when the new one has none (0). */
   | { kind: 'replaceDrawing'; svg: string; drawing: Drawing }
   /**

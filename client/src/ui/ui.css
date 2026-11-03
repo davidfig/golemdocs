@@ -2950,8 +2950,39 @@ body.wm-fullscreen #footer {
   display: none !important;
 }
 body.wm-fullscreen:not(.wm-fullscreen-menu) #chrome,
-body.wm-fullscreen .wm-toolbars {
-  display: none;
+body.wm-fullscreen .wm-toolbars,
+body.wm-fullscreen .wm-keys {
+  display: none !important;
+}
+/* Where the browser can't go full screen (a phone), this button in the corner leaves it. */
+.wm-fullscreen-exit {
+  position: fixed;
+  z-index: 50;
+  top: calc(env(safe-area-inset-top) + 8px);
+  right: calc(env(safe-area-inset-right) + 8px);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wm-border);
+  border-radius: 50%;
+  background: var(--wm-face);
+  color: var(--wm-text);
+  box-shadow: var(--wm-float-shadow);
+  opacity: 0.7;
+}
+.wm-fullscreen-exit:hover {
+  opacity: 1;
+}
+.wm-fullscreen-exit svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 #footer {
@@ -3166,4 +3197,47 @@ body.wm-fullscreen .wm-toolbars {
   padding: 12px;
   color: var(--wm-muted);
   text-align: center;
+}
+
+/* The handles at the ends of a selection made with a finger (see selectionHandles.ts). */
+
+.wm-sel-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wm-sel-handles[hidden],
+.wm-sel-handle[hidden] {
+  display: none;
+}
+
+.wm-sel-handle {
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  background: var(--wm-accent);
+  will-change: transform;
+}
+
+/* The knob a finger takes: above the start, below the end. */
+.wm-sel-handle::after {
+  content: '';
+  position: absolute;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--wm-accent);
+}
+
+.wm-sel-handle.start::after {
+  top: -11px;
+}
+
+.wm-sel-handle.end::after {
+  bottom: -11px;
 }

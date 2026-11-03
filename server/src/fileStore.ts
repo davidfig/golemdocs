@@ -85,8 +85,17 @@ export async function openDocument(env: Env, key: string, ownerId: string, docId
   throw new HttpError(503, 'the document changed while it was being read; try again');
 }
 
-/** The response for a GET of a document's file (null if there is none). */
-export async function documentResponse(env: Env, key: string, ownerId: string, docId: string, type: string): Promise<Response | null> {
+/**
+ * The response for a GET of a document's file (null if there is none). With the request's `If-None-Match` (the etag of the copy the
+ * client has), an unchanged file is answered 304 with no body: a view-only reader checks for a newer save this way (see viewer.md).
+ */
+export async function documentResponse(env: Env, key: string, ownerId: string, docId: string, type: string, ifNoneMatch?: string | null): Promise<Response | null> {
+  if (ifNoneMatch) {
+    const head = await env.FILES.head(key);
+    if (!head) return null;
+    const etag = `"${head.etag}"`;
+    if (ifNoneMatch.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag)) return new Response(null, { status: 304, headers: { etag, 'cache-control': 'private, no-cache' } });
+  }
   const file = await openDocument(env, key, ownerId, docId);
   if (!file) return null;
   return new Response(file.body, { headers: { 'content-type': type, 'content-length': String(file.size), etag: file.etag, 'cache-control': 'private, no-cache', 'x-content-type-options': 'nosniff' } });

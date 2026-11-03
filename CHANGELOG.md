@@ -32,12 +32,21 @@
 - Conditional formatting in workbooks shows as in Excel: highlighted cells, colour scales, data bars and icon sets, recalculated as the values change.
 - Sheet › Group groups rows or columns in a workbook: collapse and expand them from the outline beside the headers, or show a level with its numbered buttons. Groups made in Excel show the same way.
 - Emoji show in color everywhere: documents of every format, text files, workbook cells and charts, and PDF, picture and SVG downloads and printed sheets. Families, flags, keycaps and skin tones each show as one emoji, and the caret, selection and Backspace treat each as one character. The emoji images load only when a document uses one.
+- On a phone or tablet, a long press selects the word under your finger, and a double tap does too; keep your finger down and drag to select more. Dragging near the top or bottom of the screen scrolls the document as you select.
+- On a phone or tablet, a selection has a handle at each end: drag one to change where the selection starts or ends.
+
+### Changed
+
+- On a phone or tablet, tapping inside a word puts the cursor at the end of the word, so you don't have to aim between two letters, and a double tap no longer needs to land on exactly the same spot.
+- Someone you share a document with as “Can view” (File › Share) now opens it in a simple read-only viewer: pages, zoom, find, and select and copy, with nothing to edit. They see the latest saved version, and it catches up by itself while you keep working; once you stop sharing it with them (or they leave it), it disappears from their screen. Choosing between “Can edit” and “Can view” in the Share dialog is now a pair of buttons.
 
 ### Fixed
 
 - Workbooks saved by programs that don't calculate formulas showed empty cells where the formulas were; they are now calculated when opened.
 - An Excel workbook synced from the desktop folder opened as a document holding only its first sheet's table; it now opens as the workbook.
 - Pasting a hundred thousand rows or more into a sheet failed.
+- View › Full Screen works on phones, where the browser has no full screen of its own: the menus and toolbars go away, and a button in the corner brings them back. It is also in the phone's menu.
+- Copying and pasting into another app keeps paragraph indents that come from a paragraph’s style, and copying a long document (Edit › Select All) keeps its formatting.
 - In the desktop app, files that changed in your vault folder no longer download again when you open them. The app keeps the copy it just synced, so they open straight away.
 
 ## 0.31.0 - 2026-11-02

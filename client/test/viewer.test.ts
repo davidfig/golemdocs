@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { FontManifest } from '@golemdocs/layout';
-import { checkOutcome, fitWidthZoom, hostKey, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, viewerKey, ZOOM_STEPS, type KeyContext } from '../src/viewer/protocol.ts';
+import { Camera, CSS_PX_PER_POINT } from '../src/view/camera.ts';
+import { canScrollSideways, checkOutcome, FIT_MARGIN, fitWidthZoom, hostKey, SIDE_PADDING, SIDE_PADDING_X, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, viewerKey, ZOOM_STEPS, type KeyContext } from '../src/viewer/protocol.ts';
 import { VIEWER_FONTS, viewerFontSet } from '../src/viewer/fonts.ts';
 
 test('an open message is read with its bytes, and anything else is ignored', () => {
@@ -169,6 +170,30 @@ test('letters and keys the viewer has no use for are the host\'s; the browser ke
   // Enter and Space press a button that has the focus.
   assert.equal(press({ key: 'Enter' }, { onButton: true }), 'browser');
   assert.equal(press({ key: ' ' }, { onButton: true }), 'browser');
+});
+
+test('a page zoomed to fit the width has no room to scroll sideways, so ← → go to the host; one zoomed past the width keeps them', () => {
+  const letter = { x: 0, y: 0, width: 612, height: 792 };
+  // Satchel's reading pane and wider views, at DPR 1 and 2 (CSS px are the same either way: the camera's room is in CSS px).
+  for (const viewWidth of [480, 600, 640, 700, 733, 800, 1280]) {
+    for (const dpr of [1, 2]) {
+      const camera = new Camera();
+      camera.dpr = dpr;
+      camera.width = viewWidth * dpr;
+      camera.zoom = fitWidthZoom(letter.width, viewWidth, FIT_MARGIN, CSS_PX_PER_POINT);
+      camera.clamp(letter, viewWidth, 600, SIDE_PADDING, SIDE_PADDING_X);
+      const scrolls = canScrollSideways(camera, letter, viewWidth);
+      assert.equal(scrolls, false, `${viewWidth} px at DPR ${dpr}`);
+      assert.equal(viewerKey({ key: 'ArrowLeft', shiftKey: false, ctrlKey: false, altKey: false, metaKey: false }, { ...VIEW, canScrollSideways: scrolls }), 'host');
+      // Zoomed in until the page overflows the view: ← → scroll it.
+      camera.zoom = (viewWidth + 100) / (letter.width * CSS_PX_PER_POINT);
+      assert.equal(canScrollSideways(camera, letter, viewWidth), true, `${viewWidth} px at DPR ${dpr}, zoomed in`);
+    }
+  }
+  // A page a pixel or two wider than the fit (rounding) still counts as fitting.
+  const camera = new Camera();
+  camera.zoom = (700 - FIT_MARGIN + 1.5) / (letter.width * CSS_PX_PER_POINT);
+  assert.equal(canScrollSideways(camera, letter, 700), false);
 });
 
 test('a key passed to the host keeps only what describes it', () => {

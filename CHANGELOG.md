@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.33.1 - Unreleased
+
+### Fixed
+
+- A document opened from a view-only share or a public link no longer slides sideways when its page already fits the width of the window.
+
 ## 0.33.0 - 2026-11-03
 
 ### Added

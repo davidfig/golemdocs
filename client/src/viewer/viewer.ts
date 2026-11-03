@@ -21,7 +21,7 @@ import { SelectionLayer } from '../webgl/selectionLayer.ts';
 import { ImageRenderer } from '../webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from '../webgl/text/gpuFace.ts';
 import layoutWorkerUrl from '../layout/layoutWorkerEntry.ts?worker&url';
-import { fitWidthZoom, hostKey, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, stepZoom, viewerKey, type HostKey } from './protocol.ts';
+import { canScrollSideways, FIT_MARGIN, fitWidthZoom, hostKey, SIDE_PADDING, SIDE_PADDING_X, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, stepZoom, viewerKey, type HostKey } from './protocol.ts';
 
 export interface ViewerOptions {
   /** The file's bytes (they are handed to the layout worker: an ArrayBuffer passed here is transferred, and so emptied). */
@@ -57,15 +57,11 @@ export interface Viewer {
 
 /** Points of grey between pages. */
 const PAGE_GAP = 18;
-/** CSS px of grey kept beside a page zoomed to fit the view's width. */
-const FIT_MARGIN = 16;
 /** A press that moves less than this (CSS px) before it is let go is a click: on a link, the link is handed out. */
 const CLICK_SLOP = 4;
 const MULTI_CLICK_MS = 500;
 /** CSS px an arrow key scrolls. */
 const ARROW_STEP = 40;
-/** CSS px of grey the view may show beside the pages (the camera's clamp). */
-const SIDE_PADDING = 24;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const ICON_UP = 'M3 7.5L6 4.5L9 7.5';
@@ -147,7 +143,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   function render(): void {
     frame = 0;
     if (!renderer || !selection) return;
-    camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING);
+    camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING, SIDE_PADDING_X);
     renderer.render(camera, pages, selection, false, dark);
     updateBar();
   }
@@ -488,7 +484,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       inField: e.target === query || e.target === pageField,
       onButton: e.target instanceof HTMLButtonElement,
       findOpen: !findBar.hidden,
-      canScrollSideways: bounds.width * camera.zoom * CSS_PX_PER_POINT + 2 * SIDE_PADDING > canvas.clientWidth + 0.5,
+      canScrollSideways: canScrollSideways(camera, bounds, canvas.clientWidth),
     });
     if (action === 'browser') return;
     if (action === 'host') return void options.onKey?.(hostKey(e));

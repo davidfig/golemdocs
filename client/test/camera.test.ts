@@ -84,6 +84,29 @@ test('fit shows the whole rectangle, centred, limited by the tighter axis', () =
   near(c.zoom, 448 / (200 * CSS_PX_PER_POINT));
 });
 
+test('sideRoom is how far clamp lets the view move sideways, with its own padding, and 0 when the pages fit', () => {
+  const bounds = { x: 0, y: 0, width: 612, height: 792 };
+  for (const [zoom, paddingX] of [[1.5, 24], [1.5, 8], [1.2, 0], [0.5, 24]] as const) {
+    const camera = new Camera();
+    camera.zoom = zoom;
+    camera.x = -1e6;
+    camera.clamp(bounds, 800, 600, 24, paddingX);
+    const left = camera.x;
+    camera.x = 1e6;
+    camera.clamp(bounds, 800, 600, 24, paddingX);
+    const movedCss = (camera.x - left) * zoom * CSS_PX_PER_POINT;
+    assert.ok(Math.abs(movedCss - camera.sideRoom(bounds, 800, paddingX)) < 1e-6, `zoom ${zoom}, padding ${paddingX}`);
+  }
+  const fits = new Camera();
+  fits.zoom = 0.5;
+  assert.equal(fits.sideRoom(bounds, 800, 24), 0);
+  // The vertical padding is unchanged when only the sideways one is given.
+  const tall = new Camera();
+  tall.y = -1e6;
+  tall.clamp(bounds, 800, 600, 24, 8);
+  assert.ok(Math.abs(tall.y - -24 / CSS_PX_PER_POINT) < 1e-9);
+});
+
 test('fit respects the zoom limits, and default padding is 24 px', () => {
   const c = new Camera();
   c.maxZoom = 1;

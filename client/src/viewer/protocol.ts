@@ -1,6 +1,8 @@
 // What the embeddable viewer and the page around it say to each other, and the small rules the viewer follows (which links it hands
 // out, how far a zoom step goes). No DOM here, so all of it can be tested in Node. See docs/architecture/viewer.md.
 
+import type { Camera } from '../view/camera.ts';
+
 /** Sent to the viewer page (viewer.html) by its host, with `postMessage`. `bytes` is best transferred. */
 export type ToViewer = {
   type: 'golemdocs:open';
@@ -154,6 +156,23 @@ const HOST_LINK = /^(https?|mailto|tel|ftp):/i;
 export function linkForHost(url: string | null | undefined): string | null {
   const trimmed = url?.trim();
   return trimmed && HOST_LINK.test(trimmed) ? trimmed : null;
+}
+
+/** CSS px of grey left beside a page zoomed to fit the view's width (half each side). */
+export const FIT_MARGIN = 16;
+/** CSS px the view may run past the pages, above and below (the camera's clamp). */
+export const SIDE_PADDING = 24;
+/**
+ * And sideways: half the fit margin, so a page zoomed to fit the width has no room to scroll sideways, and ← → go to the host. (With
+ * the clamp's 24 px a side, a fitted page could still move 32 px, so the viewer kept ← → for that.)
+ */
+export const SIDE_PADDING_X = FIT_MARGIN / 2;
+/** Sideways room this small (CSS px, rounding) is not worth keeping ← → for. */
+const SIDE_TOLERANCE = 2;
+
+/** Whether ← → scroll the view (`viewerKey`'s `canScrollSideways`): the camera's own sideways room, as its clamp gives it. */
+export function canScrollSideways(camera: Pick<Camera, 'sideRoom'>, bounds: { width: number }, viewWidth: number): boolean {
+  return camera.sideRoom(bounds, viewWidth, SIDE_PADDING_X) > SIDE_TOLERANCE;
 }
 
 /** Zoom limits of the viewer (1 = 100%). */

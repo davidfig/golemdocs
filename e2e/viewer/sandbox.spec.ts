@@ -82,7 +82,8 @@ async function pixels(scratch: Page, png: Buffer): Promise<{ white: number; dark
 }
 
 // One build, shared by the tests: they run one after the other.
-test.describe.configure({ mode: 'serial' });
+// Each test opens some twenty files in turn, HEIC through libheif in Chromium among them: more than the default minute.
+test.describe.configure({ mode: 'serial', timeout: 180_000 });
 let built = false;
 test.beforeAll(() => {
   if (built) return;
@@ -168,6 +169,25 @@ async function sandboxed(context: BrowserContext) {
     expect(keys.map((k) => k.key)).toEqual(['f', 'Escape', 'ArrowLeft', 'F']);
     expect(keys[0]).toEqual({ type: 'golemdocs:key', key: 'f', code: 'KeyF', shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false });
     expect(keys[3]).toMatchObject({ key: 'F', code: 'KeyF', shiftKey: true });
+
+    // In a frame narrower than the page (a mail client's reading pane), the page opens zoomed to fit the width: nothing to scroll
+    // sideways, so ← → are the host's. Zoomed in past the width, they scroll the page again.
+    const wide = page.viewportSize()!;
+    await page.setViewportSize({ width: 700, height: wide.height });
+    await viewer.open('Report.docx', await docxFile(2));
+    await expect.poll(async () => parseInt((await viewer.frame.locator('.wm-viewer-zoom').textContent()) ?? '100', 10)).toBeLessThan(100);
+    const narrowFrom = (await viewer.messages()).length;
+    await canvas.click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ControlOrMeta+=');
+    await page.keyboard.press('ControlOrMeta+=');
+    await page.keyboard.press('ArrowLeft'); // scrolls now
+    await page.keyboard.press('Shift+F');
+    await viewer.waitFor('golemdocs:key', narrowFrom + 2);
+    const narrowKeys = (await viewer.messages()).slice(narrowFrom).filter((m) => m.type === 'golemdocs:key');
+    expect(narrowKeys.map((k) => k.key)).toEqual(['ArrowLeft', 'ArrowRight', 'F']);
+    await page.setViewportSize(wide);
 
     // Formats read in lazily loaded chunks, and remote pictures, fetch nothing from elsewhere.
     expect(await viewer.open('page.html', htmlFile())).toMatchObject({ type: 'golemdocs:opened' });

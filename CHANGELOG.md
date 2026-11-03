@@ -17,6 +17,17 @@
 - View › Full Screen works on phones, where the browser has no full screen of its own: the menus and toolbars go away, and a button in the corner brings them back. It is also in the phone's menu.
 - Copying and pasting into another app keeps paragraph indents that come from a paragraph’s style, and copying a long document (Edit › Select All) keeps its formatting.
 
+### Fixed
+
+- In the desktop app, files that changed in your vault folder no longer download again when you open them. The app keeps the copy it just synced, so they open straight away.
+
+## 0.31.0 - 2026-11-02
+
+### Added
+
+- Tools › Thesaurus (Shift+F7): look up words of the same meaning as the selected word, or the word at the caret, and replace it with one. Double-click a word in the list to look that one up in turn; Previous goes back. The thesaurus is in English.
+- Right-click a word for its synonyms: pick one to put it in place of the word, or choose Thesaurus… to see them all.
+
 ## 0.30.1 - 2026-10-31
 
 ### Changed

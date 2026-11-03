@@ -75,6 +75,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.tabs': '탭(&T)…',
   'chrome.format.styles': '스타일(&Y)…',
   'chrome.tools.spelling': '맞춤법 및 문법(&S)…',
+  'chrome.tools.thesaurus': '동의어 사전(&H)…',
   'chrome.tools.wordCount': '단어 수(&W)…',
   'chrome.tools.trackChanges': '변경 내용 추적(&T)',
   'chrome.tools.autoFormat': '입력하면서 자동 서식(&A)',

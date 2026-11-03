@@ -29,6 +29,8 @@ export interface VaultHooks {
   settled(): Promise<void>;
   /** A sync changed documents (in this browser or the account): the page's list of them is out of date, and so is an editor showing one of `touched` (their ids on that side). */
   changed(touched: string[]): void;
+  /** This browser's id for the document open in the editor, if any: the sync leaves its copy to `changed`. */
+  openLocalId?(): string | null;
 }
 
 /** What the shell answers to a scan while iCloud Drive is still downloading files into the folder (desktop/src-tauri/src/icloud.rs). */
@@ -203,7 +205,7 @@ export class VaultService {
         await Promise.race([this.hooks.settled(), new Promise((resolve) => setTimeout(resolve, SETTLE_MS))]);
       }
       const account = this.account(); // signing out can happen while waiting
-      const report = await syncVault(realHost(root, this.bridge, this.codec, account), { ...options, progress: (p) => this.progress(p) });
+      const report = await syncVault(realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null), { ...options, progress: (p) => this.progress(p) });
       // What the sync itself wrote is not a change to sync again.
       this.signature = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
       this.lastAccountLook = Date.now();

@@ -75,6 +75,7 @@ export const chrome: Partial<Messages> = {
   'chrome.format.tabs': '定位點(&T)…',
   'chrome.format.styles': '樣式(&Y)…',
   'chrome.tools.spelling': '拼字及文法檢查(&S)…',
+  'chrome.tools.thesaurus': '同義字(&H)…',
   'chrome.tools.wordCount': '字數統計(&W)…',
   'chrome.tools.trackChanges': '追蹤修訂(&T)',
   'chrome.tools.autoFormat': '輸入時自動套用格式(&A)',

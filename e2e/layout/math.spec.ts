@@ -229,7 +229,7 @@ test.describe('equations in saved files', () => {
     await app.type('See ');
   });
 
-  test('a Word file with an equation opens again with the equation in it', async ({ app }) => {
+  test('a Word file with an equation opens again with the equation in it', { tag: '@heavy' }, async ({ app }) => {
     await insertEquation(app, '\\frac{a}{b}');
     const file = await app.download(() => app.menu('File', 'Download'));
     expect(file.name).toMatch(/\.docx$/);

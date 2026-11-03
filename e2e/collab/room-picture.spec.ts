@@ -68,7 +68,7 @@ test('taking over: the watcher holds the picture and can draw, and the one who h
   await context.close();
 });
 
-test('a device that comes back with changes the account does not have, while another holds the picture, keeps them as a conflicted copy', async ({ browser }) => {
+test('a device that comes back with changes the account does not have, while another holds the picture, keeps them as a conflicted copy', { tag: '@heavy' }, async ({ browser }) => {
   const person = await newPerson(browser, 'picture');
   await person.page.goto('/?doc=welcome');
   await openPicture(person.app, CANVAS());

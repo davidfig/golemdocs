@@ -25,6 +25,9 @@ const SVG = 'http://www.w3.org/2000/svg';
 /** A cross, for `iconButton`. */
 export const CLOSE_ICON = 'M3 3L9 9M9 3L3 9';
 
+/** A right-pointing chevron, for `iconButton`: turn it 90° to show something is open. */
+export const CHEVRON_ICON = 'M4 2.5l4 3.5-4 3.5';
+
 /** A small button showing `path` (drawn on a 12 × 12 grid) rather than a character, so the icon is centered the same whatever the font does. Style the stroke in CSS. */
 export function iconButton(className: string, path: string, label: string): HTMLButtonElement {
   const icon = document.createElementNS(SVG, 'svg');

@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'Excluir comentário',
   'panels.feedback.deleteAsk': 'Excluir este comentário? Esta ação não pode ser desfeita.',
   'panels.feedback.resolved': 'Resolvido',
+  'panels.feedback.expand': 'Expandir',
+  'panels.feedback.collapse': 'Recolher',
   'panels.pages.label': 'Páginas',
   'panels.pages.page': 'Página {number}',
   'panels.pages.delete': 'Excluir página {number}',

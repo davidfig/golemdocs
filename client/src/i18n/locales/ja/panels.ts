@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'フィードバックの削除',
   'panels.feedback.deleteAsk': 'このフィードバックを削除しますか？元に戻せません。',
   'panels.feedback.resolved': '解決済み',
+  'panels.feedback.expand': '展開',
+  'panels.feedback.collapse': '折りたたむ',
   'panels.pages.label': 'ページ',
   'panels.pages.page': '{number} ページ',
   'panels.pages.delete': '{number} ページを削除',

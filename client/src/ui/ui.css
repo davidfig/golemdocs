@@ -2422,6 +2422,68 @@ html.wm-titlebar .wm-format {
   overflow-wrap: anywhere;
 }
 
+.wm-feedback-entry.resolved header {
+  cursor: pointer;
+}
+
+.wm-feedback-entry.resolved header strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-feedback-toggle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wm-feedback-toggle:hover {
+  background: var(--wm-hot);
+}
+
+.wm-feedback-toggle svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wm-feedback-toggle.open svg {
+  transform: rotate(90deg);
+}
+
+/* Collapsed: just the header and the message's first line. */
+.wm-feedback-entry .wm-feedback-summary {
+  display: none;
+  margin: 4px 0 0 26px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-feedback-entry.collapsed .wm-feedback-summary {
+  display: block;
+}
+
+.wm-feedback-entry.collapsed .wm-feedback-message,
+.wm-feedback-entry.collapsed footer {
+  display: none;
+}
+
 .wm-feedback-badge {
   font-weight: 700;
   opacity: 0.8;

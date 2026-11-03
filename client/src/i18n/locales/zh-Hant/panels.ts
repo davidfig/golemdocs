@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': '刪除意見反應',
   'panels.feedback.deleteAsk': '要刪除這則意見反應嗎？此動作無法復原。',
   'panels.feedback.resolved': '已解決',
+  'panels.feedback.expand': '展開',
+  'panels.feedback.collapse': '摺疊',
   'panels.pages.label': '頁面',
   'panels.pages.page': '第 {number} 頁',
   'panels.pages.delete': '刪除第 {number} 頁',

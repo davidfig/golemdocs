@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'Supprimer le commentaire',
   'panels.feedback.deleteAsk': 'Supprimer ce commentaire ? Cette action est irréversible.',
   'panels.feedback.resolved': 'Résolu',
+  'panels.feedback.expand': 'Développer',
+  'panels.feedback.collapse': 'Réduire',
   'panels.pages.label': 'Pages',
   'panels.pages.page': 'Page {number}',
   'panels.pages.delete': 'Supprimer la page {number}',

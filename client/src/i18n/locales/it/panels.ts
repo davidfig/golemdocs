@@ -164,6 +164,8 @@ export const panels: Partial<Messages> = {
   'panels.feedback.deleteTitle': 'Elimina feedback',
   'panels.feedback.deleteAsk': 'Eliminare questo feedback? Questa operazione non può essere annullata.',
   'panels.feedback.resolved': 'Risolto',
+  'panels.feedback.expand': 'Espandi',
+  'panels.feedback.collapse': 'Comprimi',
   'panels.pages.label': 'Pagine',
   'panels.pages.page': 'Pagina {number}',
   'panels.pages.delete': 'Elimina pagina {number}',

@@ -184,6 +184,8 @@ export const panels: Catalog = {
   'panels.feedback.deleteTitle': 'Удалить отзыв',
   'panels.feedback.deleteAsk': 'Удалить этот отзыв? Это действие нельзя отменить.',
   'panels.feedback.resolved': 'Решено',
+  'panels.feedback.expand': 'Развернуть',
+  'panels.feedback.collapse': 'Свернуть',
   'panels.pages.label': 'Страницы',
   'panels.pages.page': 'Страница {number}',
   'panels.pages.delete': 'Удалить страницу {number}',

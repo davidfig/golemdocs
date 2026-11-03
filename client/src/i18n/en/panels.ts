@@ -179,6 +179,8 @@ export const panels = {
   'panels.feedback.deleteTitle': 'Delete feedback',
   'panels.feedback.deleteAsk': 'Delete this feedback? This can’t be undone.',
   'panels.feedback.resolved': 'Resolved',
+  'panels.feedback.expand': 'Expand',
+  'panels.feedback.collapse': 'Collapse',
   'panels.analytics.loading': 'Loading…',
   'panels.analytics.failed': 'Couldn’t get analytics: {reason}',
   'panels.analytics.status': 'status {status}',

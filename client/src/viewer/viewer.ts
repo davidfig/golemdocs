@@ -21,7 +21,7 @@ import { SelectionLayer } from '../webgl/selectionLayer.ts';
 import { ImageRenderer } from '../webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from '../webgl/text/gpuFace.ts';
 import layoutWorkerUrl from '../layout/layoutWorkerEntry.ts?worker&url';
-import { fitWidthZoom, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, stepZoom } from './protocol.ts';
+import { fitWidthZoom, hostKey, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, stepZoom, viewerKey, type HostKey } from './protocol.ts';
 
 export interface ViewerOptions {
   /** The file's bytes (they are handed to the layout worker: an ArrayBuffer passed here is transferred, and so emptied). */
@@ -40,6 +40,8 @@ export interface ViewerOptions {
   onDownload?(): void;
   /** A link in the document was clicked (only web, mail, phone and FTP addresses are passed on). */
   onLink?(url: string): void;
+  /** A key the viewer has no use for was pressed while it had the focus (see `viewerKey` in protocol.ts): the host's to act on. */
+  onKey?(key: HostKey): void;
   /** The document is open and laid out. */
   onOpened?(info: { name: string; format: string; pages: number }): void;
   /** It can't be shown. */
@@ -62,6 +64,8 @@ const CLICK_SLOP = 4;
 const MULTI_CLICK_MS = 500;
 /** CSS px an arrow key scrolls. */
 const ARROW_STEP = 40;
+/** CSS px of grey the view may show beside the pages (the camera's clamp). */
+const SIDE_PADDING = 24;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const ICON_UP = 'M3 7.5L6 4.5L9 7.5';
@@ -143,7 +147,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   function render(): void {
     frame = 0;
     if (!renderer || !selection) return;
-    camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight);
+    camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING);
     renderer.render(camera, pages, selection, false, dark);
     updateBar();
   }
@@ -474,64 +478,59 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   }
 
   /** Keys anywhere in the viewer: zoom, find, select all, moving through the document. */
+  /**
+   * Keys anywhere in the viewer: zoom, find, select all, moving through the document. What it does with a key is `viewerKey`'s
+   * decision (protocol.ts); a key it has no use for goes to the host (`onKey`), so the page around it can act on Escape, a letter, ← →.
+   */
   function onKeyDown(e: KeyboardEvent): void {
-    const mod = MAC ? e.metaKey : e.ctrlKey;
-    const inField = e.target === query || e.target === pageField;
-    if (mod && (e.key === '=' || e.key === '+')) {
-      e.preventDefault();
-      return zoomTo(stepZoom(camera.zoom, 1));
-    }
-    if (mod && (e.key === '-' || e.key === '_')) {
-      e.preventDefault();
-      return zoomTo(stepZoom(camera.zoom, -1));
-    }
-    if (mod && e.key === '0') {
-      e.preventDefault();
-      return zoomTo(1);
-    }
-    if (mod && e.key.toLowerCase() === 'f') {
-      e.preventDefault();
-      return openFind();
-    }
-    if (e.key === 'Escape' && !findBar.hidden) {
-      e.preventDefault();
-      return closeFind();
-    }
-    if (inField) return;
-    if (mod && e.key.toLowerCase() === 'a') {
-      e.preventDefault();
-      return send({ kind: 'selectAll' });
-    }
-    if (e.key === 'F3' || (mod && e.key.toLowerCase() === 'g')) {
-      e.preventDefault();
-      return findNext(e.shiftKey);
-    }
-    const viewHeight = canvas.clientHeight;
+    const action = viewerKey(e, {
+      mac: MAC,
+      inField: e.target === query || e.target === pageField,
+      onButton: e.target instanceof HTMLButtonElement,
+      findOpen: !findBar.hidden,
+      canScrollSideways: bounds.width * camera.zoom * CSS_PX_PER_POINT + 2 * SIDE_PADDING > canvas.clientWidth + 0.5,
+    });
+    if (action === 'browser') return;
+    if (action === 'host') return void options.onKey?.(hostKey(e));
+    e.preventDefault();
     const scroll = (dx: number, dy: number): void => {
-      e.preventDefault();
       userMoved = true;
       camera.panBy(dx, dy);
       requestRender();
     };
-    switch (e.key) {
-      case 'ArrowDown':
+    const screen = canvas.clientHeight * 0.9;
+    switch (action) {
+      case 'zoomIn':
+        return zoomTo(stepZoom(camera.zoom, 1));
+      case 'zoomOut':
+        return zoomTo(stepZoom(camera.zoom, -1));
+      case 'zoomReset':
+        return zoomTo(1);
+      case 'find':
+        return openFind();
+      case 'closeFind':
+        return closeFind();
+      case 'selectAll':
+        return send({ kind: 'selectAll' });
+      case 'findNext':
+        return findNext(false);
+      case 'findPrevious':
+        return findNext(true);
+      case 'lineDown':
         return scroll(0, ARROW_STEP);
-      case 'ArrowUp':
+      case 'lineUp':
         return scroll(0, -ARROW_STEP);
-      case 'ArrowLeft':
+      case 'lineLeft':
         return scroll(-ARROW_STEP, 0);
-      case 'ArrowRight':
+      case 'lineRight':
         return scroll(ARROW_STEP, 0);
-      case 'PageDown':
-      case ' ':
-        return scroll(0, (e.shiftKey && e.key === ' ' ? -1 : 1) * viewHeight * 0.9);
-      case 'PageUp':
-        return scroll(0, -viewHeight * 0.9);
-      case 'Home':
-        e.preventDefault();
+      case 'pageDown':
+        return scroll(0, screen);
+      case 'pageUp':
+        return scroll(0, -screen);
+      case 'first':
         return goToPage(0);
-      case 'End':
-        e.preventDefault();
+      case 'last':
         return goToPage(pages.length - 1);
     }
   }

@@ -16,12 +16,14 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
                                     PageRenderer, SelectionLayer, Camera  <-- layout, selection ---------
  'golemdocs:opened' / 'error' <--
  'golemdocs:link' (a click) <----   worker.linkAt() -> linkForHost()
+ 'golemdocs:key' (unused key) <--   viewerKey() -> 'host'
 ```
 
 - **Read-only from the start.** `LayoutClient.openReadOnly` sends `open` with `readOnly: true`. The worker sets `OpenDocument.viewOnly`, which makes its `readOnly` true with no room: every edit, paste, format, undo, check box, picture or PDF markup is refused (the same gate a room's viewer goes through), no room is joined, and no squiggles are drawn, so no dictionary is fetched. Selecting, select-all, find and copy work as in the app. Tested in `client/test/layoutWorker.readOnly.test.ts`.
 - **Fonts from the host.** The worker reads where its fonts are from its name, before any message arrives (`layoutWorkerName` / `fontBaseOf` in `layout/protocol.ts`; `loadAppFonts(base)` in `formats/appFonts.ts`). The app's worker keeps its usual name and the site's `/fonts/`.
 - **The page** (`src/viewer/viewer.ts`) is the editor's render loop without its chrome: `GpuPage`s from layout updates, `arrangePages` in one column, a `Camera` placed as the editor places it (the first page at 100%, or zoomed out to fit its width; a picture fitted whole), and `PageRenderer.render` on demand. `PageRenderer` takes its desk colour as a function, so the viewer doesn't load the app's colour-scheme module (which reads browser storage).
-- **Input.** A hidden textarea holds the focus (`inputmode="none"`, so no on-screen keyboard), for copy and the keys; whatever is typed in it is dropped. A press sends `pointer` commands (a double click a word, a triple a paragraph, a drag extends), a click that didn't move asks `linkAt`, and a link that passes `linkForHost` (http, https, mailto, tel, ftp) goes to `onLink`. Wheel scrolls, Ctrl/⌘ + wheel or a pinch zooms, arrows, Page Up/Down, Space, Home and End scroll, Ctrl/⌘ A selects all, Ctrl/⌘ F opens the find bar, F3 or Ctrl/⌘ G finds again. Copy (and cut, which only copies) puts the selection's text and HTML on the clipboard.
+- **Input.** A hidden textarea holds the focus (`inputmode="none"`, so no on-screen keyboard), for copy and the keys; whatever is typed in it is dropped. A press sends `pointer` commands (a double click a word, a triple a paragraph, a drag extends), a click that didn't move asks `linkAt`, and a link that passes `linkForHost` (http, https, mailto, tel, ftp) goes to `onLink`. Wheel scrolls, Ctrl/⌘ + wheel or a pinch zooms. Copy (and cut, which only copies) puts the selection's text and HTML on the clipboard.
+- **Keys, and which are the host's.** `viewerKey` (`protocol.ts`, unit-tested in `viewer.test.ts`) decides each key press, and the handler does what it says. The viewer's own: Ctrl/⌘ + − 0 zoom; Ctrl/⌘ F opens the find bar, F3 or Ctrl/⌘ G finds again (Shift: back), Escape closes the find bar while it is open; Ctrl/⌘ A selects all; ↑ ↓ Page Up/Down Space (Shift+Space back) Home End move through the document, and ← → too, but only when the pages are wider than the view. The browser's: Ctrl/⌘ C X V, Tab, everything typed in the find or page field, Enter and Space on a focused button, an input method's composing, and keys that only modify others. Every other key goes to the host (`onKey`, or the `golemdocs:key` message), so the page around the viewer can act on it while the focus is in the frame: Escape with the find bar closed, letters (Satchel's `f`), ← → over pages that fit, and combinations the viewer doesn't use. Its default isn't stopped.
 - **The bar** is built from the shared parts (`iconButton` with `.wm-tbutton`, `.wm-input`, `.wm-find-message`, the `--wm-*` colours) and its words go through `t('viewer.*')` (with `dialogs.find.*` reused). The UI font is the system's: the app's Atkinson Hyperlegible is a web font of the site's, so the viewer's build strips its `@font-face` rules (`noUiFont` in `vite.viewer.config.ts`).
 
 ## Shared view-only: the site's own host
@@ -57,6 +59,7 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 | `onOpened({ name, format, pages })` | The file is open and laid out; `format` is what it was read as (`docx`, `md`, `pdf`...). |
 | `onError(message)` | It can't be shown (an unknown kind, a damaged file, no WebGL 2). |
 | `onLink(url)` | A link was clicked. |
+| `onKey(key)` | A key the viewer has no use for was pressed while it had the focus: `{ key, code, shiftKey, ctrlKey, altKey, metaKey, repeat }`, as `KeyboardEvent` has them (see Keys above). |
 | `title` | Shown in the bar beside the page number. |
 
 `destroy()` stops the worker, frees the GPU (`WEBGL_lose_context`) and removes what it added. `reload(bytes)` shows a newer version of the same file in place, keeping the view where it was.
@@ -68,7 +71,7 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 | Direction | Message |
 | --- | --- |
 | host → viewer | `{ type: 'golemdocs:open', bytes: ArrayBuffer, name, fontBase?, dark?, locale? }`. Transfer `bytes`. A second `open` replaces the file. `fontBase` defaults to `?fonts=` in the page's address, else `fonts/` beside the page. |
-| viewer → host | `{ type: 'golemdocs:ready' }` once loaded; `{ type: 'golemdocs:opened', name, format, pages }`; `{ type: 'golemdocs:error', message }`; `{ type: 'golemdocs:link', url }`. |
+| viewer → host | `{ type: 'golemdocs:ready' }` once loaded; `{ type: 'golemdocs:opened', name, format, pages }`; `{ type: 'golemdocs:error', message }`; `{ type: 'golemdocs:link', url }`; `{ type: 'golemdocs:key', key, code, shiftKey, ctrlKey, altKey, metaKey, repeat }` for a key the viewer has no use for (see Keys above). |
 
 ## Building it
 
@@ -110,14 +113,23 @@ What the host must do:
 - **Name its own origin in the viewer's Content-Security-Policy, not `'self'`.** In a frame with an opaque origin, WebKit matches `'self'` to nothing (Chromium to the frame's address). This works in both, with `ORIGIN` the scheme and host the viewer is served from (for example `tauri://localhost`, or a custom scheme):
 
   ```
-  default-src 'none'; script-src ORIGIN; worker-src ORIGIN data:; connect-src ORIGIN; style-src ORIGIN;
+  default-src 'none'; script-src ORIGIN 'wasm-unsafe-eval'; worker-src ORIGIN data:; connect-src ORIGIN; style-src ORIGIN;
   img-src ORIGIN blob: data:; font-src ORIGIN; base-uri 'none'; form-action 'none'
   ```
 
+- **`'wasm-unsafe-eval'`** lets WebAssembly compile (and nothing else; `eval` stays refused). Only HEIC photos need it, where the browser can't decode HEIC itself (Chromium), since libheif decodes them there. Leave it out and HEIC files show an error in such a browser; WebKit decodes them itself.
 - **Allow `data:` workers** (`worker-src ... data:`). From an opaque origin no worker can be started from a URL: Chromium refuses ("cannot be accessed from origin 'null'"), WebKit fails without a word. So in a frame whose `origin` is `"null"` the viewer starts its worker from a `data:` module that imports the real one by its address (`startLayoutWorker` in `viewer.ts`). A `blob:` module worker works in WebKit but not in Chromium. The worker gets an opaque origin and the frame's policy; its imports and font fetches are CORS requests like the page's. Outside a sandbox the worker is started from its URL as usual.
 - Serve the files with their types (`text/javascript`, `text/css`, `application/json`, `image/webp`).
 
 Found on the way, and fixed: WebKit reads a `Blob`'s `stream()` through a `blob:` address, which a worker with an opaque origin may not load, so every ZIP-based file (Word, ODT, EPUB) failed to inflate there. `@golemdocs/docx`'s inflate and `@golemdocs/pdf`'s Flate encoder now make the stream directly (`bytesStream` in `docx/src/zip/deflate.ts`).
+
+In fact WebKit can't read a `Blob` there at all, by any means: `arrayBuffer()`, `new Response(blob)`, `FileReaderSync`, `stream()` and `createImageBitmap(blob)` all fail in such a worker (the page itself reads them). So the worker takes no path that needs one:
+
+- **Writing a PNG** (a drawing's picture, made in the worker when an SVG or SVGZ opens): `encodeCanvas` (`formats/imageCodec.ts`) reads the canvas's Blob as before, and where it can't, writes the PNG from the canvas's pixels itself (`formats/pngEncode.ts`: zlib through `CompressionStream`, fed by a writer). A JPEG or WebP can't be written there; a HEIC photo, which is kept as a JPEG elsewhere, is kept as a PNG instead (`toPng`).
+- **Decoding a picture** (one inside a drawing, a HEIC photo): `decodeImage` tries `createImageBitmap(blob)` and, where it fails, the browser's `ImageDecoder` (WebCodecs), which takes the bytes themselves; then libheif for HEIC.
+- Pictures shown on a page (PNG, JPEG, WebP, GIF, BMP, and those in Word, HTML and EPUB) are decoded by the page, where Blobs work, and need neither.
+
+The sandbox spec opens SVG, SVGZ, PNG, JPEG, WebP, GIF, BMP and HEIC files, and Word, HTML and EPUB files with pictures, in both engines, and checks each shows its red. WebKit also logs "Refused to apply a stylesheet" (`style-src`) once in that run, which blocks nothing: its source wasn't found (the viewer sets no inline style, and a run with a single file doesn't show it).
 
 Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same engine, not the same embedding), and copying to the clipboard from a sandboxed frame (the copy event is a page-level event and needs no permission, but the sandbox spec doesn't read the clipboard back).
 

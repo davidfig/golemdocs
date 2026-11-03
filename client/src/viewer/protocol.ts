@@ -25,7 +25,109 @@ export type FromViewer =
   /** The file can't be shown. */
   | { type: 'golemdocs:error'; message: string }
   /** A link in the document was clicked: the viewer never follows one itself. */
-  | { type: 'golemdocs:link'; url: string };
+  | { type: 'golemdocs:link'; url: string }
+  /** A key the viewer has no use for (see `viewerKey`), pressed while the focus was in it: the host's to act on (Escape, say). */
+  | ({ type: 'golemdocs:key' } & HostKey);
+
+/** A key press passed on to the host, as `KeyboardEvent` has it. */
+export interface HostKey {
+  key: string;
+  code: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+  /** Held down and repeating. */
+  repeat: boolean;
+}
+
+/** What a key does in the viewer (`viewerKey`): one of its own actions, the browser's own (`browser`), or nothing, so the host gets it (`host`). */
+export type ViewerKey =
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'zoomReset'
+  | 'find'
+  | 'closeFind'
+  | 'selectAll'
+  | 'findNext'
+  | 'findPrevious'
+  | 'lineUp'
+  | 'lineDown'
+  | 'lineLeft'
+  | 'lineRight'
+  | 'pageUp'
+  | 'pageDown'
+  | 'first'
+  | 'last'
+  | 'browser'
+  | 'host';
+
+/** Where the focus is and what the view can do, for `viewerKey`. */
+export interface KeyContext {
+  /** ⌘ is the command key (a Mac); elsewhere Ctrl is. */
+  mac: boolean;
+  /** In a text field of the viewer (find, page number): typing, Enter and the arrows are the field's. */
+  inField: boolean;
+  /** On one of the bar's buttons: Enter and Space press it. */
+  onButton: boolean;
+  findOpen: boolean;
+  /** The pages are wider than the view, so ← and → scroll it. */
+  canScrollSideways: boolean;
+}
+
+const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'Fn', 'FnLock', 'OS', 'Hyper', 'Super', 'NumLock', 'ScrollLock']);
+
+/**
+ * What a key press does in the viewer. Its own keys are zoom (⌘/Ctrl + − 0), find (⌘/Ctrl F, F3, ⌘/Ctrl G, and Escape while the find bar
+ * is open), select all (⌘/Ctrl A) and moving through the document (↑ ↓ Page Up/Down Space Home End, and ← → only when the pages are
+ * wider than the view). The browser keeps copying and cutting (⌘/Ctrl C, X, V), Tab, every key in a text field but the zoom and find
+ * keys, a button's Enter and Space, an input method's composing, and keys that only modify others. Every other key is the host's: Escape with the find bar closed, letters
+ * and ← → over pages that fit, and anything with a modifier the viewer doesn't use.
+ */
+export function viewerKey(e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'metaKey'> & { isComposing?: boolean }, context: KeyContext): ViewerKey {
+  const { key } = e;
+  if (e.isComposing || key === 'Process' || key === 'Dead' || key === 'Unidentified' || MODIFIER_KEYS.has(key)) return 'browser';
+  const mod = context.mac ? e.metaKey : e.ctrlKey;
+  const lower = key.length === 1 ? key.toLowerCase() : key;
+  if (mod && (key === '=' || key === '+')) return 'zoomIn';
+  if (mod && (key === '-' || key === '_')) return 'zoomOut';
+  if (mod && key === '0') return 'zoomReset';
+  if (mod && lower === 'f') return 'find';
+  if (key === 'Escape' && context.findOpen) return 'closeFind';
+  if (context.inField) return 'browser';
+  if (mod && lower === 'a') return 'selectAll';
+  if (key === 'F3' || (mod && lower === 'g')) return e.shiftKey ? 'findPrevious' : 'findNext';
+  if (mod && (lower === 'c' || lower === 'x' || lower === 'v')) return 'browser';
+  if (key === 'Tab') return 'browser';
+  if (context.onButton && (key === 'Enter' || key === ' ')) return 'browser';
+  // Moving through the document: plain keys (Shift too, which selects nothing here); with another modifier they are the host's.
+  if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    switch (key) {
+      case 'ArrowDown':
+        return 'lineDown';
+      case 'ArrowUp':
+        return 'lineUp';
+      case 'ArrowLeft':
+        return context.canScrollSideways ? 'lineLeft' : 'host';
+      case 'ArrowRight':
+        return context.canScrollSideways ? 'lineRight' : 'host';
+      case 'PageDown':
+        return 'pageDown';
+      case 'PageUp':
+        return 'pageUp';
+      case ' ':
+        return e.shiftKey ? 'pageUp' : 'pageDown';
+      case 'Home':
+        return 'first';
+      case 'End':
+        return 'last';
+    }
+  }
+  return 'host';
+}
+
+/** The parts of a key press a host is told of. */
+export const hostKey = (e: HostKey): HostKey => ({ key: e.key, code: e.code, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey, repeat: e.repeat });
 
 /** Reads a message as one the viewer takes, or null (anything else is ignored). */
 export function readToViewer(data: unknown): ToViewer | null {

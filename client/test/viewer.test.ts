@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { FontManifest } from '@golemdocs/layout';
-import { checkOutcome, fitWidthZoom, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, ZOOM_STEPS } from '../src/viewer/protocol.ts';
+import { checkOutcome, fitWidthZoom, hostKey, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, viewerKey, ZOOM_STEPS, type KeyContext } from '../src/viewer/protocol.ts';
 import { VIEWER_FONTS, viewerFontSet } from '../src/viewer/fonts.ts';
 
 test('an open message is read with its bytes, and anything else is ignored', () => {
@@ -112,4 +112,66 @@ test('a check for a newer save shows it, keeps what is shown while unchanged or 
   assert.equal(checkOutcome(403), 'ended', 'the owner’s plan ended');
   assert.equal(checkOutcome(401), 'signedOut');
   for (const status of [null, 500, 502, 503, 429, 408]) assert.equal(checkOutcome(status), 'retry', String(status));
+});
+
+// --- Keys -------------------------------------------------------------------------------------------
+
+const VIEW: KeyContext = { mac: true, inField: false, onButton: false, findOpen: false, canScrollSideways: false };
+type Press = { key: string; shiftKey?: boolean; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean; isComposing?: boolean };
+const press = (p: Press, context: Partial<KeyContext> = {}) => viewerKey({ shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, ...p }, { ...VIEW, ...context });
+
+test('the viewer keeps its own keys: zoom, find, select all, and moving through the document', () => {
+  assert.equal(press({ key: '=', metaKey: true }), 'zoomIn');
+  assert.equal(press({ key: '+', metaKey: true, shiftKey: true }), 'zoomIn');
+  assert.equal(press({ key: '-', metaKey: true }), 'zoomOut');
+  assert.equal(press({ key: '0', metaKey: true }), 'zoomReset');
+  assert.equal(press({ key: 'f', metaKey: true }), 'find');
+  assert.equal(press({ key: 'F', metaKey: true, shiftKey: true }), 'find');
+  assert.equal(press({ key: 'a', metaKey: true }), 'selectAll');
+  assert.equal(press({ key: 'F3' }), 'findNext');
+  assert.equal(press({ key: 'g', metaKey: true, shiftKey: true }), 'findPrevious');
+  assert.equal(press({ key: 'ArrowDown' }), 'lineDown');
+  assert.equal(press({ key: 'ArrowUp', shiftKey: true }), 'lineUp');
+  assert.equal(press({ key: ' ' }), 'pageDown');
+  assert.equal(press({ key: ' ', shiftKey: true }), 'pageUp');
+  assert.equal(press({ key: 'PageUp' }), 'pageUp');
+  assert.equal(press({ key: 'Home' }), 'first');
+  assert.equal(press({ key: 'End' }), 'last');
+  // Ctrl is the command key on Windows and Linux; on a Mac, Ctrl+F is not find.
+  assert.equal(press({ key: 'f', ctrlKey: true }, { mac: false }), 'find');
+  assert.equal(press({ key: 'f', ctrlKey: true }), 'host');
+  assert.equal(press({ key: 'f', metaKey: true }, { mac: false }), 'host');
+});
+
+test('Escape closes find when it is open, and is the host\'s otherwise; ← → scroll only pages wider than the view', () => {
+  assert.equal(press({ key: 'Escape' }, { findOpen: true }), 'closeFind');
+  assert.equal(press({ key: 'Escape' }, { findOpen: true, inField: true }), 'closeFind');
+  assert.equal(press({ key: 'Escape' }), 'host');
+  assert.equal(press({ key: 'ArrowLeft' }), 'host');
+  assert.equal(press({ key: 'ArrowRight' }), 'host');
+  assert.equal(press({ key: 'ArrowLeft' }, { canScrollSideways: true }), 'lineLeft');
+  assert.equal(press({ key: 'ArrowRight' }, { canScrollSideways: true }), 'lineRight');
+  assert.equal(press({ key: 'ArrowDown', altKey: true }), 'host', 'with a modifier the viewer does not use');
+});
+
+test('letters and keys the viewer has no use for are the host\'s; the browser keeps copying, Tab, fields, buttons and composing', () => {
+  for (const key of ['f', 'j', 'k', 'N', 'Enter', 'Backspace', 'Delete', 'F5', '?']) assert.equal(press({ key }), 'host', key);
+  assert.equal(press({ key: 'r', metaKey: true, shiftKey: true }), 'host');
+  for (const key of ['c', 'x', 'v']) assert.equal(press({ key, metaKey: true }), 'browser', key);
+  assert.equal(press({ key: 'Tab' }), 'browser');
+  assert.equal(press({ key: 'Tab', shiftKey: true }), 'browser');
+  for (const key of ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']) assert.equal(press({ key }), 'browser', key);
+  assert.equal(press({ key: 'a', isComposing: true }), 'browser');
+  assert.equal(press({ key: 'Process' }), 'browser');
+  // Typing in the find or page field is the field's, not the host's (but the zoom and find keys still work there).
+  for (const key of ['f', 'Escape', 'ArrowLeft', 'Enter', 'Home']) assert.equal(press({ key }, { inField: true }), 'browser', key);
+  assert.equal(press({ key: '=', metaKey: true }, { inField: true }), 'zoomIn');
+  // Enter and Space press a button that has the focus.
+  assert.equal(press({ key: 'Enter' }, { onButton: true }), 'browser');
+  assert.equal(press({ key: ' ' }, { onButton: true }), 'browser');
+});
+
+test('a key passed to the host keeps only what describes it', () => {
+  const event = { key: 'f', code: 'KeyF', shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false, target: {}, timeStamp: 3 };
+  assert.deepEqual(hostKey(event), { key: 'f', code: 'KeyF', shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false });
 });

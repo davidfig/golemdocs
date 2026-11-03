@@ -29,6 +29,7 @@ window.addEventListener('message', (event) => {
     onOpened: (info) => tell({ type: 'golemdocs:opened', ...info }),
     onError: (message) => tell({ type: 'golemdocs:error', message }),
     onLink: (url) => tell({ type: 'golemdocs:link', url }),
+    onKey: (key) => tell({ type: 'golemdocs:key', ...key }),
   });
 });
 

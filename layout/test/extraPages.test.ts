@@ -117,3 +117,12 @@ test('text typed later loads its extra page first', async () => {
   await session.ensurePages('☃');
   assert.equal(loaded.filter((id) => id === 'calibri-extra/regular').length, 1, 'loaded once');
 });
+
+test('a font set without a font\'s usual stand-in falls back to Calibri rather than failing (the viewer\'s trimmed font set)', async () => {
+  // This set has Calibri and Arial only: Courier New, which Consolas stands in as, and JetBrains Mono's stand-in are missing.
+  const { fonts } = await makeFonts();
+  assert.equal(fonts.resolve({ font: 'Consolas' }).family.id, 'calibri');
+  assert.equal(fonts.resolve({ font: 'Georgia' }).family.id, 'calibri', 'Georgia stands in as Times New Roman, which is missing too');
+  assert.equal(fonts.resolve({ font: 'Segoe UI' }).family.id, 'arial');
+  assert.equal(fonts.resolve({ font: 'Unheard Of' }).family.id, 'calibri');
+});

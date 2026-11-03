@@ -17,9 +17,10 @@ import { spelling } from './spelling.ts';
 import { table } from './table.ts';
 import { vault } from './vault.ts';
 import { vector } from './vector.ts';
+import { viewer } from './viewer.ts';
 import { pageSetup } from './pageSetup.ts';
 import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Catalog = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };

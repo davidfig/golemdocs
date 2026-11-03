@@ -192,7 +192,7 @@ onScrollPastEndChange(() => {
   camera.scrollPastEnd = scrollPastEndOn();
   requestRender();
 });
-const renderer = new PageRenderer(gl);
+const renderer = new PageRenderer(gl, deskColor);
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 // The default font nearly every document uses: fetch its atlases now, not after the first layout.
 atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);
@@ -2298,6 +2298,9 @@ async function openShared(id: string): Promise<void> {
       pendingNotice = t('app.sharedGone');
       return;
     }
+    // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts), at the share's own address
+    // rather than the document's id. It takes this page's place in the history, so Back goes to where they chose it from.
+    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view/?s=${encodeURIComponent(doc.viewToken)}`);
     setStatus(t('app.openingShared'));
     worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });

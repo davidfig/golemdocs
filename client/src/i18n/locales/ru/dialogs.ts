@@ -55,7 +55,7 @@ export const dialogs: Catalog = {
   'dialogs.share.nobody': 'Пока ни с кем не открыт общий доступ.',
   'dialogs.share.done': 'Готово',
   'dialogs.share.peopleHeading': 'Пользователи',
-  'dialogs.share.note': 'Пользователи должны хотя бы раз войти в Golem Docs. Редакторы и читатели видят изменения в реальном времени.',
+  'dialogs.share.note': 'Пользователи должны хотя бы раз войти в Golem Docs. Редакторы видят изменения в реальном времени; читатели получают копию только для чтения, которая обновляется при каждом сохранении документа.',
 
   // Sign in
   'dialogs.signIn.title': 'Вход',

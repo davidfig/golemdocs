@@ -1,24 +1,28 @@
 // Sharing, in one dialog: for a cloud document, the people it is shared with: the owner adds them by
 // the email they signed in with, as editors (who can change the document) or viewers (who can only
-// look, live), and removes them.
+// look: they open it in the read-only viewer, docs/architecture/viewer.md), and removes them.
 
 import { addShare, listShares, removeShare, type Share, type ShareRole } from '../cloud.ts';
 import { t } from '../i18n/index.ts';
 import { avatar } from './avatar.ts';
-import { h } from './dom.ts';
+import { h, segmented } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
 
-const roleLabel = (role: ShareRole): string => t(role === 'editor' ? 'dialogs.share.canEdit' : 'dialogs.share.canView');
-
-function roleSelect(value: ShareRole): HTMLSelectElement {
-  const select = h('select', { class: 'wm-select', attrs: { 'aria-label': t('dialogs.share.access') } });
-  for (const role of ['editor', 'viewer'] as const) {
-    const option = h('option', { text: roleLabel(role) });
-    option.value = role;
-    select.append(option);
-  }
-  select.value = value;
-  return select;
+/** Can edit | Can view: the shared segmented control, set to `value`, with `pick` told of a change. */
+function roleChoice(value: ShareRole, pick: (role: ShareRole) => void): { el: HTMLElement; set(role: ShareRole): void } {
+  const choice = segmented<ShareRole>(
+    t('dialogs.share.access'),
+    [
+      { value: 'editor', text: t('dialogs.share.canEdit') },
+      { value: 'viewer', text: t('dialogs.share.canView') },
+    ],
+    (role) => {
+      choice.set(role);
+      pick(role);
+    },
+  );
+  choice.set(value);
+  return choice;
 }
 
 export interface ShareTarget {
@@ -47,9 +51,10 @@ export function showShareDialog(target: ShareTarget): void {
 
   const email = h('input', { attrs: { type: 'email', placeholder: t('dialogs.share.emailPlaceholder'), 'aria-label': t('dialogs.share.emailLabel'), autocomplete: 'off' } });
   email.style.cssText = 'flex:1;min-width:0;padding:6px';
-  const role = roleSelect('editor');
+  let role: ShareRole = 'editor';
+  const roleFor = roleChoice(role, (next) => (role = next));
   const add = h('button', { text: t('dialogs.share.share'), attrs: { type: 'submit' } });
-  const form = h('form', {}, email, role, add);
+  const form = h('form', {}, email, roleFor.el, add);
   form.style.cssText = 'display:flex;gap:6px';
 
   const say = (text: string, error = false) => {
@@ -60,10 +65,8 @@ export function showShareDialog(target: ShareTarget): void {
   const row = (share: Share): HTMLElement => {
     const label = h('span', { text: share.name && share.email ? t('dialogs.share.person', { name: share.name, email: share.email }) : (share.email ?? share.name ?? t('dialogs.share.unknown')) });
     label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    const access = roleSelect(share.role);
-    access.addEventListener('change', () => {
-      if (!share.email) return;
-      const next = access.value as ShareRole;
+    const access = roleChoice(share.role, (next) => {
+      if (!share.email) return access.set(share.role);
       addShare(personId, share.email, next).then(
         () => {
           share.role = next;
@@ -71,7 +74,7 @@ export function showShareDialog(target: ShareTarget): void {
         },
         (error: Error) => {
           // It didn't change: show the access they still have.
-          access.value = share.role;
+          access.set(share.role);
           say(error.message, true);
         },
       );
@@ -87,7 +90,7 @@ export function showShareDialog(target: ShareTarget): void {
         },
       );
     });
-    const el = h('div', { attrs: { role: 'listitem' } }, avatar(share.picture, share.name ?? share.email, 24), label, access, remove);
+    const el = h('div', { attrs: { role: 'listitem' } }, avatar(share.picture, share.name ?? share.email, 24), label, access.el, remove);
     el.style.cssText = 'display:flex;gap:6px;align-items:center';
     return el;
   };
@@ -106,7 +109,7 @@ export function showShareDialog(target: ShareTarget): void {
     const address = email.value.trim();
     if (!address) return;
     add.disabled = true;
-    addShare(personId, address, role.value as ShareRole).then(
+    addShare(personId, address, role).then(
       () => {
         email.value = '';
         say('');

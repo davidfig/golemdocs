@@ -1,8 +1,8 @@
 // Tiles for the page to draw (docs/spreadsheets.md, "Drawing: a hashed tile pyramid"), built in the sheet worker.
 // Level 0: the cells of 64 rows by 16 columns, with their text and look; the page lays the glyphs out. Levels 1 and up: the
-// overview, 256 by 256 texels, one a cell at level 1 and each level a quarter of the one below, so a zoomed-out sheet is a
-// handful of textures whatever its size. Texels are what a cell looks like from far away: its fill, darkened by how much
-// of it its text covers (estimated, never formatted).
+// overview, 256 by 256 texels, a texel 2^(level-1) points square, so a zoomed-out sheet is a handful of textures whatever its
+// size. The lowest levels are drawn from the same cells as level 0, placed as the page places them (fills, borders, and text
+// as a bar a word, as the page draws text too small to read, cellText.ts); each level above is the mean of the four below.
 
 import { Kind, MAX_COLUMNS, MAX_ROWS } from './model/column.ts';
 import type { Workbook } from './model/workbook.ts';
@@ -10,20 +10,20 @@ import type { Worksheet } from './model/worksheet.ts';
 import { displayText } from './format/display.ts';
 import { numberFormat } from './format/numberFormat.ts';
 import type { NumberFormat } from './format/numberFormat.ts';
-import { drawStyle, mix } from './draw.ts';
+import { drawStyle } from './draw.ts';
 import type { CellOverlay, ConditionalPainter } from './conditional.ts';
 import { tablePaint } from './tables.ts';
 import { pivotLookOf, pivotPaint } from './pivot.ts';
 import type { PivotPaint } from './pivot.ts';
 import { resolveColor } from './model/theme.ts';
-import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE } from './protocol.ts';
+import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE, overviewTexel } from './protocol.ts';
 import type { CellPaint, CellTile, DrawStyle, OverviewTile, PrintData, TileKey } from './protocol.ts';
 import { printLayout } from './print.ts';
+import { PAD, ROUGH_MEASURE, inkAlpha, inkSpans, INK_TOP, placeText } from './cellText.ts';
+import type { CellRange } from './model/worksheet.ts';
 
 /** How far a cell's text may spill into empty neighbours, in cells. */
 const MAX_SPILL = 32;
-/** How dark a line of text looks from far away, over the part of the cell it covers. */
-const INK = 0.55;
 /** Overview tiles kept (each 256 kB). */
 const KEEP = 256;
 
@@ -120,8 +120,13 @@ export const OVERLAY_STYLES = 1 << 30;
 export function cellTile(book: Workbook, index: number, sheet: Worksheet, key: TileKey, cache: TileCache, conditional?: ConditionalPainter): CellTile {
   const r0 = key.ty * CELL_TILE_ROWS;
   const c0 = key.tx * CELL_TILE_COLS;
-  const r1 = Math.min(MAX_ROWS, r0 + CELL_TILE_ROWS);
-  const c1 = Math.min(MAX_COLUMNS, c0 + CELL_TILE_COLS);
+  const { cells, merges } = paintCells(book, sheet, r0, Math.min(MAX_ROWS, r0 + CELL_TILE_ROWS), c0, Math.min(MAX_COLUMNS, c0 + CELL_TILE_COLS), cache, conditional);
+  const used = [...new Set(cells.map((c) => c.style))];
+  return { sheet: index, key, cells, merges, styles: used.map((s) => [s, cache.style(s)]), version: cache.version };
+}
+
+/** The cells of rows [r0, r1) and columns [c0, c1) with something to show, and the merged ranges touching them. */
+function paintCells(book: Workbook, sheet: Worksheet, r0: number, r1: number, c0: number, c1: number, cache: TileCache, conditional?: ConditionalPainter): { cells: CellPaint[]; merges: CellRange[] } {
   const grid = sheet.grid;
   const cells: CellPaint[] = [];
   const merges = sheet.merges.filter((m) => m.r0 < r1 && m.r1 >= r0 && m.c0 < c1 && m.c1 >= c0);
@@ -173,8 +178,7 @@ export function cellTile(book: Workbook, index: number, sheet: Worksheet, key: T
   if (sheet.tables.length) applyTables(book, sheet, cells, r0, r1, c0, c1, cache);
   if (sheet.pivots.length) applyPivots(book, sheet, cells, r0, r1, c0, c1, cache);
   if (conditional && sheet.conditional.length) applyConditional(book, sheet, cells, r0, r1, c0, c1, cache, conditional);
-  const used = [...new Set(cells.map((c) => c.style))];
-  return { sheet: index, key, cells, merges, styles: used.map((s) => [s, cache.style(s)]), version: cache.version };
+  return { cells, merges };
 }
 
 /** Paints the tile's cells that are in tables with their tables' styles (empty ones too). */
@@ -300,87 +304,139 @@ function generalWidth(sheet: Worksheet, col: number, style: DrawStyle): number {
   return Math.max(1, Math.min(255, Math.floor(((width - 4) / (style.size * 0.5)) + 0.0001)));
 }
 
-/** Cells per texel at a level, and cells a tile covers. */
-export const overviewSpan = (level: number): number => 2 ** (level - 1);
-
-export function overviewTile(book: Workbook, index: number, sheet: Worksheet, key: TileKey, cache: TileCache): OverviewTile {
-  const rgba = overviewPixels(book, index, sheet, key, cache);
-  return { sheet: index, key, rgba: rgba ?? new Uint8Array(0), version: cache.version };
-}
-
 const WHITE = 0xffffff;
 
-/** The tile's texels, or null when it is all empty sheet (drawn as plain white). */
-function overviewPixels(book: Workbook, index: number, sheet: Worksheet, key: TileKey, cache: TileCache): Uint8Array | null {
+/** Overview levels up to this one are drawn from the cells; each above it is the mean of the four tiles below. */
+const DIRECT_LEVEL = 4;
+/** How far text may spill into an overview tile from cells outside it, in points. */
+const SPILL_REACH = 480;
+
+export function overviewTile(book: Workbook, index: number, sheet: Worksheet, key: TileKey, cache: TileCache, conditional?: ConditionalPainter): OverviewTile {
+  const rgba = overviewPixels(book, index, sheet, key, cache, conditional);
+  // A copy: the worker transfers what it sends, and the cache keeps the original (for this tile asked again, and the levels above).
+  return { sheet: index, key, rgba: rgba ? rgba.slice() : new Uint8Array(0), version: cache.version };
+}
+
+function overviewPixels(book: Workbook, index: number, sheet: Worksheet, key: TileKey, cache: TileCache, conditional?: ConditionalPainter): Uint8Array | null {
   const id = `${index}:${key.level}:${key.tx}:${key.ty}`;
   const kept = cache.getOverview(id);
   if (kept !== undefined) return kept;
-  const span = overviewSpan(key.level) * OVERVIEW_TILE;
-  const r0 = key.ty * span;
-  const c0 = key.tx * span;
-  const grid = sheet.grid;
+  const span = overviewTexel(key.level) * OVERVIEW_TILE;
+  const x0 = key.tx * span;
+  const y0 = key.ty * span;
+  const { grid, rowSizes: rows, colSizes: cols } = sheet;
   let pixels: Uint8Array | null;
-  if (r0 >= Math.max(grid.rows, 1) || c0 >= Math.max(grid.cols, 1) || (r0 >= grid.rows && !sheet.rowStyles.size) || (c0 >= grid.cols && !sheet.colStyles.size)) {
+  // Nothing to draw: past the sheet's end, or below or right of its cells (and the text that may spill from them).
+  if (
+    x0 >= cols.total() ||
+    y0 >= rows.total() ||
+    (rows.indexAt(y0) >= Math.max(grid.rows, 1) && !sheet.rowStyles.size) ||
+    (cols.indexAt(Math.max(0, x0 - SPILL_REACH)) >= Math.max(grid.cols, 1) && !sheet.colStyles.size)
+  ) {
     pixels = null;
-  } else if (key.level === 1) {
-    pixels = levelOne(book, sheet, r0, c0, cache);
+  } else if (key.level <= DIRECT_LEVEL) {
+    pixels = drawCells(book, sheet, x0, y0, overviewTexel(key.level), cache, conditional);
   } else {
     // Each texel is the mean of the four below it.
-    const children = [0, 1, 2, 3].map((k) => overviewPixels(book, index, sheet, { level: key.level - 1, tx: key.tx * 2 + (k & 1), ty: key.ty * 2 + (k >> 1) }, cache));
+    const children = [0, 1, 2, 3].map((k) => overviewPixels(book, index, sheet, { level: key.level - 1, tx: key.tx * 2 + (k & 1), ty: key.ty * 2 + (k >> 1) }, cache, conditional));
     pixels = children.every((c) => c === null) ? null : downsample(children);
   }
   cache.putOverview(id, pixels);
   return pixels;
 }
 
-function levelOne(book: Workbook, sheet: Worksheet, r0: number, c0: number, cache: TileCache): Uint8Array {
-  const out = new Uint8Array(OVERVIEW_TILE * OVERVIEW_TILE * 4);
-  const r1 = Math.min(MAX_ROWS, r0 + OVERVIEW_TILE);
-  const c1 = Math.min(MAX_COLUMNS, c0 + OVERVIEW_TILE);
-  // Start white where the sheet is, transparent past its end.
-  for (let r = r0; r < r1; r++) {
-    for (let c = c0; c < c1; c++) {
-      const i = ((r - r0) * OVERVIEW_TILE + (c - c0)) * 4;
-      out[i] = out[i + 1] = out[i + 2] = out[i + 3] = 255;
+/**
+ * An overview tile drawn from its cells: each texel the share of it each fill, border and word covers, as the page draws
+ * them at level 0 when rows are too small for text (renderer.ts, `buildCells`). Text is measured roughly (`ROUGH_MEASURE`).
+ */
+export function drawCells(book: Workbook, sheet: Worksheet, x0: number, y0: number, texel: number, cache: TileCache, conditional?: ConditionalPainter): Uint8Array {
+  const n = OVERVIEW_TILE;
+  const span = texel * n;
+  const { rowSizes: rows, colSizes: cols } = sheet;
+  const color = new Float32Array(n * n * 3).fill(1);
+  const paint = (ax0: number, ay0: number, ax1: number, ay1: number, rgb: number, opacity: number) => {
+    const i0 = Math.max(0, Math.floor((ax0 - x0) / texel));
+    const i1 = Math.min(n - 1, Math.ceil((ax1 - x0) / texel) - 1);
+    const j0 = Math.max(0, Math.floor((ay0 - y0) / texel));
+    const j1 = Math.min(n - 1, Math.ceil((ay1 - y0) / texel) - 1);
+    const r = ((rgb >> 16) & 255) / 255;
+    const g = ((rgb >> 8) & 255) / 255;
+    const b = (rgb & 255) / 255;
+    for (let j = j0; j <= j1; j++) {
+      const ty = y0 + j * texel;
+      const fy = (Math.min(ay1, ty + texel) - Math.max(ay0, ty)) / texel;
+      if (fy <= 0) continue;
+      for (let i = i0; i <= i1; i++) {
+        const tx = x0 + i * texel;
+        const f = ((Math.min(ax1, tx + texel) - Math.max(ax0, tx)) / texel) * fy * opacity;
+        if (f <= 0) continue;
+        const k = (j * n + i) * 3;
+        color[k] += (r - color[k]) * f;
+        color[k + 1] += (g - color[k + 1]) * f;
+        color[k + 2] += (b - color[k + 2]) * f;
+      }
+    }
+  };
+
+  // The cells the tile shows, those whose text may spill into it, and the first cells of merged ranges reaching it.
+  let r0 = rows.indexAt(y0);
+  const r1 = rows.endAt(y0 + span) + 1;
+  let c0 = cols.indexAt(Math.max(0, x0 - SPILL_REACH));
+  const c1 = cols.endAt(x0 + span + SPILL_REACH) + 1;
+  for (const m of sheet.merges) {
+    if (m.r0 < r1 && m.r1 >= r0 && m.c0 < c1 && m.c1 >= c0) {
+      r0 = Math.min(r0, m.r0);
+      c0 = Math.min(c0, m.c0);
     }
   }
-  const put = (r: number, c: number, rgb: number) => {
-    const i = ((r - r0) * OVERVIEW_TILE + (c - c0)) * 4;
-    out[i] = (rgb >> 16) & 255;
-    out[i + 1] = (rgb >> 8) & 255;
-    out[i + 2] = rgb & 255;
-  };
-  // Whole styled rows and columns first, then cells over them, column by column (the model's grain).
-  for (const [c, s] of sheet.colStyles) {
-    if (c < c0 || c >= c1) continue;
-    const fill = cache.style(s).fill;
-    if (fill !== null) for (let r = r0; r < r1; r++) put(r, c, fill);
+  const { cells, merges } = paintCells(book, sheet, r0, r1, c0, c1, cache, conditional);
+  const boxes = new Map(merges.map((m) => [`${m.r0}:${m.c0}`, { x0: cols.position(m.c0), y0: rows.position(m.r0), x1: cols.position(m.c1 + 1), y1: rows.position(m.r1 + 1) }]));
+  for (const box of boxes.values()) paint(box.x0, box.y0, box.x1, box.y1, WHITE, 1);
+  const words: [number, number, number, number, number, number][] = [];
+  for (const cell of cells) {
+    const style = cache.style(cell.style);
+    const box = boxes.get(`${cell.row}:${cell.col}`) ?? { x0: cols.position(cell.col), y0: rows.position(cell.row), x1: cols.position(cell.col + 1), y1: rows.position(cell.row + 1) };
+    if (box.x1 <= box.x0 || box.y1 <= box.y0) continue;
+    const w = box.x1 - box.x0;
+    const h = box.y1 - box.y0;
+    if (style.fill !== null) paint(box.x0, box.y0, box.x1, box.y1, style.fill, 1);
+    if (cell.bar) paint(box.x0 + w * cell.bar.from + 1, box.y0 + 1.5, box.x0 + w * cell.bar.to - 1, box.y1 - 1.5, cell.bar.color, 1);
+    if (cell.icon) {
+      const size = Math.min(12, h - 3, w - 2);
+      if (size > 2) paint(box.x0 + 2, box.y0 + (h - size) / 2, box.x0 + 2 + size, box.y0 + (h + size) / 2, cell.icon.color, 0.7);
+    }
+    const [left, right, top, bottom] = style.borders;
+    if (left) paint(box.x0 - left[0] / 2, box.y0, box.x0 + left[0] / 2, box.y1, left[1], 1);
+    if (right) paint(box.x1 - right[0] / 2, box.y0, box.x1 + right[0] / 2, box.y1, right[1], 1);
+    if (top) paint(box.x0, box.y0 - top[0] / 2, box.x1, box.y0 + top[0] / 2, top[1], 1);
+    if (bottom) paint(box.x0, box.y1 - bottom[0] / 2, box.x1, box.y1 + bottom[0] / 2, bottom[1], 1);
+    if (!cell.text) continue;
+    const reachLeft = cell.spillLeft ? cols.position(cell.col - cell.spillLeft) + PAD : box.x0;
+    const reachRight = cell.spillRight ? cols.position(cell.col + 1 + cell.spillRight) - PAD : box.x1;
+    const ink = cell.color ?? style.color;
+    const opacity = inkAlpha(style);
+    for (const line of placeText(cell.text, style, cell.type, box, reachLeft, reachRight, ROUGH_MEASURE, cell.fill)) {
+      for (const [a, b] of inkSpans(line, style.size, ROUGH_MEASURE)) words.push([a, line.baseline - INK_TOP * style.size, b, line.baseline, ink, opacity]);
+    }
   }
-  for (const [r, s] of sheet.rowStyles) {
-    if (r < r0 || r >= r1) continue;
-    const fill = cache.style(s).fill;
-    if (fill !== null) for (let c = c0; c < c1; c++) put(r, c, fill);
-  }
-  const grid = sheet.grid;
-  for (let c = c0; c < Math.min(c1, grid.cols); c++) {
-    const column = grid.columns[c];
-    if (!column) continue;
-    const width = Math.max(1, sheet.colSizes.ownSize(c));
-    for (const { chunk, start } of column.chunks(r0, r1)) {
-      if (!chunk.n) continue;
-      const from = Math.max(0, r0 - start);
-      const to = Math.min(chunk.count, r1 - start);
-      chunk.forEach(from, to, (o, kind, value, styleIndex) => {
-        const row = start + o;
-        const style = cache.style(styleIndex);
-        const base = style.fill ?? WHITE;
-        let chars = 0;
-        if (kind === Kind.Number) chars = cache.format(styleIndex).estimateLength(value);
-        else if (kind === Kind.String) chars = Math.min(64, book.strings.get(value).length);
-        else if (kind === Kind.Boolean || kind === Kind.Error) chars = 5;
-        const coverage = Math.min(1, (chars * style.size * (style.bold ? 0.56 : 0.5)) / width) * INK * (style.bold ? 1.25 : 1);
-        put(row, c, chars ? mix(base, style.color, coverage) : base);
-      });
+  // Text over every fill, as the page draws it.
+  for (const [a, top, b, baseline, ink, opacity] of words) paint(a, top, b, baseline, ink, opacity);
+
+  // Opaque where the sheet is, transparent past its end.
+  const width = cols.total();
+  const height = rows.total();
+  const out = new Uint8Array(n * n * 4);
+  for (let j = 0; j < n; j++) {
+    const ty = y0 + j * texel;
+    const fy = Math.max(0, Math.min(1, (height - ty) / texel));
+    for (let i = 0; i < n; i++) {
+      const tx = x0 + i * texel;
+      const fx = Math.max(0, Math.min(1, (width - tx) / texel));
+      const k = j * n + i;
+      out[k * 4] = Math.round(color[k * 3] * 255);
+      out[k * 4 + 1] = Math.round(color[k * 3 + 1] * 255);
+      out[k * 4 + 2] = Math.round(color[k * 3 + 2] * 255);
+      out[k * 4 + 3] = Math.round(fx * fy * 255);
     }
   }
   return out;

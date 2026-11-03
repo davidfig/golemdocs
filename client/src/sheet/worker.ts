@@ -336,7 +336,7 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         if (!sheet || !isWorksheet(sheet)) return post({ t: 'tiles', id: m.id, cells: [], overview: [] });
         const conditional = sheet.conditional.length && engine ? painterFor(m.sheet, sheet) : undefined;
         const cells = m.keys.filter((k) => k.level === 0).map((k) => cellTile(book!, m.sheet, sheet, k, cache!, conditional));
-        const overview = m.keys.filter((k) => k.level > 0).map((k) => overviewTile(book!, m.sheet, sheet, k, cache!));
+        const overview = m.keys.filter((k) => k.level > 0).map((k) => overviewTile(book!, m.sheet, sheet, k, cache!, conditional));
         post({ t: 'tiles', id: m.id, cells, overview }, overview.map((o) => o.rgba.buffer as ArrayBuffer).filter((b, i, all) => b.byteLength && all.indexOf(b) === i));
         return;
       }

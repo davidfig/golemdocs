@@ -18,6 +18,7 @@ import {
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { h, isFormField, modalOpen, segmented } from './dom.ts';
+import { zoomPercent } from '../view/camera.ts';
 import { sameValue } from './sameValue.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
@@ -222,7 +223,7 @@ export class Chrome {
   /** The zoom box's list of sizes, shown by `owner` (the status bar's zoom); a second click closes it. */
   showZoomList(owner: HTMLElement): void {
     if (popupOpenFor(owner)) return closePopup();
-    const current = `${Math.round(this.state.zoom * 100)}%`;
+    const current = `${zoomPercent(this.state.zoom)}%`;
     const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': t('chrome.control.zoom') } });
     for (const preset of zoomPresets()) {
       const chosen = preset.label === current;
@@ -1160,7 +1161,7 @@ export class Chrome {
           label: t('chrome.control.zoom'),
           width: 52,
           options: () => zoomPresets().map((p) => p.label),
-          value: (s) => `${Math.round(s.zoom * 100)}%`,
+          value: (s) => `${zoomPercent(s.zoom)}%`,
           enabled: () => true,
           commit: (text) => {
             const preset = zoomPresets().find((p) => p.label.toLowerCase() === text.toLowerCase());

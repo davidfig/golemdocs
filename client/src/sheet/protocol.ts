@@ -1,7 +1,7 @@
 // What the spreadsheet view (page) and the sheet worker say to each other (docs/spreadsheets.md, "Drawing", "The editor").
 // The worker holds the workbook; the page holds the camera, the geometry it needs to place things (row heights and column
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
-// (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells.
+// (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells as laid out.
 
 import type { DelimitedKind } from './delimited.ts';
 import type { PageSetup, PrintLayout } from './print.ts';
@@ -18,12 +18,16 @@ import type { CellRange, Pane, SheetState } from './model/worksheet.ts';
 /** Level 0: 64 rows by 16 columns of cells. */
 export const CELL_TILE_ROWS = 64;
 export const CELL_TILE_COLS = 16;
-/** Overview tiles are 256 by 256 texels; at level k a texel is 2^(k-1) by 2^(k-1) cells. */
+/**
+ * Overview tiles are 256 by 256 texels; at level k a texel is 2^(k-1) points square, so tiles cover the sheet as it is
+ * laid out (wide columns wide, text where it spills), not a grid of cells.
+ */
 export const OVERVIEW_TILE = 256;
+export const overviewTexel = (level: number): number => 2 ** (level - 1);
 
 export interface TileKey {
   level: number;
-  /** Tile column and row: cells [tx * width, ...) at the level's size. */
+  /** Tile column and row: at level 0 blocks of cells, above it squares of OVERVIEW_TILE texels (points from the sheet's top left). */
   tx: number;
   ty: number;
 }

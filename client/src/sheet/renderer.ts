@@ -1,7 +1,7 @@
 // Draws a sheet with the app's WebGL renderer (docs/spreadsheets.md, "Drawing: a hashed tile pyramid"). Each pane of the
 // canvas (geometry.ts) is drawn with a camera of its own: the sheet's white, gridlines one device pixel wide, the cells of
-// level-0 tiles (fills, borders, text laid out here with CellFonts), the overview's textures faded in as rows get too
-// small to read, the selection; then the row and column headers. Tiles are asked of the worker as they come into view
+// level-0 tiles (fills, borders, text laid out here with CellFonts, or a bar a word once rows are too small to read it),
+// the overview's textures (the same bars, drawn by the worker) faded in as rows get smaller still, the selection; then the row and column headers. Tiles are asked of the worker as they come into view
 // and kept in small caches, each with its own float64 origin so float32 stays exact a million rows down.
 
 import type { CellIcon } from './protocol.ts';
@@ -15,19 +15,27 @@ import type { GpuFace } from '../webgl/text/gpuFace.ts';
 import { TextRenderer } from '../webgl/text/textRenderer.ts';
 import { MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
 import type { CellRange } from './model/worksheet.ts';
-import { PAD, placeText } from './cellText.ts';
+import { INK_TOP, PAD, inkAlpha, inkSpans, placeText } from './cellText.ts';
 import type { Measure } from './cellText.ts';
 import type { CellFonts } from './fonts.ts';
 import { HEADER_HEIGHT, OUTLINE_STEP, SheetGeometry } from './geometry.ts';
 import type { Region } from './geometry.ts';
-import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE, tileId } from './protocol.ts';
+import { CELL_TILE_COLS, CELL_TILE_ROWS, OVERVIEW_TILE, overviewTexel, tileId } from './protocol.ts';
 import type { CellTile, ChartScene, DrawStyle, OverviewTile, TileKey } from './protocol.ts';
 import { TriangleBatch, TriangleBatchRenderer } from '../webgl/shapes/triangleBatch.ts';
 
-/** Rows of this many CSS pixels or more show their cells; below FADE_LOW only the overview. */
-const FADE_HIGH = 9;
-const FADE_LOW = 4;
-const KEEP_CELL_TILES = 96;
+/** Rows of this many CSS pixels or more show their text; below, each word is a bar, as the overview draws it. */
+const TEXT_ROWS = 5;
+/** Rows of this many CSS pixels or more show their cells; the overview fades in over them below, and below FADE_LOW is all there is. */
+const FADE_HIGH = 3;
+const FADE_LOW = 2;
+/** Gridlines fade out as rows shrink between these (the overview has none). */
+const GRID_HIGH = 9;
+const GRID_LOW = 3;
+/** The highest overview level: a texel of 2^17 points, so a sheet of a million rows is a few textures. */
+const MAX_LEVEL = 18;
+/** Tiles kept beyond those the last frame drew (always kept, however many a large screen shows). */
+const KEEP_CELL_TILES = 192;
 const KEEP_OVERVIEW = 96;
 /** Milliseconds a frame may spend building tiles; the rest are built in the frames after. */
 const BUDGET_MS = 10;
@@ -177,6 +185,17 @@ interface BuiltCells {
   fontsVersion: number;
   rects: RectBatch | null;
   text: TextBatch[];
+  /** The text as a bar a word, drawn instead of `text` when rows are too small to read it. */
+  bars: RectBatch | null;
+}
+
+/** An overview tile placed for drawing: where in device pixels (relative to the viewport), and its texture. */
+interface OverviewQuad {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  texture: WebGLTexture;
 }
 
 interface BuiltOverview {
@@ -216,7 +235,7 @@ class OverviewRenderer {
   }
 
   /** Each quad: where in device pixels (relative to the viewport), its texture, its opacity. */
-  render(camera: Camera, quads: { x: number; y: number; width: number; height: number; texture: WebGLTexture }[], alpha: number): void {
+  render(camera: Camera, quads: OverviewQuad[], alpha: number): void {
     const gl = this.gl;
     gl.useProgram(this.program);
     gl.enable(gl.BLEND);
@@ -250,7 +269,10 @@ export class SheetRenderer {
    * until the new one comes, and asked for again, so the sheet never blinks empty while it updates.
    */
   private cellTiles = new Map<string, { tile: CellTile; built: BuiltCells | null; stale?: boolean }>();
-  private overviewTiles = new Map<string, { tile: OverviewTile; built: BuiltOverview | null; stale?: boolean }>();
+  private overviewTiles = new Map<string, { tile: OverviewTile; built: BuiltOverview | null; stale?: boolean; blank: boolean }>();
+  /** How many tiles of each kind the last frame drew: the caches never drop below that, or tiles in view would push each other out. */
+  private cellsInView = 0;
+  private overviewInView = 0;
   private styles = new Map<number, DrawStyle>();
   private requested = new Set<string>();
   /** Tiles asked for before they were made out of date: what comes back for them is already stale. */
@@ -282,12 +304,7 @@ export class SheetRenderer {
     const old = this.cellTiles.get(id);
     if (old?.built) this.freeCells(old.built);
     this.cellTiles.set(id, { tile, built: null, stale });
-    while (this.cellTiles.size > KEEP_CELL_TILES) {
-      const first = this.cellTiles.keys().next().value!;
-      const gone = this.cellTiles.get(first)!;
-      if (gone.built) this.freeCells(gone.built);
-      this.cellTiles.delete(first);
-    }
+    trimTiles(this.cellTiles, KEEP_CELL_TILES, this.cellsInView, (gone) => gone.built && this.freeCells(gone.built));
   }
 
   putOverview(tile: OverviewTile): void {
@@ -296,13 +313,8 @@ export class SheetRenderer {
     const stale = this.staleInFlight.delete(id);
     const old = this.overviewTiles.get(id);
     if (old?.built?.texture) this.gl.deleteTexture(old.built.texture);
-    this.overviewTiles.set(id, { tile, built: null, stale });
-    while (this.overviewTiles.size > KEEP_OVERVIEW) {
-      const first = this.overviewTiles.keys().next().value!;
-      const gone = this.overviewTiles.get(first)!;
-      if (gone.built?.texture) this.gl.deleteTexture(gone.built.texture);
-      this.overviewTiles.delete(first);
-    }
+    this.overviewTiles.set(id, { tile, built: null, stale, blank: !tile.rgba.length });
+    trimTiles(this.overviewTiles, KEEP_OVERVIEW, this.overviewInView, (gone) => gone.built?.texture && this.gl.deleteTexture(gone.built.texture));
   }
 
   /** The width of a line of text in a style, in points (null while its font is not loaded). */
@@ -435,6 +447,7 @@ export class SheetRenderer {
 
   private freeCells(built: BuiltCells): void {
     built.rects?.dispose(this.gl);
+    built.bars?.dispose(this.gl);
     for (const batch of built.text) batch.dispose(this.gl);
   }
 
@@ -471,9 +484,13 @@ export class SheetRenderer {
     const regions = (this.regions = g.regions(cssWidth, cssHeight, scale, camera.x, camera.y, this.headerWidth));
     const rowPx = g.rows.default * scale;
     const cellsAlpha = Math.min(1, Math.max(0, (rowPx - FADE_LOW) / (FADE_HIGH - FADE_LOW)));
+    const gridAlpha = Math.min(1, Math.max(0, (rowPx - GRID_LOW) / (GRID_HIGH - GRID_LOW)));
+    const words = rowPx < TEXT_ROWS;
     const overviewAlpha = 1 - cellsAlpha;
     let pending = false;
     const started = performance.now();
+    let cellsInView = 0;
+    let overviewInView = 0;
     const wanted: TileKey[] = [];
 
     for (const region of regions) {
@@ -490,19 +507,25 @@ export class SheetRenderer {
       const frameRects = new RectList();
       // The sheet itself.
       frameRects.push(0, 0, g.width, g.height, packColor(COLOR.sheet));
-      if (cellsAlpha > 0 && frame.gridlines) this.gridlines(frameRects, g, r0, r1, c0, c1, 1 / (scale * dpr));
+      if (cellsAlpha > 0 && gridAlpha > 0 && frame.gridlines) this.gridlines(frameRects, g, r0, r1, c0, c1, 1 / (scale * dpr), gridAlpha);
       this.drawRects(view, frameRects);
 
+      // Rows too small for text whose cells have not all come: the overview stays until they have.
+      let cellsMissing = false;
       if (cellsAlpha > 0) {
-        const batches = { rects: [] as RectBatch[], text: [] as TextBatch[] };
+        const batches = { rects: [] as RectBatch[], text: [] as TextBatch[], bars: [] as RectBatch[] };
         const keys = this.cellKeys(g, r0, r1, c0, c1);
         for (const key of keys) {
           const id = tileId(frame.sheet, key);
           const entry = this.cellTiles.get(id);
+          cellsInView++;
           if (!entry || entry.stale) {
             if (!this.requested.has(id)) wanted.push(key);
             pending = true;
-            if (!entry) continue;
+            if (!entry) {
+              cellsMissing = words;
+              continue;
+            }
           }
           if (!entry.built || entry.built.fontsVersion !== this.fonts.version) {
             if (performance.now() - started > BUDGET_MS && entry.built) {
@@ -513,48 +536,90 @@ export class SheetRenderer {
             }
           }
           if (entry.built.rects) batches.rects.push(entry.built.rects);
-          batches.text.push(...entry.built.text);
+          if (!words) batches.text.push(...entry.built.text);
+          else if (entry.built.bars) batches.bars.push(entry.built.bars);
           // Most recently used last.
           this.cellTiles.delete(id);
           this.cellTiles.set(id, entry);
         }
         this.rects.render(view, batches.rects);
-        this.text.render(view, sortByFace(batches.text));
+        if (words) this.rects.render(view, batches.bars);
+        else this.text.render(view, sortByFace(batches.text));
       }
 
-      if (overviewAlpha > 0) {
-        const level = overviewLevel(g.rows.default * scale * dpr);
-        const span = 2 ** (level - 1) * OVERVIEW_TILE;
-        const quads: { x: number; y: number; width: number; height: number; texture: WebGLTexture }[] = [];
+      const shownOverview = cellsMissing ? 1 : overviewAlpha;
+      if (shownOverview > 0) {
+        const overviewAlpha = shownOverview;
+        // Tiles are squares of the sheet in points, from its top left.
+        const level = overviewLevel(scale * dpr);
+        const span = overviewTexel(level) * OVERVIEW_TILE;
+        const quads: OverviewQuad[] = [];
+        /** Tiles of other levels drawn under a tile still to come (the four below it, or one above), so nothing blinks. */
+        const standIns = new Map<string, OverviewQuad>();
         const blanks = new RectList();
-        for (let ty = Math.floor(r0 / span); ty <= Math.floor(r1 / span); ty++) {
-          for (let tx = Math.floor(c0 / span); tx <= Math.floor(c1 / span); tx++) {
+        // A cached tile as a quad (its texture made the first time), marked as just used; null if it has nothing to draw.
+        const place = (key: TileKey): OverviewQuad | null => {
+          const id = tileId(frame.sheet, key);
+          const entry = this.overviewTiles.get(id);
+          if (!entry || entry.blank) return null;
+          this.overviewTiles.delete(id);
+          this.overviewTiles.set(id, entry);
+          if (!entry.built) {
+            entry.built = { version: entry.tile.version, texture: this.texture(entry.tile.rgba) };
+            // The texture has the pixels now.
+            entry.tile = { ...entry.tile, rgba: new Uint8Array(0) };
+          }
+          if (!entry.built.texture) return null;
+          const size = overviewTexel(key.level) * OVERVIEW_TILE;
+          // Texels past the sheet's end are transparent; the quad covers the whole tile.
+          return { x: (key.tx * size - view.x) * view.scale, y: (key.ty * size - view.y) * view.scale, width: size * view.scale, height: size * view.scale, texture: entry.built.texture };
+        };
+        for (let ty = Math.floor(Math.max(0, docTop) / span); ty <= Math.floor(Math.min(docBottom, g.height) / span); ty++) {
+          for (let tx = Math.floor(Math.max(0, docLeft) / span); tx <= Math.floor(Math.min(docRight, g.width) / span); tx++) {
             const key: TileKey = { level, tx, ty };
             const id = tileId(frame.sheet, key);
             const entry = this.overviewTiles.get(id);
-            const rowA = ty * span;
-            const colA = tx * span;
-            const y0 = g.y(rowA);
-            const y1 = g.y(Math.min(MAX_ROWS, rowA + span));
-            const x0 = g.x(colA);
-            const x1 = g.x(Math.min(MAX_COLUMNS, colA + span));
+            const x0 = tx * span;
+            const y0 = ty * span;
+            const x1 = Math.min(g.width, x0 + span);
+            const y1 = Math.min(g.height, y0 + span);
+            if (x1 <= x0 || y1 <= y0) continue;
+            overviewInView++;
             if (!entry || entry.stale) {
               if (!this.requested.has(id)) wanted.push(key);
               pending = true;
-              if (!entry) continue;
             }
-            if (!entry.tile.rgba.length) {
+            if (!entry) {
+              // Zooming out: the four finer tiles it is made of; zooming in: the nearest coarser one holding it.
+              let found = false;
+              if (level > 1) {
+                for (let k = 0; k < 4; k++) {
+                  const child = { level: level - 1, tx: tx * 2 + (k & 1), ty: ty * 2 + (k >> 1) };
+                  const quad = place(child);
+                  if (quad) standIns.set(tileId(frame.sheet, child), quad);
+                  found ||= this.overviewTiles.has(tileId(frame.sheet, child));
+                }
+              }
+              for (let up = 1; !found && up <= 4 && level + up <= MAX_LEVEL; up++) {
+                const parent = { level: level + up, tx: tx >> up, ty: ty >> up };
+                const parentId = tileId(frame.sheet, parent);
+                const quad = standIns.has(parentId) ? null : place(parent);
+                if (quad) standIns.set(parentId, quad);
+                found = standIns.has(parentId) || this.overviewTiles.has(parentId);
+              }
+              continue;
+            }
+            if (entry.blank) {
+              this.overviewTiles.delete(id);
+              this.overviewTiles.set(id, entry);
               blanks.push(x0, y0, x1 - x0, y1 - y0, packColor(COLOR.sheet, overviewAlpha));
               continue;
             }
-            entry.built ??= { version: entry.tile.version, texture: this.texture(entry.tile.rgba) };
-            if (!entry.built.texture) continue;
-            // Texels past the sheet's end are transparent; the quad covers the tile's whole span of cells.
-            const fullY1 = rowA + span > MAX_ROWS ? y0 + ((y1 - y0) * span) / (MAX_ROWS - rowA) : y1;
-            const fullX1 = colA + span > MAX_COLUMNS ? x0 + ((x1 - x0) * span) / (MAX_COLUMNS - colA) : x1;
-            quads.push({ x: (x0 - view.x) * view.scale, y: (y0 - view.y) * view.scale, width: (fullX1 - x0) * view.scale, height: (fullY1 - y0) * view.scale, texture: entry.built.texture });
+            const quad = place(key);
+            if (quad) quads.push(quad);
           }
         }
+        this.overview.render(view, [...standIns.values()], overviewAlpha);
         this.drawRects(view, blanks);
         this.overview.render(view, quads, overviewAlpha);
       }
@@ -590,6 +655,8 @@ export class SheetRenderer {
     gl.disable(gl.SCISSOR_TEST);
     this.headers(frame, regions, scale, cssWidth, cssHeight);
 
+    this.cellsInView = cellsInView;
+    this.overviewInView = overviewInView;
     if (wanted.length) {
       const fresh = wanted.filter((k) => !this.requested.has(tileId(frame.sheet, k)));
       for (const k of fresh) this.requested.add(tileId(frame.sheet, k));
@@ -628,8 +695,8 @@ export class SheetRenderer {
   }
 
   /** Lines between the cells in view, one device pixel wide whatever the zoom. */
-  private gridlines(list: RectList, g: SheetGeometry, r0: number, r1: number, c0: number, c1: number, px: number): void {
-    const color = packColor(COLOR.grid);
+  private gridlines(list: RectList, g: SheetGeometry, r0: number, r1: number, c0: number, c1: number, px: number, alpha: number): void {
+    const color = packColor(COLOR.grid, alpha);
     const top = g.y(r0);
     const bottom = g.y(r1 + 1);
     const left = g.x(c0);
@@ -663,6 +730,7 @@ export class SheetRenderer {
     const originY = g.y(r0);
     const fills = new RectList();
     const borders = new RectList();
+    const bars = new RectList();
     const lists = new Map<string, { face: GpuFace; list: GlyphList; skew: number; embolden: number }>();
     // Merged ranges: one box, white (or filled) over the gridlines inside.
     const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number }>();
@@ -712,7 +780,9 @@ export class SheetRenderer {
       const color = packColor(cell.color ?? style.color);
       const skew = font.syntheticItalic ? SYNTHETIC_SKEW : 0;
       const embolden = font.syntheticBold ? SYNTHETIC_EMBOLDEN : 0;
+      const ink = packColor(cell.color ?? style.color, inkAlpha(style));
       for (const line of placeText(cell.text, style, cell.type, box, reachLeft, reachRight, measure, cell.fill)) {
+        for (const [a, b] of inkSpans(line, style.size, measure)) bars.push(a - originX, line.baseline - INK_TOP * style.size - originY, b - a, INK_TOP * style.size, ink);
         for (const { cp, x: gx } of line.chars) {
           if (cp <= 32) continue;
           const glyph = this.fonts.glyph(font, cp);
@@ -739,7 +809,13 @@ export class SheetRenderer {
     all.append(fills);
     all.append(borders);
     const text = [...lists.values()].filter((e) => e.list.count).map((e) => new TextBatch(e.face, { skew: e.skew, embolden: e.embolden }, e.list.buffer, e.list.count, originX, originY));
-    return { version: tile.version, fontsVersion: this.fonts.version, rects: all.count ? new RectBatch(all.buffer, all.count, originX, originY) : null, text };
+    return {
+      version: tile.version,
+      fontsVersion: this.fonts.version,
+      rects: all.count ? new RectBatch(all.buffer, all.count, originX, originY) : null,
+      text,
+      bars: bars.count ? new RectBatch(bars.buffer, bars.count, originX, originY) : null,
+    };
   }
 
   private texture(rgba: Uint8Array): WebGLTexture | null {
@@ -997,10 +1073,23 @@ export function groupBefore(levels: Map<number, number>, summary: number, level:
   return [first, summary - 1];
 }
 
-/** The overview level whose texels are about a device pixel for rows of `rowDevicePx`. */
-export function overviewLevel(rowDevicePx: number): number {
-  if (rowDevicePx >= 1) return 1;
-  return Math.min(13, 1 + Math.ceil(Math.log2(1 / rowDevicePx)));
+/**
+ * Drops the least recently used tiles (first in the map) beyond `keep`, or beyond twice the tiles the last frame drew if
+ * that is more, so tiles in view never push each other out.
+ */
+export function trimTiles<T>(tiles: Map<string, T>, keep: number, inView: number, free: (gone: T) => unknown): void {
+  const limit = Math.max(keep, inView * 2);
+  while (tiles.size > limit) {
+    const first = tiles.keys().next().value!;
+    free(tiles.get(first)!);
+    tiles.delete(first);
+  }
+}
+
+/** The overview level to draw at this many device pixels a point. */
+export function overviewLevel(devicePxPerPoint: number): number {
+  // The level whose texels are no bigger than a device pixel, so the texture is only ever shrunk.
+  return Math.min(MAX_LEVEL, Math.max(1, 1 + Math.floor(Math.log2(1 / devicePxPerPoint))));
 }
 
 /** 1, 2, 5, 10, 20, 50... the first at least `n`. */

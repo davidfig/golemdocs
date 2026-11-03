@@ -7,6 +7,8 @@ import { History, nextSheetName, sheetNameProblem } from '../src/sheet/edit.ts';
 import { changeDecimals, look } from '../src/sheet/format/styleChange.ts';
 import { parseInput } from '../src/sheet/input.ts';
 import { TileCache, cellTile, overviewTile } from '../src/sheet/tiles.ts';
+import { inkSpans } from '../src/sheet/cellText.ts';
+import { trimTiles } from '../src/sheet/renderer.ts';
 import { copyRange, parseTabbed } from '../src/sheet/clipboard.ts';
 import { findNext } from '../src/sheet/find.ts';
 import { readWorkbook } from '../src/sheet/xlsx/read.ts';
@@ -144,18 +146,67 @@ test('cell tiles: shown text, spill into empty neighbours, fills of empty styled
   assert.equal(tile.cells.filter((c) => c.row === 5).length, 16, 'a filled row paints its empty cells');
 });
 
-test('overview tiles: blank past the data, coloured where cells are', () => {
+test('overview tiles: the cells as laid out, text a bar a word where it shows', () => {
   const { book: b, sheet, history } = book();
-  history.apply(0, { kind: 'input', range: { r0: 0, c0: 0, r1: 99, c1: 0 }, text: 'some text here' });
+  history.apply(0, { kind: 'input', range: { r0: 0, c0: 0, r1: 0, c1: 0 }, text: 'a long label that spills right' });
+  history.apply(0, { kind: 'input', range: { r0: 0, c0: 4, r1: 0, c1: 4 }, text: '1' });
+  sheet.colSizes.set(5, 200);
+  history.apply(0, { kind: 'input', range: { r0: 0, c0: 6, r1: 0, c1: 6 }, text: 'x' });
+  history.apply(0, { kind: 'input', range: { r0: 1, c0: 0, r1: 99, c1: 0 }, text: 'some text here' });
   const cache = new TileCache(b);
-  const near = overviewTile(b, 0, sheet, { level: 1, tx: 0, ty: 0 }, cache);
-  assert.equal(near.rgba.length, 256 * 256 * 4);
-  assert.ok(near.rgba[0] < 255, 'a cell with text is darker than white');
-  assert.equal(near.rgba[4], 255, 'an empty cell is white');
-  assert.equal(overviewTile(b, 0, sheet, { level: 1, tx: 0, ty: 3 }, cache).rgba.length, 0, 'all empty: no pixels');
-  const far = overviewTile(b, 0, sheet, { level: 3, tx: 0, ty: 0 }, cache);
-  assert.ok(far.rgba[0] < 255 && far.rgba[0] > near.rgba[0] - 1, 'a level up is the mean of the cells it covers');
-  void sheet;
+  // Level 2: a texel two points square, the tile 512 points.
+  const near = overviewTile(b, 0, sheet, { level: 2, tx: 0, ty: 0 }, cache).rgba;
+  assert.equal(near.length, 256 * 256 * 4);
+  const at = (x: number, y: number) => near[(Math.floor(y / 2) * 256 + Math.floor(x / 2)) * 4];
+  const band = 15 - 5; // in row 1's ink, between its x-height and baseline
+  const w = sheet.colSizes.size(0);
+  assert.equal(at(1, 2), 255, 'above the text: the sheet');
+  assert.ok(at(5, band) < 255, 'text at its cell\'s left');
+  assert.ok(at(w + 10, band) < 255, 'and spilling into the empty cell to its right');
+  const e = sheet.colSizes.position(4);
+  const f = sheet.colSizes.position(5);
+  assert.ok(at(f - 4, band) < 255, 'a number at its cell\'s right');
+  assert.equal(at(e + 4, band), 255, 'with nothing left of it');
+  const g = sheet.colSizes.position(6);
+  assert.equal(g - f, 200, 'a wide column is as wide as it is');
+  assert.equal(at(f + 100, band), 255, 'an empty wide column is empty');
+  assert.ok(at(g + 4, band) < 255, 'the text after it, where it is');
+  assert.equal(overviewTile(b, 0, sheet, { level: 2, tx: 0, ty: 30 }, cache).rgba.length, 0, 'below the cells: no pixels');
+  const far = overviewTile(b, 0, sheet, { level: 6, tx: 0, ty: 0 }, cache).rgba;
+  assert.ok(far[0] < 255 && far[0] > 0, 'a level up is the mean of what it covers');
+  assert.equal(far[3], 255, 'and opaque on the sheet');
+});
+
+test('an overview tile sent to the page can be asked for again', () => {
+  const { book: b, sheet, history } = book();
+  history.apply(0, { kind: 'input', range: { r0: 0, c0: 0, r1: 99, c1: 0 }, text: 'text' });
+  const cache = new TileCache(b);
+  const first = overviewTile(b, 0, sheet, { level: 2, tx: 0, ty: 0 }, cache);
+  // The worker transfers the pixels it posts, which empties the buffer it had.
+  structuredClone(first, { transfer: [first.rgba.buffer] });
+  assert.equal(overviewTile(b, 0, sheet, { level: 2, tx: 0, ty: 0 }, cache).rgba.length, 256 * 256 * 4);
+  assert.ok(overviewTile(b, 0, sheet, { level: 6, tx: 0, ty: 0 }, cache).rgba[0] < 255, 'and the levels above still see it');
+});
+
+test('tile caches keep every tile in view, however many', () => {
+  const tiles = new Map<string, number>();
+  const freed: number[] = [];
+  for (let i = 0; i < 300; i++) tiles.set(String(i), i);
+  trimTiles(tiles, 96, 0, (n) => freed.push(n));
+  assert.equal(tiles.size, 96);
+  assert.deepEqual(freed.slice(0, 2), [0, 1], 'the least recently used go first');
+  for (let i = 0; i < 300; i++) tiles.set(String(i), i);
+  trimTiles(tiles, 96, 250, () => {});
+  assert.equal(tiles.size, 300, 'a screen of 250 tiles keeps them all');
+});
+
+test('text too small to read is a bar a word', () => {
+  const measure = { advance: (cp: number) => (cp === 32 ? 0.25 : 0.5), ascent: 0.75, descent: 0.25, lineHeight: 1.2 };
+  const line = { chars: [...'ab cd'].map((ch, i) => ({ cp: ch.codePointAt(0)!, x: i * 5 })), baseline: 10, left: 0, right: 25 };
+  assert.deepEqual(inkSpans(line, 10, measure), [
+    [0, 10],
+    [15, 25],
+  ]);
 });
 
 test('copy and paste as tab-separated text', () => {

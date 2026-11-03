@@ -1459,8 +1459,8 @@ async function refreshLibrary(): Promise<void> {
 }
 
 /** Where to open a listed document from: the account only when this browser's copy is missing or older. */
-/** Waiting for a document other than `before` to finish opening (its first layout done, or failed). */
-const readyWaiters: { before: OpenDocument; resolve: () => void }[] = [];
+/** Waiting for a document other than `before` to finish opening (its first layout done, or failed); `before` null: whichever finishes next. */
+const readyWaiters: { before: OpenDocument | null; resolve: () => void }[] = [];
 
 function documentReady(): void {
   for (const waiter of readyWaiters.filter((w) => w.before !== current)) {
@@ -1469,9 +1469,8 @@ function documentReady(): void {
   }
 }
 
-/** Resolves once a document other than the one open now has opened (or `ms` have passed, for one that never does). */
-function nextDocumentReady(ms = 30_000): Promise<void> {
-  const before = current;
+/** Resolves once a document other than `before` (the one open now) has opened, or with `before` null the next to finish (or `ms` have passed, for one that never does). */
+function nextDocumentReady(ms = 30_000, before: OpenDocument | null = current): Promise<void> {
   return new Promise((resolve) => {
     const waiter = { before, resolve };
     readyWaiters.push(waiter);
@@ -5059,6 +5058,9 @@ async function vaultChanged(touched: string[]): Promise<void> {
  * 'typed' when it was edited here meanwhile (those edits win, and nothing was put in).
  */
 async function refreshFromStore(doc: OpenDocument): Promise<boolean | 'typed'> {
+  // Still opening (a vault sync or the account's save arriving at launch): waited for, or the document would be opened all over again.
+  if (!loaded && doc === current) await nextDocumentReady(30_000, null);
+  if (current !== doc) return true;
   if (!doc.localId || !loaded || textView.active || annotating || isPicture() || isDrawing() || embeddedDrawing || grid) return false;
   const saved = await getSaved(doc.localId).catch(() => null);
   // Renamed too: opened again, so everything that shows its name has the new one.

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.32.1 - Unreleased
+
+### Fixed
+
+- In the desktop app, a document changed in the vault folder while the app was closed no longer opens, disappears and opens again at launch: the change goes into it once it has opened.
+
 ## 0.32.0 - 2026-11-03
 
 ### Added

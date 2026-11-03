@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Camera, CSS_PX_PER_POINT } from '../src/view/camera.ts';
+import { Camera, CSS_PX_PER_POINT, zoomPercent } from '../src/view/camera.ts';
 
 const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} vs ${b}`);
 
@@ -204,4 +204,11 @@ test('scrollPastEnd leaves a document that fits in the view centered', () => {
   const off = new Camera();
   off.clamp(bounds, 800, 800);
   near(c.y, off.y);
+});
+
+test('zoom shows as a whole percentage, with a decimal below 10%', () => {
+  assert.equal(zoomPercent(1), 100);
+  assert.equal(zoomPercent(0.333), 33);
+  assert.equal(zoomPercent(0.08), 8);
+  assert.equal(zoomPercent(0.002), 0.2);
 });

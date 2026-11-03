@@ -211,20 +211,22 @@ has its own float64 origin, so float32 stays exact a million rows down.
   Aptos, Arial... through the same substitutes and font pages as documents, CJK included), fills, borders, gridlines,
   overflow of text into empty neighbours (decided in the worker, which knows them), wrap, rotation, conditional formats
   (colour scales, data bars, icon sets), merged cells, in-cell pictures, sparklines.
-- **Levels 1 and up: the overview.** Below about 3 pixels a row text can't be read and drawing it costs glyphs for
-  nothing, so beneath that zoom the sheet is drawn from a **pyramid of textures**: at level 1 one texel is one cell, each
-  texture covers 256 by 256 cells, and every level up halves the resolution (2 by 2 cells a texel, then 4 by 4...). A
-  texel is the cell as it would look from far away: its fill colour, blended with its text colour weighted by how much of the
-  cell its text covers (the text's measured width), so columns of numbers read as grey bands, headers as darker rows, fills
-  and conditional colours as colour. At 1% a million rows is a few thousand screen pixels high, so a handful of
-  textures draw the whole sheet. Levels are built column by column from the chunks, lazily and by need, and a level-k
-  texture is built from the four level-(k-1) textures under it when those exist.
-- **Between levels** the two are cross-faded over a short zoom range, so zooming in from 1% to 100% never jumps. The text
-  editor rejected a level of detail because a bar per line looked wrong at reading zooms; here the overview takes over only
-  where text is already unreadable, and it is a picture of the cells, not a symbol for them. To be judged on real sheets
-  in step M0.
-- **Zoom range**: the sheet sets `camera.minZoom` lower (0.1%, to be tuned so the whole of a full sheet fits), and the
-  pyramid has as many levels as that needs (about 12 for 16,384 columns by 1M rows).
+- **Text too small to read: a bar a word.** Below 5 CSS pixels a row the page draws each word of a cell's text as a
+  bar instead of its glyphs (`inkSpans` in `cellText.ts`), from about its x-height down to its baseline, in its colour at
+  about the share of the bar its letters would cover. The bars come from the same placed lines as the glyphs, so they are
+  aligned, spill into empty neighbours and are cut where the text is: from far away a sheet still looks like its text.
+  Gridlines fade out as rows shrink from 9 to 3 pixels.
+- **Levels 1 and up: the overview.** Below about 3 pixels a row even the level-0 tiles cost too much (there are too
+  many on screen), so the sheet is drawn from a **pyramid of textures**. A texture covers a square of the sheet in
+  **points**, not cells: at level k a texel is 2^(k-1) points, so wide columns stay wide and text sits where it is.
+  Levels up to 4 are drawn by the worker from the cells themselves, laid out as level 0 lays them out (`paintCells`,
+  then `placeText` with a rough measure of the characters, `ROUGH_MEASURE`): fills, borders, data bars and the same bars
+  a word, each texel the share of it each covers. Each level above is the mean of the four below. Levels are built lazily
+  and by need, and the page picks the level whose texels are no bigger than a device pixel.
+- **Between levels** the overview is faded in over the cells as rows go from 3 to 2 pixels. Because both draw the same
+  bars, nothing jumps: zooming in from 0.1% to 100% the bars sharpen, then become text at 5 pixels a row.
+- **Zoom range**: a workbook sets `camera.minZoom` to 0.1% while it is open (the view puts the camera's own back when
+  it closes), and the pyramid has as many levels as that needs (up to 18 for 16,384 columns by 1M rows).
 - **Visible tiles** come from the Fenwick trees (row and column ranges on screen), then the keys in that rectangle at the
   chosen level. Missing tiles are requested and drawn as soon as they arrive, with the next level up drawn in their place
   meanwhile. LRU caches per level, an upload budget per frame (as `glRenderer.ts`). A cell edit invalidates its level-0 tile

@@ -1,6 +1,9 @@
 /** CSS pixels per point at 100% zoom (Word: 1pt = 1/72in, 96 CSS px per inch). */
 export const CSS_PX_PER_POINT = 96 / 72;
 
+/** A zoom as the percentage shown: whole numbers, with a decimal below 10% (a sheet zooms out to 0.1%). */
+export const zoomPercent = (zoom: number): number => (zoom >= 0.1 ? Math.round(zoom * 100) : Math.round(zoom * 1000) / 10);
+
 /**
  * Maps document space (points, y down) to the canvas. Changing it never touches glyph
  * buffers, only uniforms, which is what makes zoom and scroll cheap.

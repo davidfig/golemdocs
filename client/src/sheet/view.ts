@@ -71,6 +71,8 @@ export interface SheetEditorDeps {
 /** Bars over the canvas, in CSS pixels: the formula bar at the top, the sheet tabs at the bottom. */
 const FORMULA_BAR = 30;
 const TABS_BAR = 30;
+/** How far out a sheet zooms (0.1%): far enough to see most of a big sheet whole, drawn from the overview. */
+const SHEET_MIN_ZOOM = 0.001;
 
 const single = (row: number, col: number): CellRange => ({ r0: row, c0: col, r1: row, c1: col });
 const norm = (a: { row: number; col: number }, b: { row: number; col: number }): CellRange => ({ r0: Math.min(a.row, b.row), c0: Math.min(a.col, b.col), r1: Math.max(a.row, b.row), c1: Math.max(a.col, b.col) });
@@ -314,6 +316,8 @@ export class SheetEditorView {
     const buffer = bytes.slice().buffer;
     const imageBuffer = image ? image.slice().buffer : null;
     this.send({ t: 'open', name, bytes: buffer, image: imageBuffer, format }, imageBuffer ? [buffer, imageBuffer] : [buffer]);
+    this.savedMinZoom = this.deps.camera.minZoom;
+    this.deps.camera.minZoom = SHEET_MIN_ZOOM;
     this.el.hidden = false;
     this.progress = t('sheet.opening');
     this.showStatus();
@@ -326,6 +330,10 @@ export class SheetEditorView {
     for (const reply of this.replies.values()) reply({ t: 'error', id: 0, message: 'closed' });
     this.replies.clear();
     this.renderer.reset();
+    if (this.savedMinZoom !== null) {
+      this.deps.camera.minZoom = this.savedMinZoom;
+      this.savedMinZoom = null;
+    }
     this.book = null;
     this.geometry = null;
     this.editing = null;
@@ -396,6 +404,8 @@ export class SheetEditorView {
 
   /** A CSV or TSV file was told it keeps only the active sheet's values (said once, the first save that leaves something out). */
   private lossNoted = false;
+  /** The camera's own floor, put back when the workbook closes. */
+  private savedMinZoom: number | null = null;
 
   /** The file as it is now (.xlsx, or the CSV or TSV it was), and its new memory image (empty for CSV and TSV). */
   async save(): Promise<{ file: Uint8Array; image: Uint8Array; sha256: string }> {

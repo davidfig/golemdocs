@@ -1,6 +1,6 @@
 // Where a cell's text goes (docs/spreadsheets.md, "Drawing"): aligned in its box as Excel aligns it, spilling into empty
 // neighbours, wrapped, or replaced by #### when a number does not fit, and cut at the edges it may not cross (whole
-// characters are left out, decision 5). Pure: the page gives each character's advance; this places them.
+// characters are left out, decision 5). Pure: the page gives each character's advance (the worker a rough one); this places them.
 
 import { MAYBE_EMOJI, emojiAt } from '@golemdocs/layout';
 import type { DrawStyle } from './protocol.ts';
@@ -165,3 +165,47 @@ export function wrap(text: string, width: number, measure: (s: string) => number
   }
   return out;
 }
+
+/** Text too small to read is drawn as ink: a bar a word, from about its x-height down to its baseline (docs/spreadsheets.md, "Drawing"). */
+export const INK_TOP = 0.5;
+/** How much of a bar's area the letters it stands for would cover (bold letters more). */
+export const inkAlpha = (style: DrawStyle): number => (style.bold ? 0.7 : 0.55);
+
+/** The words of a placed line, each as where it starts and ends, in points. */
+export function inkSpans(line: PlacedLine, size: number, m: Measure): [number, number][] {
+  const out: [number, number][] = [];
+  let start = -1;
+  let end = 0;
+  for (const { cp, x, emoji } of line.chars) {
+    if (cp <= 32) {
+      if (start >= 0) out.push([start, end]);
+      start = -1;
+      continue;
+    }
+    if (start < 0) start = x;
+    const advance = emoji ? m.emoji?.(emoji) : null;
+    end = x + (advance ?? m.advance(cp)) * size;
+  }
+  if (start >= 0) out.push([start, end]);
+  return out;
+}
+
+/**
+ * Advances near enough to Calibri's (and most sans fonts') for text seen from far away, where the fonts are not at hand
+ * (the sheet worker's overview).
+ */
+export const ROUGH_MEASURE: Measure = {
+  advance(cp) {
+    if (cp === 32) return 0.23;
+    if (cp >= 0x30 && cp <= 0x39) return 0.51;
+    if (cp >= 0x2e80) return 1;
+    const ch = String.fromCodePoint(cp);
+    if ('iljtfr.,:;!|\'"()[]'.includes(ch)) return 0.3;
+    if ('MWmw'.includes(ch)) return 0.82;
+    if (ch >= 'A' && ch <= 'Z') return 0.6;
+    return 0.48;
+  },
+  ascent: 0.75,
+  descent: 0.25,
+  lineHeight: 1.22,
+};

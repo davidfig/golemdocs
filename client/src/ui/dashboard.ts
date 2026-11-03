@@ -110,6 +110,8 @@ export class Dashboard {
   /** What has been typed in the name field so far (and where the caret is), kept when the cards are rebuilt under it. */
   private renameDraft: { id: string; value: string; start: number; end: number } | null = null;
   private dragged: Dragged | null = null;
+  /** A listing came in during a drag: the cards are redrawn when it ends (redrawing the one being dragged would cancel the drag). */
+  private redrawAfterDrag = false;
   /** While the cards are being replaced: the rename field losing its place isn't the user leaving it. */
   private rebuilding = false;
   private readonly crumbs: HTMLElement;
@@ -125,7 +127,8 @@ export class Dashboard {
     library.subscribe(() => {
       if (!this.visible) return;
       this.notice.textContent = library.problem ?? '';
-      this.render();
+      if (this.dragged) this.redrawAfterDrag = true;
+      else this.render();
     });
     this.search = h('input', { class: 'wm-input wm-dash-search', attrs: { type: 'search', placeholder: t('panels.dashboard.search'), 'aria-label': t('panels.dashboard.search') } });
     this.notice = h('p', { class: 'wm-dash-notice', attrs: { role: 'status' } });
@@ -376,6 +379,7 @@ export class Dashboard {
   // --- Rendering ---------------------------------------------------------------------------
 
   private render(): void {
+    this.redrawAfterDrag = false;
     const field = this.grid.querySelector<HTMLInputElement>('.wm-card-name-input');
     this.renameDraft =
       field && this.renaming ? { id: this.renaming, value: field.value, start: field.selectionStart ?? field.value.length, end: field.selectionEnd ?? field.value.length } : null;
@@ -830,6 +834,7 @@ export class Dashboard {
     el.addEventListener('dragend', () => {
       this.dragged = null;
       el.classList.remove('wm-dragging');
+      if (this.redrawAfterDrag && this.visible) this.render();
     });
   }
 

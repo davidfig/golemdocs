@@ -69,7 +69,7 @@ export class ZipEntry {
     let crc = 0;
     try {
       for (;;) {
-        let piece: ReadableStreamReadResult<Uint8Array>;
+        let piece: Awaited<ReturnType<typeof reader.read>>;
         try {
           piece = await reader.read();
         } catch (e) {

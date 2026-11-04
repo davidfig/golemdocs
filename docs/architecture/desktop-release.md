@@ -9,7 +9,7 @@ The desktop app is a shell around golemdocs.com ([desktop.md](desktop.md)), so a
 1. **check**: the tag must equal the version in `package.json`, `desktop/src-tauri/tauri.conf.json` and `desktop/src-tauri/Cargo.toml`. If not, nothing is built.
 2. **build** on three runners, each running `cargo test` first, then `tauri-action`:
    - macOS: one universal app (Apple silicon and Intel) as a `.dmg`, signed and notarized when the secrets below exist.
-   - Windows: NSIS `.exe` and `.msi`. **Not signed yet**, so SmartScreen warns on first run.
+   - Windows: NSIS `.exe` and `.msi`, signed with Azure Artifact Signing and checked with `Get-AuthenticodeSignature`. A pushed tag fails if the signing keys are missing; a run from the Actions tab warns and builds unsigned.
    - Linux (Ubuntu 22.04): `.AppImage`, `.deb`, `.rpm`.
 3. The installers are attached to a **draft** GitHub Release named for the tag. Nothing is public until the draft is published.
 
@@ -58,6 +58,23 @@ The Apple rows are for the Mac build; the last one is for every platform. A *Dev
 
 Tauri signs with the hardened runtime and then submits the app to Apple's notary service and staples the ticket; the notarization wait is part of the job (typically a few minutes).
 
+## One-time setup: Windows signing
+
+Windows code-signing keys must live in hardware, so CI signs through Azure Artifact Signing, where Microsoft holds the key. Tauri's `bundle.windows.signCommand` runs `artifact-signing-cli` on the app and the installers; the workflow writes that setting into `tauri.windows.conf.json` during the Windows build, so a local build stays unsigned. The signing account and certificate profile are shared with satchel.email, so the two apps show the same publisher: **David Figatner**, the identity validated on the profile (the Mac build reads YOPEY YOPEY LLC). The certificate's details also show the city. Publishing under the company would take an identity validation for it and a new certificate profile, then a change to `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE`.
+
+| Name | Kind | What |
+| --- | --- | --- |
+| `AZURE_TENANT_ID` | secret | Microsoft Entra ID › Overview › Tenant ID |
+| `AZURE_CLIENT_ID` | secret | the Application (client) ID of the app registration `satchel-signing-ci` |
+| `AZURE_CLIENT_SECRET` | secret | a client secret of that app, named `golemdocs-ci`. **It expires**, and tagged releases then fail at signing: make a new one and set this secret again. Satchel has its own secret on the same app |
+| `AZURE_ARTIFACT_SIGNING_ENDPOINT` | variable | the signing account's regional endpoint |
+| `AZURE_ARTIFACT_SIGNING_ACCOUNT` | variable | the signing account's name |
+| `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE` | variable | the certificate profile's name |
+
+The app registration needs the **Artifact Signing Certificate Profile Signer** role on the signing account. To try a change without releasing, run the workflow from the Actions tab on the branch, with an existing tag: it only replaces that tag's draft files, and nothing reaches the website until `pnpm publish:desktop`.
+
+Update signatures are separate: they use the Tauri update key, so signing the installers does not affect installed apps' updates.
+
 ## Updating the shell
 
 The page updates itself (it is the website), so only the shell, the Rust code and `tauri.conf.json`, needs this. `tauri-plugin-updater` does it, driven from the page through two commands of ours (`desktop/src-tauri/src/update.rs`: `update_check`, `update_install`), so the page never names a URL or a file.
@@ -82,9 +99,8 @@ golemdocs.com/download redirects to the site's **Download** page, `/home/downloa
 
 - **Serving** (`server/src/downloads.ts`): public, no sign-in. `GET /api/downloads` is `latest.json` (`{ version, date, files: [{ name, platform, size }] }`); `GET /api/downloads/<file>` streams the installer from R2 as an attachment, cached for a year (a name never changes its bytes). File names are restricted to `[A-Za-z0-9._+-]`, so nothing outside `downloads/desktop/` can be read, and `latest.json` is never served as a file.
 - **Publishing** (`scripts/publish-desktop.ts`, `pnpm publish:desktop [vX.Y.Z] [--dry-run]`): refuses a release that lacks a Mac, a Windows or a Linux installer, or that has a file of another version; uploads the installers, then the manifest, so the page never lists a version whose files are not all there. Only the Worker needs deploying once for the route; later releases are just this script (no website deploy).
-- **Windows note**: the page tells Windows visitors how to get past SmartScreen (`download.noteWindows`) because the Windows installer is not signed. Remove the note (key, template element, JS) in every language once it is.
+- **Windows note**: the page tells Windows visitors how to get past SmartScreen (`download.noteWindows`). A new signature can still warn until it has built up reputation, so remove the note (key, template element, JS) in every language once a signed installer has been seen to run without a warning on a real Windows machine.
 
 ## Not done yet
 
-- **Windows signing**: needs a code-signing certificate (or Azure Trusted Signing). Until then, the first run on Windows shows a SmartScreen warning ("More info › Run anyway").
 - **Linux/Windows window chrome**: the window uses an overlay title bar and the menus in the page; the native menu bar is Mac-only. Check both on real machines before announcing them.

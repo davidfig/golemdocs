@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.33.2 - Unreleased
+
+### Changed
+
+- The Windows installers are now digitally signed, so Windows can show who published them.
+
 ## 0.33.1 - 2026-11-03
 
 ### Fixed

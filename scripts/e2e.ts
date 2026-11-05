@@ -59,8 +59,9 @@ process.on('SIGTERM', () => stopAll('SIGTERM'));
 
 /** Kills what is still listening on the run's ports: the server's own children can outlive their parent when a run is stopped. */
 function freePorts(env: Record<string, string> = {}): void {
-  const client = Number(env.E2E_CLIENT_PORT ?? 5273);
-  const api = Number(env.E2E_API_PORT ?? 3101);
+  // process.env as well: a side run is given its ports that way, and must not clear the default ones, where the main run's heavy pass has its servers.
+  const client = Number(env.E2E_CLIENT_PORT ?? process.env.E2E_CLIENT_PORT ?? 5273);
+  const api = Number(env.E2E_API_PORT ?? process.env.E2E_API_PORT ?? 3101);
   // One lsof per port, and `-a`: without it lsof ORs its selections, and `-sTCP:LISTEN` alone matches every listening process of the user, dev servers included.
   for (const port of [client, api, api + 6000]) {
     const out = spawnSync('lsof', ['-nti', '-a', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });

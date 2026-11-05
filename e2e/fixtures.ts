@@ -10,6 +10,31 @@ import { readFile } from 'node:fs/promises';
 
 export const MOD = 'ControlOrMeta';
 
+/** Where `locator` is, asking again if the list was just being redrawn under it. */
+export async function boxOf(locator: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  let box: Awaited<ReturnType<Locator['boundingBox']>> = null;
+  await expect.poll(async () => (box = await locator.boundingBox())).not.toBeNull();
+  return box!;
+}
+
+/**
+ * Drags `from` onto `to` (at `at` inside it, or its middle) with the mouse itself. Use this where a list may be redrawn, as a signed-in list is after any
+ * change: if a redraw replaces the source just as `dragTo` presses it, Playwright blocks the press and loses the drag with no error, and later drags do nothing.
+ */
+export async function dragOnto(from: Locator, to: Locator, at?: { x: number; y: number }): Promise<void> {
+  const page = from.page();
+  const a = await boxOf(from);
+  const b = await boxOf(to);
+  const end = { x: b.x + (at?.x ?? b.width / 2), y: b.y + (at?.y ?? b.height / 2) };
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2 + 10, a.y + a.height / 2 + 10, { steps: 3 });
+  await page.mouse.move(end.x, end.y, { steps: 5 });
+  // A second move over the target: WebKit takes no drop on a small target it has only just entered.
+  await page.mouse.move(end.x + 1, end.y + 1);
+  await page.mouse.up();
+}
+
 export class App {
   constructor(readonly page: Page) {}
 

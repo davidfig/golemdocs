@@ -80,6 +80,7 @@ Playwright (`playwright.config.ts`, specs in `e2e/<area>/*.spec.ts`: `collab`, `
 - GPU: on a non-CI Mac the browser uses Metal; elsewhere SwiftShader software GL (`E2E_SOFTWARE_GL=1` forces it).
 - `scripts/e2e.ts`: pass one runs everything in parallel (workers = a third of the cores, `E2E_WORKERS` overrides; one retry, and a pass on retry is reported flaky); pass two re-runs `{ tag: '@heavy' }` tests with fewer workers. `E2E_SKIP_HEAVY=1` skips pass two. Arguments go straight to `playwright test` (single pass).
 - During development run only the specs you added or changed (`pnpm e2e e2e/shell/themes.spec.ts`). For a second concurrent run give it its own ports, state and output: `E2E_CLIENT_PORT=5274 E2E_API_PORT=3102 E2E_STATE=e2e/.state-2 pnpm e2e <paths> --workers=2 --output=e2e/.results-2`, and clean up afterwards. Never `pkill -f playwright`.
+- Drag in a list that can be redrawn with `dragOnto` (`e2e/fixtures.ts`), not `dragTo`. A signed-in list redraws after any change; if that replaces the source just as `dragTo` presses it, Playwright blocks the press and loses the drag with no error, and later drags in that test do nothing. People's drags aren't affected.
 - A feature that adds or changes UI gets a spec. Billing is not covered.
 
 ### Load-sensitive tests

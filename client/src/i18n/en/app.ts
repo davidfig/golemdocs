@@ -73,6 +73,7 @@ export const app = {
   // Account and cloud
   'app.adopted.one': 'Added the document from this browser to your account',
   'app.adopted': 'Added {count} documents from this browser to your account',
+  'app.journalCut': 'Some of the last edits to “{name}” could not be brought back.',
   'app.conflictNotice': '“{before}” was also changed somewhere else, so these changes were saved as “{name}”',
   'app.mergedNotice': '“{name}” was also changed somewhere else, in other paragraphs, so both sets of changes were kept. Version History has it as it was before.',
   'app.signInToShare': 'Sign in to share this document',

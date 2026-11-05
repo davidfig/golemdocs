@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { findContainer, paragraphLength, paragraphsIn, WordDocument, type Paragraph } from '@golemdocs/docx';
+import { findContainer, paragraphLength, paragraphsIn, paragraphText, WordDocument, type Paragraph } from '@golemdocs/docx';
 import { CollabServer, Engine, Mapping, Replica, END, mapOperation, type ClientMessage, type Operation, type ServerMessage } from '../src/index.ts';
 
 const CORPUS = path.resolve(import.meta.dirname, '../../.cache/docx-corpus');
@@ -439,4 +439,46 @@ test('table rows and cells that start with a nested table undo to the right row 
   const bare = { kind: 'cell' as const, properties: {}, attrs: {}, children: [{ kind: 'raw' as const, xml: '<w:sdt/>' }] } as unknown as ReturnType<typeof newCell>;
   assert.equal(engine.apply([{ type: 'insertCell', paragraph: a1, after: true, cell: bare }]).steps[0].inverse.length, 0);
   assert.equal(JSON.stringify(doc.body), before);
+});
+
+test('replaying what a replica told of, after a save, reaches the same document: edits, undo and redo, in any order', async () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    let state = seed;
+    const random = () => (state = (state * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const doc = await WordDocument.create();
+    const live = new Replica(doc, { random });
+    const told: Operation[][] = [];
+    live.onTransaction = (tx) => told.push(JSON.parse(JSON.stringify(tx.ops)));
+    const step = () => {
+      const list = paragraphsIn(doc.body);
+      const p = list[Math.floor(random() * list.length)];
+      const id = live.id(p);
+      const length = paragraphLength(p);
+      const at = Math.floor(random() * (length + 1));
+      const roll = random();
+      if (roll < 0.45) live.edit([{ type: 'insertText', paragraph: id, offset: at, text: 'abc'.slice(0, 1 + Math.floor(random() * 3)) }]);
+      else if (roll < 0.6 && length) live.edit([{ type: 'delete', paragraph: id, from: Math.min(at, length - 1), to: Math.min(at + 2, length) }]);
+      else if (roll < 0.75) live.edit([{ type: 'split', paragraph: id, offset: at, id: live.newId(), properties: {} }]);
+      else if (roll < 0.85 && length) live.edit([{ type: 'formatText', paragraph: id, from: 0, to: length, format: { bold: true } }]);
+      else if (roll < 0.95) live.undo();
+      else live.redo();
+    };
+    for (let i = 0; i < 15; i++) step();
+    // The sequence as the layout worker takes it: read in the same stretch as the body is written, with an edit landing just before and just after.
+    step();
+    let seq = -1;
+    const saving = doc.write({
+      onBody: () => {
+        seq = told.length;
+      },
+    });
+    step();
+    const saved = await saving;
+    for (let i = 0; i < 15; i++) step();
+    const back = await WordDocument.read(saved);
+    const again = new Replica(back);
+    for (const ops of told.slice(seq)) again.external(ops);
+    const shape = (d: WordDocument) => paragraphsIn(d.body).map((p) => [p.attrs['w14:paraId'], paragraphText(p)]);
+    assert.deepEqual(shape(back), shape(doc), `seed ${seed}`);
+  }
 });

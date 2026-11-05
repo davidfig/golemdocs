@@ -70,6 +70,7 @@ export const app: Partial<Messages> = {
 
   // Account and cloud
   'app.adopted': '이 브라우저의 문서 {count}개를 계정에 추가했습니다',
+  'app.journalCut': '“{name}”의 마지막 편집 내용 중 일부를 복원하지 못했습니다.',
   'app.conflictNotice': '“{before}”이(가) 다른 곳에서도 변경되어, 이 변경 사항을 “{name}”(으)로 저장했습니다',
   'app.mergedNotice': '“{name}”이(가) 다른 곳에서도 다른 단락이 변경되어 두 변경 사항을 모두 유지했습니다. 이전 상태는 버전 기록에 있습니다.',
   'app.signInToShare': '이 문서를 공유하려면 로그인하십시오',

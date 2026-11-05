@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- What you typed just before reloading, closing a tab or a tab crashing is no longer lost: it is there when the document opens again. This covers documents such as Word and Markdown, not yet text files, spreadsheets, PDFs or pictures.
 - In the desktop app, documents and folders can be dragged again: into folders on the Files sidebar and the Open screen, and files from your computer into the window. This needs the app's next update.
 - In Safari and the desktop app, documents and folders on the Open screen can be dragged by their pictures and names.
 - A document moved to a folder while it is still uploading stays there, instead of jumping back when the upload finishes.

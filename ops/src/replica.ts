@@ -39,6 +39,8 @@ export class Replica {
   private readonly random: () => number;
   private counter = 0;
   private client: CollabClient | null = null;
+  /** Told of every change made here: edits, undo and redo, and edits from outside the app. Others' changes in a room are not (see `receive`). */
+  onTransaction: ((transaction: Transaction) => void) | null = null;
 
   constructor(readonly doc: WordDocument, options: ReplicaOptions = {}) {
     this.engine = new Engine(doc);
@@ -60,7 +62,9 @@ export class Replica {
   }
 
   private transaction(ops: Operation[]): Transaction {
-    return { id: `${this.clientId}:${this.counter++}`, client: this.clientId, ops };
+    const transaction = { id: `${this.clientId}:${this.counter++}`, client: this.clientId, ops };
+    this.onTransaction?.(transaction);
+    return transaction;
   }
 
   /** Applies a local edit. */

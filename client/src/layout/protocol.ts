@@ -5,7 +5,7 @@
 
 import type { DocumentProperties, MathEquation } from '@golemdocs/docx';
 import type { Command } from '@golemdocs/editor';
-import type { Pointer, RoomRole } from '@golemdocs/ops';
+import type { Operation, Pointer, RoomRole } from '@golemdocs/ops';
 import type { AnnotationKind, FormField } from '@golemdocs/pdf';
 import type { EncodedPage, FaceDescriptor } from '@golemdocs/layout';
 import type { Format } from '../formats/convert.ts';
@@ -259,6 +259,10 @@ export type ToWorker =
       /** Shown read-only from the start (the embeddable viewer): selecting, finding and copying only, with no room and no squiggles. */
       readOnly?: boolean;
     }
+  /** What was edited here and not saved when the page last went away, to put back into the open document (see storage/editJournal.ts). */
+  | { type: 'replayJournal'; doc: number; batches: Operation[][] }
+  /** The same, into a copy of what `source` holds rather than the open document: answered with `saved`. */
+  | { type: 'journalCopy'; request: number; source: DocumentSource; batches: Operation[][] }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
@@ -447,7 +451,10 @@ export type FromWorker =
   /** A Markdown document being opened embeds a picture or note (`![[title]]`): the stored document of that title, as `embedFile`. */
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
-  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string }
+  /** `seq`: the last edit (see `journal`) the bytes hold. */
+  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string; seq?: number }
+  /** An edit made here, in order, for the page to keep until a save holds it; `ops` null when what was done can't be replayed (see storage/editJournal.ts). */
+  | { type: 'journal'; doc: number; seq: number; ops: Operation[] | null }
   /** `typed`: not put in, because the document was edited here meanwhile (those edits win; `ok` is true, as nothing needs opening again). */
   | { type: 'refreshed'; request: number; ok: boolean; typed?: boolean }
   /** The answer to a `spellText`: the marks of every line (a language whose dictionary is still loading has none yet, and `loading` says so), or the problem at `at`. */

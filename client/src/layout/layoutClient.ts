@@ -1,3 +1,4 @@
+import type { Operation } from '@golemdocs/ops';
 import type { Shape } from '../formats/imageDraw.ts';
 import type { Scene } from '../vector/model.ts';
 import type { FaceDescriptor } from '@golemdocs/layout';
@@ -14,6 +15,8 @@ export interface DocumentListener {
   layout(update: LayoutUpdate): void;
   /** The first full layout finished. */
   done(pages: number, timings: LayoutTimings): void;
+  /** An edit made, for the page to keep until a save holds it (see storage/editJournal.ts). */
+  journal?(seq: number, ops: Operation[] | null): void;
   selection(update: SelectionUpdate): void;
   /** Collaboration status (documents opened in a room). */
   /** The multiplayer room changed (cloud documents). */
@@ -46,6 +49,8 @@ export class LayoutClient {
   private listener: DocumentListener | null = null;
   private nextRequest = 1;
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
+  /** What a `saved` answer said of its `seq`, for `saveMarked`. */
+  private readonly savedSeqs = new Map<number, number>();
   private readonly thesaurusRequests = new Map<number, (answer: { result: LookUp | null; failed?: boolean }) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
@@ -216,6 +221,29 @@ export class LayoutClient {
     return this.request((request) => ({ type: 'save', doc: this.doc, request, lens })).then((bytes) => new Uint8Array(bytes));
   }
 
+  /** `save`, and how far through the edit journal the bytes reach. */
+  saveMarked(): Promise<{ bytes: Uint8Array; seq: number }> {
+    let request = 0;
+    return this.request((r) => {
+      request = r;
+      return { type: 'save', doc: this.doc, request: r };
+    }).then((bytes) => {
+      const seq = this.savedSeqs.get(request) ?? 0;
+      this.savedSeqs.delete(request);
+      return { bytes: new Uint8Array(bytes), seq };
+    });
+  }
+
+  /** Puts edits kept from before the page last went away back into the open document. They are in turn with the commands sent after this. */
+  replayJournal(batches: Operation[][]): void {
+    this.send({ type: 'replayJournal', doc: this.doc, batches });
+  }
+
+  /** What `source` holds with those edits in it, as a .wdoc, leaving the open document alone. */
+  journalCopy(source: DocumentSource, batches: Operation[][]): Promise<Uint8Array> {
+    return this.request((request) => ({ type: 'journalCopy', request, source, batches })).then((bytes) => new Uint8Array(bytes));
+  }
+
   /** The open document exported as a file of a format (lossy); the open document doesn't change. */
   convert(to: Format): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'convert', doc: this.doc, request, to })).then((bytes) => new Uint8Array(bytes));
@@ -287,6 +315,7 @@ export class LayoutClient {
       return;
     }
     if (message.type === 'media' || message.type === 'saved') {
+      if (message.type === 'saved' && message.seq !== undefined) this.savedSeqs.set(message.request, message.seq);
       this.requests.get(message.request)?.(message.bytes, message.type === 'saved' ? message.error : undefined);
       this.requests.delete(message.request);
       return;
@@ -300,6 +329,9 @@ export class LayoutClient {
         break;
       case 'layout':
         this.listener.layout(message);
+        break;
+      case 'journal':
+        this.listener.journal?.(message.seq, message.ops);
         break;
       case 'done':
         this.listener.done(message.pages, message.timings);

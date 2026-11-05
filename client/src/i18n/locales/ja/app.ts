@@ -70,6 +70,7 @@ export const app: Partial<Messages> = {
 
   // Account and cloud
   'app.adopted': 'このブラウザーのドキュメント {count} 件をアカウントに追加しました',
+  'app.journalCut': '「{name}」の最後の編集の一部を復元できませんでした。',
   'app.conflictNotice': '「{before}」は別の場所でも変更されたため、これらの変更は「{name}」として保存されました',
   'app.mergedNotice': '「{name}」は別の場所でも別の段落が変更されたため、両方の変更を残しました。以前の状態はバージョン履歴にあります。',
   'app.signInToShare': 'このドキュメントを共有するにはサインインしてください',

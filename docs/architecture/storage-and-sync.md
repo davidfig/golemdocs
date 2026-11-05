@@ -23,6 +23,8 @@ Documents live in the browser's IndexedDB first. Signed out they never leave the
         Documents screen, Files Sidebar, File > Open Recent all read this one copy
 ```
 
+An autosave waits for a pause in typing, and the document is in the layout worker, so a page going away can't wait for a last save. The [edit journal](../edit-journal.md) keeps the edits since the last save in `localStorage` and replays them on opening. Each save records how far through the journal it reaches (`SavedInfo.journal`), in the same IndexedDB transaction as its bytes, and any other write of the copy clears that.
+
 Nothing is ever overwritten. A copy that started from an older cloud version is merged with the cloud's when the two changed different things, and otherwise becomes a separate "(conflicted copy)" document (`conflictCopyName` in `client/src/library.ts`). Multi-person live editing is a different path (a room becomes the single writer; see [Collaboration](collaboration.md)).
 
 ## Merging a conflict
@@ -82,6 +84,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | `client/src/subscription.ts` | `fetchSubscription`, checkout/portal URLs; `sync: false` switches the app to guest mode |
 | `client/src/settingsSync.ts` | `SYNCED_KEYS`, `planSync`, `syncSettings`, per-profile (`desktop`/`mobile`) |
 | `client/src/thumbnail.ts` | first-page thumbnail drawn with the editor's renderer into an offscreen framebuffer (max about 2x card size) |
+| `client/src/storage/editJournal.ts` | the edits since the last save, in `localStorage`, so a page going away can't lose them: replayed on opening (see [edit-journal.md](../edit-journal.md)) |
 | `client/src/main.ts` | wires it all: `LibraryStore` host, `connect()`, `UploadQueue` host, autosave, sign-out |
 
 ## Key data types

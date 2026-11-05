@@ -108,7 +108,11 @@ const languageItems = (): MenuItem[] =>
     label: info.name,
     checked: id === getLocale(),
     run: () => {
-      if (id !== getLocale()) void setLocale(id).then(() => location.reload());
+      // The language showing can still be chosen when the account's has been saved for the next load: only that is put right.
+      const other = id !== getLocale();
+      void setLocale(id).then(() => {
+        if (other) location.reload();
+      });
     },
   }));
 
@@ -241,7 +245,6 @@ export class Chrome {
     openPopup(owner, list);
   }
 
-  /** Who is signed in changed: the Admin menu appears or goes. */
   /** The saved shortcuts changed (they came from the account): menus and keys follow them. */
   rereadShortcuts(): void {
     this.registry.rereadShortcuts();
@@ -249,6 +252,7 @@ export class Chrome {
     this.nativeMenu?.schedule();
   }
 
+  /** Who is signed in changed: the Admin menu appears or goes. */
   accountChanged(): void {
     this.menuBar.refresh();
     this.nativeMenu?.schedule();

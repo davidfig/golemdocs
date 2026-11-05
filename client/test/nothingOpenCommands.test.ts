@@ -37,3 +37,24 @@ test('value-carrying actions are refused too', () => {
   assert.equal(worksWithoutDocument({ kind: 'close' }), false);
   assert.equal(worksWithoutDocument({ kind: 'import' }), true);
 });
+
+test('shortcuts saved elsewhere replace the ones in use, and one no longer saved goes back to its own', () => {
+  const saved = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => saved.get(k) ?? null,
+    setItem: (k: string, v: string) => void saved.set(k, v),
+    removeItem: (k: string) => void saved.delete(k),
+  };
+  const r = registry(false);
+  r.add({ id: 'test.keys', label: 'Keys', shortcut: 'Ctrl+J', action: { kind: 'new' } });
+  r.add({ id: 'test.native', label: 'Native', shortcut: 'Ctrl+K', nativeShortcut: true, action: { kind: 'new' } });
+  const own = r.get('test.keys').shortcutText;
+  saved.set('wm-shortcuts', JSON.stringify({ 'test.keys': 'Ctrl+Shift+U', 'test.native': 'Ctrl+Shift+Y' }));
+  r.rereadShortcuts();
+  assert.notEqual(r.get('test.keys').shortcutText, own);
+  assert.equal(r.get('test.keys').shortcutParsed?.key, 'u');
+  assert.equal(r.get('test.native').shortcutParsed?.key, 'k'); // the browser's or the system's own: not ours to change
+  saved.delete('wm-shortcuts');
+  r.rereadShortcuts();
+  assert.equal(r.get('test.keys').shortcutText, own);
+});

@@ -169,6 +169,7 @@ export async function syncSettings(user: string, options: { api?: SettingsApi; p
   const api = options.api ?? serverSettings;
   const profile = options.profile ?? settingsProfile();
   let base: Values;
+  const applied: SyncedKey[] = [];
   try {
     const cloud: Values = {};
     for (const [key, entry] of Object.entries(await api.get(profile))) cloud[key] = entry.value;
@@ -176,7 +177,6 @@ export async function syncSettings(user: string, options: { api?: SettingsApi; p
     const plan = planSync(local, readMeta(user, profile), cloud);
     if (Object.keys(plan.push).length) await api.put(profile, plan.push);
     base = { ...local, ...plan.push };
-    const applied: SyncedKey[] = [];
     for (const [key, value] of Object.entries(plan.apply)) {
       try {
         if (value === null) localStorage.removeItem(key);
@@ -188,11 +188,12 @@ export async function syncSettings(user: string, options: { api?: SettingsApi; p
       }
     }
     writeMeta(user, profile, base);
-    if (applied.length) options.applied(applied);
   } catch {
     return; // Offline or the account is unreachable: this browser's settings stand until the next load.
   }
   if (options.watchChanges ?? true) watch(user, profile, base, api);
+  // Last, and outside the `try`: trouble showing a setting is not the account being out of reach.
+  if (applied.length) options.applied(applied);
 }
 
 interface Watch {

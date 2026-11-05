@@ -96,6 +96,17 @@ test('the page hears which settings came down, and nothing when none did', async
   assert.deepEqual(api.puts, []);
 });
 
+test('trouble showing a setting is not taken for the account being out of reach', async () => {
+  const api = fakeAccount({ desktop: { 'word.ruler': 'on' } });
+  const options = { api, profile: 'desktop' as const, watchChanges: false };
+  await assert.rejects(syncSettings('u1', { ...options, applied: () => { throw new Error('shown badly'); } }), /shown badly/);
+  // It is kept, and counted as synced: the next load has nothing to take.
+  assert.equal(store.get('word.ruler'), 'on');
+  let applied = 0;
+  await syncSettings('u1', { ...options, applied: () => void applied++ });
+  assert.equal(applied, 0);
+});
+
 test('this browser\'s own settings go up the first time, and later changes follow', async () => {
   const api = fakeAccount();
   store.set('word.ruler', 'on');

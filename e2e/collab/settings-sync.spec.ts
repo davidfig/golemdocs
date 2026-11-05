@@ -2,6 +2,7 @@
 
 import { test, expect, App } from '../fixtures';
 import { newPerson, signInAs } from './helpers';
+import { openPicture } from '../layout/helpers';
 import type { Browser, Page } from '@playwright/test';
 
 const cloud = async (page: Page, profile: string): Promise<Record<string, { value: string | null }>> =>
@@ -15,6 +16,17 @@ async function setInAccount(page: Page, prefs: Record<string, string>): Promise<
   );
   expect(status).toBe(200);
 }
+
+/** A one-pixel picture, as the page's own canvas draws it. */
+const tinyPng = async (page: Page): Promise<Buffer> =>
+  Buffer.from(
+    await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 40;
+      return canvas.toDataURL('image/png').split(',')[1];
+    }),
+    'base64',
+  );
 
 async function another(browser: Browser, email: string, options: Parameters<Browser['newContext']>[0] = {}) {
   const context = await browser.newContext(options);
@@ -93,6 +105,8 @@ test('settings from the account show at once, without loading the page again, an
 test('a language from the account shows from the next load', async ({ browser }) => {
   const person = await newPerson(browser, 'language');
   await person.app.blank();
+  // This browser's own language goes up first, or it would land on top of the one put in the account below.
+  await expect.poll(async () => (await cloud(person.page, 'desktop'))['wm.locale']?.value, { timeout: 15_000 }).toBeTruthy();
   await setInAccount(person.page, { 'wm.locale': 'de' });
 
   const second = await another(browser, person.email);
@@ -108,6 +122,79 @@ test('a language from the account shows from the next load', async ({ browser })
   await second.app.ready();
   await expect.poll(() => second.page.evaluate(() => document.documentElement.lang)).toBe('de');
   await second.context.close();
+  await person.context.close();
+});
+
+test('what the account has ignored in the open document is kept when something more is ignored in it', async ({ browser }) => {
+  const person = await newPerson(browser, 'ignored');
+  const { app, page } = person;
+  await app.blank();
+  await app.editor.focus();
+  await page.keyboard.insertText('recieve teh');
+  await expect.poll(() => app.text()).toBe('recieve teh');
+  await expect.poll(() => new URL(page.url()).searchParams.get('doc'), { timeout: 15_000 }).toMatch(/^local:/);
+  const doc = new URL(page.url()).searchParams.get('doc')!;
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('golem.settingsSync')), { timeout: 15_000 }).not.toBeNull();
+  await setInAccount(page, { 'word.spelling.ignored.v1': JSON.stringify({ [doc]: { words: ['recieve'], rules: [] } }) });
+
+  // The document has opened by the time the settings arrive, as it usually has.
+  let release = (): void => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/preferences**', async (route) => {
+    if (route.request().method() === 'GET') await held;
+    await route.fallback();
+  });
+  await page.reload();
+  await app.ready();
+  release();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('word.spelling.ignored.v1')), { timeout: 15_000 }).toContain('recieve');
+
+  const spell = page.getByRole('dialog', { name: 'Spelling and Grammar' });
+  await app.menu('Tools', 'Spelling and Grammar');
+  // The caret came back at the end of the text, so the check starts from there and finds nothing: from the top.
+  await spell.getByRole('button', { name: 'Check Again', exact: true }).click();
+  await expect(spell.locator('.wm-spell-problem')).toHaveText('teh');
+  await spell.getByRole('button', { name: 'Ignore All', exact: true }).last().click();
+  await expect
+    .poll(async () => (await cloud(page, 'desktop'))['word.spelling.ignored.v1']?.value ?? '', { timeout: 15_000 })
+    .toMatch(/recieve.*teh/);
+  await person.context.close();
+});
+
+test('a view mode from the account leaves a picture where it is', async ({ browser }) => {
+  const person = await newPerson(browser, 'viewmode');
+  const { app, page } = person;
+  await app.goto('?doc=welcome');
+  await app.ready();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('golem.settingsSync')), { timeout: 15_000 }).not.toBeNull();
+  await openPicture(app, await tinyPng(page));
+  const bar = page.locator('#footer');
+  await bar.getByRole('button', { name: /%$/ }).click();
+  await page.getByRole('listbox', { name: 'Zoom' }).getByRole('option', { name: '200%' }).click();
+  await expect(bar.getByRole('button', { name: '200%' })).toBeVisible();
+
+  await setInAccount(page, { 'word.viewMode': 'flow' });
+  await page.evaluate(() => window.dispatchEvent(new Event('online'))); // back online: the settings are looked at again
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('word.viewMode')), { timeout: 15_000 }).toBe('flow');
+  await page.waitForTimeout(500);
+  await expect(bar.getByRole('button', { name: '200%' })).toBeVisible();
+  await person.context.close();
+});
+
+test('the language showing can be chosen again after the account saved another for the next load', async ({ browser }) => {
+  const person = await newPerson(browser, 'language-back');
+  const { app, page } = person;
+  await app.goto('?doc=welcome');
+  await app.ready();
+  await expect.poll(async () => (await cloud(page, 'desktop'))['wm.locale']?.value, { timeout: 15_000 }).toBeTruthy();
+  await setInAccount(page, { 'wm.locale': 'de' });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('wm.locale')), { timeout: 15_000 }).toBe('de');
+  await app.menu('Tools', 'Language', 'English');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('wm.locale'))).toBe('en');
+  await page.reload();
+  await app.ready();
+  await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('en');
   await person.context.close();
 });
 

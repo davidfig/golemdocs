@@ -304,7 +304,7 @@ export class Dashboard {
   }
 
   /** Shows on New the picture of the type it makes (the one used last), and names the type in its tooltip. */
-  private showNewKind(): void {
+  showNewKind(): void {
     const kind = lastNewKind();
     this.newButton.replaceChildren(newKindIconElement(kind, true), h('span', { text: t('panels.dashboard.newBlank') }));
     this.newButton.title = t('panels.dashboard.newKind', { type: newKindLabel(kind) });

@@ -1534,7 +1534,8 @@ async function reloadForUpdate(): Promise<void> {
 /**
  * How a setting from the account takes effect with no reload (settingsSync.ts): what the page holds of it is read
  * from storage again. These read and never write, so a value isn't sent straight back to the account in another form.
- * Null: nothing to do, as the setting is read from storage each time it is used. The type makes a new synced key choose.
+ * Null: nothing to do, as the setting is read from storage each time it is used, or (the language) can only show from
+ * the next load. The type makes a new synced key choose.
  */
 const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.theme': rereadTheme,
@@ -1548,8 +1549,8 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'word.spelling.asYouType': rereadSpelling,
   'word.spelling.grammar': rereadSpelling,
   'word.userDictionary.v1': rereadSpelling,
-  'word.spelling.ignored.v1': null, // read as each document opens
-  'golem.newKinds': null,
+  'word.spelling.ignored.v1': rereadIgnored,
+  'golem.newKinds': () => dashboard.showNewKind(), // the toolbar's New button and the menus ask each time
   'golem.newVersion.off': () => newVersionNotice.rereadOff(),
   'word.viewMode': rereadViewMode,
   'word.formattingMarks': rereadViewOptions,
@@ -1572,6 +1573,12 @@ function rereadSpelling(): void {
   spellDialog.reread();
 }
 
+/** What is ignored in the open document, with what came from the account: saving it later without that would take it out of the account too. */
+function rereadIgnored(): void {
+  startIgnored(current);
+  textView.spellReset();
+}
+
 /** The status bar, toolbars, ruler and formatting marks, as saved. */
 function rereadViewOptions(): void {
   const stored = (key: string): string | null => {
@@ -1590,17 +1597,30 @@ function rereadViewOptions(): void {
   requestRender();
 }
 
-/** Print or Flow, as saved. The page grid, if it is showing, stays until it is left. */
+/**
+ * Print or Flow, as saved. Where that changes nothing on screen (the page grid, a PDF's own pages, a picture) the view
+ * stays where it is. A position still to be put back stays too: placing the camera skips one saved in the other view,
+ * and the caret goes back all the same.
+ */
 function rereadViewMode(): void {
-  const mode = savedViewMode();
-  if (mode === viewMode) return;
-  viewMode = mode;
-  if (!grid) placeViewAgain();
+  const was = reflowing();
+  viewMode = savedViewMode();
+  if (reflowing() === was) return requestRender();
+  cameraPlaced = false;
+  userMoved = false;
+  syncReflow(true);
+  arrange();
 }
 
-/** Shows what came from the account, each setting once however many of its keys came. */
+/** Shows what came from the account, each setting once however many of its keys came. One that fails doesn't stop the others. */
 function showSettingsFromAccount(keys: SyncedKey[]): void {
-  for (const show of new Set(keys.map((key) => SETTING_APPLIED[key]))) show?.();
+  for (const show of new Set(keys.map((key) => SETTING_APPLIED[key]))) {
+    try {
+      show?.();
+    } catch (e) {
+      window.reportError(e);
+    }
+  }
   chrome.refresh(); // the check marks in the menus
 }
 
@@ -4831,11 +4851,6 @@ function setViewMode(mode: ViewMode): void {
       // Storage unavailable: the choice lasts for this session only.
     }
   }
-  placeViewAgain();
-}
-
-/** The view changed: the document is placed in it from the start. */
-function placeViewAgain(): void {
   cameraPlaced = false;
   userMoved = false;
   pendingView = null;

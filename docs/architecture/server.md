@@ -69,7 +69,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 
 ## Search, analytics, feedback
 
-- `docIndex.ts`: `GET /api/documents/:id/index`, the full-text index from `@golemdocs/docx` search, built lazily and cached at `<owner>/<doc>.idx`, valid while the index version and the row's `updated_at` match.
+- `docIndex.ts`: `GET /api/documents/:id/index`, the full-text index from `@golemdocs/docx` search, built lazily and cached at `<owner>/<doc>.idx`, valid while the index version and the row's `updated_at` match. A file it can't read (a PDF, a picture, a workbook, a `.wdoc` with no flowing document) answers 204, with no `x-index-at`: the page makes that index itself (`client/src/search/indexJob.ts`).
 - `analytics.ts` (admin, from `identities`/`sessions`), `feedback.ts` (`/api/feedback` for users, `/api/admin/feedback` to read/resolve/delete).
 
 ## Wrangler environments

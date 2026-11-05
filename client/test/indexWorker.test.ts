@@ -30,13 +30,26 @@ test('a PDF that is not a document yet is indexed by the text of its pages', asy
   assert.equal((await indexFromBytes(locked.buffer.slice(locked.byteOffset, locked.byteOffset + locked.byteLength) as ArrayBuffer)).n, 0);
 });
 
+test('a PDF kept as the file itself (added from outside the app) is indexed by the text of its pages', async () => {
+  const pdf = readFileSync(join(import.meta.dirname, '../../pdf/test/fixtures/chromium.pdf'));
+  const index = await indexFromBytes(pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) as ArrayBuffer);
+  assert.equal(index.n, 1);
+  assert.equal(searchIndex(index, parseQuery('quick fox'))?.paragraph, 0);
+  // One nobody can read (a password) is an empty index here too.
+  const locked = readFileSync(join(import.meta.dirname, '../../pdf/test/fixtures/aes-128.pdf'));
+  assert.equal((await indexFromBytes(locked.buffer.slice(locked.byteOffset, locked.byteOffset + locked.byteLength) as ArrayBuffer)).n, 0);
+});
+
 test('the job turns a document\'s bytes into its index, empty when there is no text', async () => {
   const index = await indexFromBytes(await docx('# Plan\n\nBuy cabinets #renovation'));
   assert.equal(searchIndex(index, parseQuery('cabinets'))?.paragraph, 1);
   assert.equal(searchIndex(index, parseQuery('#renovation'))?.paragraph, 1);
-  // A plain text file is kept as it is: its lines are its paragraphs. Bytes that are neither text nor a document are an error.
+  // A plain text file is kept as it is: its lines are its paragraphs.
   assert.equal(searchIndex(await indexFromBytes(new TextEncoder().encode('first\nsecond line').buffer as ArrayBuffer), parseQuery('second'))?.paragraph, 1);
-  await assert.rejects(() => indexFromBytes(new Uint8Array([1, 0, 3]).buffer));
+  // Bytes that are neither (a picture kept as it is) have no text: an empty index, so they aren't tried again at every pass.
+  assert.equal((await indexFromBytes(new Uint8Array([1, 0, 3]).buffer)).n, 0);
+  // A ZIP cut short is an error: it may read properly next time.
+  await assert.rejects(() => indexFromBytes(new Uint8Array([0x50, 0x4b, 3, 4, 0, 0, 0, 0]).buffer));
 });
 
 /** A Worker that does the job in this thread, and records what happened to it. */

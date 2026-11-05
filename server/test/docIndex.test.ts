@@ -92,28 +92,30 @@ test('a viewer can fetch it; someone with no access gets 404; other methods 405'
   assert.equal((await w.call(null, 'GET', `/api/documents/${doc.id}/index`)).status, 401);
 });
 
-test('a file that is not a .docx answers 422', async () => {
+test('a file that is not a .docx has nothing here (204), and nothing is kept', async () => {
   const r = await w.call(OWNER, 'POST', '/api/documents?name=Doc.docx', { body: new Uint8Array([0, 1, 2, 3]), type: DOCX });
   const doc = (await r.json()) as any;
-  assert.equal((await index(OWNER, doc.id)).status, 422);
+  assert.equal((await index(OWNER, doc.id)).status, 204);
   assert.equal(idxKeys().length, 0);
 });
 
-test('a file that is not a ZIP (a PDF, a picture) answers 422 without logging a failure', async () => {
+test('a file that is not a ZIP (a PDF, a picture) answers 204 without logging a failure', async () => {
   const r = await w.call(OWNER, 'POST', '/api/documents?name=Doc.pdf', { body: new TextEncoder().encode('%PDF-1.7\n\u0000\u0001binary'), type: 'application/pdf' });
   const doc = (await r.json()) as any;
   const logged: unknown[][] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => void logged.push(args);
   try {
-    assert.equal((await index(OWNER, doc.id)).status, 422);
+    const answer = await index(OWNER, doc.id);
+    assert.equal(answer.status, 204);
+    assert.equal(answer.headers.get('x-index-at'), null); // what tells the page there is no index
   } finally {
     console.error = original;
   }
   assert.deepEqual(logged, []);
 });
 
-test('a workbook answers 422 without logging a failure: the page makes its index from its active sheet as shown', async () => {
+test('a workbook answers 204 without logging a failure: the page makes its index from its active sheet as shown', async () => {
   const xlsx = await writeZip([{ name: 'xl/workbook.xml', data: new TextEncoder().encode('<workbook/>') }]);
   const r = await w.call(OWNER, 'POST', '/api/documents?name=Book.xlsx', { body: xlsx, type: 'application/octet-stream' });
   const doc = (await r.json()) as any;
@@ -121,7 +123,7 @@ test('a workbook answers 422 without logging a failure: the page makes its index
   const original = console.error;
   console.error = (...args: unknown[]) => void logged.push(args);
   try {
-    assert.equal((await index(OWNER, doc.id)).status, 422);
+    assert.equal((await index(OWNER, doc.id)).status, 204);
   } finally {
     console.error = original;
   }
@@ -158,16 +160,10 @@ test('the app\'s own .wdoc wrapper is read through to the document inside', asyn
   assert.equal(answer.headers.get('x-index-at'), String(doc.updatedAt));
 });
 
-test('a .wdoc with no flowing document (a PDF not turned into one) has no text here: refused, and nothing is kept', async () => {
+test('a .wdoc with no flowing document (a PDF not turned into one) has no text here: nothing to give, and nothing is kept', async () => {
   const r = await w.call(OWNER, 'POST', '/api/documents?name=Scan.wdoc', { body: await wdoc(null, new Uint8Array([37, 80, 68, 70])), type: DOCX });
   const doc = (await r.json()) as { id: string };
-  const quiet = console.error;
-  console.error = () => {};
-  try {
-    assert.equal((await index(OWNER, doc.id)).status, 422);
-  } finally {
-    console.error = quiet;
-  }
+  assert.equal((await index(OWNER, doc.id)).status, 204);
   assert.equal(idxKeys().length, 0);
 });
 

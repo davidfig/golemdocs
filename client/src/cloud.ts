@@ -115,7 +115,7 @@ export async function downloadDocument(id: string, onProgress?: (share: number) 
 /**
  * The account's search index of a document (made by the server the first time it is asked for, and
  * again after the document changes), and the version of the document it is for (the document's
- * `updatedAt`). Null when there is none to have: too big, or made by another version of the app.
+ * `updatedAt`). Null when the server has none to give (a PDF, a picture, a workbook: the page makes those itself).
  */
 export async function downloadIndex(id: string): Promise<{ index: DocIndex; at: number } | null> {
   const response = await check(await send(`/api/documents/${id}/index`));

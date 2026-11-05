@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.33.3 - Unreleased
+
+### Fixed
+
+- Search All Documents finds the text of PDFs added to your account from outside the app, such as from a vault folder.
+
 ## 0.33.2 - 2026-11-05
 
 ### Changed

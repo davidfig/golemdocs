@@ -126,24 +126,31 @@ function playwright(args: string[], options: RunOptions = {}): Promise<{ code: n
 // What exists, and what the last run did with it
 
 interface Spec {
+  /** `e2e/<file>:<line>`, what Playwright accepts as a filter. */
   key: string;
+  /** Its file and titles: what says whether it passed, as a line number can differ between a run and a later listing. */
+  id: string;
   heavy: boolean;
 }
 
-/** Every test, as `e2e/<file>:<line>` (what Playwright accepts as a filter) and whether it is @heavy. */
+/** Every test, and whether it is @heavy. */
 function listAll(): Spec[] {
   const out = spawnSync('pnpm', ['exec', 'playwright', 'test', '--list', '--reporter=json'], { encoding: 'utf8', maxBuffer: 1 << 28 });
   const json = JSON.parse(out.stdout.slice(out.stdout.indexOf('{'))) as { suites: Suite[] };
   interface Suite {
+    title: string;
     suites?: Suite[];
-    specs?: { file: string; line: number; tags: string[] }[];
+    specs?: { title: string; file: string; line: number; tags: string[] }[];
   }
-  const walk = (suite: Suite): Spec[] => [
-    ...(suite.specs ?? []).map((spec) => ({ key: `e2e/${spec.file}:${spec.line}`, heavy: spec.tags.includes('heavy') })),
-    ...(suite.suites ?? []).flatMap(walk),
-  ];
+  const walk = (suite: Suite, parents: string[]): Spec[] => {
+    const titles = [...parents, suite.title];
+    return [
+      ...(suite.specs ?? []).map((spec) => ({ key: `e2e/${spec.file}:${spec.line}`, id: [...titles, spec.title].join(' › '), heavy: spec.tags.includes('heavy') })),
+      ...(suite.suites ?? []).flatMap((child) => walk(child, titles)),
+    ];
+  };
   const seen = new Map<string, Spec>();
-  for (const spec of json.suites.flatMap(walk)) seen.set(spec.key, spec);
+  for (const spec of json.suites.flatMap((suite) => walk(suite, []))) seen.set(spec.id, spec);
   return [...seen.values()];
 }
 
@@ -154,19 +161,20 @@ function passedKeys(): Set<string> {
     for (const line of fs.readFileSync(PROGRESS, 'utf8').split('\n')) {
       if (!line) continue;
       try {
-        const row = JSON.parse(line) as { key: string; passed: boolean };
-        last.set(row.key, row.passed);
+        const row = JSON.parse(line) as { title: string; passed: boolean };
+        // The reporter's title starts with the project.
+        last.set(row.title.split(' › ').slice(1).join(' › '), row.passed);
       } catch {
         // a line cut short by a kill
       }
     }
   }
-  return new Set([...last].filter(([, passed]) => passed).map(([key]) => key));
+  return new Set([...last].filter(([, passed]) => passed).map(([id]) => id));
 }
 
 function remaining(): Spec[] {
   const passed = passedKeys();
-  return listAll().filter((spec) => !passed.has(spec.key));
+  return listAll().filter((spec) => !passed.has(spec.id));
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -231,8 +239,9 @@ async function main(): Promise<number> {
       return 0;
     }
     console.log(`Running the ${left.length} test(s) that did not pass.`);
-    const normal = left.filter((spec) => !spec.heavy).map((spec) => spec.key);
-    const heavy = left.filter((spec) => spec.heavy).map((spec) => spec.key);
+    // Tests made in a loop share a line, so one filter runs them all.
+    const normal = [...new Set(left.filter((spec) => !spec.heavy).map((spec) => spec.key))];
+    const heavy = [...new Set(left.filter((spec) => spec.heavy).map((spec) => spec.key))];
     if (normal.length > 0) await firstPass(normal);
     if (heavy.length > 0 && !stopped) await heavyPass(heavy);
     return report();

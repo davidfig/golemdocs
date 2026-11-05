@@ -104,4 +104,4 @@ export async function openBigFile(app: App, name: string, buffer: Buffer, lines:
 }
 
 /** The status bar says how many lines the file has (the specs turn it off by default). */
-export const statusBarOn = (target: Page | import('@playwright/test').BrowserContext): Promise<void> => target.addInitScript(() => localStorage.setItem('word.footer', 'on'));
+export const statusBarOn = (target: Page | import('@playwright/test').BrowserContext): Promise<void> => target.addInitScript(() => localStorage.setItem('word.footer', 'on')).then(() => {});

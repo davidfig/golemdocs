@@ -13,13 +13,13 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Download (in the document's own format)
 - Rename (File ▸ Rename, or click the name centred in the menu bar; on a phone, tap the name at the top of the menu, which asks in a dialog). Not for built-in pages or documents shared by someone else. Any document in the library can be renamed from its card on the Documents screen or its menu in the Files sidebar (`renameEntry` in `folderOps.ts`, or the editor for the open one)
 - Convert To (Word, ODT, HTML, PDF, Markdown, text)
-- Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab)
+- Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab; on a phone or tablet both go to the system share sheet, whose Print has every page; in the Mac app both open the PDF in Preview)
 - Share: sharing a cloud document with people by email, and its public link (view, download, embed); Sync Now
 - Sign In, Sign Out, Clear Local Data
 - Version History (File ▸ Version History: this browser's and the account's earlier versions of the open document; save a named version, rename, delete, open one as a new document) and Trash (File ▸ Trash, and a button on the Documents screen: restore or delete for good what was deleted in the last 30 days, from this browser and from the account). See [history.md](history.md)
 
 **Edit**
-- Undo, Redo, Cut, Copy, Paste (formatted HTML, or plain text for formats without marks), Paste Special (HTML or text, with preview), Select All
+- Undo, Redo, Cut, Copy, Paste (formatted HTML, or plain text for formats without marks), Paste Special (HTML or text, with preview), Select All. A PDF's own pages have Copy and Select All; on a phone Copy is in the menu
 - Insert Comment (also a note on a PDF): written and edited in the comments panel (`ui/commentsPanel.ts`), with replies and Resolve. Comments are in the document model (`WordDocument.comments` plus range markers) and carried by DOCX (incl. `commentsExtended`), ODT, RTF, PDF export/import, legacy DOC (read only), Markdown (CriticMarkup) and HTML/EPUB/MHTML; not LaTeX, Org, MediaWiki, AsciiDoc, RST or Textile
 - Find, Replace and Go To: one dialog with a tab for each, as in Word 2003 (`ui/findDialog.ts`)
   - Find/Replace: next/previous, match case, replace one, replace all; the search is in `@golemdocs/editor`

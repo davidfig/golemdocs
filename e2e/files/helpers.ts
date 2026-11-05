@@ -306,3 +306,44 @@ export async function sheetRows(page: Page, rows: number, cols: number): Promise
     [rows, cols],
   );
 }
+
+/** An iPhone, for `test.use` or a new context: the app decides what a phone can do from these. */
+export const IPHONE = {
+  viewport: { width: 390, height: 844 },
+  hasTouch: true,
+  isMobile: true,
+  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+};
+
+export interface SharedFile {
+  name: string;
+  type: string;
+  /** The file's first bytes, as text. */
+  head: string;
+  refused: boolean;
+}
+
+/** Stands in for the system share sheet: records each file offered. The first `refuse` calls fail as they do when no tap came just before. */
+export async function stubShareSheet(page: Page, refuse = 0): Promise<void> {
+  await page.addInitScript((refusals) => {
+    const w = window as unknown as { __shared: unknown[] };
+    w.__shared = [];
+    let left = refusals;
+    navigator.canShare = () => true;
+    navigator.share = async (data?: ShareData) => {
+      const file = data!.files![0]!;
+      const head = String.fromCharCode(...new Uint8Array(await file.slice(0, 5).arrayBuffer()));
+      const refused = left-- > 0;
+      w.__shared.push({ name: file.name, type: file.type, head, refused });
+      if (refused) throw new DOMException('needs a tap', 'NotAllowedError');
+    };
+  }, refuse);
+}
+
+export const sharedFiles = (page: Page): Promise<SharedFile[]> => page.evaluate(() => (window as unknown as { __shared: SharedFile[] }).__shared);
+
+/** An item of the phone's menu drawer. */
+export async function drawerItem(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('menuitem', { name }).first().click();
+}

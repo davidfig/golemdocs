@@ -3,6 +3,8 @@
 #[cfg(desktop)]
 mod menu;
 #[cfg(desktop)]
+mod print;
+#[cfg(desktop)]
 mod update;
 mod icloud;
 mod incoming;
@@ -42,6 +44,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_read_base64,
             vault::vault_write_base64,
             menu::set_native_menu,
+            print::print_open_pdf,
             update::update_check,
             update::update_install,
         ])

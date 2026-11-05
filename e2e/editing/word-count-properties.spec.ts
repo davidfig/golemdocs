@@ -56,7 +56,7 @@ test.describe('Word Count', () => {
     await expect(cell(app, 'Pages')).toHaveText('2');
   });
 
-  test.fixme('a page break separates words ("first", page break, "second" is two words; it counts one)', async ({ app }) => {
+  test('a page break separates words ("first", page break, "second" is two words)', async ({ app }) => {
     await app.blank();
     await app.type('first');
     await app.press(`${MOD}+Enter`);

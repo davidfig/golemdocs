@@ -254,7 +254,7 @@ test.describe('Full Screen', () => {
     await expect(page.locator('#chrome')).toBeVisible();
   });
 
-  test('keeps the menu bar, and hides only the toolbars, when Options says so', async ({ app, page }) => {
+  test('keeps the menu bar, and hides only the toolbars, when Options says so', { tag: '@heavy' }, async ({ app, page }) => {
     await app.blank();
     await app.menu('Tools', 'Options');
     await page.getByRole('checkbox', { name: 'Keep the menu bar in full screen' }).check();

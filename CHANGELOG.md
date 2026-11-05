@@ -1,6 +1,12 @@
 # What’s New in Golem Docs
 
-## 0.33.2 - Unreleased
+## 0.33.3 - Unreleased
+
+### Fixed
+
+- What you typed just before reloading, closing a tab or a tab crashing is no longer lost: it is there when the document opens again. This covers documents such as Word and Markdown, not yet text files, spreadsheets, PDFs or pictures.
+
+## 0.33.2 - 2026-11-05
 
 ### Changed
 
@@ -8,7 +14,17 @@
 
 ### Fixed
 
-- What you typed just before reloading, closing a tab or a tab crashing is no longer lost: it is there when the document opens again. This covers documents such as Word and Markdown, not yet text files, spreadsheets, PDFs or pictures.
+- Public links, embedded documents and documents shared with you to view open a moment sooner: their address no longer goes through a redirect first.
+- File › Share works on a document you have just opened: it saves and uploads it first, instead of asking you to make a change or try again later.
+- Print and Print Preview in the Mac app did nothing. After updating the app, they open the document in Preview, ready to print; until then the PDF is saved to Downloads for you to print.
+- Print on a phone or tablet now gives you every page: it opens the system share sheet with the PDF, where you can print it. It used to print only the first page.
+- Download on a phone no longer fails silently when the file takes a while to make: it asks for one more tap to save it. Download on a public link's page works on a phone too.
+- In a PDF, Edit › Copy and Select All are available, and the menu on a phone has Copy, so you can copy text you selected.
+- Insert › Comment and the command palette now keep the keyboard, so what you type goes into them and not into the document.
+- OK now works in Page Setup with A3, A4 or A5 paper, in Paragraph with line spacing such as 1.08, and in Columns with spacing such as 0.33.
+- In a PDF, a shape that came with the file can be moved: the move used to be lost when the file was saved.
+- Text typed right before or after a link no longer becomes part of the link.
+- Word Count counts the words either side of a page break as two words.
 - In the desktop app, documents and folders can be dragged again: into folders on the Files sidebar and the Open screen, and files from your computer into the window. This needs the app's next update.
 - In Safari and the desktop app, documents and folders on the Open screen can be dragged by their pictures and names.
 - A document moved to a folder while it is still uploading stays there, instead of jumping back when the upload finishes.

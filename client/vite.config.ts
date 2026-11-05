@@ -45,6 +45,24 @@ function docxCorpus(): Plugin {
 }
 
 /**
+ * The viewer page's address is /view?s=… or /view?p=… (src/viewer/share.ts): the site serves view/index.html there, as Cloudflare
+ * serves a folder's index.html at its name without the slash (and redirects /view/ to it). The dev server only knows /view/, so
+ * this hands it that.
+ */
+function viewerAddress(): Plugin {
+  return {
+    name: 'viewer-address',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url === '/view' || req.url?.startsWith('/view?')) req.url = `/view/${req.url.slice('/view'.length)}`;
+        next();
+      });
+    },
+  };
+}
+
+/**
  * Names each production build: `__BUILD_ID__` in the code, and `build.json` (`{ "id": ... }`) in the output.
  * An open page asks for the file now and then, and offers a reload when the id has changed (src/buildCheck.ts).
  */
@@ -64,7 +82,7 @@ const CLIENT_PORT = Number(process.env.WORD_CLIENT_PORT ?? 5173);
 const API_PORT = Number(process.env.WORD_API_PORT ?? 3001);
 
 export default defineConfig({
-  plugins: [docxCorpus(), welcomeContent(), buildId()],
+  plugins: [docxCorpus(), viewerAddress(), welcomeContent(), buildId()],
   // Each end-to-end client keeps its own dependency cache: two dev servers sharing one (a second e2e run
   // alongside the first, or `pnpm dev`) can invalidate each other's, and a server that dies takes the run with it.
   cacheDir: process.env.WORD_CLIENT_PORT ? path.resolve(import.meta.dirname, `node_modules/.vite-e2e-${CLIENT_PORT}`) : undefined,

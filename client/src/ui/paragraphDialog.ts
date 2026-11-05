@@ -157,7 +157,8 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
     const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('paragraph.close') } });
     const form = h(
       'form',
-      { attrs: { method: 'dialog' } },
+      // A number box's step is how far its arrows go, not a limit on what can be typed (A4 is 8.27 in, line spacing can be 1.08): the submit handler below checks the values.
+      { attrs: { method: 'dialog', novalidate: '' } },
       tabs,
       h('div', { class: 'wm-dialog-body wm-link-body' }, indentsTab, breaksTab, message),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),

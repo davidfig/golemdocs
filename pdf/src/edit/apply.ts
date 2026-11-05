@@ -433,7 +433,8 @@ function editObject(edit: ObjectEdit, objects: readonly PageObject[], patches: M
   }
   const to = edit.box ?? object.box;
   const t = fit(object.box, to);
-  const inverse = invert(object.ctm);
+  // `invert` also answers null for the identity, which needs no undoing (an object drawn under no matrix at all).
+  const inverse = object.ctm.every((v, i) => Math.abs(v - IDENTITY[i]) < 1e-9) ? IDENTITY : invert(object.ctm);
   if (!inverse || t.every((v, i) => Math.abs(v - IDENTITY[i]) < 1e-9)) return to;
   const m = multiply(multiply(object.ctm, t), inverse);
   before.set(object.from, [...(before.get(object.from) ?? []), { op: 'q', operands: [] }, { op: 'cm', operands: m.map((v) => Math.round(v * 1e8) / 1e8) }]);

@@ -25,8 +25,7 @@ test.describe('opening a picture as a document', () => {
     expect(red(pixelAt(img, 117, 30))).toBeLessThan(-150);
   });
 
-  // Suspected bug: typing into a picture document is accepted (the text lands in the model behind the picture, unseen).
-  test.fixme('a picture is not text: typing does not change it', async ({ app }) => {
+  test('a picture is not text: typing does not change it', async ({ app }) => {
     await openPicture(app, GRADIENT);
     await app.type('hello');
     expect(await pageBoxes(app.page)).toEqual([{ width: 90, height: 45 }]);

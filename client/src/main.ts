@@ -108,7 +108,7 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
-import { desktopUpdater, isDesktopApp } from './desktop/bridge.ts';
+import { desktopUpdater, isDesktopApp, isTouchDevice, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { UpdateService } from './desktop/updateService.ts';
@@ -2501,7 +2501,7 @@ async function openShared(id: string): Promise<void> {
     }
     // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts), at the share's own address
     // rather than the document's id. It takes this page's place in the history, so Back goes to where they chose it from.
-    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view/?s=${encodeURIComponent(doc.viewToken)}`);
+    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view?s=${encodeURIComponent(doc.viewToken)}`);
     setStatus(t('app.openingShared'));
     worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
@@ -2511,13 +2511,28 @@ async function openShared(id: string): Promise<void> {
   }
 }
 
+/** How long File ▸ Share waits for the open document's first upload before opening anyway. */
+const SHARE_UPLOAD_WAIT_MS = 10_000;
+
 /** File ▸ Share: a link that lets anyone edit the open document with you, and the people it is shared with. */
 async function share(): Promise<void> {
   // Who may share depends on the account's plan: asked just after the page opened, wait for it
   // (otherwise the dialog would say to sign in, or to subscribe, to someone who has).
   await accountKnown;
+  // Sharing needs the document in the account: one just opened and not saved yet, or still waiting for its first upload, goes now,
+  // rather than asking to edit it or to try again later. What can't be done (offline, say) is said below.
+  if (account && !current.shared && !current.builtIn) await saveNow().catch(() => null);
   if (current.localId && !library.local.some((d) => d.id === current.localId)) await library.reloadLocal();
-  const info = library.local.find((d) => d.id === current.localId);
+  let info = library.local.find((d) => d.id === current.localId);
+  if (account && !current.shared && info && !info.cloudId) {
+    uploads.failures.delete(info.id);
+    uploads.backOnline();
+    uploads.add(info.id);
+    showSync();
+    // A slow connection or a long queue of other documents mustn't keep the dialog from opening: it then says to try again.
+    await Promise.race([flushUploads().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, SHARE_UPLOAD_WAIT_MS))]);
+    info = library.local.find((d) => d.id === current.localId);
+  }
   const people = !account
     ? { unavailable: !signedIn ? t('app.signInToShare') : sellsSubscriptions() ? t('app.subscribeToShare') : t('app.shareNotIncluded') }
     : current.shared
@@ -2592,12 +2607,31 @@ async function download(): Promise<void> {
 /**
  * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as
  * Download), then printed from a hidden frame, or opened in a new tab to look at first.
+ * A phone or tablet can't do either: iOS prints only the first page of a PDF in a frame, Android shows none, and an app's web view has
+ * no tabs. There the PDF goes to the system share sheet, whose Print has every page (`saveFile`). The Mac app opens it in Preview.
  */
 async function print(preview: boolean): Promise<void> {
   // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
   const sheetPdf = sheetView.active ? sheetView.printPdf() : null;
   if (!sheetPdf && !(await openAsDocument())) return;
+  const name = fileName().replace(/\.[^.]*$/, '') + '.pdf'; // named now: another document may be open by the time the bytes come back
   const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
+  if (isTouchDevice()) {
+    await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime);
+    return;
+  }
+  // The Mac app's web view ignores print() and opens no tabs: Preview prints it. A shell without that command can still download.
+  const printer = macPrinter();
+  if (printer) {
+    try {
+      await printer.open(name, bytes as Uint8Array);
+      setStatus(t('app.printInPreview'));
+    } catch (e) {
+      if (!(e instanceof ShellTooOldError)) return reportError(t('app.printFailed', { message: (e as Error).message }));
+      if (await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime)) setStatus(t('app.printSavedInstead', { name }));
+    }
+    return;
+  }
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
     if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));

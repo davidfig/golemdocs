@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-print-open-pdf"
+description = "Enables the print_open_pdf command without any pre-configured scope."
+commands.allow = ["print_open_pdf"]
+
+[[permission]]
+identifier = "deny-print-open-pdf"
+description = "Denies the print_open_pdf command without any pre-configured scope."
+commands.deny = ["print_open_pdf"]

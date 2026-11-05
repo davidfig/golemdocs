@@ -40,6 +40,8 @@ export interface CommandSpec {
   checked?: (state: ChromeState) => boolean;
   /** Checked items in a group are drawn as radio bullets. */
   radio?: boolean;
+  /** What it opens takes the keyboard for itself, so it is not handed back to the document afterwards (the command palette). */
+  takesKeyboard?: boolean;
 }
 
 export interface Command extends CommandSpec {
@@ -193,10 +195,10 @@ export class CommandRegistry {
       const action = this.actionOf(command);
       if (action) this.perform(action, command.plainLabel);
     }
-    // A dialog takes the keyboard for itself, and so do the link form and a workbook's note card (over the document).
+    // A dialog takes the keyboard for itself, and so do the link form, a new comment's box and a workbook's note card (over the document).
     const action = this.actionOf(command);
     const kind = action?.kind;
-    const opensDialog = kind === 'dialog' || kind === 'insertLink' || (action?.kind === 'sheet' && (action.op === 'newNote' || action.op === 'protectSheet' || action.op === 'unprotectSheet' || action.op === 'goalSeek' || action.op === 'dataTable' || action.op === 'scenarioManager' || action.op === 'solver'));
+    const opensDialog = command.takesKeyboard || kind === 'dialog' || kind === 'insertLink' || kind === 'insertComment' || (action?.kind === 'sheet' && (action.op === 'newNote' || action.op === 'protectSheet' || action.op === 'unprotectSheet' || action.op === 'goalSeek' || action.op === 'dataTable' || action.op === 'scenarioManager' || action.op === 'solver'));
     if (options.refocus !== false && !opensDialog) host.focusEditor();
     return true;
   }

@@ -181,6 +181,15 @@ test('an object can be deleted, moved and stretched', async () => {
   assert.ok(docText(back).includes('Caption'));
 });
 
+test('a shape drawn under no matrix at all can be moved', async () => {
+  const doc = await withObjects();
+  const rect = scanPage(doc.pages[0]).objects.find((o) => o.kind === 'path')!;
+  applyEdits(doc, [{ id: 'a', page: 0, kind: 'object', target: rect.id, box: [200, 650, 400, 700] }]);
+  const back = PdfDocument.load(await doc.save());
+  const moved = scanPage(back.pages[0]).objects.find((o) => o.kind === 'path')!;
+  assert.ok(near(moved.box, [200, 650, 400, 700]), `${moved.box}`);
+});
+
 test('shapes and pictures can be added', async () => {
   const doc = await withObjects();
   const png = readFileSync(join(import.meta.dirname, 'fixtures', 'img-rgb.png')).toString('base64');

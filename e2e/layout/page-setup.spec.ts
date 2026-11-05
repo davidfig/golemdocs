@@ -79,9 +79,7 @@ test.describe('Page Setup dialog', () => {
     await dlg.getByRole('button', { name: 'Cancel' }).click();
   });
 
-  // Bug: the size fields are <input type=number step=0.05>, so A4's 8.27 x 11.69 in fail the browser's step validation
-  // ("the two nearest valid values are 8.25 and 8.3") and OK never closes the dialog. Same for A3 and A5.
-  test.fixme('A4 paper sets the page and the Word file, in portrait and in landscape', async ({ app }) => {
+  test('A4 paper sets the page and the Word file, in portrait and in landscape', async ({ app }) => {
     await pageSetup(app, { paper: 'A4' });
     await expect.poll(async () => (await pageBoxes(app.page))[0]?.height).toBeCloseTo(841.9, 0);
     expect((await pageBoxes(app.page))[0].width).toBeCloseTo(595.3, 0);

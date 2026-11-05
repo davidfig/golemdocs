@@ -27,7 +27,7 @@ test.describe('the save indicator when signed in', () => {
     await person.context.close();
   });
 
-  test('the account holds what was typed', async ({ browser }) => {
+  test('the account holds what was typed', { tag: '@heavy' }, async ({ browser }) => {
     const person = await newPerson(browser, 'sync');
     await person.app.blank();
     await person.app.type('kept in the cloud');

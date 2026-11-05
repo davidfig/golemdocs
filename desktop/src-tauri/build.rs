@@ -21,6 +21,7 @@ fn main() {
             "vault_read_base64",
             "vault_write_base64",
             "set_native_menu",
+            "print_open_pdf",
             "update_check",
             "update_install",
             "incoming_pending",

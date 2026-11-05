@@ -87,8 +87,8 @@ test('a PDF can only be marked up: a Format menu with characters only, annotatio
   expect(await menuContents(app, 'Table')).toBeNull();
   const edit = await menuContents(app, 'Edit');
   expect(hasItem(edit, 'Cut', true)).toBe(false);
-  expect(hasItem(edit, 'Copy', true)).toBe(false);
-  expect(hasItem(edit, 'Select All', true)).toBe(false);
+  expect(hasItem(edit, 'Copy', true)).toBe(true);
+  expect(hasItem(edit, 'Select All', true)).toBe(true);
   expect(hasItem(edit, 'Find')).toBe(true);
   await expect(exact(app, 'Underline')).toBeVisible();
   await expect(exact(app, 'Strikethrough')).toBeVisible();
